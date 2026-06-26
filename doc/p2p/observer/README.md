@@ -1,12 +1,14 @@
 # Observer 子域入口
 
 ## 从这里开始
+- 想确认 observer 与 P2P/DistFS/consensus/execution 接起来后的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 Observer 子域入口。
 - 想理解 Observer 同步源策略化的基线：先读 `observer-sync-source-mode.prd.md`。
 - 想理解 DHT 组合链路差异：先读主文档后，再读 `observer-sync-source-dht-mode.prd.md`。
 - 想查同步模式 metrics / runtime bridge / observability：按专题名进入对应 PRD / design / project 三件套。
 
 ## 阅读面边界
 - 本页只做 Observer 子域分流，不复制 `doc/p2p/prd.index.md` 的完整三件套长表。
+- Observer 专题的 sync source、metrics、runtime bridge 或 observability green 结果只能作为链上大世界状态底座的观测/恢复证据；模块级闭环以 S9A 的 `module_required / module_full / integration_required / release_full` 分层为准。
 - `observer-sync-source-mode` 是 source-mode 组的默认主入口；`observer-sync-source-dht-mode` 只承载 DHT 组合链路差异。
 - metrics / runtime bridge / observability 组仍以 `doc/p2p/prd.index.md` 的 ROUND-002 主从说明为准。
 - 完整文件级检索仍回到 `doc/p2p/prd.index.md`。

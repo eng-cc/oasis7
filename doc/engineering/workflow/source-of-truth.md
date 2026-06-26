@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.26**
-Last Updated: **2026-06-23**
+Version: **v1.4.27**
+Last Updated: **2026-06-24**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -67,6 +67,34 @@ Specialist skills are not mandatory workflow phases. They become reachable throu
 - Visual companion / Image2 target workflows are optional evidence, not universal gates. They may be used inside an existing task/worktree as visual target and screenshot-comparison evidence, but cannot replace implementation, real native/browser screenshots, interaction smoke, QA evidence, or PR review. Screenshot-only previews count as stable visual-comparison evidence, not real interaction coverage.
 
 If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
+
+### 1.2.1 Friction Controls After Task Truth
+The always-bootstrap rule protects traceability, but it must not turn every
+small question into a heavyweight workflow.
+
+- Once a request is already inside the bound task/worktree, pure fact lookup,
+  path lookup, command-output restatement, or mechanical evidence collection may
+  use the objective-fact fast path: TPM gathers the evidence, answers directly,
+  and records a short execution-log note only when the fact materially affects
+  task truth, PR evidence, or a future decision.
+- Read-only professional/domain questions still require a matching role slice,
+  but the default slice should be bounded and time-boxed: one concrete question,
+  explicit evidence paths, `findings/no_findings` or verdict return, and no file
+  edits unless the task is routed into execution.
+- Do not dispatch a professional slice when the user is only asking for a
+  mechanical GitHub status, file path, command output, or exact current fact that
+  TPM can verify directly inside the bound task.
+- Do not create a second parent/planning surface to answer a small follow-up
+  inside an existing bound task; append the follow-up evidence to the current
+  task unless it changes owner, scope, or PR chain.
+- Use `.pm/tasks/<TASK-UID>.yaml` `module` as the default large-module marker for
+  ordinary task grouping, reporting, and parallel work queues. It is a small
+  enum, not a free tag or owner-role substitute. Current allowed values are
+  `engineering`, `game-strategy`, `visualization`, and
+  `chain-world-state-substrate`.
+- Do not create a separate parent/planning surface merely to label a task's
+  large module. Use a normal task with `module` unless the user explicitly asks
+  for a separate coordination task.
 
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
@@ -255,6 +283,10 @@ If a specialist skill is used, TPM must still bind it to the same owner, `.pm` t
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 
 ## 7. Change Log
+- **v1.4.27 (2026-06-24)**
+  - Added friction controls after task truth so objective fact lookups, bounded read-only role slices, and small follow-ups do not become heavyweight workflow by default.
+  - Added `.pm` task `module` as the default large-module marker for grouping, reporting, and parallel work queues.
+  - Clarified that module-local test evidence does not imply integration or release readiness.
 - **v1.4.26 (2026-06-23)**
   - Tightened pre-PR role inference backstops for producer product/system docs, viewer/launcher implementation/docs/scripts, and agent/subagent workflow contract surfaces.
   - Clarified semantic review evidence behavior by distinguishing generic `n/a` from explicit deferral/exemption reasons across runtime, gameplay, visual, ops, and liveops evidence.
@@ -389,5 +421,6 @@ This checklist records whether key legacy `AGENTS.md` workflow semantics were pr
 - [x] Local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability as formal review/merge boundary; `REVIEW_REQUIRED` is informational, not a blocker.
 - [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
 - [x] Workflow phase-to-skill map preserves required, conditional, optional, and specialist skill reachability.
+- [x] Module-local verification remains distinct from integration/release readiness claims.
 
 If any item above changes, update this file first and then sync downstream docs/skills/scripts.

@@ -442,6 +442,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   NEW_TASK_CMD=(./scripts/pm/new-task.sh
     --owner-role "$PM_OWNER_ROLE"
     --title "$PM_TITLE"
+    --module "$MODULE_SLUG"
     --priority "$PM_PRIORITY"
   )
   for source_ref in "${PM_SOURCE_REFS[@]}"; do

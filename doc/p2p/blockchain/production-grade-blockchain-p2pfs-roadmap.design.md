@@ -3,6 +3,8 @@
 - 对应需求文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 - 对应项目管理文档: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.project.md`
 
+> 现行状态：本文保留为历史 P2PFS 路线图的设计追溯。当前链上大世界状态底座的聚合设计入口、测试层级与 claim boundary 以 `doc/p2p/design.md`、`testing-manual.md#s9a链上大世界状态底座自闭环` 和 `PRD-P2P-031` 为准；本文不单独证明 S9A `module_full`、`integration_required` 或 `release_full`。
+
 ## 1. 设计定位
 定义把“可演示的区块链 + P2PFS + 节点收益”推进到可生产部署形态的路线图，优先收敛共识哈希、奖励结算签名和执行链路三类高风险缺口。
 

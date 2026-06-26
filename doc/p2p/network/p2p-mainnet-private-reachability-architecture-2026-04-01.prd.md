@@ -79,6 +79,7 @@
   - 不在本专题内绑定单一网络库实现，不把 “libp2p / 自研 / 混合” 之一提前冻结成唯一方案。
   - 不把当前目标降级成“能连起来就行”的家宽补丁；本专题讨论的是公共主链级目标态。
   - 不在本专题内定义单一链型的共识算法细节；这里只冻结链无关的 P2P substrate 和数据面适配边界。
+  - 不把本专题的 P2P substrate / reachability green 结果单独提升为链上大世界状态底座的 S9A `module_full`、`integration_required` 或 `release_full`。
   - 不把 browser wallet、production signer custody 或 shared-network 实跑证据在此专题内冒充已实现。
   - 不要求普通用户直接配置 `validator_core / sentry / relay / full_storage / observer_light` 原始角色枚举。
 

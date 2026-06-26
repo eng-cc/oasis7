@@ -57,6 +57,7 @@ def build_parser(
     new_task.add_argument("root", type=pathlib.Path)
     new_task.add_argument("--owner-role", required=True)
     new_task.add_argument("--title", required=True)
+    new_task.add_argument("--module")
     new_task.add_argument("--priority", choices=priority_choices, default="P2")
     new_task.add_argument("--source-signal")
     new_task.add_argument("--source-ref", action="append", default=[], required=True)

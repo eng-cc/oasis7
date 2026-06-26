@@ -3,10 +3,11 @@
 审计轮次: 14
 
 ## 任务拆解（活跃面）
-- 当前主线仍是非全公网 P2P substrate、reachability/role policy 与 claims boundary；具体执行优先级以 `## 状态` 和对应 topic project 为准。
+- 当前主线收束为链上大世界状态底座及其 network tier、reachability/role policy 与 claims boundary 子线；P2P transport 是底座网络层，不单独代表模块级闭环。具体执行优先级以 `## 状态` 和对应 topic project 为准。
 - hosted player access / hosted account、public testnet、bridge/newapi、network tier、主链 token 与 faucet/mint-ready 细项均已有独立 topic project；本页不再逐条复述每条子线的完成流水。
 
 ### 最近完成（保留一跳 Trace）
+- [x] chain-world-state-doc-conflict-audit (PRD-P2P-031) [test_tier_required]: 审计旧 P2P/P2PFS/reachability 文档与“链上大世界状态底座”口径的语义冲突；保留历史路线图作为 provenance，给 current-facing 入口和历史阶段文档补 S9A / PRD-P2P-031 claim boundary，避免组件 green 被误读为 `module_full`、`integration_required` 或 `release_full`。 Trace: .pm/tasks/task_0ff885b320474f738ea908b6e9e06c8c.yaml
 - [x] p2p-observer-fetch-head-peer-cache-readiness (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet clean observer 通过 validated gap-sync fetch-commit 前进后仍不记录 peer head、导致 `consensus_peer_head_unavailable` 长期阻塞 readiness 的根因；正常 gap-sync 在执行与持久化后更新 peer-head freshness path，fetch-head-only 仍不作为信任来源。 Trace: .pm/tasks/task_c5278d401f864d5c99b62374cad65f08.yaml
 - [x] p2p-testnet-observer-readiness-startup-order (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet clean observer readiness 启动顺序与 cold observer fetch-commit 错误归因；manifest-backed public_testnet observer 不再在 height=0 且无 peer head 时自判 ready，同时 fetch-commit provider-route 后续 availability gap 不再覆盖先前 connected-peer timeout，支持根因修复后重新打包并 clean redeploy/rebuild。 Trace: .pm/tasks/task_f796d8ba0a734647aff5b611c9e47bae.yaml
 - [x] p2p-observer-fetch-commit-provider-gap (PRD-P2P-001/003/028) [test_tier_required]: 修复 public_testnet clean validator rebuild 后本地 observer 只升级 package 却隐式保留旧链状态的问题；local node install 遇到既有 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` 等持久状态默认 fail-closed，要求显式 `--preserve-state` 或 `--reset-state`，并在 runtime status 增加 local committed height 高于 fresh network head 的诊断。 Trace: .pm/tasks/task_32fcc1219b0e4470b394ca0db2a6e80f.yaml
@@ -77,6 +78,7 @@
 - 当前状态: active（ROUND-027）
 - 当前活跃子线: hosted player access / hosted account、public testnet、bridge/newapi、network tier 和主链代币口径都已有独立 topic `*.project.md`；本页状态区不再逐条复述各子线最近完成项。
 - Next: 保持 p2p 主项目页作为模块级 active verdict 与 trace hub；新增长流水应进入对应 topic project 或 `.pm/tasks/*.execution.md`，本页只保留近期一跳 Trace。
+- 最新补充（2026-06-25 / chain-world-state substrate closure）: “P2P 基础设施闭环”现收敛为“链上大世界状态底座自闭环”。该底座覆盖 P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection；P2P transport green 只可作为底座局部证据，不可替代链上大世界或 `public_testnet` readiness。当前测试真值入口为 `testing-manual.md` S9A，PRD 映射为 `PRD-P2P-031` / `AC-43`。Trace: .pm/tasks/task_0ff885b320474f738ea908b6e9e06c8c.yaml
 - 最新补充（2026-05-31 / mainstream sync recovery parity）: 平滑升级不再只依赖 systemd active。`scripts/p2p-upgrade-preflight.sh` 会检查 status 端点的 replication cursor、peer-head freshness、gap-sync blocked 和 policy lag，并用 trusted checkpoint / state-sync bundle 门槛保护落后节点恢复。当前代码支持 snapshot-only state-sync bundle 作为最小恢复输入：`--require-state-sync-bundle` 要求 bundle manifest、bundle dir、snapshot path/sha256 与 state_root；journal 仅在 manifest 提供 `journal_path` 时参与校验，不再作为最小 bundle 的必需字段。完整 seed/restore artifact 的 snapshot/journal/blob closure 仍属于更严格的 operator 恢复路径。Trace: `.pm/tasks/task_9051849e0c92424bb7f0ca972a7935cc.yaml`。
 - 最新补充（2026-06-01 / mainstream sync recovery parity execution guardrails）: testnet 演练后继续补齐恢复执行层：restore script 执行前会 re-check 必需工具链、snapshot/journal/chunk sha256 与 chunks root，捕获 `systemctl show/status` 服务状态快照，备份 source/backup sha256 与 `path/type/size/mode/uid/gid` metadata manifest 并自动比对；生成 restore command plan 前会拒绝 shell-unsafe service name、data/backup/bundle 路径及 snapshot/journal/chunk 相对路径。fake execution drill 覆盖成功恢复、snapshot 篡改、chunk 篡改、restore 失败自动 rollback；真实 ECS/testnet 状态仍未被替换。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。

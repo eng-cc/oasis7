@@ -11,6 +11,7 @@
 - 想先看 hosted player entry / `hosted_public_join` 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`（legacy topic label: hosted world）
 - 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
+- 想先看 P2P/DistFS/consensus/execution/observer 如何作为“链上大世界状态底座”单模块自闭环测试：`testing-manual.md#s9a链上大世界状态底座自闭环`
 - 想先看 Token 分配 / 治理签名 / 理想化交易模型 / 生产 signer 外部化 / `OC -> LetAI Run OpenAPI quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
 - 当前链上代币的正式产品名固定为“绿洲币 / Oasis Coin”；当前 runtime symbol/ticker 为 `OC`，公钥派生账户前缀为 `oc:pk:`；当前创世 `initial_supply` 已冻结为 `10,000,000,000 OC`。
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/p2p/prd.index.md`
@@ -37,6 +38,7 @@
 
 ## 模块职责
 - 维护 P2P、共识、DistFS、节点奖励与网络桥接等核心链路口径。
+- 维护“链上大世界状态底座”口径：P2P transport 只是传输层，模块自闭环必须同时覆盖 DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的 claim boundary。
 - 汇总 blockchain / distfs / node / observer / token / viewer-live / consensus / distributed / network 九类专题。
 - 承接跨 runtime、launcher、viewer-live 的分布式运行与发布约束收口。
 - 承接非全公网 mixed-topology、sentry/relay、overlay reachability 与多链型数据面适配的框架层口径。

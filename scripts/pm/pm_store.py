@@ -86,6 +86,12 @@ ROLE_MEMORY_PREFIXES = {
 DEFAULT_MEMORY_REVIEW_STALE_DAYS = 7
 DEFAULT_WORKING_MEMORY_EXPIRES_DAYS = 2
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+TASK_MODULE_VALUES = {
+    "engineering",
+    "game-strategy",
+    "visualization",
+    "chain-world-state-substrate",
+}
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 WORKING_MEMORY_ENTRY_KINDS = {
     "attempt",
@@ -476,11 +482,17 @@ def rebuild_task_views(root: pathlib.Path) -> None:
     )
     registry_entries: list[OrderedDict[str, object]] = []
     for path, fields in task_records:
-        registry_entries.append(
+        registry_entry = OrderedDict(
+            [
+                ("task_uid", fields.get("task_uid")),
+                ("owner_role", fields.get("owner_role")),
+            ]
+        )
+        if fields.get("module") is not None:
+            registry_entry["module"] = fields.get("module")
+        registry_entry.update(
             OrderedDict(
                 [
-                    ("task_uid", fields.get("task_uid")),
-                    ("owner_role", fields.get("owner_role")),
                     ("task_path", str(path.relative_to(root))),
                     ("status", fields.get("status")),
                     ("priority", fields.get("priority")),
@@ -488,6 +500,9 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                     ("updated_at", fields.get("updated_at")),
                 ]
             )
+        )
+        registry_entries.append(
+            registry_entry
         )
     registry_path = task_registry_path(root)
     registry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -507,11 +522,17 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                 status = str(fields.get("status") or "")
                 if backlog_file_for_status(status) != f"{file_status}.yaml":
                     continue
-                items.append(
+                item = OrderedDict(
+                    [
+                        ("task_uid", fields.get("task_uid")),
+                        ("title", fields.get("title")),
+                    ]
+                )
+                if fields.get("module") is not None:
+                    item["module"] = fields.get("module")
+                item.update(
                     OrderedDict(
                         [
-                            ("task_uid", fields.get("task_uid")),
-                            ("title", fields.get("title")),
                             ("priority", fields.get("priority")),
                             ("source_signal", fields.get("source_signal")),
                             ("related_prd", list(fields.get("related_prd", []))),
@@ -522,6 +543,7 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                         ]
                     )
                 )
+                items.append(item)
             backlog_path.parent.mkdir(parents=True, exist_ok=True)
             dump_list_document(backlog_path, header, "tasks", items)
 
@@ -1593,6 +1615,7 @@ def create_candidate_task(
     root: pathlib.Path,
     owner_role: str,
     title: str,
+    module: str | None,
     priority: str,
     source_signal: str | None,
     source_refs: list[str],
@@ -1610,6 +1633,13 @@ def create_candidate_task(
             raise ValueError(f"unknown handoff role: {role}")
     if priority not in PRIORITY_ORDER:
         raise ValueError(f"unsupported priority: {priority}")
+    if module is not None:
+        module = module.strip()
+        if not module:
+            module = None
+        elif module not in TASK_MODULE_VALUES:
+            supported_modules = ", ".join(sorted(TASK_MODULE_VALUES))
+            raise ValueError(f"unsupported module: {module}; expected one of: {supported_modules}")
     if not source_refs:
         raise ValueError("task source_refs must be a non-empty list")
     for source_ref in source_refs:
@@ -1628,6 +1658,7 @@ def create_candidate_task(
             ("task_uid", task_uid),
             ("title", title),
             ("owner_role", owner_role),
+            ("module", module),
             ("worktree_hint", worktree_hint),
             ("execution_log_path", execution_log_path_rel),
             ("status", "candidate"),
@@ -1677,6 +1708,8 @@ def ordered_task_fields(fields: OrderedDict[str, object], task_uid: str) -> Orde
     ordered["task_uid"] = task_uid
     ordered["title"] = rewritten.get("title")
     ordered["owner_role"] = rewritten.get("owner_role")
+    if "module" in rewritten:
+        ordered["module"] = rewritten.get("module")
     ordered["worktree_hint"] = rewritten.get("worktree_hint")
     ordered["execution_log_path"] = task_execution_log_relative_path(task_uid)
     ordered["status"] = rewritten.get("status")
@@ -2460,6 +2493,7 @@ def cmd_new_task(args: argparse.Namespace) -> int:
         args.root,
         owner_role=args.owner_role,
         title=args.title,
+        module=args.module,
         priority=args.priority,
         source_signal=args.source_signal,
         source_refs=list(args.source_ref),

@@ -23,6 +23,7 @@
    - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
 10. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 11. PR 创建后默认进入正常 PR CI / comments watch-fix-merge 主链；除非 task/用户明确说明该 PR 只是为了触发手动打包/发布 CI，否则 TPM 必须持续盯 required checks、mergeability、PR comments 与 review threads；`REVIEW_REQUIRED` 只作为状态信息回报，不是 block 项。`mergeStateStatus=BEHIND` 本身也不是 block 项；若 PR 仍然 mergeable 且 GitHub/repo merge path 接受直接合入，可不先 rebase。若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则这是正常流程，可在复查 checks、mergeability、requested changes、comments/thread 后使用 repo admin merge path。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或 GitHub merge API/branch protection 明确要求先更新分支/解决冲突时，才回到修复/验证/推送、branch sync 或 comment closeout 循环；通过且 comments/thread 已收口后合入并清理 worktree。
+12. 单模块闭环测试不等于发布放行：任务可用 `module_required` / `module_full` 快速迭代，但跨模块行为、玩家可发布、真实节点/浏览器/服务信心必须按验证矩阵升级到 `integration_required` / `release_full`。
 
 ### Workflow Eval Contract Markers
 本段保留 `scripts/pm/workflow-behavior-eval.sh` 的稳定契约词；语义解释仍以 `doc/engineering/workflow/source-of-truth.md` 为唯一真值。

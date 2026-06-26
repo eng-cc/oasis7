@@ -122,6 +122,12 @@ checks = [
             "The task/worktree decision and the professional-slice decision are intentionally decoupled",
             default_runtime_config_marker,
             "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
+            "`module` as the default large-module marker",
+            "`game-strategy`",
+            "`visualization`",
+            "`chain-world-state-substrate`",
+            "Do not create a separate parent/planning surface",
+            "Module-local verification remains distinct from integration/release readiness claims",
         ],
     ),
     (

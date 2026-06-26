@@ -3,6 +3,7 @@
 更新时间: 2026-06-13
 
 ## 从这里开始
+- 想确认 P2P/DistFS/consensus/execution/observer 的整体闭环、测试层级与 claim boundary：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`；本页只负责 node 子域入口。
 - 想确认节点奖励、贡献分、资产与结算口径：先读 `node-contribution-points.prd.md`、`node-redeemable-power-asset.prd.md` 或 `node-reward-settlement-native-transaction.prd.md`
 - 想确认复制链路、net stack、signer binding 与 DistFS 节点网络闭环：先读 `node-replication-libp2p-migration.prd.md`、`node-distfs-replication-network-closure.prd.md` 或 `node-consensus-signer-binding-replication-hardening.prd.md`
 - 想确认 PoS 时间、slot clock 与控制面对齐：先读 `node-pos-slot-clock-real-time-2026-03-07.prd.md`、`node-pos-subslot-tick-pacing-2026-03-07.prd.md` 或 `node-pos-time-anchor-control-plane-alignment-2026-03-07.prd.md`
@@ -13,6 +14,7 @@
 
 ## 入口分工
 - 当前页只承担 `node/` 子目录 landing page 职责，不复制完整长表。
+- node 专题的执行校验、奖励、复制或监控 green 结果只能作为链上大世界状态底座的组件证据；模块级闭环以 S9A 的 `module_required / module_full / integration_required / release_full` 分层为准。
 - `../README.md` 是 `p2p` 模块级 landing page，负责跨 `blockchain / distfs / node / observer / token / network / distributed / consensus / viewer-live` 分流。
 - `../prd.index.md` 是 `p2p` 模块完整文件级索引，适合已知主题后按文件名查找。
 
