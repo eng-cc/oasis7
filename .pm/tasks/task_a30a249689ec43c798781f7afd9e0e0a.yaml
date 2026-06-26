@@ -1,0 +1,26 @@
+task_uid: task_a30a249689ec43c798781f7afd9e0e0a
+title: "Find next code performance optimization item"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-20260626
+execution_log_path: .pm/tasks/task_a30a249689ec43c798781f7afd9e0e0a.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Professional slices identify ranked code-level performance optimization candidates with evidence."
+  - "Implement one narrow low-risk optimization without changing API behavior."
+  - "Focused regression tests prove pagination/order/cursor semantics remain unchanged."
+handoff_to: []
+updated_at: 2026-06-26T12:10:10+08:00
+last_started_at: 2026-06-26T11:49:38+08:00
+last_claim_type: task_complete
+last_verify_command: "cargo fmt --check && env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime query_blocks_pages_descending_heights_without_full_sort && env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime explorer_p0 && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_a30a249689ec43c798781f7afd9e0e0a --phase current && git diff --check"
+last_verified_at: 2026-06-26T12:10:08+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-26T12:10:10+08:00
