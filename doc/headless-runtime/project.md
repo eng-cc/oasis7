@@ -71,7 +71,7 @@
 - 承接约束: 先完成 `TASK-NONVIEWER-002/003`，再与 testing 联动推进 `TASK-NONVIEWER-004`。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已补齐命名迁移后的轻量入口，当前模块无需再拆更重的 README 层级。
-- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；过程记录在 `doc/devlog/README.md`。
+- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
 
 ## 阶段收口角色交接
 ### Meta
@@ -115,13 +115,13 @@
 - 代码改动：如需，仅限支撑 headless 验证与证据采集的必要脚本改动。
 - 文档回写：`doc/headless-runtime/project.md` 与相关专题文档。
 - 测试记录：补齐 `test_tier_required`，并标注何处需后续 `test_tier_full`。
-- devlog 记录：记录门禁骨架与是否需升级优先级。
+- 任务证据记录：在对应 `.pm/tasks/task_<32hex>.execution.md` 记录门禁骨架与是否需升级优先级。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `doc/devlog/YYYY-MM-DD.md` 已记录
+- 任务证据已记录到对应 `.pm/tasks/task_<32hex>.execution.md`
 - [ ] required/full 测试证据已补齐或明确挂起原因
 
 ### Risks / Decisions

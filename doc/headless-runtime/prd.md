@@ -67,7 +67,7 @@
   - AC-1: headless-runtime PRD 定义生命周期、鉴权、归档三条主线。
   - AC-2: headless-runtime project 文档维护对应任务拆解与状态。
   - AC-3: 与 `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md` 等专题文档一致。
-  - AC-4: 对外行为变更时同步补齐测试与 devlog 记录。
+  - AC-4: 对外行为变更时同步补齐测试证据，并在对应 `.pm/tasks/task_<32hex>.execution.md` 记录任务执行证据。
 - Non-Goals:
   - 不在本 PRD 中重写 viewer UI 行为。
   - 不替代 p2p 共识层详细设计。
