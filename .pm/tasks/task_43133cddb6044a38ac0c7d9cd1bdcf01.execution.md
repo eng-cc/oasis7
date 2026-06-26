@@ -52,3 +52,51 @@ Example:
 - Expected Result: Required-tier smoke, doc governance, and current task workflow lint all pass.
 - Actual Result: PASS: required-tier smoke OK; PASS: doc-governance-check OK; PASS: workflow-lint current OK for task_43133cddb6044a38ac0c7d9cd1bdcf01.
 - Blocker / Next Action: Commit implementation and evidence, then request repo-owned review.
+
+## 2026-06-27 07:54:32 CST / tpm
+- 完成内容: Review Trigger: pre-PR local role review for workflow-lint explicit task fast path.
+- 遗留事项: Await fresh role review outputs and integrate findings/no_findings before PR creation.
+- Action: Generated review package and dispatched repository_health_engineer, qa_engineer, and producer_system_designer review slices.
+- Validation Command: Subagent review results for repository_health_engineer, qa_engineer, producer_system_designer.
+- Expected Result: Each role returns findings or no_findings, scope/spec compliance verdict, quality/risk verdict, and residual risk.
+- Actual Result: Review request recorded with package, scope, roles, evidence, expected return contract, slice ledger, and formal sink.
+- Blocker / Next Action: Wait for review slices, then record final Pre-PR Local Role Review packet and address any valid findings.
+- Review Trigger: pre-PR local role review
+- Review Scope: `scripts/pm/workflow-lint.sh`, `scripts/pm/workflow-lint.test.sh`, `.pm` task evidence, and `doc/engineering/project.md` trace for explicit task lookup performance optimization.
+- Review Package: .pm/scratch/task_43133cddb6044a38ac0c7d9cd1bdcf01/review-packages/review-b53c173d1..33cdd015a.diff
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Question: Confirm the explicit `--task-uid` fast path preserves workflow-lint behavior and error semantics, the regression test proves unrelated task YAML is skipped, verification is sufficient, and the selected candidate fits the next performance optimization request without duplicating prior pm-lint/governance work.
+- Evidence Available: workflow-lint.test OK; workflow-lint current OK; required-tier smoke OK; doc-governance-check OK; git diff --check OK.
+- Expected Return Contract: findings | no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk
+- Slice Ledger: .pm/scratch/task_43133cddb6044a38ac0c7d9cd1bdcf01/slice-ledger.jsonl
+- Formal Sink: .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.execution.md
+
+## 2026-06-27 07:59:01 CST / tpm
+- 完成内容: Pre-PR Local Role Review: passed. Task UID: task_43133cddb6044a38ac0c7d9cd1bdcf01. Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-8-20260627. Source Branch: task/engineering-next-code-performance-optimization-8-20260627. Source Head: 33cdd015a7099da4b75f7a64c361550a94dbc930. Comparison Ref: refs/remotes/origin/main. Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.execution.md; .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.yaml; doc/engineering/project.md; scripts/pm/workflow-lint.sh; scripts/pm/workflow-lint.test.sh. Review Package: .pm/scratch/task_43133cddb6044a38ac0c7d9cd1bdcf01/review-packages/review-b53c173d1..33cdd015a.diff. Review Roles: repository_health_engineer, qa_engineer, producer_system_designer. Review Evidence: repository_health_engineer no_findings; qa_engineer no_findings; producer_system_designer no_findings. Review Findings Disposition: no_findings.
+- Pre-PR Local Role Review: passed
+- Task UID: task_43133cddb6044a38ac0c7d9cd1bdcf01
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-8-20260627
+- Source Branch: task/engineering-next-code-performance-optimization-8-20260627
+- Source Head: 33cdd015a7099da4b75f7a64c361550a94dbc930
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.execution.md; .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.yaml; doc/engineering/project.md; scripts/pm/workflow-lint.sh; scripts/pm/workflow-lint.test.sh
+- Review Package: .pm/scratch/task_43133cddb6044a38ac0c7d9cd1bdcf01/review-packages/review-b53c173d1..33cdd015a.diff
+- Role Selection Basis: workflow helper and task governance surfaces touched; repository_health included for script semantics and task/project evidence; QA included for verification sufficiency and negative fixture coverage; producer included for candidate selection and acceptance fit; runtime/viewer were discovery-only and not final changed-path owners.
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health_engineer no_findings with PASS on explicit UID semantics, regression fixture, project trace, and verification; qa_engineer no_findings with PASS on PR readiness, noting missing explicit-UID negative tests are non-blocking residual; producer_system_designer no_findings with PASS on user-request fit and duplicate-exclusion.
+- Review Verdicts: repository_health pass; QA pass; producer pass
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no implementation changes required by review; residual negative explicit-UID error-message coverage is non-blocking future harness improvement.
+- Verification Matrix: workflow-lint explicit task fast path -> workflow-lint.test OK and current task workflow-lint OK; repo workflow smoke -> required-tier-smoke OK; docs/project trace -> doc-governance-check OK; whitespace -> git diff --check OK.
+- Visual Evidence: n/a, no viewer or visual path touched.
+- WASM Evidence: n/a, no wasm/ABI/determinism path touched.
+- Ops Evidence: n/a, no deployment/operator runbook change.
+- LiveOps Evidence: n/a, no external messaging/player promise change.
+- Residual Risk: low; explicit missing-UID and malformed-target negative cases are not directly asserted, but target YAML still uses the same parser path and missing UID has deterministic targeted error behavior.
+- Slice Ledger: .pm/scratch/task_43133cddb6044a38ac0c7d9cd1bdcf01/slice-ledger.jsonl
+- 遗留事项: Commit review evidence, run claim-ready/closeout, prepare PR.
+- Action: Integrated three pre-PR role review results and recorded passed packet.
+- Validation Command: Subagent review results
+- Expected Result: All required local role reviews return no blocking findings and final packet is present for PR preflight.
+- Actual Result: PASS: repository_health_engineer, qa_engineer, and producer_system_designer returned no_findings with low residual risk.
+- Blocker / Next Action: Commit review evidence and continue to claim-ready/closeout.
