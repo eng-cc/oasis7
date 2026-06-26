@@ -1,0 +1,26 @@
+task_uid: task_3e13225c198541109cb2faf3eb32d663
+title: "Find next code performance optimization item"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-3-20260626
+execution_log_path: .pm/tasks/task_3e13225c198541109cb2faf3eb32d663.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Professional slices identify ranked code-level performance optimization candidates with evidence, excluding recently merged Explorer block pagination, Explorer tx pagination/prune, and prior launcher compile-metrics work."
+  - "Implement one narrow low-risk optimization without changing external behavior."
+  - "Focused regression tests or equivalent deterministic checks prove the optimized path preserves behavior."
+handoff_to: []
+updated_at: 2026-06-26T15:12:16+08:00
+last_started_at: 2026-06-26T14:48:25+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_3e13225c198541109cb2faf3eb32d663 --phase current"
+last_verified_at: 2026-06-26T15:12:12+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-26T15:12:16+08:00
