@@ -4,7 +4,7 @@ owner_role: tpm
 module: engineering
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next-scan
 execution_log_path: .pm/tasks/task_500b9cd1ad81421696724c08d08a2f94.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
@@ -21,5 +21,11 @@ acceptance:
   - "Apply a scoped safe fix when one is found."
   - "Verify the dependency graph, governance checks, and affected build or test surfaces before PR."
 handoff_to: []
-updated_at: 2026-06-26T11:21:14+08:00
+updated_at: 2026-06-26T11:33:29+08:00
 last_started_at: 2026-06-26T11:21:14+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_500b9cd1ad81421696724c08d08a2f94 --phase current"
+last_verified_at: 2026-06-26T11:33:28+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-26T11:33:29+08:00
