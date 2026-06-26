@@ -12,9 +12,9 @@ ignore = [
   # Each ignore must keep a `rustsec-ignore` metadata line immediately above it.
   # `scripts/check-rustsec-ignore-baseline.sh` fails on missing metadata, expired
   # metadata, or unreviewed changes to the approved ignore set.
-  # rustsec-ignore: owner=repository_health_engineer; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo tree -i serde_cbor
+  # rustsec-ignore: owner=repository_health_engineer; crate=serde_cbor; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo tree --all-features -i serde_cbor; local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk
   "RUSTSEC-2021-0127", # serde_cbor unmaintained
-  # rustsec-ignore: owner=repository_health_engineer; scope=transitive macro dependency debt; reason=paste remains in the current dependency closure and should be removed by upstream crate modernization; expiry=2026-09-30; validation=cargo tree -i paste
+  # rustsec-ignore: owner=repository_health_engineer; crate=paste; scope=transitive macro dependency debt; reason=paste remains in the current dependency closure and should be removed by upstream crate modernization; expiry=2026-09-30; validation=cargo tree --target all -i paste; local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node,pixel_world_bridge
   "RUSTSEC-2024-0436", # paste unmaintained
 ]
 
