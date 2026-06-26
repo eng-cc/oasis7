@@ -590,6 +590,38 @@ fn agent_runner_round_robin() {
 }
 
 #[test]
+fn agent_runner_round_robin_skips_not_ready_and_wraps() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-1".to_string(),
+        name: "base".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    for idx in 0..3 {
+        kernel.submit_action(Action::RegisterAgent {
+            agent_id: format!("agent-{idx}"),
+            location_id: "loc-1".to_string(),
+        });
+    }
+    kernel.step_until_empty();
+
+    let mut runner: AgentRunner<WaitingAgent> = AgentRunner::new();
+    for idx in 0..3 {
+        runner.register(WaitingAgent::new(format!("agent-{idx}"), 0));
+    }
+    runner.get_mut("agent-1").unwrap().wait_until = Some(kernel.time().saturating_add(10));
+
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        let tick = runner.tick_decide_only(&mut kernel).unwrap();
+        seen.push(tick.agent_id);
+    }
+
+    assert_eq!(seen, vec!["agent-0", "agent-2", "agent-0"]);
+}
+
+#[test]
 fn agent_runner_wait_ticks_sets_wait_until() {
     let mut kernel = setup_kernel_with_wait_agent("agent-1");
     let mut runner: AgentRunner<WaitingAgent> = AgentRunner::new();
