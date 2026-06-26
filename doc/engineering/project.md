@@ -329,6 +329,7 @@
 - [x] evidence-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/testing`、`doc/playability_test_result` 与 `doc/core` 活证据/门禁模板中仍把新任务结论导向 `doc/devlog/YYYY-MM-DD.md` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/evidence bundle 回写要求。 Trace: .pm/tasks/task_cb0f1e08aa594e42a08f9393347fb8e7.yaml
 - [x] readme-liveops-runbook-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Moltbook / 小红书持续运营 runbook 与 readme PRD 当前 flow / AC 中仍把渠道动作和信号回流导向 `doc/devlog` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留 runbook、issue / PR 与 producer summary 等正式回流面。 Trace: .pm/tasks/task_cd72186645e746dd8d12ed5cfc730f50.yaml
 - [x] playability-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/playability_test_result` 当前项目交接与 closed beta / 高优问题闭环活模板中仍把新可玩性信号导向 `doc/devlog` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/prd、发布证据包、QA triage、producer escalation 与 LiveOps 回流面。 Trace: .pm/tasks/task_eb93f5de123c49d1a3889855038b6987.yaml
+- [x] root-design-redirect-shell-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 world-runtime / world-simulator 根级 legacy design redirect 壳，将仅存索引引用收敛到模块内 canonical design 文档，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_a99b0850527b4c1e935e3276a5338b57.yaml
 
 ## File Structure / Affected Paths
 
@@ -393,10 +394,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-26
+- 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `playability-template-execution-log-semantics`（已将 playability 当前项目交接与 closed beta / 高优问题闭环活模板中的旧 devlog 回写语义收敛到 PM task execution log evidence，同时保留发布证据包、QA/producer/liveops 回流面。）
+- 最新完成: `root-design-redirect-shell-deletion`（已删除 world-runtime / world-simulator 根级 legacy design redirect 壳，将剩余索引引用收敛到模块内 canonical design 文档，并同步收紧 root markdown allowlist。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
