@@ -101,6 +101,23 @@ summary_md="$run_dir/summary.md"
 mkdir -p "$cases_root"
 : > "$case_records"
 
+find_longrun_bash() {
+  local candidate
+  if [[ -n "${P2P_LONGRUN_BASH:-}" ]]; then
+    printf '%s\n' "$P2P_LONGRUN_BASH"
+    return 0
+  fi
+  for candidate in bash /opt/homebrew/bin/bash /usr/local/bin/bash; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c '(( BASH_VERSINFO[0] >= 4 ))' >/dev/null 2>&1; then
+      command -v "$candidate"
+      return 0
+    fi
+  done
+  printf 'bash\n'
+}
+
+longrun_bash=$(find_longrun_bash)
+
 write_json_array() {
   local out_file=$1
   shift
@@ -148,8 +165,8 @@ cgnat_relay_path_ranking|required|exact|substrate_exact|cgnat|cgnat_to_public_pe
 bootstrap_poisoning_dedupe|required|exact|substrate_exact|bootstrap_poisoning|bootstrap_peer_to_suspect_record|bootstrap_poisoning|may_direct_must_recover|must_recover_after_clean_record|policy_supported|exact_discovery_contract_not_public_network_truth|Validate poisoned bootstrap discovery does not permanently consume dial dedupe.|Covers discovery ingress quarantine against suspect records that later refresh healthy metadata.|source ./scripts/cargo-dev-lib.sh; oasis7_cargo_dev test -p oasis7_net --features libp2p process_discovered_peer_record_does_not_poison_dial_dedupe_for_suspect_peer -- --nocapture
 relay_budget_detection|required|exact|substrate_exact|relay_exhaustion|many_peers_to_relay_domain|relay_exhaustion|may_direct_must_recover|must_detect_and_downgrade|policy_supported|exact_budget_policy_not_live_capacity_truth|Validate relay budget overflow is detected and downgraded before quarantine consumption.|Exact peer-manager coverage for relay-budget and relay-domain concentration detection during health recompute.|source ./scripts/cargo-dev-lib.sh; oasis7_cargo_dev test -p oasis7_net --features libp2p recompute_marks_relay_budget_and_domain_concentration -- --nocapture
 path_failover_selection|required|exact|substrate_exact|path_failover|direct_peer_to_ranked_fallbacks|restart_pause_disconnect|may_direct_must_recover|direct_to_hole_punch_to_relay|policy_supported|exact_failover_contract_not_live_path_churn_truth|Validate direct-path failure falls back to hole-punch before relay.|Exact transport failover coverage for direct -> punched -> relay ordering.|source ./scripts/cargo-dev-lib.sh; oasis7_cargo_dev test -p oasis7_net --features libp2p preferred_transport_path_skips_direct_and_falls_back_to_hole_punch_before_relay -- --nocapture
-sentry_loss_proxy_longrun|full|proxy|executable_proxy|sentry_loss|validator_sentry_proxy|sentry_loss|may_direct_must_recover|must_recover_via_remaining_paths|proxy_supported|proxy_not_dedicated_sentry_or_nat_lab_truth|Run triad_distributed ingress-loss proxy with disconnect/restart chaos.|Dedicated sentry live harness is not wired yet; triad_distributed ingress loss is the current executable proxy for sentry/anchor loss.|./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad_distributed --base-port 16610 --duration-secs 300 --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions disconnect,restart --chaos-continuous-seed 20260403 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir __RUN_DIR__/sentry-loss-proxy
-mixed_topology_release_proxy|full|proxy|executable_proxy|mixed_topology|public_private_proxy_mix|restart_pause_disconnect|may_direct_must_recover|must_recover_without_physical_nat_claim|proxy_supported|proxy_not_physical_nat_or_cgnat_truth|Run triad + triad_distributed release-profile proxy under mixed chaos.|Current runtime harness has no physical NAT/CGNAT lab; this proxy leaves a real distributed recovery command in the evidence bundle without overstating coverage.|./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad,triad_distributed --base-port 17610 --duration-secs 300 --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions restart,pause,disconnect --chaos-continuous-seed 20260403 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir __RUN_DIR__/mixed-topology-release-proxy
+sentry_loss_proxy_longrun|full|proxy|executable_proxy|sentry_loss|validator_sentry_proxy|sentry_loss|may_direct_must_recover|must_recover_via_remaining_paths|proxy_supported|proxy_not_dedicated_sentry_or_nat_lab_truth|Run triad_distributed ingress-loss proxy with disconnect/restart chaos.|Dedicated sentry live harness is not wired yet; triad_distributed ingress loss is the current executable proxy for sentry/anchor loss.|__LONGRUN_BASH__ ./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad_distributed --base-port 16610 --duration-secs 300 --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions disconnect,restart --chaos-continuous-seed 20260403 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir __RUN_DIR__/sentry-loss-proxy
+mixed_topology_release_proxy|full|proxy|executable_proxy|mixed_topology|public_private_proxy_mix|restart_pause_disconnect|may_direct_must_recover|must_recover_without_physical_nat_claim|proxy_supported|proxy_not_physical_nat_or_cgnat_truth|Run triad + triad_distributed release-profile proxy under mixed chaos.|Current runtime harness has no physical NAT/CGNAT lab; this proxy leaves a real distributed recovery command in the evidence bundle without overstating coverage.|__LONGRUN_BASH__ ./scripts/p2p-longrun-soak.sh --profile soak_release --topologies triad,triad_distributed --base-port 17610 --duration-secs 300 --max-stall-secs 240 --max-lag-p95 50 --max-distfs-failure-ratio 0.1 --chaos-continuous-enable --chaos-continuous-interval-secs 30 --chaos-continuous-start-sec 30 --chaos-continuous-max-events 8 --chaos-continuous-actions restart,pause,disconnect --chaos-continuous-seed 20260403 --chaos-continuous-restart-down-secs 1 --chaos-continuous-pause-duration-secs 2 --out-dir __RUN_DIR__/mixed-topology-release-proxy
 EOF
 )
 
@@ -167,6 +184,7 @@ while IFS='|' read -r case_id min_tier evidence_class execution_class scenario r
   case_dir="$cases_root/$case_id"
   mkdir -p "$case_dir"
   command=${command_template//__RUN_DIR__/$run_dir}
+  command=${command//__LONGRUN_BASH__/$longrun_bash}
   printf '%s\n' "$command" > "$case_dir/command.txt"
 
   started_at=$(date -Iseconds)

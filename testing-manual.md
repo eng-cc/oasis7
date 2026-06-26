@@ -587,10 +587,11 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
   - 能定位 `mismatch_tick`；
   - `rollback_to_snapshot_with_reconciliation` 后 `first_tick_consensus_drift() == None`；
   - `verify_tick_consensus_chain()` 通过。
-- 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`。
+- 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`、`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。
 
 ### S9A：链上大世界状态底座自闭环
 - 目标语义：本节的闭环对象不是单独的 libp2p/P2P transport，而是 `链上大世界状态底座`：P2P transport、分布式存储/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/validator/storage ops，以及 API/viewer 对同一 world state 的投影。
+- Claim boundary / 状态提交闭环首读入口：`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。涉及 world state sync、commit closure、state-sync bundle、observer catch-up 或 API/viewer projection 的结论，先按 GWSC 口径定档，再下钻 S9/S10 执行套件。
 - 可声明结论：
   - `module_required` 通过：底座本地合同可集成。
   - `module_full` 通过：底座在当前可执行 proxy/triad 拓扑下能持续推进和恢复。
@@ -640,6 +641,10 @@ Phase 6 world-state integration / release:
 ```
 - `module_required` 推荐命令：
 ```bash
+./scripts/game-world-state-sync-commit-module-required.sh
+```
+- 等价展开命令：
+```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --tests --features test_tier_required
 env -u RUSTC_WRAPPER cargo test -p oasis7_node
 env -u RUSTC_WRAPPER cargo test -p oasis7_net --lib
@@ -660,6 +665,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
   --execution-records-dir <seed-execution-records-dir> \
   --store-dir <seed-store-dir>
 ```
+- `module_full` state-sync closure 证据包模板：`doc/testing/templates/state-sync-closure-evidence-packet-template.md`。复制模板到实际 evidence path 后回填；模板文件本身不能作为 pass evidence。
 - real-env / release 入口：
 ```bash
 ./scripts/p2p-real-env-triad-snapshot.sh ...
@@ -667,6 +673,8 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
 ./scripts/s10-five-node-game-soak.sh --duration-secs 300 --no-prewarm --max-stall-secs 240 --max-lag-p95 50 --out-dir .tmp/release_gate_s10
 ./scripts/network-tier-public-testnet-readiness.sh --manifest <manifest> --lanes-tsv <lanes.tsv>
 ```
+- S10 `summary.json` 固定输出 `api_viewer_projection`，S10 `summary.md` 固定输出 `API / Viewer Projection Contract`。默认状态是 `not_collected`，只有补齐同窗口 API/viewer evidence refs 后才能声明 projection 已验证。
+- public_testnet readiness 必须包含 `api_viewer_projection_ready` lane；若缺失该 lane，或 pass evidence 仍指向 template/placeholder，或缺少 `api_viewer_projection.status=pass`、同窗口 refs 与 `world_state_projection_match=true` 的 JSON 证据，则不得声明 `ready_for_live_candidate`。
 - 最小验收指标：
   - `committed_height` 单调推进；
   - `consensus_hash_consistent == true` 且 `consensus_hash_mismatch_count == 0`；
@@ -938,7 +946,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required longrun_
   - `summary.json` 中 `run.status == "ok"`，并产出 `timeline.csv`；
   - `summary.json` 中 `run.metric_gate.status == "pass"`（一般告警通过 `run.metric_gate.notes` 留痕，不应降级为 `insufficient_data`）；
   - 若失败，必须保留 `failures.md` 作为分诊依据。
-- 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/s10-five-node-real-game-soak.prd.md`。
+- 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/s10-five-node-real-game-soak.prd.md`、`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。
 
 ### 发布门禁一键收口（S0 + S1 + S6 + S9 + S10）
 ```bash
@@ -1094,8 +1102,8 @@ rg -n "conflicting attestation already exists|attestation threshold not met|atte
 | `scripts/ci-m1-wasm-summary.sh` / `scripts/ci-verify-m1-wasm-summaries.py` / `scripts/wasm-release-evidence-report.sh` / `.github/workflows/wasm-determinism-gate.yml` | `S0` + `./scripts/ci-m1-wasm-summary.sh --module-set m4 --runner-label linux-x86_64 --out output/ci/m4-wasm-summary/linux-x86_64.json` + `./scripts/wasm-release-evidence-report.sh --module-sets m4 --skip-collect --summary-import-dir output/ci/m4-wasm-summary --expected-runners linux-x86_64` | `workflow_dispatch` 触发 GitHub-hosted Linux runner gate；若补入外部 macOS summary，可再用 `--expected-runners linux-x86_64,darwin-arm64` 做双宿主对账 | 若改动 hash/summary/evidence report 格式，Linux gate 必跑；跨宿主 full-tier 在有 Docker-capable macOS summary 时追加 |
 | `scripts/plan-wasm-determinism-scope.sh` | `bash -n scripts/plan-wasm-determinism-scope.sh` + `./scripts/plan-wasm-determinism-scope.sh --changed-path crates/oasis7_builtin_wasm_modules/m4_factory_miner_mk1/Cargo.toml` + `./scripts/plan-wasm-determinism-scope.sh --changed-path doc/testing/project.md` | 与 `wasm-determinism-gate` 同步执行；PR/push 上先规划命中的 module set，再决定 collect/verify 是否实际执行 | 若共享 wasm pipeline 输入命中，则必须扩成 `m1,m4,m5`；无关改动应输出 `scope=skip` 并保留 stable required contexts |
 | `scripts/run-viewer-web.sh` | S0 + S6 | S5 + S8 | 若涉及 software_safe 静态入口、构建 freshness 或浏览器自动化契约，追加对应 smoke 与 bundle 验证 |
-| `scripts/p2p-longrun-soak.sh` / `doc/testing/p2p-storage-consensus-longrun-online-stability-2026-02-24*` | S0 + S9 smoke（含 summary/timeline 校验） | S9 endurance（含 chaos） | 任何阈值/summary 字段变更必须补 endurance |
-| `scripts/s10-five-node-game-soak.sh` / `doc/testing/s10-five-node-real-game-soak*` | S0 + S10 smoke（含 summary/timeline 校验） | S10 默认长窗（30min+） | 任何门禁字段 / 结算 / mint 改动都需补长窗 |
+| `scripts/p2p-longrun-soak.sh` / `doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24*` | S0 + S9 smoke（含 summary/timeline 校验） | S9 endurance（含 chaos） | 任何阈值/summary 字段变更必须补 endurance |
+| `scripts/s10-five-node-game-soak.sh` / `doc/testing/longrun/s10-five-node-real-game-soak*` | S0 + S10 smoke（含 summary/timeline 校验） | S10 默认长窗（30min+） | 任何门禁字段 / 结算 / mint 改动都需补长窗 |
 
 ### 选择规则
 1. 先按“改动路径”命中一行矩阵，执行“必跑”。

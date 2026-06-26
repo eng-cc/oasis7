@@ -23,6 +23,11 @@ faucet_evidence="$tmpdir/faucet-guard-ready.md"
 reset_policy_evidence="$tmpdir/reset-policy-announced.md"
 runtime_bootstrap_evidence="$tmpdir/runtime-bootstrap-ready.md"
 claims_boundary_evidence="$tmpdir/claims-boundary-review.md"
+world_resource_provenance_evidence="$tmpdir/world-resource-provenance-ready.md"
+provider_resource_provenance_evidence="$tmpdir/provider-resource-provenance-ready.md"
+resource_delta_replay_evidence="$tmpdir/resource-delta-replay-ready.md"
+api_viewer_projection_evidence="$tmpdir/api-viewer-projection-ready.md"
+api_viewer_projection_vacuous_evidence="$tmpdir/api-viewer-projection-vacuous.json"
 old_skeleton_evidence="$tmpdir/public-testnet-skeleton-example.md"
 legacy_coarse_gate_evidence="$tmpdir/public-testnet-rehearsal-coarse-gate.md"
 
@@ -96,6 +101,51 @@ cat >"$claims_boundary_evidence" <<'EOF'
 - note: smoke-only claims boundary lane evidence
 EOF
 
+cat >"$world_resource_provenance_evidence" <<'EOF'
+# world resource provenance ready evidence
+
+- world_id: `public-testnet-smoke`
+- chain_id: `oasis7-public-testnet-smoke`
+- note: smoke-only world resource provenance lane evidence
+EOF
+
+cat >"$provider_resource_provenance_evidence" <<'EOF'
+# provider resource provenance ready evidence
+
+- provider_manifest: `smoke-provider-manifest`
+- note: smoke-only provider resource provenance lane evidence
+EOF
+
+cat >"$resource_delta_replay_evidence" <<'EOF'
+# resource delta replay ready evidence
+
+- replay_status: `pass`
+- note: smoke-only resource delta replay lane evidence
+EOF
+
+cat >"$api_viewer_projection_evidence" <<'EOF'
+{
+  "api_viewer_projection": {
+    "status": "pass",
+    "same_window_required": true,
+    "chain_status_samples_ref": "output/s10/timeline.csv",
+    "api_projection_ref": "output/api/projection.json",
+    "viewer_projection_ref": "output/viewer/projection.json",
+    "world_state_projection_match": true
+  }
+}
+EOF
+
+cat >"$api_viewer_projection_vacuous_evidence" <<'EOF'
+{
+  "api_viewer_projection": {
+    "status": "pass",
+    "same_window_required": true,
+    "world_state_projection_match": true
+  }
+}
+EOF
+
 cat >"$legacy_coarse_gate_evidence" <<'EOF'
 # public testnet rehearsal coarse gate evidence
 
@@ -134,6 +184,10 @@ EOF
   --require-gate faucet_guard_ready \
   --require-gate reset_policy_announced \
   --require-gate runtime_bootstrap \
+  --require-gate world_resource_provenance_ready \
+  --require-gate provider_resource_provenance_ready \
+  --require-gate resource_delta_replay_ready \
+  --require-gate api_viewer_projection_ready \
   --require-gate claims_boundary_review \
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
@@ -146,6 +200,10 @@ explorer_public_ready	runtime_engineer	partial	doc/testing/templates/public-test
 faucet_guard_ready	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder faucet evidence
 reset_policy_announced	liveops_community	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder reset evidence
 runtime_bootstrap	runtime_engineer	partial	doc/testing/templates/public-testnet-rehearsal-template.md	template bootstrap evidence
+world_resource_provenance_ready	blockchain_ops_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder world resource provenance evidence
+provider_resource_provenance_ready	agent_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder provider resource provenance evidence
+resource_delta_replay_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder resource delta replay evidence
+api_viewer_projection_ready	viewer_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder api/viewer projection evidence
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	template claims evidence
 EOF
 
@@ -155,6 +213,10 @@ explorer_public_ready	runtime_engineer	pass	EXPLORER_EVIDENCE	explorer ready
 faucet_guard_ready	liveops_community	pass	FAUCET_EVIDENCE	faucet guard ready
 reset_policy_announced	liveops_community	pass	RESET_POLICY_EVIDENCE	reset policy announced
 runtime_bootstrap	runtime_engineer	pass	RUNTIME_BOOTSTRAP_EVIDENCE	runtime bootstrap ready
+world_resource_provenance_ready	blockchain_ops_engineer	pass	WORLD_RESOURCE_PROVENANCE_EVIDENCE	world resource provenance ready
+provider_resource_provenance_ready	agent_engineer	pass	PROVIDER_RESOURCE_PROVENANCE_EVIDENCE	provider resource provenance ready
+resource_delta_replay_ready	runtime_engineer	pass	RESOURCE_DELTA_REPLAY_EVIDENCE	resource delta replay ready
+api_viewer_projection_ready	viewer_engineer	pass	API_VIEWER_PROJECTION_EVIDENCE	api/viewer projection ready
 claims_boundary_review	qa_engineer	pass	CLAIMS_BOUNDARY_EVIDENCE	claims boundary reviewed
 EOF
 
@@ -163,6 +225,10 @@ replace_literal "$ready_lanes_tsv" "EXPLORER_EVIDENCE" "$explorer_evidence"
 replace_literal "$ready_lanes_tsv" "FAUCET_EVIDENCE" "$faucet_evidence"
 replace_literal "$ready_lanes_tsv" "RESET_POLICY_EVIDENCE" "$reset_policy_evidence"
 replace_literal "$ready_lanes_tsv" "RUNTIME_BOOTSTRAP_EVIDENCE" "$runtime_bootstrap_evidence"
+replace_literal "$ready_lanes_tsv" "WORLD_RESOURCE_PROVENANCE_EVIDENCE" "$world_resource_provenance_evidence"
+replace_literal "$ready_lanes_tsv" "PROVIDER_RESOURCE_PROVENANCE_EVIDENCE" "$provider_resource_provenance_evidence"
+replace_literal "$ready_lanes_tsv" "RESOURCE_DELTA_REPLAY_EVIDENCE" "$resource_delta_replay_evidence"
+replace_literal "$ready_lanes_tsv" "API_VIEWER_PROJECTION_EVIDENCE" "$api_viewer_projection_evidence"
 replace_literal "$ready_lanes_tsv" "CLAIMS_BOUNDARY_EVIDENCE" "$claims_boundary_evidence"
 cp "$ready_lanes_tsv" "$runtime_block_lanes_tsv"
 replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer\tpass\t' $'runtime_bootstrap\truntime_engineer\tblock\t'
@@ -176,13 +242,13 @@ replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json \
   --out-dir "$out_dir/example-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 6' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 10' \
   "$(latest_summary "$out_dir/example-skeleton")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/smoke-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 6' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 10' \
   "$(latest_summary "$out_dir/smoke-skeleton")/summary.json" >/dev/null
 
 python3 - <<'PY' "$manifest_path"
@@ -201,7 +267,7 @@ PY
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/no-lanes-block" >/dev/null
-jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 6' \
+jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 10' \
   "$(latest_summary "$out_dir/no-lanes-block")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
@@ -266,6 +332,17 @@ if ./scripts/network-tier-public-testnet-readiness.sh \
   exit 1
 fi
 grep -q "pass evidence cannot use placeholder/template ref" "$tmpdir/old-skeleton-pass.stderr"
+
+cp "$ready_lanes_tsv" "$old_skeleton_pass_lanes_tsv"
+replace_literal "$old_skeleton_pass_lanes_tsv" "$api_viewer_projection_evidence" "$api_viewer_projection_vacuous_evidence"
+if ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$old_skeleton_pass_lanes_tsv" \
+  --out-dir "$out_dir/api-viewer-vacuous-pass-rejected" >"$tmpdir/api-viewer-vacuous-pass.stdout" 2>"$tmpdir/api-viewer-vacuous-pass.stderr"; then
+  echo "expected vacuous API/viewer projection pass evidence to be rejected" >&2
+  exit 1
+fi
+grep -q "api_viewer_projection_ready" "$tmpdir/api-viewer-vacuous-pass.stderr"
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
