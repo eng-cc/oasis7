@@ -18,6 +18,8 @@
 
 - [x] pm-lint-task-view-sync-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `pm-lint` task backlog lint by reusing the task views already synced by the outer lint wrapper instead of rebuilding them a second time. Trace: .pm/tasks/task_3e13225c198541109cb2faf3eb32d663.yaml
 
+- [x] pm-lint-backlog-pass-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `pm-lint` by avoiding the second coordinated full task backlog lint pass after `task-lint` has already covered execution-log validation, while preserving standalone `task-execution-log-lint` behavior. Trace: .pm/tasks/task_639bc8b58e8c4c12a42c0b790115d7c0.yaml
+
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
 - [x] TASK-ENGINEERING-002 (PRD-ENGINEERING-001/002) [test_tier_required]: 补齐高频违规（超行数/超文档长度/文档平铺新增）自动诊断与门禁建议。
 - [x] TASK-ENGINEERING-005 (PRD-ENGINEERING-001/002) [test_tier_required]: 执行文档平铺存量迁移批次（world-simulator/p2p），并更新 allowlist 与引用路径。
