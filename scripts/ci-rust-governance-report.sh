@@ -12,6 +12,7 @@ Usage: ./scripts/ci-rust-governance-report.sh [--out-dir <dir>]
 
 Produce report-only Rust governance artifacts:
 - RustSec ignored-advisory baseline metadata/ratchet report
+- standalone tool lockfile consistency report
 - cargo-deny full policy report
 - duplicate dependency report
 - duplicate dependency baseline/budget report
@@ -85,6 +86,7 @@ else
   printf '%s\n' 127 >"$out_dir/cargo-deny.log.rc"
 fi
 run_report "RustSec ignore baseline" "$out_dir/rustsec-ignore-baseline.log" ./scripts/check-rustsec-ignore-baseline.sh
+run_report "standalone tool lockfiles" "$out_dir/standalone-tool-lockfiles.log" ./scripts/check-standalone-tool-lockfiles.sh
 run_report "launcher p2p dependency surface" "$out_dir/launcher-p2p-dependency-surface.log" ./scripts/check-launcher-p2p-dependency-surface.sh
 run_report "duplicate dependencies" "$out_dir/cargo-tree-duplicates.log" cargo tree -d
 run_report "unsafe usage" "$out_dir/unsafe-usage.log" rg -n --glob '*.rs' '\bunsafe\b' .
@@ -158,6 +160,7 @@ duplicate_top_crates = [
 
 summary = {
     "rustsec_ignore_baseline_rc": read_rc("rustsec-ignore-baseline.log"),
+    "standalone_tool_lockfiles_rc": read_rc("standalone-tool-lockfiles.log"),
     "launcher_p2p_dependency_surface_rc": read_rc("launcher-p2p-dependency-surface.log"),
     "cargo_deny_rc": read_rc("cargo-deny.log"),
     "duplicate_dependencies_rc": read_rc("cargo-tree-duplicates.log"),
@@ -186,6 +189,7 @@ lines = [
     "| Check | Status | Artifact |",
     "| --- | ---: | --- |",
     f"| RustSec ignore baseline | {summary['rustsec_ignore_baseline_rc']} | `rustsec-ignore-baseline.log` |",
+    f"| standalone tool lockfiles | {summary['standalone_tool_lockfiles_rc']} | `standalone-tool-lockfiles.log` |",
     f"| launcher p2p dependency surface | {summary['launcher_p2p_dependency_surface_rc']} | `launcher-p2p-dependency-surface.log` |",
     f"| cargo deny check | {summary['cargo_deny_rc']} | `cargo-deny.log` |",
     f"| cargo tree -d | {summary['duplicate_dependencies_rc']} | `cargo-tree-duplicates.log` |",
