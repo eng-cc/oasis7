@@ -94,3 +94,12 @@ Example:
 - Expected Result: Fresh wrapper syntax, package-script help, repo wrapper help, doc governance, task workflow, and diff hygiene checks pass immediately before PR creation.
 - Actual Result: `claim-ready` returned `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`, and `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
 - Blocker / Next Action: Run `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-26 10:57:00 CST / tpm
+- 完成内容: PROJECT TRACE REPAIRED
+- 遗留事项: Rerun prepare-task-pr and continue into PR CI watch.
+- Action: `prepare-task-pr` rejected the branch because `doc/engineering/project.md` lacked a Trace entry for `task_1528a3f2bcd04bd6acad166c7a257bca`; added the current governance task row with `Trace: .pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.yaml`.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_1528a3f2bcd04bd6acad166c7a257bca --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check`
+- Expected Result: Task-local workflow lint accepts the project trace, docs remain governance-clean, and diff whitespace remains clean.
+- Actual Result: `workflow-lint: OK`; `doc-governance-check: OK`; `git diff --check` passed.
+- Blocker / Next Action: Commit evidence, then run `./scripts/prepare-task-pr.sh --create`.
