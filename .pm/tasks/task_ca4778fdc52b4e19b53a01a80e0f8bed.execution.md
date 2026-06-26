@@ -225,3 +225,12 @@ Example:
 - Expected Result: Task closes after the closeout verification command succeeds.
 - Actual Result: The closeout verification command succeeded (`last_verification_exit_code: 0`, `last_verification_status: verified`, task status `done`); the script process returned non-zero afterward because repo-wide `.pm` lint found unrelated historical execution-log debt in other tasks.
 - Blocker / Next Action: No current-task closeout blocker; proceed with task-local workflow lint and PR preparation.
+
+## 2026-06-26 10:32:00 CST / tpm
+- 完成内容: Recorded fresh ready-for-PR claim evidence after closeout.
+- 遗留事项: Commit evidence and rerun `prepare-task-pr.sh --create`.
+- Action: Ran claim-ready with the current task-local workflow lint gate.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_ca4778fdc52b4e19b53a01a80e0f8bed --phase current" --json`
+- Expected Result: Fresh ready-for-PR verification succeeds and can be cited in the execution log.
+- Actual Result: Passed with `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`, `verified_at: 2026-06-26T09:51:32+08:00`.
+- Blocker / Next Action: No blocker; rerun PR helper.
