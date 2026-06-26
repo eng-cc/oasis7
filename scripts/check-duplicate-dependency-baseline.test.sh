@@ -53,6 +53,32 @@ OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 
   ./scripts/check-duplicate-dependency-baseline.sh "$summary" >"$valid_out"
 grep -q "ok: duplicate dependency baseline within budget" "$valid_out"
 
+python3 - "$summary" "$baseline" "$tmp_dir/zero-summary.json" "$tmp_dir/zero-baseline.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+summary = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+baseline = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+summary["duplicate_dependency_cluster_count"] = 0
+summary["duplicate_dependency_unique_crates"] = 0
+summary["duplicate_dependency_entry_total"] = 0
+summary["duplicate_dependency_crates"] = []
+summary["duplicate_dependency_top_crates"] = []
+baseline["maxima"] = {
+    "duplicate_dependency_cluster_count": 0,
+    "duplicate_dependency_unique_crates": 0,
+    "duplicate_dependency_entry_total": 0,
+}
+baseline["crate_maxima"] = {}
+Path(sys.argv[3]).write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+Path(sys.argv[4]).write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
+PY
+zero_out="$tmp_dir/zero.out"
+OASIS7_DUPLICATE_DEP_BASELINE="$tmp_dir/zero-baseline.json" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/zero-summary.json" >"$zero_out"
+grep -q "ok: duplicate dependency baseline within budget" "$zero_out"
+
 python3 - "$summary" "$tmp_dir/growth.json" <<'PY'
 from pathlib import Path
 import json

@@ -80,7 +80,7 @@ if cargo_deny_rc != 0:
     )
 
 for key in required_baseline_keys:
-    if not baseline.get(key):
+    if key not in baseline or baseline[key] is None:
         failures.append(f"baseline missing key: {key}")
 
 if baseline.get("schema_version") != 1:
