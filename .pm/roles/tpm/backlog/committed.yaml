@@ -99,16 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_f2e24199fb3144aea8a95b0475d7eb85
-    title: "Find next repository governance issue"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Repository health slice identifies the next actionable governance issue with evidence."
-      - "Implement the narrow governance fix without changing unrelated behavior."
-      - "Record role evidence, focused verification, and PR-ready task evidence."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_f2e24199fb3144aea8a95b0475d7eb85.yaml

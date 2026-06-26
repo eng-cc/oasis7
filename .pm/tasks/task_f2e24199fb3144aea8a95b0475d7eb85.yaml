@@ -4,7 +4,7 @@ owner_role: tpm
 module: engineering
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-next-governance-issue-2-20260626
 execution_log_path: .pm/tasks/task_f2e24199fb3144aea8a95b0475d7eb85.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
@@ -17,5 +17,11 @@ acceptance:
   - "Implement the narrow governance fix without changing unrelated behavior."
   - "Record role evidence, focused verification, and PR-ready task evidence."
 handoff_to: []
-updated_at: 2026-06-26T10:42:58+08:00
+updated_at: 2026-06-26T11:11:25+08:00
 last_started_at: 2026-06-26T10:42:58+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -n scripts/pm/verify-gameplay-high-risk-hardening.sh && npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/main.test.jsx && npm --prefix crates/oasis7_viewer run test:ui -- performance_metrics && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_f2e24199fb3144aea8a95b0475d7eb85 --phase current && git diff --check"
+last_verified_at: 2026-06-26T11:11:24+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-26T11:11:25+08:00
