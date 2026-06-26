@@ -10,6 +10,8 @@
 
 - [x] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml
 
+- [x] transfer-history-query-page-materialization-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize transfer history queries to retain only the requested ordered page while still scanning all matches for total counts, avoiding full record materialization before pagination. Trace: .pm/tasks/task_aeb40d5298af4452bc5322b046985716.yaml
+
 - [x] remove-root-pr-md-evidence-flow (PRD-ENGINEERING-021/025) [test_tier_required]: 删除根目录共享 `PR.md`，将 post-PR evidence 链收敛到 task-local execution log / `.pm` evidence，并用 workflow-lint smoke 阻断根 `PR.md` 回流。 Trace: .pm/tasks/task_2b7e1387ff0443719e66732a90304164.yaml
 
 - [x] viewer-performance-probe-package-script-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Route the Viewer performance probe wrapper through the canonical `npm --prefix crates/oasis7_viewer run test:performance` package script and align current performance PRD command口径. Trace: .pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.yaml

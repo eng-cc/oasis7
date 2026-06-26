@@ -1,6 +1,75 @@
 use super::*;
 use crate::transfer_submit_api::transfer_submit_api_support::with_transfer_tracker;
 
+fn tracked_transfer_for_history(
+    action_id: u64,
+    submitted_at_unix_ms: i64,
+    status: TransferLifecycleStatus,
+) -> super::super::TrackedTransfer {
+    super::super::TrackedTransfer {
+        action_id,
+        from_account_id: "player:a".to_string(),
+        to_account_id: format!("player:{action_id}"),
+        amount: action_id,
+        nonce: action_id,
+        asset_id: None,
+        memo: None,
+        chain_id: None,
+        network_id: None,
+        tx_version: None,
+        tx_type: None,
+        valid_until_unix_ms: None,
+        max_fee: None,
+        fee_asset_id: None,
+        application_payload_hash: None,
+        client_request_id: None,
+        status,
+        submitted_at_unix_ms,
+        updated_at_unix_ms: submitted_at_unix_ms,
+        error_code: None,
+        error: None,
+    }
+}
+
+#[test]
+fn transfer_history_query_limits_page_without_losing_total_or_order() {
+    let _guard = lock_transfer_test_state();
+    with_transfer_tracker(|tracker| {
+        for (action_id, submitted_at_unix_ms, status) in [
+            (31, 1_000, TransferLifecycleStatus::Confirmed),
+            (32, 3_000, TransferLifecycleStatus::Pending),
+            (33, 2_000, TransferLifecycleStatus::Confirmed),
+            (34, 3_000, TransferLifecycleStatus::Confirmed),
+            (35, 500, TransferLifecycleStatus::Confirmed),
+        ] {
+            tracker.by_action_id.insert(
+                action_id,
+                tracked_transfer_for_history(action_id, submitted_at_unix_ms, status),
+            );
+        }
+        tracker.action_order.extend([31, 32, 33, 34, 35]);
+
+        let (total, items) = tracker.query_history(None, None, None, 3);
+
+        assert_eq!(total, 5);
+        assert_eq!(
+            items.iter().map(|item| item.action_id).collect::<Vec<_>>(),
+            vec![34, 32, 33]
+        );
+
+        let (confirmed_total, confirmed_items) =
+            tracker.query_history(None, Some(TransferLifecycleStatus::Confirmed), None, 2);
+        assert_eq!(confirmed_total, 4);
+        assert_eq!(
+            confirmed_items
+                .iter()
+                .map(|item| item.action_id)
+                .collect::<Vec<_>>(),
+            vec![34, 33]
+        );
+    });
+}
+
 #[test]
 fn transfer_status_and_history_endpoint_report_confirmed_record() {
     let _guard = lock_transfer_test_state();
