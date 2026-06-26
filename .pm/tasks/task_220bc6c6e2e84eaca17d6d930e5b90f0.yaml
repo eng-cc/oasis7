@@ -1,0 +1,29 @@
+task_uid: task_220bc6c6e2e84eaca17d6d930e5b90f0
+title: "Migrate pixel-world Bevy bridge to Bevy 0.19"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-bevy-0-19-migration-20260626
+execution_log_path: .pm/tasks/task_220bc6c6e2e84eaca17d6d930e5b90f0.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Update pixel_world_bridge Bevy dependency and lockfile to Bevy 0.19.x intentionally."
+  - "Apply required API/feature adaptations for native and wasm builds."
+  - "Pass pixel_world_bridge native/wasm checks plus Bevy render and pixel regression probes."
+  - "Record runtime/viewer/wasm/QA evidence and remaining release-level validation needs."
+handoff_to: []
+updated_at: 2026-06-27T00:14:31+08:00
+last_started_at: 2026-06-26T23:17:49+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/viewer-pixel-world-wasm-regression.sh --headless --viewer-port 4273 --live-bind 127.0.0.1:5123 --web-bind 127.0.0.1:5111 --chain-status-bind 127.0.0.1:5221"
+last_verified_at: 2026-06-27T00:14:30+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-27T00:14:31+08:00
