@@ -101,7 +101,7 @@ import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 Path(sys.argv[2]).write_text(
-    text.replace("validation=cargo tree -i serde_cbor", "validation=echo not-a-scope-check"),
+    text.replace("validation=cargo tree --all-features -i serde_cbor", "validation=echo not-a-scope-check"),
     encoding="utf-8",
 )
 PY
@@ -110,5 +110,45 @@ if run_check "$bad_validation" >"$tmp_dir/bad-validation.out" 2>&1; then
   exit 1
 fi
 grep -q 'validation must be a `cargo tree -i ...` command' "$tmp_dir/bad-validation.out"
+
+extra_local_crate="$tmp_dir/extra-local-crate.toml"
+python3 - deny.toml "$extra_local_crate" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+Path(sys.argv[2]).write_text(
+    text.replace(
+        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
+        "local_crates=oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
+    ),
+    encoding="utf-8",
+)
+PY
+if run_check "$extra_local_crate" >"$tmp_dir/extra-local-crate.out" 2>&1; then
+  echo "expected unapproved local crate scope case to fail" >&2
+  exit 1
+fi
+grep -q "appears in unapproved local crate scope" "$tmp_dir/extra-local-crate.out"
+
+missing_local_crate="$tmp_dir/missing-local-crate.toml"
+python3 - deny.toml "$missing_local_crate" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+Path(sys.argv[2]).write_text(
+    text.replace(
+        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk",
+        "local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk,oasis7_fake_scope",
+    ),
+    encoding="utf-8",
+)
+PY
+if run_check "$missing_local_crate" >"$tmp_dir/missing-local-crate.out" 2>&1; then
+  echo "expected missing approved local crate scope case to fail" >&2
+  exit 1
+fi
+grep -q "approved local crate scope(s) missing from validation" "$tmp_dir/missing-local-crate.out"
 
 echo "check-rustsec-ignore-baseline.test: OK"

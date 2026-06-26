@@ -24,7 +24,7 @@ approved = [
     "RUSTSEC-2021-0127",
     "RUSTSEC-2024-0436",
 ]
-required_keys = ("owner", "scope", "reason", "expiry", "validation")
+required_keys = ("owner", "scope", "reason", "expiry", "validation", "local_crates")
 allowed_libp2p_local_crates = {
     "oasis7_net",
     "oasis7_node",
@@ -75,6 +75,9 @@ def with_prefix_none(args: list[str]) -> list[str]:
         return args
     return [*args, "--prefix", "none"]
 
+def csv_set(value: str) -> set[str]:
+    return {part.strip() for part in value.split(",") if part.strip()}
+
 def run_cargo_tree(args: list[str], advisory_id: str, label: str) -> list[str] | None:
     cmd = ["env", "-u", "RUSTC_WRAPPER", "cargo", "tree", *with_prefix_none(args)]
     result = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -102,15 +105,16 @@ def validate_dependency_scope(advisory_id: str, metadata: dict[str, str], line_n
     scoped_lines = run_cargo_tree(args, advisory_id, "scoped cargo tree")
     if scoped_lines is None:
         return
-    if "-p" not in args:
-        return
-
     inverse_index = args.index("-i")
     if inverse_index + 1 >= len(args):
         failures.append(f"line {line_no}: `{advisory_id}` validation is missing `-i` package")
         return
     package_spec = args[inverse_index + 1]
-    workspace_lines = run_cargo_tree(["-i", package_spec], advisory_id, "workspace cargo tree")
+    if "-p" in args:
+        workspace_args = ["-i", package_spec]
+    else:
+        workspace_args = args
+    workspace_lines = run_cargo_tree(workspace_args, advisory_id, "workspace cargo tree")
     if workspace_lines is None:
         return
 
@@ -139,6 +143,20 @@ def validate_dependency_scope(advisory_id: str, metadata: dict[str, str], line_n
         for name in [package_name(line)]
         if name
     }
+    expected_local = csv_set(metadata.get("local_crates", ""))
+    if expected_local:
+        extra_local = sorted(local_crates - expected_local)
+        missing_local = sorted(expected_local - local_crates)
+        if extra_local:
+            failures.append(
+                f"`{advisory_id}` appears in unapproved local crate scope(s): "
+                + ", ".join(extra_local)
+            )
+        if missing_local:
+            failures.append(
+                f"`{advisory_id}` approved local crate scope(s) missing from validation: "
+                + ", ".join(missing_local)
+            )
     if metadata.get("scope", "").startswith("oasis7_net libp2p"):
         extra_local = sorted(local_crates - allowed_libp2p_local_crates)
         if extra_local:
