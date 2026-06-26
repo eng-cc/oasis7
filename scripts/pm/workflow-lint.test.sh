@@ -43,6 +43,10 @@ last_verification_status: verified
 last_closed_at: 2026-06-25T00:02:00+08:00
 EOF
 
+cat > "$TMPDIR/.pm/tasks/task_22222222222222222222222222222222.yaml" <<EOF
+this: [unrelated malformed task yaml
+EOF
+
 write_log() {
   local actual_result=$1
   cat > "$TMPDIR/.pm/tasks/$TASK_UID.execution.md" <<EOF
