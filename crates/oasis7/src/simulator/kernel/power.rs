@@ -16,55 +16,48 @@ impl WorldKernel {
         let thermal_dissipation = self.config.physics.thermal_dissipation;
         let thermal_dissipation_gradient_bps = self.config.physics.thermal_dissipation_gradient_bps;
 
-        let agent_ids: Vec<AgentId> = self.model.agents.keys().cloned().collect();
+        let mut pending_power_events = Vec::new();
 
-        for agent_id in agent_ids {
-            let (consumed, remaining, old_state, new_state) = {
-                let agent = match self.model.agents.get_mut(&agent_id) {
-                    Some(a) => a,
-                    None => continue,
-                };
+        for (agent_id, agent) in self.model.agents.iter_mut() {
+            if agent.power.is_shutdown() {
+                continue;
+            }
 
-                if agent.power.is_shutdown() {
-                    continue;
-                }
-
-                let old_state = agent.power.state;
-                let consumed = agent.power.consume(idle_cost, &power_config);
-                let new_state = agent.power.state;
-                let thermal_drop = Self::scaled_thermal_dissipation(
-                    agent.thermal.heat,
-                    thermal_capacity,
-                    thermal_dissipation,
-                    thermal_dissipation_gradient_bps,
-                );
-                if thermal_drop > 0 {
-                    agent.thermal.heat = agent.thermal.heat.saturating_sub(thermal_drop);
-                }
-                (consumed, agent.power.level, old_state, new_state)
-            };
-
+            let old_state = agent.power.state;
+            let consumed = agent.power.consume(idle_cost, &power_config);
+            let new_state = agent.power.state;
+            let remaining = agent.power.level;
+            let thermal_drop = Self::scaled_thermal_dissipation(
+                agent.thermal.heat,
+                thermal_capacity,
+                thermal_dissipation,
+                thermal_dissipation_gradient_bps,
+            );
+            if thermal_drop > 0 {
+                agent.thermal.heat = agent.thermal.heat.saturating_sub(thermal_drop);
+            }
             if consumed > 0 {
-                let power_event = PowerEvent::PowerConsumed {
+                pending_power_events.push(PowerEvent::PowerConsumed {
                     agent_id: agent_id.clone(),
                     amount: consumed,
                     reason: ConsumeReason::Idle,
                     remaining,
-                };
-                let event = self.record_event(super::types::WorldEventKind::Power(power_event));
-                events.push(event);
+                });
             }
 
             if old_state != new_state {
-                let power_event = PowerEvent::PowerStateChanged {
+                pending_power_events.push(PowerEvent::PowerStateChanged {
                     agent_id: agent_id.clone(),
                     from: old_state,
                     to: new_state,
                     trigger_level: remaining,
-                };
-                let event = self.record_event(super::types::WorldEventKind::Power(power_event));
-                events.push(event);
+                });
             }
+        }
+
+        for power_event in pending_power_events {
+            let event = self.record_event(super::types::WorldEventKind::Power(power_event));
+            events.push(event);
         }
 
         events
