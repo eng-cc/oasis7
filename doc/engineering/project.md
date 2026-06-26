@@ -308,6 +308,7 @@
 - [x] root-design-legacy-entrypoint-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口当前模块根 `design.md` 的旧模板语义，删除指向标准 `project.md` 的重复“兼容执行入口”行，并把 legacy 风险改为 redirect 误标注风险，避免读者把当前执行入口误读成历史兼容入口。 Trace: .pm/tasks/task_4d604c693b8249e5aa62f03aa18985a7.yaml
 - [x] headless-runtime-evidence-sink-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `headless-runtime` 当前项目页、生命周期/鉴权 checklist 与长稳归档模板中仍把新任务证据导向 `doc/devlog` 的旧语义，将 active evidence sink 改为 `.pm/tasks/task_<32hex>.execution.md`，保留 `doc/devlog/README.md` 仅作为历史归档入口。 Trace: .pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml
 - [x] world-runtime-evidence-sink-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `world-runtime` 当前项目页、runtime core boundary checklist 与 runtime security/numeric regression template 中仍把新任务证据导向 `doc/devlog` 的旧语义，将 active evidence sink 改为 `.pm/tasks/task_<32hex>.execution.md`，保留 `doc/devlog/README.md` 仅作为历史归档入口。 Trace: .pm/tasks/task_cec36d733eaa4d418223792f8227c0a6.yaml
+- [x] gwsc-test-readiness-gates (PRD-ENGINEERING-021/025) [test_tier_required] + [test_tier_full]: 补齐大世界状态同步与提交闭环的模块级 wrapper、S10 API/viewer projection contract、public_testnet readiness lane 和 claim-boundary 文档，确保 module/proxy 证据不越界声明 release/public_testnet ready。 Trace: .pm/tasks/task_b52dc268bc394b0eb05a139eabc00307.yaml
 
 ## File Structure / Affected Paths
 
