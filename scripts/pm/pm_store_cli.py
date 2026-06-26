@@ -29,10 +29,20 @@ def build_parser(
 
     task_lint = subparsers.add_parser("task-lint")
     task_lint.add_argument("root", type=pathlib.Path)
+    task_lint.add_argument(
+        "--views-already-synced",
+        action="store_true",
+        help="skip internal task view sync; only use after sync-views already ran",
+    )
     task_lint.set_defaults(func=handlers["cmd_task_lint"])
 
     task_execution_log_lint = subparsers.add_parser("task-execution-log-lint")
     task_execution_log_lint.add_argument("root", type=pathlib.Path)
+    task_execution_log_lint.add_argument(
+        "--views-already-synced",
+        action="store_true",
+        help="skip internal task view sync; only use after sync-views already ran",
+    )
     task_execution_log_lint.set_defaults(func=handlers["cmd_task_execution_log_lint"])
 
     memory_lint = subparsers.add_parser("memory-lint")

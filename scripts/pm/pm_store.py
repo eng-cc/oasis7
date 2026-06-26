@@ -2366,10 +2366,10 @@ def build_workflow_report(
     )
 
 
-def run_task_backlog_lint(root: pathlib.Path) -> None:
+def run_task_backlog_lint(root: pathlib.Path, *, views_already_synced: bool = False) -> None:
     run_task_backlog_lint_helper(
         root,
-        sync_task_views=sync_task_views,
+        sync_task_views=(lambda _root: None) if views_already_synced else sync_task_views,
         load_roles=load_roles,
         collect_signals=collect_signals,
         is_devlog_archive_reference=is_devlog_archive_reference,
@@ -2416,12 +2416,12 @@ def cmd_working_memory_lint(args: argparse.Namespace) -> int:
 
 
 def cmd_task_lint(args: argparse.Namespace) -> int:
-    run_task_backlog_lint(args.root)
+    run_task_backlog_lint(args.root, views_already_synced=args.views_already_synced)
     return 0
 
 
 def cmd_task_execution_log_lint(args: argparse.Namespace) -> int:
-    run_task_backlog_lint(args.root)
+    run_task_backlog_lint(args.root, views_already_synced=args.views_already_synced)
     print("task-execution-log-lint: OK")
     return 0
 
