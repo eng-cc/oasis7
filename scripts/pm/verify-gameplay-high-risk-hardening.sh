@@ -23,10 +23,7 @@ oasis7_cargo_dev test -p oasis7 \
 
 npm --prefix crates/oasis7_viewer run test:feedback-contract
 
-(
-  cd crates/oasis7_viewer
-  npm run test:ui -- software_safe_src/main.test.jsx
-)
+npm --prefix crates/oasis7_viewer run test:ui -- software_safe_src/main.test.jsx
 
 ./scripts/build-viewer-software-safe.sh
 ./scripts/doc-governance-check.sh

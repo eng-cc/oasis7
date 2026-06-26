@@ -10,6 +10,8 @@
 
 - [x] viewer-performance-probe-package-script-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Route the Viewer performance probe wrapper through the canonical `npm --prefix crates/oasis7_viewer run test:performance` package script and align current performance PRD command口径. Trace: .pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.yaml
 
+- [x] viewer-ui-test-entrypoint-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Route current Viewer UI test entrypoints in gameplay hardening and performance harness guidance through repo-root `npm --prefix crates/oasis7_viewer run test:ui` commands. Trace: .pm/tasks/task_f2e24199fb3144aea8a95b0475d7eb85.yaml
+
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
 - [x] TASK-ENGINEERING-002 (PRD-ENGINEERING-001/002) [test_tier_required]: 补齐高频违规（超行数/超文档长度/文档平铺新增）自动诊断与门禁建议。
 - [x] TASK-ENGINEERING-005 (PRD-ENGINEERING-001/002) [test_tier_required]: 执行文档平铺存量迁移批次（world-simulator/p2p），并更新 allowlist 与引用路径。

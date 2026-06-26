@@ -58,7 +58,7 @@
 
 ## 验证
 - Required narrow checks:
-  - `cd crates/oasis7_viewer && npm run test:ui -- performance_metrics`
+  - `npm --prefix crates/oasis7_viewer run test:ui -- performance_metrics`
   - `./scripts/viewer-performance-probe.sh --profile smoke --duration-ms 1000 --min-frame-samples 20 --min-fps 20`
   - `git diff --check`
 - Broader follow-up when chasing player-visible lag:
