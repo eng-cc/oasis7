@@ -224,6 +224,55 @@ fi
 grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-direct.out"
 cp "$launcher_backup" "$launcher_manifest"
 
+python3 - "$launcher_manifest" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+out = []
+inserted = False
+for line in lines:
+    out.append(line)
+    if line.strip() == "[dependencies]" and not inserted:
+        out.append("'paste' = '1'")
+        inserted = True
+if not inserted:
+    raise SystemExit("test manifest missing [dependencies]")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+if run_check deny.toml >"$tmp_dir/paste-single-quoted.out" 2>&1; then
+  echo "expected single-quoted direct paste manifest case to fail" >&2
+  exit 1
+fi
+grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-single-quoted.out"
+cp "$launcher_backup" "$launcher_manifest"
+
+python3 - "$launcher_manifest" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+out = []
+inserted = False
+for line in lines:
+    out.append(line)
+    if line.strip() == "[dependencies]" and not inserted:
+        out.append('paste_alias.package = "paste"')
+        out.append('paste_alias.version = "1"')
+        inserted = True
+if not inserted:
+    raise SystemExit("test manifest missing [dependencies]")
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+PY
+if run_check deny.toml >"$tmp_dir/paste-dotted-alias.out" 2>&1; then
+  echo "expected dotted alias direct paste manifest case to fail" >&2
+  exit 1
+fi
+grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-dotted-alias.out"
+cp "$launcher_backup" "$launcher_manifest"
+
 python3 - "$root_manifest" <<'PY'
 from pathlib import Path
 import sys

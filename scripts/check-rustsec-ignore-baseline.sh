@@ -55,8 +55,12 @@ failures: list[str] = []
 metadata_re = re.compile(r"^\s*#\s*rustsec-ignore:\s*(?P<body>.+)$")
 id_re = re.compile(r'"(?P<id>RUSTSEC-\d{4}-\d{4})"')
 table_re = re.compile(r"^\s*\[(?P<table>[^\]]+)\]\s*$")
-dep_key_re = re.compile(r"^\s*(?P<key>[A-Za-z0-9_-]+|\"[^\"]+\")\s*=")
-package_re = re.compile(r"\bpackage\s*=\s*\"(?P<package>[^\"]+)\"")
+dep_key_re = re.compile(
+    r"^\s*(?P<key>(?:[A-Za-z0-9_-]+|'[^']+'|\"[^\"]+\")"
+    r"(?:\s*\.\s*(?:[A-Za-z0-9_-]+|'[^']+'|\"[^\"]+\"))*)\s*="
+)
+package_re = re.compile(r"\bpackage\s*=\s*(['\"])(?P<package>[^'\"]+)\1")
+quoted_scalar_re = re.compile(r"^\s*(['\"])(?P<value>[^'\"]+)\1\s*$")
 
 def parse_metadata(body: str, line_no: int) -> dict[str, str]:
     metadata: dict[str, str] = {}
@@ -147,6 +151,40 @@ def tracked_cargo_manifests() -> list[Path]:
 def normalize_table_name(table: str) -> str:
     return table.replace('"', "").replace("'", "")
 
+def split_toml_key(key: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    for char in key:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = None
+            continue
+        if char in ("'", '"'):
+            quote = char
+            current.append(char)
+            continue
+        if char == ".":
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    parts.append("".join(current).strip())
+    return [unquote_toml_key(part) for part in parts if part]
+
+def unquote_toml_key(key: str) -> str:
+    key = key.strip()
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in ("'", '"'):
+        return key[1:-1]
+    return key
+
+def quoted_scalar(value: str) -> str | None:
+    match = quoted_scalar_re.match(value)
+    if match:
+        return match.group("value")
+    return None
+
 def direct_dependency_manifests(crate_name: str) -> set[str]:
     manifests: set[str] = set()
     for manifest in tracked_cargo_manifests():
@@ -183,9 +221,20 @@ def direct_dependency_manifests(crate_name: str) -> set[str]:
             if dependency_table:
                 key_match = dep_key_re.match(stripped)
                 if key_match:
-                    key = key_match.group("key").strip('"')
+                    key_parts = split_toml_key(key_match.group("key"))
+                    key = key_parts[0] if key_parts else ""
                     value = stripped.split("=", 1)[1]
-                    if key == crate_name or package_re.search(value or "") and package_re.search(value or "").group("package") == crate_name:
+                    package_match = package_re.search(value or "")
+                    dotted_package = (
+                        len(key_parts) >= 2
+                        and key_parts[-1] == "package"
+                        and quoted_scalar(value) == crate_name
+                    )
+                    if (
+                        key == crate_name
+                        or package_match and package_match.group("package") == crate_name
+                        or dotted_package
+                    ):
                         manifests.add(str(manifest))
             elif dependency_subtable:
                 package_match = package_re.search(stripped)
