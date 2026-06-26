@@ -361,6 +361,48 @@ impl<B: AgentBehavior> AgentRunner<B> {
         self.agents.keys().cloned().collect()
     }
 
+    fn is_agent_ready_for_tick(
+        &self,
+        kernel: &WorldKernel,
+        now: WorldTime,
+        id: &str,
+        agent: &RegisteredAgent<B>,
+    ) -> bool {
+        if !kernel.model().agents.contains_key(id) {
+            return false;
+        }
+        if !agent.is_ready(now) {
+            return false;
+        }
+        let quota = agent.quota.as_ref().or(self.default_quota.as_ref());
+        if let Some(q) = quota {
+            if q.is_exhausted(agent.action_count, agent.decision_count) {
+                return false;
+            }
+        }
+        !agent.is_rate_limited(now, self.rate_limit_policy.as_ref())
+    }
+
+    fn select_next_ready_agent_id(&self, kernel: &WorldKernel, now: WorldTime) -> Option<String> {
+        let cursor = self.scheduler_cursor.as_deref();
+        let mut first_ready = None;
+        let mut first_after_cursor = None;
+
+        for (id, agent) in &self.agents {
+            if !self.is_agent_ready_for_tick(kernel, now, id, agent) {
+                continue;
+            }
+            let id = id.as_str();
+            first_ready.get_or_insert(id);
+            if cursor.is_some_and(|cursor| id > cursor) {
+                first_after_cursor = Some(id);
+                break;
+            }
+        }
+
+        first_after_cursor.or(first_ready).map(str::to_owned)
+    }
+
     /// Returns the total ticks executed.
     pub fn total_ticks(&self) -> u64 {
         self.total_ticks
@@ -382,53 +424,12 @@ impl<B: AgentBehavior> AgentRunner<B> {
         self.total_ticks += 1;
         let now = kernel.time();
 
-        // Find the next ready agent using round-robin
-        // Exclude agents that are quota-exhausted or rate-limited
-        let rate_policy = self.rate_limit_policy.as_ref();
-        let default_quota = self.default_quota.as_ref();
-
-        let ready_agents: Vec<String> = self
-            .agents
-            .iter()
-            .filter(|(id, agent)| {
-                // Check if agent is registered in the world
-                if !kernel.model().agents.contains_key(*id) {
-                    return false;
-                }
-                // Check if agent is ready (not waiting)
-                if !agent.is_ready(now) {
-                    return false;
-                }
-                // Check quota (per-agent or default)
-                let quota = agent.quota.as_ref().or(default_quota);
-                if let Some(q) = quota {
-                    if q.is_exhausted(agent.action_count, agent.decision_count) {
-                        return false;
-                    }
-                }
-                // Check rate limit
-                if agent.is_rate_limited(now, rate_policy) {
-                    return false;
-                }
-                true
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-
-        if ready_agents.is_empty() {
+        // Find the next ready agent using round-robin, respecting world
+        // registration, wait state, quota, and rate limits.
+        let Some(agent_id) = self.select_next_ready_agent_id(kernel, now) else {
             self.runtime_perf
                 .record_tick_duration(tick_started_at.elapsed());
             return None;
-        }
-
-        // Round-robin selection
-        let agent_id = match &self.scheduler_cursor {
-            None => ready_agents[0].clone(),
-            Some(cursor) => ready_agents
-                .iter()
-                .find(|id| id.as_str() > cursor.as_str())
-                .cloned()
-                .unwrap_or_else(|| ready_agents[0].clone()),
         };
 
         self.scheduler_cursor = Some(agent_id.clone());
@@ -539,44 +540,10 @@ impl<B: AgentBehavior> AgentRunner<B> {
         self.total_ticks += 1;
         let now = kernel.time();
 
-        let rate_policy = self.rate_limit_policy.as_ref();
-        let default_quota = self.default_quota.as_ref();
-        let ready_agents: Vec<String> = self
-            .agents
-            .iter()
-            .filter(|(id, agent)| {
-                if !kernel.model().agents.contains_key(*id) {
-                    return false;
-                }
-                if !agent.is_ready(now) {
-                    return false;
-                }
-                let quota = agent.quota.as_ref().or(default_quota);
-                if let Some(q) = quota {
-                    if q.is_exhausted(agent.action_count, agent.decision_count) {
-                        return false;
-                    }
-                }
-                if agent.is_rate_limited(now, rate_policy) {
-                    return false;
-                }
-                true
-            })
-            .map(|(id, _)| id.clone())
-            .collect();
-        if ready_agents.is_empty() {
+        let Some(agent_id) = self.select_next_ready_agent_id(kernel, now) else {
             self.runtime_perf
                 .record_tick_duration(tick_started_at.elapsed());
             return None;
-        }
-
-        let agent_id = match &self.scheduler_cursor {
-            None => ready_agents[0].clone(),
-            Some(cursor) => ready_agents
-                .iter()
-                .find(|id| id.as_str() > cursor.as_str())
-                .cloned()
-                .unwrap_or_else(|| ready_agents[0].clone()),
         };
         self.scheduler_cursor = Some(agent_id.clone());
 
