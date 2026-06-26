@@ -99,18 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_ca4778fdc52b4e19b53a01a80e0f8bed
-    title: "find next Rust dependency upgrade governance issue"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd:
-      - PRD-ENGINEERING-021
-      - PRD-ENGINEERING-025
-    acceptance:
-      - "Identify the next actionable Rust dependency upgrade or dependency-governance issue using repository evidence."
-      - "Apply a scoped governance fix when a safe high-value candidate is found."
-      - "Verify dependency graph, governance checks, and affected build/test surfaces before PR."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.yaml

@@ -172,3 +172,56 @@ Example:
 - Expected Result: Project trace/doc changes preserve doc governance.
 - Actual Result: Passed: `doc-governance-check: OK`.
 - Blocker / Next Action: Commit current implementation and review evidence.
+
+## 2026-06-26 10:23:00 CST / tpm
+- 完成内容: Recorded parser-friendly pre-PR local role review packet.
+- 遗留事项: Run closeout, commit evidence-only packet, then create PR.
+- Pre-PR Local Role Review: passed
+- Task UID: task_ca4778fdc52b4e19b53a01a80e0f8bed
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next-round
+- Source Branch: task/engineering-rust-dependency-upgrade-next-round
+- Source Head: c0e34e7727ec4ce9337ca9dc129f850454d95734
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.execution.md; .pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.yaml; doc/engineering/project.md; scripts/check-standalone-tool-lockfiles.sh; scripts/ci-rust-governance-report.sh; tools/wasm_module_observe/Cargo.lock
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next-round/.pm/scratch/task_ca4778fdc52b4e19b53a01a80e0f8bed/review-packages/review-83211dcc5..c0e34e772.diff
+- Role Selection Basis: `repository_health_engineer` owns dependency governance and lockfile drift candidate selection; `wasm_platform_engineer` required by `tools/wasm_module_observe` and WASM tool lockfile semantics; `runtime_engineer` required because the lockfile sync touches the `oasis7_wasm_executor`/`wasmtime` runtime closure; `producer_system_designer` required by `doc/engineering/project.md` task trace and scope semantics; `qa_engineer` required for verification sufficiency and PR readiness.
+- Review Roles: repository_health_engineer, wasm_platform_engineer, runtime_engineer, producer_system_designer, qa_engineer
+- Review Evidence: repository_health_engineer selected standalone lockfile drift governance as the safest next dependency issue; wasm_platform_engineer found one P1 false-green issue in the checker, which was fixed by removing `--no-deps` and confirmed in follow-up with no findings; runtime_engineer found no runtime source/replay/checkpoint risk and confirmed the lockfile follows `wasm_module_observe -> oasis7_wasm_executor -> wasmtime 43.0.2`; qa_engineer found the verification matrix sufficient after the WASM finding fix; producer/system scope is covered by project trace update and repository-health candidate scoping, with no product/system promise beyond dependency-governance trace.
+- Review Verdicts: repository_health_engineer scope/spec compliance pass and repository-health quality/risk pass for Candidate A; wasm_platform_engineer scope/spec pass and quality/risk pass after finding fix; runtime_engineer scope/spec pass and quality/risk pass with replay/checkpoint n/a; qa_engineer verification sufficiency pass and quality/risk pass with explicit manifest-list residual risk; producer_system_designer scope/spec compliance pass and quality/risk pass because project trace only records completed dependency-governance work and does not add product/runtime commitments.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: WASM P1 finding addressed in `scripts/check-standalone-tool-lockfiles.sh` by using full `cargo metadata --locked --format-version 1`; `/tmp` negative smoke mutating copied `wasm_module_observe` lockfile `wasmtime 43.0.2` to `43.0.1` returned 101; follow-up WASM review confirmed no findings.
+- Verification Matrix: standalone lockfile checker -> `./scripts/check-standalone-tool-lockfiles.sh` passed for 3 manifests; transitive drift negative smoke -> full `cargo metadata --locked` returned 101 on intentionally stale copied lockfile; Rust governance report -> `./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-standalone-lockfile-after-fix` all rows status 0; locked WASM tool build -> `env -u RUSTC_WRAPPER cargo check --manifest-path tools/wasm_module_observe/Cargo.toml --locked` passed in 2m44s; adjacent standalone tool lock check -> `env -u RUSTC_WRAPPER cargo check --manifest-path tools/scenario_test_runner/Cargo.toml --locked` passed in 3m35s with existing warnings only; workflow/doc hygiene -> `./scripts/pm/workflow-lint.sh --task-uid task_ca4778fdc52b4e19b53a01a80e0f8bed --phase current`, `git diff --check`, and `./scripts/doc-governance-check.sh` passed.
+- Visual Evidence: n/a (no player-visible UI, rendering, or viewer asset change)
+- WASM Evidence: `tools/wasm_module_observe/Cargo.lock` now resolves the current `wasmtime 43.0.2` / `cranelift 0.130.2` closure; `cargo check --manifest-path tools/wasm_module_observe/Cargo.toml --locked` passed; no WASM ABI, receipt schema, source hash, or determinism workflow source changed.
+- Ops Evidence: n/a (no deployment, packaging, node ops, rollback, or operator runbook change)
+- LiveOps Evidence: n/a (no external messaging, player promise, incident, release note, or community-facing change)
+- Residual Risk: `serde_cbor` and `paste` remain RustSec baseline debts; standalone lockfile checker uses an explicit list of current standalone tools and future tools must be added deliberately; Rust governance report is report-only, while required advisory gating remains in `./scripts/ci-tests.sh`; no end-to-end `wasm_module_observe observe` fixture was run because this task changes lockfile/governance surfaces only.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next-round/.pm/scratch/task_ca4778fdc52b4e19b53a01a80e0f8bed/slice-ledger.jsonl
+- Action: Integrated local role reviews and recorded required pre-PR packet.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_ca4778fdc52b4e19b53a01a80e0f8bed --phase current`
+- Expected Result: Current task execution log remains parser-friendly after review packet integration.
+- Actual Result: Passed: `workflow-lint: OK`.
+- Blocker / Next Action: Rerun workflow lint, closeout, commit evidence-only changes, and prepare PR.
+
+## 2026-06-26 10:27:00 CST / producer_system_designer
+- 完成内容: Completed producer/system-design pre-PR review for the project trace and scope semantics.
+- 遗留事项: No producer/system blocker.
+- Review Trigger: pre-PR local role review required by `doc/engineering/project.md` trace change.
+- Review Scope: `doc/engineering/project.md`; `.pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.yaml`; `.pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.execution.md`; standalone lockfile governance diff.
+- Review Verdict: no findings. Scope/spec compliance pass; quality/risk pass with residual risk.
+- Evidence: Project trace accurately records a completed Rust dependency-governance task for standalone tool lockfile drift, does not promise product/runtime/WASM behavior changes, and does not imply `serde_cbor` or `paste` are resolved.
+- Residual Risk: `serde_cbor` and `paste` remain future dependency-governance debts; Rust governance report remains report-only; project status "latest completed" section was not part of this update.
+- Action: Reviewed project trace, task acceptance, execution log, and governance diff for scope and system-level semantics.
+- Validation Command: `git diff origin/main...HEAD -- doc/engineering/project.md .pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.yaml .pm/tasks/task_ca4778fdc52b4e19b53a01a80e0f8bed.execution.md`; `rg -n "PRD-ENGINEERING-021|PRD-ENGINEERING-025|Rust|依赖|governance|lockfile|standalone" doc/engineering/prd.md doc/engineering/project.md`
+- Expected Result: Project/task trace matches user intent without scope creep or misleading system promises.
+- Actual Result: producer_system_designer review found no findings.
+- Blocker / Next Action: No producer/system blocker.
+
+## 2026-06-26 10:30:00 CST / tpm
+- 完成内容: Closed current task with fresh Rust governance verification.
+- 遗留事项: Commit evidence-only closeout changes and create PR.
+- Action: Ran task closeout using the standalone lockfile-enabled Rust governance report.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_ca4778fdc52b4e19b53a01a80e0f8bed --verify-command "./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-standalone-lockfile-closeout"`
+- Expected Result: Task closes after the closeout verification command succeeds.
+- Actual Result: The closeout verification command succeeded (`last_verification_exit_code: 0`, `last_verification_status: verified`, task status `done`); the script process returned non-zero afterward because repo-wide `.pm` lint found unrelated historical execution-log debt in other tasks.
+- Blocker / Next Action: No current-task closeout blocker; proceed with task-local workflow lint and PR preparation.
