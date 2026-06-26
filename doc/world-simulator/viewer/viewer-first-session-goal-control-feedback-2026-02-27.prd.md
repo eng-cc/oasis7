@@ -60,5 +60,16 @@
   - `getState().lastControlFeedback`
 - 输入解释链路已覆盖“入参解析、失败原因、建议下一步、世界状态增量（logicalTime/eventSeq）”。
 
+## 2026-06-25 Follow-up: P0 Control Proof Surface
+- `software_safe` 正式玩家入口在 `Formal Gameplay Summary` 顶部新增 `Control Proof` 卡片，把现有 runtime/viewer 真值聚合为四格：`Player Intent`、`World Consequence`、`Recovery Move`、`Next Move`。
+- 该卡片只消费既有 `player_gameplay` / feedback 字段，不新增 runtime schema，不把 viewer 派生摘要写成 canonical truth。
+- 交互意图：玩家不需要展开 diagnostics 或拼 raw log，也能在同一处回答“我让系统做什么、世界为什么这样、卡住时怎么恢复、下一步做什么”。
+- 验收：`software-safe-feedback-contract.test.mjs` 锁定 `controlProof` 派生结构，`main.test.jsx` 锁定 DOM 中 `Control Proof / Player Intent / World Consequence / Recovery Move / Next Move` 可见。
+
+## 2026-06-25 Follow-up: P1/P2 Continuation Surface
+- `software_safe` 正式玩家入口在 `Formal Gameplay Summary` 中追加 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于把 AI 时代开篇体验的后续落点从“系统替我做事”转成“我能打断、重排、纠偏，并看到世界承接结果”。
+- 该 surface 继续只读现有 `player_gameplay` 字段，不新增 runtime canonical truth；具体 small-player lane、anti-grind 与 repair/rebuild/pivot 设计真值挂回 `PRD-GAME-015`。
+- 验收：`software-safe-feedback-contract.test.mjs` 锁定 P1/P2 派生结构，`main.test.jsx` 锁定 `Agency Moves / First Win & Anti-Grind / Mature-World Continuation / Share Replay` 可见。
+
 ## 6. Validation & Decision Record
 - 追溯: 对应同名 `.project.md`，保持原文约束语义不变。

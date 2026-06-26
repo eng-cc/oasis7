@@ -1,0 +1,23 @@
+task_uid: task_2b7e1387ff0443719e66732a90304164
+title: "remove root PR.md evidence flow"
+owner_role: tpm
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-remove-root-pr-md-flow-20260625
+execution_log_path: .pm/tasks/task_2b7e1387ff0443719e66732a90304164.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - AGENTS.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-25T14:10:54+08:00
+last_started_at: 2026-06-25T13:25:24+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.test.sh && ./scripts/prepare-task-pr.test.sh && ./scripts/pm/workflow-behavior-eval.sh --json >/tmp/oasis7-workflow-behavior-eval-prmd-removal-closeout.json && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_2b7e1387ff0443719e66732a90304164 --phase current && git diff --check"
+last_verified_at: 2026-06-25T14:10:53+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-25T14:10:54+08:00

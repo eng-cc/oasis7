@@ -107,4 +107,37 @@ grep -q 'remote_replication_root="$remote_stack_root/output/node-distfs/$remote_
 grep -q 'REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root"' scripts/p2p-public-testnet-local-observer-sync.sh
 
+local_stack="$tmp_dir/local-stack"
+mkdir -p \
+  "$local_stack/world" \
+  "$local_stack/world-simulator-mirror" \
+  "$local_stack/execution-records" \
+  "$local_stack/store/blobs" \
+  "$local_stack/runtime-root" \
+  "$local_stack/replication-root"
+printf '{"height":1233}\n' >"$local_stack/world/snapshot.json"
+printf '{"mirror":"old"}\n' >"$local_stack/world-simulator-mirror/snapshot.json"
+printf '{"height":1233}\n' >"$local_stack/execution-records/latest.json"
+printf 'old blob\n' >"$local_stack/store/blobs/old"
+printf '{"runtime":"old"}\n' >"$local_stack/runtime-root/reward-runtime-execution-bridge-state.json"
+printf '{"committed_height":1233}\n' >"$local_stack/replication-root/node_pos_state.json"
+
+reset_backup="$tmp_dir/reset-backup"
+./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+  --local-env "$tmp_dir/local.env" \
+  --backup-dir "$reset_backup"
+
+test -f "$reset_backup/execution-world/snapshot.json"
+test -f "$reset_backup/execution-world-simulator-mirror/snapshot.json"
+test -f "$reset_backup/execution-records/latest.json"
+test -f "$reset_backup/storage/blobs/old"
+test -f "$reset_backup/runtime-root/reward-runtime-execution-bridge-state.json"
+test -f "$reset_backup/replication-root/node_pos_state.json"
+test ! -e "$local_stack/world/snapshot.json"
+test ! -e "$local_stack/world-simulator-mirror/snapshot.json"
+test ! -e "$local_stack/execution-records/latest.json"
+test ! -e "$local_stack/store/blobs/old"
+test ! -e "$local_stack/runtime-root/reward-runtime-execution-bridge-state.json"
+test ! -e "$local_stack/replication-root/node_pos_state.json"
+
 echo "ok: local observer sync accepts sequencer/storage validator env pair"

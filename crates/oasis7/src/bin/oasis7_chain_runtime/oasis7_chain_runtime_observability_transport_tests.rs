@@ -82,6 +82,40 @@ fn classify_transport_stability_ignores_reachability_diagnostics() {
 }
 
 #[test]
+fn classify_transport_stability_ignores_local_peer_id_startup_noise() {
+    let stability =
+        super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {
+            local_peer_id: "validator-a".to_string(),
+            connected_peers: vec!["validator-b".to_string()],
+            peer_healths: vec![super::ChainPeerHealthStatus {
+                peer_id: "validator-b".to_string(),
+                status: "active".to_string(),
+                issues: Vec::new(),
+                discovery_sources: vec!["static_bootstrap".to_string()],
+                active_path_kind: Some("direct".to_string()),
+                source_operator: Some("validator".to_string()),
+                source_asn: None,
+            }],
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::from([("validator-b".to_string(), 100)]),
+            connection_events: Vec::new(),
+            recent_errors: vec![
+                "libp2p incoming connection error: LocalPeerId { endpoint: Listener { local_addr: /ip4/172.26.53.91/tcp/6831, send_back_addr: /ip4/39.104.204.172/tcp/34306 } }".to_string(),
+                "libp2p outgoing connection error peer=Some(PeerId(\"validator-a\")): LocalPeerId { endpoint: Dialer { address: /ip4/39.104.204.172/tcp/6831/p2p/validator-a, role_override: Dialer } }".to_string(),
+                "libp2p connection established peer=validator-b direction=outbound addr=/ip4/39.104.205.67/tcp/6832/p2p/validator-b".to_string(),
+            ],
+        });
+
+    assert!(stability.stable);
+    assert_eq!(stability.score, 100);
+    assert_eq!(stability.blocking_error_count, 0);
+    assert_eq!(stability.connection_closed_count, 0);
+    assert_eq!(stability.protocol_error_count, 0);
+}
+
+#[test]
 fn classify_transport_stability_recovers_when_active_request_peer_is_healthy() {
     let stability =
         super::status_payload::classify_transport_stability(&super::ChainReplicationDebugStatus {

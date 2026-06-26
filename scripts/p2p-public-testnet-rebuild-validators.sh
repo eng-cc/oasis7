@@ -231,10 +231,22 @@ json_sequencer_ok() {
     .running == true
     and (.last_error == null or .last_error == "null")
     and (.readiness.status // null) == "ready"
+    and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and ((.consensus.committed_height // 0) > 0)
-    and ((.consensus.last_execution_height // 0) > 0)
+    and (
+      (
+        ((.consensus.committed_height // 0) > 0)
+        and ((.consensus.last_execution_height // 0) > 0)
+      )
+      or (
+        ((.consensus.committed_height // .committed_height // 0) == 0)
+        and ((.consensus.last_execution_height // 0) == 0)
+        and ((.consensus.network_head.source // null) == "self_only")
+        and ((.consensus.network_head.required_peer_count // 0) == 0)
+        and ((.consensus.network_head.decision // null) == "ready")
+      )
+    )
   ' "$path" >/dev/null 2>&1
 }
 
@@ -252,11 +264,22 @@ json_storage_ok() {
     .running == true
     and (.last_error == null or .last_error == "null")
     and (.readiness.status // null) == "ready"
+    and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and ((.consensus.committed_height // 0) > 0)
-    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
     and (.replication.connected_peers | length) >= 1
+    and (
+      (
+        ((.consensus.committed_height // 0) > 0)
+        and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+      )
+      or (
+        ((.consensus.committed_height // .committed_height // 0) == 0)
+        and ((.consensus.network_head.source // null) == "self_only")
+        and ((.consensus.network_head.required_peer_count // 0) == 0)
+        and ((.consensus.network_head.decision // null) == "ready")
+      )
+    )
   ' "$path" >/dev/null 2>&1
 }
 
@@ -457,6 +480,7 @@ cleanup_host_processes() {
     "SERVICE_NAME='$service' STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
 import os
 import signal
+import shlex
 import subprocess
 import sys
 import time
@@ -469,15 +493,72 @@ needles = (
     f'{stack_root}/releases/',
 )
 
+def is_stack_path(value):
+    value = (value or '').strip()
+    return value == stack_root or value.startswith(f'{stack_root}/')
+
+def unit_metadata_matches_stack_root(metadata):
+    for line in metadata.splitlines():
+        key, _, value = line.partition('=')
+        if key == 'WorkingDirectory':
+            if is_stack_path(value):
+                return True
+        elif key == 'ExecStart':
+            for token in shlex.split(value):
+                if is_stack_path(token):
+                    return True
+    return False
+
+def discover_stack_services():
+    candidates = {service_name}
+    for command in (
+        ['systemctl', 'list-unit-files', '--type=service', '--no-legend', '--no-pager'],
+        ['systemctl', 'list-units', '--all', '--type=service', '--no-legend', '--no-pager'],
+    ):
+        out = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
+        if out.returncode != 0:
+            continue
+        for line in out.stdout.splitlines():
+            name = line.strip().split(None, 1)[0] if line.strip() else ''
+            if name.endswith('.service'):
+                candidates.add(name)
+    owners = set()
+    for candidate in candidates:
+        show = subprocess.run(
+            ['systemctl', 'show', candidate, '-p', 'FragmentPath', '-p', 'ExecStart', '-p', 'WorkingDirectory'],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if candidate == service_name or (show.returncode == 0 and unit_metadata_matches_stack_root(show.stdout)):
+            owners.add(candidate)
+    return [service_name] + sorted(owner for owner in owners if owner != service_name)
+
+service_names = discover_stack_services()
+
 def quiesce_systemd():
-    subprocess.run(['systemctl', 'stop', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    subprocess.run(
-        ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', service_name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
-    subprocess.run(['systemctl', 'reset-failed', service_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    for owner in service_names:
+        mask = subprocess.run(
+            ['systemctl', 'mask', '--runtime', owner],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if mask.returncode != 0:
+            details = (mask.stderr or mask.stdout or '').strip()
+            suffix = f': {details}' if details else f' (exit {mask.returncode})'
+            print(f'cleanup failed: systemctl runtime mask failed for {owner}{suffix}', file=sys.stderr)
+            raise SystemExit(1)
+        subprocess.run(['systemctl', 'stop', owner], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        subprocess.run(
+            ['systemctl', 'kill', '--kill-who=all', '--signal=SIGKILL', owner],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        subprocess.run(['systemctl', 'reset-failed', owner], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 def matching_pids():
     current = os.getpid()
@@ -549,7 +630,7 @@ start_host() {
   local host=$1
   local control_path=$2
   local service=$3
-  ssh_run "$host" "$control_path" "systemctl reset-failed '$service' || true; systemctl start '$service'"
+  ssh_run "$host" "$control_path" "systemctl unmask '$service' || true; systemctl reset-failed '$service' || true; systemctl start '$service'"
 }
 
 cleanup_after_failed_start() {
@@ -585,13 +666,16 @@ SEQUENCER_STARTED=1
 if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
   cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
 fi
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 
 STORAGE_STARTED=1
 if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
-  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-status.json"
+  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-liveness.json"
 fi
+
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
+  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-liveness.json" "storage liveness" json_liveness_ok \
+  || cleanup_after_failed_start "storage liveness" "$OUT_DIR/storage-liveness.json"
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
   || cleanup_after_failed_start "sequencer readiness" "$OUT_DIR/sequencer-status.json"
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok \

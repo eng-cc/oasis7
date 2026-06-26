@@ -44,9 +44,9 @@ mod error;
 mod execution_hook;
 mod feedback_runtime;
 mod gossip_udp;
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 mod libp2p_replication_network;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
 mod libp2p_replication_network_wasm;
 mod network_bridge;
 mod network_bridge_gap_sync_budget;
@@ -94,15 +94,16 @@ pub use gossip_udp::{
     GossipTrafficDirectionMetricsSnapshot, GossipTrafficLaneMetricsSnapshot,
     GossipTrafficMetricsSnapshot,
 };
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(all(feature = "libp2p", not(target_arch = "wasm32")))]
 pub use libp2p_replication_network::{
     Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(feature = "libp2p", target_arch = "wasm32"))]
 pub use libp2p_replication_network_wasm::{
     Libp2pReplicationNetwork, Libp2pReplicationNetworkConfig, derive_libp2p_identity_keypair,
 };
 pub use network_bridge::NodeReplicationNetworkHandle;
+#[cfg(feature = "libp2p")]
 pub use oasis7_net::{
     Libp2pControlPlaneMetricsSnapshot, Libp2pReachabilitySnapshot, Libp2pTrafficMetricsSnapshot,
     LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability, LiveTransportKind,
@@ -139,9 +140,9 @@ use replication::{
     REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime, load_blob_from_root,
     load_commit_message_from_root, load_latest_commit_message_from_root,
 };
-use replication_fetch_handler_support::{
-    attach_checkpoint_for_fetch_commit_if_boundary, should_export_checkpoint_for_fetch_commit,
-};
+use replication_fetch_handler_support::attach_checkpoint_for_fetch_commit_if_boundary;
+#[cfg(test)]
+use replication_fetch_handler_support::should_export_checkpoint_for_fetch_commit;
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
     request_fetch_blob_with_storage_challenge_routes,

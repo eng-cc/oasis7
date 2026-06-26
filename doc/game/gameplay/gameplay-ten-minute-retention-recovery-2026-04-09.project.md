@@ -63,6 +63,10 @@
   - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
   - `software_safe` floor：至少 1 轮正式入口复核
   - 回写 `doc/playability_test_result/card_*.md` 与 QA trust verdict，并单列 capability verdict 现状
+- `p0-control-proof-surface` / 首局控制证明 surface
+  - `rtk node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+  - `rtk npm run test:ui -- software_safe_src/main.test.jsx`
+  - 验证 `Control Proof` 从既有 `player_gameplay` / feedback 真值派生，且在 `Formal Gameplay Summary` 顶部同卡展示 `Player Intent / World Consequence / Recovery Move / Next Move`
 
 ## Done Definition
 
@@ -88,6 +92,10 @@
   - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
   - [x] 历史 `10-minute trust gate = hold` 裁决已保留为 baseline，不再作为当前 blocker
   - [x] fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`；更宽的 release / liveops 边界仍需独立复核
+- `p0-control-proof-surface`
+  - [x] `software_safe` summary 已发布 viewer-derived `controlProof`，不新增 runtime schema
+  - [x] 正式玩法摘要顶部已展示 `Control Proof`，把玩家意图、世界后果、恢复动作与下一步并排呈现
+  - [x] contract / UI 测试覆盖 blocked 与 completed 控制证明语义
 
 ## 依赖
 
@@ -106,6 +114,15 @@
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
 - 下一任务: 当前专题的历史 `hold/not_run` baseline 已被 fresh formal evidence 刷新；后续只在出现新回退时再补新的 active-LLM formal rerun，而不是继续把 `#160` 当作当前未解 blocker。
+
+- 2026-06-25 P0 control proof follow-up:
+  - 已把制作人落点“首局 KPI 从世界活着改为玩家控制被证明”落到 `software_safe` 正式入口：`buildGameplaySummary()` 聚合 `controlProof`，`WorldSummaryPanel()` 在 `Formal Gameplay Summary` 顶部显示 `Control Proof` 卡片。
+  - 本切片只强化 viewer summary 与 UI hierarchy；canonical truth 仍来自 runtime `player_gameplay` / feedback 字段，不能把该卡片单独包装成 `10-minute trust gate` 或 `first capability gate` 新 verdict。
+  - 对应测试：`rtk node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`、`rtk npm run test:ui -- software_safe_src/main.test.jsx`。
+- 2026-06-25 P1/P2 continuation follow-up:
+  - 已在同一 `Formal Gameplay Summary` 中追加 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 和 `Share Replay`，把 P1 打断/重排/纠偏、P1 首胜 anti-grind leverage、P2 repair/rebuild/pivot 与可分享回放落成 viewer 可读 surface。
+  - 本切片仍只消费或派生既有 `player_gameplay` 字段；PRD-GAME-015 的 runtime lane truth、agent specialization contract 与 QA mature-world verdict 仍按各自后续任务判定。
+  - 对应测试：`rtk node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`、`rtk npm run test:ui -- software_safe_src/main.test.jsx`。
 
 - 口径更新（2026-05-17）: `PRD-GAME-012` 当前正式 verdict 继续拆成两层。`10-minute trust gate` 只判断“控制可信、主目标可读、后果可见、是否愿意继续玩”；`first capability gate` 单独判断“首个持续能力”是否在后续 `30` 分钟或 `1~3` 次会话内闭环。2026-04-15 的 `trust gate = hold / capability gate = not_run` 保留为历史 baseline；当前 fresh active-LLM formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`，证据见 `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`。
 - 说明:

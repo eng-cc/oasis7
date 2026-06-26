@@ -123,88 +123,90 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
 
 #[test]
 fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligible() {
-    let mut swarm = super::super::swarm_behaviour::build_swarm(
-        &Keypair::generate_ed25519(),
-        false,
-        true,
-        std::time::Duration::from_secs(30),
-        super::super::wire_bytes::init_shared_wire_byte_counters(),
-    );
-    let peer_key = Keypair::generate_ed25519();
-    let peer_id = PeerId::from(peer_key.public());
-    let suspect_record = super::signed_discovery_peer_record(
-        &peer_key,
-        vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
-        1,
-    );
-    let upgraded_record = super::signed_discovery_peer_record(
-        &peer_key,
-        vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ],
-        2,
-    );
-    let mut discovered_peer_records = HashMap::new();
-    let mut known_transport_paths = HashMap::new();
-    let mut last_dialed_transport_paths = HashMap::new();
-    let active_transport_paths = HashMap::new();
-    let mut failed_transport_path_labels = HashSet::new();
+    super::super::runtime_support::run_on_libp2p_test_runtime(|| {
+        let mut swarm = super::super::swarm_behaviour::build_swarm(
+            &Keypair::generate_ed25519(),
+            false,
+            true,
+            std::time::Duration::from_secs(30),
+            super::super::wire_bytes::init_shared_wire_byte_counters(),
+        );
+        let peer_key = Keypair::generate_ed25519();
+        let peer_id = PeerId::from(peer_key.public());
+        let suspect_record = super::signed_discovery_peer_record(
+            &peer_key,
+            vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
+            1,
+        );
+        let upgraded_record = super::signed_discovery_peer_record(
+            &peer_key,
+            vec![
+                crate::dht::PeerDiscoverySource::Dht,
+                crate::dht::PeerDiscoverySource::Rendezvous,
+            ],
+            2,
+        );
+        let mut discovered_peer_records = HashMap::new();
+        let mut known_transport_paths = HashMap::new();
+        let mut last_dialed_transport_paths = HashMap::new();
+        let active_transport_paths = HashMap::new();
+        let mut failed_transport_path_labels = HashSet::new();
 
-    super::super::discovery::process_discovered_peer_record(
-        &mut swarm,
-        &mut discovered_peer_records,
-        &mut known_transport_paths,
-        &mut last_dialed_transport_paths,
-        &active_transport_paths,
-        &mut failed_transport_path_labels,
-        None,
-        &PeerManagerPolicy::default(),
-        suspect_record,
-    )
-    .expect("process suspect peer record");
+        super::super::discovery::process_discovered_peer_record(
+            &mut swarm,
+            &mut discovered_peer_records,
+            &mut known_transport_paths,
+            &mut last_dialed_transport_paths,
+            &active_transport_paths,
+            &mut failed_transport_path_labels,
+            None,
+            &PeerManagerPolicy::default(),
+            suspect_record,
+        )
+        .expect("process suspect peer record");
 
-    assert!(discovered_peer_records.contains_key(&peer_id));
-    assert!(last_dialed_transport_paths.contains_key(&peer_id));
-    let suspect_dialed_path = last_dialed_transport_paths
-        .get(&peer_id)
-        .cloned()
-        .expect("suspect record should queue an initial dial path");
+        assert!(discovered_peer_records.contains_key(&peer_id));
+        assert!(last_dialed_transport_paths.contains_key(&peer_id));
+        let suspect_dialed_path = last_dialed_transport_paths
+            .get(&peer_id)
+            .cloned()
+            .expect("suspect record should queue an initial dial path");
 
-    super::super::discovery::process_discovered_peer_record(
-        &mut swarm,
-        &mut discovered_peer_records,
-        &mut known_transport_paths,
-        &mut last_dialed_transport_paths,
-        &active_transport_paths,
-        &mut failed_transport_path_labels,
-        None,
-        &PeerManagerPolicy::default(),
-        upgraded_record,
-    )
-    .expect("process upgraded peer record");
+        super::super::discovery::process_discovered_peer_record(
+            &mut swarm,
+            &mut discovered_peer_records,
+            &mut known_transport_paths,
+            &mut last_dialed_transport_paths,
+            &active_transport_paths,
+            &mut failed_transport_path_labels,
+            None,
+            &PeerManagerPolicy::default(),
+            upgraded_record,
+        )
+        .expect("process upgraded peer record");
 
-    assert!(last_dialed_transport_paths.contains_key(&peer_id));
-    let upgraded_dialed_path = last_dialed_transport_paths
-        .get(&peer_id)
-        .cloned()
-        .expect("upgraded record should keep dial eligibility");
-    assert_eq!(upgraded_dialed_path, suspect_dialed_path);
-    let upgraded_sources = discovered_peer_records
-        .get(&peer_id)
-        .map(|record| record.record.discovery_sources.clone())
-        .expect("upgraded peer record should stay cached");
-    let mut upgraded_source_labels: Vec<_> = upgraded_sources
-        .iter()
-        .map(|source| peer_manager::discovery_source_label(*source))
-        .collect();
-    upgraded_source_labels.sort_unstable();
-    assert_eq!(upgraded_source_labels, ["dht", "rendezvous"]);
-    assert_eq!(
-        upgraded_sources.len(),
-        upgraded_source_labels.len(),
-        "upgraded discovery sources should not duplicate entries"
-    );
+        assert!(last_dialed_transport_paths.contains_key(&peer_id));
+        let upgraded_dialed_path = last_dialed_transport_paths
+            .get(&peer_id)
+            .cloned()
+            .expect("upgraded record should keep dial eligibility");
+        assert_eq!(upgraded_dialed_path, suspect_dialed_path);
+        let upgraded_sources = discovered_peer_records
+            .get(&peer_id)
+            .map(|record| record.record.discovery_sources.clone())
+            .expect("upgraded peer record should stay cached");
+        let mut upgraded_source_labels: Vec<_> = upgraded_sources
+            .iter()
+            .map(|source| peer_manager::discovery_source_label(*source))
+            .collect();
+        upgraded_source_labels.sort_unstable();
+        assert_eq!(upgraded_source_labels, ["dht", "rendezvous"]);
+        assert_eq!(
+            upgraded_sources.len(),
+            upgraded_source_labels.len(),
+            "upgraded discovery sources should not duplicate entries"
+        );
+    });
 }
 
 #[test]

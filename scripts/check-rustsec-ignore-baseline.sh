@@ -22,16 +22,7 @@ today = os.environ.get("OASIS7_RUSTSEC_TODAY") or date.today().isoformat()
 
 approved = [
     "RUSTSEC-2021-0127",
-    "RUSTSEC-2024-0384",
     "RUSTSEC-2024-0436",
-    "RUSTSEC-2025-0009",
-    "RUSTSEC-2025-0010",
-    "RUSTSEC-2025-0012",
-    "RUSTSEC-2025-0052",
-    "RUSTSEC-2026-0098",
-    "RUSTSEC-2026-0099",
-    "RUSTSEC-2026-0104",
-    "RUSTSEC-2026-0119",
 ]
 required_keys = ("owner", "scope", "reason", "expiry", "validation")
 allowed_libp2p_local_crates = {

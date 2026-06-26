@@ -1,3 +1,5 @@
+import { isHostedPublicJoinDeploymentMode } from "./software_safe_constants.js";
+
 export function createViewerAuthSurfaceModule({
   getSearchParams,
   localeText,
@@ -34,7 +36,7 @@ export function createViewerAuthSurfaceModule({
 
   function authDeploymentHint(auth) {
     const hostedMode = String(state.hostedAccess?.deployment_mode || "").trim();
-    if (hostedMode === "hosted_public_join") {
+    if (isHostedPublicJoinDeploymentMode(hostedMode)) {
       if (auth.available && auth.source === "legacy_viewer_auth_bootstrap") {
         return "hosted_public_join_contract_with_legacy_bootstrap";
       }
@@ -339,7 +341,7 @@ export function createViewerAuthSurfaceModule({
   }
 
   function buildHostedRecoveryHint(locale = state.uiLocale) {
-    if (String(state.hostedAccess?.deployment_mode || "").trim() !== "hosted_public_join") {
+    if (!isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
       return null;
     }
     if (state.auth.available) {

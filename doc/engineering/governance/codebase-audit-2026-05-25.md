@@ -6,11 +6,11 @@
 
 ## Proposed Tasks
 
-### 1) Fix one spelling typo
-- **Finding**: `followup` is used as a single word in task labels; team conventions elsewhere commonly use `follow-up`.
-- **Example**: `pr-108-vendor-egui-review-comment-followup` in `doc/engineering/project.md`.
-- **Proposed task**: normalize wording to `follow-up` for readability and consistency across project/task labels.
-- **Risk**: low (doc-only rename/update).
+### 1) Fix one spelling typo — superseded
+- **Finding status**: no longer actionable against current repository truth.
+- **Current evidence**: the cited `doc/engineering/project.md` entry is already `pr-108-vendor-egui-review-comment-follow-up`.
+- **Do not execute as written**: remaining `followup` hits are not one coherent typo class. They include historical task labels, scripts, tests, fixtures, story filenames, and evidence paths, so a broad rename would create churn rather than a focused cleanup.
+- **Risk if reopened**: low-to-medium documentation churn unless a future focused task first proves a current-facing readability issue in a bounded path.
 
 ### 2) Fix one code error (panic-prone request parsing)
 - **Finding**: test helper HTTP parser assumes request headers are UTF-8 and panics on decode failure via `expect("request header should be utf-8")`.
@@ -31,7 +31,6 @@
 - **Risk**: low-to-medium (test-only; may expose latent logic edge cases).
 
 ## Suggested execution order
-1. Task 1 (spelling)
-2. Task 3 (comment/doc consistency)
-3. Task 4 (test strengthening)
-4. Task 2 (panic-path hardening + regression tests)
+1. Task 3 (comment/doc consistency)
+2. Task 4 (test strengthening)
+3. Task 2 (panic-path hardening + regression tests)

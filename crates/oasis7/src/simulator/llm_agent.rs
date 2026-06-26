@@ -835,16 +835,16 @@ impl OpenAiChatCompletionClient {
         }
     }
 
-    fn build_http_client(timeout_ms: u64) -> Result<reqwest::Client, LlmClientError> {
+    fn build_http_client(timeout_ms: u64) -> Result<async_openai_reqwest::Client, LlmClientError> {
         #[cfg(target_arch = "wasm32")]
         let builder = {
             let _ = timeout_ms;
-            reqwest::Client::builder()
+            async_openai_reqwest::Client::builder()
         };
 
         #[cfg(not(target_arch = "wasm32"))]
-        let builder =
-            reqwest::Client::builder().timeout(std::time::Duration::from_millis(timeout_ms.max(1)));
+        let builder = async_openai_reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(timeout_ms.max(1)));
 
         builder.build().map_err(|err| LlmClientError::BuildClient {
             message: err.to_string(),

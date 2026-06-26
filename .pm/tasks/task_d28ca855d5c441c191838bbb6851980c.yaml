@@ -1,0 +1,24 @@
+task_uid: task_d28ca855d5c441c191838bbb6851980c
+title: "Find and govern next Rust dependency upgrade issue"
+owner_role: repository_health_engineer
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-rust-dependency-upgrade-next
+execution_log_path: .pm/tasks/task_d28ca855d5c441c191838bbb6851980c.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs: []
+related_prd: []
+acceptance:
+  - "Identify the next high-value Rust dependency upgrade/governance issue with repository-health evidence."
+  - "Implement the smallest safe governance fix or record the blocker with owner and verification evidence."
+handoff_to: []
+updated_at: 2026-06-25T17:10:28+08:00
+last_started_at: 2026-06-25T16:12:17+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/ci-rust-governance-report.sh --out-dir output/rust-governance-dependency-upgrade-next-closeout"
+last_verified_at: 2026-06-25T17:10:14+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-25T17:10:25+08:00

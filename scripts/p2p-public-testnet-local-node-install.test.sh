@@ -96,4 +96,72 @@ grep -q "^GENESIS_VALIDATOR_REGISTRY_PATH=$node_root_abs/config/genesis-validato
 
 plutil -lint "$node_root_abs/oasis7.testnet.smoke.plist" >/dev/null
 
+mkdir -p "$node_root_abs/replication-root" "$node_root_abs/execution-records" "$node_root_abs/store/blobs" "$node_root_abs/world-simulator-mirror"
+printf '{"committed_height":1233}\n' >"$node_root_abs/replication-root/node_pos_state.json"
+printf '{"height":1233}\n' >"$node_root_abs/execution-records/latest.json"
+printf 'old blob\n' >"$node_root_abs/store/blobs/old"
+printf '{"mirror":"old"}\n' >"$node_root_abs/world-simulator-mirror/snapshot.json"
+
+set +e
+install_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$node_root" 2>&1)
+install_status=$?
+set -e
+if [[ "$install_status" -eq 0 ]]; then
+  echo "expected local node install to fail closed when persisted state exists" >&2
+  exit 1
+fi
+grep -q 'contains persisted chain state' <<<"$install_output"
+grep -q -- '--preserve-state' <<<"$install_output"
+grep -q -- '--reset-state' <<<"$install_output"
+
+set +e
+conflicting_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$node_root" \
+  --preserve-state \
+  --reset-state 2>&1)
+conflicting_status=$?
+set -e
+if [[ "$conflicting_status" -eq 0 ]]; then
+  echo "expected local node install to reject conflicting state mode flags" >&2
+  exit 1
+fi
+grep -q 'conflicts with --preserve-state' <<<"$conflicting_output"
+
+"$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$node_root" \
+  --preserve-state >/dev/null
+
+test -f "$node_root_abs/replication-root/node_pos_state.json"
+test -f "$node_root_abs/execution-records/latest.json"
+test -f "$node_root_abs/store/blobs/old"
+test -f "$node_root_abs/world-simulator-mirror/snapshot.json"
+
+reset_backup="$TMP_DIR/reset-backup"
+"$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$node_root" \
+  --reset-state \
+  --state-backup-dir "$reset_backup" >/dev/null
+
+test -f "$reset_backup/replication-root/node_pos_state.json"
+test -f "$reset_backup/execution-records/latest.json"
+test -f "$reset_backup/store/blobs/old"
+test -f "$reset_backup/world-simulator-mirror/snapshot.json"
+test ! -e "$node_root_abs/replication-root/node_pos_state.json"
+test ! -e "$node_root_abs/execution-records/latest.json"
+test ! -e "$node_root_abs/store/blobs/old"
+test ! -e "$node_root_abs/world-simulator-mirror/snapshot.json"
+
 echo "ok: local testnet node install pins runtime artifact under dedicated root"

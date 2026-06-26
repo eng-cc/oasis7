@@ -62,6 +62,7 @@ impl PosNodeEngine {
             self.ingest_consensus_network_messages(endpoint, world_id, current_slot)?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
+            let record_peer_heads_from_gap_sync = gossip.is_some() || consensus_network.is_some();
             match (&mut execution_hook, &mut progress_callback) {
                 (Some(hook), Some(callback)) => {
                     self.ingest_network_replications_with_progress(
@@ -79,6 +80,7 @@ impl PosNodeEngine {
                         replication.as_deref_mut(),
                         Some(&mut **hook),
                         Some(&mut **callback),
+                        record_peer_heads_from_gap_sync,
                     )?;
                 }
                 (Some(hook), None) => {
@@ -97,6 +99,7 @@ impl PosNodeEngine {
                         replication.as_deref_mut(),
                         Some(&mut **hook),
                         None,
+                        record_peer_heads_from_gap_sync,
                     )?;
                 }
                 (None, Some(callback)) => {
@@ -115,6 +118,7 @@ impl PosNodeEngine {
                         replication.as_deref_mut(),
                         None,
                         Some(&mut **callback),
+                        record_peer_heads_from_gap_sync,
                     )?;
                 }
                 (None, None) => {
@@ -133,6 +137,7 @@ impl PosNodeEngine {
                         replication.as_deref_mut(),
                         None,
                         None,
+                        record_peer_heads_from_gap_sync,
                     )?;
                 }
             }

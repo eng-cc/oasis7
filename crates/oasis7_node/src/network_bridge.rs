@@ -4,7 +4,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use oasis7_net::{world_error_is_publish_failure, world_error_is_retryable_connection_gap};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::distributed_net::{
@@ -20,14 +19,16 @@ use crate::gossip_udp::{
 };
 use crate::network_bridge_gap_sync_budget::{
     gap_sync_fetch_commit_probe_route_budget, gap_sync_fetch_commit_route_budget,
-    gap_sync_fetch_commit_route_budget_exhausted,
+    gap_sync_fetch_commit_route_budget_exhausted, short_node_error, summarize_fetch_commit_routes,
 };
 pub(crate) use crate::network_error_classification::{
+    network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
     replication_network_error_is_unsupported_protocol, replication_network_error_kind_label,
     replication_network_error_mentions_protocol,
+    replication_network_error_should_keep_timeout_over_provider_gap,
 };
 use crate::replication::{
     FetchCommitRequest, FetchCommitResponse, FetchHeadRequest, FetchHeadResponse,
@@ -640,7 +641,13 @@ impl ReplicationNetworkEndpoint {
                             peer_id,
                             short_node_error(&err)
                         ));
-                        last_err = Some(err);
+                        if !replication_network_error_should_keep_timeout_over_provider_gap(
+                            last_err.as_ref(),
+                            &err,
+                            REPLICATION_FETCH_COMMIT_PROTOCOL,
+                        ) {
+                            last_err = Some(err);
+                        }
                     }
                 }
             }
@@ -911,18 +918,6 @@ impl ReplicationNetworkEndpoint {
     }
 }
 
-fn short_node_error(err: &NodeError) -> String {
-    let raw = err.to_string();
-    raw.chars().take(160).collect()
-}
-
-fn summarize_fetch_commit_routes(route_events: &[String]) -> String {
-    if route_events.is_empty() {
-        return "routes=none".to_string();
-    }
-    route_events.join(";")
-}
-
 fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {
     FetchCommitSuccessCacheKey {
         world_id: request.world_id.clone(),
@@ -1109,7 +1104,7 @@ fn network_err_for_protocol(protocol: &str, err: WorldError) -> NodeError {
 }
 
 fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) -> NodeError {
-    if world_error_is_retryable_connection_gap(&err) {
+    if network_world_error_is_retryable_connection_gap(&err) {
         return NodeError::Replication {
             reason: format!(
                 "{REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX}{}",
@@ -1117,7 +1112,7 @@ fn network_err_with_request_protocol(protocol: Option<&str>, err: WorldError) ->
             ),
         };
     }
-    if world_error_is_publish_failure(&err) {
+    if network_world_error_is_publish_failure(&err) {
         return NodeError::Replication {
             reason: format!("replication network error: {err:?}"),
         };

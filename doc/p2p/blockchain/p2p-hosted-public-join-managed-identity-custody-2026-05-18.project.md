@@ -19,7 +19,7 @@
     - `.pm/tasks/task_584da7818a9d42e6aae5894512413102.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_player_session_ -- --nocapture`
-    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
@@ -41,7 +41,7 @@
     - `.pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_ -- --nocapture`
-    - `node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
+    - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
     - `npm --prefix crates/oasis7_viewer run test:ui`
     - `npm --prefix crates/oasis7_viewer run build:software-safe`
     - `./scripts/doc-governance-check.sh`
