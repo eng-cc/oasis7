@@ -15,7 +15,7 @@
 | Next Action | e.g., `issue created, awaiting QA triage` |
 | Response | Short text referencing “limited playable technical preview” & GitHub CTA |
 
-Use the above table to log every closed beta candidate signal before moving it into `doc/devlog/README.md`.
+Use the above table to log every closed beta candidate signal before moving it into the corresponding `.pm/tasks/task_<32hex>.execution.md` and any formal QA / LiveOps evidence bundle required by the release gate.
 
 ## Incident Template
 
