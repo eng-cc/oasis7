@@ -56,9 +56,16 @@ function percentile(values, quantile) {
   if (sorted.length === 0) {
     return null;
   }
+  return percentileSorted(sorted, quantile);
+}
+
+function percentileSorted(sortedValues, quantile) {
+  if (!Array.isArray(sortedValues) || sortedValues.length === 0) {
+    return null;
+  }
   const ratio = Math.min(1, Math.max(0, Number(quantile) || 0));
-  const index = Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1);
-  return sorted[Math.max(0, index)];
+  const index = Math.min(sortedValues.length - 1, Math.ceil(sortedValues.length * ratio) - 1);
+  return sortedValues[Math.max(0, index)];
 }
 
 function average(values) {
@@ -171,9 +178,9 @@ export function summarizeViewerPerformance({
     sampleDurationMs: round(sampleWindowMs),
     frameSamples,
     frameAvgMs: round(meanFrameMs),
-    frameP50Ms: round(percentile(frames, 0.5)),
-    frameP95Ms: round(percentile(frames, 0.95)),
-    frameP99Ms: round(percentile(frames, 0.99)),
+    frameP50Ms: round(percentileSorted(frames, 0.5)),
+    frameP95Ms: round(percentileSorted(frames, 0.95)),
+    frameP99Ms: round(percentileSorted(frames, 0.99)),
     frameMaxMs: round(frames[frames.length - 1] ?? null),
     fpsAvg: round(fpsFromWindow ?? fpsFromMean),
     slowFrameCount: slowFrames,
@@ -188,8 +195,8 @@ export function summarizeViewerPerformance({
     domInteractiveMs: round(asNumber(domReadiness.domInteractiveMs)),
     responseEndMs: round(asNumber(domReadiness.responseEndMs)),
     interactionSamples: interactions.length,
-    interactionP50Ms: round(percentile(interactions, 0.5)),
-    interactionP95Ms: round(percentile(interactions, 0.95)),
+    interactionP50Ms: round(percentileSorted(interactions, 0.5)),
+    interactionP95Ms: round(percentileSorted(interactions, 0.95)),
     interactionMaxMs: round(interactions[interactions.length - 1] ?? null),
     domNodeCount: Math.floor(asNumber(dom.nodeCount, 0) ?? 0),
     panelCount: Math.floor(asNumber(dom.panelCount, 0) ?? 0),
