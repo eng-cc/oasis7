@@ -157,6 +157,10 @@ duplicate_top_crates = [
         key=lambda item: (-item[1], item[0]),
     )[:20]
 ]
+duplicate_crates = [
+    {"crate": crate_name, "duplicate_entries": duplicate_count}
+    for crate_name, duplicate_count in sorted(duplicate_crate_counts.items())
+]
 
 summary = {
     "rustsec_ignore_baseline_rc": read_rc("rustsec-ignore-baseline.log"),
@@ -170,6 +174,7 @@ summary = {
     "duplicate_dependency_entry_total": sum(
         duplicate_count for _, duplicate_count in duplicate_warning_entries
     ),
+    "duplicate_dependency_crates": duplicate_crates,
     "duplicate_dependency_top_crates": duplicate_top_crates,
     "unsafe_usage_rc": read_rc("unsafe-usage.log"),
     "unsafe_usage_total": sum(unsafe_counts.values()),

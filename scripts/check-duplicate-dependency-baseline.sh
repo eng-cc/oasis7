@@ -27,6 +27,7 @@ required_summary_keys = (
     "duplicate_dependency_unique_crates",
     "duplicate_dependency_entry_total",
     "duplicate_dependency_tree_output_lines",
+    "duplicate_dependency_crates",
     "duplicate_dependency_top_crates",
 )
 required_baseline_keys = (
@@ -37,6 +38,7 @@ required_baseline_keys = (
     "rationale",
     "update_policy",
     "maxima",
+    "crate_maxima",
 )
 budget_keys = (
     "duplicate_dependency_cluster_count",
@@ -111,39 +113,52 @@ for key in budget_keys:
     if actual > maximum:
         failures.append(f"{key} grew beyond baseline: actual={actual} maximum={maximum}")
 
-top_crate_maxima = baseline.get("top_crate_maxima", {})
-if top_crate_maxima is None:
-    top_crate_maxima = {}
-if not isinstance(top_crate_maxima, dict):
-    failures.append("baseline top_crate_maxima must be an object when present")
-    top_crate_maxima = {}
+crate_maxima = baseline.get("crate_maxima", {})
+if not isinstance(crate_maxima, dict):
+    failures.append("baseline crate_maxima must be an object")
+    crate_maxima = {}
 
-top_crates = summary.get("duplicate_dependency_top_crates", [])
-if not isinstance(top_crates, list):
-    failures.append("summary duplicate_dependency_top_crates must be a list")
-    top_crates = []
+duplicate_crates = summary.get("duplicate_dependency_crates", [])
+if not isinstance(duplicate_crates, list):
+    failures.append("summary duplicate_dependency_crates must be a list")
+    duplicate_crates = []
 
-for entry in top_crates:
+seen_crates: set[str] = set()
+for entry in duplicate_crates:
     if not isinstance(entry, dict):
-        failures.append("summary duplicate_dependency_top_crates entries must be objects")
+        failures.append("summary duplicate_dependency_crates entries must be objects")
         continue
     crate_name = entry.get("crate")
     if not crate_name:
-        failures.append("summary top crate entry missing crate")
+        failures.append("summary duplicate crate entry missing crate")
         continue
-    if crate_name not in top_crate_maxima:
+    if crate_name in seen_crates:
+        failures.append(f"summary duplicate_dependency_crates repeats crate `{crate_name}`")
+        continue
+    seen_crates.add(crate_name)
+    if crate_name not in crate_maxima:
+        failures.append(
+            f"new duplicate crate `{crate_name}` is not approved in baseline; "
+            "update crate_maxima only with repository-health review evidence"
+        )
         continue
     try:
         actual = int(entry.get("duplicate_entries", -1))
-        maximum = int(top_crate_maxima[crate_name])
+        maximum = int(crate_maxima[crate_name])
     except (TypeError, ValueError):
-        failures.append(f"top crate value must be integer for {crate_name}")
+        failures.append(f"duplicate crate value must be integer for {crate_name}")
         continue
     if actual > maximum:
         failures.append(
-            f"top duplicate crate `{crate_name}` grew beyond baseline: "
+            f"duplicate crate `{crate_name}` grew beyond baseline: "
             f"actual={actual} maximum={maximum}"
         )
+
+for crate_name in sorted(set(crate_maxima) - seen_crates):
+    failures.append(
+        f"duplicate crate baseline entry `{crate_name}` is stale; "
+        "remove or lower it in the same reviewed dependency-governance patch"
+    )
 
 if failures:
     for failure in failures:

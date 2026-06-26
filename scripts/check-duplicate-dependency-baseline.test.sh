@@ -13,10 +13,14 @@ baseline="$tmp_dir/baseline.json"
 cat >"$summary" <<'JSON'
 {
   "cargo_deny_rc": 0,
-  "duplicate_dependency_cluster_count": 88,
-  "duplicate_dependency_unique_crates": 88,
-  "duplicate_dependency_entry_total": 213,
+  "duplicate_dependency_cluster_count": 2,
+  "duplicate_dependency_unique_crates": 2,
+  "duplicate_dependency_entry_total": 10,
   "duplicate_dependency_tree_output_lines": 1903,
+  "duplicate_dependency_crates": [
+    {"crate": "hashbrown", "duplicate_entries": 4},
+    {"crate": "windows-sys", "duplicate_entries": 6}
+  ],
   "duplicate_dependency_top_crates": [
     {"crate": "windows-sys", "duplicate_entries": 6},
     {"crate": "hashbrown", "duplicate_entries": 4}
@@ -24,7 +28,25 @@ cat >"$summary" <<'JSON'
 }
 JSON
 
-cp scripts/rust-duplicate-dependency-baseline.json "$baseline"
+cat >"$baseline" <<'JSON'
+{
+  "schema_version": 1,
+  "owner": "repository_health_engineer",
+  "reviewed_at": "2026-06-25",
+  "expires": "2026-09-30",
+  "rationale": "test fixture",
+  "update_policy": "test fixture",
+  "maxima": {
+    "duplicate_dependency_cluster_count": 2,
+    "duplicate_dependency_unique_crates": 2,
+    "duplicate_dependency_entry_total": 10
+  },
+  "crate_maxima": {
+    "hashbrown": 4,
+    "windows-sys": 6
+  }
+}
+JSON
 
 valid_out="$tmp_dir/valid.out"
 OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
@@ -37,7 +59,7 @@ import json
 import sys
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-payload["duplicate_dependency_entry_total"] = 214
+payload["duplicate_dependency_entry_total"] = 11
 Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
@@ -54,7 +76,8 @@ import json
 import sys
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-payload["duplicate_dependency_top_crates"][0]["duplicate_entries"] = 7
+for key in ("duplicate_dependency_crates", "duplicate_dependency_top_crates"):
+    payload[key][0]["duplicate_entries"] = 7
 Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
 if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
@@ -63,7 +86,48 @@ then
   echo "expected top crate growth to fail" >&2
   exit 1
 fi
-grep -q 'top duplicate crate `windows-sys` grew beyond baseline' "$tmp_dir/top-growth.out"
+grep -q 'duplicate crate `hashbrown` grew beyond baseline' "$tmp_dir/top-growth.out"
+
+python3 - "$summary" "$tmp_dir/new-crate.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["duplicate_dependency_crates"] = [
+    {"crate": "hashbrown", "duplicate_entries": 4},
+    {"crate": "new_duplicate_surface", "duplicate_entries": 6},
+]
+payload["duplicate_dependency_top_crates"] = [
+    {"crate": "new_duplicate_surface", "duplicate_entries": 6},
+    {"crate": "hashbrown", "duplicate_entries": 4},
+]
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/new-crate.json" >"$tmp_dir/new-crate.out" 2>&1
+then
+  echo "expected new duplicate crate identity to fail" >&2
+  exit 1
+fi
+grep -q 'new duplicate crate `new_duplicate_surface` is not approved in baseline' "$tmp_dir/new-crate.out"
+
+python3 - "$baseline" "$tmp_dir/stale-baseline.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["crate_maxima"]["stale_duplicate_surface"] = 2
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$tmp_dir/stale-baseline.json" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$summary" >"$tmp_dir/stale.out" 2>&1
+then
+  echo "expected stale duplicate crate baseline entry to fail" >&2
+  exit 1
+fi
+grep -q 'duplicate crate baseline entry `stale_duplicate_surface` is stale' "$tmp_dir/stale.out"
 
 python3 - "$baseline" "$tmp_dir/expired-baseline.json" <<'PY'
 from pathlib import Path
@@ -92,6 +156,7 @@ payload["cargo_deny_rc"] = 127
 payload["duplicate_dependency_cluster_count"] = 0
 payload["duplicate_dependency_unique_crates"] = 0
 payload["duplicate_dependency_entry_total"] = 0
+payload["duplicate_dependency_crates"] = []
 payload["duplicate_dependency_top_crates"] = []
 Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
