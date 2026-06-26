@@ -376,9 +376,10 @@ impl LongTermMemory {
         if n == 0 {
             return top;
         }
-        if n >= self.entries.len() {
+        if !use_bounded_top_n(n, self.entries.len()) {
             top.extend(self.entries.values());
             top.sort_by(|left, right| compare_importance_desc(left, right));
+            top.truncate(n);
             return top;
         }
         for entry in self.entries.values() {
@@ -477,6 +478,10 @@ fn compare_importance_desc(left: &LongTermMemoryEntry, right: &LongTermMemoryEnt
         .importance
         .partial_cmp(&left.importance)
         .unwrap_or(Ordering::Equal)
+}
+
+fn use_bounded_top_n(limit: usize, total: usize) -> bool {
+    limit.saturating_mul(2) < total
 }
 
 // ============================================================================
