@@ -317,6 +317,7 @@
 - [x] world-runtime-evidence-sink-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `world-runtime` 当前项目页、runtime core boundary checklist 与 runtime security/numeric regression template 中仍把新任务证据导向 `doc/devlog` 的旧语义，将 active evidence sink 改为 `.pm/tasks/task_<32hex>.execution.md`，保留 `doc/devlog/README.md` 仅作为历史归档入口。 Trace: .pm/tasks/task_cec36d733eaa4d418223792f8227c0a6.yaml
 - [x] gwsc-test-readiness-gates (PRD-ENGINEERING-021/025) [test_tier_required] + [test_tier_full]: 补齐大世界状态同步与提交闭环的模块级 wrapper、S10 API/viewer projection contract、public_testnet readiness lane 和 claim-boundary 文档，确保 module/proxy 证据不越界声明 release/public_testnet ready。 Trace: .pm/tasks/task_b52dc268bc394b0eb05a139eabc00307.yaml
 - [x] scripts-bootstrap-devlog-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/scripts` 当前 README / PRD 与 task-worktree-bootstrap 专题中仍把 `--init-docs` 绑定到“当日 devlog” / `today_devlog` 的旧语义，将 active bootstrap docs 对齐为模块 PRD/project 检查与 PM task execution log evidence。 Trace: .pm/tasks/task_e53e6c9884ec4f27a45e99f54b7075ba.yaml
+- [x] evidence-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/testing`、`doc/playability_test_result` 与 `doc/core` 活证据/门禁模板中仍把新任务结论导向 `doc/devlog/YYYY-MM-DD.md` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/evidence bundle 回写要求。 Trace: .pm/tasks/task_cb0f1e08aa594e42a08f9393347fb8e7.yaml
 
 ## File Structure / Affected Paths
 
@@ -384,7 +385,7 @@
 - 更新日期: 2026-06-26
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `scripts-bootstrap-devlog-semantics`（已将 `doc/scripts` 活跃 bootstrap 文档中的 `--init-docs` / `today_devlog` 旧口径收敛到模块 PRD/project 检查与 PM task execution log evidence。）
+- 最新完成: `evidence-template-execution-log-semantics`（已将 testing/playability/core 活证据模板中的 `doc/devlog/YYYY-MM-DD.md` 旧证据 sink 收敛到 PM task execution log evidence。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

@@ -85,4 +85,4 @@
 - 是否至少填写一条执行命令与对应日志路径。
 - 若执行 UI / 长跑测试，是否补齐截图、console、summary 或 failures 路径。
 - `pass/fail/blocked` 是否能被日志、截图或 summary 直接支撑。
-- 是否已把结论同步回写 `doc/testing/project.md`、相关模块 `project.md` 与 `doc/devlog/YYYY-MM-DD.md`。
+- 是否已把结论同步回写 `doc/testing/project.md`、相关模块 `project.md` 与对应 `.pm/tasks/task_<32hex>.execution.md`。
