@@ -103,3 +103,12 @@ Example:
 - Expected Result: Task-local workflow lint accepts the project trace, docs remain governance-clean, and diff whitespace remains clean.
 - Actual Result: `workflow-lint: OK`; `doc-governance-check: OK`; `git diff --check` passed.
 - Blocker / Next Action: Commit evidence, then run `./scripts/prepare-task-pr.sh --create`.
+
+## 2026-06-26 11:03:00 CST / tpm
+- 完成内容: PR CREATED
+- 遗留事项: Watch required checks, mergeability, PR comments, and review threads through merge.
+- Action: Ran `./scripts/prepare-task-pr.sh --create`; the helper pushed the branch and created GitHub PR #653.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`
+- Expected Result: Preflight accepts role coverage, project trace, and claim-ready evidence, creates a normal PR, and reports the PR URL.
+- Actual Result: PR created at https://github.com/eng-cc/oasis7/pull/653. Pre-PR Local Role Review status: passed. PR purpose decision: `normal_pr_ci_watch`; this PR is not a manual packaging/release CI hold.
+- Blocker / Next Action: Push this PR evidence commit, then monitor GitHub required checks, mergeability, comments, and review threads; fix any concrete blocker and continue to merge/cleanup when gates are green.
