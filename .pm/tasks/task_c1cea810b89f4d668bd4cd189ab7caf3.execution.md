@@ -116,7 +116,7 @@ Example:
 - Task UID: task_c1cea810b89f4d668bd4cd189ab7caf3
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-convergence-next
 - Source Branch: task/engineering-legacy-doc-semantics-convergence-next
-- Source Head: c572185c01e28e46876ad39e6bf4573b119409c6 plus current reviewed working-tree diff; later changes before PR creation are limited to task review evidence and PR metadata.
+- Source Head: 85b9f50206e659885c58b037ebdd8f40f1d44e30
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.yaml`; `.pm/tasks/task_c1cea810b89f4d668bd4cd189ab7caf3.execution.md`; `doc/headless-runtime/project.md`; `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`; `doc/headless-runtime/templates/longrun-archive-incident-template.md`
 - Review Package: `.pm/scratch/task_c1cea810b89f4d668bd4cd189ab7caf3/review-packages/review-c572185c0..c572185c0.diff`; limitation recorded above because the package was generated before local diff commit and is empty, so reviewers used current `git diff` and listed paths.
@@ -124,7 +124,7 @@ Example:
 - Review Roles: repository_health_engineer, qa_engineer
 - Review Evidence: repository_health_engineer returned `no_findings`, scope/spec pass, quality/risk pass, residual risk low; qa_engineer returned one P3 non-blocking checklist-shape finding, scope/spec pass, verification sufficient, residual risk low after disposition.
 - Review Verdicts: repository_health_engineer scope/spec compliance pass and repository health quality/risk pass; qa_engineer scope/spec compliance pass and QA quality/risk pass.
-- Review Findings Disposition: addressed by evaluated alternative; no blocking findings remain.
+- Review Findings Disposition: addressed
 - Finding Disposition Evidence: QA P3 requested restoring checkbox form for the Done Definition line, but `./scripts/doc-governance-check.sh` rejects newly added `- [ ]` lines in `project.md` as project task rows unless they match the task-row template; the final plain-bullet wording preserves the evidence-sink semantic fix while satisfying doc governance. Final verification rerun passed.
 - Verification Matrix: headless-runtime live evidence-sink wording -> targeted `rg` for active devlog terms -> no matches; doc governance contract -> `./scripts/doc-governance-check.sh` -> OK; whitespace/diff hygiene -> `git diff --check` -> pass.
 - Visual Evidence: n/a; docs-only wording change with no UI or screenshot surface.
