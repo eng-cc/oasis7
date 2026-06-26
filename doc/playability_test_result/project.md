@@ -120,7 +120,7 @@
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer` / `viewer_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- 对应 `.pm/tasks/task_<32hex>.execution.md` 已记录
+  - [ ] 对应 `.pm/tasks/task_<32hex>.execution.md` 已记录
 - [ ] required 证据已补齐
 
 ### Risks / Decisions
