@@ -99,3 +99,17 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_fd01d2a5289f4dd7980e9e734b9c3671
+    title: "next code performance optimization"
+    module: engineering
+    priority: P2
+    source_signal: null
+    related_prd:
+      - PRD-ENGINEERING/GOVERNANCE
+    acceptance:
+      - "Identify one next code-level performance optimization candidate not duplicating recent transfer history, viewer summary, pm-lint, or launcher compile work."
+      - "Implement the scoped optimization with focused tests or verification."
+      - "Complete repo-owned review, PR checks, merge, and cleanup."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_fd01d2a5289f4dd7980e9e734b9c3671.yaml

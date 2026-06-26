@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] action-mempool-batch-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize consensus action mempool batch selection to sort references and clone only selected actions, avoiding full `ActionEnvelope` materialization before batch and zone-batch selection. Trace: .pm/tasks/task_fd01d2a5289f4dd7980e9e734b9c3671.yaml
+
 - [x] power-tick-agent-iteration-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator power tick agent iteration to avoid cloning every agent id and performing a second map lookup on each tick while preserving event ordering semantics. Trace: .pm/tasks/task_9aa5cd8fecb54028a3126768eff6d8d4.yaml
 
 - [x] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml

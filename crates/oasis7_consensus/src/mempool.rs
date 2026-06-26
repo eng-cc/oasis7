@@ -153,32 +153,36 @@ impl ActionMempool {
         if self.actions.is_empty() {
             return Ok(None);
         }
-        let mut candidates: Vec<ActionEnvelope> = self.actions.values().cloned().collect();
-        candidates.sort_by(|left, right| {
-            left.timestamp_ms
-                .cmp(&right.timestamp_ms)
-                .then_with(|| left.action_id.cmp(&right.action_id))
-        });
+        let (actions, oversized_action_ids) = {
+            let mut candidates: Vec<&ActionEnvelope> = self.actions.values().collect();
+            candidates.sort_by(|left, right| action_batch_order(left, right));
 
-        let mut actions = Vec::new();
-        let mut total_bytes = 0usize;
+            let mut actions = Vec::new();
+            let mut oversized_action_ids = Vec::new();
+            let mut total_bytes = 0usize;
 
-        for action in candidates {
-            if actions.len() >= rules.max_actions {
-                break;
+            for action in candidates {
+                if actions.len() >= rules.max_actions {
+                    break;
+                }
+                let size_bytes = action_size_bytes(action)?;
+                if size_bytes > rules.max_payload_bytes {
+                    oversized_action_ids.push(action.action_id.clone());
+                    continue;
+                }
+                let next_total_bytes =
+                    checked_usize_add(total_bytes, size_bytes, "mempool batch payload bytes")?;
+                if next_total_bytes > rules.max_payload_bytes {
+                    break;
+                }
+                total_bytes = next_total_bytes;
+                actions.push(action.clone());
             }
-            let size_bytes = action_size_bytes(&action)?;
-            if size_bytes > rules.max_payload_bytes {
-                self.remove_action(&action.action_id);
-                continue;
-            }
-            let next_total_bytes =
-                checked_usize_add(total_bytes, size_bytes, "mempool batch payload bytes")?;
-            if next_total_bytes > rules.max_payload_bytes {
-                break;
-            }
-            total_bytes = next_total_bytes;
-            actions.push(action);
+            (actions, oversized_action_ids)
+        };
+
+        for action_id in oversized_action_ids {
+            self.remove_action(action_id.as_str());
         }
 
         if actions.is_empty() {
@@ -210,50 +214,51 @@ impl ActionMempool {
         if self.actions.is_empty() {
             return Ok(Vec::new());
         }
-        let mut candidates: Vec<ActionEnvelope> = self.actions.values().cloned().collect();
-        candidates.sort_by(|left, right| {
-            left.timestamp_ms
-                .cmp(&right.timestamp_ms)
-                .then_with(|| left.action_id.cmp(&right.action_id))
-        });
+        let (selected_batches, oversized_action_ids) = {
+            let mut zone_candidates = BTreeMap::<String, Vec<&ActionEnvelope>>::new();
+            for candidate in self.actions.values() {
+                zone_candidates
+                    .entry(normalized_zone_id(candidate.zone_id.as_str()))
+                    .or_default()
+                    .push(candidate);
+            }
 
-        let mut zone_candidates = BTreeMap::<String, Vec<ActionEnvelope>>::new();
-        for candidate in candidates {
-            zone_candidates
-                .entry(normalized_zone_id(candidate.zone_id.as_str()))
-                .or_default()
-                .push(candidate);
+            let mut selected_batches = Vec::new();
+            let mut oversized_action_ids = Vec::new();
+            for (_zone, mut zone_actions) in zone_candidates {
+                zone_actions.sort_by(|left, right| action_batch_order(left, right));
+                let mut selected = Vec::new();
+                let mut total_bytes = 0usize;
+                for action in zone_actions {
+                    if selected.len() >= rules.max_actions {
+                        break;
+                    }
+                    let size_bytes = action_size_bytes(action)?;
+                    if size_bytes > rules.max_payload_bytes {
+                        oversized_action_ids.push(action.action_id.clone());
+                        continue;
+                    }
+                    let next_total_bytes =
+                        checked_usize_add(total_bytes, size_bytes, "mempool zone batch bytes")?;
+                    if next_total_bytes > rules.max_payload_bytes {
+                        break;
+                    }
+                    total_bytes = next_total_bytes;
+                    selected.push(action.clone());
+                }
+                if !selected.is_empty() {
+                    selected_batches.push(selected);
+                }
+            }
+            (selected_batches, oversized_action_ids)
+        };
+
+        for action_id in oversized_action_ids {
+            self.remove_action(action_id.as_str());
         }
 
         let mut batches = Vec::new();
-        for (_zone, mut zone_actions) in zone_candidates {
-            zone_actions.sort_by(|left, right| {
-                left.timestamp_ms
-                    .cmp(&right.timestamp_ms)
-                    .then_with(|| left.action_id.cmp(&right.action_id))
-            });
-            let mut selected = Vec::new();
-            let mut total_bytes = 0usize;
-            for action in zone_actions {
-                if selected.len() >= rules.max_actions {
-                    break;
-                }
-                let size_bytes = action_size_bytes(&action)?;
-                if size_bytes > rules.max_payload_bytes {
-                    self.remove_action(&action.action_id);
-                    continue;
-                }
-                let next_total_bytes =
-                    checked_usize_add(total_bytes, size_bytes, "mempool zone batch bytes")?;
-                if next_total_bytes > rules.max_payload_bytes {
-                    break;
-                }
-                total_bytes = next_total_bytes;
-                selected.push(action);
-            }
-            if selected.is_empty() {
-                continue;
-            }
+        for selected in selected_batches {
             for action in &selected {
                 self.remove_action(&action.action_id);
             }
@@ -278,6 +283,12 @@ impl ActionMempool {
             self.remove_action(&evicted_id);
         }
     }
+}
+
+fn action_batch_order(left: &ActionEnvelope, right: &ActionEnvelope) -> std::cmp::Ordering {
+    left.timestamp_ms
+        .cmp(&right.timestamp_ms)
+        .then_with(|| left.action_id.cmp(&right.action_id))
 }
 
 fn batch_id_for_actions(actions: &[ActionEnvelope]) -> Result<String, WorldError> {
