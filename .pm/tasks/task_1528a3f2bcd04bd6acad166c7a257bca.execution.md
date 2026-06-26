@@ -85,3 +85,12 @@ Example:
 - Expected Result: Task-local verification passes, task metadata is marked done/verified, and closeout completes unless repo-wide historical lint debt blocks the final aggregate lint step.
 - Actual Result: The task YAML was updated to `status: done`, `last_verification_status: verified`, `last_verification_exit_code: 0`, and `last_closed_at: 2026-06-26T09:37:08+08:00`; task-local `workflow-lint` passes. `task-closeout.sh` exited nonzero only after task-local closeout because repo-wide `pm-lint` reported pre-existing historical execution-log debt in unrelated task files such as `task_04d61dc5778e4b1683a61056daf454e3` and `task_060e9de147ba4757ac29cf0fb7a15210`.
 - Blocker / Next Action: Treat repo-wide `.pm` lint debt as unrelated historical blocker for the helper's final aggregate lint; continue with task-local evidence and PR CI coverage.
+
+## 2026-06-26 10:48:00 CST / tpm
+- 完成内容: CLAIM-READY EVIDENCE RECORDED
+- 遗留事项: Run prepare-task-pr and continue into PR CI watch.
+- Action: Ran fresh `claim-ready` verification for the `ready_for_pr` claim. The task is already closed, so the helper was run without `--task-uid` and its JSON result is recorded here.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "bash -n scripts/viewer-performance-probe.sh && npm --prefix crates/oasis7_viewer run test:performance -- --help && ./scripts/viewer-performance-probe.sh --help && ./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_1528a3f2bcd04bd6acad166c7a257bca --phase current && git diff --check" --json`
+- Expected Result: Fresh wrapper syntax, package-script help, repo wrapper help, doc governance, task workflow, and diff hygiene checks pass immediately before PR creation.
+- Actual Result: `claim-ready` returned `verification_exit_code: 0`, `status: verified`, `allowed_to_claim: true`, and `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
+- Blocker / Next Action: Run `./scripts/prepare-task-pr.sh --create`.
