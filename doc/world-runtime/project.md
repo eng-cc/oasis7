@@ -737,7 +737,7 @@
 - 承接约束: `TASK-WORLD_RUNTIME-002` 完成后方可进入 `TASK-WORLD_RUNTIME-003` 与 `TASK-WORLD_RUNTIME-004`；`TASK-WORLD_RUNTIME-033` 保留为后续联合验证切片。
 - 实施备注: 仅保留 `TASK-WORLD_RUNTIME-043` 的当前阻塞与承接约束；已完成切片不再在状态区展开，统一回看上方任务项、topic project 与 `.pm` execution log。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 说明: 本文档仅维护 world-runtime 模块设计执行状态；过程记录在 `doc/devlog/README.md`、`doc/devlog/README.md` 与 `doc/devlog/README.md`。
+- 说明: 本文档仅维护 world-runtime 模块设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
 
 ## 阶段收口角色交接
 ### Meta
@@ -781,13 +781,13 @@
 - 代码改动：如需，仅限支撑 runtime 验收与指标暴露的必要实现。
 - 文档回写：`doc/world-runtime/project.md` 与相关专题文档。
 - 测试记录：补齐 runtime `test_tier_required`，必要时标注后续 `test_tier_full`。
-- devlog 记录：记录验收项、风险与下一切片。
+- 任务证据记录：在对应 `.pm/tasks/task_<32hex>.execution.md` 记录验收项、风险与下一切片。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `doc/devlog/YYYY-MM-DD.md` 已记录
+- 任务证据已记录到对应 `.pm/tasks/task_<32hex>.execution.md`
 - [ ] required/full 测试证据已补齐或明确挂起原因
 
 ### Risks / Decisions
