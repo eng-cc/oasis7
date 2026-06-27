@@ -352,6 +352,63 @@ fn feedback_rate_limit_blocks_excessive_submissions() {
 }
 
 #[test]
+fn feedback_rate_limit_skips_stale_audit_paths_before_reading() {
+    let dir = temp_dir("rate-limit-stale-skip");
+    let store = LocalCasStore::new(&dir);
+    let config = FeedbackStoreConfig {
+        rate_limit_window_ms: 60_000,
+        max_actions_per_ip_window: 1,
+        max_actions_per_pubkey_window: 1,
+        ..FeedbackStoreConfig::default()
+    };
+    let feedback_store = FeedbackStore::new(store, config);
+    let author = signing_key(29);
+    let author_pubkey = public_key_hex(&author);
+    let stale_audit_path = feedback_audit_path(now_plus(-120_000), "stale-malformed");
+    feedback_store
+        .store
+        .write_file(stale_audit_path.as_str(), b"not-json")
+        .expect("write stale malformed audit");
+
+    let timestamp = now_plus(0);
+    let expires = now_plus(60_000);
+    let stub = FeedbackCreateRequest {
+        feedback_id: "fb-rate-stale-skip".to_string(),
+        author_public_key_hex: author_pubkey.clone(),
+        submit_ip: "127.0.0.6".to_string(),
+        category: "bug".to_string(),
+        platform: "web".to_string(),
+        game_version: "0.2.2".to_string(),
+        content: "stale audit should not be parsed".to_string(),
+        attachments: vec![],
+        nonce: "n-rate-stale-skip".to_string(),
+        timestamp_ms: timestamp,
+        expires_at_ms: expires,
+        signature_hex: String::new(),
+    };
+    let content_hash = feedback_create_content_hash(&stub).expect("hash");
+    let signature = sign_signature_hex(
+        FeedbackActionKind::Create,
+        stub.feedback_id.as_str(),
+        stub.author_public_key_hex.as_str(),
+        content_hash.as_str(),
+        stub.nonce.as_str(),
+        stub.timestamp_ms,
+        stub.expires_at_ms,
+        &author,
+    );
+    let receipt = feedback_store
+        .submit_feedback(FeedbackCreateRequest {
+            signature_hex: signature,
+            ..stub
+        })
+        .expect("stale malformed audit is skipped before read");
+    assert!(receipt.accepted);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn feedback_replicated_ingest_is_idempotent_for_root_and_event() {
     let source_dir = temp_dir("replicated-source");
     let target_dir = temp_dir("replicated-target");

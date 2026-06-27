@@ -694,6 +694,11 @@ impl FeedbackStore {
             if !file.path.starts_with(feedback_audit_prefix().as_str()) {
                 continue;
             }
+            if feedback_audit_path_timestamp_ms(file.path.as_str())
+                .is_some_and(|timestamp_ms| timestamp_ms < min_timestamp)
+            {
+                continue;
+            }
             let bytes = self.store.read_file(file.path.as_str())?;
             let record: FeedbackAuditRecord = serde_json::from_slice(&bytes)?;
             if !record.accepted {
@@ -1124,6 +1129,19 @@ fn feedback_audit_path(timestamp_ms: i64, audit_id: &str) -> String {
         timestamp_ms.max(0),
         audit_id
     )
+}
+
+fn feedback_audit_path_timestamp_ms(path: &str) -> Option<i64> {
+    let prefix = feedback_audit_prefix();
+    let rest = path.strip_prefix(prefix.as_str())?;
+    let timestamp = rest.get(..20)?;
+    if !timestamp.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if !rest.as_bytes().get(20).is_some_and(|byte| *byte == b'-') {
+        return None;
+    }
+    timestamp.parse().ok()
 }
 
 fn is_feedback_root_path(path: &str) -> bool {
