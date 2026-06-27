@@ -14,7 +14,7 @@
 ## 接口 / 数据
 - PRD 主入口: `doc/world-runtime/prd.md`
 - 项目管理入口: `doc/world-runtime/project.md`
-- 兼容跳转互链: `doc/world-runtime.project.md`（legacy redirect，不作为当前执行入口）
+- 历史根入口: root world-runtime project legacy redirect shell 已删除，不作为当前执行入口。
 - 文件级索引: `doc/world-runtime/prd.index.md`
 - 追踪主键: `PRD-WORLD_RUNTIME-xxx`
 - 测试与发布参考: `testing-manual.md`

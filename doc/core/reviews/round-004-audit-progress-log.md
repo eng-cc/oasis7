@@ -37,7 +37,7 @@
 | 2026-03-06 11:50:18 +0800 | codex | `doc/world-runtime/prd.index.md` | issue_open | I4-001 | 索引声明“保证专题文档可达”，但未收录 `governance-events.md`、`audit-export.md`、`integration/node-contribution-points-runtime-closure.md`。 |
 | 2026-03-06 11:50:53 +0800 | codex | `doc/world-runtime/prd.md` | issue_open | I4-017 | Validation 表为描述性“验证方法”，未给出可执行命令或证据路径，PRD->TASK->命令链条不闭合。 |
 | 2026-03-06 11:51:19 +0800 | codex | `doc/world-runtime/project.md` | issue_open | I4-018 | TASK-WORLD_RUNTIME-001~005 未附验收命令/证据，只有 TASK-WORLD_RUNTIME-006 给出具体回归命令，追溯链不完整。 |
-| 2026-03-06 11:51:46 +0800 | codex | `doc/world-runtime/testing/testing.md` | issue_open | I4-019 | 文档仍声明挂靠 `doc/world-runtime.prd.md` 且使用 `ModuleValidationFailed` 术语，与当前 `governance-events.md` 口径不一致。 |
+| 2026-03-06 11:51:46 +0800 | codex | `doc/world-runtime/testing/testing.md` | issue_open | I4-019 | 文档当时仍声明挂靠 root world-runtime PRD shell 且使用 `ModuleValidationFailed` 术语，与当前 `governance-events.md` 口径不一致；该 root shell 后续已删除。 |
 | 2026-03-06 11:52:17 +0800 | codex | `doc/headless-runtime/README.md` | issue_open | I4-020 | 模块已更名 `headless-runtime` 但活跃文档与约定仍长期并存 `nonviewer-*` 命名，术语双轨易造成检索与口径漂移。 |
 | 2026-03-06 11:52:46 +0800 | codex | `doc/headless-runtime/prd.index.md` | pass | - | 专题 PRD/Project 配对完整且入口单一，未发现新增可达性问题。 |
 | 2026-03-06 11:53:20 +0800 | codex | `doc/headless-runtime/prd.md` | issue_open | I4-017 | Validation 表仍为描述性验证方法，未落到可执行命令与证据路径，追溯闭环不完整。 |
@@ -383,7 +383,7 @@
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/agent-default-modules.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/agent-default-modules.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-lifecycle.md` | issue_open | I4-019 | 仍引用 legacy 主入口 `doc/world-runtime.prd.md`，与当前模块主入口口径不一致。 |
+| 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-lifecycle.md` | issue_open | I4-019 | 当时仍引用 root world-runtime legacy PRD shell，与当前模块主入口口径不一致；该 root shell 后续已删除。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-storage.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-storage.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/module-subscription-filters.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
@@ -502,8 +502,8 @@
 | 2026-03-06 12:32:57 +0800 | codex | `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.project.md` | pass | - | 项目任务与 stress 脚本接线一致，未发现 D4 新增问题。 |
 
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | historical deleted root Viewer manual shell | pass | - | F4-002 补审覆盖：当时结构与口径未发现新增高/中风险；该历史根入口后续已删除。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-runtime.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-runtime.project.md` | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-runtime PRD shell | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险；该 root shell 后续已删除。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-runtime project shell | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段；该 root shell 后续已删除。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator.prd.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator.project.md` | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |

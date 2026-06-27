@@ -271,7 +271,7 @@
   - 并发修改冲突：同一规则多分支更新时以最新主干基线重放验证。
   - 新旧格式并存：迁移中允许 legacy 与 strict 共存，但每个迁移批次必须标注边界并回写追踪状态。
   - 批量迁移回归风险：结构改写可能造成引用断链，需附带路径扫描与脚本复核。
-  - 根入口重定向迁移：root game-test project shell 已在后续治理中删除，`doc/world-runtime.project.md`、`doc/world-simulator.project.md` 仍仅允许在 redirect 语义内维护，不恢复为业务正文入口。
+  - 根入口重定向迁移：root game-test 与 world-runtime project shells 已在后续治理中删除，`doc/world-simulator.project.md` 仍仅允许在 redirect 语义内维护，不恢复为业务正文入口。
   - 索引覆盖不足：专题文档未被入口索引时，必须在当批修复并补回链路。
   - 互链缺失：若 PRD 与 project 仅单向引用，会导致追溯断链，门禁需直接阻断。
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
