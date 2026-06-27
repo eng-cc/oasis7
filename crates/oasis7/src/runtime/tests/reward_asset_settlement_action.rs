@@ -167,6 +167,106 @@ fn reward_asset_settlement_action_applies_signed_records_via_step() {
 }
 
 #[test]
+fn reward_asset_settlement_action_bridge_remainder_prefers_higher_points() {
+    let mut world = World::new();
+    configure_main_token_bridge_budget(&mut world, 23, 4, 4);
+    bind_node_identity(&mut world, "node-a");
+    bind_node_identity(&mut world, "node-b");
+    let signer_private_key = bind_node_identity_with_seed(&mut world, "node-signer", 12);
+    world.set_reward_signature_governance_policy(RewardSignatureGovernancePolicy {
+        require_mintsig_v2: true,
+        allow_mintsig_v1_fallback: false,
+        require_redeem_signature: false,
+        require_redeem_signer_match_node_id: false,
+    });
+    world.set_reward_asset_config(RewardAssetConfig {
+        points_per_credit: 1,
+        ..RewardAssetConfig::default()
+    });
+
+    let report = settlement_report(23, vec![settlement("node-a", 1), settlement("node-b", 2)]);
+    let mut preview = world.clone();
+    let minted_records = preview
+        .apply_node_points_settlement_mint_v2(&report, "node-signer", signer_private_key.as_str())
+        .expect("build settlement records");
+
+    world.submit_action(Action::ApplyNodePointsSettlementSigned {
+        report,
+        signer_node_id: "node-signer".to_string(),
+        mint_records: minted_records,
+    });
+    world.step().expect("apply settlement action");
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::NodePointsSettlementApplied {
+            main_token_bridge_total_amount,
+            main_token_bridge_distributions,
+            ..
+        }) => {
+            assert_eq!(*main_token_bridge_total_amount, 4);
+            assert_eq!(
+                main_token_bridge_distributions
+                    .iter()
+                    .map(|distribution| (distribution.node_id.as_str(), distribution.amount))
+                    .collect::<Vec<_>>(),
+                vec![("node-a", 1), ("node-b", 3)]
+            );
+        }
+        other => panic!("expected NodePointsSettlementApplied, got {other:?}"),
+    }
+}
+
+#[test]
+fn reward_asset_settlement_action_bridge_remainder_ties_by_node_id() {
+    let mut world = World::new();
+    configure_main_token_bridge_budget(&mut world, 24, 5, 5);
+    bind_node_identity(&mut world, "node-a");
+    bind_node_identity(&mut world, "node-b");
+    let signer_private_key = bind_node_identity_with_seed(&mut world, "node-signer", 13);
+    world.set_reward_signature_governance_policy(RewardSignatureGovernancePolicy {
+        require_mintsig_v2: true,
+        allow_mintsig_v1_fallback: false,
+        require_redeem_signature: false,
+        require_redeem_signer_match_node_id: false,
+    });
+    world.set_reward_asset_config(RewardAssetConfig {
+        points_per_credit: 1,
+        ..RewardAssetConfig::default()
+    });
+
+    let report = settlement_report(24, vec![settlement("node-b", 1), settlement("node-a", 1)]);
+    let mut preview = world.clone();
+    let minted_records = preview
+        .apply_node_points_settlement_mint_v2(&report, "node-signer", signer_private_key.as_str())
+        .expect("build settlement records");
+
+    world.submit_action(Action::ApplyNodePointsSettlementSigned {
+        report,
+        signer_node_id: "node-signer".to_string(),
+        mint_records: minted_records,
+    });
+    world.step().expect("apply settlement action");
+
+    match &world.journal().events.last().expect("event").body {
+        WorldEventBody::Domain(DomainEvent::NodePointsSettlementApplied {
+            main_token_bridge_total_amount,
+            main_token_bridge_distributions,
+            ..
+        }) => {
+            assert_eq!(*main_token_bridge_total_amount, 5);
+            assert_eq!(
+                main_token_bridge_distributions
+                    .iter()
+                    .map(|distribution| (distribution.node_id.as_str(), distribution.amount))
+                    .collect::<Vec<_>>(),
+                vec![("node-a", 3), ("node-b", 2)]
+            );
+        }
+        other => panic!("expected NodePointsSettlementApplied, got {other:?}"),
+    }
+}
+
+#[test]
 fn reward_asset_settlement_action_rejects_tampered_mint_record() {
     let mut world = World::new();
     configure_main_token_bridge_budget(&mut world, 21, 4, 4);

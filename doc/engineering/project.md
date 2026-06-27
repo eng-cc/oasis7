@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml
+
 - [x] provider-distribution-borrowed-id-audit-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize provider distribution audit to dedupe per-hash provider ids by borrowed references and allocate provider ids only for global coverage entries, preserving insufficient-replica and full-coverage rejection semantics. Trace: .pm/tasks/task_92b8563352b84e80969a3305aeb464f7.yaml
 
 - [x] libp2p-peer-health-pending-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize libp2p peer health refresh to sort pending active `PeerId`s directly instead of allocating `String` sort keys, preserving deterministic admission order semantics. Trace: .pm/tasks/task_a7b607e4bf1a4392b8ad62297b726d55.yaml
