@@ -45,7 +45,7 @@
 | 2026-03-06 11:54:15 +0800 | codex | `doc/README.md` | pass | - | 总入口路径矩阵与 legacy redirect 说明完整，未发现 D4-001~D4-008 新增问题。 |
 | 2026-03-06 11:54:44 +0800 | codex | `doc/game-test.prd.md` | pass | - | redirect 角色边界与主入口指向清晰，未见多入口冲突。 |
 | 2026-03-06 11:55:15 +0800 | codex | `doc/game-test.project.md` | issue_open | I4-021 | Project 文档未维护 PRD-ID 映射与验收命令字段，redirect 任务可追溯性不足。 |
-| 2026-03-06 11:56:15 +0800 | codex | `doc/playability_test_card.md` | pass | - | redirect 声明与主入口指向明确，未发现新增冲突。 |
+| 2026-03-06 11:56:15 +0800 | codex | historical deleted root playability card shell | pass | - | 当时 redirect 声明与主入口指向明确；该历史根入口后续已删除。 |
 | 2026-03-06 11:56:43 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md` | issue_open | I4-014 | Traceability 表沿用 `PRD-ENGINEERING-006 + 文档内既有任务条目`，未建立本专题 PRD-ID 与任务/命令/证据链。 |
 | 2026-03-06 11:57:17 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”仅迁移任务带 PRD-ID，T0~T3 未显式映射需求与验收命令。 |
 | 2026-03-06 11:48:11 +0800 | codex | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md` | issue_open | I4-003,I4-006 | 同文并存 `审计轮次: 4` 与 `- 审计轮次: 2`；状态仍写“进行中/等待回归”且最近更新停在 2026-03-01，时效状态失真。 |
