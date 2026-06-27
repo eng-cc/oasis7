@@ -146,7 +146,7 @@ Example:
 ## 2026-06-27 16:20:00 CST / tpm
 - Review Trigger: pre-PR local role review
 - Review Scope: `crates/oasis7/src/runtime/world/module_runtime.rs`; `doc/engineering/project.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.*`
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-458ed286f..2c1c209f8.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-70a8b1d84..29d5f856a.diff`
 - Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer, producer_system_designer
 - Review Question: Confirm the lazy module-routing payload/hash computation preserves module call input semantics, WASM/module-platform compatibility, verification sufficiency, and governance trace quality before PR creation.
 - Evidence Available: `./scripts/cargo-dev.sh fmt --check`; `./scripts/cargo-dev.sh test -p oasis7 modules --lib`; `./scripts/cargo-dev.sh test -p oasis7 module_runtime --lib`; `./scripts/cargo-dev.sh test -p oasis7 module --lib`; targeted `./scripts/ci-tests.sh required`; `./scripts/check-rust-file-size.sh`; `git diff --check`; `./scripts/doc-governance-check.sh`; task-local `./scripts/pm/workflow-lint.sh --task-uid task_9e8e6246b4264cda8baf908cd98d8cfd --phase pr-ready`.
@@ -160,10 +160,10 @@ Example:
 - Task UID: task_9e8e6246b4264cda8baf908cd98d8cfd
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7
 - Source Branch: task/engineering-code-execution-efficiency-next-7
-- Source Head: 2c1c209f85e0728108eb5a173acdf472dfcf0b75
+- Source Head: 29d5f856acbb36f30bcb7e0b203ed4e6abdcf466
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `crates/oasis7/src/runtime/world/module_runtime.rs`; `doc/engineering/project.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.execution.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.yaml`
-- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-458ed286f..2c1c209f8.diff`
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-70a8b1d84..29d5f856a.diff`
 - Role Selection Basis: changed `crates/oasis7` runtime module-routing code and module call input semantics -> runtime_engineer; module ABI/input/hash compatibility -> wasm_platform_engineer; PR readiness and test-tier sufficiency -> qa_engineer; governance trace and technical-debt separation -> repository_health_engineer; prepare-task-pr changed-path inference and system-level module contract confirmation -> producer_system_designer. Skipped gameplay/visual/agent/viewer/blockchain/liveops roles because this PR changes no gameplay rule, visible UI, agent behavior, viewer path, operator runbook, deployment artifact, or external/player messaging.
 - Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer, producer_system_designer
 - Review Evidence: runtime_engineer no_findings; wasm_platform_engineer no_findings; qa_engineer no_findings; repository_health_engineer no_findings; producer_system_designer no_findings.
@@ -178,3 +178,20 @@ Example:
 - Residual Risk: Low. No dedicated benchmark asserts the no-subscriber path avoids serialization/hash work; benefit is supported by code structure and owner review. Existing behavior regressions cover module input semantics for subscribed paths.
 - Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/slice-ledger.jsonl`
 - 遗留事项: Commit review evidence and run PR preflight/create.
+
+## 2026-06-27 16:43:00 CST / tpm
+- 完成内容: Rebasing completed cleanly after `origin/main` advanced.
+- 遗留事项: Need fresh post-rebase verification, evidence commit, PR creation, CI/comment watch, merge, and cleanup.
+- Action: Rebased `task/engineering-code-execution-efficiency-next-7` onto `origin/main` at `70a8b1d8460c861708aeb921dc7363a77d505d0a`; no conflicts occurred.
+- Action: Refreshed review package to `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-70a8b1d84..29d5f856a.diff`.
+- Action: Updated pre-PR review packet `Source Head` to current rebased head `29d5f856acbb36f30bcb7e0b203ed4e6abdcf466`; review findings remain applicable because the rebase was conflict-free and changed only commit ancestry/package metadata.
+- Validation Command: `./scripts/cargo-dev.sh test -p oasis7 module --lib`
+- Expected Result: Module surface remains green after rebase.
+- Actual Result: Passed; 164 passed, 1 ignored.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_9e8e6246b4264cda8baf908cd98d8cfd --phase pr-ready`
+- Expected Result: Task-local workflow evidence remains PR-ready after packet/head refresh.
+- Actual Result: Passed.
+- Validation Command: `git diff --check`
+- Expected Result: No whitespace errors.
+- Actual Result: Passed.
+- Blocker / Next Action: Commit post-rebase evidence and run PR helper.
