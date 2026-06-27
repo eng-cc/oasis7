@@ -63,9 +63,14 @@ impl World {
         }
 
         let world_config_hash = self.current_manifest_hash()?;
-        let mut invoked = 0;
+        let mut due_invocations = Vec::with_capacity(invocation_ids.len());
         for invocation_id in invocation_ids {
             let invocation = self.active_module_invocation_for_id(&invocation_id)?;
+            due_invocations.push((invocation_id, invocation));
+        }
+
+        let mut invoked = 0;
+        for (invocation_id, invocation) in due_invocations {
             // Always remove the previous schedule first. The module output decides whether to
             // reschedule itself (wake) or stay suspended.
             self.module_tick_schedule.remove(invocation_id.as_str());

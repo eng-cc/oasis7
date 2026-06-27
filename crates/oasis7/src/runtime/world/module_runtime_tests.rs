@@ -222,3 +222,60 @@ fn route_tick_to_modules_keeps_schedule_when_due_record_is_missing() {
     assert_eq!(sandbox.calls, 1);
     assert_eq!(world.module_tick_schedule.get("inst-due"), None);
 }
+
+#[test]
+fn route_tick_to_modules_preflights_due_records_before_side_effects() {
+    let mut world = World::new();
+    world.state.time = 7;
+    let wasm_bytes = b"first-due-tick-module";
+    let wasm_hash = crate::runtime::util::sha256_hex(wasm_bytes);
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .expect("register artifact");
+    world.state.module_instances.insert(
+        "inst-a".to_string(),
+        ModuleInstanceState {
+            instance_id: "inst-a".to_string(),
+            module_id: "m.a".to_string(),
+            module_version: "0.1.0".to_string(),
+            wasm_hash: wasm_hash.clone(),
+            owner_agent_id: "owner".to_string(),
+            install_target: ModuleInstallTarget::SelfAgent,
+            active: true,
+            installed_at: 1,
+        },
+    );
+    world.state.module_instances.insert(
+        "inst-z".to_string(),
+        ModuleInstanceState {
+            instance_id: "inst-z".to_string(),
+            module_id: "m.z".to_string(),
+            module_version: "0.1.0".to_string(),
+            wasm_hash: "missing-record-hash".to_string(),
+            owner_agent_id: "owner".to_string(),
+            install_target: ModuleInstallTarget::SelfAgent,
+            active: true,
+            installed_at: 1,
+        },
+    );
+    world.module_registry.records.insert(
+        ModuleRegistry::record_key("m.a", "0.1.0"),
+        ModuleRecord {
+            manifest: tick_manifest("m.a", &wasm_hash),
+            registered_at: 1,
+            registered_by: "owner".to_string(),
+            audit_event_id: None,
+        },
+    );
+    world.module_tick_schedule.insert("inst-a".to_string(), 1);
+    world.module_tick_schedule.insert("inst-z".to_string(), 1);
+
+    let mut sandbox = CountingSandbox::default();
+    let err = world
+        .route_tick_to_modules(&mut sandbox)
+        .expect_err("later due missing record errors before earlier due executes");
+    assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+    assert_eq!(sandbox.calls, 0);
+    assert_eq!(world.module_tick_schedule.get("inst-a"), Some(&1));
+    assert_eq!(world.module_tick_schedule.get("inst-z"), Some(&1));
+}
