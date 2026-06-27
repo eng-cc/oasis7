@@ -52,7 +52,7 @@
 - 范围文件记录于 `doc/core/reviews/round-009-reviewed-files.md`。
 - 范围分层：
   - 入口层：`README.md`、`doc/README.md`、12 个模块 `README.md`、`site/doc/cn/index.html`、`site/doc/en/index.html`
-  - 手册层：`testing-manual.md`、`doc/world-simulator/viewer/viewer-manual.manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
+  - 手册层：`testing-manual.md`、historical deleted viewer manual shell、`doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - 边界热点：`doc/readme/prd.index.md`、`doc/readme/README.md`、`doc/ui_review_result/README.md`、静态 `viewer-manual.html`
 - ROUND-009 不把其它文档纳入正式分母，除非后续显式追加并同步更新清单。
 
@@ -60,7 +60,7 @@
 - 仓库当前 `doc/` 下实际 `*.manual.md` 数量：`0`
 - 仓库当前 `doc/` 下实际 `*.runbook.md` 数量：`2`
 - 高频“手册型文档”仍主要存在于以下载体：
-  - `doc/world-simulator/viewer/viewer-manual.manual.md`
+  - historical deleted viewer manual shell
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `testing-manual.md`
 - 说明：这说明规范层已定义 `manual/runbook`，但消费层仍存在明显 legacy/语义漂移，适合作为 ROUND-009 的主问题域。
