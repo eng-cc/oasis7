@@ -96,6 +96,44 @@ small question into a heavyweight workflow.
   large module. Use a normal task with `module` unless the user explicitly asks
   for a separate coordination task.
 
+### 1.2.2 Learning Intake / Loop Closeout
+Loop engineering in this repository means each task should close the smallest
+useful feedback loop: answer the immediate question, preserve reusable learning
+at the right weight, and avoid promoting every observation into a new task.
+
+After task truth exists, TPM and professional roles use this decision ladder
+whenever a task produces a discovery, follow-up idea, repeated friction point,
+or reusable failure signature:
+
+1. **No-op**: choose this when the observation is transient, already captured by
+   the current command output, or has no likely reuse value.
+2. **Short execution-log note**: choose this when the observation changes the
+   current task's route, verification interpretation, PR evidence, or handoff,
+   but should not outlive the task as a separate signal.
+3. **Reflection signal**: choose this for useful follow-up ideas, repeated
+   workflow friction, possible debt, or cross-task learning that is not yet
+   ready to become committed task truth. Use
+   `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`.
+   By default this creates `source_type=reflection` only and must not create a
+   candidate task unless `--create-task` is explicitly selected.
+4. **Task-scoped `working_memory`**: choose this when the current task needs a
+   structured temporary memory or transcript-derived summary before closeout.
+   `working_memory` supplements `.pm/tasks/<TASK-UID>.execution.md`; it never
+   replaces task truth.
+5. **Candidate task or memory promotion**: choose this only after owner review
+   when the signal or working memory is stable enough to become executable
+   backlog work or long-term role memory. Promotion must preserve source refs
+   and must not bypass owner, role, PRD/project, or `.pm` truth.
+
+Learning intake is not a new mandatory gate before every answer. It is a
+closeout habit for moments where the task produced reusable knowledge. When the
+right answer is no-op or a short note, do not add extra process.
+
+The minimum record for a micro loop inside an already-bound task is:
+question or observation, evidence path or command, answer or decision, and
+whether it changes task truth. Use the full bootstrap/router packets only when
+the owner, scope, route, professional slice plan, or PR chain actually changes.
+
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
 - TPM is not a professional execution role. TPM must not be the source of domain/professional analysis, implementation, verification judgment, code review judgment, product/design judgment, runtime/wasm/viewer/agent/QA/repository-health judgment, or liveops/community messaging.
@@ -202,6 +240,11 @@ small question into a heavyweight workflow.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
 - If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
 - Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a `.pm` task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
+- After task truth exists, use the section 1.2.2 learning-intake ladder for
+  discoveries and follow-ups: no-op, short execution-log note, reflection
+  signal, task-scoped `working_memory`, or owner-reviewed candidate task/memory
+  promotion. Do not skip directly from a lightweight observation to committed
+  task truth unless the owner explicitly selects that promotion.
 
 ### 5.2.1 Read-only specialist routing
 - The task/worktree decision and the professional-slice decision are intentionally decoupled:
@@ -281,8 +324,17 @@ small question into a heavyweight workflow.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
+- Learning intake / loop closeout: only when reusable learning exists, record
+  the chosen ladder step and evidence. Reflection signals, working memory, and
+  promoted candidate tasks/memory supplement the `.pm` execution log but do not
+  replace it.
 
 ## 7. Change Log
+- **v1.4.28 (2026-06-27)**
+  - Added the Learning Intake / Loop Closeout ladder so task learning can flow
+    to no-op, short execution-log note, reflection signal, task-scoped
+    `working_memory`, or owner-reviewed candidate task/memory without creating
+    heavy ceremony for every small loop.
 - **v1.4.27 (2026-06-24)**
   - Added friction controls after task truth so objective fact lookups, bounded read-only role slices, and small follow-ups do not become heavyweight workflow by default.
   - Added `.pm` task `module` as the default large-module marker for grouping, reporting, and parallel work queues.

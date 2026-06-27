@@ -128,6 +128,14 @@ checks = [
             "`chain-world-state-substrate`",
             "Do not create a separate parent/planning surface",
             "Module-local verification remains distinct from integration/release readiness claims",
+            "### 1.2.2 Learning Intake / Loop Closeout",
+            "no-op",
+            "short execution-log note",
+            "Reflection signal",
+            "Task-scoped `working_memory`",
+            "Candidate task or memory promotion",
+            "By default this creates `source_type=reflection` only",
+            "The minimum record for a micro loop inside an already-bound task is:",
         ],
     ),
     (
@@ -144,6 +152,9 @@ checks = [
             "read-only/chat-only professional judgment",
             "Do force this bootstrap onto chat-only or read-only requests",
             "Do not treat read-only professional/domain questions as TPM-owned conclusions",
+            "Already-bound micro-loop caveat:",
+            "Learning Intake / Loop Closeout",
+            "question or observation, evidence path or command",
         ],
     ),
     (
@@ -443,6 +454,9 @@ surfaces = {
     ".agents/skills/game-architect/SKILL.md": (
         root / ".agents/skills/game-architect/SKILL.md"
     ).read_text(encoding="utf-8"),
+    "scripts/pm/capture-todo.sh": (
+        root / "scripts/pm/capture-todo.sh"
+    ).read_text(encoding="utf-8"),
 }
 default_runtime = load_default_subagent_runtime(surfaces[".codex/config.toml"])
 default_model = default_runtime.get("model")
@@ -484,6 +498,42 @@ scenarios = [
             "read-only professional/domain judgments must already be task-bound",
             "Unbound read-only professional questions are invalid under the always-bootstrap workflow",
             "record the slice contract in `.pm`",
+        ],
+    },
+    {
+        "id": "already_bound_micro_loop_uses_minimal_learning_record",
+        "expected_route": "bound task -> minimal learning-intake record without repeating full bootstrap/router packets",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "### 1.2.2 Learning Intake / Loop Closeout",
+            "Learning intake is not a new mandatory gate before every answer.",
+            "The minimum record for a micro loop inside an already-bound task is:",
+            "question or observation, evidence path or command, answer or decision, and",
+            "Use the full bootstrap/router packets only when",
+        ],
+    },
+    {
+        "id": "capture_todo_defaults_to_reflection_without_task_creation",
+        "expected_route": "learning intake -> reflection signal by default; candidate task only with explicit --create-task",
+        "surface": "scripts/pm/capture-todo.sh",
+        "required_markers": [
+            "Capture a lightweight pre-task TODO as a reflection signal.",
+            "By default this only",
+            "appends to .pm/inbox/signals.jsonl and does not create a .pm task.",
+            "--create-task",
+            "--source-type reflection",
+        ],
+    },
+    {
+        "id": "working_memory_supplements_not_replaces_execution_log",
+        "expected_route": "learning intake -> task-scoped working_memory may supplement execution log only",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "Task-scoped `working_memory`",
+            "`working_memory` supplements `.pm/tasks/<TASK-UID>.execution.md`; it never",
+            "replaces task truth.",
+            "Reflection signals, working memory, and",
+            "replace it.",
         ],
     },
     {

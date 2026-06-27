@@ -37,6 +37,11 @@ Do not use this skill when:
 7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
 8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
 9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
+10. Already-bound micro loops may use the source-of-truth "Learning Intake /
+    Loop Closeout" minimal record instead of a full route packet when the
+    owner, scope, phase, professional slice plan, and PR chain do not change.
+    The minimal record must include the question or observation, evidence path
+    or command, answer or decision, and whether task truth changed.
 
 ## Routing Order
 
@@ -80,6 +85,10 @@ Ask and answer these in order:
 8. Is the task actually at closeout rather than execution?
 9. Did GitHub review feedback arrive?
 10. Is this task editing local skill surfaces or skill governance?
+11. Did this step produce reusable learning, a follow-up idea, repeated
+    friction, or a failure signature that should use the learning-intake
+    ladder: no-op, short execution-log note, reflection signal,
+    task-scoped `working_memory`, or candidate task/memory promotion?
 
 ## Expected Output
 
@@ -144,6 +153,9 @@ WORKFLOW ROUTE DECIDED
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
 - Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
+- Do not promote a lightweight observation directly into committed task truth
+  when a reflection signal or task-scoped `working_memory` is the right
+  learning-intake weight.
 
 ## Known Failure Modes
 

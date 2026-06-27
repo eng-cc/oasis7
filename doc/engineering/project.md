@@ -74,6 +74,8 @@
 
 - [x] legacy-doc-migration-backlog-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 2026-03-03 legacy 迁移 backlog 快照，将旧迁移池语义收敛到迁移协作完成态、doc structure standard 与 workflow semantic migration checklist。 Trace: .pm/tasks/task_72ea44c2e71f4721b04f307acc8b6f54.yaml
 
+- [x] learning-intake-loop-closeout-workflow (PRD-ENGINEERING-021) [test_tier_required]: 将 loop engineering 的学习回流落地为 source-of-truth `Learning Intake / Loop Closeout` 梯子，同步 bootstrap/router/closeout 技能，并用 workflow behavior eval 固化 minimal record、reflection 默认行为与 working_memory 边界。 Trace: .pm/tasks/task_b16a1b14eecd460c8e6537bb609b9a61.yaml
+
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
 - [x] TASK-ENGINEERING-002 (PRD-ENGINEERING-001/002) [test_tier_required]: 补齐高频违规（超行数/超文档长度/文档平铺新增）自动诊断与门禁建议。
 - [x] TASK-ENGINEERING-005 (PRD-ENGINEERING-001/002) [test_tier_required]: 执行文档平铺存量迁移批次（world-simulator/p2p），并更新 allowlist 与引用路径。
