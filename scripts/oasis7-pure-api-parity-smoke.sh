@@ -129,12 +129,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-for raw_arg in "${stack_args[@]}"; do
-  if [[ "$raw_arg" == "--no-llm" ]]; then
-    echo "error: pure API parity smoke no longer accepts --no-llm; formal pure_api parity is only valid with active LLM access, while no-LLM runs are observer/debug-only" >&2
-    exit 2
-  fi
-done
+if [[ "${#stack_args[@]}" -gt 0 ]]; then
+  for raw_arg in "${stack_args[@]}"; do
+    if [[ "$raw_arg" == "--no-llm" ]]; then
+      echo "error: pure API parity smoke no longer accepts --no-llm; formal pure_api parity is only valid with active LLM access, while no-LLM runs are observer/debug-only" >&2
+      exit 2
+    fi
+  done
+fi
 
 [[ "$tier" == "required" || "$tier" == "full" ]] || {
   echo "error: --tier must be required or full" >&2
@@ -210,7 +212,11 @@ client_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_pure_api_clien
 }
 
 if [[ -z "$live_addr" ]]; then
-  ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+  if [[ "${#stack_args[@]}" -gt 0 ]]; then
+    ./scripts/run-launcher-stack.sh "${stack_args[@]}" > >(tee "$run_log") 2>&1 &
+  else
+    ./scripts/run-launcher-stack.sh > >(tee "$run_log") 2>&1 &
+  fi
   stack_pid=$!
 
   for ((i = 0; i < startup_timeout_secs; i++)); do

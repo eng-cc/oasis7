@@ -15,6 +15,7 @@
 | 阶段判断 | 当前阶段保持 `internal_playable_alpha_late`；当前对外 claim envelope 为 `limited playable technical preview`。 | `producer_system_designer` 仅在真实 preview 回流、QA verdict 与 claim envelope 均收口后重新评估。 | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
 | Limited preview 执行 | round-1 主线程已切到 GitHub issue `eng-cc/oasis7#48`；当前重点是首批 `Blocking / Opportunity / Idea` 信号回流和 claim drift 纠偏。 | `liveops_community` 执行 controlled builder-facing callout；`qa_engineer` 输出 event/weekly verdict；`producer_system_designer` 决定 continue / hold / reassess。 | `TASK-GAME-036/037/038`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
 | 10-minute trust / first capability | 2026-04-15 的 `trust gate = hold / capability gate = not_run` 只保留为 historical baseline；当前 fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`。 | 后续若再次回退，必须以新样本单独重开，不复用旧 blocker 文案。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`, `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md` |
+| First 10/30-minute attraction | `TASK-GAME-076` 已有逐项 Playwright / actual UI-click / `__AW_TEST__` 完备性自动化、deterministic-provider-backed attraction cards、motivation-density card、content-volume supplement 和 weak-sample regression；required tier 当前为 `attraction_pass` / `content_volume_pass`，记录 `34/30` 分钟有效内容与 `22` 次玩家操作。 | 继续保留 live/provider playtest 边界：deterministic-provider-backed pass 不等同于真实玩家留存或生产 provider 放行；若改动 runtime/viewer/agent 真值，需要复跑 required/live gate。 | `TASK-GAME-076`, `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md` |
 | Indirect control agency | control-feeling 合同已冻结为 accepted intent、主因果、打断/重排、续玩恢复和 fallback。 | 变更 headed Web/UI、pure API、agent reprioritize 或 runtime feedback 时，先回到专题合同和 QA matrix。 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`, `doc/testing/evidence/gameplay-control-feeling-and-anti-grind-matrix-2026-05-23.md` |
 | Mature-world small-player lane | 小玩家主线冻结为 `local operator -> regional specialist -> limited-scope regional influence`；`protected first industrial win` 是低爆炸半径、可恢复、leverage 可见，不是无敌保护。 | 新增 progression / economy / regional influence 变更时，先证明 `player leverage` 而不是 `world_activity_only` 或纯 grind。 | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md` |
 | Physical scale / action grain | `1cm` 是世界物理真值；当前正式玩家主路线仍是间接控制文明模拟，不承诺 Minecraft 式逐块直接操作。 | runtime/viewer/agent 任何尺度表达变化都要保持四层合同：厘米真值、coarse-grained 子系统、玩家动作粒度、表现层夸张。 | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` |
@@ -26,6 +27,7 @@
 | TASK-GAME-036 | PRD-GAME-010 | `liveops_community` | in progress / waiting for real signal | 继续归档 controlled preview 的 `Blocking / Opportunity / Idea` 信号，并在 claim drift 出现时当轮纠偏。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/producer-to-liveops-task-game-036-limited-preview-execution-2026-03-22.md` |
 | TASK-GAME-037 | PRD-GAME-010 | `qa_engineer` | pending preview signal | 输出 `QA Weekly / Event Verdict`，确认 unified gate 是否仍为 `pass`，或给出 continue / conditional go / no-go 建议。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/producer-to-qa-task-game-037-limited-preview-gate-watch-2026-03-22.md` |
 | TASK-GAME-038 | PRD-GAME-010 | `producer_system_designer` | pending TASK-GAME-036/037 | 基于真实执行样本决定继续维持、收紧节奏，或触发下一轮阶段评审。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, future producer sink |
+| TASK-GAME-076 | PRD-GAME-012 | `gameplay_designer` | required pass / live-boundary retained | 自动化、诊断框架和 content-volume supplement 已补齐：required summary 为 `attraction_pass` / `content_volume_pass`，覆盖诊断、路线取舍、微型委托、事故修复、机会扫描、回访封装和本地订单贡献。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`, `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`, Trace: .pm/tasks/task_e3e98d92b70f4168831f756a5872a4aa.yaml |
 
 ## 最近收口但仍影响当前判断
 | 主题 | 当前可复用结论 | Trace |
@@ -74,9 +76,11 @@
 - 当前阶段判断: `internal_playable_alpha_late`
 - 当前 claim envelope: `limited playable technical preview`
 - 当前执行重点: controlled builder-facing limited preview signal 回流、QA verdict、producer continue / hold / reassess 决策。
+- 当前玩法补充重点: first 10/30-minute attraction hardening 已完成 required tier 自动化/诊断/content-volume supplement；当前不要扩大宏系统卖点，后续改动需继续守住 live/provider playtest 与真实留存边界。
 - 当前阻断条件:
   - 若 unified release gate 回退为 `block`，不得扩大 preview 节奏。
   - 若真实 preview signal 暴露 claim drift、agency confusion、first capability regression 或 small-player leverage 误报，必须回到对应专题 owner slice。
+  - 若后续 `TASK-GAME-076` 回退为 `content_volume_weak`，不得把 target coverage、actual UI-click pass 或 motivation-density pass 单独包装成“前 30 分钟内容量足够”。
   - 若未完成 TASK-GAME-036/037/038，不得仅凭历史 topic pass 将阶段升级为 `closed_beta_candidate`。
 - 说明: 本文件不再维护已完成任务长表；更早轮次进展以专题 project、evidence 与 `.pm` task trace 为准。
 
@@ -85,4 +89,5 @@
 - 空白/格式检查: `git diff --check`
 - 路由检查:
   - `rg -n "TASK-GAME-036|TASK-GAME-037|TASK-GAME-038|limited playable technical preview|internal_playable_alpha_late" doc/game/project.md`
+  - `rg -n "TASK-GAME-076|first-10-30-minute-attraction-hardening|progression_pass_but_attraction_weak|motivation density|hook_score" doc/game/project.md doc/game/prd.md doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`
   - `rg -n "PRD-GAME-012|PRD-GAME-014|PRD-GAME-015|PRD-GAME-010" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/gameplay/README.md`

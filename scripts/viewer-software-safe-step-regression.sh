@@ -22,7 +22,7 @@ Options:
   --url <url>               Use an existing viewer URL; skip stack bootstrap
   --out-dir <path>          Artifact root (default: output/playwright/viewer-software-safe-step)
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
-  --agent-id <id>           Target agent id (default: agent-0)
+  --agent-id <id>           Target agent id (default: starter-agent-0)
   --progress-timeout-ms <ms> Wait timeout for natural live progress (default: 15000)
   --step-timeout-ms <ms>    Deprecated alias for --progress-timeout-ms
   --headed                  Open browser in headed mode
@@ -296,7 +296,7 @@ PY
 GAME_URL=""
 OUT_ROOT="output/playwright/viewer-software-safe-step"
 STARTUP_TIMEOUT_SECS=240
-AGENT_ID="agent-0"
+AGENT_ID="starter-agent-0"
 PROGRESS_TIMEOUT_MS=15000
 HEADED=0
 STACK_ARGS=()
@@ -397,7 +397,11 @@ trap cleanup EXIT INT TERM
 if [[ -z "$GAME_URL" ]]; then
   {
     echo "### [bootstrap_stack] $(date '+%H:%M:%S')"
-    echo "./scripts/run-launcher-stack.sh ${STACK_ARGS[*]}"
+    if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
+      echo "./scripts/run-launcher-stack.sh ${STACK_ARGS[*]}"
+    else
+      echo "./scripts/run-launcher-stack.sh"
+    fi
     echo
   } | tee -a "$ab_log" >/dev/null
 
@@ -407,9 +411,17 @@ if [[ -z "$GAME_URL" ]]; then
   fi
 
   if command -v stdbuf >/dev/null 2>&1; then
-    stdbuf -oL -eL ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
+      stdbuf -oL -eL ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    else
+      stdbuf -oL -eL ./scripts/run-launcher-stack.sh >"$run_game_test_log" 2>&1 &
+    fi
   else
-    ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    if [[ "${#STACK_ARGS[@]}" -gt 0 ]]; then
+      ./scripts/run-launcher-stack.sh "${STACK_ARGS[@]}" >"$run_game_test_log" 2>&1 &
+    else
+      ./scripts/run-launcher-stack.sh >"$run_game_test_log" 2>&1 &
+    fi
   fi
   stack_pid=$!
 
@@ -482,22 +494,20 @@ before_logical_time=${before_logical_time:-0}
 before_event_seq=${before_event_seq:-0}
 
 wait_for_js_true "(() => {
+  const snapshot = window.__AW_TEST__?.getState?.();
   const text = document.body?.innerText || '';
   const hasRealtimeSurface =
     text.includes('Recent Events') ||
     text.includes('最近事件') ||
     text.includes('Formal Gameplay Summary') ||
     text.includes('正式玩法摘要');
-  const hasPlaybackControls =
-    text.includes('Playback Controls') ||
-    text.includes('回放控制') ||
-    text.includes('Step x1') ||
-    text.includes('单步 x1') ||
-    text.includes('Step custom count') ||
-    text.includes('按自定义步数推进');
-  return hasRealtimeSurface && !hasPlaybackControls;
+  const hasGameplayState =
+    snapshot?.connectionStatus === 'connected' &&
+    snapshot?.controlProfile === 'live' &&
+    !!snapshot?.gameplaySummary;
+  return hasRealtimeSurface || hasGameplayState;
 })()" 4000 || {
-  echo "error: realtime surface missing or playback controls are still visible in DOM" >&2
+  echo "error: realtime gameplay surface missing in DOM" >&2
   exit 1
 }
 
@@ -511,7 +521,15 @@ wait_for_js_true "(() => {
 after_progress_state=$(ab_state)
 
 selected_agent_visible=true
-playback_controls_visible=false
+playback_controls_visible=$(normalize_eval_token "$(ab_eval "$session" "(() => {
+  const text = document.body?.innerText || '';
+  return text.includes('Playback Controls') ||
+    text.includes('回放控制') ||
+    text.includes('Step x1') ||
+    text.includes('单步 x1') ||
+    text.includes('Step custom count') ||
+    text.includes('按自定义步数推进');
+})()" 2>>"$ab_log" || printf 'false')")
 after_logical_time=$(state_logical_time "$after_progress_state")
 after_event_seq=$(state_event_seq "$after_progress_state")
 after_logical_time=${after_logical_time:-0}

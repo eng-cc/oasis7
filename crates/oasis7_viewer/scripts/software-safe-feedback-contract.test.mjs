@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  buildTaskGame076ScenarioSnapshot,
+  TASK_GAME_076_BEATS,
+} from "../software_safe_src/gameplay_attraction_scenario.js";
 import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "../software_safe_src/software_safe_constants.js";
 
 globalThis.window = {
@@ -82,72 +86,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
-  core.state.snapshot = {
-    model: {
-      agents: { "agent-0": { id: "agent-0" } },
-      locations: { "loc-0": { id: "loc-0" } },
-    },
-    player_gameplay: {
-      stage_id: "post_onboarding",
-      stage_status: "blocked",
-      execution_state: "blocked",
-      goal_id: "post_onboarding.recover_capability",
-      goal_kind: "RecoverCapability",
-      goal_title: "Recover sustainable capability",
-      objective: "Recover the blocked line or capability chain instead of repeating one-off actions.",
-      progress_detail: "Stage progress: the primary line is blocked.",
-      progress_percent: 68,
-      blocker_kind: "material_shortage",
-      blocker_detail: "iron input exhausted at factory-0",
-      causality_kind: "world_constraint",
-      causality_detail: "iron input exhausted at factory-0",
-      next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-      branch_hint: null,
-      can_interrupt: true,
-      can_reprioritize: true,
-      replacement_intent_summary: "Switch from stalled smelter build to material recovery.",
-      handoff_result: "Old build intent stays paused until recovery proves material input.",
-      first_win_goal_id: "small_player.first_industrial_win",
-      player_action: "queued build_factory_smelter_mk1 and inspected the material blocker",
-      world_change_due_to_player: "factory-0 exposed a recoverable iron shortage instead of silent waiting",
-      player_leverage_verdict: "watch: recovery can restore the first capability",
-      leverage_class: "repair_elasticity",
-      same_loop_repeat_count: 2,
-      grind_only_flag: false,
-      major_power_dependency_status: "independent_path_available",
-      repair_available: true,
-      rebuild_available: true,
-      pivot_available: true,
-      recovery_path_kind: "repair_rebuild_or_pivot",
-      recovery_path_detail: "replenish iron, rebuild the local line, or pivot to a lower-input branch",
-      available_actions: [
-        {
-          action_id: "advance_step",
-          label: "Advance 1 step",
-          protocol_action: "live_control.step",
-          target_agent_id: null,
-          disabled_reason: null,
-        },
-        {
-          action_id: "request_snapshot",
-          label: "Request snapshot",
-          protocol_action: "world.request_snapshot",
-          target_agent_id: null,
-          disabled_reason: null,
-        },
-      ],
-      recent_feedback: {
-        action: "step",
-        stage: "blocked",
-        effect: "gameplay blocked before requested advance completed: logicalTime +0, eventSeq +0",
-        reason: "latest live control was blocked before runtime advance",
-        hint: "inspect the blocker details, recover the line, then advance again to confirm progress.",
-        delta_logical_time: 0,
-        delta_event_seq: 0,
-      },
-      agent_claim: null,
-    },
-  };
+  core.state.snapshot = buildTaskGame076ScenarioSnapshot();
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.stageId, "post_onboarding");
   assert.equal(gameplaySummary.stageStatus, "blocked");
@@ -157,14 +96,14 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.progressPercent, 68);
   assert.deepEqual(
     gameplaySummary.availableActions.map((action) => action.actionId),
-    ["advance_step", "request_snapshot"],
+    ["build_factory_smelter_mk1", "advance_step", "request_snapshot"],
   );
   assert.match(gameplaySummary.economicSurface.input, /material chain/i);
-  assert.match(gameplaySummary.economicSurface.output, /gameplay blocked before requested advance completed/i);
+  assert.match(gameplaySummary.economicSurface.output, /smelter build request reached factory-0/i);
   assert.match(gameplaySummary.economicSurface.repairAction, /Advance 1 step/i);
   assert.match(gameplaySummary.economicSurface.nextValue, /stalled line becomes an operable capability again/i);
   assert.match(gameplaySummary.assetGovernanceHandoff, /no main token transfer form/i);
-  assert.equal(gameplaySummary.controlProof.intent, "No player-facing accepted intent yet");
+  assert.equal(gameplaySummary.controlProof.intent, "Queue build_factory_smelter_mk1 for agent-0");
   assert.match(gameplaySummary.controlProof.consequence, /World Constraint/i);
   assert.match(gameplaySummary.controlProof.recovery, /Advance 1 step/i);
   assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
@@ -174,37 +113,22 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.match(gameplaySummary.agencyMoves.correction, /material recovery/i);
   assert.match(gameplaySummary.progressionProof.firstWinGoal, /small_player\.first_industrial_win/i);
   assert.match(gameplaySummary.progressionProof.antiGrind, /repair_elasticity/i);
+  assert.match(gameplaySummary.attractionProof.summary, /first 10\/30-minute attraction/i);
+  assert.equal(gameplaySummary.attractionProof.verdict, "attraction_evidence_present");
+  assert.match(gameplaySummary.attractionProof.whatICaused, /factory-0 exposed a recoverable iron shortage/i);
+  assert.match(gameplaySummary.attractionProof.newOption, /repair_elasticity/i);
+  assert.match(gameplaySummary.attractionProof.whyContinue, /Replenish upstream materials/i);
+  assert.match(gameplaySummary.attractionProof.waitingCost, /iron input exhausted/i);
+  assert.match(gameplaySummary.attractionProof.recovery, /replenish iron/i);
   assert.match(gameplaySummary.matureWorldContinuation.dependencyStatus, /independent_path_available/i);
   assert.match(gameplaySummary.matureWorldContinuation.recoveryOptions, /repair.*rebuild.*pivot/i);
   assert.match(gameplaySummary.shareReplay.snippet, /queued build_factory_smelter_mk1/i);
   assert.equal(core.getState().gameplaySummary.goalTitle, "Recover sustainable capability");
+  assert.equal(TASK_GAME_076_BEATS.length, 10);
 }
 
 {
-  core.state.snapshot = {
-    model: {
-      agents: { "agent-0": { id: "agent-0" } },
-      locations: { "loc-0": { id: "loc-0" } },
-    },
-    player_gameplay: {
-      stage_id: "post_onboarding",
-      stage_status: "blocked",
-      execution_state: "blocked",
-      goal_title: "Recover sustainable capability",
-      objective: "Recover the blocked line.",
-      blocker_kind: "material_shortage",
-      blocker_detail: "iron input exhausted at factory-0",
-      causality_kind: "world_constraint",
-      causality_detail: "iron input exhausted at factory-0",
-      next_step_hint: "Replenish upstream materials, then advance again.",
-      can_interrupt: false,
-      can_reprioritize: false,
-      repair_available: false,
-      rebuild_available: false,
-      pivot_available: false,
-      available_actions: [],
-    },
-  };
+  core.state.snapshot = buildTaskGame076ScenarioSnapshot({ variant: "weak_blocked" });
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.agencyMoves.interrupt, "unavailable");
   assert.equal(gameplaySummary.agencyMoves.reprioritize, "unavailable");
@@ -220,6 +144,12 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.shareReplay.worldResult, null);
   assert.equal(gameplaySummary.shareReplay.snippet, null);
   assert.match(gameplaySummary.controlProof.nextMove, /Replenish upstream materials/i);
+  assert.equal(gameplaySummary.attractionProof.verdict, "progression_pass_but_attraction_weak");
+  assert.match(gameplaySummary.attractionProof.whatICaused, /waiting for player-caused world change/i);
+  assert.match(gameplaySummary.attractionProof.newOption, /waiting for new option/i);
+  assert.match(gameplaySummary.attractionProof.whyContinue, /Replenish upstream materials/i);
+  assert.match(gameplaySummary.attractionProof.waitingCost, /iron input exhausted/i);
+  assert.match(gameplaySummary.attractionProof.recovery, /repair: unavailable/i);
 }
 
 {
@@ -243,6 +173,21 @@ const core = await import("../software_safe_src/legacy_core.js");
   assert.equal(gameplaySummary.shareReplay.playerIntent, "queued build_factory_smelter_mk1");
   assert.equal(gameplaySummary.shareReplay.worldResult, null);
   assert.equal(gameplaySummary.shareReplay.snippet, null);
+}
+
+{
+  core.state.snapshot = buildTaskGame076ScenarioSnapshot({ variant: "weak_high_progress" });
+  const gameplaySummary = core.buildGameplaySummary();
+  assert.equal(gameplaySummary.progressPercent, 92);
+  assert.equal(gameplaySummary.attractionProof.verdict, "progression_pass_but_attraction_weak");
+  assert.match(gameplaySummary.attractionProof.summary, /progression can pass while attraction is weak/i);
+  assert.match(gameplaySummary.attractionProof.whatICaused, /waiting for player-caused world change/i);
+  assert.match(gameplaySummary.attractionProof.newOption, /waiting for new option/i);
+  assert.match(gameplaySummary.attractionProof.whyContinue, /waiting for next branch/i);
+  assert.match(gameplaySummary.attractionProof.waitingCost, /repeat=4.*grind_only/i);
+  assert.match(gameplaySummary.attractionProof.recovery, /waiting for recovery path/i);
+  core.state.snapshot.player_gameplay.stage_status = "blocked";
+  core.state.snapshot.player_gameplay.execution_state = "blocked";
 }
 
 {

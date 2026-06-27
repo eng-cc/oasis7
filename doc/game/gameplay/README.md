@@ -43,6 +43,7 @@
   - 进入游戏后的前 10 分钟为什么会掉线
   - micro-loop、反馈可见性和 post-onboarding 阶段如何衔接
   - 哪些问题应该先作为体验修复，而不是系统重写
+  - 当前 `TASK-GAME-076` 的 required tier 自动化/诊断/content-volume supplement 已补齐到 `content_volume_pass`；若要判断真实留存或生产 provider 体验，继续看 retention topic project 的 live/provider playtest 边界
 
 ### 3. Agency、间接控制与物理尺度
 - 首读入口:

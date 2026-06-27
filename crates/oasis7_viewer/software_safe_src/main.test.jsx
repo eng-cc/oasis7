@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
 import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "./software_safe_constants.js";
 
 vi.mock("./pixel_world_host.jsx", () => ({
@@ -22,98 +23,7 @@ function elementPrecedes(first, second) {
 }
 
 function sampleSnapshot(overrides = {}) {
-  return {
-    time: 12,
-    config: {
-      space: {
-        width_cm: 10_000_000,
-        depth_cm: 5_000_000,
-        height_cm: 1_000_000,
-      },
-    },
-    model: {
-      agents: {
-        "agent-0": {
-          id: "agent-0",
-          name: "Agent 0",
-          location_id: "loc-0",
-          resources: {},
-        },
-      },
-      locations: {
-        "loc-0": {
-          id: "loc-0",
-          name: "Factory Anchor",
-          pos: { x_cm: 0, y_cm: 0, z_cm: 0 },
-          profile: { radius_cm: 25_000, radiation_emission_per_tick: 0, material: "silicate" },
-          resources: {},
-        },
-      },
-      agent_prompt_profiles: {},
-      agent_execution_debug_contexts: {},
-    },
-    player_gameplay: {
-      stage_id: "post_onboarding",
-      stage_status: "blocked",
-      execution_state: "blocked",
-      accepted_intent_id: "gameplay_action:build_factory_smelter_mk1",
-      intent_summary: "Queue build_factory_smelter_mk1 for agent-0",
-      intent_scope: "gameplay_action",
-      intent_target: "agent-0",
-      status_reason: "Advance 1-2 steps to apply the queued build action.",
-      last_world_change: null,
-      resume_anchor: "Recover the first sustainable line",
-      resume_next_step: "Advance after replenishing materials to confirm the line resumes.",
-      goal_id: "post_onboarding.recover_capability",
-      goal_kind: "RecoverCapability",
-      goal_title: "Recover sustainable capability",
-      objective: "Stabilize the first production line before expanding.",
-      progress_detail: "The primary line is blocked by missing material input.",
-      progress_percent: 68,
-      blocker_kind: "material_shortage",
-      blocker_detail: "iron input exhausted at factory-0",
-      causality_kind: "world_constraint",
-      causality_detail: "iron input exhausted at factory-0",
-      blocker_supplemental_detail: null,
-      next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
-      branch_hint: null,
-      can_interrupt: true,
-      can_reprioritize: true,
-      replacement_intent_summary: "Switch from stalled smelter build to material recovery.",
-      handoff_result: "Old build intent stays paused until recovery proves material input.",
-      first_win_goal_id: "small_player.first_industrial_win",
-      player_action: "queued build_factory_smelter_mk1 and inspected the material blocker",
-      world_change_due_to_player: "factory-0 exposed a recoverable iron shortage instead of silent waiting",
-      player_leverage_verdict: "watch: recovery can restore the first capability",
-      leverage_class: "repair_elasticity",
-      same_loop_repeat_count: 2,
-      grind_only_flag: false,
-      major_power_dependency_status: "independent_path_available",
-      repair_available: true,
-      rebuild_available: true,
-      pivot_available: true,
-      recovery_path_kind: "repair_rebuild_or_pivot",
-      recovery_path_detail: "replenish iron, rebuild the local line, or pivot to a lower-input branch",
-      available_actions: [
-        {
-          action_id: "build_factory_smelter_mk1",
-          target_agent_id: "agent-0",
-          label: "Build smelter mk1",
-          protocol_action: "gameplay_action.submit",
-          disabled_reason: null,
-        },
-        {
-          action_id: "request_snapshot",
-          label: "Request snapshot",
-          protocol_action: "world.request_snapshot",
-          disabled_reason: null,
-        },
-      ],
-      recent_feedback: null,
-      agent_claim: null,
-    },
-    ...overrides,
-  };
+  return buildTaskGame076ScenarioSnapshot({ overrides });
 }
 
 function sampleAgentClaimSnapshot() {
@@ -324,6 +234,12 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("World Consequence")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recovery Move")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Next Move").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Attraction Proof")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("What I caused")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("New option")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Why continue")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Waiting cost")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Recovery").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Agency Moves")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Interrupt")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Reprioritize")).toBeInTheDocument();
@@ -331,7 +247,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("First Win & Anti-Grind")).toBeInTheDocument();
     expect(within(stagePanel).getByText("First Win")).toBeInTheDocument();
     expect(within(stagePanel).getByText("small_player.first_industrial_win")).toBeInTheDocument();
-    expect(within(stagePanel).getByText(/repair_elasticity/i)).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText(/repair_elasticity/i).length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Mature-World Continuation")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Recovery Options")).toBeInTheDocument();
     expect(within(stagePanel).getByText("repair: available / rebuild: available / pivot: available")).toBeInTheDocument();
@@ -603,7 +519,12 @@ describe("viewer web ui automation baseline", () => {
     expect(recommendedCard).toBeTruthy();
     expect(within(recommendedCard).getByText("Advance recovery proof")).toBeInTheDocument();
     expect(within(recommendedCard).getByText(/Advance one committed step to apply or prove recovery/i)).toBeInTheDocument();
-    expect(within(recommendedCard).getByRole("button", { name: "Advance One Step" })).toBeInTheDocument();
+    expect(within(recommendedCard).getByRole("button", { name: "Advance One Step" })).toHaveAttribute(
+      "data-testid",
+      "viewer-playthrough-action-recommended",
+    );
+    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
+    expect(screen.getByTestId("viewer-primary-action-preview")).toHaveTextContent(/Recommended context: Advance recovery proof/);
     expect(within(stagePanel).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -613,6 +534,14 @@ describe("viewer web ui automation baseline", () => {
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
           next_step_hint: "Refresh the snapshot first, then prove whether the blocker cleared.",
+          available_actions: [
+            {
+              action_id: "request_snapshot",
+              label: "Request snapshot",
+              protocol_action: "world.request_snapshot",
+              disabled_reason: null,
+            },
+          ],
         },
       }),
     });
@@ -621,8 +550,42 @@ describe("viewer web ui automation baseline", () => {
     const recommendedCard = within(stagePanel).getByText("Recommended Action").closest(".callout");
     expect(recommendedCard).toBeTruthy();
     expect(within(recommendedCard).getByText("Request snapshot")).toBeInTheDocument();
-    expect(within(recommendedCard).getByRole("button", { name: "Refresh Snapshot" })).toBeInTheDocument();
+    expect(within(recommendedCard).getByRole("button", { name: "Refresh Snapshot" })).toHaveAttribute(
+      "data-testid",
+      "viewer-playthrough-action-recommended",
+    );
+    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Request snapshot/);
     expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("publishes stable player-visible locators for actual-click attraction playthrough", async () => {
+    await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          next_step_hint: "Advance one committed step, then refresh the snapshot.",
+          available_actions: [
+            {
+              action_id: "live_control.step",
+              label: "Advance recovery proof",
+              protocol_action: "live_control.step",
+              disabled_reason: null,
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Request snapshot",
+              protocol_action: "world.request_snapshot",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(screen.getByTestId("viewer-playthrough-select-agent")).toHaveAccessibleName(/agent/i);
+    expect(screen.getByTestId("viewer-playthrough-action-recommended")).toHaveAccessibleName("Advance One Step");
+    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
+    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Advance recovery proof/);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders claim-agent quote and owned claim guidance without inventing claim controls", async () => {
@@ -1411,7 +1374,7 @@ describe("viewer web ui automation baseline", () => {
     expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeUndefined();
     expect(container).not.toHaveAttribute("data-viewer-visual-fixture");
     expect(document.body).not.toHaveAttribute("data-viewer-visual-fixture");
-    expect(container.querySelector("#viewer-gameplay-details")).not.toHaveAttribute("open");
+    expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
     expect(container.querySelector("#viewer-diagnostics-panel")).not.toHaveAttribute("open");
     expect(elementPrecedes(
       container.querySelector(".stage-hero"),

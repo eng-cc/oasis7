@@ -1122,6 +1122,76 @@ export function createViewerFeedbackModule({
           "P2 mature-world continuation: small players need repair, rebuild, or pivot paths without forced major-power dependency.",
         ),
     };
+    const enabledGameplayActions = enrichedAvailableActions
+      .filter((action) => !action.disabledReason && action.executeKind === "gameplay_action");
+    const attractionCaused = gameplay.player_action && gameplay.world_change_due_to_player
+      ? `${gameplay.player_action} -> ${gameplay.world_change_due_to_player}`
+      : gameplay.player_action
+        ? `${gameplay.player_action} -> ${localeText(locale, "等待玩家导致的世界变化", "waiting for player-caused world change")}`
+        : localeText(locale, "等待玩家导致的世界变化", "waiting for player-caused world change");
+    const attractionNewOption = leverageClass
+      || gameplay.player_leverage_verdict
+      || gameplay.first_win_goal_id
+      || gameplay.branch_hint
+      || enabledGameplayActions.map((action) => action.label || action.actionId).filter(Boolean).join(" / ")
+      || localeText(locale, "等待新选择", "waiting for new option");
+    const attractionWhyContinue = gameplay.branch_hint
+      || narrativeNextStep
+      || gameplay.resume_next_step
+      || localeText(locale, "等待下一分支", "waiting for next branch");
+    const attractionWaitingCostParts = [
+      resolvedBlockerDetail || blockerLabel || statusReason || recentFeedback?.reason || null,
+      normalizedRepeatCount != null ? `repeat=${normalizedRepeatCount}` : null,
+      grindOnlyFlag ? "grind_only" : null,
+    ].filter(Boolean);
+    const attractionWaitingCost = attractionWaitingCostParts.length > 0
+      ? attractionWaitingCostParts.join(" · ")
+      : localeText(locale, "等待 / 未验证：尚未发布等待成本", "waiting/unverified: no waiting cost published");
+    const attractionRecovery = gameplay.recovery_path_detail
+      || gameplay.recovery_path_kind
+      || (recoveryOptions.length > 0 ? recoveryOptions.join(" / ") : null)
+      || localeText(locale, "等待恢复路径", "waiting for recovery path");
+    const hasPlayerCausedWorldChange = Boolean(gameplay.player_action && gameplay.world_change_due_to_player);
+    const hasNewOption = attractionNewOption !== localeText(locale, "等待新选择", "waiting for new option");
+    const hasWhyContinue = attractionWhyContinue !== localeText(locale, "等待下一分支", "waiting for next branch");
+    const hasAvailableRecovery = [gameplay.repair_available, gameplay.rebuild_available, gameplay.pivot_available]
+      .some((value) => value === true);
+    const hasRecoveryPath = Boolean(gameplay.recovery_path_detail || gameplay.recovery_path_kind || hasAvailableRecovery);
+    const missingAttractionSignals = [
+      !hasPlayerCausedWorldChange,
+      !hasNewOption,
+      !hasWhyContinue,
+      !hasRecoveryPath,
+    ].filter(Boolean).length;
+    const attractionWeak =
+      grindOnlyFlag
+      || (normalizedRepeatCount != null && normalizedRepeatCount >= 3)
+      || (progressPercent != null && progressPercent >= 80 && missingAttractionSignals >= 2)
+      || missingAttractionSignals >= 3;
+    const attractionVerdict = attractionWeak
+      ? "progression_pass_but_attraction_weak"
+      : hasPlayerCausedWorldChange && hasNewOption
+        ? "attraction_evidence_present"
+        : "attraction_watch";
+    const attractionProof = {
+      verdict: attractionVerdict,
+      whatICaused: attractionCaused,
+      newOption: attractionNewOption,
+      whyContinue: attractionWhyContinue,
+      waitingCost: attractionWaitingCost,
+      recovery: attractionRecovery,
+      summary: attractionWeak
+        ? localeText(
+          locale,
+          "前 10/30 分钟吸引力预警：进度可以通过，但玩家造成的变化、新选择或恢复理由不足。",
+          "First 10/30-minute attraction warning: progression can pass while attraction is weak because player-caused change, new option, or recovery reason is missing.",
+        )
+        : localeText(
+          locale,
+          "前 10/30 分钟吸引力证据：玩家能看到自己造成了什么、解锁了什么、为什么继续、等待代价和恢复路径。",
+          "First 10/30-minute attraction proof: the player can see what they caused, what opened up, why to continue, the waiting cost, and the recovery path.",
+        ),
+    };
     const replayPlayerIntent = gameplay.player_action || null;
     const replayWorldResult = gameplay.world_change_due_to_player || null;
     const shareReplaySnippet = replayPlayerIntent && replayWorldResult
@@ -1185,6 +1255,7 @@ export function createViewerFeedbackModule({
       narrativeNextStep,
       economicSurface,
       controlProof,
+      attractionProof,
       agencyMoves,
       progressionProof,
       matureWorldContinuation,

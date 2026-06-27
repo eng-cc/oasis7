@@ -56,7 +56,7 @@
 | PRD-GAME-009 | 当前阶段与 closed beta candidate 需要统一 release gate 和对外 claim envelope，不允许 topic-by-topic 拼凑升阶。 | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md` | 当前阶段判断仍为 `internal_playable_alpha_late`；对外 claim envelope 维持 `limited playable technical preview`。 |
 | PRD-GAME-010 | limited preview 必须是受控、可回流、可纠偏的真实执行闭环。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` | 当前重点是 controlled builder-facing 回流与 QA/producer 复盘。 |
 | PRD-GAME-011 | agent claim 体现持续承诺：首个 claim 也非免费，但 slot-1 可按 runtime 规则使用 restricted starter funding；当前冷启动链路包含 `claim_first_agent -> claim_starter_oc -> first agent chat`，其中 starter OC 是首局 LLM/agent chat 前置解锁动作并授予初始 liquid OC，不是免费 agent claim 或通用补贴。 | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md` | restricted grant / upkeep / reclaim / audit 以专题与 runbook 为准；starter OC 与 restricted starter claim balance 不得混写，当前 chat gate 以 `starter_oc_claims` 记录为准，不以剩余 liquid OC 作为持续预算门。 |
-| PRD-GAME-012 | 10-minute trust gate 和 first capability gate 分开判定；当前 early-retention 优先顺序是 trust floor、capability closure、工业状态可读、agency 因果与下一步。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | 2026-04-15 `hold/not_run` 仅为历史 baseline；fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`。 |
+| PRD-GAME-012 | 10-minute trust gate、first capability gate 与 first 10/30-minute attraction/content-volume gate 分开判定；target coverage、motivation density 和 content volume 不得互相替代。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | 2026-04-15 `hold/not_run` 仅为历史 baseline；fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`。`TASK-GAME-076` required tier 已补齐 deterministic-provider-backed content-volume supplement，当前为 `content_volume_pass` / `attraction_pass`；真实玩家留存与生产 provider 放行仍需 live/provider playtest 另证。 |
 | PRD-GAME-013 | oasis7 采用真实厘米尺度，但当前玩家主路线仍是间接控制文明模拟；不得把 `1cm` 写成 Minecraft 式逐块直接操作承诺。 | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | 四层合同：厘米真值、coarse-grained 子系统、玩家动作粒度、表现层夸张。 |
 | PRD-GAME-014 | 间接控制必须保留 agency：accepted intent、主因果、打断/重排、续玩恢复和 fallback 需要可读、可测。 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | control-feeling 相关 runtime/viewer/agent/QA 证据以专题 project 与 evidence 为准。 |
 | PRD-GAME-015 | mature-world 小玩家需要不依赖立即投靠 major power 的成长线：local operator -> regional specialist -> limited-scope regional influence。 | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md` | `protected first industrial win` 指低爆炸半径、可恢复、leverage 可见，不是新手无敌。 |
@@ -94,7 +94,7 @@
 ## 5. Risks & Roadmap
 - Phased Rollout:
   - MVP: 保持当前 `limited playable technical preview` claim envelope 与 active gameplay baseline。
-  - v1.1: 按真实 preview feedback 更新 `PRD-GAME-010`、QA verdict 和 producer decision。
+  - v1.1: 按真实 preview feedback 更新 `PRD-GAME-010`、QA verdict 和 producer decision；并用 `TASK-GAME-076` 区分 `progression_pass`、`motivation_density_pass`、`content_volume_weak/pass` 与最终 `attraction_weak/pass`。
   - v1.2: 若 resource terminology 继续产生误读，单独收口 built-in resource truth vs module gameplay taxonomy。
 - Technical / Documentation Risks:
   - 风险-1: 历史流水再次进入根 PRD，导致根入口变重。
