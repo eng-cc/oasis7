@@ -25,6 +25,8 @@ env:
   EVIDENCE_ROOT: output/ci/wasm-darwin-docker-evidence
   MODULE_SETS: m1,m4,m5
   RUNNER_LABEL: darwin-arm64
+  WASM_BUILDER_IMAGE: oasis7/wasm-builder:nightly-2025-12-11
+  WASM_BUILDER_IMAGE_DIGEST: sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a
   BUNDLE_ARTIFACT_NAME: darwin-arm64-wasm-summary-bundle
   REPORT_ARTIFACT_NAME: darwin-arm64-wasm-release-evidence-report
 
@@ -70,7 +72,39 @@ jobs:
           grep -Eq '^(x86_64|amd64)$' "${EVIDENCE_ROOT}/preflight/docker-platform.txt"
           printf 'runner_label=%s\n' "$RUNNER_LABEL"
 
+      - name: Rebuild and verify canonical wasm builder image
+        run: |
+          mkdir -p "${EVIDENCE_ROOT}/preflight"
+          docker image rm -f "$WASM_BUILDER_IMAGE" >/dev/null 2>&1 || true
+          if docker buildx version >/dev/null 2>&1; then
+            docker buildx build \
+              --load \
+              --platform linux/amd64 \
+              --build-arg "WASM_TOOLCHAIN=${OASIS7_WASM_TOOLCHAIN}" \
+              --build-arg "WASM_TARGET=${OASIS7_WASM_TARGET}" \
+              --tag "$WASM_BUILDER_IMAGE" \
+              --file docker/wasm-builder/Dockerfile \
+              .
+          else
+            docker build \
+              --platform linux/amd64 \
+              --build-arg "WASM_TOOLCHAIN=${OASIS7_WASM_TOOLCHAIN}" \
+              --build-arg "WASM_TARGET=${OASIS7_WASM_TARGET}" \
+              --tag "$WASM_BUILDER_IMAGE" \
+              --file docker/wasm-builder/Dockerfile \
+              .
+          fi
+          actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+          {
+            printf 'builder_image=%s\n' "$WASM_BUILDER_IMAGE"
+            printf 'expected_digest=%s\n' "$WASM_BUILDER_IMAGE_DIGEST"
+            printf 'actual_image_id=%s\n' "$actual_image_id"
+          } | tee "${EVIDENCE_ROOT}/preflight/wasm-builder-image.txt"
+          test "$actual_image_id" = "$WASM_BUILDER_IMAGE_DIGEST"
+
       - name: Package darwin-arm64 summary bundle
+        env:
+          OASIS7_WASM_BUILDER_AUTO_BUILD: "0"
         run: |
           mkdir -p "${EVIDENCE_ROOT}"
           ./scripts/package-wasm-summary-bundle.sh \
