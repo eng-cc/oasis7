@@ -85,7 +85,7 @@ Example:
 - Blocker / Next Action: Record formal `Pre-PR Local Role Review: passed` packet and run fresh ready-for-PR verification.
 
 ## 2026-06-27 13:30:00 CST / tpm
-Pre-PR Local Role Review: passed
+- Pre-PR Local Role Review: passed
 - Task UID: task_89ecb9cc79d44cab9cef5e8ae01bd48a
 - Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-11`
 - Source Branch: `task/engineering-legacy-doc-semantics-deletion-next-11`
@@ -101,7 +101,10 @@ Pre-PR Local Role Review: passed
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: no review findings required remediation; focused stale-path checks and governance gates already passed before review.
 - Verification Matrix: exact deleted root path -> no matches in `doc README.md scripts .agents`; bare stale filename risk -> only canonical paths or historical count-only context; deleted shell file -> `test ! -e doc/playability_test_card.md` passed; canonical card -> `test -e doc/playability_test_result/playability_test_card.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current` OK; diff hygiene -> `git diff --check` OK.
-- Visual/WASM/Ops/LiveOps Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI, WASM runtime, blockchain ops, or external community messaging surface changes.
+- Visual Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI surface changes.
+- WASM Evidence: not applicable; no WASM runtime files or behavior changed.
+- Ops Evidence: not applicable; no blockchain ops or deployment files changed.
+- LiveOps Evidence: not applicable; no external community messaging or channel runbook changed.
 - Gameplay/Playability Evidence Semantics: producer/system review confirmed canonical playability card body and evidence semantics were unchanged; deletion only removes the obsolete root redirect shell.
 - Action: Run fresh verification plus ready-for-PR claim.
 - Validation Command: pending fresh `rg`, deleted/canonical file checks, `git diff --check`, `./scripts/doc-governance-check.sh`, `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current`, and `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"`.
@@ -120,7 +123,7 @@ Pre-PR Local Role Review: passed
 - Blocker / Next Action: Commit closeout metadata and create PR.
 
 ## 2026-06-27 13:42:00 CST / tpm
-Pre-PR Local Role Review: passed
+- Pre-PR Local Role Review: passed
 - Task UID: task_89ecb9cc79d44cab9cef5e8ae01bd48a
 - Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-11`
 - Source Branch: `task/engineering-legacy-doc-semantics-deletion-next-11`
@@ -136,7 +139,10 @@ Pre-PR Local Role Review: passed
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: no review findings required remediation; final task-scoped gates passed at closeout.
 - Verification Matrix: exact deleted root path -> no matches in `doc README.md scripts .agents`; bare stale filename risk -> only canonical paths or historical count-only context; deleted shell file -> `test ! -e doc/playability_test_card.md` passed; canonical card -> `test -e doc/playability_test_result/playability_test_card.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current` OK; diff hygiene -> `git diff --check` OK.
-- Visual/WASM/Ops/LiveOps Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI, WASM runtime, blockchain ops, or external community messaging surface changes.
+- Visual Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI surface changes.
+- WASM Evidence: not applicable; no WASM runtime files or behavior changed.
+- Ops Evidence: not applicable; no blockchain ops or deployment files changed.
+- LiveOps Evidence: not applicable; no external community messaging or channel runbook changed.
 - Gameplay/Playability Evidence Semantics: producer/system review confirmed canonical playability card body and evidence semantics were unchanged; deletion only removes the obsolete root redirect shell.
 - Action: Retry `prepare-task-pr.sh --create`.
 - Validation Command: `./scripts/prepare-task-pr.sh --create --base main --title "Delete root playability card redirect"`.
