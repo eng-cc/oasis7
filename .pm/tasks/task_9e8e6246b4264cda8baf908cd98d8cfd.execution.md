@@ -147,7 +147,7 @@ Example:
 - Review Trigger: pre-PR local role review
 - Review Scope: `crates/oasis7/src/runtime/world/module_runtime.rs`; `doc/engineering/project.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.*`
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-458ed286f..2c1c209f8.diff`
-- Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer
+- Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer, producer_system_designer
 - Review Question: Confirm the lazy module-routing payload/hash computation preserves module call input semantics, WASM/module-platform compatibility, verification sufficiency, and governance trace quality before PR creation.
 - Evidence Available: `./scripts/cargo-dev.sh fmt --check`; `./scripts/cargo-dev.sh test -p oasis7 modules --lib`; `./scripts/cargo-dev.sh test -p oasis7 module_runtime --lib`; `./scripts/cargo-dev.sh test -p oasis7 module --lib`; targeted `./scripts/ci-tests.sh required`; `./scripts/check-rust-file-size.sh`; `git diff --check`; `./scripts/doc-governance-check.sh`; task-local `./scripts/pm/workflow-lint.sh --task-uid task_9e8e6246b4264cda8baf908cd98d8cfd --phase pr-ready`.
 - Expected Return Contract: findings or no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
@@ -158,16 +158,16 @@ Example:
 ## 2026-06-27 16:27:00 CST / tpm
 - Pre-PR Local Role Review: passed
 - Task UID: task_9e8e6246b4264cda8baf908cd98d8cfd
-- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7`
-- Source Branch: `task/engineering-code-execution-efficiency-next-7`
-- Source Head: `2c1c209f85e0728108eb5a173acdf472dfcf0b75`
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7
+- Source Branch: task/engineering-code-execution-efficiency-next-7
+- Source Head: 2c1c209f85e0728108eb5a173acdf472dfcf0b75
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `crates/oasis7/src/runtime/world/module_runtime.rs`; `doc/engineering/project.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.execution.md`; `.pm/tasks/task_9e8e6246b4264cda8baf908cd98d8cfd.yaml`
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-code-execution-efficiency-next-7/.pm/scratch/task_9e8e6246b4264cda8baf908cd98d8cfd/review-packages/review-458ed286f..2c1c209f8.diff`
-- Role Selection Basis: changed `crates/oasis7` runtime module-routing code and module call input semantics -> runtime_engineer; module ABI/input/hash compatibility -> wasm_platform_engineer; PR readiness and test-tier sufficiency -> qa_engineer; governance trace and technical-debt separation -> repository_health_engineer. Skipped producer/gameplay/visual/agent/viewer/blockchain/liveops roles because this PR changes no product contract, gameplay rule, visible UI, agent behavior, viewer path, operator runbook, deployment artifact, or external/player messaging.
-- Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer
-- Review Evidence: runtime_engineer no_findings; wasm_platform_engineer no_findings; qa_engineer no_findings; repository_health_engineer no_findings.
-- Review Verdicts: runtime_engineer scope/spec passed and runtime quality/risk passed; wasm_platform_engineer scope/spec passed and module-platform quality/risk passed; qa_engineer scope/spec passed and QA quality/risk permits PR with no extra blocking full/release gate; repository_health_engineer scope/spec passed and repository-health quality/risk acceptable for PR.
+- Role Selection Basis: changed `crates/oasis7` runtime module-routing code and module call input semantics -> runtime_engineer; module ABI/input/hash compatibility -> wasm_platform_engineer; PR readiness and test-tier sufficiency -> qa_engineer; governance trace and technical-debt separation -> repository_health_engineer; prepare-task-pr changed-path inference and system-level module contract confirmation -> producer_system_designer. Skipped gameplay/visual/agent/viewer/blockchain/liveops roles because this PR changes no gameplay rule, visible UI, agent behavior, viewer path, operator runbook, deployment artifact, or external/player messaging.
+- Review Roles: runtime_engineer, wasm_platform_engineer, qa_engineer, repository_health_engineer, producer_system_designer
+- Review Evidence: runtime_engineer no_findings; wasm_platform_engineer no_findings; qa_engineer no_findings; repository_health_engineer no_findings; producer_system_designer no_findings.
+- Review Verdicts: runtime_engineer scope/spec passed and runtime quality/risk passed; wasm_platform_engineer scope/spec passed and module-platform quality/risk passed; qa_engineer scope/spec passed and QA quality/risk permits PR with no extra blocking full/release gate; repository_health_engineer scope/spec passed and repository-health quality/risk acceptable for PR; producer_system_designer scope/spec passed and producer/system-design quality/risk passed with no product/system contract or verification-tier escalation.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: n/a; no valid findings required code or documentation changes.
 - Verification Matrix: module-routing behavior -> `./scripts/cargo-dev.sh test -p oasis7 modules --lib` passed and `./scripts/cargo-dev.sh test -p oasis7 module_runtime --lib` passed; module surface -> `./scripts/cargo-dev.sh test -p oasis7 module --lib` passed; required-gate confidence -> targeted `./scripts/ci-tests.sh required` passed; formatting/lint/governance -> `./scripts/cargo-dev.sh fmt --check`, `./scripts/check-rust-file-size.sh`, `git diff --check`, `./scripts/doc-governance-check.sh`, and task-local `./scripts/pm/workflow-lint.sh --task-uid task_9e8e6246b4264cda8baf908cd98d8cfd --phase pr-ready` passed.
