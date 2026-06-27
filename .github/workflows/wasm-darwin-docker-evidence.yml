@@ -26,7 +26,7 @@ env:
   MODULE_SETS: m1,m4,m5
   RUNNER_LABEL: darwin-arm64
   WASM_BUILDER_IMAGE: oasis7/wasm-builder:nightly-2025-12-11
-  WASM_BUILDER_IMAGE_DIGEST: sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a
+  WASM_BUILDER_IMAGE_DIGEST: sha256:178008aeb003c9bfcf1f6c38a74cb69a29c0b63438bc3d875956296603045d86
   BUNDLE_ARTIFACT_NAME: darwin-arm64-wasm-summary-bundle
   REPORT_ARTIFACT_NAME: darwin-arm64-wasm-release-evidence-report
 

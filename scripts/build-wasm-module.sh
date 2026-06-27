@@ -10,7 +10,7 @@ CANONICAL_DOCKER_PLATFORM="linux/amd64"
 CANONICAL_CONTAINER_PLATFORM_TOKEN="linux-x86_64"
 CONTAINER_WORKSPACE_DIR="/workspace"
 DEFAULT_BUILDER_IMAGE="oasis7/wasm-builder:${CANONICAL_WASM_TOOLCHAIN}"
-DEFAULT_BUILDER_IMAGE_DIGEST="sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a"
+DEFAULT_BUILDER_IMAGE_DIGEST="sha256:178008aeb003c9bfcf1f6c38a74cb69a29c0b63438bc3d875956296603045d86"
 DEFAULT_BUILDER_DOCKERFILE="$ROOT_DIR/docker/wasm-builder/Dockerfile"
 DEFAULT_CANONICALIZER_VERSION="strip-custom-sections-v1"
 
@@ -376,31 +376,62 @@ build_local_builder_image() {
 }
 
 ensure_builder_image() {
-  if docker image inspect "$WASM_BUILDER_IMAGE" >/dev/null 2>&1; then
-    return 0
-  fi
+  local actual_image_id=""
+  if actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}' 2>/dev/null)"; then
+    if [[ -z "$WASM_BUILDER_IMAGE_DIGEST" || "$actual_image_id" == "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+      return 0
+    fi
 
-  if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
-    echo "error: configured builder image is missing: $WASM_BUILDER_IMAGE" >&2
-    echo "hint: pre-build or pull that image before invoking this script" >&2
-    exit 1
-  fi
+    echo "warning: builder image digest mismatch for $WASM_BUILDER_IMAGE" >&2
+    echo "warning: expected $WASM_BUILDER_IMAGE_DIGEST but found $actual_image_id" >&2
 
-  if ! is_truthy "$WASM_BUILDER_AUTO_BUILD"; then
-    echo "error: canonical wasm builder image is missing: $WASM_BUILDER_IMAGE" >&2
-    echo "hint: set OASIS7_WASM_BUILDER_AUTO_BUILD=1 or build the image manually" >&2
-    exit 1
+    if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
+      echo "error: configured builder image does not match OASIS7_WASM_BUILDER_IMAGE_DIGEST" >&2
+      exit 1
+    fi
+
+    if ! is_truthy "$WASM_BUILDER_AUTO_BUILD"; then
+      echo "error: canonical wasm builder image has stale digest: $WASM_BUILDER_IMAGE" >&2
+      echo "hint: set OASIS7_WASM_BUILDER_AUTO_BUILD=1 or rebuild the image manually" >&2
+      exit 1
+    fi
+
+    docker image rm -f "$WASM_BUILDER_IMAGE" >/dev/null 2>&1 || true
+  else
+    if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
+      echo "error: configured builder image is missing: $WASM_BUILDER_IMAGE" >&2
+      echo "hint: pre-build or pull that image before invoking this script" >&2
+      exit 1
+    fi
+
+    if ! is_truthy "$WASM_BUILDER_AUTO_BUILD"; then
+      echo "error: canonical wasm builder image is missing: $WASM_BUILDER_IMAGE" >&2
+      echo "hint: set OASIS7_WASM_BUILDER_AUTO_BUILD=1 or build the image manually" >&2
+      exit 1
+    fi
   fi
 
   build_local_builder_image
+
+  if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+    actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+    if [[ "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+      echo "warning: rebuilt canonical wasm builder image id differs from configured recipe digest" >&2
+      echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; rebuilt image id $actual_image_id" >&2
+    fi
+  fi
 }
 
 builder_image_digest() {
-  if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+  local actual_image_id
+  actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+  if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" && "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+    echo "warning: builder image id differs from configured recipe digest for $WASM_BUILDER_IMAGE" >&2
+    echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; image id $actual_image_id" >&2
     printf '%s\n' "$WASM_BUILDER_IMAGE_DIGEST"
     return 0
   fi
-  docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}'
+  printf '%s\n' "$actual_image_id"
 }
 
 parse_host_paths() {
