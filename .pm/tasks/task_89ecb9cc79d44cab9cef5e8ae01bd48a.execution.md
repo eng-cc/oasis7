@@ -118,3 +118,28 @@ Pre-PR Local Role Review: passed
 - Actual Result: `task-closeout.sh` exited 1 after closeout because repo-wide `.pm lint` reported unrelated historical execution-log formatting failures such as `task_04d61dc5778e4b1683a61056daf454e3` and `task_060e9de147ba4757ac29cf0fb7a15210`; current task YAML now shows `status: done`, `last_claim_type: task_complete`, `last_verify_command: ./scripts/doc-governance-check.sh`, `last_verification_status: verified`, and `last_closed_at: 2026-06-27T13:13:58+08:00`.
 - Task-Scoped Gate Rerun: PASS. `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed.
 - Blocker / Next Action: Commit closeout metadata and create PR.
+
+## 2026-06-27 13:42:00 CST / tpm
+Pre-PR Local Role Review: passed
+- Task UID: task_89ecb9cc79d44cab9cef5e8ae01bd48a
+- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-11`
+- Source Branch: `task/engineering-legacy-doc-semantics-deletion-next-11`
+- Source Head: `f8c777f0c9617bc84cc39f3895a3850e4b3c89b7`
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.execution.md`; `doc/.governance/doc-root-md-allowlist.txt`; `doc/README.md`; `doc/core/reviews/round-003-reviewed-files.md`; `doc/core/reviews/round-004-audit-progress-log.md`; `doc/core/reviews/round-004-reviewed-files.md`; `doc/engineering/project.md`; deleted `doc/playability_test_card.md`.
+- Review Package: `.pm/scratch/task_89ecb9cc79d44cab9cef5e8ae01bd48a/review-packages/review-origin-main..618d9a3b6.diff`
+- Slice Ledger: n/a; formal review evidence and subagent IDs are recorded in this execution log.
+- Role Selection Basis: final head only adds review evidence and closeout metadata after the reviewed implementation; no product/doc-governance implementation surface changed after review. `repository_health_engineer`, `qa_engineer`, and `producer_system_designer` remain the required/relevant roles.
+- Review Roles: `repository_health_engineer`; `qa_engineer`; `producer_system_designer`.
+- Review Evidence: repository health, QA, and producer/system review all returned `no_findings` for the implementation scope; subsequent commits only recorded review evidence and closeout metadata.
+- Review Verdicts: `repository_health_engineer`: no_findings; `qa_engineer`: no_findings; `producer_system_designer`: no_findings.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no review findings required remediation; final task-scoped gates passed at closeout.
+- Verification Matrix: exact deleted root path -> no matches in `doc README.md scripts .agents`; bare stale filename risk -> only canonical paths or historical count-only context; deleted shell file -> `test ! -e doc/playability_test_card.md` passed; canonical card -> `test -e doc/playability_test_result/playability_test_card.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current` OK; diff hygiene -> `git diff --check` OK.
+- Visual/WASM/Ops/LiveOps Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI, WASM runtime, blockchain ops, or external community messaging surface changes.
+- Gameplay/Playability Evidence Semantics: producer/system review confirmed canonical playability card body and evidence semantics were unchanged; deletion only removes the obsolete root redirect shell.
+- Action: Retry `prepare-task-pr.sh --create`.
+- Validation Command: `./scripts/prepare-task-pr.sh --create --base main --title "Delete root playability card redirect"`.
+- Expected Result: PR helper accepts the current-head pre-PR review packet.
+- Actual Result: pending.
+- Blocker / Next Action: Commit this current-head packet and retry PR helper.
