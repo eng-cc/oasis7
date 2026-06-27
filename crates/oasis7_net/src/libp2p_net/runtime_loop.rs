@@ -406,7 +406,7 @@ pub(super) fn refresh_peer_manager_healths(
         .copied()
         .filter(|peer_id| !admitted_active_peers.contains(peer_id))
         .collect();
-    pending_active_peers.sort_unstable_by_key(|peer_id| peer_id.to_string());
+    pending_active_peers.sort_unstable();
     for peer_id in pending_active_peers {
         if quarantined_active_peers.contains(&peer_id) {
             continue;
