@@ -199,5 +199,20 @@ Example:
 - Actual Result: Partially passed for current task: `.pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml` now has status `done`, last_verification_status `verified`, and last_closed_at `2026-06-27T16:19:17+08:00`; helper exited 1 because repo-wide `pm-lint` reported unrelated historical execution-log debt in many older tasks.
 - Validation Command: ./scripts/pm/workflow-lint.sh --phase pr-ready --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d
 - Expected Result: Current task PR-ready lint passes after recording claim/closeout evidence.
-- Actual Result: Pending rerun.
-- Blocker / Next Action: Rerun current task PR-ready lint and commit closeout evidence.
+- Actual Result: Passed.
+- Blocker / Next Action: Create PR and record PR purpose decision.
+
+## 2026-06-27 16:24:53 CST / tpm
+- 完成内容: Created normal PR and started CI/comments/mergeability watch.
+- 遗留事项: Watch required checks, comments, review threads, mergeability, then merge and clean up.
+- Action: PR creation and purpose decision.
+- PR: https://github.com/eng-cc/oasis7/pull/697
+- PR Title: Optimize social evidence lookup
+- PR Purpose Decision: normal_pr_ci_watch
+- Validation Command: ./scripts/prepare-task-pr.sh --create
+- Expected Result: Push branch, pass preflight, create GitHub PR.
+- Actual Result: Passed; PR #697 created for `task/engineering-next-code-performance-optimization-13-20260627`.
+- Validation Command: gh pr view 697 --json number,title,url,headRefName,baseRefName,state,isDraft,mergeStateStatus,reviewDecision,statusCheckRollup,comments,reviews
+- Expected Result: Capture initial PR status/checks/comments.
+- Actual Result: PR open, ready for review, mergeStateStatus=BLOCKED due reviewDecision=REVIEW_REQUIRED, no comments/reviews, required-gate and plan-wasm-determinism-scope in progress, skipped full-regression/newapi bridge.
+- Blocker / Next Action: Continue normal PR watch; inspect/fix failed checks or merge after checks/comments/thread gates pass.
