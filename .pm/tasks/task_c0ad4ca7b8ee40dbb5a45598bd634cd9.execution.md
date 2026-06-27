@@ -99,7 +99,7 @@ Example:
 - Residual Risk: low; historical review records intentionally lose clickable old root paths because the root legacy shells are deleted, while current canonical world-runtime paths remain explicit.
 - Review Findings Disposition: addressed
 - Finding Disposition Evidence: repository_health_engineer P1 stale package finding addressed by rebasing onto `origin/main=80fb25557658e99c0a92a1d73a7f179817a71200`, regenerating `.pm/scratch/task_c0ad4ca7b8ee40dbb5a45598bd634cd9/review-packages/review-origin-main..rebased.diff`, and receiving updated `no_findings`.
-- Verification Matrix: deleted path absence tests passed; canonical path existence tests passed; exact stale path scans no matches; `git diff --check origin/main..HEAD` passed; `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current` passed.
+- Verification Matrix: deleted path absence tests passed; canonical path existence tests passed; exact stale path scans no matches; `git diff --check origin/main..HEAD` passed; `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current` passed; runtime replay/recovery/checkpoint/long-run applicability: docs-only root redirect deletion changed no runtime code, replay behavior, recovery flow, checkpoint semantics, or long-run behavior, and runtime_engineer verified current world-runtime entrypoint semantics remain clear.
 - Visual Evidence: not applicable; docs-only governance deletion.
 - WASM Evidence: not applicable; no WASM/runtime behavior changed.
 - Ops Evidence: not applicable; no deployment/network operation changed.
@@ -112,5 +112,5 @@ Example:
 - Action: Record closeout boundary and rerun task-local gates.
 - Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --verify-command "./scripts/doc-governance-check.sh"`; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check origin/main..HEAD`
 - Expected Result: closeout verifies current task and records done metadata; any full-repo `.pm lint` failures are separated from current task-local gates; task-local lint, doc governance, and diff hygiene pass.
-- Actual Result: `task-closeout.sh` exited 1 after reporting full-repo `.pm lint` historical failures, but current task YAML is `status: done`, `last_verification_status: verified`. Task-local gates will be rerun after this boundary record.
+- Actual Result: `task-closeout.sh` exited 1 after reporting full-repo `.pm lint` historical failures, but current task YAML is `status: done`, `last_verification_status: verified`. Task-local gates passed after this boundary record.
 - Blocker / Next Action: Rerun current task-local gates, commit final evidence, and run PR creation.
