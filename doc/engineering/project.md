@@ -8,6 +8,8 @@
 
 - [x] provider-distribution-borrowed-id-audit-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize provider distribution audit to dedupe per-hash provider ids by borrowed references and allocate provider ids only for global coverage entries, preserving insufficient-replica and full-coverage rejection semantics. Trace: .pm/tasks/task_92b8563352b84e80969a3305aeb464f7.yaml
 
+- [x] libp2p-peer-health-pending-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize libp2p peer health refresh to sort pending active `PeerId`s directly instead of allocating `String` sort keys, preserving deterministic admission order semantics. Trace: .pm/tasks/task_a7b607e4bf1a4392b8ad62297b726d55.yaml
+
 - [x] replica-maintenance-borrowed-candidate-selection-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize replica maintenance repair/rebalance candidate selection to rank borrowed provider records and clone only final transfer ids, avoiding per-content candidate materialization and preserving source/target tie-break semantics. Trace: .pm/tasks/task_0ea63503613f455b82524e5b3264e836.yaml
 
 - [x] provider-selection-topn-ranking-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DHT provider ranking to dedupe per provider first and select only the bounded top-N candidate window before final ordering, avoiding full provider-record clone/sort work while preserving score, freshness, provider-id tie-break, duplicate-provider, and unlimited-candidate semantics. Trace: .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.yaml

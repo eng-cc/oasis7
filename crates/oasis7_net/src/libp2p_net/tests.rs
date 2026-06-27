@@ -21,6 +21,7 @@ mod active_set_candidate_tests;
 mod admissible_request_peers_tests;
 mod discovery_dial_tests;
 mod discovery_peer_record_tests;
+mod peer_health_refresh_tests;
 mod peer_record_tests;
 mod request_peer_filter_tests;
 mod subscribe_ack_tests;
@@ -511,116 +512,6 @@ fn admitted_active_transport_paths_excludes_non_active_peers_from_health_recompu
     let admitted = admitted_active_transport_paths(&active_transport_paths, &healths);
     let admitted_peers: HashSet<PeerId> = admitted.keys().copied().collect();
     assert_eq!(admitted_peers, HashSet::from([active_peer]));
-}
-
-#[test]
-fn refresh_peer_manager_healths_keeps_missing_record_active_peer_soft_blocked_for_request_fallback()
-{
-    let healthy_peer_key = Keypair::generate_ed25519();
-    let healthy_peer = PeerId::from(healthy_peer_key.public());
-    let unverified_peer = PeerId::random();
-    let discovered_peer_records = HashMap::from([(
-        healthy_peer,
-        signed_discovery_peer_record(
-            &healthy_peer_key,
-            vec![
-                crate::dht::PeerDiscoverySource::Dht,
-                crate::dht::PeerDiscoverySource::Rendezvous,
-            ],
-            1,
-        ),
-    )]);
-    let active_transport_paths = HashMap::from([
-        (
-            healthy_peer,
-            active_transport_path_from_endpoint(
-                &HashMap::new(),
-                healthy_peer,
-                &"/ip4/10.0.0.1/udp/4103/quic-v1"
-                    .parse()
-                    .expect("healthy endpoint"),
-            ),
-        ),
-        (
-            unverified_peer,
-            active_transport_path_from_endpoint(
-                &HashMap::new(),
-                unverified_peer,
-                &"/ip4/10.0.0.2/udp/4104/quic-v1"
-                    .parse()
-                    .expect("unverified endpoint"),
-            ),
-        ),
-    ]);
-    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
-    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
-    let event_errors = Arc::new(Mutex::new(Vec::new()));
-
-    let (healths, quarantined, admitted) = refresh_peer_manager_healths(
-        &discovered_peer_records,
-        &active_transport_paths,
-        &HashSet::from([healthy_peer]),
-        &PeerManagerPolicy::default(),
-        &event_peer_healths,
-        &event_block_artifacts,
-        &event_errors,
-        32,
-    );
-
-    assert_eq!(
-        healths[&healthy_peer].status,
-        PeerManagerHealthStatus::Active
-    );
-    assert_eq!(
-        healths[&unverified_peer].status,
-        PeerManagerHealthStatus::Blocked
-    );
-    assert!(has_missing_peer_record_issue(&healths[&unverified_peer]));
-    assert!(quarantined.is_empty());
-    assert_eq!(admitted, HashSet::from([healthy_peer, unverified_peer]));
-    let event_healths = event_peer_healths.lock().expect("lock peer healths");
-    let unverified_health = event_healths
-        .get(unverified_peer.to_string().as_str())
-        .expect("unverified peer health");
-    assert_eq!(unverified_health.status, PeerManagerHealthStatus::Blocked);
-    assert!(!super::runtime_loop::peer_requires_active_quarantine(
-        unverified_peer,
-        &healths
-    ));
-}
-
-#[test]
-fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
-    let bootstrap_peer = PeerId::random();
-    let active_transport_paths = HashMap::from([(
-        bootstrap_peer,
-        active_transport_path_from_endpoint(
-            &HashMap::new(),
-            bootstrap_peer,
-            &"/ip4/10.0.0.2/tcp/6832"
-                .parse()
-                .expect("bootstrap endpoint"),
-        ),
-    )]);
-    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
-    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
-    let event_errors = Arc::new(Mutex::new(Vec::new()));
-
-    let (healths, quarantined, admitted) = refresh_peer_manager_healths(
-        &HashMap::new(),
-        &active_transport_paths,
-        &HashSet::new(),
-        &PeerManagerPolicy::default(),
-        &event_peer_healths,
-        &event_block_artifacts,
-        &event_errors,
-        32,
-    );
-
-    assert!(has_missing_peer_record_issue(&healths[&bootstrap_peer]));
-    assert!(quarantined.is_empty());
-    assert_eq!(admitted, HashSet::from([bootstrap_peer]));
-    assert!(!peer_requires_active_quarantine(bootstrap_peer, &healths));
 }
 
 #[test]
