@@ -38,8 +38,8 @@
 - 活跃补充：`*.manual.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如临时草稿/日志快照）。
 - 按需进入：复签结论、状态收口、evidence、report、template 等审计留痕保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
-- 历史入口：根目录 `doc/world-simulator.prd.md` 与 `doc/world-simulator.project.md` 仅保留兼容跳转语义，不作为主索引分母。
-- 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` / `project.md` 主入口。
+- 历史入口：root world-simulator PRD/project legacy redirect shells 已删除，不作为主索引分母。
+- 当前入口：本目录 `prd.md` / `project.md` 是 world-simulator PRD 与执行状态主入口。
 
 ## 历史证据入口
 

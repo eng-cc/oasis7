@@ -62,7 +62,7 @@
   - 触发：`push` 到 `main`（限制 `site/**` 与 workflow 相关路径）。
   - 产物：上传 `site/` 目录并部署到 GitHub Pages。
 - 内容来源：
-  - 主来源：`README.md` 与 `doc/world-simulator.prd.md` 的公开信息。
+  - 主来源：`README.md` 与 `doc/world-simulator/prd.md` 的公开信息。
   - 展示素材：通过现有 viewer 截图流程生成，再挑选到 `site/assets/images/`。
 - 链接策略：
   - 使用相对路径资源，兼容 `https://<org>.github.io/<repo>/` 项目页路径前缀。

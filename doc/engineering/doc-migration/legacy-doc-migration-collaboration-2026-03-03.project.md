@@ -15,7 +15,7 @@
 - [x] TASK-ENGINEERING-013D (PRD-ENGINEERING-006): Owner-C Batch-C4 迁移 `doc/world-runtime/runtime/**` 待迁移文档（17 篇）。
 - [x] TASK-ENGINEERING-014 (PRD-ENGINEERING-006): Owner-D 迁移 `doc/site/**`、`doc/readme/**`、`doc/scripts/**`、`doc/game/**`、`doc/engineering/**` 及根入口遗留文档（57 篇；D1/D2 已完成）。
 - [x] TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006): Owner-D 已完成非根入口 54 篇迁移（不含 3 份根入口 redirect project 文档）。
-- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006): Owner-D 完成 3 份根入口 redirect project 文档收口（root game-test 与 world-runtime project shells 后续已删除；`doc/world-simulator.project.md` 仍保留兼容跳转）。
+- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006): Owner-D 完成 3 份根入口 redirect project 文档收口（root game-test、world-runtime 与 world-simulator project shells 后续均已删除）。
 - [x] TASK-ENGINEERING-015 (PRD-ENGINEERING-007): 执行全量收口复核（命名一致性、引用可达、模块追踪同步、燃尽归零）。
 
 ## 依赖

@@ -24,7 +24,7 @@
 - 设计总览: `doc/world-simulator/design.md`
 - 标准执行入口: `doc/world-simulator/project.md`
 - 文件级索引与完整专题配对: `doc/world-simulator/prd.index.md`
-- 根级兼容执行入口: `doc/world-simulator.project.md`
+- 根级旧跳转入口: root world-simulator PRD/project legacy redirect shells 已删除
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
 - 跨模块模式 taxonomy: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
@@ -97,7 +97,7 @@
 - 文档治理与引用可达：`./scripts/doc-governance-check.sh`
 - `.pm` task truth：`./scripts/pm/lint.sh`
 - Markdown / whitespace sanity：`git diff --check`
-- 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md doc/world-simulator.project.md`
+- 行数回归观察：`wc -l doc/world-simulator/prd.md doc/world-simulator/README.md doc/world-simulator/prd.index.md doc/world-simulator/project.md`
 - 行为变更、runtime/Viewer/WASM/launcher 语义变更不由本 PRD 瘦身任务放行；需按对应专题 PRD 的验证矩阵和 owner role 复核。
 
 ## Risks & Roadmap

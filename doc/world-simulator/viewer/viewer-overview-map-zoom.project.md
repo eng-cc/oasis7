@@ -21,7 +21,7 @@
 - `crates/oasis7_viewer/src/scene_helpers.rs`
 - `crates/oasis7_viewer/src/location_fragment_render.rs`
 - `crates/oasis7_viewer/src/app_bootstrap.rs`
-- `doc/world-simulator.project.md`
+- `doc/world-simulator/project.md`
 
 ## 状态
 - 当前阶段：OVZ1~OVZ4 已完成。

@@ -1,0 +1,24 @@
+task_uid: task_afc61923b1404b20815ec81ce1c60a7e
+title: "Delete next legacy doc semantics"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-15
+execution_log_path: .pm/tasks/task_afc61923b1404b20815ec81ce1c60a7e.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/prd.md
+related_prd: []
+acceptance:
+  - "Find one bounded legacy-document or legacy-semantics deletion point owned by repository health."
+  - "Delete obsolete legacy document shells or exact stale references after canonical docs are confirmed."
+  - "Update governance allowlists/scripts and current docs so deleted old paths are not current entrypoints."
+  - "Run doc governance and workflow verification, collect role review, and carry the PR through merge."
+handoff_to: []
+updated_at: 2026-06-27T15:48:07+08:00
+last_started_at: 2026-06-27T15:48:07+08:00

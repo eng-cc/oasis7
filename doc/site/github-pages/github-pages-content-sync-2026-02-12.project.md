@@ -14,7 +14,7 @@
 ### 0. 文档与基线
 - [x] 新增设计文档（`doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md`）
 - [x] 新增项目管理文档（本文件）
-- [x] 明确一致性核对基线（`doc/world-simulator.project.md`）
+- 历史完成项：明确一致性核对基线；当前状态入口为 `doc/world-simulator/project.md`。
 
 ### 1. 页面内容同步（双语）
 - [x] 更新中英文路线图状态（M3 完成 / M4 进行中 / M5 下一阶段）
@@ -31,7 +31,7 @@
 - [x] 写入当日开发日志（`doc/devlog/README.md`）
 
 ## 依赖
-- 依赖现有项目阶段状态文档：`doc/world-simulator.project.md`。
+- 依赖现有项目阶段状态文档：`doc/world-simulator/project.md`。
 - 不涉及前端结构变更与新资源引入。
 
 ## 状态

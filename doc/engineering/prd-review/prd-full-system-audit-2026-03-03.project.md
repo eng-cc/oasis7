@@ -26,7 +26,7 @@
   - `doc/engineering/prd-review/checklists/active-testing.md`
   - `doc/engineering/prd-review/checklists/active-world-runtime.md`
   - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical snapshot; current world-simulator truth is routed through `doc/world-simulator/README.md` and `doc/world-simulator/prd.index.md`）
-  - `doc/engineering/prd-review/checklists/active-root-legacy.md`
+  - root legacy redirect checklist（后续已删除；root PRD/project shells no longer have active review targets）
 ## 依赖
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.design.md`
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`

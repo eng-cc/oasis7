@@ -35,7 +35,7 @@
 ## 接口/数据
 - 输入基线
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
-  - `doc/world-simulator.project.md`
+  - `doc/world-simulator/project.md`
   - `doc/world-simulator/viewer/viewer-generic-focus-targets.prd.md`
   - `doc/world-simulator/viewer/viewer-web-test-api-step-control-2026-02-24.prd.md`
   - `crates/oasis7/src/bin/oasis7_viewer_live.rs`

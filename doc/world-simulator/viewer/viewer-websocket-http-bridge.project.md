@@ -43,7 +43,7 @@
 - `AGENTS.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.project.md`
-- `doc/world-simulator.project.md`
+- `doc/world-simulator/project.md`
 
 ## 状态
 - 当前阶段：WLB1~WLB6 全部完成。

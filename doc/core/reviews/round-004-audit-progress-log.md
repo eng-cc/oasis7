@@ -223,7 +223,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-p2p.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-playability_test_result.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-readme.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-root-legacy.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical root legacy redirect checklist（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-scripts.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-site.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-testing.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
@@ -257,7 +257,7 @@
 | 2026-03-06 11:52:45 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.project | pass | - | 任务拆解含 PRD-ID 映射与状态时间，项目口径与 PRD 分工一致。 |
 | 2026-03-06 11:53:03 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.prd | pass | - | 闭环策略文档与配套 project 分工清晰，未发现新增 D4 高中风险问题。 |
 | 2026-03-06 11:53:02 +0800 | codex | `doc/testing/manual/systematic-application-testing-manual.prd.md` | issue_open | I4-004 | 文档定义 required/full 口径与脚本入口，但未给出可直接执行的命令示例，验收复现需跨文档跳转。 |
-| 2026-03-06 11:53:25 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.project | issue_open | I4-006 | 依赖列表写为 `doc/world-simulator.project.md`（路径不存在），会导致主项目入口可达性断点。 |
+| 2026-03-06 11:53:25 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.project | issue_open | I4-006 | 依赖列表写为 root world-simulator project shell（后续已删除），会导致主项目入口可达性断点。 |
 | 2026-03-06 11:53:22 +0800 | codex | `doc/testing/manual/systematic-application-testing-manual.project.md` | issue_open | I4-005 | TMAN-5 使用 `PRD-TESTING-004`，与主 PRD 的 `PRD-TESTING-MANUAL-*` 编号体系不一致，任务追踪存在断链风险。 |
 | 2026-03-06 11:53:46 +0800 | G4-002-Aristotle | doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md | issue_open | I4-007 | 主 PRD 合并了 phase8~10 的执行过程与验收产物清单，混入 project/devlog 属性内容。 |
 | 2026-03-06 11:53:47 +0800 | codex | `doc/testing/README.md` | pass | - | 入口索引与目录结构一致，未发现 D4-001~D4-008 的立即整改项。 |
@@ -504,8 +504,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | historical deleted root Viewer manual shell | pass | - | F4-002 补审覆盖：当时结构与口径未发现新增高/中风险；该历史根入口后续已删除。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-runtime PRD shell | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险；该 root shell 后续已删除。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-runtime project shell | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段；该 root shell 后续已删除。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator.prd.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator.project.md` | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-simulator PRD shell（后续已删除） | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | root world-simulator project shell（后续已删除） | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/kernel/kernel-rule-hook-foundation.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
