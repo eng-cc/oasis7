@@ -12,7 +12,7 @@
     "canonicalizer_version": "strip-custom-sections-v1",
     "container_platform": "linux-x86_64",
     "builder_image_ref": "oasis7/wasm-builder:nightly-2025-12-11",
-    "builder_image_digest": "sha256:178008aeb003c9bfcf1f6c38a74cb69a29c0b63438bc3d875956296603045d86",
+    "builder_image_digest": "sha256:f3538a8039074c0b074946ae9d1803f6c74b823aee9152d52584111844ee1ed8",
     "build_suite_version": "0.1.0",
     "canonical_platforms": [
       "linux-x86_64"
@@ -25,8 +25,8 @@
         "linux-x86_64=19ad4646aa3be6c3aef3610674aad3495bdc72aae36248f0db09bdb6ca0a0e3a"
       ],
       "source_hash": "86ae6b415780a3711846215532a326995331ce1871a196fc97e15d7e1b3ca0ff",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "cd3c4497a1155052c8137584e2acccb83b0260470c8bdba6970e5dddd6a619ef"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "376cf168023527badd9c873831fc28c13342656e1815132ddf6f1a8b8b2c3be4"
     },
     {
       "module_id": "m1.memory.core",
@@ -34,8 +34,8 @@
         "linux-x86_64=8e1d13ff25070c4a94e7eded92cca302caa4f0c13acc729e85b971bdc5a86206"
       ],
       "source_hash": "0defd376ece75ca857f549e79d2b3a6687568b147e4e1eec22ef103ff467efd7",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "9dceca0826a8ef047fe941f5c495e24d8d105b54df6856f941385c8a15ccff93"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "5744d4a518f3789bd3f9b65a27eac90c57a5852a84feda5af867ab06ce4103ab"
     },
     {
       "module_id": "m1.mobility.basic",
@@ -43,8 +43,8 @@
         "linux-x86_64=50b757d950499030a7bb0eb97b984c0998e6d50982877f64dfef5e515bdcfa97"
       ],
       "source_hash": "6624724d3372cfd036badc2fc78bad2ca88725b96be964315c404b3885446307",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "ac3cf87d258469daf8dc27e6502a0207a59994bb05240c76e8dd17d4bf1cfb29"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "41e277f536f0f319cd11757970a1a8c802c6f77159ae50cbe6d131d3f52b2479"
     },
     {
       "module_id": "m1.power.radiation_harvest",
@@ -52,8 +52,8 @@
         "linux-x86_64=fc38ad7715e8e2bd0cb0b5e51fe2e0778d0375576807367f31a279b3d1e01e8a"
       ],
       "source_hash": "288d5ac463028c53c394646354f7f6890c6f537964a525c45903e48fb529aee2",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "aac2bd88dd85eedde7ffc77ce72e96eee1f6678be55e3c7e23c6eecf51e668f9"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "3e26aa256b3f97581d605ffa7f5918845254ae7b989a655252e855d86c8ec4c5"
     },
     {
       "module_id": "m1.power.storage",
@@ -61,8 +61,8 @@
         "linux-x86_64=d30f55ff12549ed32138194825fa0ce430591dadcd70cd18839225180175d4ca"
       ],
       "source_hash": "9d370c20aa0e7fa75cbfabd3aead246e59bcb1f9c283edcf6e419fb87426a6fb",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "cbca046f447d5b8b687a823a009fe1e183749fc789adf0ca4dee1a61d7813586"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "96a19596a0ac935333e04e5867faf3fd67f9afcfcb8bdfe3a7abd88da4e3564f"
     },
     {
       "module_id": "m1.rule.move",
@@ -70,8 +70,8 @@
         "linux-x86_64=50b757d950499030a7bb0eb97b984c0998e6d50982877f64dfef5e515bdcfa97"
       ],
       "source_hash": "8ecc99aba9fdfe5eff0d21342e0103f09a39189a60f525ff4976b04e94b8e3fc",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "a84e7aba392c1d20b72e96bdf36d7ac9c54c42072ea629c3b362c9f01bbb339d"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "00678e4eeac51a9a2d0e9d616c63d53facf7e09f4dd3c431c93717ff10f641cb"
     },
     {
       "module_id": "m1.rule.transfer",
@@ -79,8 +79,8 @@
         "linux-x86_64=360585fd0cc420daff9b8b8dbfae773fd1b81cf5aeba8e3f45ca24c59f0f80dd"
       ],
       "source_hash": "79105239008f116b8a3ffc93e98df795803ca71d46de56e6a748ad10774e2abf",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "b1e573083713427aa00f91d71f77fbc41cec1eed3a4d872d5427c309de3e56d9"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "ef8bf5ae9b9a5d17bc8997e371dd30d02523b6bdb5106e6fca3fee3618bc0a05"
     },
     {
       "module_id": "m1.rule.visibility",
@@ -88,8 +88,8 @@
         "linux-x86_64=dcf387a51158d424c8f01c0711f28f36ac9c395d9012b2029b01334efd5a62a0"
       ],
       "source_hash": "9a0bbdf105bb0b1255ca016de96be3f220edf1ca94d1b06d90099fb500fba392",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "4fbf55465aa44a253f8c2f9c5251b1f97c1b8e6a1e650d56ea0fcae5c5abbb4d"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "e2d2a068dc7cb630415b2b43a246ae4d465e4137e70a0de39951ad07f587ebbf"
     },
     {
       "module_id": "m1.sensor.basic",
@@ -97,8 +97,8 @@
         "linux-x86_64=dcf387a51158d424c8f01c0711f28f36ac9c395d9012b2029b01334efd5a62a0"
       ],
       "source_hash": "ee77132c1c1e98ea0c3a57ea8f4dced5161adffdb0efdd16b36fcd0a6ef4834f",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "433b966592eaeb1f1d7be96f7c0640ffe18dc4e0e0846c11be1cec56b8f1c6cd"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "41ae58e0afe77780848b3f40de3c2db988453ca451ddcc7b879a140429b7a52f"
     },
     {
       "module_id": "m1.storage.cargo",
@@ -106,8 +106,8 @@
         "linux-x86_64=75aab118b1b88c04ec01b0eb28e8829539b126bf45969fbb712b5e0abef4920d"
       ],
       "source_hash": "aee52e4ace4857db8302627329de134de33a9b636ca9e703d8c850e8b71aa299",
-      "build_manifest_hash": "9b6698ae2a99ba0cb2b5c6cd2f7a5711467c67ce255d2d8f2bb1065998fc4f23",
-      "identity_hash": "0075f33927f1dab5652c4bc48a05407393c2742269e393e75962db84f792975c"
+      "build_manifest_hash": "ed25217ce584e7ab3ca2442610013a052e03d10d9fb2a191cf389525556052bc",
+      "identity_hash": "35f0167de2f0f23f26a1138f81d1c13fb81ff9b36b2bf7b5cc65a71d73cd4297"
     }
   ]
 }
