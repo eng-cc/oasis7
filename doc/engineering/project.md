@@ -12,6 +12,8 @@
 
 - [x] runner-ready-agent-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator runner ready-agent selection to avoid cloning every ready agent id per decision tick while preserving round-robin cursor, readiness, quota, and rate-limit semantics. Trace: .pm/tasks/task_08c1b767b4b2448ca3275bb4db4f0108.yaml
 
+- [x] power-order-matching-candidate-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator power order matching to reuse sorted candidate metadata and avoid repeated orderbook linear lookup/full order cloning during fills while preserving price priority, tie order, auto-cancel, and consistency rejection semantics. Trace: .pm/tasks/task_06b3702abf934878bc285bcfe7575618.yaml
+
 - [x] power-tick-agent-iteration-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator power tick agent iteration to avoid cloning every agent id and performing a second map lookup on each tick while preserving event ordering semantics. Trace: .pm/tasks/task_9aa5cd8fecb54028a3126768eff6d8d4.yaml
 
 - [x] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml

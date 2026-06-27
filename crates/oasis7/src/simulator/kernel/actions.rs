@@ -34,5 +34,6 @@ struct PreparedPowerTransfer {
 }
 
 include!("actions_core.rs");
+include!("actions_power_order_matching.rs");
 include!("actions_resolution.rs");
 include!("actions_regressions.rs");
