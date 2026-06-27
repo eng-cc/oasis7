@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] pm-sync-views-single-scan-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize PM `sync_task_views()` to reuse the task/role counts already loaded by `rebuild_task_views()` instead of parsing every canonical task yaml a second time during one sync, with a focused regression smoke guarding against double reads. Trace: .pm/tasks/task_619bb81ae69c415c9a7e6a29a7f3fd9d.yaml
+
 - [x] viewer-world-scale-nearest-location-topn-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize Viewer world-scale nearest-location derivation to keep only the nearest three candidates during scan instead of sorting all locations, preserving stable equal-distance order and synced software-safe bundle output. Trace: .pm/tasks/task_9c7613b51cfd45b9810a93ed137073b6.yaml
 
 - [x] workflow-lint-explicit-task-fast-path (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `workflow-lint --task-uid` to load only the requested task yaml instead of parsing every historical `.pm/tasks/task_*.yaml`, preserving full-scan behavior for unbound worktree discovery. Trace: .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.yaml

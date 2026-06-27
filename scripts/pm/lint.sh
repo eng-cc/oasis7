@@ -77,6 +77,7 @@ require_file "scripts/pm/stage-lint.sh"
 require_file "scripts/pm/stage-report.sh"
 require_file "scripts/pm/supersede-memory.sh"
 require_file "scripts/pm/sync-views.sh"
+require_file "scripts/pm/sync-views.test.sh"
 require_file "scripts/pm/task-compaction-smoke.sh"
 require_file "scripts/pm/task-execution-log-lint.sh"
 require_file "scripts/pm/workflow-behavior-eval.sh"
@@ -131,6 +132,7 @@ python3 -m py_compile \
   "$SCRIPT_DIR/pm_store_reporting.py" \
   "$SCRIPT_DIR/pm_store_stage.py" \
   "$SCRIPT_DIR/pm_store_task_lint.py"
+"$SCRIPT_DIR/sync-views.test.sh" >/dev/null
 python3 "$SCRIPT_DIR/pm_store.py" task-lint "$ROOT_DIR" --views-already-synced
 
 echo "pm-lint: OK"
