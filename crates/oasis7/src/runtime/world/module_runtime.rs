@@ -325,8 +325,8 @@ impl World {
         let event_kind = event_kind_label(&event.body);
         let event_value = serde_json::to_value(event)?;
         let invocations = self.collect_active_module_invocations()?;
-        let event_bytes = to_canonical_cbor(event)?;
-        let world_config_hash = self.current_manifest_hash()?;
+        let mut event_bytes = None;
+        let mut world_config_hash = None;
         let mut invoked = 0;
         for invocation in invocations {
             let manifest = invocation.manifest;
@@ -337,6 +337,13 @@ impl World {
                 prepared_module_subscribes_to_event(prepared.as_ref(), event_kind, &event_value);
             if !subscribed {
                 continue;
+            }
+
+            if event_bytes.is_none() {
+                event_bytes = Some(to_canonical_cbor(event)?);
+            }
+            if world_config_hash.is_none() {
+                world_config_hash = Some(self.current_manifest_hash()?);
             }
 
             let trace_id = format!("event-{}-{}", event.id, instance_id);
@@ -352,7 +359,7 @@ impl World {
                 },
                 limits: manifest.limits.clone(),
                 stage: Some("post_event".to_string()),
-                world_config_hash: Some(world_config_hash.clone()),
+                world_config_hash: world_config_hash.clone(),
                 manifest_hash: Some(module_manifest_hash),
                 journal_height: Some(event.id),
                 module_version: Some(manifest.version.clone()),
@@ -371,7 +378,7 @@ impl World {
             };
             let input = ModuleCallInput {
                 ctx,
-                event: Some(event_bytes.clone()),
+                event: event_bytes.clone(),
                 action: None,
                 state,
             };
@@ -420,13 +427,9 @@ impl World {
         let action_kind = action_kind_label(&envelope.action);
         let action_value = serde_json::to_value(envelope)?;
         let invocations = self.collect_active_module_invocations()?;
-        let action_bytes = to_canonical_cbor(envelope)?;
-        let event_bytes = if stage == ModuleSubscriptionStage::PostAction {
-            result_event.map(to_canonical_cbor).transpose()?
-        } else {
-            None
-        };
-        let world_config_hash = self.current_manifest_hash()?;
+        let mut action_bytes = None;
+        let mut event_bytes = None;
+        let mut world_config_hash = None;
         let mut invoked = 0;
 
         for invocation in invocations {
@@ -444,6 +447,19 @@ impl World {
                 continue;
             }
 
+            if action_bytes.is_none() {
+                action_bytes = Some(to_canonical_cbor(envelope)?);
+            }
+            if stage == ModuleSubscriptionStage::PostAction
+                && event_bytes.is_none()
+                && let Some(event) = result_event
+            {
+                event_bytes = Some(to_canonical_cbor(event)?);
+            }
+            if world_config_hash.is_none() {
+                world_config_hash = Some(self.current_manifest_hash()?);
+            }
+
             let trace_id = format!("action-{}-{}", envelope.id, instance_id);
             let module_manifest_hash = hash_json(&manifest)?;
             let ctx = ModuleContext {
@@ -457,7 +473,7 @@ impl World {
                 },
                 limits: manifest.limits.clone(),
                 stage: Some(subscription_stage_label(stage).to_string()),
-                world_config_hash: Some(world_config_hash.clone()),
+                world_config_hash: world_config_hash.clone(),
                 manifest_hash: Some(module_manifest_hash),
                 journal_height: Some(self.journal.events.len() as u64),
                 module_version: Some(manifest.version.clone()),
@@ -477,7 +493,7 @@ impl World {
             let input = ModuleCallInput {
                 ctx,
                 event: event_bytes.clone(),
-                action: Some(action_bytes.clone()),
+                action: action_bytes.clone(),
                 state,
             };
             let input_bytes = to_canonical_cbor(&input)?;
