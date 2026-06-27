@@ -1,0 +1,19 @@
+task_uid: task_21152e953bd14e4195a3f2ec3519a33b
+title: "Converge and delete next stale legacy document surface"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-9
+execution_log_path: .pm/tasks/task_21152e953bd14e4195a3f2ec3519a33b.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Find one additional current old-document/old-semantics drift point with emphasis on removable stale legacy documentation, remediate the live documentation surface, delete obsolete legacy document(s) only when current references are safely repointed, avoid broad historical rewrites, verify doc governance, and close through PR."
+handoff_to: []
+updated_at: 2026-06-27T10:53:05+08:00
+last_started_at: 2026-06-27T10:53:05+08:00
