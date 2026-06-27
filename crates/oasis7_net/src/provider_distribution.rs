@@ -46,7 +46,10 @@ pub fn audit_provider_distribution(
     let mut provider_coverage_count: BTreeMap<String, usize> = BTreeMap::new();
     for content_hash in &required_hashes {
         let providers = dht.get_providers(world_id, content_hash)?;
-        let provider_ids: BTreeSet<String> = providers.into_iter().map(|p| p.provider_id).collect();
+        let provider_ids: BTreeSet<&str> = providers
+            .iter()
+            .map(|provider| provider.provider_id.as_str())
+            .collect();
         let replica_count = provider_ids.len();
         if replica_count < policy.min_replicas_per_blob {
             return Err(WorldError::DistributedValidationFailed {
@@ -57,8 +60,11 @@ pub fn audit_provider_distribution(
             });
         }
         for provider_id in provider_ids {
-            let coverage = provider_coverage_count.entry(provider_id).or_insert(0usize);
-            *coverage = coverage.saturating_add(1);
+            if let Some(coverage) = provider_coverage_count.get_mut(provider_id) {
+                *coverage = coverage.saturating_add(1);
+            } else {
+                provider_coverage_count.insert(provider_id.to_string(), 1);
+            }
         }
     }
 
