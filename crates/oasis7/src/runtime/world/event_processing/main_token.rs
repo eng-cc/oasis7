@@ -805,37 +805,34 @@ fn distribute_main_token_bridge_budget(
             / u128::from(total_points);
         let amount = u64::try_from(amount_u128).unwrap_or(u64::MAX);
         distributed = distributed.saturating_add(amount);
-        distributions.push(MainTokenNodePointsBridgeDistribution {
-            node_id: settlement.node_id.clone(),
-            account_id: settlement.node_id.clone(),
-            amount,
-        });
+        distributions.push((
+            settlement.awarded_points,
+            MainTokenNodePointsBridgeDistribution {
+                node_id: settlement.node_id.clone(),
+                account_id: settlement.node_id.clone(),
+                amount,
+            },
+        ));
     }
 
     let mut remainder = total_budget.saturating_sub(distributed);
-    distributions.sort_by(|left, right| {
-        let left_points = settlements
-            .iter()
-            .find(|settlement| settlement.node_id == left.node_id)
-            .map(|settlement| settlement.awarded_points)
-            .unwrap_or(0);
-        let right_points = settlements
-            .iter()
-            .find(|settlement| settlement.node_id == right.node_id)
-            .map(|settlement| settlement.awarded_points)
-            .unwrap_or(0);
+    distributions.sort_by(|(left_points, left), (right_points, right)| {
         right_points
-            .cmp(&left_points)
+            .cmp(left_points)
             .then_with(|| left.node_id.cmp(&right.node_id))
     });
     let mut index = 0_usize;
     while remainder > 0 && !distributions.is_empty() {
         let target = index % distributions.len();
-        distributions[target].amount = distributions[target].amount.saturating_add(1);
+        distributions[target].1.amount = distributions[target].1.amount.saturating_add(1);
         remainder -= 1;
         index = index.saturating_add(1);
     }
 
+    let mut distributions = distributions
+        .into_iter()
+        .map(|(_, distribution)| distribution)
+        .collect::<Vec<_>>();
     distributions.retain(|item| item.amount > 0);
     distributions.sort_by(|left, right| left.node_id.cmp(&right.node_id));
     (total_budget, distributions)

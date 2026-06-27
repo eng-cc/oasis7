@@ -99,3 +99,15 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
+  - task_uid: task_0389769c78cd454cb520a620ea0eadda
+    title: "Find and implement next code performance optimization"
+    module: engineering
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+    acceptance:
+      - "Identify one non-duplicative code-level performance optimization candidate, implement a small verified patch, record professional slice evidence, pass focused and governance checks, then create/watch/merge PR."
+    handoff_to: []
+    status: committed
+    task_path: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml

@@ -1,0 +1,20 @@
+task_uid: task_0389769c78cd454cb520a620ea0eadda
+title: "Find and implement next code performance optimization"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-task-engineering-next-code-performance-optimization-18-20260627
+execution_log_path: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.execution.md
+status: committed
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - doc/engineering/prd.md
+acceptance:
+  - "Identify one non-duplicative code-level performance optimization candidate, implement a small verified patch, record professional slice evidence, pass focused and governance checks, then create/watch/merge PR."
+handoff_to: []
+updated_at: 2026-06-27T21:00:16+08:00
+last_started_at: 2026-06-27T20:43:17+08:00
