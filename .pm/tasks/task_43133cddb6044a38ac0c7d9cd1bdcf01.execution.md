@@ -118,3 +118,12 @@ Example:
 - Expected Result: PR preflight passes, branch is pushed, PR is created, and the PR purpose is classified.
 - Actual Result: PASS: PR https://github.com/eng-cc/oasis7/pull/680 created from task/engineering-next-code-performance-optimization-8-20260627 to main; purpose decision: normal_pr_ci_watch. Preflight reported branch behind base by 1 and suggested sync before merge if GitHub later requires it.
 - Blocker / Next Action: Watch required checks, mergeability, PR comments, and review threads; fix any failures or blockers, then merge and clean up.
+
+## 2026-06-27 08:07:15 CST / tpm
+- 完成内容: Addressed PR #680 Codex review comment on malformed workflow-lint fixture strength.
+- 遗留事项: Push review fix, resolve the GitHub review thread, then continue required-gate watch.
+- Action: Verified the review comment against `scripts/pm/pm_store_docio.py`; changed the unrelated fixture to a line without `: ` so the repo parser rejects it, and added a no-UID full-scan negative assertion proving the malformed task would fail if the optimized path still scanned every task.
+- Validation Command: ./scripts/pm/workflow-lint.test.sh; ./scripts/pm/workflow-lint.sh --task-uid task_43133cddb6044a38ac0c7d9cd1bdcf01 --phase current; git diff --check
+- Expected Result: Workflow-lint regression test passes with stronger malformed fixture, current task lint remains OK, and whitespace checks pass.
+- Actual Result: PASS: workflow-lint.test OK; PASS: workflow-lint current OK; PASS: git diff --check.
+- Blocker / Next Action: Commit and push review fix, then resolve thread `PRRT_kwDORHhWec6MqNYl`.
