@@ -47,3 +47,53 @@ Example:
 - Expected Result: Deleted file is absent; exact old path has no current reachable references; documentation governance and task workflow lint pass; diff contains only bounded governance/task truth changes.
 - Actual Result: `test ! -e` passed; `rg` returned no matches (exit 1, expected for absence); `doc-governance-check: OK`; `workflow-lint: OK (task_87cf5ae11c174ef6ba4b7ec4945b8bfc, phase=current)`; `git diff --check` passed; diff shows deletion plus exact-reference repairs and task/project truth updates.
 - Blocker / Next Action: Commit implementation, then run pre-PR local role review.
+
+## 2026-06-27 20:48:50 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: delete `doc/engineering/prd-review/checklists/active-playability_test_result.md`; replace exact old path references in engineering PRD review project and core round review logs; update engineering project/task truth.
+- Review Package: `.pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/review-packages/review-20ee3349c..268e0b44e.diff`
+- Review Roles: repository_health_engineer, producer_system_designer, qa_engineer
+- Review Question: Confirm whether the scoped deletion correctly converges the obsolete `active-playability_test_result.md` PRD review checklist snapshot into canonical playability_test_result entrypoints without broad historical rewrite, module truth regression, or insufficient verification.
+- Evidence Available: `test ! -e doc/engineering/prd-review/checklists/active-playability_test_result.md`; no `rg -F` matches for exact old path; `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed; implementation commit `268e0b44e893274d5e1233ad8fb4d90399bcedd6`.
+- Expected Return Contract: findings | no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
+- Slice Ledger: n/a; `slice-ledger.sh --print` returned `.pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/slice-ledger.jsonl`, but no file was materialized on disk, so review relies on the review package and execution-log slice records.
+- Formal Sink: `.pm/tasks/task_87cf5ae11c174ef6ba4b7ec4945b8bfc.execution.md`
+
+## 2026-06-27 20:53:41 CST / tpm
+- 完成内容: Integrated pre-PR local role review. repository_health_engineer: no_findings; scope/spec passed; role quality/risk passed; residual risk low and other `active-*.md` snapshots intentionally deferred. producer_system_designer: no_findings; scope/spec passed; role quality/risk passed; residual risk low and no product/system/evidence-module semantic changes. qa_engineer: no_findings; scope/spec passed; role quality/risk passed; verification evidence sufficient for docs-governance deletion PR and no runtime/UI/playability regression required.
+- Pre-PR Local Role Review: passed
+- Task UID: task_87cf5ae11c174ef6ba4b7ec4945b8bfc
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-20
+- Source Branch: task/engineering-legacy-doc-semantics-deletion-next-20
+- Source Head: 268e0b44e893274d5e1233ad8fb4d90399bcedd6
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_87cf5ae11c174ef6ba4b7ec4945b8bfc.yaml; .pm/tasks/task_87cf5ae11c174ef6ba4b7ec4945b8bfc.execution.md; doc/core/reviews/round-003-reviewed-files.md; doc/core/reviews/round-004-audit-progress-log.md; doc/core/reviews/round-004-reviewed-files.md; doc/engineering/prd-review/checklists/active-playability_test_result.md; doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md; doc/engineering/project.md
+- Review Package: .pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/review-packages/review-20ee3349c..268e0b44e.diff
+- Role Selection Basis: changed docs govern PRD review snapshots, playability_test_result module reading/status references, engineering project/task truth, and verification evidence; included repository_health_engineer for docs/code contract and debt boundary, producer_system_designer for module truth semantics, qa_engineer for verification sufficiency; skipped runtime_engineer/viewer_engineer/wasm_platform_engineer/blockchain_ops_engineer/liveops_community because no runtime/UI/WASM/ops/external messaging surfaces changed.
+- Review Roles: repository_health_engineer, producer_system_designer, qa_engineer
+- Review Evidence: repository_health_engineer no_findings / passed; producer_system_designer no_findings / passed; qa_engineer no_findings / passed.
+- Review Verdicts: repository_health_engineer scope/spec passed and role quality/risk passed; producer_system_designer scope/spec passed and role quality/risk passed; qa_engineer scope/spec passed and role quality/risk passed.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a; no valid findings required code or doc changes.
+- Verification Matrix: deleted old doc snapshot -> `test ! -e doc/engineering/prd-review/checklists/active-playability_test_result.md` passed; exact old path reachability -> `rg -n -F "doc/engineering/prd-review/checklists/active-playability_test_result.md" README.md doc scripts .agents .pm/tasks/*.yaml` returned no matches; docs governance -> `./scripts/doc-governance-check.sh` OK; workflow evidence -> `./scripts/pm/workflow-lint.sh --task-uid task_87cf5ae11c174ef6ba4b7ec4945b8bfc --phase current` OK; diff hygiene -> `git diff --check` passed.
+- Visual Evidence: n/a; documentation governance only, no player-visible UI or image surface.
+- WASM Evidence: n/a; no WASM, ABI, manifest, determinism, or build receipt surface changed.
+- Ops Evidence: n/a; no deployment, node ops, packaging, runbook, or operator surface changed.
+- LiveOps Evidence: n/a; no external messaging, release note, incident, player promise, or channel runbook changed.
+- Residual Risk: Other `active-*.md` PRD review checklist snapshots still exist with old naming, intentionally out of scope to keep this PR bounded; they should be governed one module at a time.
+- Slice Ledger: n/a; helper printed `.pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/slice-ledger.jsonl` but no file exists, so the execution log and review package are the formal evidence surfaces.
+- 遗留事项: Run claim-ready and closeout, then create PR.
+- Action: Recorded passed local review packet after all involved-role subagents returned no findings.
+- Validation Command: `git rev-parse HEAD`; `ls -l .pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/slice-ledger.jsonl .pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/review-packages/review-20ee3349c..268e0b44e.diff`; `find .pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc -maxdepth 3 -type f | sort`.
+- Expected Result: Review packet records exact source head and truthful evidence paths.
+- Actual Result: Source head is `268e0b44e893274d5e1233ad8fb4d90399bcedd6`; review package exists; slice-ledger helper output path does not exist and is recorded as n/a.
+- Blocker / Next Action: Fresh claim-ready verification and closeout.
+
+## 2026-06-27 20:57:19 CST / tpm
+- 完成内容: Fresh verification and task-local closeout boundary recorded. `claim-ready.sh --claim-type tests_passed` verified `./scripts/doc-governance-check.sh`; `task-closeout.sh` wrote current task status `done`, `last_claim_type: task_complete`, `last_verify_command: ./scripts/doc-governance-check.sh`, `last_verification_status: verified`, and `last_closed_at: 2026-06-27T20:56:33+08:00`.
+- 遗留事项: `task-closeout.sh` exited 1 after closeout because repo-wide `.pm` lint still reports unrelated historical execution-log debt across many old tasks; current task-local workflow lint remains OK. This repo-wide debt is out of scope for this bounded docs deletion PR.
+- Action: Ran closeout and rechecked task-local workflow lint after the repo-wide lint failure.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type tests_passed --task-uid task_87cf5ae11c174ef6ba4b7ec4945b8bfc --verify-command './scripts/doc-governance-check.sh'`; `./scripts/pm/task-closeout.sh --role tpm --task-uid task_87cf5ae11c174ef6ba4b7ec4945b8bfc --verify-command './scripts/doc-governance-check.sh'`; `sed -n '1,220p' .pm/tasks/task_87cf5ae11c174ef6ba4b7ec4945b8bfc.yaml`; `./scripts/pm/workflow-lint.sh --task-uid task_87cf5ae11c174ef6ba4b7ec4945b8bfc --phase current`.
+- Expected Result: Current task has fresh verification, passed pre-PR review, and task-local workflow evidence is valid; repo-wide historical lint debt is not attributed to this task.
+- Actual Result: `claim-ready` status verified with exit code 0; `task-closeout.sh` updated current task to `done` but returned exit 1 on unrelated repo-wide `.pm` lint failures such as historical missing execution-log fields in old tasks; `workflow-lint: OK (task_87cf5ae11c174ef6ba4b7ec4945b8bfc, phase=current)`.
+- Blocker / Next Action: Commit review/closeout evidence, then run final PR readiness checks and create PR.
