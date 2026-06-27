@@ -4,7 +4,7 @@ owner_role: tpm
 module: chain-world-state-substrate
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-chain-world-state-substrate-wdbp32-darwin-arm64-evidence
 execution_log_path: .pm/tasks/task_dac2a6ab38134923b8573bc74fe5743e.execution.md
-status: committed
+status: done
 priority: P0
 source_signal: null
 source_refs:
@@ -23,5 +23,11 @@ handoff_to:
   - wasm_platform_engineer
   - runtime_engineer
   - qa_engineer
-updated_at: 2026-06-26T22:43:12+08:00
+updated_at: 2026-06-27T11:37:33+08:00
 last_started_at: 2026-06-26T22:43:12+08:00
+last_claim_type: task_complete
+last_verify_command: "actionlint .github/workflows/wasm-darwin-docker-evidence.yml && ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/wasm-darwin-docker-evidence.yml\"); puts \"yaml ok\"' && git diff --check origin/main..HEAD && /opt/homebrew/bin/bash scripts/wasm-summary-bundle-smoke.sh"
+last_verified_at: 2026-06-27T11:37:32+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-27T11:37:33+08:00
