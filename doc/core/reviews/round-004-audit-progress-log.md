@@ -43,8 +43,8 @@
 | 2026-03-06 11:53:20 +0800 | codex | `doc/headless-runtime/prd.md` | issue_open | I4-017 | Validation 表仍为描述性验证方法，未落到可执行命令与证据路径，追溯闭环不完整。 |
 | 2026-03-06 11:53:46 +0800 | codex | `doc/headless-runtime/project.md` | issue_open | I4-018 | TASK-NONVIEWER-* 任务项未给出验收命令与证据链接，Project 层执行可复现性不足。 |
 | 2026-03-06 11:54:15 +0800 | codex | `doc/README.md` | pass | - | 总入口路径矩阵与 legacy redirect 说明完整，未发现 D4-001~D4-008 新增问题。 |
-| 2026-03-06 11:54:44 +0800 | codex | `doc/game-test.prd.md` | pass | - | redirect 角色边界与主入口指向清晰，未见多入口冲突。 |
-| 2026-03-06 11:55:15 +0800 | codex | `doc/game-test.project.md` | issue_open | I4-021 | Project 文档未维护 PRD-ID 映射与验收命令字段，redirect 任务可追溯性不足。 |
+| 2026-03-06 11:54:44 +0800 | codex | root game-test PRD shell | pass | - | redirect 角色边界与主入口指向清晰；该 root shell 后续已删除。 |
+| 2026-03-06 11:55:15 +0800 | codex | root game-test project shell | issue_open | I4-021 | Project 文档未维护 PRD-ID 映射与验收命令字段；该 root shell 后续已删除。 |
 | 2026-03-06 11:56:15 +0800 | codex | historical deleted root playability card shell | pass | - | 当时 redirect 声明与主入口指向明确；该历史根入口后续已删除。 |
 | 2026-03-06 11:56:43 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md` | issue_open | I4-014 | Traceability 表沿用 `PRD-ENGINEERING-006 + 文档内既有任务条目`，未建立本专题 PRD-ID 与任务/命令/证据链。 |
 | 2026-03-06 11:57:17 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”仅迁移任务带 PRD-ID，T0~T3 未显式映射需求与验收命令。 |

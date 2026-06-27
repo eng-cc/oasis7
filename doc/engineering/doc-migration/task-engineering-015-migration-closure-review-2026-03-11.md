@@ -11,7 +11,7 @@
 - 迁移项目文档：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
 - 冻结快照：`doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
 - 工程主项目：`doc/engineering/project.md`
-- 根入口 redirect 集：`doc/game-test.prd.md`、`doc/game-test.project.md`、`doc/world-runtime.prd.md`、`doc/world-runtime.project.md`、`doc/world-simulator.prd.md`、`doc/world-simulator.project.md`
+- 根入口 redirect 集：root game-test PRD/project shells 已在后续治理中删除；`doc/world-runtime.prd.md`、`doc/world-runtime.project.md`、`doc/world-simulator.prd.md`、`doc/world-simulator.project.md` 仍保留兼容跳转语义。
 
 ## 收口结论
 | 复核项 | 结果 | 说明 |

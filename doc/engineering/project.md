@@ -62,7 +62,7 @@
 - [x] TASK-ENGINEERING-013D (PRD-ENGINEERING-006) [test_tier_required]: Owner-C Batch-C4 迁移 `doc/world-runtime/runtime/**` 待迁移文档（17 篇）。
 - [x] TASK-ENGINEERING-014 (PRD-ENGINEERING-006) [test_tier_required]: Owner-D 迁移 `doc/site/**`、`doc/readme/**`、`doc/scripts/**`、`doc/game/**`、`doc/engineering/**` 与根入口遗留文档（57 篇，D1/D2 已完成）。
 - [x] TASK-ENGINEERING-014-D1 (PRD-ENGINEERING-006) [test_tier_required]: Owner-D 已完成非根入口 54 篇 legacy 迁移（`*.md/*.project.md -> *.prd.md/*.project.md`）。
-- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006) [test_tier_required]: 完成 3 份根入口 redirect project 文档收口（`doc/game-test.project.md`、`doc/world-runtime.project.md`、`doc/world-simulator.project.md`）。
+- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006) [test_tier_required]: 完成 3 份根入口 redirect project 文档收口（root game-test project shell 后续已删除；`doc/world-runtime.project.md`、`doc/world-simulator.project.md` 仍保留兼容跳转）。
 - [x] TASK-ENGINEERING-015 (PRD-ENGINEERING-007) [test_tier_required]: 执行全量迁移收口复核（命名一致性、引用可达、模块追踪同步、燃尽归零）。
 - [x] TASK-ENGINEERING-016 (PRD-ENGINEERING-008) [test_tier_required]: 为 12 个模块补齐文件级 PRD 索引，并从模块入口文档建立可达引用。
 - [x] TASK-ENGINEERING-017 (PRD-ENGINEERING-009) [test_tier_required]: 在 `scripts/doc-governance-check.sh` 新增专题 `*.prd.md <-> *.project.md` 双向互链门禁。
@@ -350,6 +350,7 @@
 - [x] playability-manual-root-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 playability test manual 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛到 `playability_test_result` canonical manual，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_21152e953bd14e4195a3f2ec3519a33b.yaml
 - [x] playability-card-root-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 playability test card 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛为非路径历史描述，并以 `playability_test_result` canonical card 作为唯一卡片入口。 Trace: .pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml
 - [x] viewer-manual-root-redirect-fact-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 删除仍残留的 Viewer manual 根级 legacy redirect 文件事实，将 root allowlist、README 示例、role inference 测试样例与历史 review exact path 收敛到 `viewer-manual.manual.md` canonical 手册语义。 Trace: .pm/tasks/task_f2825ab37494405fae7764c31a282d01.yaml
+- [x] game-test-root-legacy-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 root game-test PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/playability_test_result/game-test.prd.md` / `doc/playability_test_result/game-test.project.md`，并同步收紧 root allowlist 与 doc governance 豁免。 Trace: .pm/tasks/task_fae804670e22469eb7285c8c1e0b996b.yaml
 
 ## File Structure / Affected Paths
 
@@ -417,7 +418,7 @@
 - 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `viewer-manual-root-redirect-fact-sync`（已删除仍残留的 Viewer manual 根级 legacy redirect 文件事实，将当前入口唯一收敛到 `doc/world-simulator/viewer/viewer-manual.manual.md`。）
+- 最新完成: `game-test-root-legacy-redirect-deletion`（已删除 root game-test PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/playability_test_result/` canonical 专题文档。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

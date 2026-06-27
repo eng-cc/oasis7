@@ -4,7 +4,7 @@
 
 更新时间：2026-03-04
 范围：doc/*.prd.md 与 doc/*.project.md（legacy redirect）
-文档数：6
+文档数：4
 
 说明：
 - 逐篇阅读后再勾选，必须填写阅读时刻与核对结论。
@@ -15,8 +15,8 @@
 - `默认结论` = `代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 已完成全量审读与校验`。
 - 与默认结论不同的行保留完整字段，作为路径回写、例外状态或历史说明证据。
 
-- [x] 2026-03-03 23:45:14 CST | doc/game-test.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
-- [x] 2026-03-03 23:45:14 CST | doc/game-test.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
+- [x] 2026-03-03 23:45:14 CST | root game-test PRD shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/playability_test_result/game-test.prd.md` | 处理动作: root legacy redirect removed
+- [x] 2026-03-03 23:45:14 CST | root game-test project shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/playability_test_result/game-test.project.md` | 处理动作: root legacy redirect removed
 - [x] 2026-03-03 23:45:14 CST | doc/world-runtime.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
 - [x] 2026-03-03 23:45:14 CST | doc/world-runtime.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
 - [x] 2026-03-03 23:45:14 CST | doc/world-simulator.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
