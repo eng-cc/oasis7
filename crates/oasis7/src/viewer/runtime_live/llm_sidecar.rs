@@ -876,7 +876,7 @@ impl RuntimeLlmSidecar {
         config: &WorldConfig,
     ) -> Result<(), String> {
         let runtime_snapshot = world.snapshot();
-        let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
+        let next_event_id = 0;
         let next_action_id = runtime_snapshot.next_action_id.max(1);
         let model = runtime_state_to_simulator_model(world.state(), self);
         let snapshot = WorldSnapshot {
@@ -1072,6 +1072,19 @@ mod tests {
                 .map(String::as_str),
             Some("pubkey-b")
         );
+    }
+
+    #[test]
+    fn sync_shadow_kernel_accepts_empty_synthetic_runtime_snapshot() {
+        let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+        let world = RuntimeWorld::default();
+
+        sidecar
+            .sync_shadow_kernel(&world, &WorldConfig::default())
+            .expect("empty synthetic runtime snapshot should sync");
+
+        let shadow = sidecar.shadow_kernel.as_ref().expect("shadow kernel");
+        assert!(shadow.journal().is_empty());
     }
 
     #[test]

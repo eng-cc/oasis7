@@ -3,7 +3,9 @@ use std::fs;
 use std::path::Path;
 
 use super::super::persist::{PersistError, WorldJournal, WorldSnapshot};
-use super::super::types::{CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION};
+use super::super::types::{
+    CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION, WorldEventId,
+};
 use super::WorldKernel;
 use crate::chain_resource_schema::{
     ChainResourceDelta, ChainResourceDerivationContext, ChainResourceManifest,
@@ -91,6 +93,7 @@ impl WorldKernel {
                 actual: journal.events.len(),
             });
         }
+        validate_journal_event_prefix(snapshot.next_event_id, &journal.events)?;
         Ok(Self::restore_persisted_state(snapshot, journal.events))
     }
 
@@ -113,6 +116,7 @@ impl WorldKernel {
         }
 
         let journal_len = snapshot.journal_len;
+        validate_journal_event_prefix(snapshot.next_event_id, &journal.events[..journal_len])?;
         let mut kernel = Self::restore_persisted_state(snapshot, journal.events.clone());
 
         for event in journal.events.iter().skip(journal_len) {
@@ -158,4 +162,30 @@ impl WorldKernel {
         let journal = WorldJournal::load_json(&journal_path)?;
         Self::from_snapshot(snapshot, journal)
     }
+}
+
+fn validate_journal_event_prefix(
+    next_event_id: WorldEventId,
+    events: &[super::WorldEvent],
+) -> Result<(), PersistError> {
+    if next_event_id as usize != events.len() {
+        return Err(PersistError::ReplayConflict {
+            message: format!(
+                "journal next_event_id mismatch: expected {}, got {}",
+                events.len(),
+                next_event_id
+            ),
+        });
+    }
+    for (index, event) in events.iter().enumerate() {
+        if event.id != index as WorldEventId {
+            return Err(PersistError::ReplayConflict {
+                message: format!(
+                    "journal event id mismatch: expected {}, got {}",
+                    index, event.id
+                ),
+            });
+        }
+    }
+    Ok(())
 }

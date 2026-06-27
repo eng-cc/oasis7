@@ -562,7 +562,8 @@ impl WorldKernel {
     }
 
     fn has_journal_event(&self, event_id: WorldEventId) -> bool {
-        self.journal.iter().any(|event| event.id == event_id)
+        // Event ids are assigned from next_event_id and replay enforces a gapless sequence.
+        event_id < self.next_event_id
     }
 
     fn lock_social_stake(
