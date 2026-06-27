@@ -27,7 +27,7 @@
 - `doc/engineering/prd-review/checklists/active-game.md`
 - `doc/engineering/prd-review/checklists/active-headless-runtime.md`
 - historical p2p PRD review checklist snapshot（后续已删除）
-- `doc/engineering/prd-review/checklists/active-playability_test_result.md`
+- historical playability_test_result PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-readme.md`
 - historical root legacy redirect checklist（后续已删除）
 - `doc/engineering/prd-review/checklists/active-scripts.md`
