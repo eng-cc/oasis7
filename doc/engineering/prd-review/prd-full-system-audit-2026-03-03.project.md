@@ -18,7 +18,7 @@
   - `doc/engineering/prd-review/checklists/active-engineering.md`
   - `doc/engineering/prd-review/checklists/active-game.md`
   - `doc/engineering/prd-review/checklists/active-headless-runtime.md`
-  - `doc/engineering/prd-review/checklists/active-p2p.md`
+  - historical p2p PRD review checklist snapshot（后续已删除；当前 p2p truth 见 `doc/p2p/README.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/project.md`）
   - `doc/engineering/prd-review/checklists/active-playability_test_result.md`
   - `doc/engineering/prd-review/checklists/active-readme.md`
   - `doc/engineering/prd-review/checklists/active-scripts.md`
