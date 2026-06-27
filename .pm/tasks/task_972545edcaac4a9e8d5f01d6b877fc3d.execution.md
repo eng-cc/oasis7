@@ -186,3 +186,18 @@ Example:
 - Expected Result: Current workflow lint passes after review fix.
 - Actual Result: Passed.
 - Blocker / Next Action: Run closeout/PR-ready gates and create PR.
+
+## 2026-06-27 16:22:21 CST / tpm
+- 完成内容: Ran ready-for-PR claim and task closeout helper.
+- 遗留事项: Commit closeout metadata/evidence, create PR, watch required checks/comments/mergeability, merge, and cleanup.
+- Action: Close current task and capture closeout gate state.
+- Validation Command: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --phase current --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d"
+- Expected Result: Fresh current-task workflow verification passes and ready_for_pr claim is allowed.
+- Actual Result: Passed; verification_exit_code=0, status=verified, allowed_to_claim=true.
+- Validation Command: ./scripts/pm/task-closeout.sh --role tpm --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d --verify-command "./scripts/pm/workflow-lint.sh --phase current --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d"
+- Expected Result: Current task closeout metadata is written after fresh verification.
+- Actual Result: Partially passed for current task: `.pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml` now has status `done`, last_verification_status `verified`, and last_closed_at `2026-06-27T16:19:17+08:00`; helper exited 1 because repo-wide `pm-lint` reported unrelated historical execution-log debt in many older tasks.
+- Validation Command: ./scripts/pm/workflow-lint.sh --phase pr-ready --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d
+- Expected Result: Current task PR-ready lint passes after recording claim/closeout evidence.
+- Actual Result: Pending rerun.
+- Blocker / Next Action: Rerun current task PR-ready lint and commit closeout evidence.

@@ -99,17 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_972545edcaac4a9e8d5f01d6b877fc3d
-    title: "Find next code performance optimization"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd:
-      - PRD-ENGINEERING
-    acceptance:
-      - "Identify one concrete non-duplicate code performance optimization candidate with specialist evidence."
-      - "Implement the chosen optimization with focused regression coverage."
-      - "Run required local verification and carry the PR through merge/cleanup."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml
