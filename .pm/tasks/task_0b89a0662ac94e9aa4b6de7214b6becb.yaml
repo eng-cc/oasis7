@@ -10,7 +10,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/testing/project.md
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
 related_prd: []
 acceptance: []
 handoff_to: []

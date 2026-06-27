@@ -105,7 +105,6 @@ doc/testing/prd.index.md
 doc/testing/prd.md
 doc/testing/project.md
 doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md
-doc/viewer/project.md
 doc/ui_review_result/README.md
 doc/ui_review_result/card_2026_03_06_11_50_29.md
 doc/ui_review_result/ui_review_list.md

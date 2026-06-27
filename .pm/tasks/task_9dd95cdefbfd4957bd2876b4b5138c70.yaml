@@ -14,7 +14,7 @@ source_refs:
   - crates/oasis7_viewer/software_safe_src/main.jsx
   - crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js
 doc_refs:
-  - doc/world-simulator/viewer/project.md
+  - doc/world-simulator/viewer/README.md
 related_prd: []
 acceptance:
   - "Selecting agent or location from the left rail does not blank the Bevy pixel-world renderer"

@@ -8,10 +8,10 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/project.md
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
 doc_refs:
   - doc/engineering/project.md
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
 related_prd: []
 acceptance:
   - "Find one bounded frontend code governance issue and fix it with regression coverage."
