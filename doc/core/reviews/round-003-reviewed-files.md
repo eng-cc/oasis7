@@ -23,7 +23,7 @@
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
 - historical core PRD review checklist snapshot（后续已删除）
-- `doc/engineering/prd-review/checklists/active-engineering.md`
+- historical engineering PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-game.md`
 - historical headless-runtime PRD review checklist snapshot（后续已删除）
 - historical p2p PRD review checklist snapshot（后续已删除）
