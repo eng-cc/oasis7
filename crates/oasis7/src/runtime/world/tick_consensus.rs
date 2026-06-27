@@ -553,27 +553,40 @@ impl World {
             let empty_inputs: Vec<TickEventHashInput<'_>> = Vec::new();
             return hash_json(&empty_inputs);
         }
+        let mut tick_events_by_id = BTreeMap::new();
+        for event in self
+            .journal
+            .events
+            .iter()
+            .filter(|event| event.time == tick)
+        {
+            tick_events_by_id.entry(event.id).or_insert(event);
+        }
         let mut events = Vec::with_capacity(ordered_event_ids.len());
         for event_id in ordered_event_ids {
-            let event = self
-                .journal
-                .events
-                .iter()
-                .find(|event| event.id == *event_id && event.time == tick)
-                .ok_or_else(|| WorldError::DistributedValidationFailed {
+            let event = tick_events_by_id.get(event_id).copied().ok_or_else(|| {
+                WorldError::DistributedValidationFailed {
                     reason: format!(
                         "tick event missing during hash rebuild tick={} event_id={}",
                         tick, event_id
                     ),
-                })?;
-            events.push(event.clone());
+                }
+            })?;
+            events.push(event);
         }
-        self.hash_tick_events(events.as_slice())
+        self.hash_tick_event_refs(events)
     }
 
     fn hash_tick_events(&self, events: &[WorldEvent]) -> Result<String, WorldError> {
+        self.hash_tick_event_refs(events.iter())
+    }
+
+    fn hash_tick_event_refs<'a>(
+        &self,
+        events: impl IntoIterator<Item = &'a WorldEvent>,
+    ) -> Result<String, WorldError> {
         let inputs: Vec<TickEventHashInput<'_>> = events
-            .iter()
+            .into_iter()
             .map(|event| TickEventHashInput {
                 id: event.id,
                 caused_by: &event.caused_by,
