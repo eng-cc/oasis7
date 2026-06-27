@@ -144,3 +144,45 @@ Example:
 - Expected Result: Social replay/persistence tests still pass.
 - Actual Result: Passed; 3 tests passed, 0 failed.
 - Blocker / Next Action: Commit review fix and request targeted runtime/QA/repository-health re-review.
+
+## 2026-06-27 16:17:07 CST / tpm
+- 完成内容: Integrated pre-PR local role review outcomes and targeted re-review results.
+- 遗留事项: Run PR-ready closeout, create PR, watch required checks/comments/mergeability, merge, and cleanup.
+- Action: Record passed local role review packet.
+- Pre-PR Local Role Review: passed
+- Task UID: task_972545edcaac4a9e8d5f01d6b877fc3d
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-13-20260627
+- Source Branch: task/engineering-next-code-performance-optimization-13-20260627
+- Source Head: 73fc8129bfc1848092715b63b4baf8836ec59edc
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml; .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.execution.md; crates/oasis7/src/simulator/kernel/persistence.rs; crates/oasis7/src/simulator/kernel/social.rs; crates/oasis7/src/simulator/tests/persist.rs; crates/oasis7/src/simulator/tests/social.rs; doc/engineering/project.md
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-13-20260627/.pm/scratch/task_972545edcaac4a9e8d5f01d6b877fc3d/review-packages/review-458ed286f..73fc8129b.diff
+- Role Selection Basis: Changed simulator runtime/social/persistence code and tests require runtime_engineer and gameplay_designer; verification sufficiency requires qa_engineer; performance governance/task evidence/doc trace requires repository_health_engineer; system acceptance and player-visible contract require producer_system_designer; no UI/WASM/ops/liveops surfaces changed.
+- Review Roles: runtime_engineer, gameplay_designer, qa_engineer, repository_health_engineer, producer_system_designer
+- Review Evidence:
+  - runtime_engineer initial review: finding P1 on unvalidated persisted next_event_id/journal prefix invariant.
+  - runtime_engineer targeted re-review: no_findings; P1 resolved by `validate_journal_event_prefix` in from_snapshot/replay_from_snapshot and persist regressions.
+  - gameplay_designer review: no_findings; social evidence behavior and first-missing-id semantics preserved for normal gameplay paths.
+  - qa_engineer initial + targeted review: no_findings; persist/social/social_persist tests plus workflow/doc gates sufficient.
+  - repository_health_engineer initial + targeted review: no_findings; bounded non-duplicate performance治理 with no schema churn/broad refactor.
+  - producer_system_designer review: no_findings; performance治理 promise and player-visible social contract preserved.
+- Review Verdicts: runtime_engineer scope/spec compliance passed and runtime risk low after targeted fix; gameplay_designer scope/spec compliance passed and role risk low; qa_engineer verification adequacy passed and QA risk low; repository_health_engineer governance/scope compliance passed and residual risk low; producer_system_designer system/product contract compliance passed and residual risk low.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: runtime P1 addressed by commit 73fc8129bfc1848092715b63b4baf8836ec59edc; `./scripts/cargo-dev.sh test -p oasis7 simulator::tests::persist` passed 32; `./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social` passed 8; `./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social_persist` passed 3; targeted runtime/QA/repository-health re-review all returned no_findings.
+- Verification Matrix: social evidence lookup -> social tests -> passed 8; persisted journal invariant -> persist tests -> passed 32; social replay behavior -> social_persist tests -> passed 3; formatting/whitespace -> cargo fmt --check and git diff --check -> passed; doc/workflow PM surfaces -> doc-governance-check, workflow-lint current, required-tier-smoke -> passed.
+- Visual Evidence: n/a; no UI, Viewer, screenshot, or visual surface changed.
+- WASM Evidence: n/a; no WASM ABI/module/determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, rollback, runbook, or operator surface changed.
+- LiveOps Evidence: n/a; no external messaging, release note, player promise, or community surface changed.
+- Residual Risk: Low; future journal pruning or non-gapless simulator event storage would need an updated membership strategy/invariant, but current restore/replay boundaries now enforce the invariant used by social evidence lookup.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-13-20260627/.pm/scratch/task_972545edcaac4a9e8d5f01d6b877fc3d/slice-ledger.jsonl
+- Validation Command: env -u RUSTC_WRAPPER cargo fmt --all -- --check
+- Expected Result: Formatting check passes after review fix.
+- Actual Result: Passed.
+- Validation Command: git diff --check
+- Expected Result: No whitespace errors after review fix.
+- Actual Result: Passed.
+- Validation Command: ./scripts/pm/workflow-lint.sh --phase current --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d
+- Expected Result: Current workflow lint passes after review fix.
+- Actual Result: Passed.
+- Blocker / Next Action: Run closeout/PR-ready gates and create PR.
