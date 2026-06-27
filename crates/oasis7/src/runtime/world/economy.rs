@@ -488,6 +488,13 @@ impl World {
         let mut emitted = Vec::new();
         let mut factories: Vec<_> = self.state.factories.values().cloned().collect();
         factories.sort_by(|lhs, rhs| lhs.factory_id.cmp(&rhs.factory_id));
+        let mut active_jobs_by_factory = BTreeMap::<String, i64>::new();
+        for job in self.state.pending_recipe_jobs.values() {
+            active_jobs_by_factory
+                .entry(job.factory_id.clone())
+                .and_modify(|count| *count = count.saturating_add(1))
+                .or_insert(1);
+        }
 
         for factory in factories {
             if factory.built_at >= now {
@@ -507,12 +514,10 @@ impl World {
             if base_decay <= 0 {
                 continue;
             }
-            let active_jobs = self
-                .state
-                .pending_recipe_jobs
-                .values()
-                .filter(|job| job.factory_id == factory.factory_id.as_str())
-                .count() as i64;
+            let active_jobs = active_jobs_by_factory
+                .get(factory.factory_id.as_str())
+                .copied()
+                .unwrap_or(0);
             let recipe_slots = i64::from(factory.spec.recipe_slots.max(1));
             let utilization_bps = ((active_jobs as i128)
                 .saturating_mul(FACTORY_LOAD_FACTOR_BASE_BPS as i128)
