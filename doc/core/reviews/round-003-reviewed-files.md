@@ -384,7 +384,7 @@
 - `doc/testing/prd.index.md`
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
-- `doc/viewer-manual.md`
+- historical deleted root Viewer manual shell
 - `doc/world-runtime.prd.md`
 - `doc/world-runtime.project.md`
 - `doc/world-runtime/README.md`
