@@ -97,3 +97,12 @@ Example:
 - Ops Evidence: n/a; no deployment, node ops, rollback, or operator runbook surface changed.
 - LiveOps Evidence: n/a; no external messaging, release note, incident, or community runbook changed.
 - Residual Risk: low. External or manual consumers that open the deleted legacy path directly will no longer receive an in-repo redirect, but current repo reader journeys and exact references converge to canonical `doc/world-simulator/viewer/viewer-manual.manual.md`.
+
+## 2026-06-27 12:15:00 CST / tpm
+- 完成内容: Ran fresh final verification after pre-PR role review findings were fixed.
+- 遗留事项: Commit final verification evidence/claim metadata if changed, run task closeout, and prepare PR.
+- Action: Verify final branch state before closeout and PR creation.
+- Validation Command: `rg -n "viewer-manual\\.md" doc/world-simulator/viewer`; `rg -n -F "doc/world-simulator/viewer/viewer-manual.md" doc README.md scripts .agents`; `test ! -e doc/world-simulator/viewer/viewer-manual.md`; `test -e doc/world-simulator/viewer/viewer-manual.manual.md`; `git diff --check`; `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_50fe2af50edf479db290e6fae0a215f8 --phase current`; `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"`.
+- Expected Result: focused same-directory stale filename scan returns no matches; exact deleted path search returns no matches; deleted shell absent; canonical manual present; diff whitespace OK; doc governance OK; workflow current-phase lint OK; claim-ready allows ready_for_pr.
+- Actual Result: PASS. Focused fragment `rg` returned no matches; exact stale path `rg` returned no matches; deleted-file and canonical-file checks passed; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`; `claim-ready` reported `status: verified`, `allowed_to_claim: true`.
+- Blocker / Next Action: Run task closeout and prepare PR.
