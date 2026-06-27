@@ -105,7 +105,7 @@ Example:
 - Task UID: task_8539cf65c1b74efbacd963fe51adbaf1
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-task-engineering-next-code-performance-optimization-14-20260627
 - Source Branch: task/task-engineering-next-code-performance-optimization-14-20260627
-- Source Head: 70a8b1d8460c861708aeb921dc7363a77d505d0a
+- Source Head: f11aaf060218ab62793d17bda95326cbb2b7c8d4
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/roles/tpm/backlog/candidate.yaml; .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.execution.md; .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.yaml; crates/oasis7_net/src/provider_selection.rs; doc/engineering/project.md
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-task-engineering-next-code-performance-optimization-14-20260627/.pm/scratch/task_8539cf65c1b74efbacd963fe51adbaf1/review-packages/review-70a8b1d84..70a8b1d84.diff (empty committed-ref package); active review target was the current working-tree diff by explicit review request.
