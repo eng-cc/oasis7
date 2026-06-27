@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - AGENTS.md
 doc_refs:
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
   - doc/testing/project.md
 related_prd: []
 acceptance: []

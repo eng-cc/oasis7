@@ -7,9 +7,9 @@ status: done
 priority: P2
 source_signal: null
 source_refs:
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
 doc_refs:
-  - doc/viewer/project.md
+  - doc/world-simulator/viewer/README.md
   - testing-manual.md
 related_prd: []
 acceptance:
