@@ -9,7 +9,7 @@
 ## 复核范围
 - 迁移协作入口：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - 迁移项目文档：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
-- 冻结快照：`doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+- 冻结快照：2026-03-03 legacy migration backlog snapshot（后续已删除）
 - 工程主项目：`doc/engineering/project.md`
 - 根入口 redirect 集：root game-test、world-runtime 与 world-simulator PRD/project shells 已在后续治理中删除；当前入口回到各模块 canonical PRD/project。
 
@@ -40,7 +40,7 @@
 ## 对 QA 的交接点
 - 本次只要求 `qa_engineer` 复核“迁移专项是否具备完成态证据链”，不要求重新审读 303 条文档正文。
 - 若 QA 需要抽样，优先抽查：
-  - `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+  - 2026-03-03 legacy migration backlog snapshot（后续已删除）
   - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
   - `doc/engineering/project.md`
   - `doc/world-runtime/project.md`

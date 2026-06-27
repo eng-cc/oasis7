@@ -27,7 +27,7 @@
 ## 证据文件
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+- 2026-03-03 legacy migration backlog snapshot（后续已删除）
 - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - `doc/engineering/project.md`
 - `doc/devlog/README.md`

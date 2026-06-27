@@ -64,7 +64,7 @@
 - Integration Points:
   - 协作主文档：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
   - 协作项目文档：`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
-  - 待迁移清单快照：`doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+  - 待迁移清单快照：2026-03-03 legacy migration backlog snapshot（后续已删除；完成态见协作项目文档，当前迁移规则见 `doc/engineering/doc-governance/doc-structure-standard.design.md` 与 `doc/engineering/workflow/source-of-truth.md`）
   - 模块追踪：`doc/engineering/prd.md`、`doc/engineering/project.md`
   - 任务日志：`doc/devlog/README.md`
 - Owner-C 执行分批（TASK-ENGINEERING-013）：

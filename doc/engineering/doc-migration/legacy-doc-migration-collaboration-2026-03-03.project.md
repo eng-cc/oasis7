@@ -21,7 +21,7 @@
 ## 依赖
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.design.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+- 2026-03-03 legacy migration backlog snapshot（后续已删除；完成态见本 project，当前迁移规则见 `doc/engineering/doc-governance/doc-structure-standard.design.md` 与 `doc/engineering/workflow/source-of-truth.md`）
 - `doc/engineering/prd.md`
 - `doc/engineering/project.md`
 - `doc/devlog/README.md`

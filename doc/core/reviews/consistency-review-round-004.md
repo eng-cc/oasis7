@@ -158,7 +158,7 @@ rg -n "^审计轮次:\s*4$" doc --glob '*.md'
 | A4-011 | 验收命令：`! rg -n "^- 审计轮次:\\s*[0-9]+" doc --glob '*.md'`<br>`rg -n "当前基线|当前已审读文档数" doc/core/reviews/consistency-review-round-004.md doc/core/reviews/round-004-reviewed-files.md` | cc | 2026-03-11 | done |
 | A4-012 | 验收命令：`! rg -n "完成内容|遗留事项|时刻" doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.prd.md doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`<br>`rg -n "PRD-ID|任务拆解|验收命令" doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.project.md doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md` | cc | 2026-03-11 | done |
 | A4-013 | 验收命令：`! rg -n "doc/world-runtime\\.prd\\.md|ModuleValidationFailed" doc/world-runtime/testing/testing.md`<br>`rg -n "headless-runtime|nonviewer" doc/headless-runtime/README.md doc/headless-runtime/prd.md doc/headless-runtime/project.md` | cc | 2026-03-11 | done |
-| A4-014 | 验收命令：`rg -n "legacy|快照|豁免|可达性" doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`<br>`./scripts/doc-governance-check.sh` | cc | 2026-03-12 | done |
+| A4-014 | 历史验收：2026-03-03 legacy migration backlog snapshot（后续已删除）曾用于检查 `legacy|快照|豁免|可达性` 语义；当前保留 `./scripts/doc-governance-check.sh` 作为可执行治理门禁。 | cc | 2026-03-12 | done |
 
 ## 特殊情况备注（仅在无需整改时填写）
 | 编号 | 原因 | 风险 | 临时缓解 | 复审日期 | 评审人 |
