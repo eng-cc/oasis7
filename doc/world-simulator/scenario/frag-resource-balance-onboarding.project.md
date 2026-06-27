@@ -9,7 +9,7 @@
 - [x] FRB2.1 扩展 `AsteroidFragmentConfig`（保底数量 + 中心引导参数）
 - [x] FRB2.2 在 `generate_fragments` 接入中心区密度倍率与确定性补种
 - [x] FRB2.3 补充 `test_tier_required` 测试（数量保底/分布偏置/sanitize）
-- [x] FRB3.1 回写 `doc/world-simulator.project.md` 状态
+- 历史完成项：FRB3.1 回写 world-simulator 状态；当前状态入口为 `doc/world-simulator/project.md`。
 - [x] FRB3.2 记录当日 devlog（日期/完成内容/遗留事项）
 - [x] FRB3.3 运行回归测试并完成收口
 - [x] FRB4.1 更新设计文档：补种改为“每 100 tick 补 1%”与资源类型分布策略
@@ -27,7 +27,7 @@
 - `crates/oasis7/src/simulator/tests/asteroid_fragment.rs`
 - `crates/oasis7/src/simulator/tests/kernel.rs`
 - `crates/oasis7/src/simulator/tests/persist.rs`
-- `doc/world-simulator.project.md`
+- `doc/world-simulator/project.md`
 - `doc/devlog/`
 
 ## 状态

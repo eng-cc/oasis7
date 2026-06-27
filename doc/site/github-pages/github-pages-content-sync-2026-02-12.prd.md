@@ -33,7 +33,7 @@
 - 文档文件
   - `README.md`
 - 一致性依据
-  - `doc/world-simulator.project.md` 当前阶段与下一步状态。
+  - `doc/world-simulator/project.md` 当前阶段与下一步状态。
 
 ## 里程碑
 - M1：文档与任务拆解

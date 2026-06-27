@@ -43,7 +43,7 @@
 - `doc/engineering/prd-review/checklists/active-p2p.md`
 - `doc/engineering/prd-review/checklists/active-playability_test_result.md`
 - `doc/engineering/prd-review/checklists/active-readme.md`
-- `doc/engineering/prd-review/checklists/active-root-legacy.md`
+- historical root legacy redirect checklist（后续已删除）
 - `doc/engineering/prd-review/checklists/active-scripts.md`
 - `doc/engineering/prd-review/checklists/active-site.md`
 - `doc/engineering/prd-review/checklists/active-testing.md`
@@ -479,8 +479,8 @@
 - `doc/world-runtime/wasm/wasm-sdk-no-std.project.md`
 - `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.prd.md`
 - `doc/world-runtime/wasm/wasm-sdk-wire-types-dedup.project.md`
-- `doc/world-simulator.prd.md`
-- `doc/world-simulator.project.md`
+- root world-simulator PRD shell（后续已删除）
+- root world-simulator project shell（后续已删除）
 - `doc/world-simulator/README.md`
 - `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md`
 - `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md`

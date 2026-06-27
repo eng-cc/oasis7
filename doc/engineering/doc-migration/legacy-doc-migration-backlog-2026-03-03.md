@@ -322,4 +322,4 @@
 - `doc/site/manual/site-manual-static-docs.project.md`
 - `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md`
 - root world-runtime project shell（后续已删除）
-- `doc/world-simulator.project.md`
+- root world-simulator project shell（后续已删除）

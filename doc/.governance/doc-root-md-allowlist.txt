@@ -1,3 +1,1 @@
 doc/README.md
-doc/world-simulator.prd.md
-doc/world-simulator.project.md

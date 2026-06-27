@@ -63,7 +63,7 @@
   - `doc/engineering/prd.index.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
   - `doc/engineering/prd-review/checklists/active-*.md`
-  - `doc/engineering/prd-review/checklists/active-root-legacy.md`
+  - root legacy redirect checklist（后续已删除；root PRD/project shells no longer have active review targets）
   - `doc/*/prd.md`
   - `doc/*/project.md`
   - `doc/*/prd.index.md`

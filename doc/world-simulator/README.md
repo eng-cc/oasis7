@@ -56,8 +56,7 @@
 - 需要完整活跃专题清单时，进入 `doc/world-simulator/prd.index.md`；需要历史回溯时，再按具体任务或专题路径进入。
 
 ## 根目录 legacy
-- `doc/world-simulator.prd.md`
-- `doc/world-simulator.project.md`
+- root world-simulator PRD/project legacy redirect shells 已删除；当前只使用 `doc/world-simulator/prd.md` 与 `doc/world-simulator/project.md`。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

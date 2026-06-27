@@ -17,7 +17,7 @@
 - `crates/oasis7_viewer/src/selection_linking/tests.rs`
 - `crates/oasis7_viewer/src/egui_right_panel.rs`
 - `crates/oasis7_viewer/src/ui_locale_text.rs`
-- `doc/world-simulator.project.md`
+- `doc/world-simulator/project.md`
 - `doc/devlog/README.md`
 
 ## 状态
