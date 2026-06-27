@@ -109,10 +109,10 @@ Example:
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: .pm/roles/tpm/backlog/candidate.yaml; .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.execution.md; .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.yaml; crates/oasis7_net/src/provider_selection.rs; doc/engineering/project.md
 - Review Package: /Users/scc/ccwork/worktrees/oasis7-task-engineering-next-code-performance-optimization-14-20260627/.pm/scratch/task_8539cf65c1b74efbacd963fe51adbaf1/review-packages/review-70a8b1d84..70a8b1d84.diff (empty committed-ref package); active review target was the current working-tree diff by explicit review request.
-- Role Selection Basis: changed distributed provider selection path affects repository performance/health, DHT fetch and replica maintenance running surface, and verification sufficiency; selected repository_health_engineer, blockchain_ops_engineer, qa_engineer.
-- Review Roles: repository_health_engineer, blockchain_ops_engineer, qa_engineer
-- Review Evidence: repository_health_engineer=no_findings; blockchain_ops_engineer=no_findings; qa_engineer=no_findings.
-- Review Verdicts: repository_health_engineer scope/spec passed and low risk; blockchain_ops_engineer scope/spec passed and no ops behavior regression found; qa_engineer scope/spec passed and required-tier matrix sufficient.
+- Role Selection Basis: changed distributed provider selection path affects repository performance/health, DHT fetch and replica maintenance running surface, verification sufficiency, and prepare-task-pr required-role inference for engineering project trace; selected repository_health_engineer, blockchain_ops_engineer, qa_engineer, producer_system_designer.
+- Review Roles: repository_health_engineer, blockchain_ops_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health_engineer=no_findings; blockchain_ops_engineer=no_findings; qa_engineer=no_findings; producer_system_designer=no_findings.
+- Review Verdicts: repository_health_engineer scope/spec passed and low risk; blockchain_ops_engineer scope/spec passed and no ops behavior regression found; qa_engineer scope/spec passed and required-tier matrix sufficient; producer_system_designer scope/spec passed and no player/system-design intent change found.
 - Review Findings Disposition: no_findings
 - Finding Disposition Evidence: n/a; no valid findings to address.
 - Verification Matrix: provider selection ordering/dedupe -> `./scripts/cargo-dev.sh test -p oasis7_net provider_selection` passed 4; replica maintenance caller behavior -> `./scripts/cargo-dev.sh test -p oasis7_net replica_maintenance` passed 8; package-level regression -> `./scripts/cargo-dev.sh test -p oasis7_net` passed 168 plus doc-tests 0; governance -> fmt check, diff check, rust file-size, doc-governance, workflow current lint, and required-tier smoke passed.
@@ -131,3 +131,23 @@ Example:
 - Expected Result: current task has fresh verification and closeout truth; unrelated historical `.pm` lint debt is separated from task-local readiness.
 - Actual Result: Fresh `oasis7_net` verification passed; current task yaml is `status: done` with verified task_complete claim; repo-wide pm lint failed only on unrelated historical task logs.
 - Blocker / Next Action: Run task-local `./scripts/pm/workflow-lint.sh --phase pr-ready --task-uid task_8539cf65c1b74efbacd963fe51adbaf1`, then commit and create PR if it passes.
+
+## 2026-06-27 18:15:00 CST / tpm
+- Review Trigger: pre-PR local role review follow-up after `prepare-task-pr.sh --create` required-role inference
+- Review Scope: Current committed diff for provider selection ranking optimization and engineering task trace.
+- Review Package: n/a; current branch commits are `f11aaf060218ab62793d17bda95326cbb2b7c8d4` and `e5cc3dc51`, and producer_system_designer is reviewing the committed branch diff against `refs/remotes/origin/main`.
+- Review Roles: producer_system_designer
+- Review Question: Confirm this performance optimization does not alter player/system-level provider selection intent, world-first persistence/emergence goals, or acceptance scope; identify any product/system-design mismatch or missing PRD/project trace.
+- Evidence Available: repository_health_engineer, blockchain_ops_engineer, and qa_engineer pre-PR reviews returned no_findings; full `oasis7_net` test passed 168; pr-ready workflow lint passed.
+- Expected Return Contract: findings or no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-task-engineering-next-code-performance-optimization-14-20260627/.pm/scratch/task_8539cf65c1b74efbacd963fe51adbaf1/slice-ledger.jsonl`
+- Formal Sink: `.pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.execution.md`
+
+## 2026-06-27 18:19:00 CST / producer_system_designer
+- 完成内容: Pre-PR local role review follow-up returned `no_findings`. Scope/spec compliance verdict: passed; diff is focused on provider ranking implementation and engineering project trace, and does not change provider selection system intent. Role quality/risk verdict: this is an engineering/resource-selection performance optimization, not a player rule, world persistence, emergence-boundary, or resource-economy change; `provider-selection-topn-ranking-performance (PRD-ENGINEERING/GOVERNANCE)` trace is present and task yaml references engineering PRD/project. Residual risk: no benchmark quantification and future replica-maintenance materialization remains independent future work; neither blocks this PR.
+- 遗留事项: None for this role.
+- Action: Review committed branch diff against `refs/remotes/origin/main`.
+- Validation Command: `git diff refs/remotes/origin/main...HEAD`; prior `./scripts/cargo-dev.sh test -p oasis7_net` and governance checks listed above.
+- Expected Result: Identify producer/system design mismatch or return explicit no_findings.
+- Actual Result: no_findings.
+- Blocker / Next Action: Commit producer review evidence and rerun `prepare-task-pr.sh --create`.
