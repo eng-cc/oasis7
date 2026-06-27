@@ -115,3 +115,26 @@ Example:
 - Expected Result: current task marked complete if verification passes; any repo-wide historical lint debt remains attributed separately.
 - Actual Result: helper recorded `last_verification_status: verified`, `last_verification_exit_code: 0`, and moved the task to `done`; final helper exit was non-zero because repo-wide `pm-lint` reported pre-existing failures in many unrelated `.pm/tasks/*.execution.md` files, beginning with `task_04d61dc5778e4b1683a61056daf454e3` and `task_060e9de147ba4757ac29cf0fb7a15210`.
 - Blocker / Next Action: Treat repo-wide `.pm` historical debt as out of scope for this focused doc deletion task; proceed to PR preparation with the current task's scoped gates and review packet.
+
+## 2026-06-27 12:21:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_50fe2af50edf479db290e6fae0a215f8
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-10
+- Source Branch: task/engineering-legacy-doc-semantics-deletion-next-10
+- Source Head: 5d7f12a323cc02916b8f9f91645ddd981352d7f7
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.yaml`; `.pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.execution.md`; `doc/core/project.md`; `doc/core/reviews/consistency-review-round-009.md`; `doc/core/reviews/round-003-reviewed-files.md`; `doc/core/reviews/round-004-audit-progress-log.md`; `doc/core/reviews/round-004-reviewed-files.md`; `doc/core/reviews/round-005-audit-progress-log.md`; `doc/core/reviews/round-005-reviewed-files.md`; `doc/core/reviews/round-009-audit-progress-log.md`; `doc/core/reviews/round-009-reviewed-files.md`; `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`; `doc/engineering/project.md`; `doc/p2p/prd.md`; `doc/readme/governance/readme-world-rules-consolidation.prd.md`; `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`; `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md`; `doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.prd.md`; `doc/world-simulator/viewer/viewer-manual.manual.md`; deleted `doc/world-simulator/viewer/viewer-manual.md`; `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.project.md`; `doc/world-simulator/viewer/viewer-websocket-http-bridge.project.md`.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-10/.pm/scratch/task_50fe2af50edf479db290e6fae0a215f8/review-packages/review-origin-main..f4058363b.diff`
+- Slice Ledger: n/a; formal review evidence and subagent IDs are recorded in this execution log.
+- Role Selection Basis: `repository_health_engineer`, `viewer_engineer`, `qa_engineer`, and `producer_system_designer` selected for doc-governance deletion boundary, Viewer manual reader journey, verification sufficiency, and product/system manual semantics. Runtime/WASM/ops/liveops roles were not selected because no runtime behavior, wasm ABI, deployment, or external messaging changed.
+- Review Roles: repository_health_engineer, viewer_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health and viewer review returned `no_findings`; QA and producer/system review returned P2 findings, both addressed before this final head. QA finding on bare same-directory `viewer-manual.md` was fixed in `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.project.md`; producer/system finding on retained compatibility-layer wording was fixed in `doc/core/reviews/round-009-audit-progress-log.md`.
+- Review Verdicts: repository health passed; viewer reader journey passed; QA verification sufficiency passed after finding fix; producer/system reader journey passed after finding fix.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: focused same-directory `rg -n "viewer-manual\\.md" doc/world-simulator/viewer` returned no matches; exact stale path search returned no matches; `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed.
+- Verification Matrix: same-directory stale filename -> focused `rg` no matches; exact deleted path -> scoped `rg` no matches; deleted shell file -> `test ! -e` passed; canonical manual -> `test -e doc/world-simulator/viewer/viewer-manual.manual.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_50fe2af50edf479db290e6fae0a215f8 --phase current` OK; diff hygiene -> `git diff --check` OK.
+- Visual Evidence: n/a; documentation governance deletion with no UI or rendered visual surface.
+- WASM Evidence: n/a; no WASM code, ABI, receipt, or determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, rollback, or operator runbook surface changed.
+- LiveOps Evidence: n/a; no external messaging, release note, incident, or community runbook changed.
+- Residual Risk: low. External or manual consumers that open the deleted legacy path directly will no longer receive an in-repo redirect, but current repo reader journeys and exact references converge to canonical `doc/world-simulator/viewer/viewer-manual.manual.md`.
