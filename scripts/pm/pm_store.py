@@ -463,15 +463,18 @@ def compact_task_group(
     }
 
 
-def rebuild_task_views(root: pathlib.Path) -> None:
+def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
     task_records = []
+    loaded_task_count = 0
     for path, fields in iter_task_files(root):
+        loaded_task_count += 1
         task_uid = str(fields.get("task_uid") or "")
         if not task_uid:
             continue
         task_records.append((path, fields))
 
     task_records.sort(key=lambda item: task_order_key(item[1]))
+    roles = sorted(load_roles(root))
 
     registry_header = OrderedDict(
         [
@@ -508,7 +511,7 @@ def rebuild_task_views(root: pathlib.Path) -> None:
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     dump_list_document(registry_path, registry_header, "tasks", registry_entries)
 
-    for role in sorted(load_roles(root)):
+    for role in roles:
         for file_status in ("candidate", "committed", "blocked", "done"):
             backlog_path = role_backlog_path(root, role, file_status)
             if backlog_path.exists():
@@ -546,14 +549,18 @@ def rebuild_task_views(root: pathlib.Path) -> None:
                 items.append(item)
             backlog_path.parent.mkdir(parents=True, exist_ok=True)
             dump_list_document(backlog_path, header, "tasks", items)
+    return {
+        "task_count": loaded_task_count,
+        "role_count": len(roles),
+    }
 
 
 def sync_task_views(root: pathlib.Path) -> dict[str, object]:
-    rebuild_task_views(root)
+    summary = rebuild_task_views(root)
     return {
         "task_registry_path": str(task_registry_path(root).relative_to(root)),
-        "task_count": sum(1 for _ in iter_task_files(root)),
-        "role_count": len(load_roles(root)),
+        "task_count": summary["task_count"],
+        "role_count": summary["role_count"],
     }
 
 
