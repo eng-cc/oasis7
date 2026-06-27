@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] replica-maintenance-borrowed-candidate-selection-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize replica maintenance repair/rebalance candidate selection to rank borrowed provider records and clone only final transfer ids, avoiding per-content candidate materialization and preserving source/target tie-break semantics. Trace: .pm/tasks/task_0ea63503613f455b82524e5b3264e836.yaml
+
 - [x] provider-selection-topn-ranking-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DHT provider ranking to dedupe per provider first and select only the bounded top-N candidate window before final ordering, avoiding full provider-record clone/sort work while preserving score, freshness, provider-id tie-break, duplicate-provider, and unlimited-candidate semantics. Trace: .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.yaml
 
 - [x] social-evidence-journal-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator social fact evidence validation to use the existing gapless event-id invariant instead of scanning the full journal for each evidence id, preserving first-missing-id rejection semantics and replay persistence behavior. Trace: .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml
