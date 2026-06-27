@@ -58,7 +58,7 @@ readonly GRANDFATHERED_ADDED_PROJECT_TASK_ROWS=(
   "doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006): Owner-D 完成 3 份根入口 redirect project 文档收口（root game-test、world-runtime 与 world-simulator project shells 后续均已删除）。"
 )
 readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
-  "doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md"
+  "__no_reference_existence_exempt_docs__"
 )
 readonly DOC_ROOT_MD_ALLOWLIST_FILE="doc/.governance/doc-root-md-allowlist.txt"
 readonly MODULE_ROOT_MD_ALLOWLIST_FILE="doc/.governance/module-root-md-allowlist.txt"

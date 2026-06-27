@@ -29,7 +29,7 @@
 - `doc/core/reviews/round-004-reviewed-files.md`
 - `doc/core/templates/prd-id-test-evidence-mapping.md`
 - `doc/engineering/README.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+- 2026-03-03 legacy migration backlog snapshot（后续已删除）
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
 - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`

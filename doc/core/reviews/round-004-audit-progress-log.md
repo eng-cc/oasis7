@@ -209,7 +209,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/core/reviews/round-004-reviewed-files.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/core/templates/prd-id-test-evidence-mapping.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/README.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md` | issue_open | I4-202 | 快照保留大量旧 .project.md 路径且被引用可达门禁豁免，存在中风险可达性债务。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | 2026-03-03 legacy migration backlog snapshot（后续已删除） | issue_open | I4-202 | 快照保留大量旧 .project.md 路径且被引用可达门禁豁免，存在中风险可达性债务。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |

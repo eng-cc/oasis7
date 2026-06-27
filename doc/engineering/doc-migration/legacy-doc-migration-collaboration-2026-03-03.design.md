@@ -12,7 +12,8 @@
 - 复核层：Reviewer 抽检内容保真、命名规范、引用完整性与门禁结果。
 
 ## 3. 关键接口 / 入口
-- 待迁移池：`doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md`
+- 待迁移池：2026-03-03 legacy migration backlog snapshot（后续已删除；完成态见 `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`）
+- 当前迁移规则：`doc/engineering/doc-governance/doc-structure-standard.design.md` 与 `doc/engineering/workflow/source-of-truth.md`
 - 模块追踪：`doc/engineering/prd.md`、`doc/engineering/project.md`、`doc/engineering/prd.index.md`
 - 校验门禁：`scripts/doc-governance-check.sh`
 - 时序证据：`doc/devlog/YYYY-MM-DD.md`
