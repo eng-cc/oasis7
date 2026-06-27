@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] distfs-feedback-rate-limit-audit-window-skip-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DistFS feedback mutation rate-limit checks to skip stale audit files by parseable audit-path timestamp before disk read / JSON parse, preserving conservative fallback for nonstandard paths and existing accepted/rejected semantics. Trace: .pm/tasks/task_3261fc6f08024571968673d03abf6515.yaml
+
 - [x] runtime-factory-depreciation-active-job-count-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize runtime factory depreciation to pre-aggregate active recipe-job counts by factory once per tick instead of scanning every pending recipe job for each factory, preserving sorted factory event order and load-based durability semantics. Trace: .pm/tasks/task_40053ec2060d4a3ba13220e657eee034.yaml
 
 - [x] module-tick-invocation-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize module tick routing to resolve only due invocation ids instead of materializing all active module invocations, preserving retry semantics for due missing-record errors and existing tick lifecycle behavior. Trace: .pm/tasks/task_b5b4afa8686b46d58856252de9cea35e.yaml
