@@ -61,3 +61,50 @@ Example:
 - Expected Result: no exact deleted root path remains in current scoped docs; no actionable bare stale root filename remains; deleted root shell absent; canonical card present; governance and workflow checks pass.
 - Actual Result: PASS. Exact deleted root path search returned no matches; bare filename scan showed canonical-path references plus a historical count-only entry, with no actionable old root path; `test ! -e doc/playability_test_card.md` passed by absence; `test -e doc/playability_test_result/playability_test_card.md` passed; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`.
 - Blocker / Next Action: Commit implementation, generate review package, then dispatch pre-PR local role review.
+
+## 2026-06-27 13:18:00 CST / tpm
+- 完成内容: Created implementation commit and prepared local review package for pre-PR role review.
+- Review Scope: commit `618d9a3b6` against `origin/main`; changed paths include `.pm` task truth, `doc/.governance/doc-root-md-allowlist.txt`, `doc/README.md`, `doc/core/reviews/round-003-reviewed-files.md`, `doc/core/reviews/round-004-audit-progress-log.md`, `doc/core/reviews/round-004-reviewed-files.md`, `doc/engineering/project.md`, and deleted `doc/playability_test_card.md`.
+- Review Package: `.pm/scratch/task_89ecb9cc79d44cab9cef5e8ae01bd48a/review-packages/review-origin-main..618d9a3b6.diff`.
+- Role Selection Basis: `repository_health_engineer` for doc-governance deletion/reachability; `qa_engineer` for verification coverage of deleted/canonical paths and governance gates; `producer_system_designer` for playability evidence semantics and reader journey impact.
+- Planned Review Roles:
+  - `repository_health_engineer`
+  - `qa_engineer`
+  - `producer_system_designer`
+- Action: Dispatch bounded local review slices against the review package.
+- Validation Command: `git diff --binary origin/main..HEAD --output=.pm/scratch/task_89ecb9cc79d44cab9cef5e8ae01bd48a/review-packages/review-origin-main..618d9a3b6.diff`.
+- Expected Result: Review package exists and covers all changed paths.
+- Actual Result: PASS.
+- Blocker / Next Action: Wait for role review verdicts, address findings, then record pre-PR local role review packet.
+
+## 2026-06-27 13:28:00 CST / tpm
+- 完成内容: Integrated pre-PR local role review verdicts.
+- Review Evidence: `producer_system_designer` subagent `019f077a-915d-7670-aad0-0d60de19565d` returned `no_findings`, confirming canonical `doc/playability_test_result/playability_test_card.md` was not modified and playability evidence/card semantics and reader journey remain intact. `repository_health_engineer` subagent `019f077a-469f-7931-8ff9-100143ef97e2` returned `no_findings`, confirming doc governance, workflow lint, and diff hygiene are passing. `qa_engineer` subagent `019f077a-6b84-7200-98db-fce71d3a8f18` returned `no_findings`, confirming deleted path, canonical path, exact stale references, bare filename risk, doc-governance, workflow-lint, and diff-check coverage have no blockers.
+- Review Findings Disposition: no_findings.
+- Residual Risk: low. External bookmarks to the deleted root shell no longer receive an in-repo redirect, but current repo reader journeys and scripts converge on canonical `doc/playability_test_result/playability_test_card.md`.
+- Blocker / Next Action: Record formal `Pre-PR Local Role Review: passed` packet and run fresh ready-for-PR verification.
+
+## 2026-06-27 13:30:00 CST / tpm
+Pre-PR Local Role Review: passed
+- Task UID: task_89ecb9cc79d44cab9cef5e8ae01bd48a
+- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-11`
+- Source Branch: `task/engineering-legacy-doc-semantics-deletion-next-11`
+- Source Head: `618d9a3b6`
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.execution.md`; `doc/.governance/doc-root-md-allowlist.txt`; `doc/README.md`; `doc/core/reviews/round-003-reviewed-files.md`; `doc/core/reviews/round-004-audit-progress-log.md`; `doc/core/reviews/round-004-reviewed-files.md`; `doc/engineering/project.md`; deleted `doc/playability_test_card.md`.
+- Review Package: `.pm/scratch/task_89ecb9cc79d44cab9cef5e8ae01bd48a/review-packages/review-origin-main..618d9a3b6.diff`
+- Slice Ledger: n/a; formal review evidence and subagent IDs are recorded in this execution log.
+- Role Selection Basis: `repository_health_engineer` for doc-governance deletion/reachability; `qa_engineer` for verification coverage of deleted/canonical paths and governance gates; `producer_system_designer` for playability evidence/card semantics and reader journey impact.
+- Review Roles: `repository_health_engineer`; `qa_engineer`; `producer_system_designer`.
+- Review Evidence: repository health, QA, and producer/system review all returned `no_findings`.
+- Review Verdicts: `repository_health_engineer`: no_findings; `qa_engineer`: no_findings; `producer_system_designer`: no_findings.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: no review findings required remediation; focused stale-path checks and governance gates already passed before review.
+- Verification Matrix: exact deleted root path -> no matches in `doc README.md scripts .agents`; bare stale filename risk -> only canonical paths or historical count-only context; deleted shell file -> `test ! -e doc/playability_test_card.md` passed; canonical card -> `test -e doc/playability_test_result/playability_test_card.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current` OK; diff hygiene -> `git diff --check` OK.
+- Visual/WASM/Ops/LiveOps Evidence: not applicable; this is doc-governance deletion of a root playability card redirect shell with no visual UI, WASM runtime, blockchain ops, or external community messaging surface changes.
+- Gameplay/Playability Evidence Semantics: producer/system review confirmed canonical playability card body and evidence semantics were unchanged; deletion only removes the obsolete root redirect shell.
+- Action: Run fresh verification plus ready-for-PR claim.
+- Validation Command: pending fresh `rg`, deleted/canonical file checks, `git diff --check`, `./scripts/doc-governance-check.sh`, `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current`, and `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/doc-governance-check.sh"`.
+- Expected Result: all checks pass and ready-for-PR claim records evidence.
+- Actual Result: PASS. Exact deleted root path search returned no matches; bare filename scan returned only canonical-path references and a historical count-only row; deleted root shell absent; canonical card present; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`; `claim-ready` status `verified`, allowed_to_claim `true`.
+- Blocker / Next Action: Commit review/verification evidence, run task closeout, then create PR.
