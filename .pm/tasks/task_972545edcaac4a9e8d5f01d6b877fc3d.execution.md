@@ -233,3 +233,32 @@ Example:
 - Expected Result: Split journal invariant tests pass.
 - Actual Result: Passed; 3 tests passed, 0 failed.
 - Blocker / Next Action: Run formatting/diff/workflow checks, commit, push, and re-watch PR checks.
+
+## 2026-06-27 16:41:18 CST / tpm
+- 完成内容: Addressed GitHub automated review thread on runtime-live LLM synthetic shadow snapshots.
+- 遗留事项: Commit and push fix, resolve review thread, re-watch required checks/comments/mergeability, merge, and cleanup.
+- Action: PR review thread fix.
+- Review Thread: PRRT_kwDORHhWec6Ms6Xb (`crates/oasis7/src/simulator/kernel/persistence.rs:96`)
+- Finding: Strict simulator `from_snapshot` journal-prefix validation rejected runtime-live LLM sidecar synthetic snapshots that intentionally use `WorldJournal::new()`.
+- Disposition: addressed.
+- Fix Evidence: `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs::sync_shadow_kernel` now normalizes the synthetic simulator shadow snapshot to `next_event_id = 0` with `journal_len = 0` and `WorldJournal::new()`, preserving strict real simulator journal validation.
+- Local Role Review: viewer_engineer targeted review returned no_findings; scope/spec compliance passed; viewer runtime-live LLM residual risk low.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 viewer::runtime_live::control_plane::llm_sidecar::tests::sync_shadow_kernel_accepts_empty_synthetic_runtime_snapshot
+- Expected Result: Empty synthetic runtime snapshot syncs into shadow kernel.
+- Actual Result: Passed; 1 test passed, 0 failed.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 viewer::runtime_live::control_plane::llm_sidecar::tests
+- Expected Result: Runtime-live LLM sidecar tests pass.
+- Actual Result: Passed; 4 tests passed, 0 failed.
+- Validation Command: ./scripts/check-rust-file-size.sh
+- Expected Result: Oversized Rust file scan remains clean.
+- Actual Result: Passed.
+- Validation Command: env -u RUSTC_WRAPPER cargo fmt --all -- --check
+- Expected Result: Formatting check passes.
+- Actual Result: Passed.
+- Validation Command: git diff --check
+- Expected Result: No whitespace errors.
+- Actual Result: Passed.
+- Validation Command: ./scripts/pm/workflow-lint.sh --phase current --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d
+- Expected Result: Current workflow lint passes.
+- Actual Result: Passed.
+- Blocker / Next Action: Commit, push, resolve PR thread, and re-watch checks.
