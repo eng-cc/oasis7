@@ -10,6 +10,7 @@ source_signal: null
 source_refs:
   - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md
 doc_refs:
+  - doc/world-runtime/project.md
   - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md
   - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md
 related_prd: []
