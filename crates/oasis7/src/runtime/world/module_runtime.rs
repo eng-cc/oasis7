@@ -31,52 +31,8 @@ fn count_exceeds_limit(count: usize, limit: u32) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::runtime::{
-        ModuleAbiContract, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
-    };
-
-    fn manifest_with_subscription(wasm_hash: &str, event_kind: &str) -> ModuleManifest {
-        ModuleManifest {
-            module_id: "m.cache".to_string(),
-            name: "Cache".to_string(),
-            version: "0.1.0".to_string(),
-            kind: ModuleKind::Reducer,
-            role: ModuleRole::Domain,
-            wasm_hash: wasm_hash.to_string(),
-            interface_version: "wasm-1".to_string(),
-            abi_contract: ModuleAbiContract::default(),
-            exports: vec!["reduce".to_string()],
-            subscriptions: vec![ModuleSubscription {
-                event_kinds: vec![event_kind.to_string()],
-                action_kinds: Vec::new(),
-                stage: Some(ModuleSubscriptionStage::PostEvent),
-                filters: None,
-            }],
-            required_caps: Vec::new(),
-            artifact_identity: None,
-            limits: ModuleLimits::unbounded(),
-        }
-    }
-
-    #[test]
-    fn prepared_subscription_cache_key_tracks_manifest_identity() {
-        let base = manifest_with_subscription("hash-a", "world.tick");
-        let changed_hash = manifest_with_subscription("hash-b", "world.tick");
-        let changed_subscription = manifest_with_subscription("hash-a", "world.event");
-
-        let base_key = prepared_subscription_cache_key(&base).expect("base key");
-        assert_ne!(
-            base_key,
-            prepared_subscription_cache_key(&changed_hash).expect("hash key")
-        );
-        assert_ne!(
-            base_key,
-            prepared_subscription_cache_key(&changed_subscription).expect("subscription key")
-        );
-    }
-}
+#[path = "module_runtime_tests.rs"]
+mod tests;
 
 fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, WorldError> {
     let record_key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
@@ -306,6 +262,59 @@ impl World {
 
         invocations.sort_by(|left, right| left.instance_id.cmp(&right.instance_id));
         Ok(invocations)
+    }
+
+    pub(super) fn active_module_invocation_for_id(
+        &self,
+        invocation_id: &str,
+    ) -> Result<Option<ActiveModuleInvocation>, WorldError> {
+        if let Some(instance) = self.state.module_instances.get(invocation_id) {
+            if !instance.active {
+                return Ok(None);
+            }
+            let key = ModuleRegistry::record_key(&instance.module_id, &instance.module_version);
+            let record = self.module_registry.records.get(&key).ok_or_else(|| {
+                WorldError::ModuleChangeInvalid {
+                    reason: format!("module record missing {key}"),
+                }
+            })?;
+            return Ok(Some(ActiveModuleInvocation {
+                instance_id: instance.instance_id.clone(),
+                module_id: instance.module_id.clone(),
+                install_target: instance.install_target.clone(),
+                manifest: record.manifest.clone(),
+            }));
+        }
+
+        if self
+            .state
+            .module_instances
+            .values()
+            .any(|instance| instance.module_id == invocation_id)
+        {
+            return Ok(None);
+        }
+
+        let Some(version) = self.module_registry.active.get(invocation_id) else {
+            return Ok(None);
+        };
+        let key = ModuleRegistry::record_key(invocation_id, version);
+        let record = self.module_registry.records.get(&key).ok_or_else(|| {
+            WorldError::ModuleChangeInvalid {
+                reason: format!("module record missing {key}"),
+            }
+        })?;
+        Ok(Some(ActiveModuleInvocation {
+            instance_id: invocation_id.to_string(),
+            module_id: invocation_id.to_string(),
+            install_target: self
+                .state
+                .installed_module_targets
+                .get(invocation_id)
+                .cloned()
+                .unwrap_or(ModuleInstallTarget::SelfAgent),
+            manifest: record.manifest.clone(),
+        }))
     }
 
     pub fn route_event_to_modules(

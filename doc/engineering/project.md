@@ -8,6 +8,8 @@
 
 - [x] runtime-factory-depreciation-active-job-count-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize runtime factory depreciation to pre-aggregate active recipe-job counts by factory once per tick instead of scanning every pending recipe job for each factory, preserving sorted factory event order and load-based durability semantics. Trace: .pm/tasks/task_40053ec2060d4a3ba13220e657eee034.yaml
 
+- [x] module-tick-invocation-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize module tick routing to resolve only due invocation ids instead of materializing all active module invocations, preserving retry semantics for due missing-record errors and existing tick lifecycle behavior. Trace: .pm/tasks/task_b5b4afa8686b46d58856252de9cea35e.yaml
+
 - [x] pm-sync-views-single-scan-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize PM `sync_task_views()` to reuse the task/role counts already loaded by `rebuild_task_views()` instead of parsing every canonical task yaml a second time during one sync, with a focused regression smoke guarding against double reads. Trace: .pm/tasks/task_619bb81ae69c415c9a7e6a29a7f3fd9d.yaml
 
 - [x] tick-consensus-event-hash-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize tick consensus event hash rebuild to scan journal events for the target tick once and hash borrowed events in ordered event-id order, avoiding repeated journal scans and full event clones while preserving consensus hash and recovery semantics. Trace: .pm/tasks/task_97ad6595b03342c68c67f14e49833a94.yaml

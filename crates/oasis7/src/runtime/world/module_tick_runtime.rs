@@ -2,7 +2,6 @@ use oasis7_wasm_abi::{
     ModuleCallInput, ModuleCallOrigin, ModuleSandbox, ModuleSubscriptionStage,
     ModuleTickLifecycleDirective,
 };
-use std::collections::BTreeMap;
 
 use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{ModuleKind, ModuleManifest, ModuleRegistry, WorldError};
@@ -63,18 +62,20 @@ impl World {
             return Ok(0);
         }
 
-        let mut active_invocations = BTreeMap::new();
-        for invocation in self.collect_active_module_invocations()? {
-            active_invocations.insert(invocation.instance_id.clone(), invocation);
-        }
         let world_config_hash = self.current_manifest_hash()?;
-        let mut invoked = 0;
+        let mut due_invocations = Vec::with_capacity(invocation_ids.len());
         for invocation_id in invocation_ids {
+            let invocation = self.active_module_invocation_for_id(&invocation_id)?;
+            due_invocations.push((invocation_id, invocation));
+        }
+
+        let mut invoked = 0;
+        for (invocation_id, invocation) in due_invocations {
             // Always remove the previous schedule first. The module output decides whether to
             // reschedule itself (wake) or stay suspended.
             self.module_tick_schedule.remove(invocation_id.as_str());
 
-            let Some(invocation) = active_invocations.get(&invocation_id).cloned() else {
+            let Some(invocation) = invocation else {
                 continue;
             };
             let manifest = invocation.manifest;
