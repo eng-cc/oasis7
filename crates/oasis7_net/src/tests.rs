@@ -952,6 +952,20 @@ fn provider_distribution_rejects_insufficient_replicas() {
 }
 
 #[test]
+fn provider_distribution_dedupes_duplicate_providers_per_hash() {
+    let dht = map_dht(&[("hash-a", &["peer-1", "peer-1"])]);
+    let hashes = vec!["hash-a".to_string()];
+
+    let err =
+        audit_provider_distribution(&dht, "w1", &hashes, ProviderDistributionPolicy::default())
+            .expect_err("duplicate provider ids must not count as separate replicas");
+    assert!(matches!(
+        err,
+        WorldError::DistributedValidationFailed { .. }
+    ));
+}
+
+#[test]
 fn provider_distribution_rejects_single_provider_full_coverage() {
     let dht = map_dht(&[
         ("hash-a", &["peer-1", "peer-2"]),
