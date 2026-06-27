@@ -729,6 +729,7 @@
 - 当前状态: in_progress
 - 下一任务: `TASK-WORLD_RUNTIME-043`
 - 当前窗口摘要: provider/runtime live traceability、WASM Docker builder image/wrapper、build receipt/canonical token/identity/CI summary、receipt-aware release gate、node-side proof flow 与近期 runtime 技术债 tranche 均已收口；当前剩余阻塞仍是 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。Trace: .pm/tasks/task_dac2a6ab38134923b8573bc74fe5743e.yaml
+- 当前窗口补充（2026-06-27 / hosted macOS Docker probe）: self-hosted Darwin Docker evidence workflow 已可手动触发但仓库级 self-hosted runner inventory 为 0，新增独立 GitHub-hosted macOS ARM64 Docker capability probe workflow 仅采集 Docker/`linux/amd64` container 能力诊断 artifact，显式 `release_evidence=false`，不替代 WDBP-3.2/P0 canonical release evidence。Trace: .pm/tasks/task_fef95d44dbba4048b574d68138431371.yaml
 - 近期收口: viewer-live integration flake、builtin-wasm integer centimeter contract、node observability、wasm timing metrics、fetch-commit / peer-record backoff、traffic/finality/consensus health metrics 与 chain-linked passive world progress 已完成；详情回看对应任务项、topic project 与 `.pm` execution logs。
 - 历史追溯: 更早 `TASK-WORLD_RUNTIME-*` 完成项不再在状态区逐条追加；需要追 WASM builder、runtime storage、release policy、source compile、module release 或 node observability 历史时，先从上方任务项、`doc/world-runtime/prd.index.md`、topic project 与 `.pm/tasks/*.execution.md` 进入。
 - 阶段收口优先级: `P0`
