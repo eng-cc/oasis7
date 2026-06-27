@@ -36,7 +36,7 @@
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
-- `doc/engineering/prd-review/checklists/active-core.md`
+- historical core PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-engineering.md`
 - `doc/engineering/prd-review/checklists/active-game.md`
 - `doc/engineering/prd-review/checklists/active-headless-runtime.md`
