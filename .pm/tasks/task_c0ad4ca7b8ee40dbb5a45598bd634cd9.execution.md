@@ -66,3 +66,51 @@ Example:
 - Expected Result: Review package exactly represents `origin/main..HEAD`; review roles can inspect the diff and return findings/no_findings with residual risk.
 - Actual Result: Review package generated; dispatch pending.
 - Blocker / Next Action: Dispatch repository_health_engineer / qa_engineer / producer_system_designer / runtime_engineer review slices.
+
+## 2026-06-27 23:28:00 CST / tpm
+- 完成内容: Pre-PR local role review 已合流。初始 review 中 `repository_health_engineer` 发现 review package 相对最新 `origin/main` 过期；已按 finding rebase 到 `origin/main=80fb25557658e99c0a92a1d73a7f179817a71200`，新 HEAD 为 `02f1be7b4baecf0390d2ec2d28e83db8e39f2b2a`，并重生 package `.pm/scratch/task_c0ad4ca7b8ee40dbb5a45598bd634cd9/review-packages/review-origin-main..rebased.diff`。repository_health_engineer 复核后确认 P1 finding addressed，最终 `no_findings`；`qa_engineer`、`producer_system_designer`、`runtime_engineer` 均为 `no_findings`。
+- 遗留事项: 执行 claim-ready、task closeout、提交 evidence，然后进入 PR 创建与 CI/comments watch。
+- Action: Write final pre-PR evidence packet and proceed to closeout.
+- Validation Command: `test ! -e doc/world-runtime.prd.md && test ! -e doc/world-runtime.project.md && test -e doc/world-runtime/prd.md && test -e doc/world-runtime/project.md`; `rg -n -F "doc/world-runtime.prd.md" README.md doc scripts .agents`; `rg -n -F "doc/world-runtime.project.md" README.md doc scripts .agents`; `git diff --check origin/main..HEAD`; `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current`
+- Expected Result: deleted paths absent; canonical paths present; exact stale root path scans return no matches; governance and workflow gates pass against current base.
+- Actual Result: PASS. Deleted/canonical file tests passed; both `rg -n -F` commands returned no matches; `git diff --check origin/main..HEAD` passed; `doc-governance-check: OK`; `workflow-lint: OK (task_c0ad4ca7b8ee40dbb5a45598bd634cd9, phase=current)`.
+- Blocker / Next Action: Run `claim-ready` and `task-closeout`.
+
+## 2026-06-27 23:29:00 CST / tpm
+- 完成内容: 写入 Pre-PR Local Role Review packet，汇总四方 review verdict、finding disposition、review package、verification matrix 与 residual risk。
+- 遗留事项: 执行 claim-ready、task closeout、提交 evidence 并创建 PR。
+- Action: Record final pre-PR packet for `prepare-task-pr.sh --create`.
+- Validation Command: `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current`
+- Expected Result: task-local workflow lint 接受 final pre-PR packet。
+- Actual Result: 待补齐后重跑。
+- Pre-PR Local Role Review: passed
+- Task UID: task_c0ad4ca7b8ee40dbb5a45598bd634cd9
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-14
+- Source Branch: task/engineering-legacy-doc-semantics-deletion-next-14
+- Source Head: 02f1be7b4baecf0390d2ec2d28e83db8e39f2b2a
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: .pm/roles/tpm/backlog/committed.yaml; .pm/tasks/task_c0ad4ca7b8ee40dbb5a45598bd634cd9.yaml; .pm/tasks/task_c0ad4ca7b8ee40dbb5a45598bd634cd9.execution.md; doc/.governance/doc-root-md-allowlist.txt; doc/core/reviews/round-003-reviewed-files.md; doc/core/reviews/round-004-audit-progress-log.md; doc/core/reviews/round-004-reviewed-files.md; doc/core/reviews/round-008-reviewed-files.md; doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md; doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md; doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md; doc/engineering/prd-review/checklists/active-root-legacy.md; doc/engineering/prd.md; doc/engineering/project.md; doc/world-runtime.prd.md; doc/world-runtime.project.md; doc/world-runtime/README.md; doc/world-runtime/prd.md; scripts/doc-governance-check.sh
+- Review Package: .pm/scratch/task_c0ad4ca7b8ee40dbb5a45598bd634cd9/review-packages/review-origin-main..rebased.diff
+- Slice Ledger: execution log entries above; no separate ledger file required for this bounded single-surface review.
+- Role Selection Basis: repository_health_engineer for doc governance/deletion scope; qa_engineer for verification and regression adequacy; producer_system_designer for current documentation semantics and source-of-truth clarity; runtime_engineer for world-runtime module entrypoint semantics.
+- Review Roles: repository_health_engineer,qa_engineer,producer_system_designer,runtime_engineer
+- Review Evidence: repository_health_engineer initially found stale review package baseline, then verified rebase to current origin/main and regenerated package hash; qa_engineer verified deletion/canonical path tests, exact stale path scans, diff hygiene, doc governance and workflow lint; producer_system_designer verified current doc semantics in world-runtime README/PRD and engineering project remain clear; runtime_engineer verified no runtime code or current runtime doc callers are mispointed.
+- Review Verdicts: repository_health_engineer no_findings after P1 addressed; qa_engineer no_findings; producer_system_designer no_findings; runtime_engineer no_findings.
+- Residual Risk: low; historical review records intentionally lose clickable old root paths because the root legacy shells are deleted, while current canonical world-runtime paths remain explicit.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: repository_health_engineer P1 stale package finding addressed by rebasing onto `origin/main=80fb25557658e99c0a92a1d73a7f179817a71200`, regenerating `.pm/scratch/task_c0ad4ca7b8ee40dbb5a45598bd634cd9/review-packages/review-origin-main..rebased.diff`, and receiving updated `no_findings`.
+- Verification Matrix: deleted path absence tests passed; canonical path existence tests passed; exact stale path scans no matches; `git diff --check origin/main..HEAD` passed; `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current` passed.
+- Visual Evidence: not applicable; docs-only governance deletion.
+- WASM Evidence: not applicable; no WASM/runtime behavior changed.
+- Ops Evidence: not applicable; no deployment/network operation changed.
+- LiveOps Evidence: not applicable; no external/community copy or runbook changed.
+- Blocker / Next Action: Run claim-ready, task closeout, then commit final evidence.
+
+## 2026-06-27 23:32:00 CST / tpm
+- 完成内容: `claim-ready` 通过，`task-closeout.sh` 已执行并将当前 task YAML 标记为 `status: done`，记录 `last_verify_command: ./scripts/doc-governance-check.sh` 与 `last_verification_status: verified`。closeout 尾部全仓 `.pm lint` 因历史 execution log 缺字段等既有债务退出 1。
+- 遗留事项: 全仓历史 `.pm lint` 债务不属于本 task 修改范围；当前 task-local gates 已通过，继续进入 evidence commit 与 PR 创建。
+- Action: Record closeout boundary and rerun task-local gates.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --verify-command "./scripts/doc-governance-check.sh"`; `./scripts/pm/workflow-lint.sh --task-uid task_c0ad4ca7b8ee40dbb5a45598bd634cd9 --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check origin/main..HEAD`
+- Expected Result: closeout verifies current task and records done metadata; any full-repo `.pm lint` failures are separated from current task-local gates; task-local lint, doc governance, and diff hygiene pass.
+- Actual Result: `task-closeout.sh` exited 1 after reporting full-repo `.pm lint` historical failures, but current task YAML is `status: done`, `last_verification_status: verified`. Task-local gates will be rerun after this boundary record.
+- Blocker / Next Action: Rerun current task-local gates, commit final evidence, and run PR creation.
