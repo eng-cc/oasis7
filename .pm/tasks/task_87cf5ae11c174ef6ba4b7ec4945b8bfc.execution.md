@@ -106,3 +106,12 @@ Example:
 - Expected Result: Closed task claim guard may reject new non-completion claim mutation; direct readiness checks should still pass.
 - Actual Result: `claim-ready` returned `closed task claim evidence is immutable for non-completion claims`; `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed; deleted file absent; exact old path has no matches.
 - Blocker / Next Action: Create PR with the passed review packet and fresh verification evidence.
+
+## 2026-06-27 21:00:21 CST / tpm
+- 完成内容: Created GitHub PR #709: https://github.com/eng-cc/oasis7/pull/709.
+- 遗留事项: Continue normal PR CI / comments / mergeability watch; this PR is not a manual packaging/release CI hold.
+- Action: PR purpose decision recorded as `normal_pr_ci_watch`.
+- Validation Command: `./scripts/prepare-task-pr.sh --create --title "Delete playability active review checklist snapshot" --body-file .pm/scratch/task_87cf5ae11c174ef6ba4b7ec4945b8bfc/pr-body.md`.
+- Expected Result: Branch pushed, PR created, and helper confirms pre-PR local role review packet.
+- Actual Result: Branch `task/engineering-legacy-doc-semantics-deletion-next-20` pushed to origin; PR #709 created; preflight reported local role review `passed` with repository_health_engineer, producer_system_designer, and qa_engineer.
+- Blocker / Next Action: Push PR-purpose evidence, then watch required checks, comments, review state, and mergeability.
