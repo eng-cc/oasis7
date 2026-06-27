@@ -16,7 +16,7 @@
 - 模块审读清单（文件名沿用 `active-*` 以兼容 2026-03 审计与 review 引用；清单不是当前模块活跃入口或最新专题索引）：
   - historical core PRD review checklist snapshot（后续已删除；当前 core truth 见 `doc/core/README.md`、`doc/core/prd.index.md` 与 `doc/core/project.md`）
   - historical engineering PRD review checklist snapshot（后续已删除；当前 engineering truth 见 `doc/engineering/README.md`、`doc/engineering/prd.index.md` 与 `doc/engineering/project.md`）
-  - `doc/engineering/prd-review/checklists/active-game.md`
+  - historical game PRD review checklist snapshot（后续已删除；当前 game truth 见 `doc/game/README.md`、`doc/game/prd.index.md` 与 `doc/game/project.md`）
   - historical headless-runtime PRD review checklist snapshot（后续已删除；当前 headless-runtime truth 见 `doc/headless-runtime/README.md`、`doc/headless-runtime/prd.index.md` 与 `doc/headless-runtime/project.md`）
   - historical p2p PRD review checklist snapshot（后续已删除；当前 p2p truth 见 `doc/p2p/README.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/project.md`）
   - historical playability_test_result PRD review checklist snapshot（后续已删除；当前 playability_test_result truth 见 `doc/playability_test_result/README.md`、`doc/playability_test_result/prd.index.md` 与 `doc/playability_test_result/project.md`）
