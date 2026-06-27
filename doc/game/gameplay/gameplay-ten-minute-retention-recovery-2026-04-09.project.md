@@ -12,6 +12,7 @@
 - [x] TASK-GAMEPLAY-RR-003 (`PRD-GAME-012`) [test_tier_required]: `runtime_engineer` 已将 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的可复跑目标包，补齐首座工厂、首个制成品、停机恢复与扩产取舍的 canonical 语义。
 - [x] TASK-GAMEPLAY-RR-004 (`PRD-GAME-012`) [test_tier_required]: `viewer_engineer` 已收口首屏噪音、玩家身份和后果可见化，把玩家身份、当前主目标、主阻塞、立即下一步以及代价/奖励反馈抬到前台主语义。
 - Legacy `TASK-GAMEPLAY-RR-005` (PRD-GAME-012): `qa_engineer` 已区分 active-LLM formal lane 与 debug/probe lane。历史样本曾将 gate 从 `watch` 收口为 `hold`，卡在 `post_onboarding.establish_first_capability / 20%`；该结论现在只作为 historical baseline 保留。当前 fresh formal truth 已由 issue #160 closeout 更新为 `trust gate = pass`、`first capability gate = pass`，不再把旧 `hold/not_run` 当作当前 blocker。
+- [x] first-10-30-minute-attraction-hardening (PRD-GAME-012) [test_tier_required]: `TASK-GAME-076` 已完成前 10/30 分钟吸引力诊断、deterministic-provider-backed attraction evidence、逐项 Playwright / actual UI-click / `__AW_TEST__` 完备性自动化与 content-volume gate；required tier 当前为 `motivation_density_pass`、`content_volume_pass`（`34/30` 分钟有效内容、`22/18` 次玩家操作）和 `attraction_pass`。真实玩家留存与生产 provider 放行仍需 live/provider playtest 另证。 Trace: .pm/tasks/task_e3e98d92b70f4168831f756a5872a4aa.yaml
 
 ## 任务建议标题（给后续 owner 直接开 task 用）
 
@@ -22,6 +23,7 @@
 | `TASK-GAME-063` | `runtime_engineer` | Ship the first capability package after PostOnboarding |
 | `TASK-GAME-064` | `viewer_engineer` | Reduce first-screen noise and surface player-facing consequences/rewards |
 | `TASK-GAME-065` | `qa_engineer` | Establish active-LLM 10-minute trust gate and keep capability verdict separate |
+| `TASK-GAME-076` | `gameplay_designer` | Maintain first-30-minute attraction gates and live/provider boundary |
 | `viewer-economic-readability-first-capability-surface` | `viewer_engineer` | Make the first-capability economy and player value legible |
 
 ## Handoff Matrix
@@ -32,6 +34,7 @@
 | `TASK-GAME-063` | `producer_system_designer` | `runtime_engineer` | 工业引导卡组、`PostOnboarding` 阶段口径、M4 工业链目标 | 首个持续能力 canonical 状态、事件与恢复逻辑 |
 | `TASK-GAME-064` | `producer_system_designer` | `viewer_engineer` | 首屏主目标优先级、噪音样本、当前奖励反馈缺口 | 主界面信息层级与反馈可见化收口 |
 | `TASK-GAME-065` | `producer_system_designer` | `qa_engineer` | active-LLM 正式 lane 定义、debug lane 边界、阶段当前真值 | `10-minute trust gate` 的 `continue_playing / hold` 裁决，以及与 capability verdict 分开的归档 |
+| `TASK-GAME-076` | `producer_system_designer` / `tpm` | `gameplay_designer` + `qa_engineer` + runtime/viewer/agent owners | 已完成的 attraction / motivation / automation evidence、`content_volume_pass=34/30`、内容量实现包 | 后续改动保持 required/live summary 可复跑，并继续保留 `progression_pass_but_attraction_weak` / `content_volume_weak` regression |
 | `viewer-economic-readability-first-capability-surface` | `producer_system_designer` | `viewer_engineer` | 高风险修补后的经济可读性要求、first capability 样本、当前 player_gameplay surface | 玩家可见的 `投入/产出/价值/修复/下一步` surface 与回归证据 |
 
 ## 验收命令（草案）
@@ -63,6 +66,34 @@
   - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
   - `software_safe` floor：至少 1 轮正式入口复核
   - 回写 `doc/playability_test_result/card_*.md` 与 QA trust verdict，并单列 capability verdict 现状
+- `TASK-GAME-076` / 前 10/30 分钟吸引力
+  - 设计拆解: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md#task-game-076-0-30-分钟吸引力玩法脚本`
+  - 自动化覆盖矩阵: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md#自动化覆盖矩阵`
+  - Scenario driver / mock 边界: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md#scenario-driver--mock-边界`
+  - Scenario driver 代码源: `crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js`
+  - Scenario summary writer: `crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs`
+  - Summary writer contract: `crates/oasis7_viewer/scripts/gameplay-attraction-summary-writer.test.mjs`
+  - 逐项 Playwright runner: `scripts/viewer-gameplay-attraction-playthrough.sh`
+  - 实际 UI 点击 runner: `scripts/viewer-gameplay-attraction-ui-click-playthrough.sh`
+  - `__AW_TEST__` 完备性 runner: `scripts/viewer-aw-test-completeness-playthrough.sh`
+  - 每个 beat 都必须有 deterministic 自动化断言或显式缺口状态；Playwright / agent-browser 覆盖真实浏览器玩家路径，viewer semantic contract（现有 npm 脚本名仍为 `test:feedback-contract`）/ Vitest 覆盖派生语义，pure API / Rust runtime harness 覆盖 canonical gameplay truth，Bevy / pixel-world 只覆盖空间/视觉层，不替代玩法因果。
+  - `live_browser_30m_playthrough` 必须在同一个 browser session 中按 0-1m、1-3m、3-5m、5-7m、7-10m、8-12m、12-18m、18-23m、20-25m、25-30m 顺序执行 action + assertion，并为每个 beat 写出 state artifact；不得只用单步 smoke 代替逐项执行。
+  - `live_browser_30m_ui_click_playthrough` 必须用真实 player-visible UI controls 点击推进同一组 10 个 beat；`window.__AW_TEST__` 只允许用于 readiness、state assertion 和 artifact capture，不允许作为 gameplay progression action mechanism。
+  - `live_aw_test_completeness_playthrough` 必须逐步证明 `window.__AW_TEST__` 本身完备：`describeControls` / `fillControlExample` / `getState` / `select` / `focus` / `sendGameplayAction(request_snapshot)` / `sendControl(step)` / `runSteps` / recommended action submit 都能在真实 browser session 中跑通并写出 per-step artifacts。
+  - required tier 可以使用 scenario driver 生成 deterministic fixture / unit evidence；但 summary 必须标明 `viewer_fixture_only` / `runtime_backed` / `visual_only` / `live_verified` 等来源，不能把 mock 推进包装成真实 0-30 分钟 live gameplay。
+  - required 自动化入口: `./scripts/verify-gameplay-attraction-automation.sh --tier required`；其中 `summary_writer_contract` 必须验证 summary JSON/Markdown 均报告 `content_volume_pass`、6 个内容段和 truth coverage
+  - live 自动化入口: `./scripts/verify-gameplay-attraction-automation.sh --tier live`（启动真实 browser/player-path 与 pure API gameplay 栈；只有 live tier summary 才能作为真实玩家路径 / pure API gameplay 证据）
+  - deterministic-provider-backed attraction evidence 已由 `gameplay_attraction_scenario.js` 生成并纳入 summary：3 个 attraction cards 记录 `hook_score`、`replay_intent`、`action_effect_feedback`、`biggest_boredom_point`、`no-op or follow-up route`
+  - 30 分钟 motivation-density card 已纳入 summary，记录 `meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`branch_offer_clarity`、`continue_reason`、`return_hook`、`leverage_class`
+  - 30 分钟 content-volume card 已纳入 summary，区分“目标链路逐项覆盖”和“内容量足够 30 分钟”；当前 deterministic evidence 为 `34/30` 分钟有效内容、`22/18` 次玩家操作，标记 `content_volume_pass`
+  - gameplay_designer content-volume supplement 已落到 deterministic-provider-backed scenario evidence：追加 `6-30m` 内的任务诊断校准、资源换路线、微型生产委托、小事故修复、邻近机会探测、回访封装，并覆盖局部需求、共享项目贡献、玩家造成的世界变化、回访目标和恢复动作字段
+  - 玩家代理评审后的二遍可玩性优化已纳入 scenario evidence：`second_run_design_card.status=second_run_hook_pass`，`route_branch_regression.status=pass`；`route_tradeoff` 必须影响后续至少 2 个 beat，`micro_commission` 必须生成可截图成果卡，`opportunity_scan` / `return_package` 必须引用本局选择并产生分支化回访目标
+  - 玩家代理复评后的 anti-script guard 已纳入 scenario evidence：`anti_script_design_card.status=anti_script_pass`，`boredom_negative_regression.status=pass`；路线分支必须有中途可见指标差异，本地交付必须推进 `local_demand_progress_after_delivery`，第二局首屏必须复现上局选择记忆，连续 `step/wait/refresh` 推荐动作必须被判为 `attraction_weak`，`quick_patch` / `root_cause_fix` 必须有可见代价差异
+  - 多人大世界战略参考已收敛为首局可实现的小切片：局部后勤短缺、本地订单、共享项目贡献、机会扫描和回访目标；不得在 TASK-GAME-076 实现阶段扩成完整大地图、全服市场、联盟战争或多跳供应链系统。
+  - weak-sample regression 已纳入 `attraction_sufficiency_cards`：`weak_high_progress` 必须产出 `progression_pass_but_attraction_weak`
+  - fresh active-LLM / headed UI 样本仍作为 release/playtest 补证，不是 deterministic design sufficiency gate 的前置条件
+  - 若样本能推进但缺少新选择、奖励、回访理由或玩家因果感，记录 `progression_pass_but_attraction_weak` 并路由到 `PRD-GAME-012/014/015` 对应专题
+  - `rg -n "TASK-GAME-076|first-10-30-minute-attraction-hardening|0-30 分钟吸引力玩法脚本|自动化覆盖矩阵|Scenario driver|gameplay_attraction_scenario|write-gameplay-attraction-automation-summary|gameplay-attraction-summary-writer|summary_writer_contract|viewer-gameplay-attraction-playthrough|viewer-gameplay-attraction-ui-click-playthrough|viewer-aw-test-completeness-playthrough|live_browser_30m_playthrough|live_browser_30m_ui_click_playthrough|live_aw_test_completeness_playthrough|aw_test_completeness_guard|verify-gameplay-attraction-automation|attraction_sufficiency_cards|attraction_sufficiency_status|motivation_density_pass|runtime_backed|viewer_fixture_only|live_verified|progression_pass_but_attraction_weak|hook_score|meaningful_decision_count|What I caused|New option|Why continue|Playwright|Bevy" doc/game/project.md doc/game/prd.md doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js crates/oasis7_viewer/scripts/write-gameplay-attraction-automation-summary.mjs crates/oasis7_viewer/scripts/gameplay-attraction-summary-writer.test.mjs scripts/viewer-gameplay-attraction-playthrough.sh scripts/viewer-gameplay-attraction-ui-click-playthrough.sh scripts/viewer-aw-test-completeness-playthrough.sh scripts/verify-gameplay-attraction-automation.sh`
 - `p0-control-proof-surface` / 首局控制证明 surface
   - `rtk node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
   - `rtk npm run test:ui -- software_safe_src/main.test.jsx`
@@ -92,6 +123,22 @@
   - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
   - [x] 历史 `10-minute trust gate = hold` 裁决已保留为 baseline，不再作为当前 blocker
   - [x] fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`；更宽的 release / liveops 边界仍需独立复核
+- `TASK-GAME-076`
+  - [x] 0-30 分钟 target beat 脚本、测试矩阵和现有 surface 覆盖已逐项落地或明确记录缺口；这不等于新增 content-volume supplement 已完成 runtime/viewer/agent 实现
+  - [x] 自动化覆盖矩阵已逐项落地：`./scripts/verify-gameplay-attraction-automation.sh --tier required` 通过；每个 beat 至少有一条 Playwright / agent-browser、viewer semantic contract（`test:feedback-contract`）/ Vitest、pure API / Rust runtime harness 或 Bevy / pixel-world 自动化断言；任何缺口必须以 `*_unverified` / `covered_by_live_when_run` 状态记录，不能用人工试玩替代
+  - [x] Playwright 已具备逐项 30 分钟 playthrough：`live_browser_30m_playthrough` 在同一 browser session 中按 10 个 beat 顺序执行 action + assertion，并为每个 beat 写出 state artifact；该命令已纳入 `--tier live`
+  - [x] 已补实际 UI 点击版 30 分钟 playthrough：`live_browser_30m_ui_click_playthrough` 通过真实可见按钮选择目标、刷新快照、推进一步、点击推荐动作；测试 API 只用于断言/取证，不用于推进玩法；该命令已纳入 `--tier live`
+  - [x] 已补 `__AW_TEST__` 完备性 playthrough：`aw_test_completeness_guard` 覆盖 API 面静态防回退；`live_aw_test_completeness_playthrough` 在真实 browser session 中逐步跑通 API discovery、state read、select/focus、snapshot、step、runSteps、recommended action，并写出 per-step artifacts；该命令已纳入 `--tier live`
+  - [x] 已补 summary writer contract：`summary_writer_contract` 覆盖 `gameplay-attraction-summary-writer.test.mjs`，确认 required summary JSON/Markdown 不会漏报 `content_volume_pass`、6 个内容段或 truth coverage
+  - [x] 共享 scenario driver 已落地：同一份 canonical scenario 能导出 runtime snapshot、viewer snapshot、Bevy/pixel-world render input 与 attraction evidence；summary 清楚标注 `runtime_backed` / `viewer_fixture_only` / `visual_only` / `live_verified`，避免 mock 数据冒充真实推进
+  - [x] live tier 自动化已按需执行：真实玩家路径或 pure API gameplay 证据只能来自 `./scripts/verify-gameplay-attraction-automation.sh --tier live` 或等价 live evidence，不能由 required tier summary 单独声明
+  - [x] 3 个 deterministic-provider-backed 样本完成 attraction card，且不把 `trustGateResult=pass` 直接当作 attraction pass；fresh active-LLM / headed UI 样本保留为 release/playtest 补证
+  - [x] 30 分钟 motivation-density card 已完成，且 weak-sample regression 能识别 `progression_pass_but_attraction_weak`
+  - [x] 30 分钟 content-volume gate 已完成并达标：`content_volume_card.status=content_volume_pass`，`effective_play_minutes=34/30`，`player_operation_count=22/18`
+  - [x] gameplay_designer 内容量修复包已落到 deterministic-provider-backed scenario evidence，并在 summary 中报告 `content_volume_supplement_complete=true`
+  - [x] 玩家代理评审后的二遍可玩性 guard 已补齐：`second_run_design_card` 验证路线承诺、可截图委托成果、本局选择生成机会和选择记忆回访；`route_branch_regression` 验证 `accelerate` / `stabilize` 产生不同后续事故与回访目标
+  - [x] 玩家代理复评后的 anti-script guard 已补齐：`anti_script_design_card` 验证中途路线后果、本地需求交付进度、第二局首屏选择记忆、boredom 负例和修复代价差异；`boredom_negative_regression` 验证连续被动 CTA 不能通过 attraction gate
+  - [ ] 若触发旁观感、纯 grind、小玩家无价值感或 world activity only，已路由到 `PRD-GAME-014/015` 并记录 owner follow-up
 - `p0-control-proof-surface`
   - [x] `software_safe` summary 已发布 viewer-derived `controlProof`，不新增 runtime schema
   - [x] 正式玩法摘要顶部已展示 `Control Proof`，把玩家意图、世界后果、恢复动作与下一步并排呈现
@@ -110,10 +157,10 @@
 
 ## 状态
 
-- 更新日期: 2026-06-11
+- 更新日期: 2026-06-27
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: 当前专题的历史 `hold/not_run` baseline 已被 fresh formal evidence 刷新；后续只在出现新回退时再补新的 active-LLM formal rerun，而不是继续把 `#160` 当作当前未解 blocker。
+- 下一任务: `first-10-30-minute-attraction-hardening` / `TASK-GAME-076` required tier 已收口；后续只在改动 runtime/viewer/agent 或需要真实玩家留存判断时复跑 live/provider playtest。当前 required pass 不等同于生产 provider 放行或真实玩家留存结论。
 
 - 2026-06-25 P0 control proof follow-up:
   - 已把制作人落点“首局 KPI 从世界活着改为玩家控制被证明”落到 `software_safe` 正式入口：`buildGameplaySummary()` 聚合 `controlProof`，`WorldSummaryPanel()` 在 `Formal Gameplay Summary` 顶部显示 `Control Proof` 卡片。

@@ -16,6 +16,7 @@
   - SC-4: 关键决策必须前台可见：玩家能在主界面看到至少 `已接受`、`执行中`、`已产出/已恢复`、`代价/阻塞` 四类反馈，而不是依赖日志或原始事件文本自行推断。
   - SC-5: `qa_engineer` 新增 `10-minute trust gate` 后，最近 3/5 个 active-LLM 正式游玩样本应达到“整体有趣程度 >= 4 / 再玩一局意愿 >= 4 / 关键操作链路完整”的 `continue_playing` 结论；`--no-llm` 仅保留为 debug/probe lane，不计入正式留存放行。
   - SC-6: `first capability gate` 必须与 `10-minute trust gate` 分开判定；它用于验证“首座工厂单元 -> 首个制成品 -> 停机恢复 -> 第一次扩产取舍”的能力链，并允许使用 `30` 分钟窗口或 `1~3` 次会话，而不是把该闭环硬塞进单个 10 分钟样本。
+  - SC-7: `TASK-GAME-076` 必须把 `progression_pass`、`motivation_density_pass`、`content_volume_pass` 与 `attraction_pass` 分开；即使 formal lane 已能推进到 first capability，也要单独判断前 `10` 分钟是否有 hook / replay intent、前 `30` 分钟是否有足够 motivation density 和足够有效内容量。
 
 ## 2. User Experience & Functionality
 
@@ -47,6 +48,7 @@
 | 首个持续能力门 | `capability_goal_id`、`capability_progress_percent`、`factory_ready`、`first_product`、`blocked_reason`、`resumed`、`branch_offer` | 在后续 `30` 分钟或 `1~3` 次会话中跟踪首条能力链是否闭环 | `not_started -> industrial_bootstrap -> resilient_production -> branch_ready / blocked` | 必须先有持续产能，再给扩产/治理/协作分支；不得用单条 10 分钟样本替代 | `producer_system_designer` 冻结口径，`runtime_engineer` / `viewer_engineer` 落地，`qa_engineer` 复核 |
 | 首屏噪音治理 | `primary_goal_visible`、`noise_competes_with_goal`、`player_identity_clarity` | 默认首屏仅突出主目标与下一步 | `toolish -> noisy_playable -> player_focused` | 当前目标相关信息优先于历史噪音、operator/debug 信息 | `viewer_engineer` owner |
 | 后果可见化 | `accepted`、`executing`、`produced_or_resumed`、`cost_or_blocker` | 主 HUD / toast / chatter 反馈 | `implicit -> readable -> motivating` | 先解释关键代价与结果，再展示次要日志 | `viewer_engineer` owner，`agent_engineer` 配合语义 |
+| 前 10/30 分钟吸引力 | `hook_score`、`replay_intent`、`meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`biggest_boredom_point`、`effective_play_minutes`、`player_operation_count` | 对 deterministic-provider-backed、fresh active-LLM 或 headed UI 样本打 attraction / motivation / content-volume card，并记录 `progression_pass_but_attraction_weak` 或 `content_volume_weak` | `untested -> attraction_watch -> content_volume_weak / attraction_pass / attraction_weak` | 不复判 `trustGateResult=pass`；target coverage 和 motivation density 通过后，仍需 `content_volume_card` 达标才能声称前 30 分钟内容量足够 | `gameplay_designer` owner，`qa_engineer` 协作样本卡 |
 
 - Acceptance Criteria:
   - AC-1: `PRD-GAME-012` 明确未来两周只优先做 5 条 lane，不把宏系统/高风险对抗/元进度扩面写进当前冲刺主目标。
@@ -58,6 +60,7 @@
   - AC-7: `first capability gate` 必须允许使用 `30` 分钟窗口或 `1~3` 次会话，并与 `PostOnboarding` 专题中“15~45 分钟有效操作内达成首个里程碑”的口径保持一致。
   - AC-8: 本专题必须给出“该砍什么 / 该补什么 / 两层门禁如何判定”三类裁决，而不是泛化成长期愿景。
   - AC-9: execution log、根入口与专题 project 的当前阶段判断必须继续保持 `internal_playable_alpha_late`，不借本专题提前放宽 `closed beta` 口径。
+  - AC-10: `TASK-GAME-076` 样本必须回答“我为什么想继续”而不只是“系统是否继续推进”；若只有进度推进、没有新选择/奖励/回访理由，必须标记 `progression_pass_but_attraction_weak` 并路由到对应 PRD/topic；若动机密度通过但有效内容量不足，必须标记 `content_volume_weak`，不得声称前 30 分钟已足够。
 - Non-Goals:
   - 不在本专题中新增宏系统、高风险对抗、元进度的大范围新功能。
   - 不把 Prompt Ops / operator-only 能力重新包装成默认玩家主路径。
@@ -103,6 +106,7 @@
   - NFR-RR-3: `first capability gate` 不得由单条 10 分钟样本替代；必须用 `30` 分钟窗口或 `1~3` 次会话证据判定。
   - NFR-RR-4: 每条 lane 及两层 gate 的结论必须在同日回写到 task execution log 与对应 PRD/project。
   - NFR-RR-5: 所有结论继续遵守 `internal_playable_alpha_late` / `internal_only` claim envelope，不借体验改进任务扩大对外承诺。
+  - NFR-RR-6: `TASK-GAME-076` 不得把 world activity、progress percent 或 first capability pass 单独当作 attraction pass；必须有玩家动机、决策密度、奖励/解锁或 agency/leverage 证据。
 - 2026-06-25 P0 control proof follow-up:
   - `software_safe` 正式玩家入口需要把现有 `player_gameplay` 真值聚合成首局可读的 `Control Proof` surface，顺序固定为 `Player Intent -> World Consequence -> Recovery Move -> Next Move`。
   - 该 surface 只消费既有 `accepted_intent`、`execution_state`、`causality_*`、`last_world_change`、`next_step_hint`、recommended action 与 fallback/repair 语义；不得新增或伪造 runtime canonical truth。
@@ -137,6 +141,7 @@
 | PRD-GAME-012 | `TASK-GAME-063` | `test_tier_required` | 工业引导卡组 A/B/C + `30` 分钟或 `1~3` 次会话 capability follow-up 样本 + branch-ready 人工复核 | `PostOnboarding` 后中循环承接与首个持续能力门 |
 | PRD-GAME-012 | `TASK-GAME-064` | `test_tier_required` | 首屏截图对比、Mission HUD/summary/toast/chatter 语义人工复核、噪音抢焦点评估 | 玩家身份、后果可见化、奖励节奏 |
 | PRD-GAME-012 | `TASK-GAME-065` | `test_tier_required` | `10-minute trust gate` 卡片、QA 汇总与 producer `continue_playing / hold` 决策，并与 capability verdict 分开记录 | trust verdict、正式入口可信度与后续 capability follow-up 方向 |
+| PRD-GAME-012 | `TASK-GAME-076` | `test_tier_required` | deterministic-provider-backed attraction cards、30-minute motivation-density card、content-volume card、weak-sample regression；fresh active-LLM 或 headed UI cards 可作为 release/playtest 补证 | 前 10 分钟 hook、前 30 分钟 motivation density、内容量达标性、`progression_pass_but_attraction_weak` 与 `content_volume_weak` 识别 |
 | PRD-GAME-012 | `p0-control-proof-surface` | `test_tier_required` | `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 验证 `Control Proof / Player Intent / World Consequence / Recovery Move / Next Move` | 首局控制证明、后果可读、恢复动作同卡呈现 |
 | PRD-GAME-012 | `p1-p2-continuation-surface` | `test_tier_required` | `software-safe-feedback-contract.test.mjs` 与 `main.test.jsx` 验证 P1/P2 viewer cards；设计真值挂回 `PRD-GAME-015` | trust gate 之后的能动性、anti-grind 与成熟世界承接可读性 |
 
@@ -149,3 +154,4 @@
 | DEC-RR-003 | 先修控制地板，再做首屏 polish 与中循环加厚 | 先做更漂亮的前端或更宏大的系统宣传 | 玩家信任先于审美放大；不稳定控制会吞掉所有包装收益。 |
 | DEC-RR-004 | 2026-04-09 当前切片先维持 `hold`，不继续累积 retention 样本 | 忽略 fresh `software_safe` floor blocker，继续拿旧 PASS 或 debug/probe 样本拼接 continue 结论 | fresh active-LLM rerun 已证明正式入口第一步仍会被 provider timeout 阻断；在 floor 未恢复前继续累计 10 分钟样本只会污染正式 gate。 |
 | DEC-RR-005 | 把 `PRD-GAME-012` 的正式 verdict 拆成 `10-minute trust gate` 与 `first capability gate` 两层 | 继续要求单个 10 分钟样本同时证明“值得继续玩”与“首个持续能力已闭环” | `PostOnboarding` 专题要求首个能力里程碑可在 `15~45` 分钟或 `1~3` 次会话内达成；把它硬压进 10 分钟会导致 trust 与 capability 两类结论互相污染。 |
+| DEC-RR-006 | 新增 `TASK-GAME-076`，把 attraction / motivation density 从 progression pass 中拆出来单独验收 | 用 `trust gate = pass` 与 `first capability gate = pass` 直接推断前 10/30 分钟足够吸引 | 当前 pass evidence 证明能推进与能读懂，但用户与 gameplay slice 均指出它不足以证明“想继续玩”的动机曲线。 |

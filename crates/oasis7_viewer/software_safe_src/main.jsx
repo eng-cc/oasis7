@@ -886,6 +886,24 @@ function gameplayActionButtonLabel(action, locale) {
   return tr(locale, "提交玩法动作", "Submit Gameplay Action");
 }
 
+function gameplayActionTestId(action, role = "available") {
+  if (role === "recommended") {
+    return "viewer-playthrough-action-recommended";
+  }
+  if (action?.executeKind === "request_snapshot") {
+    return "viewer-available-action-request-snapshot";
+  }
+  if (action?.executeKind === "step") {
+    return "viewer-available-action-step";
+  }
+  if (action?.executeKind === "play") {
+    return "viewer-available-action-play";
+  }
+  const raw = action?.actionId || action?.protocolAction || action?.executeKind || "unknown";
+  const safe = String(raw).trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
+  return `viewer-playthrough-action-${safe}`;
+}
+
 function gameplayActionDetail(action, gameplay, locale) {
   if (action?.actionId === "claim_first_agent") {
     return action?.disabledReason
@@ -1156,6 +1174,18 @@ function WorldStageHero() {
         `The current intent is centered on ${gameplaySummary().acceptedIntentTarget}.`,
       )
       : selectionHint();
+  const refreshSnapshotAction = () =>
+    (gameplaySummary()?.availableActions || []).find((action) => action.executeKind === "request_snapshot")
+    || {
+      actionId: "request_snapshot",
+      action_id: "request_snapshot",
+      label: "Request snapshot",
+      protocolAction: "request_snapshot",
+      protocol_action: "request_snapshot",
+      executeKind: "request_snapshot",
+      targetAgentId: null,
+      disabledReason: null,
+    };
 
   return (
     <div class="stage-hero stage-hero--compact" data-stage-state={gameplaySummary()?.blockerKind || "ready"}>
@@ -1221,6 +1251,22 @@ function WorldStageHero() {
           <div class="hero-focus-card__detail">{identityDetail()}</div>
           <div class="hero-focus-card__detail">{identityMeta()}</div>
         </div>
+      </div>
+      <div class="toolbar" aria-label={tr(locale(), "主要玩法动作", "Primary gameplay actions")}>
+        <button
+          type="button"
+          data-testid="viewer-playthrough-action-request-snapshot"
+          onClick={() => renderGameplayAction(refreshSnapshotAction())}
+        >
+          {tr(locale(), "刷新快照", "Refresh Snapshot")}
+        </button>
+        <button
+          type="button"
+          data-testid="viewer-playthrough-action-step"
+          onClick={() => core.sendControl("step", { count: 1 })}
+        >
+          {tr(locale(), "推进一步", "Advance One Step")}
+        </button>
       </div>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
         <EmptyEntityRecoveryCard
@@ -1345,9 +1391,10 @@ function TargetsPanel() {
             }
           >
             <For each={lists().agents}>
-              {(agent) => (
+              {(agent, index) => (
                 <button
                   class="list-item"
+                  data-testid={index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`}
                   data-select-kind="agent"
                   data-select-id={agent.id}
                   data-selected={core.state.selectedKind === "agent" && core.state.selectedId === agent.id}
@@ -1378,6 +1425,7 @@ function TargetsPanel() {
               {(location) => (
                 <button
                   class="list-item"
+                  data-testid={`viewer-select-location-${location.id}`}
                   data-select-kind="location"
                   data-select-id={location.id}
                   data-selected={
@@ -1503,6 +1551,41 @@ function WorldSummaryPanel() {
                   />
                 </div>
               </EventCard>
+              <PanelSection
+                title={tr(locale(), "吸引力证明", "Attraction Proof")}
+                eyebrow={tr(locale(), "TASK-GAME-076: 0-30 分钟", "TASK-GAME-076: 0-30 Minutes")}
+                meta={tr(locale(), "只从 canonical player_gameplay 派生首局吸引力证据；缺失项会显示为等待或未验证。", "Derives first-session attraction evidence only from canonical player_gameplay; missing signals stay waiting or unverified.")}
+              >
+                <div class="badge-row">
+                  <Badge>{gameplay().attractionProof?.verdict || "unverified"}</Badge>
+                </div>
+                <div class="feedback-summary">
+                  {gameplay().attractionProof?.summary
+                    || tr(locale(), "等待吸引力证据发布。", "Waiting for attraction proof.")}
+                </div>
+                <div class="summary-grid">
+                  <MetricCard
+                    label={tr(locale(), "我造成了什么", "What I caused")}
+                    value={gameplay().attractionProof?.whatICaused || tr(locale(), "等待玩家导致的世界变化", "waiting for player-caused world change")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "新选择", "New option")}
+                    value={gameplay().attractionProof?.newOption || tr(locale(), "等待新选择", "waiting for new option")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "为什么继续", "Why continue")}
+                    value={gameplay().attractionProof?.whyContinue || tr(locale(), "等待下一分支", "waiting for next branch")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "等待代价", "Waiting cost")}
+                    value={gameplay().attractionProof?.waitingCost || tr(locale(), "等待 / 未验证", "waiting/unverified")}
+                  />
+                  <MetricCard
+                    label={tr(locale(), "恢复", "Recovery")}
+                    value={gameplay().attractionProof?.recovery || tr(locale(), "等待恢复路径", "waiting for recovery path")}
+                  />
+                </div>
+              </PanelSection>
               <PanelSection
                 title={tr(locale(), "玩家能动性动词", "Agency Moves")}
                 eyebrow={tr(locale(), "P1: 打断 / 重排 / 纠偏", "P1: Interrupt / Reprioritize / Correct")}
@@ -1762,6 +1845,7 @@ function WorldSummaryPanel() {
                     </div>
                     <div class="toolbar">
                       <button
+                        data-testid={gameplayActionTestId(action(), "recommended")}
                         disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
                         onClick={() => renderGameplayAction(action())}
                       >
@@ -1807,6 +1891,7 @@ function WorldSummaryPanel() {
                           >
                             <div class="toolbar">
                               <button
+                                data-testid={gameplayActionTestId(action)}
                                 disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
                                 onClick={() => renderGameplayAction(action)}
                               >
@@ -1817,6 +1902,7 @@ function WorldSummaryPanel() {
                           <Show when={action.executeKind === "agent_chat"}>
                             <div class="toolbar">
                               <button
+                                data-testid={gameplayActionTestId(action)}
                                 disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
                                 onClick={() => renderGameplayAction(action)}
                               >
