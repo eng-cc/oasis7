@@ -158,6 +158,70 @@ fn factory_depreciation_scales_with_active_recipe_load() {
 }
 
 #[test]
+fn factory_depreciation_counts_only_jobs_for_each_factory() {
+    let mut world = World::new();
+    register_builder(&mut world, "builder-a");
+    build_factory_ready(
+        &mut world,
+        "builder-a",
+        "site-1",
+        factory_spec("factory.target", 1, 2, 3),
+    );
+    build_factory_ready(
+        &mut world,
+        "builder-a",
+        "site-2",
+        factory_spec("factory.other", 1, 2, 3),
+    );
+
+    world
+        .set_material_balance("iron_ingot", 4)
+        .expect("seed recipe inputs");
+    world.set_resource_balance(ResourceKind::Electricity, 40);
+    for factory_id in ["factory.target", "factory.other"] {
+        world.submit_action(Action::ScheduleRecipe {
+            requester_agent_id: "builder-a".to_string(),
+            factory_id: factory_id.to_string(),
+            recipe_id: format!("recipe.{factory_id}"),
+            plan: RecipeExecutionPlan::accepted(
+                1,
+                vec![MaterialStack::new("iron_ingot", 1)],
+                vec![MaterialStack::new("control_chip", 1)],
+                Vec::new(),
+                1,
+                3,
+            ),
+        });
+    }
+    world.step().expect("start recipes");
+    assert_eq!(world.pending_recipe_jobs_len(), 2);
+
+    let durability_before_loaded_tick = world
+        .snapshot()
+        .state
+        .factories
+        .get("factory.target")
+        .expect("target factory exists")
+        .durability_ppm;
+
+    world
+        .step()
+        .expect("depreciation under independent factory loads");
+
+    let durability_after_loaded_tick = world
+        .snapshot()
+        .state
+        .factories
+        .get("factory.target")
+        .expect("target factory exists")
+        .durability_ppm;
+    assert_eq!(
+        durability_before_loaded_tick - durability_after_loaded_tick,
+        4_500
+    );
+}
+
+#[test]
 fn maintain_factory_consumes_hardware_part_and_recovers_durability() {
     let mut world = World::new();
     register_builder(&mut world, "builder-a");

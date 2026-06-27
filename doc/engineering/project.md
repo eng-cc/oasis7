@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] runtime-factory-depreciation-active-job-count-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize runtime factory depreciation to pre-aggregate active recipe-job counts by factory once per tick instead of scanning every pending recipe job for each factory, preserving sorted factory event order and load-based durability semantics. Trace: .pm/tasks/task_40053ec2060d4a3ba13220e657eee034.yaml
+
 - [x] pm-sync-views-single-scan-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize PM `sync_task_views()` to reuse the task/role counts already loaded by `rebuild_task_views()` instead of parsing every canonical task yaml a second time during one sync, with a focused regression smoke guarding against double reads. Trace: .pm/tasks/task_619bb81ae69c415c9a7e6a29a7f3fd9d.yaml
 
 - [x] tick-consensus-event-hash-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize tick consensus event hash rebuild to scan journal events for the target tick once and hash borrowed events in ordered event-id order, avoiding repeated journal scans and full event clones while preserving consensus hash and recovery semantics. Trace: .pm/tasks/task_97ad6595b03342c68c67f14e49833a94.yaml
