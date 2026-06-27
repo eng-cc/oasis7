@@ -100,3 +100,12 @@ Example:
 - Expected Result: All required local role reviews return no blocking findings and final packet is present for PR preflight.
 - Actual Result: PASS: repository_health_engineer, qa_engineer, and producer_system_designer returned no_findings with low residual risk.
 - Blocker / Next Action: Commit review evidence and continue to claim-ready/closeout.
+
+## 2026-06-27 08:00:40 CST / tpm
+- 完成内容: Task closeout command/result evidence recorded for the workflow-lint explicit task fast path.
+- 遗留事项: Commit closeout evidence, run PR preflight/create, then continue normal PR CI/comment/merge watch.
+- Action: Ran ready_for_pr claim and task closeout after implementation verification and pre-PR local role review passed.
+- Validation Command: ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_43133cddb6044a38ac0c7d9cd1bdcf01 --phase current"; ./scripts/pm/task-closeout.sh --role tpm --task-uid task_43133cddb6044a38ac0c7d9cd1bdcf01 --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_43133cddb6044a38ac0c7d9cd1bdcf01 --phase current"
+- Expected Result: Claim-ready verifies current task workflow lint; closeout marks task done with fresh verification metadata, or reports only unrelated repo-wide historical pm-lint debt after task-local verification succeeds.
+- Actual Result: PASS: claim-ready verified workflow-lint current at 2026-06-27T08:00:07+08:00. PASS task-local closeout metadata: task YAML status done, last_claim_type task_complete, last_verify_command workflow-lint current, last_verification_status verified, last_closed_at 2026-06-27T08:00:17+08:00. NOTE: task-closeout exited 1 after writing current task closeout because repo-wide `pm-lint` still reports unrelated historical execution-log debt outside this task.
+- Blocker / Next Action: No current-task closeout blocker remains; commit closeout evidence and run `./scripts/prepare-task-pr.sh --create`.
