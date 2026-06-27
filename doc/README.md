@@ -33,7 +33,7 @@
 - 高频兼容入口示例：
   - `doc/viewer-manual.md` -> `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/game-test.prd.md` -> `doc/playability_test_result/game-test.prd.md`
-  - `doc/playability_test_card.md` -> `doc/playability_test_result/playability_test_card.md`
+- 已删除的历史根入口示例：root playability card shell；当前只使用 `doc/playability_test_result/playability_test_card.md`。
 
 ## 模块入口矩阵
 | 模块 | PRD 主文档 | 设计主文档 | 项目管理文档 | 设计关注点 |
