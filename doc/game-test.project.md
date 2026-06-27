@@ -7,7 +7,7 @@
 
 ## 依赖
 - `doc/game-test.prd.md`
-- `doc/game-test.design.md`
+- `doc/playability_test_result/game-test.design.md`
 - `doc/playability_test_result/game-test.project.md`
 
 ## 状态

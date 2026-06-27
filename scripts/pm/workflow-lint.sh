@@ -65,8 +65,15 @@ def parse_task(path: pathlib.Path) -> dict[str, object]:
     return fields
 
 
-tasks = [parse_task(p) for p in sorted((root / ".pm" / "tasks").glob("task_*.yaml"))]
+task_dir = root / ".pm" / "tasks"
+if explicit_uid:
+    task_path = task_dir / f"{explicit_uid}.yaml"
+    tasks = [parse_task(task_path)] if task_path.is_file() else []
+else:
+    tasks = [parse_task(p) for p in sorted(task_dir.glob("task_*.yaml"))]
 if not tasks:
+    if explicit_uid:
+        raise SystemExit(f"workflow-lint: task yaml not found for --task-uid {explicit_uid}")
     raise SystemExit("workflow-lint: no .pm/tasks/*.yaml found")
 
 def worktree_hint_matches(raw_hint: object) -> bool:

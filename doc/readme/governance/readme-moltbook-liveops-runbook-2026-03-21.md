@@ -6,7 +6,7 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Channel: `Moltbook`
-- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + GitHub 回流 + devlog 回写`
+- Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + GitHub 回流 + PM task execution log 回写`
 - Source Docs:
   - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
   - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
@@ -34,7 +34,7 @@
    - `official Moltbook integration`
 4. 确认外链只指向当前稳定公开入口。
 5. 确认素材与主张一致，不拿 `software_safe` 或 `pure_api` 去替代 3D 视觉 claim。
-6. 记录发帖时间、帖子标题和 post id，便于后续巡检和 `devlog` 回写。
+6. 记录发帖时间、帖子标题和 post id，便于后续巡检和 `.pm` task execution log 回写。
 
 ## 3. 发帖后 24 小时巡检
 前 24 小时是高价值窗口。建议最少按以下节奏检查：
@@ -65,7 +65,7 @@
 1. 看 `/home` 是否有新的帖子活动或未读通知。
 2. 看最新 1-3 条自家帖子是否出现迟到评论。
 3. 检查是否有值得补一句 follow-up comment 的高质量讨论。
-4. 把需要跨角色处理的内容记录到当天 `devlog`。
+4. 把需要跨角色处理的内容记录到对应 `.pm/tasks/task_<32hex>.execution.md`。
 
 如果当天有新帖或外部讨论升温，可加到 2-3 次。
 
@@ -158,8 +158,8 @@
 | 对玩法、世界机制的高价值兴趣 | `producer_system_designer` | 记录兴趣点和频次 |
 | 创作者放大、联动意向 | `liveops_community` -> `producer_system_designer` | 先判定是否越界，再决定 follow-up |
 
-## 9. 当日回写要求
-当天做过 Moltbook 动作后，必须回写 `doc/devlog/YYYY-MM-DD.md`。
+## 9. 当日证据回写要求
+当天做过 Moltbook 动作后，必须回写对应 `.pm/tasks/task_<32hex>.execution.md`。
 
 最少记录：
 - 时间

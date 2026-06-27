@@ -242,7 +242,6 @@
 - `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.prd.md`
 - `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.project.md`
 - `doc/playability_test_card.md`
-- `doc/playability_test_manual.md`
 - `doc/playability_test_result/README.md`
 - `doc/playability_test_result/card_2026_02_28_19_22_20.md`
 - `doc/playability_test_result/card_2026_02_28_21_22_51.md`

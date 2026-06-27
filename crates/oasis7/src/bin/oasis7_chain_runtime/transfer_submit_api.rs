@@ -130,6 +130,16 @@ impl TrackedTransfer {
     }
 }
 
+fn compare_transfer_history_order(
+    left: &TrackedTransfer,
+    right: &TrackedTransfer,
+) -> std::cmp::Ordering {
+    right
+        .submitted_at_unix_ms
+        .cmp(&left.submitted_at_unix_ms)
+        .then_with(|| right.action_id.cmp(&left.action_id))
+}
+
 #[derive(Debug, Default)]
 struct TransferTracker {
     by_action_id: BTreeMap<u64, TrackedTransfer>,
@@ -282,39 +292,48 @@ impl TransferTracker {
         action_filter: Option<u64>,
         limit: usize,
     ) -> (usize, Vec<ChainTransferRecord>) {
-        let mut items = self
+        let mut total = 0usize;
+        let mut page: Vec<&TrackedTransfer> =
+            Vec::with_capacity(limit.min(self.action_order.len()));
+        for item in self
             .action_order
             .iter()
             .rev()
             .filter_map(|action_id| self.by_action_id.get(action_id))
-            .filter(|item| {
-                if let Some(action_id) = action_filter {
-                    return item.action_id == action_id;
+        {
+            if let Some(action_id) = action_filter {
+                if item.action_id != action_id {
+                    continue;
                 }
+            } else {
                 if let Some(account) = account_filter {
                     if item.from_account_id != account && item.to_account_id != account {
-                        return false;
+                        continue;
                     }
                 }
                 if let Some(status) = status_filter {
                     if item.status != status {
-                        return false;
+                        continue;
                     }
                 }
-                true
-            })
-            .map(TrackedTransfer::to_record)
-            .collect::<Vec<_>>();
+            }
 
-        items.sort_by(|left, right| {
-            right
-                .submitted_at_unix_ms
-                .cmp(&left.submitted_at_unix_ms)
-                .then_with(|| right.action_id.cmp(&left.action_id))
-        });
+            total += 1;
+            if limit == 0 {
+                continue;
+            }
+            let insert_at = page
+                .binary_search_by(|existing| compare_transfer_history_order(existing, item))
+                .unwrap_or_else(|index| index);
+            if insert_at < limit {
+                page.insert(insert_at, item);
+                if page.len() > limit {
+                    page.pop();
+                }
+            }
+        }
 
-        let total = items.len();
-        items.truncate(limit);
+        let items = page.into_iter().map(TrackedTransfer::to_record).collect();
         (total, items)
     }
 

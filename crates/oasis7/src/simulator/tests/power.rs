@@ -20,6 +20,37 @@ fn power_idle_consumption_depletes_agent() {
 }
 
 #[test]
+fn power_tick_preserves_agent_event_order() {
+    let mut kernel = WorldKernel::new();
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-1".to_string(),
+        name: "base".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-b".to_string(),
+        location_id: "loc-1".to_string(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-a".to_string(),
+        location_id: "loc-1".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let consumed_agent_ids = kernel
+        .process_power_tick()
+        .into_iter()
+        .filter_map(|event| match event.kind {
+            WorldEventKind::Power(PowerEvent::PowerConsumed { agent_id, .. }) => Some(agent_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(consumed_agent_ids, vec!["agent-a", "agent-b"]);
+}
+
+#[test]
 fn power_tick_dissipates_more_heat_when_hotter() {
     let mut config = WorldConfig::default();
     config.power.idle_cost_per_tick = 0;

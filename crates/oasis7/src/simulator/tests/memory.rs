@@ -109,6 +109,21 @@ fn long_term_memory_top_by_importance() {
 }
 
 #[test]
+fn long_term_memory_top_by_importance_preserves_tie_order() {
+    let mut memory = LongTermMemory::new();
+    let id_a = memory.store("a", 10);
+    let id_b = memory.store("b", 11);
+    let id_c = memory.store("c", 12);
+    memory.entries.get_mut(&id_a).unwrap().importance = 0.7;
+    memory.entries.get_mut(&id_b).unwrap().importance = 0.7;
+    memory.entries.get_mut(&id_c).unwrap().importance = 0.1;
+
+    let top = memory.top_by_importance(2);
+    let contents: Vec<_> = top.iter().map(|entry| entry.content.as_str()).collect();
+    assert_eq!(contents, vec!["a", "b"]);
+}
+
+#[test]
 fn long_term_memory_export_restore_roundtrip_preserves_entries_and_next_id() {
     let mut source = LongTermMemory::new();
     source.store_with_tags("first", 10, vec!["tag-a".to_string()]);

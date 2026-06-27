@@ -1,6 +1,7 @@
 //! Agent memory system: short-term and long-term memory.
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, VecDeque};
 
 use super::agent::AgentDecision;
@@ -371,13 +372,20 @@ impl LongTermMemory {
 
     /// Get the most important entries.
     pub fn top_by_importance(&self, n: usize) -> Vec<&LongTermMemoryEntry> {
-        let mut entries: Vec<_> = self.entries.values().collect();
-        entries.sort_by(|a, b| {
-            b.importance
-                .partial_cmp(&a.importance)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        entries.into_iter().take(n).collect()
+        let mut top = Vec::with_capacity(n.min(self.entries.len()));
+        if n == 0 {
+            return top;
+        }
+        if !use_bounded_top_n(n, self.entries.len()) {
+            top.extend(self.entries.values());
+            top.sort_by(|left, right| compare_importance_desc(left, right));
+            top.truncate(n);
+            return top;
+        }
+        for entry in self.entries.values() {
+            insert_top_by_importance(&mut top, entry, n);
+        }
+        top
     }
 
     /// Get the most recently accessed entries.
@@ -445,6 +453,35 @@ impl LongTermMemory {
         }
         next
     }
+}
+
+fn insert_top_by_importance<'a>(
+    top: &mut Vec<&'a LongTermMemoryEntry>,
+    candidate: &'a LongTermMemoryEntry,
+    limit: usize,
+) {
+    let insert_at = top
+        .iter()
+        .position(|entry| compare_importance_desc(candidate, entry) == Ordering::Less);
+    match insert_at {
+        Some(index) => top.insert(index, candidate),
+        None if top.len() < limit => top.push(candidate),
+        None => return,
+    }
+    if top.len() > limit {
+        top.pop();
+    }
+}
+
+fn compare_importance_desc(left: &LongTermMemoryEntry, right: &LongTermMemoryEntry) -> Ordering {
+    right
+        .importance
+        .partial_cmp(&left.importance)
+        .unwrap_or(Ordering::Equal)
+}
+
+fn use_bounded_top_n(limit: usize, total: usize) -> bool {
+    limit.saturating_mul(2) < total
 }
 
 // ============================================================================

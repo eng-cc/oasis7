@@ -6,6 +6,18 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] workflow-lint-explicit-task-fast-path (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `workflow-lint --task-uid` to load only the requested task yaml instead of parsing every historical `.pm/tasks/task_*.yaml`, preserving full-scan behavior for unbound worktree discovery. Trace: .pm/tasks/task_43133cddb6044a38ac0c7d9cd1bdcf01.yaml
+
+- [x] action-mempool-batch-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize consensus action mempool batch selection to sort references and clone only selected actions, avoiding full `ActionEnvelope` materialization before batch and zone-batch selection. Trace: .pm/tasks/task_fd01d2a5289f4dd7980e9e734b9c3671.yaml
+
+- [x] runner-ready-agent-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator runner ready-agent selection to avoid cloning every ready agent id per decision tick while preserving round-robin cursor, readiness, quota, and rate-limit semantics. Trace: .pm/tasks/task_08c1b767b4b2448ca3275bb4db4f0108.yaml
+
+- [x] power-tick-agent-iteration-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator power tick agent iteration to avoid cloning every agent id and performing a second map lookup on each tick while preserving event ordering semantics. Trace: .pm/tasks/task_9aa5cd8fecb54028a3126768eff6d8d4.yaml
+
+- [x] llm-memory-top-n-selection-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent memory top-N selection to avoid full-candidate sorting on prompt assembly hot paths while preserving tie-order semantics. Trace: .pm/tasks/task_e9bea69b2282407e98732299a4bf4e84.yaml
+
+- [x] transfer-history-query-page-materialization-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize transfer history queries to retain only the requested ordered page while still scanning all matches for total counts, avoiding full record materialization before pagination. Trace: .pm/tasks/task_aeb40d5298af4452bc5322b046985716.yaml
+
 - [x] remove-root-pr-md-evidence-flow (PRD-ENGINEERING-021/025) [test_tier_required]: 删除根目录共享 `PR.md`，将 post-PR evidence 链收敛到 task-local execution log / `.pm` evidence，并用 workflow-lint smoke 阻断根 `PR.md` 回流。 Trace: .pm/tasks/task_2b7e1387ff0443719e66732a90304164.yaml
 
 - [x] viewer-performance-probe-package-script-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Route the Viewer performance probe wrapper through the canonical `npm --prefix crates/oasis7_viewer run test:performance` package script and align current performance PRD command口径. Trace: .pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.yaml
@@ -19,6 +31,8 @@
 - [x] pm-lint-task-view-sync-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `pm-lint` task backlog lint by reusing the task views already synced by the outer lint wrapper instead of rebuilding them a second time. Trace: .pm/tasks/task_3e13225c198541109cb2faf3eb32d663.yaml
 
 - [x] pm-lint-backlog-pass-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize `pm-lint` by avoiding the second coordinated full task backlog lint pass after `task-lint` has already covered execution-log validation, while preserving standalone `task-execution-log-lint` behavior. Trace: .pm/tasks/task_639bc8b58e8c4c12a42c0b790115d7c0.yaml
+
+- [x] viewer-performance-summary-percentile-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize Viewer performance summary percentile calculation by reusing already sorted frame/interaction samples instead of re-sorting per percentile while preserving nearest-rank metric semantics. Trace: .pm/tasks/task_d29016f0e10a4eed85724f11d4667017.yaml
 
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
 - [x] TASK-ENGINEERING-002 (PRD-ENGINEERING-001/002) [test_tier_required]: 补齐高频违规（超行数/超文档长度/文档平铺新增）自动诊断与门禁建议。
@@ -305,6 +319,7 @@
 - [x] oasis7-proto-focused-clippy-cleanup (PRD-ENGINEERING-001/021/025) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust 代码层治理点，使 `oasis7_proto` focused Clippy `-D warnings` 通过，收敛 distributed network 复杂类型并保持 viewer `prompt_control` JSON wire shape。 Trace: .pm/tasks/task_d0b287212c824d2b97d8524029b3bc81.yaml
 - [x] viewer-live-disconnect-clean-exit (PRD-ENGINEERING-001/021/025) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust/runtime 代码层治理点，使 `viewer_live_integration` 的客户端断开 `Broken pipe` 进入既有 clean-exit 语义，并补 live-loop disconnect/non-disconnect 单元覆盖。 Trace: .pm/tasks/task_d82150a949bf4b3488de3423b3d1622e.yaml
 - [x] pixel-world-bridge-focused-clippy-cleanup (PRD-ENGINEERING-001/021/025) [test_tier_required]: 继续收口 repository health 巡检发现的 Rust/viewer 代码层治理点，使 `pixel_world_bridge` focused Clippy `-D warnings` 通过，并保持 Bevy render system 注册、lib tests 与 wasm target compile surface。 Trace: .pm/tasks/task_31ee2a7dc18e4f578f2fd5ebcc87800d.yaml
+- [x] pixel-world-bevy-0-19-migration (PRD-ENGINEERING-001/021/025) [test_tier_required]: 将 `pixel_world_bridge` 升级到 Bevy 0.19，补齐 native/wasm、viewer visual smoke、browser wasm runtime 与 repo hygiene 验证证据，并保留 release-level readiness 边界。 Trace: .pm/tasks/task_220bc6c6e2e84eaca17d6d930e5b90f0.yaml
 - [x] world-bounds-copy-consistency (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 codebase audit Task 3 的 world bounds / anchor fallback 双语文案一致性，保持 software-safe source 与 checked-in viewer bundle 同步，不改变 anchor fallback 行为。 Trace: .pm/tasks/task_456c5ba10a964ea69c679450d215aa64.yaml
 - [x] stale-cargo-cache-project-plan-cleanup (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 中已完成 `local-cargo-cache-script-convergence` 的过期 File Structure / Affected Paths 计划残留，保留完成行与 `.pm` task trace，不改 cargo-dev 行为。 Trace: .pm/tasks/task_42b496aae8c8456a882acea4c2116a22.yaml
 - [x] engineering-project-latest-completed-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 状态区的 `最新完成` 漂移，将其从较早的 libp2p RustSec burn-down 任务同步到当前 doc governance truth refresh，保留下一任务 inventory 分类口径不变。 Trace: .pm/tasks/task_5ca263b753114c08ab7bb6303fd49449.yaml
@@ -316,6 +331,11 @@
 - [x] gwsc-test-readiness-gates (PRD-ENGINEERING-021/025) [test_tier_required] + [test_tier_full]: 补齐大世界状态同步与提交闭环的模块级 wrapper、S10 API/viewer projection contract、public_testnet readiness lane 和 claim-boundary 文档，确保 module/proxy 证据不越界声明 release/public_testnet ready。 Trace: .pm/tasks/task_b52dc268bc394b0eb05a139eabc00307.yaml
 - [x] scripts-bootstrap-devlog-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/scripts` 当前 README / PRD 与 task-worktree-bootstrap 专题中仍把 `--init-docs` 绑定到“当日 devlog” / `today_devlog` 的旧语义，将 active bootstrap docs 对齐为模块 PRD/project 检查与 PM task execution log evidence。 Trace: .pm/tasks/task_e53e6c9884ec4f27a45e99f54b7075ba.yaml
 - [x] evidence-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/testing`、`doc/playability_test_result` 与 `doc/core` 活证据/门禁模板中仍把新任务结论导向 `doc/devlog/YYYY-MM-DD.md` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/evidence bundle 回写要求。 Trace: .pm/tasks/task_cb0f1e08aa594e42a08f9393347fb8e7.yaml
+- [x] readme-liveops-runbook-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Moltbook / 小红书持续运营 runbook 与 readme PRD 当前 flow / AC 中仍把渠道动作和信号回流导向 `doc/devlog` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留 runbook、issue / PR 与 producer summary 等正式回流面。 Trace: .pm/tasks/task_cd72186645e746dd8d12ed5cfc730f50.yaml
+- [x] playability-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/playability_test_result` 当前项目交接与 closed beta / 高优问题闭环活模板中仍把新可玩性信号导向 `doc/devlog` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/prd、发布证据包、QA triage、producer escalation 与 LiveOps 回流面。 Trace: .pm/tasks/task_eb93f5de123c49d1a3889855038b6987.yaml
+- [x] root-design-redirect-shell-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 world-runtime / world-simulator 根级 legacy design redirect 壳，将仅存索引引用收敛到模块内 canonical design 文档，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_a99b0850527b4c1e935e3276a5338b57.yaml
+- [x] game-test-root-design-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 game-test 根级 legacy design redirect 壳，将 root project 兼容壳与 review 索引引用收敛到 `playability_test_result` canonical 专题 design，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_c1ac55b06cd7455b9c92b914aa131026.yaml
+- [x] playability-manual-root-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 playability test manual 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛到 `playability_test_result` canonical manual，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_21152e953bd14e4195a3f2ec3519a33b.yaml
 
 ## File Structure / Affected Paths
 
@@ -380,10 +400,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-26
+- 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `evidence-template-execution-log-semantics`（已将 testing/playability/core 活证据模板中的 `doc/devlog/YYYY-MM-DD.md` 旧证据 sink 收敛到 PM task execution log evidence。）
+- 最新完成: `playability-manual-root-redirect-deletion`（已删除 playability test manual 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛到 `playability_test_result` canonical manual，并同步收紧 root markdown allowlist。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

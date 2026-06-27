@@ -43,6 +43,24 @@ last_verification_status: verified
 last_closed_at: 2026-06-25T00:02:00+08:00
 EOF
 
+cat > "$TMPDIR/.pm/tasks/task_22222222222222222222222222222222.yaml" <<EOF
+this line is intentionally invalid task yaml
+EOF
+
+set +e
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/workflow-lint.sh" --allow-unbound --phase current >"$TMPDIR/full-scan-malformed.stdout" 2>&1
+FULL_SCAN_MALFORMED_STATUS=$?
+set -e
+if [[ "$FULL_SCAN_MALFORMED_STATUS" == "0" ]]; then
+  echo "workflow-lint.test: expected full task scan to fail on malformed unrelated task yaml" >&2
+  exit 1
+fi
+if ! grep -Fq "invalid key/value line" "$TMPDIR/full-scan-malformed.stdout"; then
+  echo "workflow-lint.test: expected malformed unrelated task yaml parser failure" >&2
+  cat "$TMPDIR/full-scan-malformed.stdout" >&2
+  exit 1
+fi
+
 write_log() {
   local actual_result=$1
   cat > "$TMPDIR/.pm/tasks/$TASK_UID.execution.md" <<EOF
