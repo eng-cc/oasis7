@@ -108,3 +108,13 @@ Pre-PR Local Role Review: passed
 - Expected Result: all checks pass and ready-for-PR claim records evidence.
 - Actual Result: PASS. Exact deleted root path search returned no matches; bare filename scan returned only canonical-path references and a historical count-only row; deleted root shell absent; canonical card present; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`; `claim-ready` status `verified`, allowed_to_claim `true`.
 - Blocker / Next Action: Commit review/verification evidence, run task closeout, then create PR.
+
+## 2026-06-27 13:36:00 CST / tpm
+- 完成内容: Ran task closeout; task-scoped closeout metadata was written and the task is marked `done`.
+- 遗留事项: Repo-wide historical `.pm lint` debt still causes `task-closeout.sh` to exit nonzero after the current task is closed; this is outside the current task scope and was not introduced by this branch.
+- Action: Record closeout boundary and rerun task-scoped gates before PR creation.
+- Validation Command: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --verify-command "./scripts/doc-governance-check.sh"`; then rerun `./scripts/doc-governance-check.sh`, `./scripts/pm/workflow-lint.sh --task-uid task_89ecb9cc79d44cab9cef5e8ae01bd48a --phase current`, and `git diff --check`.
+- Expected Result: task YAML shows `status: done` with verified closeout metadata; task-scoped gates remain green; repo-wide historical lint debt is recorded as non-blocking boundary.
+- Actual Result: `task-closeout.sh` exited 1 after closeout because repo-wide `.pm lint` reported unrelated historical execution-log formatting failures such as `task_04d61dc5778e4b1683a61056daf454e3` and `task_060e9de147ba4757ac29cf0fb7a15210`; current task YAML now shows `status: done`, `last_claim_type: task_complete`, `last_verify_command: ./scripts/doc-governance-check.sh`, `last_verification_status: verified`, and `last_closed_at: 2026-06-27T13:13:58+08:00`.
+- Task-Scoped Gate Rerun: PASS. `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed.
+- Blocker / Next Action: Commit closeout metadata and create PR.

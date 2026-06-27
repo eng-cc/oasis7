@@ -99,14 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_89ecb9cc79d44cab9cef5e8ae01bd48a
-    title: "Converge and delete next stale legacy document surface"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Find one additional current old-document/old-semantics drift point with emphasis on removable stale legacy documentation, remediate the live documentation surface, delete obsolete legacy document(s) only when current references are safely repointed or obsolete, avoid broad historical rewrites, verify doc governance, and close through PR."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml
