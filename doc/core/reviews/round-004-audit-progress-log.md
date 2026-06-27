@@ -217,7 +217,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical core PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-engineering.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical engineering PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-game.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical headless-runtime PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical p2p PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
