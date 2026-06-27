@@ -2498,22 +2498,49 @@ function createViewerWorldScaleModule({
       locationId: fallback.id || null
     };
   }
-  function buildWorldScaleSurface2(locale = state2.uiLocale) {
-    const isZh = isLocaleZh2(locale);
-    const space = snapshotSpaceConfig();
-    const anchor = selectedWorldAnchor();
-    const locations = Object.values(state2.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos);
-    const nearestLocations = anchor ? locations.filter((location) => location.id !== anchor.locationId).map((location) => {
+  function insertNearestLocation(nearestLocations, candidate, limit = 3) {
+    let insertIndex = nearestLocations.length;
+    while (insertIndex > 0 && candidate.distanceCm < nearestLocations[insertIndex - 1].distanceCm) {
+      insertIndex -= 1;
+    }
+    if (insertIndex >= limit) {
+      return;
+    }
+    nearestLocations.splice(insertIndex, 0, candidate);
+    if (nearestLocations.length > limit) {
+      nearestLocations.length = limit;
+    }
+  }
+  function nearestLocationsForAnchor(anchor, locations, locale) {
+    if (!anchor) {
+      return [];
+    }
+    const nearestLocations = [];
+    for (const location of locations) {
+      if (location.id === anchor.locationId) {
+        continue;
+      }
       const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
-      return {
+      if (distanceCm == null) {
+        continue;
+      }
+      insertNearestLocation(nearestLocations, {
         id: location.id,
         name: location.name || location.id,
         distanceCm,
         distanceLabel: formatPhysicalDistanceCm2(distanceCm, locale),
         radiusCm: locationRadiusCm(location),
         radiusLabel: formatPhysicalDistanceCm2(locationRadiusCm(location), locale)
-      };
-    }).filter((location) => location.distanceCm != null).sort((left, right) => left.distanceCm - right.distanceCm).slice(0, 3) : [];
+      });
+    }
+    return nearestLocations;
+  }
+  function buildWorldScaleSurface2(locale = state2.uiLocale) {
+    const isZh = isLocaleZh2(locale);
+    const space = snapshotSpaceConfig();
+    const anchor = selectedWorldAnchor();
+    const locations = Object.values(state2.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos);
+    const nearestLocations = nearestLocationsForAnchor(anchor, locations, locale);
     const physicalTruth = {
       canonicalUnitLabel: formatPhysicalDistanceCm2(1, locale),
       canonicalUnitDetail: isZh ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。" : "World positions, distances, radii, and sizes are stored as integer centimeters.",
