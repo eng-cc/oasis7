@@ -624,6 +624,81 @@ fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
 }
 
 #[test]
+fn refresh_peer_manager_healths_uses_peer_id_order_for_constrained_pending_peers() {
+    let first_key = Keypair::generate_ed25519();
+    let second_key = Keypair::generate_ed25519();
+    let first_peer = PeerId::from(first_key.public());
+    let second_peer = PeerId::from(second_key.public());
+    let admitted_peer = first_peer.min(second_peer);
+    let blocked_peer = first_peer.max(second_peer);
+    let discovery_sources = vec![
+        crate::dht::PeerDiscoverySource::Dht,
+        crate::dht::PeerDiscoverySource::Rendezvous,
+    ];
+    let discovered_peer_records = HashMap::from([
+        (
+            first_peer,
+            signed_discovery_peer_record(&first_key, discovery_sources.clone(), 1),
+        ),
+        (
+            second_peer,
+            signed_discovery_peer_record(&second_key, discovery_sources, 2),
+        ),
+    ]);
+    let active_transport_paths = HashMap::from([
+        (
+            first_peer,
+            active_transport_path_from_endpoint(
+                &HashMap::new(),
+                first_peer,
+                &"/ip4/10.0.0.1/udp/4103/quic-v1"
+                    .parse()
+                    .expect("first endpoint"),
+            ),
+        ),
+        (
+            second_peer,
+            active_transport_path_from_endpoint(
+                &HashMap::new(),
+                second_peer,
+                &"/ip4/10.0.0.2/udp/4104/quic-v1"
+                    .parse()
+                    .expect("second endpoint"),
+            ),
+        ),
+    ]);
+    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
+    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+
+    let (healths, quarantined, admitted) = refresh_peer_manager_healths(
+        &discovered_peer_records,
+        &active_transport_paths,
+        &HashSet::new(),
+        &PeerManagerPolicy {
+            min_active_discovery_sources: 0,
+            max_ipv4_subnet_active_peers: Some(1),
+            ..PeerManagerPolicy::default()
+        },
+        &event_peer_healths,
+        &event_block_artifacts,
+        &event_errors,
+        32,
+    );
+
+    assert_eq!(admitted, HashSet::from([admitted_peer]));
+    assert_eq!(quarantined, HashSet::from([blocked_peer]));
+    assert_eq!(
+        healths[&admitted_peer].status,
+        PeerManagerHealthStatus::Active
+    );
+    assert_eq!(
+        healths[&blocked_peer].status,
+        PeerManagerHealthStatus::Blocked
+    );
+}
+
+#[test]
 fn request_uses_swarm_connected_peers_when_snapshot_is_empty() {
     let deadline = || Instant::now() + Duration::from_secs(10);
     let listener = Libp2pNetwork::new(Libp2pNetworkConfig {
