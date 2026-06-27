@@ -226,3 +226,14 @@ Example:
 - Expected Result: Review range contains only current task files.
 - Actual Result: Passed by inspection; files are current task execution log/yaml, `crates/oasis7/src/simulator/kernel/observation.rs`, and `doc/engineering/project.md`.
 - Blocker / Next Action: Commit this review-evidence-only update and run `prepare-task-pr.sh`.
+
+## 2026-06-27 19:27:00 CST / tpm
+- 完成内容: Created GitHub PR and selected normal PR watch path.
+- 遗留事项: Need push this PR-purpose evidence, watch required checks/comments/review threads, fix blockers if any, merge, and cleanup.
+- Action: Ran `./scripts/prepare-task-pr.sh --create --json`.
+- Validation Command: `./scripts/prepare-task-pr.sh --create --json`
+- Expected Result: Branch is pushed and PR is created after pre-PR local role review passes.
+- Actual Result: Passed. Created PR https://github.com/eng-cc/oasis7/pull/704 on branch `task/engineering-code-execution-efficiency-next-8`; helper reported `rebase_required: false`, `behind_count: 0`, pre-PR local role review `passed`, and no missing semantic evidence.
+- PR Purpose Decision: normal_pr_ci_watch
+- PR Watch Scope: Continue watching GitHub required checks, mergeability, PR comments, and unresolved review threads. `REVIEW_REQUIRED` and `BEHIND` are informational only unless accompanied by failed checks, requested changes, conflicts, actionable comments, blocking unresolved threads, or an explicit branch-update requirement.
+- Blocker / Next Action: Commit/push this PR-purpose evidence, then check PR #704 checks/comments/review threads.
