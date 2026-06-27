@@ -37,3 +37,46 @@ Example:
 - Expected Result: Removed snapshot has no remaining exact path references and docs/task gates pass.
 - Actual Result: Pending implementation verification.
 - Blocker / Next Action: Apply minimal deletion patch and run verification.
+
+## 2026-06-27 22:50:00 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: delete `doc/engineering/prd-review/checklists/active-engineering.md`; replace exact path references with historical snapshot wording; update engineering project task/status trace; include task bootstrap evidence.
+- Review Package: `.pm/scratch/task_a66e81168faa4ae0ada01030bd992edd/review-packages/review-fd822e552..11d33a170.diff`
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Question: Confirm this is a bounded old-doc/old-semantics convergence change, does not weaken current engineering truth, preserves historical audit trace without retaining the obsolete path, and has sufficient verification evidence for PR readiness.
+- Evidence Available: `test ! -e doc/engineering/prd-review/checklists/active-engineering.md` exit 0; exact path `rg` exit 1 with no matches; `./scripts/doc-governance-check.sh` OK; `./scripts/pm/workflow-lint.sh --task-uid task_a66e81168faa4ae0ada01030bd992edd --phase current` OK; `git diff --check` OK.
+- Expected Return Contract: findings | no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
+- Slice Ledger: `.pm/scratch/task_a66e81168faa4ae0ada01030bd992edd/slice-ledger.jsonl`
+- Formal Sink: `.pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.execution.md`
+
+## 2026-06-27 22:58:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_a66e81168faa4ae0ada01030bd992edd
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-23
+- Source Branch: task/engineering-legacy-doc-semantics-deletion-next-23
+- Source Head: 11d33a170e5535ce4535ad47b76d767cda0b0690
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.execution.md`; `.pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.yaml`; `doc/core/reviews/round-003-reviewed-files.md`; `doc/core/reviews/round-004-audit-progress-log.md`; `doc/core/reviews/round-004-reviewed-files.md`; `doc/engineering/prd-review/checklists/active-engineering.md`; `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`; `doc/engineering/project.md`
+- Review Package: `.pm/scratch/task_a66e81168faa4ae0ada01030bd992edd/review-packages/review-fd822e552..11d33a170.diff`
+- Role Selection Basis: docs/governance deletion and old-semantics convergence requires repository_health_engineer; verification sufficiency claim requires qa_engineer; engineering truth/status semantics requires producer_system_designer.
+- Review Roles: repository_health_engineer, qa_engineer, producer_system_designer
+- Review Evidence: repository_health_engineer/Arendt: no_findings; scope/spec pass; repository health pass; residual risk low. qa_engineer/Volta: no_findings; scope/spec pass; evidence sufficient; no additional runtime/WASM/UI/integration/regression tests required; residual risk low. producer_system_designer/James: no_findings; scope/spec pass; no product/system commitment, acceptance, workflow ownership, or current engineering truth regression; residual risk low.
+- Review Verdicts: repository_health_engineer pass; qa_engineer pass; producer_system_designer pass.
+- Review Findings Disposition: no_findings
+- Finding Disposition Evidence: n/a; all involved-role slices returned no_findings.
+- Verification Matrix: deletion surface -> `test ! -e doc/engineering/prd-review/checklists/active-engineering.md` exit 0; exact-path convergence -> `rg -n -F "doc/engineering/prd-review/checklists/active-engineering.md" README.md doc scripts .agents .pm/tasks/*.yaml` exit 1 with no matches; doc governance -> `./scripts/doc-governance-check.sh` OK; task workflow -> `./scripts/pm/workflow-lint.sh --task-uid task_a66e81168faa4ae0ada01030bd992edd --phase current` OK; whitespace -> `git diff --check` OK.
+- Visual Evidence: n/a; docs/governance deletion only, no UI or visual surface.
+- WASM Evidence: n/a; no wasm/build/determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, rollback, or operator runbook surface changed.
+- LiveOps Evidence: n/a; no external messaging, release note, player promise, or community surface changed.
+- Residual Risk: Low. Historical per-row checklist details are no longer available through the deleted current path, but historical ledger entries retain the audit fact and current truth is routed to `doc/engineering/README.md`, `doc/engineering/prd.index.md`, and `doc/engineering/project.md`.
+- Slice Ledger: `.pm/scratch/task_a66e81168faa4ae0ada01030bd992edd/slice-ledger.jsonl`
+
+## 2026-06-27 22:49:00 CST / tpm
+- 完成内容: Fresh claim-ready passed via `./scripts/pm/claim-ready.sh --claim-type tests_passed --task-uid task_a66e81168faa4ae0ada01030bd992edd --verify-command './scripts/doc-governance-check.sh'`; closeout command `./scripts/pm/task-closeout.sh --role tpm --task-uid task_a66e81168faa4ae0ada01030bd992edd --verify-command './scripts/doc-governance-check.sh'` verified the task and moved the task file to `status: done`.
+- 遗留事项: Repo-wide `.pm lint` still fails on unrelated historical task execution-log debt after current task closeout; current task-local truth is verified and workflow-lint passes.
+- Action: Record closeout boundary and proceed to PR preparation without rewriting unrelated historical `.pm` debt.
+- Validation Command: `rg -n "status:|last_claim_type|last_verify_command|last_verified_at|last_verification_exit_code|last_verification_status|last_closed_at" .pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.yaml`; `./scripts/pm/workflow-lint.sh --task-uid task_a66e81168faa4ae0ada01030bd992edd --phase current`
+- Expected Result: Current task is done/verified with verification exit code 0, and task-local workflow lint passes.
+- Actual Result: `status: done`; `last_claim_type: task_complete`; `last_verify_command: ./scripts/doc-governance-check.sh`; `last_verification_exit_code: 0`; `last_verification_status: verified`; workflow-lint OK for `task_a66e81168faa4ae0ada01030bd992edd`.
+- Blocker / Next Action: No current-task blocker. Commit review/closeout evidence, then run `prepare-task-pr.sh --create`.
