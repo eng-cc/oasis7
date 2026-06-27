@@ -113,3 +113,34 @@ Example:
 - Expected Result: Required-tier PM smoke passes.
 - Actual Result: Passed.
 - Blocker / Next Action: Inspect diff and commit implementation.
+
+## 2026-06-27 16:01:13 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: social evidence journal lookup optimization; changed paths `.pm/roles/tpm/backlog/committed.yaml`, `.pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml`, `.pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.execution.md`, `crates/oasis7/src/simulator/kernel/social.rs`, `crates/oasis7/src/simulator/tests/social.rs`, `doc/engineering/project.md`.
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-13-20260627/.pm/scratch/task_972545edcaac4a9e8d5f01d6b877fc3d/review-packages/review-458ed286f..ea3398067.diff
+- Review Roles: runtime_engineer, gameplay_designer, qa_engineer, repository_health_engineer, producer_system_designer
+- Review Question: Confirm the optimization safely replaces per-evidence journal scans with the gapless event-id invariant, preserves social evidence rejection semantics and replay/persistence behavior, and has sufficient focused verification for PR readiness.
+- Evidence Available: `./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social`; `./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social_persist`; `env -u RUSTC_WRAPPER cargo fmt --all -- --check`; `git diff --check`; `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --phase current --task-uid task_972545edcaac4a9e8d5f01d6b877fc3d`; `./scripts/pm/required-tier-smoke.sh`.
+- Expected Return Contract: findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-next-code-performance-optimization-13-20260627/.pm/scratch/task_972545edcaac4a9e8d5f01d6b877fc3d/slice-ledger.jsonl
+- Formal Sink: .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.execution.md
+
+## 2026-06-27 16:12:09 CST / tpm
+- 完成内容: Addressed runtime_engineer P1 pre-PR finding.
+- 遗留事项: Regenerate review package and request targeted re-review for the updated runtime/persistence diff.
+- Action: Fix valid review finding.
+- Finding: `has_journal_event` relied on `event_id < next_event_id`, but `from_snapshot` did not validate persisted journal prefix ids or `snapshot.next_event_id`; malformed persisted state could pass social evidence membership without an actual journal event.
+- Disposition: addressed.
+- Fix Evidence:
+  - `crates/oasis7/src/simulator/kernel/persistence.rs` now validates restored journal event-id prefix continuity and `next_event_id` consistency in `from_snapshot` and `replay_from_snapshot`.
+  - `crates/oasis7/src/simulator/tests/persist.rs` now covers mismatched `next_event_id`, gapful `from_snapshot` journal ids, and gapful replay snapshot prefix ids.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 simulator::tests::persist
+- Expected Result: Persistence restore/replay regression tests pass.
+- Actual Result: Passed; 32 tests passed, 0 failed.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social
+- Expected Result: Social evidence/lifecycle tests still pass after restore validation fix.
+- Actual Result: Passed; 8 tests passed, 0 failed.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 simulator::tests::social_persist
+- Expected Result: Social replay/persistence tests still pass.
+- Actual Result: Passed; 3 tests passed, 0 failed.
+- Blocker / Next Action: Commit review fix and request targeted runtime/QA/repository-health re-review.
