@@ -33,8 +33,9 @@ fn count_exceeds_limit(count: usize, limit: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::state::ModuleInstanceState;
     use crate::runtime::{
-        ModuleAbiContract, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
+        ModuleAbiContract, ModuleRecord, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
     };
 
     fn manifest_with_subscription(wasm_hash: &str, event_kind: &str) -> ModuleManifest {
@@ -60,6 +61,50 @@ mod tests {
         }
     }
 
+    fn tick_manifest(module_id: &str, wasm_hash: &str) -> ModuleManifest {
+        ModuleManifest {
+            module_id: module_id.to_string(),
+            name: "TickModule".to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role: ModuleRole::Domain,
+            wasm_hash: wasm_hash.to_string(),
+            interface_version: "wasm-1".to_string(),
+            abi_contract: ModuleAbiContract::default(),
+            exports: vec!["reduce".to_string()],
+            subscriptions: vec![ModuleSubscription {
+                event_kinds: Vec::new(),
+                action_kinds: Vec::new(),
+                stage: Some(ModuleSubscriptionStage::Tick),
+                filters: None,
+            }],
+            required_caps: Vec::new(),
+            artifact_identity: None,
+            limits: ModuleLimits::unbounded(),
+        }
+    }
+
+    #[derive(Default)]
+    struct CountingSandbox {
+        calls: usize,
+    }
+
+    impl ModuleSandbox for CountingSandbox {
+        fn call(
+            &mut self,
+            _request: &ModuleCallRequest,
+        ) -> Result<ModuleOutput, ModuleCallFailure> {
+            self.calls += 1;
+            Ok(ModuleOutput {
+                new_state: None,
+                effects: Vec::new(),
+                emits: Vec::new(),
+                tick_lifecycle: None,
+                output_bytes: 0,
+            })
+        }
+    }
+
     #[test]
     fn prepared_subscription_cache_key_tracks_manifest_identity() {
         let base = manifest_with_subscription("hash-a", "world.tick");
@@ -75,6 +120,144 @@ mod tests {
             base_key,
             prepared_subscription_cache_key(&changed_subscription).expect("subscription key")
         );
+    }
+
+    #[test]
+    fn active_module_invocation_for_id_resolves_due_instance_only() {
+        let due_manifest = manifest_with_subscription("hash-due", "world.tick");
+        let other_manifest = manifest_with_subscription("hash-other", "world.tick");
+        let mut world = World::new();
+        world.state.module_instances.insert(
+            "inst-due".to_string(),
+            ModuleInstanceState {
+                instance_id: "inst-due".to_string(),
+                module_id: "m.due".to_string(),
+                module_version: "0.1.0".to_string(),
+                wasm_hash: "hash-due".to_string(),
+                owner_agent_id: "owner".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at: 1,
+            },
+        );
+        world.state.module_instances.insert(
+            "inst-other".to_string(),
+            ModuleInstanceState {
+                instance_id: "inst-other".to_string(),
+                module_id: "m.other".to_string(),
+                module_version: "0.1.0".to_string(),
+                wasm_hash: "hash-other".to_string(),
+                owner_agent_id: "owner".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at: 1,
+            },
+        );
+        world.module_registry.records.insert(
+            ModuleRegistry::record_key("m.due", "0.1.0"),
+            ModuleRecord {
+                manifest: due_manifest,
+                registered_at: 1,
+                registered_by: "owner".to_string(),
+                audit_event_id: None,
+            },
+        );
+        world.module_registry.records.insert(
+            ModuleRegistry::record_key("m.other", "0.1.0"),
+            ModuleRecord {
+                manifest: other_manifest,
+                registered_at: 1,
+                registered_by: "owner".to_string(),
+                audit_event_id: None,
+            },
+        );
+
+        let invocation = world
+            .active_module_invocation_for_id("inst-due")
+            .expect("lookup succeeds")
+            .expect("due invocation");
+        assert_eq!(invocation.instance_id, "inst-due");
+        assert_eq!(invocation.module_id, "m.due");
+    }
+
+    #[test]
+    fn active_module_invocation_for_id_errors_only_for_referenced_missing_record() {
+        let mut world = World::new();
+        world.state.module_instances.insert(
+            "inst-due".to_string(),
+            ModuleInstanceState {
+                instance_id: "inst-due".to_string(),
+                module_id: "m.due".to_string(),
+                module_version: "0.1.0".to_string(),
+                wasm_hash: "hash-due".to_string(),
+                owner_agent_id: "owner".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at: 1,
+            },
+        );
+
+        let err = world
+            .active_module_invocation_for_id("inst-due")
+            .expect_err("due missing record errors");
+        assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+
+        assert!(
+            world
+                .active_module_invocation_for_id("not-scheduled")
+                .expect("unreferenced missing invocation skips")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn route_tick_to_modules_keeps_schedule_when_due_record_is_missing() {
+        let mut world = World::new();
+        world.state.time = 7;
+        let wasm_bytes = b"due-tick-module";
+        let wasm_hash = crate::runtime::util::sha256_hex(wasm_bytes);
+        world
+            .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+            .expect("register artifact");
+        world.state.module_instances.insert(
+            "inst-due".to_string(),
+            ModuleInstanceState {
+                instance_id: "inst-due".to_string(),
+                module_id: "m.due".to_string(),
+                module_version: "0.1.0".to_string(),
+                wasm_hash: wasm_hash.clone(),
+                owner_agent_id: "owner".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at: 1,
+            },
+        );
+        world.module_tick_schedule.insert("inst-due".to_string(), 1);
+
+        let err = world
+            .route_tick_to_modules(&mut CountingSandbox::default())
+            .expect_err("due missing record errors");
+        assert!(matches!(err, WorldError::ModuleChangeInvalid { .. }));
+        assert_eq!(world.module_tick_schedule.get("inst-due"), Some(&1));
+
+        world.module_registry.records.insert(
+            ModuleRegistry::record_key("m.due", "0.1.0"),
+            ModuleRecord {
+                manifest: tick_manifest("m.due", &wasm_hash),
+                registered_at: 1,
+                registered_by: "owner".to_string(),
+                audit_event_id: None,
+            },
+        );
+        let mut sandbox = CountingSandbox::default();
+        assert_eq!(
+            world
+                .route_tick_to_modules(&mut sandbox)
+                .expect("due invocation runs after record is restored"),
+            1
+        );
+        assert_eq!(sandbox.calls, 1);
+        assert_eq!(world.module_tick_schedule.get("inst-due"), None);
     }
 }
 
@@ -306,6 +489,59 @@ impl World {
 
         invocations.sort_by(|left, right| left.instance_id.cmp(&right.instance_id));
         Ok(invocations)
+    }
+
+    pub(super) fn active_module_invocation_for_id(
+        &self,
+        invocation_id: &str,
+    ) -> Result<Option<ActiveModuleInvocation>, WorldError> {
+        if let Some(instance) = self.state.module_instances.get(invocation_id) {
+            if !instance.active {
+                return Ok(None);
+            }
+            let key = ModuleRegistry::record_key(&instance.module_id, &instance.module_version);
+            let record = self.module_registry.records.get(&key).ok_or_else(|| {
+                WorldError::ModuleChangeInvalid {
+                    reason: format!("module record missing {key}"),
+                }
+            })?;
+            return Ok(Some(ActiveModuleInvocation {
+                instance_id: instance.instance_id.clone(),
+                module_id: instance.module_id.clone(),
+                install_target: instance.install_target.clone(),
+                manifest: record.manifest.clone(),
+            }));
+        }
+
+        if self
+            .state
+            .module_instances
+            .values()
+            .any(|instance| instance.module_id == invocation_id)
+        {
+            return Ok(None);
+        }
+
+        let Some(version) = self.module_registry.active.get(invocation_id) else {
+            return Ok(None);
+        };
+        let key = ModuleRegistry::record_key(invocation_id, version);
+        let record = self.module_registry.records.get(&key).ok_or_else(|| {
+            WorldError::ModuleChangeInvalid {
+                reason: format!("module record missing {key}"),
+            }
+        })?;
+        Ok(Some(ActiveModuleInvocation {
+            instance_id: invocation_id.to_string(),
+            module_id: invocation_id.to_string(),
+            install_target: self
+                .state
+                .installed_module_targets
+                .get(invocation_id)
+                .cloned()
+                .unwrap_or(ModuleInstallTarget::SelfAgent),
+            manifest: record.manifest.clone(),
+        }))
     }
 
     pub fn route_event_to_modules(
