@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use super::distributed_dht::ProviderRecord;
 
@@ -79,36 +79,31 @@ impl ProviderSelectionPolicy {
     }
 
     pub fn rank_providers(&self, providers: &[ProviderRecord], now_ms: i64) -> Vec<ProviderRecord> {
-        let mut scored: Vec<(ProviderRecord, f64)> = providers
-            .iter()
-            .cloned()
-            .map(|provider| {
-                let score = self.score_provider(&provider, now_ms);
-                (provider, score)
-            })
-            .collect();
-        scored.sort_by(
-            |(left_provider, left_score), (right_provider, right_score)| {
-                right_score
-                    .partial_cmp(left_score)
-                    .unwrap_or(Ordering::Equal)
-                    .then_with(|| right_provider.last_seen_ms.cmp(&left_provider.last_seen_ms))
-                    .then_with(|| left_provider.provider_id.cmp(&right_provider.provider_id))
-            },
-        );
-
-        let mut deduplicated = Vec::with_capacity(scored.len());
-        let mut seen = HashSet::new();
-        for (provider, _) in scored {
-            if !seen.insert(provider.provider_id.clone()) {
-                continue;
-            }
-            deduplicated.push(provider);
-            if self.max_candidates > 0 && deduplicated.len() >= self.max_candidates {
-                break;
-            }
+        let mut best_by_provider_id: HashMap<String, (ProviderRecord, f64)> = HashMap::new();
+        for provider in providers {
+            let score = self.score_provider(provider, now_ms);
+            best_by_provider_id
+                .entry(provider.provider_id.clone())
+                .and_modify(|existing| {
+                    if compare_scored_provider(provider, score, &existing.0, existing.1)
+                        == Ordering::Less
+                    {
+                        *existing = (provider.clone(), score);
+                    }
+                })
+                .or_insert_with(|| (provider.clone(), score));
         }
-        deduplicated
+
+        let mut ranked = best_by_provider_id.into_values().collect::<Vec<_>>();
+        if self.max_candidates > 0 && ranked.len() > self.max_candidates {
+            ranked.select_nth_unstable_by(self.max_candidates, compare_scored_provider_tuple);
+            ranked.truncate(self.max_candidates);
+        }
+        ranked.sort_by(compare_scored_provider_tuple);
+        ranked
+            .into_iter()
+            .map(|(provider, _)| provider)
+            .collect::<Vec<_>>()
     }
 
     fn freshness_score(&self, last_seen_ms: i64, now_ms: i64) -> f64 {
@@ -121,6 +116,26 @@ impl ProviderSelectionPolicy {
         }
         clamp01(1.0 - (age_ms as f64 / self.freshness_ttl_ms as f64))
     }
+}
+
+fn compare_scored_provider_tuple(
+    (left_provider, left_score): &(ProviderRecord, f64),
+    (right_provider, right_score): &(ProviderRecord, f64),
+) -> Ordering {
+    compare_scored_provider(left_provider, *left_score, right_provider, *right_score)
+}
+
+fn compare_scored_provider(
+    left_provider: &ProviderRecord,
+    left_score: f64,
+    right_provider: &ProviderRecord,
+    right_score: f64,
+) -> Ordering {
+    right_score
+        .partial_cmp(&left_score)
+        .unwrap_or(Ordering::Equal)
+        .then_with(|| right_provider.last_seen_ms.cmp(&left_provider.last_seen_ms))
+        .then_with(|| left_provider.provider_id.cmp(&right_provider.provider_id))
 }
 
 fn normalize_ratio_per_mille(ratio: u16) -> f64 {
@@ -208,5 +223,72 @@ mod tests {
         assert!(fresh_score.is_finite());
         assert!(stale_score.is_finite());
         assert!(fresh_score > stale_score);
+    }
+
+    #[test]
+    fn rank_providers_preserves_dedupe_tie_breaks_and_candidate_limit() {
+        let now_ms = 20_000;
+        let policy = ProviderSelectionPolicy {
+            max_candidates: 3,
+            ..ProviderSelectionPolicy::default()
+        };
+
+        let mut peer_a_old = provider("peer-a", 19_000);
+        peer_a_old.storage_total_bytes = Some(100);
+        peer_a_old.storage_available_bytes = Some(80);
+
+        let mut peer_a_best = provider("peer-a", 19_900);
+        peer_a_best.storage_total_bytes = Some(100);
+        peer_a_best.storage_available_bytes = Some(90);
+
+        let mut peer_b = provider("peer-b", 19_900);
+        peer_b.storage_total_bytes = Some(100);
+        peer_b.storage_available_bytes = Some(90);
+
+        let mut peer_c = provider("peer-c", 19_800);
+        peer_c.storage_total_bytes = Some(100);
+        peer_c.storage_available_bytes = Some(90);
+
+        let mut peer_d = provider("peer-d", 19_700);
+        peer_d.storage_total_bytes = Some(100);
+        peer_d.storage_available_bytes = Some(90);
+
+        let ranked =
+            policy.rank_providers(&[peer_d, peer_a_old, peer_c, peer_b, peer_a_best], now_ms);
+
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|provider| provider.provider_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["peer-a", "peer-b", "peer-c"]
+        );
+        assert_eq!(ranked[0].last_seen_ms, 19_900);
+    }
+
+    #[test]
+    fn rank_providers_zero_candidate_limit_keeps_all_unique_providers() {
+        let now_ms = 10_000;
+        let policy = ProviderSelectionPolicy {
+            max_candidates: 0,
+            ..ProviderSelectionPolicy::default()
+        };
+
+        let ranked = policy.rank_providers(
+            &[
+                provider("peer-c", 9_700),
+                provider("peer-a", 9_900),
+                provider("peer-b", 9_800),
+            ],
+            now_ms,
+        );
+
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|provider| provider.provider_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["peer-a", "peer-b", "peer-c"]
+        );
     }
 }
