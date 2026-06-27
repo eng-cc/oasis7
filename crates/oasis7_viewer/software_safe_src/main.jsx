@@ -1186,6 +1186,24 @@ function WorldStageHero() {
       targetAgentId: null,
       disabledReason: null,
     };
+  const primaryActionContext = () =>
+    gameplaySummary()?.recommendedAction?.label
+    || gameplaySummary()?.narrativeNextStep
+    || gameplaySummary()?.nextStepHint
+    || gameplaySummary()?.objective
+    || "";
+  const primaryRefreshLabel = () => {
+    const context = primaryActionContext();
+    return context
+      ? tr(locale(), `刷新快照，确认：${context}`, `Refresh Snapshot to verify: ${context}`)
+      : tr(locale(), "刷新快照，确认当前玩法状态", "Refresh Snapshot to verify the current gameplay state");
+  };
+  const primaryStepLabel = () => {
+    const context = primaryActionContext();
+    return context
+      ? tr(locale(), `推进一步，尝试：${context}`, `Advance One Step toward: ${context}`)
+      : tr(locale(), "推进一步，尝试当前下一步", "Advance One Step toward the current next move");
+  };
 
   return (
     <div class="stage-hero stage-hero--compact" data-stage-state={gameplaySummary()?.blockerKind || "ready"}>
@@ -1256,6 +1274,7 @@ function WorldStageHero() {
         <button
           type="button"
           data-testid="viewer-playthrough-action-request-snapshot"
+          aria-label={primaryRefreshLabel()}
           onClick={() => renderGameplayAction(refreshSnapshotAction())}
         >
           {tr(locale(), "刷新快照", "Refresh Snapshot")}
@@ -1263,10 +1282,16 @@ function WorldStageHero() {
         <button
           type="button"
           data-testid="viewer-playthrough-action-step"
+          aria-label={primaryStepLabel()}
           onClick={() => core.sendControl("step", { count: 1 })}
         >
           {tr(locale(), "推进一步", "Advance One Step")}
         </button>
+      </div>
+      <div class="feedback-detail" data-testid="viewer-primary-action-preview">
+        {primaryActionContext()
+          ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`)
+          : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.")}
       </div>
       <Show when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}>
         <EmptyEntityRecoveryCard
@@ -1492,7 +1517,7 @@ function WorldSummaryPanel() {
   ];
 
   return (
-    <details class="gameplay-details-surface" id="viewer-gameplay-details">
+    <details class="gameplay-details-surface" id="viewer-gameplay-details" open>
       <summary class="gameplay-details-surface__summary">
         <div class="diagnostic-surface__title">
           <span>{tr(locale(), "玩法明细", "Gameplay Details")}</span>

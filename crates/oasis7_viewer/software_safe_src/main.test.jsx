@@ -523,7 +523,8 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName("Advance One Step");
+    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
+    expect(screen.getByTestId("viewer-primary-action-preview")).toHaveTextContent(/Recommended context: Advance recovery proof/);
     expect(within(stagePanel).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -553,7 +554,7 @@ describe("viewer web ui automation baseline", () => {
       "data-testid",
       "viewer-playthrough-action-recommended",
     );
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName("Refresh Snapshot");
+    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Request snapshot/);
     expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -583,8 +584,8 @@ describe("viewer web ui automation baseline", () => {
 
     expect(screen.getByTestId("viewer-playthrough-select-agent")).toHaveAccessibleName(/agent/i);
     expect(screen.getByTestId("viewer-playthrough-action-recommended")).toHaveAccessibleName("Advance One Step");
-    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName("Advance One Step");
-    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName("Refresh Snapshot");
+    expect(screen.getByTestId("viewer-playthrough-action-step")).toHaveAccessibleName(/Advance One Step toward: Advance recovery proof/);
+    expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Advance recovery proof/);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders claim-agent quote and owned claim guidance without inventing claim controls", async () => {
@@ -1373,7 +1374,7 @@ describe("viewer web ui automation baseline", () => {
     expect(window.__OASIS7_VIEWER_VISUAL_FIXTURES__).toBeUndefined();
     expect(container).not.toHaveAttribute("data-viewer-visual-fixture");
     expect(document.body).not.toHaveAttribute("data-viewer-visual-fixture");
-    expect(container.querySelector("#viewer-gameplay-details")).not.toHaveAttribute("open");
+    expect(container.querySelector("#viewer-gameplay-details")).toHaveAttribute("open");
     expect(container.querySelector("#viewer-diagnostics-panel")).not.toHaveAttribute("open");
     expect(elementPrecedes(
       container.querySelector(".stage-hero"),

@@ -475,8 +475,8 @@ run_click_beat "1-3m" "first_control_proof" \
 run_click_beat "3-5m" "first_consequence_read" \
   "click visible refresh-snapshot control after first step" \
   "viewer-playthrough-action-request-snapshot" \
-  "Control Proof and Attraction Proof expose consequence/what-I-caused fields" \
-  "(() => { const g = window.__AW_TEST__?.getState?.()?.gameplaySummary || {}; return !!g.controlProof?.consequence && !!g.attractionProof?.whatICaused && !!g.attractionProof?.whyContinue; })()" \
+  "Control Proof and Attraction Proof expose visible consequence/what-I-caused fields" \
+  "(() => { const g = window.__AW_TEST__?.getState?.()?.gameplaySummary || {}; const details = document.querySelector('#viewer-gameplay-details'); const text = details?.innerText || ''; const hasControlProof = text.includes('Control Proof') || text.includes('控制证明'); const hasAttractionProof = text.includes('Attraction Proof') || text.includes('吸引力证明'); return details?.open === true && hasControlProof && hasAttractionProof && !!g.controlProof?.consequence && !!g.attractionProof?.whatICaused && !!g.attractionProof?.whyContinue; })()" \
   || overall_status="fail"
 
 run_click_beat "5-7m" "first_choice_hook" \
