@@ -51,6 +51,7 @@ WASM_BUILDER_IMAGE="$(wasm_env_or_default BUILDER_IMAGE "$DEFAULT_BUILDER_IMAGE"
 WASM_BUILDER_IMAGE_DIGEST="$(wasm_env_or_default BUILDER_IMAGE_DIGEST "$DEFAULT_BUILDER_IMAGE_DIGEST")"
 WASM_BUILDER_DOCKERFILE="$(wasm_env_or_default BUILDER_DOCKERFILE "$DEFAULT_BUILDER_DOCKERFILE")"
 WASM_BUILDER_AUTO_BUILD="$(wasm_env_or_default BUILDER_AUTO_BUILD "1")"
+WASM_BUILDER_ALLOW_IMAGE_ID_MISMATCH="$(wasm_env_or_default BUILDER_ALLOW_IMAGE_ID_MISMATCH "0")"
 WASM_BUILD_SUITE_BIN="$(wasm_env_or_default BUILD_SUITE_BIN "")"
 WASM_CANONICALIZER_VERSION="$(wasm_env_or_default CANONICALIZER_VERSION "$DEFAULT_CANONICALIZER_VERSION")"
 
@@ -388,6 +389,11 @@ ensure_builder_image() {
     if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
       echo "error: configured builder image does not match OASIS7_WASM_BUILDER_IMAGE_DIGEST" >&2
       exit 1
+    fi
+
+    if is_truthy "$WASM_BUILDER_ALLOW_IMAGE_ID_MISMATCH"; then
+      echo "warning: reusing canonical builder image despite Docker image-id variance" >&2
+      return 0
     fi
 
     if ! is_truthy "$WASM_BUILDER_AUTO_BUILD"; then
