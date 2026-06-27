@@ -106,3 +106,12 @@ Example:
 - Expected Result: focused same-directory stale filename scan returns no matches; exact deleted path search returns no matches; deleted shell absent; canonical manual present; diff whitespace OK; doc governance OK; workflow current-phase lint OK; claim-ready allows ready_for_pr.
 - Actual Result: PASS. Focused fragment `rg` returned no matches; exact stale path `rg` returned no matches; deleted-file and canonical-file checks passed; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`; `claim-ready` reported `status: verified`, `allowed_to_claim: true`.
 - Blocker / Next Action: Run task closeout and prepare PR.
+
+## 2026-06-27 12:17:00 CST / tpm
+- 完成内容: Ran task closeout helper and recorded its boundary.
+- 遗留事项: Repo-wide `.pm` lint still has unrelated historical execution-log debt outside this task; this task's scoped doc governance, workflow current-phase lint, ready-for-PR claim, and closeout verification succeeded.
+- Action: `./scripts/pm/task-closeout.sh --role tpm --task-uid task_50fe2af50edf479db290e6fae0a215f8 --verify-command "./scripts/doc-governance-check.sh"`
+- Validation Command: closeout helper with `./scripts/doc-governance-check.sh` verification.
+- Expected Result: current task marked complete if verification passes; any repo-wide historical lint debt remains attributed separately.
+- Actual Result: helper recorded `last_verification_status: verified`, `last_verification_exit_code: 0`, and moved the task to `done`; final helper exit was non-zero because repo-wide `pm-lint` reported pre-existing failures in many unrelated `.pm/tasks/*.execution.md` files, beginning with `task_04d61dc5778e4b1683a61056daf454e3` and `task_060e9de147ba4757ac29cf0fb7a15210`.
+- Blocker / Next Action: Treat repo-wide `.pm` historical debt as out of scope for this focused doc deletion task; proceed to PR preparation with the current task's scoped gates and review packet.
