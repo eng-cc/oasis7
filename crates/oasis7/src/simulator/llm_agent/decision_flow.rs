@@ -270,14 +270,20 @@ pub(super) struct ExecuteUntilCondition {
     pub value_lte: Option<i64>,
 }
 
-impl ExecuteUntilCondition {
-    pub(super) fn summary(&self) -> String {
-        if let Some(value_lte) = self.value_lte {
-            format!("{}<= {}", self.kind.as_str(), value_lte)
-        } else {
-            self.kind.as_str().to_string()
+pub(super) fn summarize_execute_until_conditions(conditions: &[ExecuteUntilCondition]) -> String {
+    use std::fmt::Write as _;
+
+    let mut summary = String::new();
+    for condition in conditions {
+        if !summary.is_empty() {
+            summary.push('|');
+        }
+        summary.push_str(condition.kind.as_str());
+        if let Some(value_lte) = condition.value_lte {
+            let _ = write!(summary, "<= {value_lte}");
         }
     }
+    summary
 }
 
 #[derive(Debug, Clone)]

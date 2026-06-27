@@ -491,6 +491,17 @@ pub(super) fn completion_turn_to_trace_json(turn: &LlmCompletionTurn) -> String 
     }
 }
 
+fn completion_turns_trace_output(turns: &[LlmCompletionTurn]) -> String {
+    let mut output = String::new();
+    for turn in turns {
+        if !output.is_empty() {
+            output.push('\n');
+        }
+        output.push_str(&completion_turn_to_trace_json(turn));
+    }
+    output
+}
+
 pub(super) fn completion_result_from_sdk_response(
     response: Response,
 ) -> Result<LlmCompletionResult, LlmClientError> {
@@ -499,11 +510,7 @@ pub(super) fn completion_result_from_sdk_response(
         .iter()
         .filter_map(output_item_to_completion_turn)
         .collect::<Vec<_>>();
-    let output = turns
-        .iter()
-        .map(completion_turn_to_trace_json)
-        .collect::<Vec<_>>()
-        .join("\n");
+    let output = completion_turns_trace_output(&turns);
 
     if output.trim().is_empty() {
         return Err(LlmClientError::EmptyChoice);

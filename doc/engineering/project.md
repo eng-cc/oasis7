@@ -8,6 +8,8 @@
 
 - [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml
 
+- [x] code-execution-efficiency-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Apply low-risk Rust code execution efficiency improvements across prompt/memory assembly, mempool selection, feedback/provider ordering, DHT progress payloads, and transfer latency summarization while preserving runtime/product semantics. Trace: .pm/tasks/task_c85925c7cfed4946b461883d94aa35be.yaml
+
 - [x] provider-distribution-borrowed-id-audit-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize provider distribution audit to dedupe per-hash provider ids by borrowed references and allocate provider ids only for global coverage entries, preserving insufficient-replica and full-coverage rejection semantics. Trace: .pm/tasks/task_92b8563352b84e80969a3305aeb464f7.yaml
 
 - [x] libp2p-peer-health-pending-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize libp2p peer health refresh to sort pending active `PeerId`s directly instead of allocating `String` sort keys, preserving deterministic admission order semantics. Trace: .pm/tasks/task_a7b607e4bf1a4392b8ad62297b726d55.yaml

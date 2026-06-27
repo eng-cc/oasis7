@@ -106,7 +106,7 @@ enum MembershipDirectorySignerKind {
         key: Vec<u8>,
     },
     Ed25519 {
-        signing_key: SigningKey,
+        signing_key: Box<SigningKey>,
         public_key_hex: String,
     },
 }
@@ -130,7 +130,7 @@ impl MembershipDirectorySigner {
         }
         Ok(Self {
             kind: MembershipDirectorySignerKind::Ed25519 {
-                signing_key,
+                signing_key: Box::new(signing_key),
                 public_key_hex: public_key_hex.to_string(),
             },
         })

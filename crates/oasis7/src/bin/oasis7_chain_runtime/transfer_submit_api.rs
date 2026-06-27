@@ -365,7 +365,7 @@ impl TransferTracker {
             })
             .filter_map(|item| nonnegative_elapsed_ms(now_ms, item.submitted_at_unix_ms))
             .max();
-        let mut confirmed_latencies = self
+        let confirmed_latencies = self
             .by_action_id
             .values()
             .filter(|item| {
@@ -377,7 +377,6 @@ impl TransferTracker {
                     .saturating_sub(item.submitted_at_unix_ms)
             })
             .collect::<Vec<_>>();
-        confirmed_latencies.sort_unstable();
         let inflight_count = counters.accepted.saturating_add(counters.pending);
         ChainTransferMetricsStatus {
             tracked_records: counters.total,

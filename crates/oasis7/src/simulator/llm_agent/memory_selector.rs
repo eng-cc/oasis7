@@ -73,20 +73,7 @@ impl MemorySelector {
         let digest = if selected.is_empty() {
             "No relevant memory selected.".to_string()
         } else {
-            selected
-                .iter()
-                .map(|item| {
-                    let source = match item.source {
-                        MemorySource::ShortTerm => "ST",
-                        MemorySource::LongTerm => "LT",
-                    };
-                    format!(
-                        "[{}][T{}][score={:.2}] {}",
-                        source, item.timestamp, item.score, item.content
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
+            selected_memory_digest(&selected)
         };
 
         MemorySelectorResult {
@@ -95,6 +82,27 @@ impl MemorySelector {
             selected_total,
         }
     }
+}
+
+fn selected_memory_digest(selected: &[ScoredMemory]) -> String {
+    use std::fmt::Write as _;
+
+    let mut digest = String::new();
+    for item in selected {
+        if !digest.is_empty() {
+            digest.push('\n');
+        }
+        let source = match item.source {
+            MemorySource::ShortTerm => "ST",
+            MemorySource::LongTerm => "LT",
+        };
+        let _ = write!(
+            digest,
+            "[{}][T{}][score={:.2}] {}",
+            source, item.timestamp, item.score, item.content
+        );
+    }
+    digest
 }
 
 fn collect_short_term_candidates(

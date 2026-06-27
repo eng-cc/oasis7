@@ -460,12 +460,9 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
 
                                     turn_output_summary = format!(
                                         "execute_until events={} max_ticks={}",
-                                        guarded_directive
-                                            .until_conditions
-                                            .iter()
-                                            .map(|condition| condition.summary())
-                                            .collect::<Vec<_>>()
-                                            .join("|"),
+                                        summarize_execute_until_conditions(
+                                            &guarded_directive.until_conditions
+                                        ),
                                         guarded_directive.max_ticks
                                     );
 

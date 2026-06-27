@@ -934,20 +934,12 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
 
         let rewritten_action_label = Self::action_label_for_rewrite(&directive.action);
         if original_action_label != rewritten_action_label {
-            let previous_until_summary = directive
-                .until_conditions
-                .iter()
-                .map(ExecuteUntilCondition::summary)
-                .collect::<Vec<_>>()
-                .join("|");
+            let previous_until_summary =
+                summarize_execute_until_conditions(&directive.until_conditions);
             directive.until_conditions =
                 default_execute_until_conditions_for_action(&directive.action);
-            let rebuilt_until_summary = directive
-                .until_conditions
-                .iter()
-                .map(ExecuteUntilCondition::summary)
-                .collect::<Vec<_>>()
-                .join("|");
+            let rebuilt_until_summary =
+                summarize_execute_until_conditions(&directive.until_conditions);
             notes.push(format!(
                 "execute_until.until rebuilt after action guardrail rewrite: action={} -> {}; until={} -> {}",
                 original_action_label, rewritten_action_label, previous_until_summary, rebuilt_until_summary

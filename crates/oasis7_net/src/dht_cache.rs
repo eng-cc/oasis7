@@ -100,7 +100,7 @@ impl CachedDht {
         if self.config.max_providers_per_content == 0 {
             return providers;
         }
-        providers.sort_by(|a, b| b.last_seen_ms.cmp(&a.last_seen_ms));
+        providers.sort_by_key(|provider| std::cmp::Reverse(provider.last_seen_ms));
         providers.truncate(self.config.max_providers_per_content);
         providers
     }
