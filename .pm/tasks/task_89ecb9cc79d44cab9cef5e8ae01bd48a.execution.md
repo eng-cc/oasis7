@@ -127,13 +127,13 @@ Example:
 - Task UID: task_89ecb9cc79d44cab9cef5e8ae01bd48a
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-11
 - Source Branch: task/engineering-legacy-doc-semantics-deletion-next-11
-- Source Head: 197c6531cac71e903190e0d84ad993301c964369
+- Source Head: 4343c5be1acc874f03205da8f0491387f7fad938
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml`; `.pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.execution.md`; `doc/.governance/doc-root-md-allowlist.txt`; `doc/README.md`; `doc/core/reviews/round-003-reviewed-files.md`; `doc/core/reviews/round-004-audit-progress-log.md`; `doc/core/reviews/round-004-reviewed-files.md`; `doc/engineering/project.md`; deleted `doc/playability_test_card.md`.
 - Review Package: `.pm/scratch/task_89ecb9cc79d44cab9cef5e8ae01bd48a/review-packages/review-origin-main..618d9a3b6.diff`
 - Slice Ledger: n/a; formal review evidence and subagent IDs are recorded in this execution log.
 - Role Selection Basis: final head only adds review evidence and closeout metadata after the reviewed implementation; no product/doc-governance implementation surface changed after review. `repository_health_engineer`, `qa_engineer`, and `producer_system_designer` remain the required/relevant roles.
-- Review Roles: `repository_health_engineer`; `qa_engineer`; `producer_system_designer`.
+- Review Roles: repository_health_engineer,qa_engineer,producer_system_designer
 - Review Evidence: repository health, QA, and producer/system review all returned `no_findings` for the implementation scope; subsequent commits only recorded review evidence and closeout metadata.
 - Review Verdicts: `repository_health_engineer`: no_findings; `qa_engineer`: no_findings; `producer_system_designer`: no_findings.
 - Residual Risk: low; external bookmarks to the deleted root shell no longer receive an in-repo redirect, but current repo reader journeys and scripts converge on canonical `doc/playability_test_result/playability_test_card.md`.
