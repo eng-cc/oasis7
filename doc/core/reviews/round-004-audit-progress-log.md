@@ -501,7 +501,7 @@
 | 2026-03-06 12:32:30 +0800 | codex | `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.prd.md` | pass | - | 性能方法论流程与门禁参数定义完整，未见 D4 命令可执行性问题。 |
 | 2026-03-06 12:32:57 +0800 | codex | `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.project.md` | pass | - | 项目任务与 stress 脚本接线一致，未发现 D4 新增问题。 |
 
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/viewer-manual.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | historical deleted root Viewer manual shell | pass | - | F4-002 补审覆盖：当时结构与口径未发现新增高/中风险；该历史根入口后续已删除。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-runtime.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-runtime.project.md` | issue_open | I4-008 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator.prd.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |

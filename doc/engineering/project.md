@@ -347,6 +347,7 @@
 - [x] game-test-root-design-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 game-test 根级 legacy design redirect 壳，将 root project 兼容壳与 review 索引引用收敛到 `playability_test_result` canonical 专题 design，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_c1ac55b06cd7455b9c92b914aa131026.yaml
 - [x] playability-manual-root-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 playability test manual 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛到 `playability_test_result` canonical manual，并同步收紧 root markdown allowlist。 Trace: .pm/tasks/task_21152e953bd14e4195a3f2ec3519a33b.yaml
 - [x] playability-card-root-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 playability test card 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛为非路径历史描述，并以 `playability_test_result` canonical card 作为唯一卡片入口。 Trace: .pm/tasks/task_89ecb9cc79d44cab9cef5e8ae01bd48a.yaml
+- [x] viewer-manual-root-redirect-fact-sync (PRD-ENGINEERING-021/025) [test_tier_required]: 删除仍残留的 Viewer manual 根级 legacy redirect 文件事实，将 root allowlist、README 示例、role inference 测试样例与历史 review exact path 收敛到 `viewer-manual.manual.md` canonical 手册语义。 Trace: .pm/tasks/task_f2825ab37494405fae7764c31a282d01.yaml
 
 ## File Structure / Affected Paths
 
@@ -414,7 +415,7 @@
 - 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `playability-card-root-redirect-deletion`（已删除 playability test card 根级 legacy redirect 壳，将当前入口唯一收敛到 `doc/playability_test_result/playability_test_card.md`。）
+- 最新完成: `viewer-manual-root-redirect-fact-sync`（已删除仍残留的 Viewer manual 根级 legacy redirect 文件事实，将当前入口唯一收敛到 `doc/world-simulator/viewer/viewer-manual.manual.md`。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
