@@ -30,7 +30,7 @@
 - historical playability_test_result PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-readme.md`
 - historical root legacy redirect checklist（后续已删除）
-- `doc/engineering/prd-review/checklists/active-scripts.md`
+- historical scripts PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-site.md`
 - `doc/engineering/prd-review/checklists/active-testing.md`
 - historical world-runtime PRD review checklist snapshot（后续已删除）
