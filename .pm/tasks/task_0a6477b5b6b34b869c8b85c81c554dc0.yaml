@@ -1,0 +1,27 @@
+task_uid: task_0a6477b5b6b34b869c8b85c81c554dc0
+title: "Set up local Darwin Docker self-hosted runner"
+owner_role: tpm
+module: chain-world-state-substrate
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-chain-world-state-substrate-setup-local-darwin-docker-runner
+execution_log_path: .pm/tasks/task_0a6477b5b6b34b869c8b85c81c554dc0.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+doc_refs:
+  - doc/world-runtime/project.md
+  - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md
+related_prd: []
+acceptance:
+  - "Local machine is registered as a Docker-capable Darwin ARM64 self-hosted GitHub Actions runner."
+  - "Wasm Darwin Docker Evidence workflow is triggered using labels self-hosted, macOS, ARM64, docker."
+handoff_to: []
+updated_at: 2026-06-27T18:56:05+08:00
+last_started_at: 2026-06-27T18:28:39+08:00
+last_claim_type: task_complete
+last_verify_command: "actionlint .github/workflows/wasm-darwin-docker-evidence.yml && ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/wasm-darwin-docker-evidence.yml\"); puts \"yaml ok\"' && bash -n scripts/build-wasm-module.sh && git diff --check"
+last_verified_at: 2026-06-27T18:56:04+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-27T18:56:05+08:00
