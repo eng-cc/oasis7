@@ -51,13 +51,12 @@ failures=0
 # Whitelist is keyed by project doc path to keep exemptions explicit and reviewable.
 readonly DESIGN_SECTION_EXEMPT_PROJECT_DOCS=(
   "doc/playability_test_result/game-test.project.md"
-  "doc/world-runtime.project.md"
   "doc/world-simulator.project.md"
 )
 readonly GRANDFATHERED_ADDED_PROJECT_TASK_ROWS=(
   "doc/engineering/project.md::- [x] TASK-ENGINEERING-115 (PRD-ENGINEERING-021) [test_tier_required]: 对齐根 \`AGENTS.md\`、角色职责卡与 handoff 模板的 \`.pm\` task 创建顺序、task execution log 口径与“一个 task 收口后再开下一 task”语义，清理当前态 \`doc/devlog\` 必写残留要求。"
-  "doc/engineering/project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006) [test_tier_required]: 完成 3 份根入口 redirect project 文档收口（root game-test project shell 后续已删除；\`doc/world-runtime.project.md\`、\`doc/world-simulator.project.md\` 仍保留兼容跳转）。"
-  "doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006): Owner-D 完成 3 份根入口 redirect project 文档收口（root game-test project shell 后续已删除；\`doc/world-runtime.project.md\`、\`doc/world-simulator.project.md\` 仍保留兼容跳转）。"
+  "doc/engineering/project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006) [test_tier_required]: 完成 3 份根入口 redirect project 文档收口（root game-test 与 world-runtime project shells 后续已删除；\`doc/world-simulator.project.md\` 仍保留兼容跳转）。"
+  "doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md::- [x] TASK-ENGINEERING-014-D2 (PRD-ENGINEERING-006): Owner-D 完成 3 份根入口 redirect project 文档收口（root game-test 与 world-runtime project shells 后续已删除；\`doc/world-simulator.project.md\` 仍保留兼容跳转）。"
 )
 readonly REFERENCE_EXISTENCE_EXEMPT_DOCS=(
   "doc/engineering/doc-migration/legacy-doc-migration-backlog-2026-03-03.md"

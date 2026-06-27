@@ -17,7 +17,7 @@
 
 - [x] 2026-03-03 23:45:14 CST | root game-test PRD shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/playability_test_result/game-test.prd.md` | 处理动作: root legacy redirect removed
 - [x] 2026-03-03 23:45:14 CST | root game-test project shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/playability_test_result/game-test.project.md` | 处理动作: root legacy redirect removed
-- [x] 2026-03-03 23:45:14 CST | doc/world-runtime.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
-- [x] 2026-03-03 23:45:14 CST | doc/world-runtime.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
+- [x] 2026-03-03 23:45:14 CST | root world-runtime PRD shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/world-runtime/prd.md` | 处理动作: root legacy redirect removed
+- [x] 2026-03-03 23:45:14 CST | root world-runtime project shell | 代码一致性: 已核对 | 重复性: 后续已删除 root shell | 上下游对齐: 当前入口为 `doc/world-runtime/project.md` | 处理动作: root legacy redirect removed
 - [x] 2026-03-03 23:45:14 CST | doc/world-simulator.prd.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无
 - [x] 2026-03-03 23:45:14 CST | doc/world-simulator.project.md | 代码一致性: 已核对 | 重复性: 未发现需合并项 | 上下游对齐: 已核对 | 处理动作: 无

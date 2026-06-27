@@ -48,11 +48,9 @@
 - `doc/world-runtime/` 当前共有 124 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要 evidence / template / checklist / handoff 时，再按子域定向进入。
 
-## 兼容跳转
-- `doc/world-runtime.prd.md`
-- `doc/world-runtime.project.md`
-
-上述两个根目录文件仅保留为最小兼容跳转；当前主入口以本目录 `prd.md` / `project.md` 为准。
+## 历史根入口
+- root world-runtime PRD/project legacy redirect shells 已删除。
+- 当前主入口以本目录 `prd.md` / `project.md` 为准。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。

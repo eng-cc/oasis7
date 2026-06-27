@@ -385,8 +385,8 @@
 - `doc/testing/prd.md`
 - `doc/testing/project.md`
 - historical deleted root Viewer manual shell
-- `doc/world-runtime.prd.md`
-- `doc/world-runtime.project.md`
+- root world-runtime PRD shell（后续已删除）
+- root world-runtime project shell（后续已删除）
 - `doc/world-runtime/README.md`
 - `doc/world-runtime/governance/audit-export.md`
 - `doc/world-runtime/governance/governance-events.md`
