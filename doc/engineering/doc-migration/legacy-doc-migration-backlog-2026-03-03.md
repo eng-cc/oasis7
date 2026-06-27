@@ -267,7 +267,7 @@
 
 ## Owner-D 清单（57）
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
-- `doc/game-test.project.md`
+- root game-test project shell（后续已删除）
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md`
 - `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md`
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md`

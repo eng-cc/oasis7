@@ -1,6 +1,4 @@
 doc/README.md
-doc/game-test.prd.md
-doc/game-test.project.md
 doc/world-runtime.prd.md
 doc/world-runtime.project.md
 doc/world-simulator.prd.md

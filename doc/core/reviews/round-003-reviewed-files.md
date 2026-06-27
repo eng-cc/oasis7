@@ -40,8 +40,8 @@
 - `doc/engineering/prd.index.md`
 - `doc/engineering/prd.md`
 - `doc/engineering/project.md`
-- `doc/game-test.prd.md`
-- `doc/game-test.project.md`
+- root game-test PRD shell（后续已删除）
+- root game-test project shell（后续已删除）
 - `doc/game/README.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md`
