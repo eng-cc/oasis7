@@ -70,8 +70,8 @@ git show 0d6fd50849cae07bac17883cca14f141ede93196:doc/core/reviews/round-007-rev
 | `world-runtime.prd.md` | 1 |
 | `world-runtime.project.md` | 1 |
 | `world-simulator` | 278 |
-| `world-simulator.prd.md` | 1 |
-| `world-simulator.project.md` | 1 |
+| root world-simulator PRD shell（后续已删除） | 1 |
+| root world-simulator project shell（后续已删除） | 1 |
 
 ## 当前入口校验
 ```bash
