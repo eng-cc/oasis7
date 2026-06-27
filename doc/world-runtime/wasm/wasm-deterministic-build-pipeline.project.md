@@ -36,7 +36,7 @@
 - 更新日期: 2026-03-31
 - 当前阶段: WDBP-3 跨宿主 evidence 收口中（WDBP-3.1 / WDBP-3.3 已完成，WDBP-4 已完成）
 - WDBP-3 剩余设计切片:
-  - `WDBP-3.2`: 需要一条真实 Docker-capable `darwin-arm64` summary/evidence 输入，并通过节点侧固定入口生成正式 proof payload / attestation；当前剩余的是 live 证据本身，不是导入、打包或提交工具。
+  - `WDBP-3.2`: 需要一条真实 Docker-capable `darwin-arm64` summary/evidence 输入，并通过节点侧固定入口生成正式 proof payload / attestation；当前剩余的是 live 证据本身，不是导入、打包或提交工具。 Trace: .pm/tasks/task_dac2a6ab38134923b8573bc74fe5743e.yaml
 - owner role: `wasm_platform_engineer`
 - 联审角色: `producer_system_designer`、`runtime_engineer`
 - 验证角色: `qa_engineer`
