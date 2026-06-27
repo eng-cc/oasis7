@@ -373,33 +373,10 @@ impl PromptAssembler {
             .map(|state| state.section.clone())
             .collect::<Vec<_>>();
 
-        let system_prompt = included_sections
-            .iter()
-            .filter(|section| {
-                matches!(
-                    section.kind,
-                    PromptSectionKind::Policy | PromptSectionKind::Goals | PromptSectionKind::Tools
-                )
-            })
-            .map(|section| section.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let system_prompt =
+            join_included_section_content(&included_sections, is_system_prompt_section);
 
-        let user_prompt = included_sections
-            .iter()
-            .filter(|section| {
-                matches!(
-                    section.kind,
-                    PromptSectionKind::Context
-                        | PromptSectionKind::Conversation
-                        | PromptSectionKind::History
-                        | PromptSectionKind::Memory
-                        | PromptSectionKind::OutputSchema
-                )
-            })
-            .map(|section| section.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let user_prompt = join_included_section_content(&included_sections, is_user_prompt_section);
 
         let estimated_input_tokens = estimate_tokens(system_prompt.as_str())
             .saturating_add(estimate_tokens(user_prompt.as_str()));
@@ -606,6 +583,38 @@ impl PromptAssembler {
 fn estimate_tokens(text: &str) -> usize {
     let chars = text.chars().count();
     (chars.saturating_add(3) / 4).max(1)
+}
+
+fn join_included_section_content(
+    sections: &[PromptSection],
+    include: impl Fn(PromptSectionKind) -> bool,
+) -> String {
+    let mut output = String::new();
+    for section in sections.iter().filter(|section| include(section.kind)) {
+        if !output.is_empty() {
+            output.push_str("\n\n");
+        }
+        output.push_str(section.content.as_str());
+    }
+    output
+}
+
+fn is_system_prompt_section(kind: PromptSectionKind) -> bool {
+    matches!(
+        kind,
+        PromptSectionKind::Policy | PromptSectionKind::Goals | PromptSectionKind::Tools
+    )
+}
+
+fn is_user_prompt_section(kind: PromptSectionKind) -> bool {
+    matches!(
+        kind,
+        PromptSectionKind::Context
+            | PromptSectionKind::Conversation
+            | PromptSectionKind::History
+            | PromptSectionKind::Memory
+            | PromptSectionKind::OutputSchema
+    )
 }
 
 fn truncate_to_token_cap(text: &str, token_cap: usize) -> String {

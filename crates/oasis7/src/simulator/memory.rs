@@ -187,34 +187,38 @@ impl ShortTermMemory {
 
     /// Create a summary of recent memory (for context injection).
     pub fn summarize(&self, max_entries: usize) -> String {
+        use std::fmt::Write as _;
+
         let recent: Vec<_> = self.recent(max_entries).collect();
         if recent.is_empty() {
             return "No recent memories.".to_string();
         }
 
-        let mut lines = Vec::new();
+        let mut output = String::new();
         for entry in recent.iter().rev() {
-            let line = match &entry.kind {
+            if !output.is_empty() {
+                output.push('\n');
+            }
+            match &entry.kind {
                 MemoryEntryKind::Observation { summary } => {
-                    format!("[T{}] Observed: {}", entry.time, summary)
+                    let _ = write!(output, "[T{}] Observed: {}", entry.time, summary);
                 }
                 MemoryEntryKind::Decision { decision } => {
-                    format!("[T{}] Decided: {:?}", entry.time, decision)
+                    let _ = write!(output, "[T{}] Decided: {:?}", entry.time, decision);
                 }
                 MemoryEntryKind::ActionResult { action, success } => {
                     let status = if *success { "succeeded" } else { "failed" };
-                    format!("[T{}] Action {:?} {}", entry.time, action, status)
+                    let _ = write!(output, "[T{}] Action {:?} {}", entry.time, action, status);
                 }
                 MemoryEntryKind::Event { description } => {
-                    format!("[T{}] Event: {}", entry.time, description)
+                    let _ = write!(output, "[T{}] Event: {}", entry.time, description);
                 }
                 MemoryEntryKind::Note { content } => {
-                    format!("[T{}] Note: {}", entry.time, content)
+                    let _ = write!(output, "[T{}] Note: {}", entry.time, content);
                 }
             };
-            lines.push(line);
         }
-        lines.join("\n")
+        output
     }
 }
 

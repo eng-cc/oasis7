@@ -1,7 +1,10 @@
 use super::super::agent::{ActionResult, AgentDecision};
 use super::super::kernel::{Observation, RejectReason, WorldEventKind};
 use super::super::types::Action;
-use super::decision_flow::{ExecuteUntilCondition, ExecuteUntilDirective, ExecuteUntilEventKind};
+use super::decision_flow::{
+    ExecuteUntilCondition, ExecuteUntilDirective, ExecuteUntilEventKind,
+    summarize_execute_until_conditions,
+};
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct ActionReplanGuardState {
@@ -115,11 +118,7 @@ impl ActiveExecuteUntil {
     }
 
     pub(super) fn until_events_summary(&self) -> String {
-        self.until_conditions
-            .iter()
-            .map(ExecuteUntilCondition::summary)
-            .collect::<Vec<_>>()
-            .join("|")
+        summarize_execute_until_conditions(&self.until_conditions)
     }
 
     pub(super) fn remaining_ticks(&self) -> u64 {

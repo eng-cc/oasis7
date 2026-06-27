@@ -62,7 +62,7 @@ pub(super) enum DhtProgressAction {
     DiscoveryError(WorldError),
     DiscoverPeerRecord {
         peer_id: PeerId,
-        result: Result<Option<SignedPeerRecord>, WorldError>,
+        result: Box<Result<Option<SignedPeerRecord>, WorldError>>,
     },
 }
 
@@ -425,7 +425,7 @@ pub(super) fn handle_dht_progress(
                 };
                 return DhtProgressAction::DiscoverPeerRecord {
                     peer_id: *peer_id,
-                    result,
+                    result: Box::new(result),
                 };
             }
         }

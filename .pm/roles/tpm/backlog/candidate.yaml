@@ -1,4 +1,16 @@
 version: 1
 role: tpm
 status: candidate
-tasks: []
+tasks:
+  - task_uid: task_c85925c7cfed4946b461883d94aa35be
+    title: "Code execution efficiency governance"
+    module: engineering
+    priority: P2
+    source_signal: null
+    related_prd:
+      - doc/engineering/prd.md
+    acceptance:
+      - "Apply low-risk Rust code execution efficiency improvements, verify focused crates, collect repo-owned review, create PR, watch CI, and merge if valid."
+    handoff_to: []
+    status: candidate
+    task_path: .pm/tasks/task_c85925c7cfed4946b461883d94aa35be.yaml

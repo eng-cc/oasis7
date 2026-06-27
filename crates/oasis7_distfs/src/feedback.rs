@@ -276,7 +276,7 @@ impl FeedbackStore {
         };
         let root = self.read_feedback_root(feedback_id)?;
         let mut events = self.read_feedback_events(feedback_id)?;
-        events.sort_by_key(|event| (event.created_at_ms, event.event_id.clone()));
+        sort_feedback_events(&mut events);
         Ok(Some(to_public_view(&root, &events)))
     }
 
@@ -293,10 +293,10 @@ impl FeedbackStore {
         let mut views = Vec::new();
         for root in roots {
             let mut events = self.read_feedback_events(root.feedback_id.as_str())?;
-            events.sort_by_key(|event| (event.created_at_ms, event.event_id.clone()));
+            sort_feedback_events(&mut events);
             views.push(to_public_view(&root, &events));
         }
-        views.sort_by(|left, right| right.created_at_ms.cmp(&left.created_at_ms));
+        views.sort_by_key(|view| std::cmp::Reverse(view.created_at_ms));
         Ok(views)
     }
 
@@ -1029,6 +1029,14 @@ fn to_public_view(root: &FeedbackRootRecord, events: &[FeedbackEventRecord]) -> 
         created_at_ms: root.created_at_ms,
         updated_at_ms,
     }
+}
+
+fn sort_feedback_events(events: &mut [FeedbackEventRecord]) {
+    events.sort_by(|left, right| {
+        left.created_at_ms
+            .cmp(&right.created_at_ms)
+            .then_with(|| left.event_id.cmp(&right.event_id))
+    });
 }
 
 fn validate_feedback_content(

@@ -531,7 +531,7 @@ impl Libp2pNetwork {
                                                 }
                                                 DhtProgressAction::DiscoverPeerRecord { peer_id, result } => {
                                                     pending_discovery_peer_records.remove(&peer_id);
-                                                    match result {
+                                                    match *result {
                                                         Ok(Some(record)) => {
                                                             if let Err(err) = process_discovered_peer_record(
                                                                 &mut swarm,

@@ -260,7 +260,7 @@ fn validate_non_empty(raw: &str, field: &str, path: &Path) -> Result<(), String>
 }
 
 fn validate_choice(raw: &str, choices: &[&str], field: &str, path: &Path) -> Result<(), String> {
-    if choices.iter().any(|choice| raw == *choice) {
+    if choices.contains(&raw) {
         Ok(())
     } else {
         Err(format!(

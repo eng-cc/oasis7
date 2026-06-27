@@ -153,16 +153,16 @@ impl ActionMempool {
         if self.actions.is_empty() {
             return Ok(None);
         }
-        let (actions, oversized_action_ids) = {
+        let (selected_action_ids, oversized_action_ids) = {
             let mut candidates: Vec<&ActionEnvelope> = self.actions.values().collect();
             candidates.sort_by(|left, right| action_batch_order(left, right));
 
-            let mut actions = Vec::new();
+            let mut selected_action_ids = Vec::new();
             let mut oversized_action_ids = Vec::new();
             let mut total_bytes = 0usize;
 
             for action in candidates {
-                if actions.len() >= rules.max_actions {
+                if selected_action_ids.len() >= rules.max_actions {
                     break;
                 }
                 let size_bytes = action_size_bytes(action)?;
@@ -176,21 +176,27 @@ impl ActionMempool {
                     break;
                 }
                 total_bytes = next_total_bytes;
-                actions.push(action.clone());
+                selected_action_ids.push(action.action_id.clone());
             }
-            (actions, oversized_action_ids)
+            (selected_action_ids, oversized_action_ids)
         };
 
         for action_id in oversized_action_ids {
             self.remove_action(action_id.as_str());
         }
 
-        if actions.is_empty() {
+        if selected_action_ids.is_empty() {
             return Ok(None);
         }
 
-        for action in &actions {
-            self.remove_action(&action.action_id);
+        let mut actions = Vec::with_capacity(selected_action_ids.len());
+        for action_id in selected_action_ids {
+            if let Some(action) = self.remove_action(action_id.as_str()) {
+                actions.push(action);
+            }
+        }
+        if actions.is_empty() {
+            return Ok(None);
         }
 
         let batch_id = batch_id_for_actions(&actions)?;
@@ -214,7 +220,7 @@ impl ActionMempool {
         if self.actions.is_empty() {
             return Ok(Vec::new());
         }
-        let (selected_batches, oversized_action_ids) = {
+        let (selected_batch_ids, oversized_action_ids) = {
             let mut zone_candidates = BTreeMap::<String, Vec<&ActionEnvelope>>::new();
             for candidate in self.actions.values() {
                 zone_candidates
@@ -223,14 +229,14 @@ impl ActionMempool {
                     .push(candidate);
             }
 
-            let mut selected_batches = Vec::new();
+            let mut selected_batch_ids = Vec::new();
             let mut oversized_action_ids = Vec::new();
             for (_zone, mut zone_actions) in zone_candidates {
                 zone_actions.sort_by(|left, right| action_batch_order(left, right));
-                let mut selected = Vec::new();
+                let mut selected_ids = Vec::new();
                 let mut total_bytes = 0usize;
                 for action in zone_actions {
-                    if selected.len() >= rules.max_actions {
+                    if selected_ids.len() >= rules.max_actions {
                         break;
                     }
                     let size_bytes = action_size_bytes(action)?;
@@ -244,13 +250,13 @@ impl ActionMempool {
                         break;
                     }
                     total_bytes = next_total_bytes;
-                    selected.push(action.clone());
+                    selected_ids.push(action.action_id.clone());
                 }
-                if !selected.is_empty() {
-                    selected_batches.push(selected);
+                if !selected_ids.is_empty() {
+                    selected_batch_ids.push(selected_ids);
                 }
             }
-            (selected_batches, oversized_action_ids)
+            (selected_batch_ids, oversized_action_ids)
         };
 
         for action_id in oversized_action_ids {
@@ -258,9 +264,15 @@ impl ActionMempool {
         }
 
         let mut batches = Vec::new();
-        for selected in selected_batches {
-            for action in &selected {
-                self.remove_action(&action.action_id);
+        for selected_ids in selected_batch_ids {
+            let mut selected = Vec::with_capacity(selected_ids.len());
+            for action_id in selected_ids {
+                if let Some(action) = self.remove_action(action_id.as_str()) {
+                    selected.push(action);
+                }
+            }
+            if selected.is_empty() {
+                continue;
             }
             let batch_id = batch_id_for_actions(&selected)?;
             batches.push(ActionBatch {
