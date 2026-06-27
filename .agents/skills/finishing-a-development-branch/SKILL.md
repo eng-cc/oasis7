@@ -27,7 +27,16 @@ Use this skill when code and docs are already updated and you are moving into br
 
 1. Confirm the task has its own worktree and `.pm` task.
 2. Run the final local checks for the changed surface.
-3. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet before final closeout or commit.
+3. Before final closeout, apply the source-of-truth Learning Intake / Loop
+   Closeout ladder to reusable findings from the task:
+   - no-op for transient observations
+   - short execution-log note for current-task-only route or evidence details
+   - reflection signal for useful follow-up ideas or repeated friction that is
+     not ready for committed task truth
+   - task-scoped `working_memory` for temporary structured learning that
+     supplements, but does not replace, the execution log
+   - candidate task or memory promotion only after owner review
+4. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet before final closeout or commit.
 
 Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change
@@ -42,13 +51,13 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
 - `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
 
-4. Close the task:
+5. Close the task:
 
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"
 ```
 
-5. Commit exactly this task slice.
+6. Commit exactly this task slice.
 
 The pre-PR local role review packet is recorded before final closeout/commit and uses this shape:
 
@@ -76,17 +85,17 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - Slice Ledger: <path to slice ledger or n/a with reason>
 ```
 
-6. Run PR preflight / create:
+7. Run PR preflight / create:
 
 ```bash
 ./scripts/prepare-task-pr.sh --create
 ```
 
-7. Record the PR purpose decision:
+8. Record the PR purpose decision:
    - `normal_pr_ci_watch`: default for ordinary implementation/documentation PRs. Keep watching required checks, mergeability, review decisions, comments, and unresolved review threads. Treat `REVIEW_REQUIRED` as informational, not as a blocker. Treat `mergeStateStatus=BEHIND` as informational too unless GitHub actually requires a branch update or reports a conflict; if the PR is otherwise mergeable and the repository merge path accepts it, merge can proceed without a local rebase. If `mergeStateStatus=BLOCKED` is only missing review approval and user/task policy explicitly allows skipping it, use the repository admin merge path as normal flow after re-checking gates.
    - `manual_packaging_ci_hold`: only when the user/task says the PR exists specifically to run manual-trigger packaging/release CI jobs. Record the manual job/purpose, responsible operator/role, expected success signal, stale-date/timeout escalation, ops readiness/rollback/runbook evidence when release ops are implicated, external/status messaging evidence when player- or community-facing, and the exact resume criterion. Stop before auto-merge until the operator/user resumes.
 
-8. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
+9. For `normal_pr_ci_watch`, keep the loop moving without waiting for another prompt:
    - if checks fail, inspect the failing job, fix, rerun local verification, push, and continue watching
    - before merge, explicitly check PR comments and review threads; if review comments arrive, use:
 
@@ -96,7 +105,7 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 
    - when required checks pass, the PR is mergeable through the repository/GitHub merge path or through an explicitly authorized review-approval admin path, PR comments/review threads have been checked, and no requested changes, actionable comments, or blocking unresolved review threads remain, merge the PR using the repository's configured merge path
 
-9. After merge, sync local `main` and remove the task worktree / branch.
+10. After merge, sync local `main` and remove the task worktree / branch.
 
 ## Required Checks Before Commit
 
@@ -104,6 +113,8 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - task execution log updated
 - relevant formal docs updated
 - local verification rerun for the affected surface
+- learning intake / loop closeout decision recorded when the task produced
+  reusable findings, follow-up ideas, repeated friction, or failure signatures
 - pre-PR local role review packet recorded when the next step is PR creation
 - PR purpose decision recorded after PR creation
 - normal PRs are watched through required checks, mergeability, review decisions, and comment closeout to merge; `REVIEW_REQUIRED` alone is not a blocker, `BEHIND` alone does not force a local rebase when the repository merge path can still merge cleanly, and review-approval-only `BLOCKED` may use an explicitly authorized admin merge path; only manual packaging CI PRs may pause before merge
@@ -130,3 +141,5 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.
 - Do not merge a normal PR without first checking PR comments and review threads and resolving or answering actionable items.
 - Do not auto-merge PRs opened specifically for manual packaging/release CI until the operator/user resumes the normal merge path.
+- Do not turn learning intake into a universal extra gate; use no-op or a short
+  execution-log note when there is no reusable learning to preserve.

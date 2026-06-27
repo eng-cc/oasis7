@@ -62,6 +62,18 @@ Read-only caveat:
    - they cannot replace the `.pm` execution log for task truth
 6. Continue into the routed phase rather than stopping at setup.
 
+Already-bound micro-loop caveat:
+
+- The first bootstrap for a request still records the full bootstrap decision.
+- Once the request is already inside the bound task/worktree, small objective
+  fact lookups, command-output restatements, and tiny follow-ups should use the
+  source-of-truth "Learning Intake / Loop Closeout" minimal record instead of
+  repeating the full bootstrap packet.
+- The minimal record is: question or observation, evidence path or command,
+  answer or decision, and whether task truth changed.
+- If owner, scope, route, professional slice plan, or PR chain changes, return
+  to the full bootstrap/router records.
+
 ## Output Contract
 
 When this skill is used, the bootstrap decision should be renderable in this shape:
@@ -124,6 +136,8 @@ WORKFLOW BOOTSTRAP DECIDED
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
 - Do not treat read-only professional/domain questions as TPM-owned conclusions just because bootstrap has completed; the matching professional slice still owns the conclusion.
+- Do not repeat the full bootstrap output for already-bound micro loops when a
+  minimal learning-intake record is sufficient.
 
 ## Known Failure Modes
 
