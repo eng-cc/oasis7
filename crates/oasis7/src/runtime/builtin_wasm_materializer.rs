@@ -19,7 +19,7 @@ const DEFAULT_WASM_TARGET: &str = "wasm32-unknown-unknown";
 const DEFAULT_WASM_BUILDER_IMAGE_REF: &str = "oasis7/wasm-builder:nightly-2025-12-11";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_WASM_BUILDER_IMAGE_DIGEST: &str =
-    "sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a";
+    "sha256:178008aeb003c9bfcf1f6c38a74cb69a29c0b63438bc3d875956296603045d86";
 #[cfg(not(target_arch = "wasm32"))]
 const DEFAULT_WASM_CANONICAL_CONTAINER_PLATFORM: &str = "linux-x86_64";
 const BUILTIN_WASM_BUILD_PROFILE: &str = "release";
