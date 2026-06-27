@@ -9,7 +9,7 @@ source_signal: null
 source_refs:
   - AGENTS.md
 doc_refs:
-  - doc/world-simulator.project.md
+  - doc/world-simulator/project.md
   - doc/playability_test_result/project.md
 related_prd: []
 acceptance:
