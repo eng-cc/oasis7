@@ -32,7 +32,7 @@
 
 ### WLB6 口径澄清（Viewer + 网关）
 - [x] WLB6.1 修订 `README.md`，明确 Web 端为 Viewer + 网关接入，不承担完整分布式节点职责
-- [x] WLB6.2 修订 `doc/world-simulator/viewer/viewer-manual.md` 与本设计文档，统一“方案1”边界描述
+- WLB6.2 历史记录：修订 `doc/world-simulator/viewer/viewer-manual.manual.md` 与本设计文档，统一“方案1”边界描述。
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-websocket-http-bridge.design.md`

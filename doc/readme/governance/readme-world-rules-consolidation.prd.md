@@ -29,11 +29,11 @@
 - 文档分层入口：
   - 导航摘要层：`README.md`
   - 世界规则细则层：`world-rule.md`
-  - 运行与调试手册：`doc/world-simulator/viewer/viewer-manual.md`
+  - 运行与调试手册：`doc/world-simulator/viewer/viewer-manual.manual.md`
   - 系统性测试手册：`testing-manual.md`
 - README 链接约定：
   - 规则细则统一链接到 `./world-rule.md`
-  - 运行/测试入口分别链接到 `./doc/world-simulator/viewer/viewer-manual.md` 与 `./testing-manual.md`
+  - 运行/测试入口分别链接到 `./doc/world-simulator/viewer/viewer-manual.manual.md` 与 `./testing-manual.md`
 
 ## 里程碑
 

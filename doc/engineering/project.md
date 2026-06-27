@@ -161,9 +161,11 @@
 - [x] p2p-node-path-governance (PRD-ENGINEERING-028) [test_tier_required]: 建立 `p2p/node` 路径级治理专题三件套、新增 `doc/p2p/node/README.md` 作为热点子域 canonical 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第三条已执行 follow-up。 Trace: .pm/tasks/task_533ac29c20a84ee8a5e6914839ad0761.yaml
 - [x] testing-evidence-path-governance (PRD-ENGINEERING-029) [test_tier_required]: 建立 `testing/evidence` 路径级治理专题三件套、新增 `doc/testing/evidence/README.md` 作为热点子域 canonical 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第四条已执行 follow-up。 Trace: .pm/tasks/task_38707b4060b54e5e8b8ebcdb8d18a602.yaml
 - [x] readme-governance-path-governance (PRD-ENGINEERING-030) [test_tier_required]: 建立 `readme/governance` 路径级治理专题三件套、新增 `doc/readme/governance/README.md` 作为热点子域 canonical 入口，并将该任务回写为 `PRD-ENGINEERING-025` 的第五条已执行 follow-up。 Trace: .pm/tasks/task_d37f636846fa44449988240af8630454.yaml
-- [x] world-simulator-doc-redundancy-reduction (PRD-ENGINEERING-015/025) [test_tier_required]: 收口 `doc/world-simulator/viewer/viewer-manual.md` 的 legacy 正文残留，并把 `doc/world-simulator/prd.index.md` 压回“精确检索优先”的文件级索引角色，避免与模块 `README.md` 再做一套 landing。 Trace: .pm/tasks/task_aaebf3a722a847b9b2e8d23695ea71c0.yaml
+- [x] world-simulator-doc-redundancy-reduction (PRD-ENGINEERING-015/025) [test_tier_required]: 收口 `doc/world-simulator/viewer/viewer-manual.manual.md` 的 legacy 正文残留，并把 `doc/world-simulator/prd.index.md` 压回“精确检索优先”的文件级索引角色，避免与模块 `README.md` 再做一套 landing。 Trace: .pm/tasks/task_aaebf3a722a847b9b2e8d23695ea71c0.yaml
 - [x] viewer-manual-canonical-source-cleanup (PRD-ENGINEERING-025) [test_tier_required]: 继续清理当前真值/当前基线类正式文档中的 `viewer-manual.md` 旧基线路径，把 `world-simulator/site github-pages` 相关正式文档统一改回 `viewer-manual.manual.md`，避免 legacy redirect 重新被误读成 canonical source。 Trace: .pm/tasks/task_010e133e25f5411daa05bbbf80ff3727.yaml
 - [x] viewer-manual-sync-contract-refresh (PRD-ENGINEERING-025) [test_tier_required]: 刷新 `scripts/site-manual-sync-check.sh` 的手册镜像契约，使 source manual 与 CN/EN HTML mirror 分别校验当前 `render_mode=viewer&test_api=1` 基线，避免脚本继续盯旧命令字符串而失去约束力。 Trace: .pm/tasks/task_03cd617323c840d29a36b5bfa91792ed.yaml
+
+- [x] viewer-manual-legacy-redirect-deletion (PRD-ENGINEERING-015/025) [test_tier_required]: 删除 Viewer manual legacy redirect 壳，将当前/半当前引用收敛到 canonical `doc/world-simulator/viewer/viewer-manual.manual.md`，避免 Viewer 手册继续暴露双入口旧语义。 Trace: .pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.yaml
 - [x] game-small-player-lane-runtime-truth (PRD-GAME-015) [test_tier_required]: 为 anti-grind / small-player lane 增加 runtime truth 字段、持久化 backfill、viewer runtime_live 派生与正向回归，并完成本地角色复查和 required gate。 Trace: .pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml
 - [x] gpt-image-2-skill-integration (PRD-ENGINEERING-016) [test_tier_required]: 将 `agentspace-so/agent-skills` 的 `gpt-image-2` skill 纳入仓库 `.agents/skills/`，同步更新 `skills-lock.json`，并保留基于本机 `codex` CLI 登录态的真实生图成功验证证据（见 task execution log `2026-05-11 22:55:00 CST` 与 `2026-05-12 10:05:43 CST` 相关条目）。 Trace: .pm/tasks/task_667fe4de81da4a29938432e4ec7cb23a.yaml
 - [x] game-visual-interaction-design-skills (PRD-ENGINEERING-032) [test_tier_required]: Add repo-owned game interaction and visual design skills, scope mandatory use to visual/player-visible changes, and bind them to `game_visual_interaction_designer` role guidance without changing workflow gates. Trace: .pm/tasks/task_aa75e054f104413bac6454b912591744.yaml
@@ -403,7 +405,7 @@
 - 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `playability-manual-root-redirect-deletion`（已删除 playability test manual 根级 legacy redirect 壳，将旧 root 路径 review 索引/日志引用收敛到 `playability_test_result` canonical manual，并同步收紧 root markdown allowlist。）
+- 最新完成: `viewer-manual-legacy-redirect-deletion`（已删除 Viewer manual legacy redirect 壳，将当前/半当前引用收敛到 `viewer-manual.manual.md` canonical manual。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

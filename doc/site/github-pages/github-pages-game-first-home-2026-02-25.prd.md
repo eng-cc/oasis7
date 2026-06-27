@@ -30,7 +30,7 @@
   - `README.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/game/gameplay/gameplay-engineering-architecture.md`
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 目标页面
   - `site/index.html`
   - `site/en/index.html`
