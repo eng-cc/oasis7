@@ -39,7 +39,7 @@
 - historical core PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-engineering.md`
 - `doc/engineering/prd-review/checklists/active-game.md`
-- `doc/engineering/prd-review/checklists/active-headless-runtime.md`
+- historical headless-runtime PRD review checklist snapshot（后续已删除）
 - historical p2p PRD review checklist snapshot（后续已删除）
 - historical playability_test_result PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-readme.md`

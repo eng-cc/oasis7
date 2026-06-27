@@ -70,6 +70,8 @@
 
 - [x] playability-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-playability_test_result.md` PRD review checklist snapshot，将当前 playability_test_result 阅读/状态语义收敛到 `doc/playability_test_result/README.md`、`doc/playability_test_result/prd.index.md` 与 `doc/playability_test_result/project.md`。 Trace: .pm/tasks/task_87cf5ae11c174ef6ba4b7ec4945b8bfc.yaml
 
+- [x] headless-runtime-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-headless-runtime.md` PRD review checklist snapshot，将当前 headless-runtime 阅读/状态语义收敛到 `doc/headless-runtime/README.md`、`doc/headless-runtime/prd.index.md` 与 `doc/headless-runtime/project.md`。 Trace: .pm/tasks/task_1dc88b3185dc464cad14134a85200b98.yaml
+
 - [x] legacy-doc-migration-backlog-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 2026-03-03 legacy 迁移 backlog 快照，将旧迁移池语义收敛到迁移协作完成态、doc structure standard 与 workflow semantic migration checklist。 Trace: .pm/tasks/task_72ea44c2e71f4721b04f307acc8b6f54.yaml
 
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
@@ -450,7 +452,7 @@
 - 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `playability-active-review-checklist-snapshot-deletion`（已删除 `active-playability_test_result.md` 历史审读快照兼容路径，当前 playability_test_result 阅读/状态语义收敛到模块 README、`prd.index.md` 与 `project.md`。）
+- 最新完成: `headless-runtime-active-review-checklist-snapshot-deletion`（已删除 `active-headless-runtime.md` 历史审读快照兼容路径，当前 headless-runtime 阅读/状态语义收敛到模块 README、`prd.index.md` 与 `project.md`。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
