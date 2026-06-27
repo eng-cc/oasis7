@@ -84,6 +84,65 @@ fn social_publish_rejects_missing_evidence_event() {
 }
 
 #[test]
+fn social_publish_validates_evidence_ids_without_journal_scan_semantic_drift() {
+    let mut kernel = setup_social_kernel();
+    let existing_event_ids = kernel
+        .journal()
+        .iter()
+        .take(2)
+        .map(|event| event.id)
+        .collect::<Vec<_>>();
+    assert_eq!(existing_event_ids.len(), 2);
+
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: None,
+        claim: "agent-b has two corroborating setup events".to_string(),
+        confidence_ppm: 880_000,
+        evidence_event_ids: existing_event_ids.clone(),
+        ttl_ticks: None,
+        stake: None,
+    });
+    let published = kernel.step().expect("publish event");
+    match published.kind {
+        WorldEventKind::SocialFactPublished { fact } => {
+            assert_eq!(fact.evidence_event_ids, existing_event_ids);
+        }
+        other => panic!("unexpected publish event: {other:?}"),
+    }
+
+    let next_event_id = kernel.journal().last().expect("last event").id + 1;
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: None,
+        claim: "agent-b has missing corroboration".to_string(),
+        confidence_ppm: 880_000,
+        evidence_event_ids: vec![existing_event_ids[0], next_event_id + 2, next_event_id + 1],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let rejected = kernel.step().expect("reject event");
+    match rejected.kind {
+        WorldEventKind::ActionRejected {
+            reason: RejectReason::RuleDenied { notes },
+        } => {
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note
+                        .contains(&format!("evidence event missing: {}", next_event_id + 2))),
+                "missing evidence rejection note should keep first missing input order: {notes:?}"
+            );
+        }
+        other => panic!("unexpected reject event: {other:?}"),
+    }
+}
+
+#[test]
 fn social_adjudication_confirm_slashes_challenge_stake_and_releases_publisher() {
     let mut kernel = setup_social_kernel();
     let evidence_event_id = first_evidence_event_id(&kernel);
