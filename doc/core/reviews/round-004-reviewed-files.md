@@ -735,7 +735,7 @@
 - `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project`
 - `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.prd`
 - `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.project`
-- `doc/world-simulator/viewer/viewer-manual.md`
+- `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `doc/world-simulator/viewer/viewer-minimal-system.prd.md`
 - `doc/world-simulator/viewer/viewer-minimal-system.project.md`
 - `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md`

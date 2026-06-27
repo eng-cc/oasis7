@@ -244,7 +244,7 @@
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `world-rule.md`
-  - `doc/world-simulator/viewer/viewer-manual.md`
+  - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
   - `oasis7_viewer_live.release.example.toml`
   - `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`

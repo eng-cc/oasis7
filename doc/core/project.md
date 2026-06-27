@@ -173,11 +173,11 @@
     - `doc/core/release-candidate-*.{prd,design,project}.md`
     - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
     - `doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`
-    - `doc/world-simulator/viewer/viewer-manual.md`
+    - `doc/world-simulator/viewer/viewer-manual.manual.md`
     - `crates/oasis7_viewer/software_safe.html`
     - 历史已删除：`crates/oasis7_viewer/src/app_bootstrap.rs`、`crates/oasis7_viewer/index.html`、旧 3D 调试脚本
   - 验收命令 (`test_tier_required`):
-    - `rg -n "^# oasis7|oasis7 Viewer|internal compatibility naming" doc/core/*.md doc/core/*.prd.md doc/core/*.design.md doc/core/*.project.md doc/world-simulator/viewer/viewer-manual.md crates/oasis7_viewer/software_safe.html`
+    - `rg -n "^# oasis7|oasis7 Viewer|internal compatibility naming" doc/core/*.md doc/core/*.prd.md doc/core/*.design.md doc/core/*.project.md doc/world-simulator/viewer/viewer-manual.manual.md crates/oasis7_viewer/software_safe.html`
     - 历史验收记录：native 入口标题与旧 3D 调试脚本语法曾在当时校验；相关文件现已删除
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`

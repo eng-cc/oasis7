@@ -504,7 +504,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-web-playability-unblock-2026-02-26.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-chat-enter-send.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-manual.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-manual.manual.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase5-advanced-texture-maps.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-wasd-camera-navigation.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

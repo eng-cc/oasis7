@@ -4,7 +4,7 @@
 
 ## 文档定位
 - 本文件是 Viewer 使用说明的 canonical `*.manual.md` 入口。
-- 历史兼容路径 `doc/world-simulator/viewer/viewer-manual.md` 仅保留跳转说明。
+- 历史兼容路径已删除；请直接使用本 canonical `*.manual.md` 手册。
 - 系统级测试分层与 suite 选择仍以 `testing-manual.md` 为权威总入口。
 
 ## 目标

@@ -740,7 +740,7 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-manual.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-manual.manual.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-minimal-system.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
