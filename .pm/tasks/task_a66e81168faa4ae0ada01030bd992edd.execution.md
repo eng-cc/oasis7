@@ -80,3 +80,13 @@ Example:
 - Expected Result: Current task is done/verified with verification exit code 0, and task-local workflow lint passes.
 - Actual Result: `status: done`; `last_claim_type: task_complete`; `last_verify_command: ./scripts/doc-governance-check.sh`; `last_verification_exit_code: 0`; `last_verification_status: verified`; workflow-lint OK for `task_a66e81168faa4ae0ada01030bd992edd`.
 - Blocker / Next Action: No current-task blocker. Commit review/closeout evidence, then run `prepare-task-pr.sh --create`.
+
+## 2026-06-27 22:50:00 CST / tpm
+- 完成内容: Created PR https://github.com/eng-cc/oasis7/pull/715 using `./scripts/prepare-task-pr.sh --create --title "Delete engineering active review checklist snapshot" --body-file .pm/scratch/task_a66e81168faa4ae0ada01030bd992edd/pr-body.md`.
+- 完成内容: PR Purpose Decision: normal_pr_ci_watch. This is an ordinary docs/governance PR, not a manual packaging/release CI hold.
+- 遗留事项: Need watch GitHub required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` and `BEHIND` are informational unless checks/comments/conflicts/branch-protection actually block merge.
+- Action: Commit and push PR purpose decision, then inspect PR state and checks.
+- Validation Command: `gh pr view 715 --json state,mergeable,mergeStateStatus,reviewDecision,comments,reviews,statusCheckRollup,url`
+- Expected Result: PR exists and can enter normal watch/fix/merge loop.
+- Actual Result: Pending post-push PR inspection.
+- Blocker / Next Action: Push execution-log update and start PR watch.
