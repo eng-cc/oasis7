@@ -54,3 +54,46 @@ Example:
 - Expected Result: no remaining stale exact path references to the deleted Viewer manual shell, deleted file absent, canonical manual present, doc governance passes, task workflow lint passes, and diff whitespace check passes.
 - Actual Result: PASS after resolving doc-governance fallout from historical exact-path references. Exact stale path search `rg -n -F "doc/world-simulator/viewer/viewer-manual.md" doc README.md scripts .agents` returned no matches; `test ! -e doc/world-simulator/viewer/viewer-manual.md` passed; `test -e doc/world-simulator/viewer/viewer-manual.manual.md` passed; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`.
 - Blocker / Next Action: Commit implementation and dispatch pre-PR local role review.
+
+## 2026-06-27 11:53:00 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: commit `f4058363b` against `origin/main`; changed paths include `.pm` task truth, `doc/engineering/project.md`, exact stale Viewer manual references across current docs and review ledgers, canonical `doc/world-simulator/viewer/viewer-manual.manual.md`, and deleted `doc/world-simulator/viewer/viewer-manual.md`.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-10/.pm/scratch/task_50fe2af50edf479db290e6fae0a215f8/review-packages/review-origin-main..f4058363b.diff`
+- Review Roles: repository_health_engineer, viewer_engineer, qa_engineer, producer_system_designer
+- Review Question: confirm deletion is limited to the obsolete Viewer manual legacy redirect shell, preserves canonical Viewer manual reader journey, avoids broad historical rewrites beyond exact-path doc-governance needs, and has sufficient doc-only verification evidence.
+- Evidence Available: exact stale path search returned no live doc/governance matches; deleted-file check passed; canonical manual file exists; `./scripts/doc-governance-check.sh` OK; `./scripts/pm/workflow-lint.sh --task-uid task_50fe2af50edf479db290e6fae0a215f8 --phase current` OK; `git diff --check` OK.
+- Expected Return Contract: findings or explicit no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk; concrete file/line or command evidence.
+- Formal Sink: `.pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.execution.md`
+- Actual Dispatch: repository_health_engineer subagent `019f0727-2b2b-7431-8fb4-60ebaed8ea0c`; viewer_engineer subagent `019f0727-5eb5-7d81-b0de-aa3712e222b7`; qa_engineer subagent `019f0727-8e3c-7d61-99c7-0ef839de170d`; producer_system_designer subagent `019f0727-baf4-7540-9c4a-d69e62340331`.
+
+## 2026-06-27 12:05:00 CST / tpm
+- 完成内容: Addressed pre-PR local role review findings from QA and producer/system design slices.
+- 遗留事项: Re-run verification, record passed review packet, then commit review evidence and proceed to closeout.
+- Findings Addressed: `qa_engineer` found one bare same-directory stale filename mention `viewer-manual.md` in `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.project.md`; `producer_system_designer` found one ROUND-009 log sentence that still claimed the old compatibility layer was retained.
+- Action: Updated the bare filename mention to `viewer-manual.manual.md` and changed the ROUND-009 sentence to state that the old compatibility layer was later deleted.
+- Validation Command: pending rerun of fragment-level `rg -n "viewer-manual\\.md"` scan, exact stale path search, deleted-file/canonical-file checks, doc governance, workflow lint, and diff check.
+- Expected Result: no actionable stale `viewer-manual.md` references remain in current scoped paths; no exact deleted path references remain; doc/task gates stay green.
+- Actual Result: PASS. Focused same-directory fragment scan `rg -n "viewer-manual\\.md" doc/world-simulator/viewer` returned no matches; exact stale path search `rg -n -F "doc/world-simulator/viewer/viewer-manual.md" doc README.md scripts .agents` returned no matches; `git diff --check` passed; `doc-governance-check: OK`; `workflow-lint: OK`.
+- Blocker / Next Action: Record pre-PR passed packet and commit review evidence.
+
+## 2026-06-27 12:12:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_50fe2af50edf479db290e6fae0a215f8
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-10
+- Source Branch: task/engineering-legacy-doc-semantics-deletion-next-10
+- Source Head: f4058363b
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.yaml`; `.pm/tasks/task_50fe2af50edf479db290e6fae0a215f8.execution.md`; Viewer manual canonical and legacy files; exact stale Viewer manual references across core review ledgers, engineering governance docs, p2p/readme/site docs, and world-simulator viewer project docs.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-10/.pm/scratch/task_50fe2af50edf479db290e6fae0a215f8/review-packages/review-origin-main..f4058363b.diff`
+- Role Selection Basis: `repository_health_engineer` selected for doc-governance, stale path, and deletion boundary review; `viewer_engineer` selected because the deleted shell sits on the Viewer manual reader path; `qa_engineer` selected for verification/test-tier sufficiency; `producer_system_designer` selected because manual semantics and ROUND-009 product/system reader journey changed. Runtime/WASM/ops/liveops roles were not selected because no runtime behavior, wasm ABI, deployment, or external messaging changed.
+- Review Roles: repository_health_engineer, viewer_engineer, qa_engineer, producer_system_designer
+- Review Evidence: `repository_health_engineer` subagent `019f0727-2b2b-7431-8fb4-60ebaed8ea0c` returned `no_findings`, confirmed deletion and exact-path convergence are within scope and repository-health risk is low. `viewer_engineer` subagent `019f0727-5eb5-7d81-b0de-aa3712e222b7` returned `no_findings`, confirmed current Viewer manual reader journey remains `README` / `world-simulator README` -> `viewer README` -> `viewer-manual.manual.md` and operator guidance is not weakened. `qa_engineer` subagent `019f0727-8e3c-7d61-99c7-0ef839de170d` returned one P2 finding for a bare same-directory `viewer-manual.md` stale mention; fixed and verified with focused fragment scan. `producer_system_designer` subagent `019f0727-baf4-7540-9c4a-d69e62340331` returned one P2 finding for ROUND-009 text still claiming the old compatibility layer was retained; fixed and verified with doc governance.
+- Review Verdicts: repository health scope/spec compliance passed and repository health quality/risk passed; viewer scope/spec compliance passed and viewer reader-journey risk low; QA scope/spec compliance passed after finding fix and verification sufficiency passed for doc-only `test_tier_required`; producer/system scope/spec compliance passed after finding fix and reader-journey risk low.
+- Review Findings Disposition: all findings addressed.
+- Finding Disposition Evidence: QA finding fixed in `doc/world-simulator/viewer/viewer-web-runtime-fatal-surfacing-2026-03-12.project.md`; producer/system finding fixed in `doc/core/reviews/round-009-audit-progress-log.md`; focused same-directory fragment scan returned no matches; exact stale path search returned no matches; doc governance OK.
+- Verification Matrix: stale exact deleted path -> scoped `rg` no matches; same-directory bare stale filename -> focused `rg` no matches; deleted shell file -> `test ! -e` passed; canonical manual -> `test -e doc/world-simulator/viewer/viewer-manual.manual.md` passed; doc governance -> `./scripts/doc-governance-check.sh` OK; workflow current phase -> `./scripts/pm/workflow-lint.sh --task-uid task_50fe2af50edf479db290e6fae0a215f8 --phase current` OK; diff hygiene -> `git diff --check` OK.
+- Visual Evidence: n/a; documentation governance deletion with no UI or rendered visual surface.
+- WASM Evidence: n/a; no WASM code, ABI, receipt, or determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, rollback, or operator runbook surface changed.
+- LiveOps Evidence: n/a; no external messaging, release note, incident, or community runbook changed.
+- Residual Risk: low. External or manual consumers that open the deleted legacy path directly will no longer receive an in-repo redirect, but current repo reader journeys and exact references converge to canonical `doc/world-simulator/viewer/viewer-manual.manual.md`.

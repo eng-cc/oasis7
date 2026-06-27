@@ -8,7 +8,7 @@
 - [x] T0 建立 PRD / Design / Project 文档，并回写模块主文档与索引。
 - [x] T1 在 `web_test_api` 补齐浏览器 runtime fatal 透出。
 - [x] T2 在 `run-game-test-ab.sh` 增加 `lastError` 快失败分支。
-- [x] T3 同步 `viewer-manual.md` 与 `testing-manual.md` 的执行与排障口径。
+- T3 历史记录：同步 `viewer-manual.manual.md` 与 `testing-manual.md` 的执行与排障口径。
 - [x] T4 运行定向验证并回写 devlog / commit 收口。
 - [x] T5 在 `web_test_api` runtime diagnostic hook 增加“已知图形 fatal 仅自动 reload 一次”恢复逻辑，收敛手动 reopen。
 - [x] T6 追加 `web_test_api` 快照即时落盘修复，并复验“首开 fatal 不再伪装成 connecting”。
