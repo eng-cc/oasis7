@@ -92,6 +92,48 @@ export function createViewerWorldScaleModule({
     };
   }
 
+  function insertNearestLocation(nearestLocations, candidate, limit = 3) {
+    let insertIndex = nearestLocations.length;
+    while (
+      insertIndex > 0
+      && candidate.distanceCm < nearestLocations[insertIndex - 1].distanceCm
+    ) {
+      insertIndex -= 1;
+    }
+    if (insertIndex >= limit) {
+      return;
+    }
+    nearestLocations.splice(insertIndex, 0, candidate);
+    if (nearestLocations.length > limit) {
+      nearestLocations.length = limit;
+    }
+  }
+
+  function nearestLocationsForAnchor(anchor, locations, locale) {
+    if (!anchor) {
+      return [];
+    }
+    const nearestLocations = [];
+    for (const location of locations) {
+      if (location.id === anchor.locationId) {
+        continue;
+      }
+      const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
+      if (distanceCm == null) {
+        continue;
+      }
+      insertNearestLocation(nearestLocations, {
+        id: location.id,
+        name: location.name || location.id,
+        distanceCm,
+        distanceLabel: formatPhysicalDistanceCm(distanceCm, locale),
+        radiusCm: locationRadiusCm(location),
+        radiusLabel: formatPhysicalDistanceCm(locationRadiusCm(location), locale),
+      });
+    }
+    return nearestLocations;
+  }
+
   function buildWorldScaleSurface(locale = state.uiLocale) {
     const isZh = isLocaleZh(locale);
     const space = snapshotSpaceConfig();
@@ -99,24 +141,7 @@ export function createViewerWorldScaleModule({
     const locations = Object.values(state.snapshot?.model?.locations || {})
       .filter((location) => location?.id && location?.pos);
 
-    const nearestLocations = anchor
-      ? locations
-        .filter((location) => location.id !== anchor.locationId)
-        .map((location) => {
-          const distanceCm = distanceCmBetweenPositions(anchor.pos, location.pos);
-          return {
-            id: location.id,
-            name: location.name || location.id,
-            distanceCm,
-            distanceLabel: formatPhysicalDistanceCm(distanceCm, locale),
-            radiusCm: locationRadiusCm(location),
-            radiusLabel: formatPhysicalDistanceCm(locationRadiusCm(location), locale),
-          };
-        })
-        .filter((location) => location.distanceCm != null)
-        .sort((left, right) => left.distanceCm - right.distanceCm)
-        .slice(0, 3)
-      : [];
+    const nearestLocations = nearestLocationsForAnchor(anchor, locations, locale);
 
     const physicalTruth = {
       canonicalUnitLabel: formatPhysicalDistanceCm(1, locale),
