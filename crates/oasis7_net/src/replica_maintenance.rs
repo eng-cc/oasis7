@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::distributed_dht::{DistributedDht, ProviderRecord};
@@ -233,7 +234,7 @@ fn plan_repair_tasks(
         }
 
         let Some(source) = selector
-            .rank_providers(providers, selection_now_ms(providers))
+            .rank_provider_refs(providers.iter(), selection_now_ms(providers))
             .into_iter()
             .next()
         else {
@@ -245,12 +246,10 @@ fn plan_repair_tasks(
 
         let mut selected_targets: BTreeSet<String> =
             providers.iter().map(|p| p.provider_id.clone()).collect();
-        let target_candidates = selector.rank_providers(
-            &all_candidates
+        let target_candidates = selector.rank_provider_refs(
+            all_candidates
                 .iter()
-                .filter(|candidate| !selected_targets.contains(&candidate.provider_id))
-                .cloned()
-                .collect::<Vec<_>>(),
+                .filter(|candidate| !selected_targets.contains(candidate.provider_id.as_str())),
             selection_now_ms(&all_candidates),
         );
 
@@ -269,7 +268,7 @@ fn plan_repair_tasks(
                 kind: ReplicaTransferKind::Repair,
                 content_hash: content_hash.clone(),
                 source_provider_id: source.provider_id.clone(),
-                target_provider_id: target.provider_id,
+                target_provider_id: target.provider_id.clone(),
             });
             produced = produced.saturating_add(1);
         }
@@ -292,7 +291,7 @@ fn plan_rebalance_tasks(
     }
 
     let all_candidates = collect_global_candidates(providers_by_hash);
-    let underloaded: Vec<ProviderRecord> = all_candidates
+    let underloaded: Vec<&ProviderRecord> = all_candidates
         .iter()
         .filter(|record| {
             record
@@ -300,7 +299,6 @@ fn plan_rebalance_tasks(
                 .map(|load| load <= policy.rebalance_target_load_max_per_mille)
                 .unwrap_or(false)
         })
-        .cloned()
         .collect();
 
     let mut existing_tasks: BTreeSet<(String, String)> = plan
@@ -322,30 +320,17 @@ fn plan_rebalance_tasks(
                     .map(|load| load >= policy.rebalance_source_load_min_per_mille)
                     .unwrap_or(false)
             })
-            .cloned()
-            .max_by_key(|record| {
-                (
-                    record.load_ratio_per_mille.unwrap_or(0),
-                    record.last_seen_ms,
-                    std::cmp::Reverse(record.provider_id.clone()),
-                )
-            });
+            .max_by(compare_rebalance_source);
         let Some(source) = source else {
             continue;
         };
 
-        let occupied: BTreeSet<String> = providers.iter().map(|p| p.provider_id.clone()).collect();
+        let occupied: BTreeSet<&str> = providers.iter().map(|p| p.provider_id.as_str()).collect();
         let target = underloaded
             .iter()
-            .filter(|candidate| !occupied.contains(&candidate.provider_id))
-            .cloned()
-            .min_by_key(|record| {
-                (
-                    record.load_ratio_per_mille.unwrap_or(u16::MAX),
-                    std::cmp::Reverse(record.last_seen_ms),
-                    record.provider_id.clone(),
-                )
-            });
+            .copied()
+            .filter(|candidate| !occupied.contains(candidate.provider_id.as_str()))
+            .min_by(compare_rebalance_target);
         let Some(target) = target else {
             continue;
         };
@@ -359,10 +344,26 @@ fn plan_rebalance_tasks(
         plan.rebalance_tasks.push(ReplicaTransferTask {
             kind: ReplicaTransferKind::Rebalance,
             content_hash: content_hash.clone(),
-            source_provider_id: source.provider_id,
-            target_provider_id: target.provider_id,
+            source_provider_id: source.provider_id.clone(),
+            target_provider_id: target.provider_id.clone(),
         });
     }
+}
+
+fn compare_rebalance_source(left: &&ProviderRecord, right: &&ProviderRecord) -> Ordering {
+    left.load_ratio_per_mille
+        .unwrap_or(0)
+        .cmp(&right.load_ratio_per_mille.unwrap_or(0))
+        .then_with(|| left.last_seen_ms.cmp(&right.last_seen_ms))
+        .then_with(|| right.provider_id.cmp(&left.provider_id))
+}
+
+fn compare_rebalance_target(left: &&ProviderRecord, right: &&ProviderRecord) -> Ordering {
+    left.load_ratio_per_mille
+        .unwrap_or(u16::MAX)
+        .cmp(&right.load_ratio_per_mille.unwrap_or(u16::MAX))
+        .then_with(|| right.last_seen_ms.cmp(&left.last_seen_ms))
+        .then_with(|| left.provider_id.cmp(&right.provider_id))
 }
 
 fn collect_global_candidates(
@@ -578,6 +579,17 @@ mod tests {
         }
     }
 
+    fn provider_seen(
+        provider_id: &str,
+        load_ratio_per_mille: Option<u16>,
+        last_seen_ms: i64,
+    ) -> ProviderRecord {
+        ProviderRecord {
+            last_seen_ms,
+            ..provider(provider_id, load_ratio_per_mille)
+        }
+    }
+
     fn map(entries: &[(&str, Vec<ProviderRecord>)]) -> HashMap<String, Vec<ProviderRecord>> {
         let mut out = HashMap::new();
         for (hash, providers) in entries {
@@ -671,6 +683,46 @@ mod tests {
                 .iter()
                 .all(|task| task.kind == ReplicaTransferKind::Rebalance)
         );
+    }
+
+    #[test]
+    fn plan_replica_maintenance_preserves_rebalance_tie_breaks() {
+        let dht = StaticProvidersDht::with_providers_by_hash(map(&[
+            (
+                "hash-a",
+                vec![
+                    provider_seen("peer-source-b", Some(950), 2_000),
+                    provider_seen("peer-source-a", Some(950), 2_000),
+                ],
+            ),
+            (
+                "hash-b",
+                vec![
+                    provider_seen("peer-target-b", Some(100), 2_900),
+                    provider_seen("peer-target-a", Some(100), 3_000),
+                ],
+            ),
+        ]));
+        let hashes = vec!["hash-a".to_string(), "hash-b".to_string()];
+
+        let plan = plan_replica_maintenance(
+            &dht,
+            "w1",
+            &hashes,
+            ReplicaMaintenancePolicy {
+                target_replicas_per_blob: 2,
+                max_repairs_per_round: 0,
+                max_rebalances_per_round: 8,
+                rebalance_source_load_min_per_mille: 900,
+                rebalance_target_load_max_per_mille: 150,
+            },
+        )
+        .expect("plan");
+
+        assert_eq!(plan.rebalance_tasks.len(), 1);
+        assert_eq!(plan.rebalance_tasks[0].content_hash, "hash-a");
+        assert_eq!(plan.rebalance_tasks[0].source_provider_id, "peer-source-a");
+        assert_eq!(plan.rebalance_tasks[0].target_provider_id, "peer-target-a");
     }
 
     #[test]

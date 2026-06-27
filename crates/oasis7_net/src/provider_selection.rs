@@ -79,31 +79,42 @@ impl ProviderSelectionPolicy {
     }
 
     pub fn rank_providers(&self, providers: &[ProviderRecord], now_ms: i64) -> Vec<ProviderRecord> {
-        let mut best_by_provider_id: HashMap<String, (ProviderRecord, f64)> = HashMap::new();
+        self.rank_provider_refs(providers.iter(), now_ms)
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>()
+    }
+
+    pub(crate) fn rank_provider_refs<'a, I>(
+        &self,
+        providers: I,
+        now_ms: i64,
+    ) -> Vec<&'a ProviderRecord>
+    where
+        I: IntoIterator<Item = &'a ProviderRecord>,
+    {
+        let mut best_by_provider_id: HashMap<&'a str, (&'a ProviderRecord, f64)> = HashMap::new();
         for provider in providers {
             let score = self.score_provider(provider, now_ms);
             best_by_provider_id
-                .entry(provider.provider_id.clone())
+                .entry(provider.provider_id.as_str())
                 .and_modify(|existing| {
-                    if compare_scored_provider(provider, score, &existing.0, existing.1)
+                    if compare_scored_provider(provider, score, existing.0, existing.1)
                         == Ordering::Less
                     {
-                        *existing = (provider.clone(), score);
+                        *existing = (provider, score);
                     }
                 })
-                .or_insert_with(|| (provider.clone(), score));
+                .or_insert((provider, score));
         }
 
         let mut ranked = best_by_provider_id.into_values().collect::<Vec<_>>();
         if self.max_candidates > 0 && ranked.len() > self.max_candidates {
-            ranked.select_nth_unstable_by(self.max_candidates, compare_scored_provider_tuple);
+            ranked.select_nth_unstable_by(self.max_candidates, compare_scored_provider_ref_tuple);
             ranked.truncate(self.max_candidates);
         }
-        ranked.sort_by(compare_scored_provider_tuple);
-        ranked
-            .into_iter()
-            .map(|(provider, _)| provider)
-            .collect::<Vec<_>>()
+        ranked.sort_by(compare_scored_provider_ref_tuple);
+        ranked.into_iter().map(|(provider, _)| provider).collect()
     }
 
     fn freshness_score(&self, last_seen_ms: i64, now_ms: i64) -> f64 {
@@ -118,9 +129,9 @@ impl ProviderSelectionPolicy {
     }
 }
 
-fn compare_scored_provider_tuple(
-    (left_provider, left_score): &(ProviderRecord, f64),
-    (right_provider, right_score): &(ProviderRecord, f64),
+fn compare_scored_provider_ref_tuple(
+    (left_provider, left_score): &(&ProviderRecord, f64),
+    (right_provider, right_score): &(&ProviderRecord, f64),
 ) -> Ordering {
     compare_scored_provider(left_provider, *left_score, right_provider, *right_score)
 }
