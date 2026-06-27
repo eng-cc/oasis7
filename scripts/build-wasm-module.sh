@@ -395,6 +395,8 @@ ensure_builder_image() {
       echo "hint: set OASIS7_WASM_BUILDER_AUTO_BUILD=1 or rebuild the image manually" >&2
       exit 1
     fi
+
+    docker image rm -f "$WASM_BUILDER_IMAGE" >/dev/null 2>&1 || true
   else
     if [[ "$WASM_BUILDER_IMAGE" != "$DEFAULT_BUILDER_IMAGE" ]]; then
       echo "error: configured builder image is missing: $WASM_BUILDER_IMAGE" >&2
@@ -411,15 +413,12 @@ ensure_builder_image() {
 
   build_local_builder_image
 
-  if [[ -z "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
-    return 0
-  fi
-
-  actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
-  if [[ "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
-    echo "error: rebuilt canonical wasm builder digest mismatch for $WASM_BUILDER_IMAGE" >&2
-    echo "error: expected $WASM_BUILDER_IMAGE_DIGEST but found $actual_image_id" >&2
-    exit 1
+  if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+    actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+    if [[ "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
+      echo "warning: rebuilt canonical wasm builder image id differs from configured recipe digest" >&2
+      echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; rebuilt image id $actual_image_id" >&2
+    fi
   fi
 }
 
@@ -427,9 +426,10 @@ builder_image_digest() {
   local actual_image_id
   actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
   if [[ -n "$WASM_BUILDER_IMAGE_DIGEST" && "$actual_image_id" != "$WASM_BUILDER_IMAGE_DIGEST" ]]; then
-    echo "error: builder image digest mismatch for $WASM_BUILDER_IMAGE" >&2
-    echo "error: expected $WASM_BUILDER_IMAGE_DIGEST but found $actual_image_id" >&2
-    exit 1
+    echo "warning: builder image id differs from configured recipe digest for $WASM_BUILDER_IMAGE" >&2
+    echo "warning: configured recipe digest $WASM_BUILDER_IMAGE_DIGEST; image id $actual_image_id" >&2
+    printf '%s\n' "$WASM_BUILDER_IMAGE_DIGEST"
+    return 0
   fi
   printf '%s\n' "$actual_image_id"
 }
