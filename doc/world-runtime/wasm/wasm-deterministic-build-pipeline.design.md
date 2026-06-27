@@ -263,10 +263,20 @@ report 聚合时必须输出：
 #### 5.8.3 External Evidence Dispatch Runbook
 当真实 Docker-capable `darwin-arm64` runner 可用后，full-tier 证据归档流程固定为：
 
+优先使用手动 CI 路径：
+
+1. 在 GitHub Actions 手动触发 `Wasm Darwin Docker Evidence`。
+2. `runs_on_json` 填写真实 Docker-capable macOS ARM64 self-hosted runner labels，默认值为 `["self-hosted","macOS","ARM64","docker"]`。
+3. `collect-darwin-docker-summaries` job 会做 `Darwin arm64 + docker linux/amd64` preflight，并产出 `darwin-arm64-wasm-summary-bundle` artifact。
+4. `verify-with-linux-summaries` job 会下载该 artifact、收集 `linux-x86_64` summaries、导入 darwin bundle，并产出 `darwin-arm64-wasm-release-evidence-report` artifact。
+5. 该 report 的 `summary.json` 满足下方 closure 条件后，才可把 `WDBP-3.2` 视为完成。
+
+如果 self-hosted runner 不能直接接入仓库 workflow，则使用外部 dispatch 路径：
+
 1. 在外部 runner 上收集 `m1/m4/m5` summary，并生成标准 bundle：
    - `./scripts/package-wasm-summary-bundle.sh --out-dir <bundle-dir> --archive <bundle.tar.gz> --runner-label darwin-arm64`
 2. 将 `<bundle.tar.gz>` 上传到 GitHub Actions runner 可访问的 URL（例如 release asset、对象存储或受控静态下载地址）。
-3. 在仓库内触发 workflow_dispatch：
+3. 在仓库内触发 `Wasm Determinism Gate` workflow_dispatch：
    - `./scripts/dispatch-wasm-determinism-gate.sh --bundle-url <https-url> --runner-label darwin-arm64`
 4. verify job 会自动执行：
    - 下载 GitHub-hosted `linux-x86_64` summaries

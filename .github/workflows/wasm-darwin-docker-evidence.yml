@@ -1,0 +1,215 @@
+name: Wasm Darwin Docker Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs_on_json:
+        description: JSON array of labels for a Docker-capable darwin arm64 self-hosted runner.
+        required: true
+        default: '["self-hosted","macOS","ARM64","docker"]'
+        type: string
+      verify_with_linux:
+        description: Import the darwin bundle into an Ubuntu-hosted linux-x86_64 verification report.
+        required: true
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_TOOLCHAIN: 1.96.0
+  OASIS7_WASM_TOOLCHAIN: nightly-2025-12-11
+  OASIS7_WASM_TARGET: wasm32-unknown-unknown
+  OASIS7_WASM_BUILD_STD: "1"
+  OASIS7_WASM_BUILD_STD_COMPONENTS: std,panic_abort
+  EVIDENCE_ROOT: output/ci/wasm-darwin-docker-evidence
+  MODULE_SETS: m1,m4,m5
+  RUNNER_LABEL: darwin-arm64
+  WASM_BUILDER_IMAGE: oasis7/wasm-builder:nightly-2025-12-11
+  WASM_BUILDER_IMAGE_DIGEST: sha256:08cb684c3ecc06e4e31e2dc9a4cfdb13bb140ea88619a47fb7a39c2fdab07e9a
+  BUNDLE_ARTIFACT_NAME: darwin-arm64-wasm-summary-bundle
+  REPORT_ARTIFACT_NAME: darwin-arm64-wasm-release-evidence-report
+
+jobs:
+  collect-darwin-docker-summaries:
+    name: Collect darwin-arm64 Docker summaries
+    runs-on: ${{ fromJSON(inputs.runs_on_json) }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Rust toolchains
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          rustup default "${RUST_TOOLCHAIN}"
+          rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
+          rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+
+      - name: Preflight Docker and host identity
+        run: |
+          mkdir -p "${EVIDENCE_ROOT}/preflight"
+          test "$(uname -s)" = "Darwin"
+          arch="$(uname -m)"
+          case "$arch" in
+            arm64|aarch64) ;;
+            *)
+              echo "error: expected darwin arm64 host, got arch=$arch" >&2
+              exit 2
+              ;;
+          esac
+          command -v jq
+          command -v docker
+          docker version
+          {
+            printf 'runner_label=%s\n' "$RUNNER_LABEL"
+            printf 'host_uname_s=%s\n' "$(uname -s)"
+            printf 'host_uname_m=%s\n' "$(uname -m)"
+            printf 'docker_path=%s\n' "$(command -v docker)"
+            docker version
+          } > "${EVIDENCE_ROOT}/preflight/docker-host.txt"
+          docker run --rm --platform linux/amd64 alpine:3.20 uname -m | tee "${EVIDENCE_ROOT}/preflight/docker-platform.txt"
+          grep -Eq '^(x86_64|amd64)$' "${EVIDENCE_ROOT}/preflight/docker-platform.txt"
+          printf 'runner_label=%s\n' "$RUNNER_LABEL"
+
+      - name: Rebuild and verify canonical wasm builder image
+        run: |
+          mkdir -p "${EVIDENCE_ROOT}/preflight"
+          docker image rm -f "$WASM_BUILDER_IMAGE" >/dev/null 2>&1 || true
+          if docker buildx version >/dev/null 2>&1; then
+            docker buildx build \
+              --load \
+              --platform linux/amd64 \
+              --build-arg "WASM_TOOLCHAIN=${OASIS7_WASM_TOOLCHAIN}" \
+              --build-arg "WASM_TARGET=${OASIS7_WASM_TARGET}" \
+              --tag "$WASM_BUILDER_IMAGE" \
+              --file docker/wasm-builder/Dockerfile \
+              .
+          else
+            docker build \
+              --platform linux/amd64 \
+              --build-arg "WASM_TOOLCHAIN=${OASIS7_WASM_TOOLCHAIN}" \
+              --build-arg "WASM_TARGET=${OASIS7_WASM_TARGET}" \
+              --tag "$WASM_BUILDER_IMAGE" \
+              --file docker/wasm-builder/Dockerfile \
+              .
+          fi
+          actual_image_id="$(docker image inspect "$WASM_BUILDER_IMAGE" --format '{{.Id}}')"
+          {
+            printf 'builder_image=%s\n' "$WASM_BUILDER_IMAGE"
+            printf 'expected_digest=%s\n' "$WASM_BUILDER_IMAGE_DIGEST"
+            printf 'actual_image_id=%s\n' "$actual_image_id"
+          } | tee "${EVIDENCE_ROOT}/preflight/wasm-builder-image.txt"
+          test "$actual_image_id" = "$WASM_BUILDER_IMAGE_DIGEST"
+
+      - name: Package darwin-arm64 summary bundle
+        env:
+          OASIS7_WASM_BUILDER_AUTO_BUILD: "0"
+        run: |
+          mkdir -p "${EVIDENCE_ROOT}"
+          ./scripts/package-wasm-summary-bundle.sh \
+            --out-dir "${EVIDENCE_ROOT}/bundle" \
+            --archive "${EVIDENCE_ROOT}/darwin-arm64-wasm-summary-bundle.tar.gz" \
+            --module-sets "${MODULE_SETS}" \
+            --runner-label "${RUNNER_LABEL}"
+          jq -e \
+            --arg runner "$RUNNER_LABEL" \
+            '.runner_label == $runner and .host_platform == "darwin-arm64" and .canonical_platforms == ["linux-x86_64"]' \
+            "${EVIDENCE_ROOT}/bundle/bundle_manifest.json"
+
+      - name: Upload darwin-arm64 summary bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          path: |
+            ${{ env.EVIDENCE_ROOT }}/preflight
+            ${{ env.EVIDENCE_ROOT }}/bundle
+            ${{ env.EVIDENCE_ROOT }}/darwin-arm64-wasm-summary-bundle.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-with-linux-summaries:
+    name: Verify linux-x86_64 plus darwin-arm64 evidence
+    if: ${{ inputs.verify_with_linux }}
+    needs: collect-darwin-docker-summaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pinned Rust toolchains
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile default
+          rustup target add wasm32-unknown-unknown --toolchain "${RUST_TOOLCHAIN}"
+          rustup default "${RUST_TOOLCHAIN}"
+          rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
+          rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+
+      - name: Download darwin-arm64 summary bundle
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ env.BUNDLE_ARTIFACT_NAME }}
+          path: ${{ env.EVIDENCE_ROOT }}/external
+
+      - name: Collect linux-x86_64 summaries
+        run: |
+          IFS=',' read -r -a module_sets <<< "$MODULE_SETS"
+          for module_set in "${module_sets[@]}"; do
+            module_set="$(echo "$module_set" | xargs)"
+            [[ -n "$module_set" ]] || continue
+            ./scripts/ci-m1-wasm-summary.sh \
+              --module-set "$module_set" \
+              --runner-label linux-x86_64 \
+              --out "${EVIDENCE_ROOT}/linux/${module_set}/linux-x86_64.json"
+          done
+
+      - name: Stage darwin-arm64 imports
+        env:
+          BUNDLE_ARCHIVE: ${{ env.EVIDENCE_ROOT }}/external/darwin-arm64-wasm-summary-bundle.tar.gz
+        run: |
+          test -f "$BUNDLE_ARCHIVE"
+          IFS=',' read -r -a module_sets <<< "$MODULE_SETS"
+          for module_set in "${module_sets[@]}"; do
+            module_set="$(echo "$module_set" | xargs)"
+            [[ -n "$module_set" ]] || continue
+            ./scripts/stage-wasm-summary-imports.sh \
+              --module-set "$module_set" \
+              --local-summary-dir "${EVIDENCE_ROOT}/linux/${module_set}" \
+              --out-dir "${EVIDENCE_ROOT}/staged/${module_set}" \
+              --external-summary-bundle "$BUNDLE_ARCHIVE" \
+              --expected-external-runner "$RUNNER_LABEL" \
+              --expected-external-host darwin-arm64 \
+              --expected-canonical-platform linux-x86_64
+          done
+
+      - name: Write cross-host evidence report
+        run: |
+          ./scripts/wasm-release-evidence-report.sh \
+            --module-sets "$MODULE_SETS" \
+            --skip-collect \
+            --summary-import-dir "${EVIDENCE_ROOT}/staged" \
+            --out-dir "${EVIDENCE_ROOT}/report" \
+            --runner-label linux-x86_64 \
+            --required-runners linux-x86_64 \
+            --expected-runners "linux-x86_64,${RUNNER_LABEL}"
+
+          summary_json="$(find "${EVIDENCE_ROOT}/report" -name summary.json | sort | tail -n 1)"
+          test -n "$summary_json"
+          jq -e \
+            --arg runner "$RUNNER_LABEL" \
+            '.gate_result == "cross-host-closed"
+              and .cross_host_evidence_pending == false
+              and (.received_runners | index("linux-x86_64"))
+              and (.received_runners | index($runner))
+              and (.module_sets | map(.module_set) | sort) == ["m1","m4","m5"]
+              and all(.module_sets[]; .canonical_hash_consistent == true)
+              and all(.module_sets[]; .receipt_evidence_consistent == true)' \
+            "$summary_json"
+
+      - name: Upload cross-host evidence report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.REPORT_ARTIFACT_NAME }}
+          path: ${{ env.EVIDENCE_ROOT }}/report
+          if-no-files-found: error
+          retention-days: 14

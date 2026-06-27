@@ -1,0 +1,33 @@
+task_uid: task_dac2a6ab38134923b8573bc74fe5743e
+title: "Close WDBP-3.2 darwin-arm64 evidence"
+owner_role: tpm
+module: chain-world-state-substrate
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-chain-world-state-substrate-wdbp32-darwin-arm64-evidence
+execution_log_path: .pm/tasks/task_dac2a6ab38134923b8573bc74fe5743e.execution.md
+status: done
+priority: P0
+source_signal: null
+source_refs:
+  - doc/world-runtime/project.md
+  - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.project.md
+  - doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md
+  - doc/world-runtime/prd.md
+doc_refs: []
+related_prd:
+  - PRD-WORLD_RUNTIME-021
+  - PRD-WORLD_RUNTIME-022
+acceptance:
+  - "Produce or import real Docker-capable darwin-arm64 WASM canonical summary evidence for WDBP-3.2, or record a concrete external-runner blocker with an executable evidence path."
+  - "Verify linux-x86_64 plus darwin-arm64 summary/proof path through the existing package/import/dispatch/attestation tooling without claiming cross-host closure prematurely."
+handoff_to:
+  - wasm_platform_engineer
+  - runtime_engineer
+  - qa_engineer
+updated_at: 2026-06-27T11:37:33+08:00
+last_started_at: 2026-06-26T22:43:12+08:00
+last_claim_type: task_complete
+last_verify_command: "actionlint .github/workflows/wasm-darwin-docker-evidence.yml && ruby -e 'require \"yaml\"; YAML.load_file(\".github/workflows/wasm-darwin-docker-evidence.yml\"); puts \"yaml ok\"' && git diff --check origin/main..HEAD && /opt/homebrew/bin/bash scripts/wasm-summary-bundle-smoke.sh"
+last_verified_at: 2026-06-27T11:37:32+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-27T11:37:33+08:00
