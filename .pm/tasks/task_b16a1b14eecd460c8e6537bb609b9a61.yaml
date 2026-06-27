@@ -11,6 +11,7 @@ source_refs:
   - doc/engineering/workflow/source-of-truth.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/engineering/project.md
 related_prd: []
 acceptance:
   - "Evaluate whether oasis7 workflow should evolve using loop engineering principles"
