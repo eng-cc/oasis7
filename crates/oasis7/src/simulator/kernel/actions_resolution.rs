@@ -11,28 +11,6 @@ impl WorldKernel {
             .position(|entry| entry.order_id == order_id)
     }
 
-    fn sorted_opposite_power_order_ids(&self, incoming_side: PowerOrderSide) -> Vec<u64> {
-        let mut entries: Vec<(u64, i64)> = self
-            .model
-            .power_order_book
-            .open_orders
-            .iter()
-            .filter(|entry| entry.side != incoming_side)
-            .map(|entry| (entry.order_id, entry.limit_price_per_pu))
-            .collect();
-        entries.sort_by(
-            |(lhs_order_id, lhs_price), (rhs_order_id, rhs_price)| match incoming_side {
-                PowerOrderSide::Buy => lhs_price
-                    .cmp(rhs_price)
-                    .then_with(|| lhs_order_id.cmp(rhs_order_id)),
-                PowerOrderSide::Sell => rhs_price
-                    .cmp(lhs_price)
-                    .then_with(|| lhs_order_id.cmp(rhs_order_id)),
-            },
-        );
-        entries.into_iter().map(|(order_id, _)| order_id).collect()
-    }
-
     fn power_order_limits_cross(
         incoming_side: PowerOrderSide,
         incoming_limit_price_per_pu: i64,
@@ -111,54 +89,60 @@ impl WorldKernel {
         let mut fills = Vec::new();
         let mut auto_cancelled_order_ids = Vec::new();
 
-        let candidate_order_ids = self.sorted_opposite_power_order_ids(side);
-        for candidate_order_id in candidate_order_ids {
+        let candidates = self.sorted_opposite_power_order_candidates(side);
+        let mut removed_original_indices = Vec::new();
+        for candidate in candidates {
             if remaining_amount <= 0 {
                 break;
             }
 
-            let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
+            let Some(candidate_index) =
+                self.current_power_order_index(&candidate, &removed_original_indices)
+            else {
                 continue;
             };
-            let candidate_order = self.model.power_order_book.open_orders[candidate_index].clone();
             if !Self::power_order_limits_cross(
                 side,
                 limit_price_per_pu,
-                candidate_order.limit_price_per_pu,
+                candidate.limit_price_per_pu,
             ) {
                 break;
             }
 
-            let fill_amount = remaining_amount.min(candidate_order.remaining_amount);
+            let fill_amount = remaining_amount.min(candidate.remaining_amount);
             if fill_amount <= 0 {
                 self.model
                     .power_order_book
                     .open_orders
                     .remove(candidate_index);
+                Self::record_removed_power_order_original_index(
+                    &mut removed_original_indices,
+                    candidate.original_index,
+                );
                 Self::append_auto_cancelled_order_id(
                     &mut auto_cancelled_order_ids,
-                    candidate_order.order_id,
+                    candidate.order_id,
                 );
                 continue;
             }
 
             let (seller, buyer, sell_limit_price_per_pu, buy_limit_price_per_pu) = match side {
                 PowerOrderSide::Buy => (
-                    candidate_order.owner.clone(),
+                    candidate.owner.clone(),
                     owner.clone(),
-                    candidate_order.limit_price_per_pu,
+                    candidate.limit_price_per_pu,
                     limit_price_per_pu,
                 ),
                 PowerOrderSide::Sell => (
                     owner.clone(),
-                    candidate_order.owner.clone(),
+                    candidate.owner.clone(),
                     limit_price_per_pu,
-                    candidate_order.limit_price_per_pu,
+                    candidate.limit_price_per_pu,
                 ),
             };
             let (buy_order_id, sell_order_id) = match side {
-                PowerOrderSide::Buy => (order_id, candidate_order.order_id),
-                PowerOrderSide::Sell => (candidate_order.order_id, order_id),
+                PowerOrderSide::Buy => (order_id, candidate.order_id),
+                PowerOrderSide::Sell => (candidate.order_id, order_id),
             };
 
             let prepared = match self.prepare_power_transfer(&seller, &buyer, fill_amount) {
@@ -180,7 +164,11 @@ impl WorldKernel {
                             .remove(candidate_index);
                         Self::append_auto_cancelled_order_id(
                             &mut auto_cancelled_order_ids,
-                            candidate_order.order_id,
+                            candidate.order_id,
+                        );
+                        Self::record_removed_power_order_original_index(
+                            &mut removed_original_indices,
+                            candidate.original_index,
                         );
                     }
                     continue;
@@ -226,7 +214,11 @@ impl WorldKernel {
                             .remove(candidate_index);
                         Self::append_auto_cancelled_order_id(
                             &mut auto_cancelled_order_ids,
-                            candidate_order.order_id,
+                            candidate.order_id,
+                        );
+                        Self::record_removed_power_order_original_index(
+                            &mut removed_original_indices,
+                            candidate.original_index,
                         );
                     }
                     continue;
@@ -246,23 +238,23 @@ impl WorldKernel {
                 continue;
             };
 
-            let Some(candidate_index) = self.find_power_order_index(candidate_order_id) else {
-                return WorldEventKind::ActionRejected {
-                    reason: RejectReason::RuleDenied {
-                        notes: vec![format!(
-                            "power orderbook inconsistent: order {} missing during fill",
-                            candidate_order_id
-                        )],
-                    },
-                };
+            let Some(candidate_state) = self
+                .model
+                .power_order_book
+                .open_orders
+                .get_mut(candidate_index)
+            else {
+                return Self::power_orderbook_inconsistent_missing(candidate.order_id);
             };
-            let candidate_state = &mut self.model.power_order_book.open_orders[candidate_index];
+            if candidate_state.order_id != candidate.order_id {
+                return Self::power_orderbook_inconsistent_missing(candidate.order_id);
+            }
             if candidate_state.remaining_amount < transferred_amount {
                 return WorldEventKind::ActionRejected {
                     reason: RejectReason::RuleDenied {
                         notes: vec![format!(
                             "power orderbook inconsistent: order {} remaining {} < fill {}",
-                            candidate_order_id,
+                            candidate.order_id,
                             candidate_state.remaining_amount,
                             transferred_amount
                         )],
@@ -277,6 +269,10 @@ impl WorldKernel {
                     .power_order_book
                     .open_orders
                     .remove(candidate_index);
+                Self::record_removed_power_order_original_index(
+                    &mut removed_original_indices,
+                    candidate.original_index,
+                );
             }
 
             remaining_amount = remaining_amount.saturating_sub(transferred_amount);
