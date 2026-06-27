@@ -216,3 +216,20 @@ Example:
 - Expected Result: Capture initial PR status/checks/comments.
 - Actual Result: PR open, ready for review, mergeStateStatus=BLOCKED due reviewDecision=REVIEW_REQUIRED, no comments/reviews, required-gate and plan-wasm-determinism-scope in progress, skipped full-regression/newapi bridge.
 - Blocker / Next Action: Continue normal PR watch; inspect/fix failed checks or merge after checks/comments/thread gates pass.
+
+## 2026-06-27 16:33:51 CST / tpm
+- 完成内容: Investigated and fixed PR #697 required-gate failure.
+- 遗留事项: Push fix, re-watch required checks/comments/mergeability, merge, and cleanup.
+- Action: CI failure fix.
+- Failure: GitHub `required-gate` failed in `./scripts/check-rust-file-size.sh` because `crates/oasis7/src/simulator/tests/persist.rs` grew to 1205 lines, exceeding the 1200-line test-file limit.
+- Fix Evidence: Moved the three new journal invariant persistence regressions into `crates/oasis7/src/simulator/tests/persist_journal_invariants.rs` and registered the module in `crates/oasis7/src/simulator/tests/mod.rs`; no behavior change to runtime validation.
+- Validation Command: ./scripts/check-rust-file-size.sh
+- Expected Result: Oversized Rust file scan passes.
+- Actual Result: Passed; oversized code files=0, test files=0.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 simulator::tests::persist
+- Expected Result: Existing persistence tests plus registered invariant module pass.
+- Actual Result: Passed; 32 tests passed, 0 failed.
+- Validation Command: ./scripts/cargo-dev.sh test -p oasis7 simulator::tests::persist_journal_invariants
+- Expected Result: Split journal invariant tests pass.
+- Actual Result: Passed; 3 tests passed, 0 failed.
+- Blocker / Next Action: Run formatting/diff/workflow checks, commit, push, and re-watch PR checks.
