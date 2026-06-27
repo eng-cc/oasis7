@@ -10,6 +10,8 @@
 
 - [x] provider-selection-topn-ranking-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DHT provider ranking to dedupe per provider first and select only the bounded top-N candidate window before final ordering, avoiding full provider-record clone/sort work while preserving score, freshness, provider-id tie-break, duplicate-provider, and unlimited-candidate semantics. Trace: .pm/tasks/task_8539cf65c1b74efbacd963fe51adbaf1.yaml
 
+- [x] simulator-observation-btreemap-snapshot-sort-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator observation snapshots to rely on BTreeMap key order for key-aligned module/social collections instead of re-sorting after collection, preserving non-key-aligned market/order sorting semantics. Trace: .pm/tasks/task_d4a0aba67db2412989ec9ec33af687fb.yaml
+
 - [x] social-evidence-journal-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator social fact evidence validation to use the existing gapless event-id invariant instead of scanning the full journal for each evidence id, preserving first-missing-id rejection semantics and replay persistence behavior. Trace: .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml
 
 - [x] distfs-feedback-rate-limit-audit-window-skip-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DistFS feedback mutation rate-limit checks to skip stale audit files by parseable audit-path timestamp before disk read / JSON parse, preserving conservative fallback for nonstandard paths and existing accepted/rejected semantics. Trace: .pm/tasks/task_3261fc6f08024571968673d03abf6515.yaml

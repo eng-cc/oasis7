@@ -64,7 +64,7 @@ impl WorldKernel {
             }
         }
 
-        let mut module_artifacts = self
+        let module_artifacts = self
             .model
             .module_artifacts
             .values()
@@ -76,15 +76,13 @@ impl WorldKernel {
                 deployed_at_tick: artifact.deployed_at_tick,
             })
             .collect::<Vec<_>>();
-        module_artifacts.sort_by(|left, right| left.wasm_hash.cmp(&right.wasm_hash));
 
-        let mut installed_modules = self
+        let installed_modules = self
             .model
             .installed_modules
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        installed_modules.sort_by(|left, right| left.module_id.cmp(&right.module_id));
 
         let mut module_listings = self
             .model
@@ -105,21 +103,19 @@ impl WorldKernel {
         let mut power_open_orders = self.model.power_order_book.open_orders.clone();
         power_open_orders.sort_by(|left, right| left.order_id.cmp(&right.order_id));
 
-        let mut social_facts = self
+        let social_facts = self
             .model
             .social_facts
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        social_facts.sort_by(|left, right| left.fact_id.cmp(&right.fact_id));
 
-        let mut social_edges = self
+        let social_edges = self
             .model
             .social_edges
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        social_edges.sort_by(|left, right| left.edge_id.cmp(&right.edge_id));
 
         let observation = Observation {
             time: self.time,
