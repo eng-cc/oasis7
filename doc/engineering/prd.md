@@ -224,7 +224,7 @@
   - `doc/engineering/workflow/source-of-truth.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
-  - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical audit snapshot; active checklist glob has been retired, current module truth is routed through each module `README.md` / `prd.index.md` / `project.md` / `prd.md`）
+  - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`

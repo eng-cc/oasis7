@@ -25,7 +25,7 @@
   - historical site PRD review checklist snapshot（后续已删除；当前 site truth 见 `doc/site/README.md`、`doc/site/prd.index.md`、`doc/site/project.md` 与 `doc/site/prd.md`）
   - historical testing PRD review checklist snapshot（后续已删除；当前 testing truth 见 `doc/testing/README.md`、`doc/testing/prd.index.md`、`doc/testing/project.md` 与 `doc/testing/prd.md`）
   - historical world-runtime PRD review checklist snapshot（后续已删除；当前 world-runtime truth 见 `doc/world-runtime/README.md`、`doc/world-runtime/prd.index.md` 与 `doc/world-runtime/project.md`）
-  - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical snapshot; current world-simulator truth is routed through `doc/world-simulator/README.md` and `doc/world-simulator/prd.index.md`）
+  - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
   - root legacy redirect checklist（后续已删除；root PRD/project shells no longer have active review targets）
 ## 依赖
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.design.md`

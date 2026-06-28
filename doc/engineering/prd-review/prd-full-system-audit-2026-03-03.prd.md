@@ -62,7 +62,7 @@
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
-  - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical audit snapshot; active checklist glob has been retired）
+  - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
   - root legacy redirect checklist（后续已删除；root PRD/project shells no longer have active review targets）
   - `doc/*/prd.md`
   - `doc/*/project.md`

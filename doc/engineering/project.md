@@ -82,6 +82,8 @@
 
 - [x] testing-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-testing.md` PRD review checklist snapshot，将当前 testing 阅读/状态语义收敛到 `doc/testing/README.md`、`doc/testing/prd.index.md`、`doc/testing/project.md` 与 `doc/testing/prd.md`。 Trace: .pm/tasks/task_d68d02b2fa1a4c60a117028935dfa8dc.yaml
 
+- [x] world-simulator-historical-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史审计留痕的 `historical-world-simulator-2026-03-05.md` PRD review checklist snapshot，将当前 world-simulator 阅读/状态语义收敛到 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`。 Trace: .pm/tasks/task_b97e58e64432417086ebf0d5a9aa5cfd.yaml
+
 - [x] p2p-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-p2p.md` PRD review checklist snapshot，将当前 p2p 阅读/状态语义收敛到 `doc/p2p/README.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/project.md`。 Trace: .pm/tasks/task_de0aa53e059f430c8905947515f36edf.yaml
 
 - [x] core-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-core.md` PRD review checklist snapshot，将当前 core 阅读/状态语义收敛到 `doc/core/README.md`、`doc/core/prd.index.md` 与 `doc/core/project.md`。 Trace: .pm/tasks/task_9799fb0a565b459098725735abf5ec81.yaml
@@ -474,7 +476,7 @@
 - 更新日期: 2026-06-27
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `testing-active-review-checklist-snapshot-deletion`（已删除 `active-testing.md` 历史审读快照兼容路径，当前 testing 阅读/状态语义收敛到模块 README、`prd.index.md`、`project.md` 与 `prd.md`。）
+- 最新完成: `world-simulator-historical-review-checklist-snapshot-deletion`（已删除 `historical-world-simulator-2026-03-05.md` 历史审读快照留痕路径，当前 world-simulator 阅读/状态语义收敛到模块 README、`prd.index.md`、`project.md` 与 `prd.md`。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
