@@ -222,7 +222,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical headless-runtime PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical p2p PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical playability_test_result PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-readme.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical readme PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical root legacy redirect checklist（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical scripts PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/checklists/active-site.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |

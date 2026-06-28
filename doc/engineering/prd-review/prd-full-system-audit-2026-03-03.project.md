@@ -20,7 +20,7 @@
   - historical headless-runtime PRD review checklist snapshot（后续已删除；当前 headless-runtime truth 见 `doc/headless-runtime/README.md`、`doc/headless-runtime/prd.index.md` 与 `doc/headless-runtime/project.md`）
   - historical p2p PRD review checklist snapshot（后续已删除；当前 p2p truth 见 `doc/p2p/README.md`、`doc/p2p/prd.index.md` 与 `doc/p2p/project.md`）
   - historical playability_test_result PRD review checklist snapshot（后续已删除；当前 playability_test_result truth 见 `doc/playability_test_result/README.md`、`doc/playability_test_result/prd.index.md` 与 `doc/playability_test_result/project.md`）
-  - `doc/engineering/prd-review/checklists/active-readme.md`
+  - historical readme PRD review checklist snapshot（后续已删除；当前 readme truth 见 `doc/readme/README.md`、`doc/readme/prd.index.md`、`doc/readme/project.md` 与 `doc/readme/prd.md`）
   - historical scripts PRD review checklist snapshot（后续已删除；当前 scripts truth 见 `doc/scripts/README.md`、`doc/scripts/prd.index.md`、`doc/scripts/project.md` 与 `doc/scripts/prd.md`）
   - `doc/engineering/prd-review/checklists/active-site.md`
   - `doc/engineering/prd-review/checklists/active-testing.md`
