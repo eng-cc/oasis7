@@ -99,13 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_4f154999acf344ccb46f2db341f08bfc
-    title: "Delete next legacy doc semantics"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance: []
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_4f154999acf344ccb46f2db341f08bfc.yaml
