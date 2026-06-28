@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] wasm-module-observe-btreemap-diff-merge-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm module observe metric bucket diffing to merge ordered `BTreeMap` iterators directly instead of cloning keys into a temporary vector, sorting, deduping, and re-looking up values, preserving saturating counter-delta semantics. Trace: .pm/tasks/task_abeacd11de97477c91668825da4524b5.yaml
+
 - [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml
 
 - [x] code-execution-efficiency-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Apply low-risk Rust code execution efficiency improvements across prompt/memory assembly, mempool selection, feedback/provider ordering, DHT progress payloads, and transfer latency summarization while preserving runtime/product semantics. Trace: .pm/tasks/task_c85925c7cfed4946b461883d94aa35be.yaml

@@ -645,21 +645,41 @@ fn diff_btree_map(
     before: &BTreeMap<String, u64>,
     after: &BTreeMap<String, u64>,
 ) -> BTreeMap<String, u64> {
-    let mut keys = before.keys().cloned().collect::<Vec<_>>();
-    for key in after.keys() {
-        if !before.contains_key(key) {
-            keys.push(key.clone());
+    let mut diff = BTreeMap::new();
+    let mut before_iter = before.iter().peekable();
+    let mut after_iter = after.iter().peekable();
+
+    while let (Some((before_key, before_value)), Some((after_key, after_value))) =
+        (before_iter.peek(), after_iter.peek())
+    {
+        match before_key.cmp(after_key) {
+            std::cmp::Ordering::Less => {
+                diff.insert((*before_key).clone(), 0);
+                before_iter.next();
+            }
+            std::cmp::Ordering::Equal => {
+                diff.insert(
+                    (*before_key).clone(),
+                    (*after_value).saturating_sub(**before_value),
+                );
+                before_iter.next();
+                after_iter.next();
+            }
+            std::cmp::Ordering::Greater => {
+                diff.insert((*after_key).clone(), **after_value);
+                after_iter.next();
+            }
         }
     }
-    keys.sort();
-    keys.dedup();
-    keys.into_iter()
-        .map(|key| {
-            let before_value = before.get(&key).copied().unwrap_or_default();
-            let after_value = after.get(&key).copied().unwrap_or_default();
-            (key, after_value.saturating_sub(before_value))
-        })
-        .collect()
+
+    for (key, _) in before_iter {
+        diff.insert(key.clone(), 0);
+    }
+    for (key, value) in after_iter {
+        diff.insert(key.clone(), *value);
+    }
+
+    diff
 }
 
 fn module_call_failure_code_label(code: &oasis7_wasm_abi::ModuleCallErrorCode) -> &'static str {
@@ -713,7 +733,11 @@ mod tests {
 
     #[test]
     fn diff_btree_map_subtracts_counters() {
-        let before = BTreeMap::from([("a".to_string(), 1), ("b".to_string(), 2)]);
+        let before = BTreeMap::from([
+            ("a".to_string(), 1),
+            ("b".to_string(), 2),
+            ("d".to_string(), 9),
+        ]);
         let after = BTreeMap::from([
             ("a".to_string(), 3),
             ("b".to_string(), 2),
@@ -723,6 +747,7 @@ mod tests {
         assert_eq!(diff.get("a"), Some(&2));
         assert_eq!(diff.get("b"), Some(&0));
         assert_eq!(diff.get("c"), Some(&5));
+        assert_eq!(diff.get("d"), Some(&0));
     }
 
     #[test]
