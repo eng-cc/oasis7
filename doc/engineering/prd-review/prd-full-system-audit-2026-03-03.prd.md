@@ -56,13 +56,13 @@
 - Evaluation Strategy: 以“清单覆盖率、已读完成率、偏差修复闭环率、引用断链数”为核心指标。
 
 ## 4. Technical Specifications
-- Architecture Overview: 采用“入口文档先行 + 模块清单执行”的审读架构；所有审读结果通过 checklist 固化在 `doc/engineering/prd-review/checklists/`。
+- Architecture Overview: 采用“入口文档先行 + 模块清单执行”的审读架构；历史审读结果保留为 snapshot，当前模块 truth 通过各模块 `README.md` / `prd.index.md` / `project.md` / `prd.md` 路由。
 - Integration Points:
   - `doc/engineering/prd.md`
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
-  - `doc/engineering/prd-review/checklists/active-*.md`
+  - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical audit snapshot; active checklist glob has been retired）
   - root legacy redirect checklist（后续已删除；root PRD/project shells no longer have active review targets）
   - `doc/*/prd.md`
   - `doc/*/project.md`
