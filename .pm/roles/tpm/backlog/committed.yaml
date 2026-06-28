@@ -99,13 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_b97e58e64432417086ebf0d5a9aa5cfd
-    title: "Delete historical world simulator PRD review checklist snapshot"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance: []
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_b97e58e64432417086ebf0d5a9aa5cfd.yaml
