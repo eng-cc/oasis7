@@ -45,7 +45,7 @@
 - historical readme PRD review checklist snapshot（后续已删除）
 - historical root legacy redirect checklist（后续已删除）
 - historical scripts PRD review checklist snapshot（后续已删除）
-- `doc/engineering/prd-review/checklists/active-site.md`
+- historical site PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/active-testing.md`
 - historical world-runtime PRD review checklist snapshot（后续已删除）
 - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`
