@@ -10,6 +10,8 @@
 
 - [x] libp2p-peer-id-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize libp2p replication peer-id sort/dedup normalization in a private helper for connected and known peer-id lists, preserving sorted unique diagnostic/network-bridge output while reducing duplicate ordering logic. Trace: .pm/tasks/task_97177b0362184061ad7b4a244926abd8.yaml
 
+- [x] chain-runtime-replication-allowlist-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize chain runtime replication allowlist sort/dedup normalization in a private helper reused by remote-writer and fetch-requester allowlist builders, preserving sorted unique signer-key output while reducing duplicate ordering logic. Trace: .pm/tasks/task_b2883927f22e4dd19236f4c3cd77ff2e.yaml
+
 - [x] wasm-module-observe-btreemap-diff-merge-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm module observe metric bucket diffing to merge ordered `BTreeMap` iterators directly instead of cloning keys into a temporary vector, sorting, deduping, and re-looking up values, preserving saturating counter-delta semantics. Trace: .pm/tasks/task_abeacd11de97477c91668825da4524b5.yaml
 
 - [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml

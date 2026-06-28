@@ -804,10 +804,7 @@ fn build_node_replication_config(
 fn build_replication_remote_writer_allowlist<'a>(
     validator_signer_public_keys: impl IntoIterator<Item = &'a String>,
 ) -> Vec<String> {
-    let mut allowlist: Vec<String> = validator_signer_public_keys.into_iter().cloned().collect();
-    allowlist.sort();
-    allowlist.dedup();
-    allowlist
+    normalize_replication_allowlist(validator_signer_public_keys.into_iter().cloned().collect())
 }
 
 fn build_replication_fetch_requester_allowlist<'a>(
@@ -816,6 +813,10 @@ fn build_replication_fetch_requester_allowlist<'a>(
 ) -> Vec<String> {
     let mut allowlist: Vec<String> = validator_signer_public_keys.into_iter().cloned().collect();
     allowlist.extend(explicit_fetch_requester_public_keys.iter().cloned());
+    normalize_replication_allowlist(allowlist)
+}
+
+fn normalize_replication_allowlist(mut allowlist: Vec<String>) -> Vec<String> {
     allowlist.sort();
     allowlist.dedup();
     allowlist
