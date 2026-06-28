@@ -18,7 +18,7 @@
 | manifest 策略 | builtin hash manifest 已改为单 canonical token `linux-x86_64=<sha256>`；identity 生成已切换为 receipt 驱动。 | 写路径已收敛，cross-host report 已拿到真实 `darwin-arm64` Docker evidence。 |
 | source compile | `compile_module_artifact_from_source` 仍保留源码包编译能力，但 production `ReleaseSecurityPolicy` 已默认拒绝该 action；仅 dev/test 可显式使用。 | external builder worker 仍未落地，当前以 production default-disable 先收敛 runtime 权限面。 |
 | CI 校验 | `.github/workflows/wasm-determinism-gate.yml` 当前已收敛为 GitHub-hosted `linux-x86_64` stable gate，并支持导入外部 summaries；`.github/workflows/wasm-darwin-docker-evidence.yml` 可手动调度 self-hosted Darwin Docker runner 产出真实 `darwin-arm64` bundle 并触发 Linux cross-host verify。 | `WDBP-3` 的真实 `linux-x86_64 + darwin-arm64` evidence 已在 main run `28297899706` 产出；GitHub-hosted macOS 仍不作为 Docker evidence producer。 |
-| runtime 消费策略 | runtime 侧已支持 production policy 关闭 source compile / local signing / builtin fallback，但主要通过显式启用 production policy 进入。 | 主运行入口尚缺“默认 hardened policy”绑定证据，binary-only 仍未完全提升为产品默认事实。 |
+| runtime 消费策略 | runtime 侧已支持 production policy 关闭 source compile / local signing / builtin fallback，且 production-facing 入口已补 hardened policy 绑定证据。 | WDBP-3.3 已完成；后续风险只保留入口扩展时的回归防护。 |
 
 ## 3. 设计原则
 - 原则-1：publish hash 只来自 canonical container，不来自宿主机。
@@ -197,7 +197,7 @@ runtime 的最终消费模型不变，仍是 binary-first：
 - runtime 不再需要解释多个宿主平台发布 hash。
 
 ### 5.8 Cross-Host Evidence Closure Design
-这是当前 `WDBP-3` 的 P0 剩余切片。设计目标不是让 GitHub-hosted CI 假装跨宿主完成，而是把“稳定 gate”和“最终证据”分层。
+这是 `WDBP-3` 曾经的 P0 剩余切片；当前已由 self-hosted Darwin Docker runner 与 main run `28297899706` 收口。本节保留 stable gate 与 full-tier evidence 的分层规则，防止后续把 GitHub-hosted Linux-only gate 误写成跨宿主 closure。
 
 #### 5.8.1 双层 gate 模型
 - `stable gate`
@@ -335,7 +335,7 @@ CI/report 只能提供开发期或候选期证据；真正进入 `ModuleReleaseS
 - 发布节点可选择 `--require-cross-host-closed`，在 full-tier 候选阶段把 `conditional-go` 直接升级为阻断。
 
 ### 5.9 Production Release Policy Binding
-这是另一个 P0 剩余切片。当前代码已具备 hardened policy 结构体与 helper，但“默认生产入口启用”还缺显式绑定证据。
+这是 `WDBP-3.3` 的设计边界；当前 production-facing 入口已补 hardened policy 绑定证据，本节保留为后续入口扩展时的约束。
 
 #### 5.9.1 策略矩阵
 
@@ -381,7 +381,7 @@ CI/report 只能提供开发期或候选期证据；真正进入 `ModuleReleaseS
 ```
 
 #### 5.9.4 与 source compile gate 的关系
-`WDBP-4` 解决的是“source compile 在 production 默认被拒绝”；`WDBP-3` 当前剩余的是“把同类 hardened policy 变成主入口默认事实并写出证据”。
+`WDBP-4` 解决的是“source compile 在 production 默认被拒绝”；`WDBP-3.3` 已把同类 hardened policy 变成主入口默认事实并写出证据。
 
 边界：
 - `WDBP-4` 不再新增 source compile 业务设计。
