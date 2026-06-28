@@ -430,8 +430,8 @@
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `scripts/check-rust-file-size.sh`
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+- `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
+- `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`

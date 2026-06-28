@@ -1,0 +1,23 @@
+task_uid: task_7c106fd04be24599878a480b810627ba
+title: "Find next doc governance convergence point"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-governance-convergence-scout
+execution_log_path: .pm/tasks/task_7c106fd04be24599878a480b810627ba.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs: []
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-28T23:47:03+08:00
+last_started_at: 2026-06-28T21:07:04+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_7c106fd04be24599878a480b810627ba --phase current && git diff --check"
+last_verified_at: 2026-06-28T23:46:51+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-28T23:47:01+08:00

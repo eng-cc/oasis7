@@ -19,7 +19,7 @@
 - 关闭后，engineering 模块主项目能够正式进入 completed 状态。
 
 ## Inputs
-- 代码 / 文档入口：`doc/engineering/project.md`、`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`、`doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
+- 代码 / 文档入口：`doc/engineering/project.md`、`doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`、`doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
 - 已完成内容：分批迁移执行、根入口 redirect 收口、全量迁移复核、主项目趋势与季度治理补齐
 - 已知约束：本次验证任务级证据链，不新增迁移批次
 - 依赖前置项：`TASK-ENGINEERING-010 ~ TASK-ENGINEERING-015`
@@ -41,7 +41,7 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`python - <<'PY' ... 冻结快照 existing gap 校验 ... PY && grep -nF -- '- [x] TASK-ENGINEERING-009' doc/engineering/project.md && rg -n "当前状态: completed|下一任务: 无" doc/engineering/project.md doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+- 建议验证命令：`python - <<'PY' ... 冻结快照 existing gap 校验 ... PY && grep -nF -- '- [x] TASK-ENGINEERING-009' doc/engineering/project.md && rg -n "当前状态: completed|下一任务: 无" doc/engineering/project.md doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 
 ## Notes
 - 接收方确认范围：`已确认 active legacy 文档迁移 umbrella 任务具备完成态证据链，可关闭 TASK-ENGINEERING-009`

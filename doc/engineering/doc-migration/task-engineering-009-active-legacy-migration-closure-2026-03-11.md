@@ -25,8 +25,7 @@
 | `TASK-ENGINEERING-015` | 全量迁移收口复核 | `completed` | 现存迁移条目缺口为 0，迁移专项具备完成态证据链 |
 
 ## 证据文件
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+- 旧协作三件套已退役；当前完成态入口为本 closure 记录与 `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - 2026-03-03 legacy migration backlog snapshot（后续已删除）
 - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - `doc/engineering/project.md`
@@ -40,11 +39,10 @@
 ## 对 QA 的交接点
 - 本次只要求 `qa_engineer` 复核“umbrella 任务是否具备完成态证据链”，不要求重新审读所有迁移文档正文。
 - 若 QA 需要抽样，优先抽查：
-  - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
   - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
   - `doc/engineering/project.md`
 
 ## 验证命令
 - `python - <<'PY' ... 冻结快照 existing gap 校验 ... PY`
 - `grep -nF -- '- [x] TASK-ENGINEERING-009' doc/engineering/project.md`
-- `rg -n "当前状态: completed|下一任务: 无" doc/engineering/project.md doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+- `rg -n "PRD-ENGINEERING-004|TASK-ENGINEERING-009|TASK-ENGINEERING-015" doc/engineering/project.md doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`

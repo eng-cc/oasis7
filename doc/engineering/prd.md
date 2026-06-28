@@ -92,9 +92,9 @@
   - PRD-ENGINEERING-002: As a 开发者, I want deterministic pre-commit checks, so that regressions are caught before CI.
   - PRD-ENGINEERING-003: As a 评审者, I want auditable governance evidence, so that review decisions are defensible.
   - PRD-ENGINEERING-004: As a 文档维护者, I want legacy docs migrated with per-doc manual review, so that content intent is preserved while converging to strict schema.
-  - PRD-ENGINEERING-005: As a 协调人, I want one collaboration doc with principles and owner boundaries, so that parallel migration is deterministic.
-  - PRD-ENGINEERING-006: As a 迁移执行人, I want non-overlapping migration scopes, so that I can avoid merge conflicts while moving fast.
-  - PRD-ENGINEERING-007: As a 质量复核人, I want measurable acceptance gates for migrated docs, so that content fidelity is auditable.
+  - PRD-ENGINEERING-005 (historical): legacy migration collaboration principles were completed and retired; current doc topology rules live in `doc/engineering/doc-governance/doc-structure-standard.design.md`.
+  - PRD-ENGINEERING-006 (historical): legacy migration owner scopes were completed and retired; current task execution truth uses `.pm/tasks/task_<32hex>.execution.md`.
+  - PRD-ENGINEERING-007 (historical): legacy migration closure review was completed and retired; current workflow gates live in `doc/engineering/workflow/source-of-truth.md`.
   - PRD-ENGINEERING-008: As a 文档维护者, I want per-module file-level PRD indexes, so that active docs are reachable from the root doc tree.
   - PRD-ENGINEERING-009: As a 治理维护者, I want bidirectional PRD<->project references enforced by gate, so that traceability never drifts.
   - PRD-ENGINEERING-010: As a 评审者, I want explicit `test_tier_required/full` on module task items, so that task-to-test review is deterministic.
@@ -218,8 +218,8 @@
   - `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
   - `doc/.governance/doc-root-md-allowlist.txt`
   - `doc/.governance/module-root-md-allowlist.txt`
-  - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
-  - `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+  - `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
+  - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
   - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
@@ -323,9 +323,9 @@
 | PRD-ENGINEERING-002 | TASK-ENGINEERING-002/003/007 | `test_tier_required` + `test_tier_full` | `commit` baseline 与 required/full CI 门禁联动校验 | 提交流程稳定性、回归拦截能力 |
 | PRD-ENGINEERING-003 | TASK-ENGINEERING-003/004/007 | `test_tier_required` | 趋势统计与审查模板抽样检查 | 工程治理可审计性与长期演进 |
 | PRD-ENGINEERING-004 | TASK-ENGINEERING-008/009 | `test_tier_required` | 原文约束点对照、迁移后治理脚本与引用扫描 | 文档格式一致性与内容保真 |
-| PRD-ENGINEERING-005 | TASK-ENGINEERING-010 | `test_tier_required` | 协作主文档结构与分工边界校验 | 并行迁移入口一致性 |
-| PRD-ENGINEERING-006 | TASK-ENGINEERING-011/012/013/013A/013B/013C/013D/014 | `test_tier_required` | 按 Owner 责任域抽样检查迁移提交 | 并行效率与冲突控制 |
-| PRD-ENGINEERING-007 | TASK-ENGINEERING-015 | `test_tier_required` + `test_tier_full` | 全量迁移收尾扫描、命名与引用一致性验证 | 全仓文档治理收口质量 |
+| PRD-ENGINEERING-005 | TASK-ENGINEERING-010 | historical-only | 迁移协作入口已退役；保留完成态 trace | legacy migration closure |
+| PRD-ENGINEERING-006 | TASK-ENGINEERING-011/012/013/013A/013B/013C/013D/014 | historical-only | 迁移批次已退役；保留完成态 trace | legacy migration closure |
+| PRD-ENGINEERING-007 | TASK-ENGINEERING-015 | historical-only | 全量迁移收尾复核已退役；保留完成态 trace | legacy migration closure |
 | PRD-ENGINEERING-008 | TASK-ENGINEERING-016 | `test_tier_required` | 12 模块文件级索引覆盖扫描、入口可达性检查 | 文档树可达性与导航一致性 |
 | PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | `doc-governance-check` 双向互链门禁验证 | PRD/project 追溯完整性 |
 | PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 模块主项目任务项 tier 显式标注检查 | 任务到测试分层可审计性 |
