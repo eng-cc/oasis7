@@ -46,19 +46,9 @@ fn parse_options_defaults() {
         options.initial_config.chain_replication_bootstrap_peers,
         default_chain_replication_bootstrap_peers_csv()
     );
-    let pos_defaults = oasis7::chain_pos_defaults::defaults();
-    assert_eq!(
-        options.initial_config.chain_pos_slot_duration_ms,
-        pos_defaults.slot_duration_ms.to_string()
-    );
-    assert_eq!(
-        options.initial_config.chain_pos_ticks_per_slot,
-        pos_defaults.ticks_per_slot.to_string()
-    );
-    assert_eq!(
-        options.initial_config.chain_pos_proposal_tick_phase,
-        pos_defaults.proposal_tick_phase.to_string()
-    );
+    assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "8000");
+    assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
+    assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
     assert!(
         !options
             .initial_config
@@ -68,10 +58,7 @@ fn parse_options_defaults() {
         options.initial_config.chain_pos_slot_clock_genesis_unix_ms,
         ""
     );
-    assert_eq!(
-        options.initial_config.chain_pos_max_past_slot_lag,
-        pos_defaults.max_past_slot_lag.to_string()
-    );
+    assert_eq!(options.initial_config.chain_pos_max_past_slot_lag, "256");
     assert!(options.initial_config.llm_enabled);
     assert!(!options.initial_config.chain_enabled);
     assert!(!options.initial_config.auto_open_browser);
@@ -1193,9 +1180,8 @@ fn make_temp_dir(label: &str) -> PathBuf {
         .expect("time")
         .as_nanos();
     path.push(format!(
-        "oasis7_oasis7_web_launcher_test_{label}_{}_{}",
-        std::process::id(),
-        stamp
+        "oasis7_oasis7_web_launcher_test_{label}_{}_{stamp}",
+        std::process::id()
     ));
     fs::create_dir_all(&path).expect("create temp dir");
     path
