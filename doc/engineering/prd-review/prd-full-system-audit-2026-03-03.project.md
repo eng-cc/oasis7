@@ -22,7 +22,7 @@
   - historical playability_test_result PRD review checklist snapshot（后续已删除；当前 playability_test_result truth 见 `doc/playability_test_result/README.md`、`doc/playability_test_result/prd.index.md` 与 `doc/playability_test_result/project.md`）
   - historical readme PRD review checklist snapshot（后续已删除；当前 readme truth 见 `doc/readme/README.md`、`doc/readme/prd.index.md`、`doc/readme/project.md` 与 `doc/readme/prd.md`）
   - historical scripts PRD review checklist snapshot（后续已删除；当前 scripts truth 见 `doc/scripts/README.md`、`doc/scripts/prd.index.md`、`doc/scripts/project.md` 与 `doc/scripts/prd.md`）
-  - `doc/engineering/prd-review/checklists/active-site.md`
+  - historical site PRD review checklist snapshot（后续已删除；当前 site truth 见 `doc/site/README.md`、`doc/site/prd.index.md`、`doc/site/project.md` 与 `doc/site/prd.md`）
   - `doc/engineering/prd-review/checklists/active-testing.md`
   - historical world-runtime PRD review checklist snapshot（后续已删除；当前 world-runtime truth 见 `doc/world-runtime/README.md`、`doc/world-runtime/prd.index.md` 与 `doc/world-runtime/project.md`）
   - `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`（historical snapshot; current world-simulator truth is routed through `doc/world-simulator/README.md` and `doc/world-simulator/prd.index.md`）
