@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
 
+- [x] legacy-doc-migration-collaboration-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且仍占据 active doc surface 的 2026-03-03 legacy migration collaboration PRD/design/project triplet，将旧迁移协作语义收敛到 closure evidence、doc structure standard 与 workflow source-of-truth。 Trace: .pm/tasks/task_7c106fd04be24599878a480b810627ba.yaml
+
 - [x] wasm-build-path-sort-dedup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm build source-hash path ordering to reuse a private `PathBuf` sort/dedup helper instead of repeated lossy-string comparator conversion in package-dir and source-file collection, preserving deterministic source-hash traversal for normal repo paths. Trace: .pm/tasks/task_f7a74ed95c704c09899a494237e500d7.yaml
 
 - [x] libp2p-peer-id-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize libp2p replication peer-id sort/dedup normalization in a private helper for connected and known peer-id lists, preserving sorted unique diagnostic/network-bridge output while reducing duplicate ordering logic. Trace: .pm/tasks/task_97177b0362184061ad7b4a244926abd8.yaml
