@@ -103,12 +103,25 @@ fn parse_options_defaults() {
             .map(|peer| (*peer).to_string())
             .collect::<Vec<_>>()
     );
-    assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
-    assert_eq!(options.chain_pos_ticks_per_slot, 10);
-    assert_eq!(options.chain_pos_proposal_tick_phase, 9);
+    let pos_defaults = oasis7::chain_pos_defaults::defaults();
+    assert_eq!(
+        options.chain_pos_slot_duration_ms,
+        pos_defaults.slot_duration_ms
+    );
+    assert_eq!(
+        options.chain_pos_ticks_per_slot,
+        pos_defaults.ticks_per_slot
+    );
+    assert_eq!(
+        options.chain_pos_proposal_tick_phase,
+        pos_defaults.proposal_tick_phase
+    );
     assert!(!options.chain_pos_adaptive_tick_scheduler_enabled);
     assert_eq!(options.chain_pos_slot_clock_genesis_unix_ms, None);
-    assert_eq!(options.chain_pos_max_past_slot_lag, 256);
+    assert_eq!(
+        options.chain_pos_max_past_slot_lag,
+        pos_defaults.max_past_slot_lag
+    );
     assert_eq!(options.chain_world_id, None);
     assert!(!options.chain_local_standalone_test);
     assert!(!options.chain_node_auto_attest_all_validators);
@@ -171,7 +184,7 @@ fn parse_options_accepts_overrides() {
             "--chain-node-tick-ms",
             "350",
             "--chain-pos-slot-duration-ms",
-            "12000",
+            "8000",
             "--chain-pos-ticks-per-slot",
             "10",
             "--chain-pos-proposal-tick-phase",
@@ -235,7 +248,7 @@ fn parse_options_accepts_overrides() {
         ]
     );
     assert_eq!(options.chain_node_tick_ms, 350);
-    assert_eq!(options.chain_pos_slot_duration_ms, 12_000);
+    assert_eq!(options.chain_pos_slot_duration_ms, 8_000);
     assert_eq!(options.chain_pos_ticks_per_slot, 10);
     assert_eq!(options.chain_pos_proposal_tick_phase, 9);
     assert!(options.chain_pos_adaptive_tick_scheduler_enabled);

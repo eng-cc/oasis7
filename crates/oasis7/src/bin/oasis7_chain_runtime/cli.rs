@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use oasis7::chain_pos_defaults;
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::RewardAssetConfig;
 use oasis7_node::{
@@ -25,10 +26,6 @@ pub(super) const DEFAULT_STATUS_BIND: &str = "127.0.0.1:5121";
 pub(super) const DEFAULT_CONFIG_FILE: &str = "config.toml";
 pub(super) const DEFAULT_REPLICATION_NETWORK_LISTEN: &str = "/ip4/127.0.0.1/tcp/0";
 pub(super) const DEFAULT_NODE_TICK_MS: u64 = 200;
-pub(super) const DEFAULT_POS_SLOT_DURATION_MS: u64 = 12_000;
-pub(super) const DEFAULT_POS_TICKS_PER_SLOT: u64 = 10;
-pub(super) const DEFAULT_POS_PROPOSAL_TICK_PHASE: u64 = 9;
-pub(super) const DEFAULT_POS_MAX_PAST_SLOT_LAG: u64 = 256;
 pub(super) const DEFAULT_REWARD_RUNTIME_STATE_FILE: &str = "reward-runtime-state.json";
 pub(super) const DEFAULT_REWARD_RUNTIME_DISTFS_PROBE_STATE_FILE: &str =
     "reward-runtime-distfs-probe-state.json";
@@ -132,6 +129,7 @@ pub(super) struct CliOptions {
 
 impl Default for CliOptions {
     fn default() -> Self {
+        let pos_defaults = chain_pos_defaults::defaults();
         Self {
             node_id: DEFAULT_NODE_ID.to_string(),
             world_id: DEFAULT_WORLD_ID.to_string(),
@@ -151,12 +149,12 @@ impl Default for CliOptions {
             p2p_source_asn: None,
             p2p_max_ipv4_subnet_active_peers: None,
             node_tick_ms: DEFAULT_NODE_TICK_MS,
-            pos_slot_duration_ms: DEFAULT_POS_SLOT_DURATION_MS,
-            pos_ticks_per_slot: DEFAULT_POS_TICKS_PER_SLOT,
-            pos_proposal_tick_phase: DEFAULT_POS_PROPOSAL_TICK_PHASE,
+            pos_slot_duration_ms: pos_defaults.slot_duration_ms,
+            pos_ticks_per_slot: pos_defaults.ticks_per_slot,
+            pos_proposal_tick_phase: pos_defaults.proposal_tick_phase,
             pos_adaptive_tick_scheduler_enabled: false,
             pos_slot_clock_genesis_unix_ms: None,
-            pos_max_past_slot_lag: DEFAULT_POS_MAX_PAST_SLOT_LAG,
+            pos_max_past_slot_lag: pos_defaults.max_past_slot_lag,
             node_auto_attest_all_validators: false,
             node_validators: Vec::new(),
             node_validator_signer_public_keys: BTreeMap::new(),
@@ -721,6 +719,7 @@ pub(super) fn parse_validator_signer_public_key_spec(
 }
 
 pub(super) fn print_help() {
+    let pos_defaults = chain_pos_defaults::defaults();
     println!(
         "Usage: oasis7_chain_runtime [options]\n\n\
 Starts standalone chain/node runtime with status HTTP endpoints.\n\n\
@@ -748,14 +747,14 @@ Options:\n\
   --p2p-max-ipv4-subnet-active-peers <n>\n\
                                     max active peers allowed in one IPv4 /24 before blocking\n\
   --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
-  --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {DEFAULT_POS_SLOT_DURATION_MS})\n\
-  --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {DEFAULT_POS_TICKS_PER_SLOT})\n\
-  --pos-proposal-tick-phase <n>     proposal trigger phase within slot tick window (default: {DEFAULT_POS_PROPOSAL_TICK_PHASE})\n\
+  --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {slot_duration_ms})\n\
+  --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {ticks_per_slot})\n\
+  --pos-proposal-tick-phase <n>     proposal trigger phase within slot tick window (default: {proposal_tick_phase})\n\
   --pos-adaptive-tick-scheduler     enable adaptive wait to next logical tick boundary\n\
   --pos-no-adaptive-tick-scheduler  disable adaptive scheduler (default)\n\
   --pos-slot-clock-genesis-unix-ms <n>\n\
                                     fixed slot clock genesis unix ms (default: auto)\n\
-  --pos-max-past-slot-lag <n>       max accepted inbound stale slot lag (default: {DEFAULT_POS_MAX_PAST_SLOT_LAG})\n\
+  --pos-max-past-slot-lag <n>       max accepted inbound stale slot lag (default: {max_past_slot_lag})\n\
   --node-validator <id:stake>       add validator stake (repeatable)\n\
   --node-validator-signer-public-key <id:public_key_hex>\n\
                                     override validator signer public key (repeatable)\n\
@@ -793,7 +792,11 @@ Options:\n\
   --reward-distfs-probe-per-tick <n>\n\
                                     distfs challenge probes per tick (default: 1)\n\
   -h, --help                        show help",
-        RewardAssetConfig::default().points_per_credit
+        RewardAssetConfig::default().points_per_credit,
+        slot_duration_ms = pos_defaults.slot_duration_ms,
+        ticks_per_slot = pos_defaults.ticks_per_slot,
+        proposal_tick_phase = pos_defaults.proposal_tick_phase,
+        max_past_slot_lag = pos_defaults.max_past_slot_lag,
     );
 }
 

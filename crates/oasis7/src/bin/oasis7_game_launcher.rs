@@ -1,3 +1,4 @@
+use oasis7::chain_pos_defaults;
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_vec;
 use oasis7::observability::{
     TRACE_SESSION_ID_ENV, emit_stderr_or_event, init_tracing, resolve_trace_session_id,
@@ -110,10 +111,6 @@ const DEFAULT_CHAIN_NODE_ROLE: &str = "sequencer";
 const DEFAULT_CHAIN_P2P_USER_MODE: &str = "auto_join";
 const DEFAULT_CHAIN_NETWORK_TIER_MANIFEST: &str = "";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
-const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: u64 = 12_000;
-const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: u64 = 10;
-const DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE: u64 = 9;
-const DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG: u64 = 256;
 const VIEWER_PLAYER_ID_ENV: &str = "OASIS7_VIEWER_PLAYER_ID";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
@@ -198,6 +195,7 @@ struct CliOptions {
 
 impl Default for CliOptions {
     fn default() -> Self {
+        let pos_defaults = chain_pos_defaults::defaults();
         Self {
             deployment_mode: DEFAULT_DEPLOYMENT_MODE.to_string(),
             allow_trusted_local_playtest: false,
@@ -233,12 +231,12 @@ impl Default for CliOptions {
             chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_vec(),
             chain_local_standalone_test: false,
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS,
-            chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS,
-            chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT,
-            chain_pos_proposal_tick_phase: DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE,
+            chain_pos_slot_duration_ms: pos_defaults.slot_duration_ms,
+            chain_pos_ticks_per_slot: pos_defaults.ticks_per_slot,
+            chain_pos_proposal_tick_phase: pos_defaults.proposal_tick_phase,
             chain_pos_adaptive_tick_scheduler_enabled: false,
             chain_pos_slot_clock_genesis_unix_ms: None,
-            chain_pos_max_past_slot_lag: DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG,
+            chain_pos_max_past_slot_lag: pos_defaults.max_past_slot_lag,
             chain_node_auto_attest_all_validators: false,
             chain_node_validators: Vec::new(),
         }

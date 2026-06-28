@@ -80,12 +80,19 @@ fn parse_options_defaults() {
     assert!(options.node_validators.is_empty());
     assert!(options.reward_runtime_enabled);
     assert!(options.reward_runtime_epoch_duration_secs.is_none());
-    assert_eq!(options.pos_slot_duration_ms, 12_000);
-    assert_eq!(options.pos_ticks_per_slot, 10);
-    assert_eq!(options.pos_proposal_tick_phase, 9);
+    let pos_defaults = oasis7::chain_pos_defaults::defaults();
+    assert_eq!(options.pos_slot_duration_ms, pos_defaults.slot_duration_ms);
+    assert_eq!(options.pos_ticks_per_slot, pos_defaults.ticks_per_slot);
+    assert_eq!(
+        options.pos_proposal_tick_phase,
+        pos_defaults.proposal_tick_phase
+    );
     assert!(!options.pos_adaptive_tick_scheduler_enabled);
     assert!(options.pos_slot_clock_genesis_unix_ms.is_none());
-    assert_eq!(options.pos_max_past_slot_lag, 256);
+    assert_eq!(
+        options.pos_max_past_slot_lag,
+        pos_defaults.max_past_slot_lag
+    );
     assert!(options.replication_network_listen_addrs.is_empty());
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
@@ -113,7 +120,7 @@ fn parse_options_reads_custom_values() {
             "--node-tick-ms",
             "350",
             "--pos-slot-duration-ms",
-            "12000",
+            "8000",
             "--pos-ticks-per-slot",
             "10",
             "--pos-proposal-tick-phase",
@@ -157,7 +164,7 @@ fn parse_options_reads_custom_values() {
     assert_eq!(options.p2p_deployment_mode, PeerDeploymentMode::Private);
     assert_eq!(options.p2p_node_role, PeerNodeRole::FullStorage);
     assert_eq!(options.node_tick_ms, 350);
-    assert_eq!(options.pos_slot_duration_ms, 12_000);
+    assert_eq!(options.pos_slot_duration_ms, 8_000);
     assert_eq!(options.pos_ticks_per_slot, 10);
     assert_eq!(options.pos_proposal_tick_phase, 9);
     assert!(options.pos_adaptive_tick_scheduler_enabled);

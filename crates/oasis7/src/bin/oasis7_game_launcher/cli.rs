@@ -460,6 +460,7 @@ fn parse_chain_link_policy(raw: &str) -> Result<&'static str, String> {
 }
 
 pub(super) fn print_help() {
+    let pos_defaults = oasis7::chain_pos_defaults::defaults();
     println!(
         "Usage: oasis7_game_launcher [options]\n\n\
 Start player stack with one command:\n\
@@ -498,11 +499,11 @@ Options:\n\
                                do not join external testnet peers; configure a self-validating single-node local commit loop\n\
   --chain-node-tick-ms <n>     oasis7_chain_runtime worker poll/fallback interval ms (default: {DEFAULT_CHAIN_NODE_TICK_MS})\n\
   --chain-pos-slot-duration-ms <n>\n\
-                               oasis7_chain_runtime PoS slot duration ms (default: {DEFAULT_CHAIN_POS_SLOT_DURATION_MS})\n\
+                               oasis7_chain_runtime PoS slot duration ms (default: {slot_duration_ms})\n\
   --chain-pos-ticks-per-slot <n>\n\
-                               oasis7_chain_runtime PoS logical ticks per slot (default: {DEFAULT_CHAIN_POS_TICKS_PER_SLOT})\n\
+                               oasis7_chain_runtime PoS logical ticks per slot (default: {ticks_per_slot})\n\
   --chain-pos-proposal-tick-phase <n>\n\
-                               oasis7_chain_runtime proposal phase in slot tick window (default: {DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE})\n\
+                               oasis7_chain_runtime proposal phase in slot tick window (default: {proposal_tick_phase})\n\
   --chain-pos-adaptive-tick-scheduler\n\
                                enable oasis7_chain_runtime adaptive tick scheduler\n\
   --chain-pos-no-adaptive-tick-scheduler\n\
@@ -510,7 +511,7 @@ Options:\n\
   --chain-pos-slot-clock-genesis-unix-ms <n>\n\
                                oasis7_chain_runtime fixed slot clock genesis unix ms (default: auto)\n\
   --chain-pos-max-past-slot-lag <n>\n\
-                               oasis7_chain_runtime max accepted stale slot lag (default: {DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG})\n\
+                               oasis7_chain_runtime max accepted stale slot lag (default: {max_past_slot_lag})\n\
   --chain-node-validator <v:s> oasis7_chain_runtime validator (repeatable)\n\
   --chain-node-auto-attest-all enable local auto-attestation for configured validators\n\
   --chain-node-no-auto-attest-all\n\
@@ -541,6 +542,10 @@ Options:\n\
 Env:\n\
   OASIS7_VIEWER_LIVE_BIN              explicit path of oasis7_viewer_live binary\n\
   OASIS7_CHAIN_RUNTIME_BIN            explicit path of oasis7_chain_runtime binary\n\
-  OASIS7_GAME_STATIC_DIR              override default viewer static dir when --viewer-static-dir is omitted"
+  OASIS7_GAME_STATIC_DIR              override default viewer static dir when --viewer-static-dir is omitted",
+        slot_duration_ms = pos_defaults.slot_duration_ms,
+        ticks_per_slot = pos_defaults.ticks_per_slot,
+        proposal_tick_phase = pos_defaults.proposal_tick_phase,
+        max_past_slot_lag = pos_defaults.max_past_slot_lag,
     );
 }
