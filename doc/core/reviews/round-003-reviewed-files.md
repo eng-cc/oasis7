@@ -16,8 +16,8 @@
 - `doc/core/templates/prd-id-test-evidence-mapping.md`
 - `doc/engineering/README.md`
 - 2026-03-03 legacy migration backlog snapshot（后续已删除）
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.prd.md`
-- `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`
+- legacy doc migration collaboration PRD (retired; completion evidence: `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`)
+- legacy doc migration collaboration project (retired; closure review: `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`)
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`

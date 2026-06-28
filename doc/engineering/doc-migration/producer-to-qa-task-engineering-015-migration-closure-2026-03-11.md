@@ -19,7 +19,7 @@
 - 当前剩余 engineering 工作已转向趋势统计与季度治理，不应继续被迁移收口状态遮蔽。
 
 ## Inputs
-- 代码 / 文档入口：`doc/engineering/project.md`、`doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md`、`doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
+- 代码 / 文档入口：`doc/engineering/project.md`、`doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - 已完成内容：Owner-A/B/C/D 迁移批次、根入口 redirect 收口、冻结快照复核
 - 已知约束：本次验证任务级证据链，不新增迁移批次
 - 依赖前置项：`TASK-ENGINEERING-010 ~ TASK-ENGINEERING-014-D2`

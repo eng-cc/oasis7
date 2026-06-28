@@ -109,7 +109,7 @@
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/doc-structure-standard.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-migration/legacy-doc-migration-collaboration-2026-03-03.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | legacy doc migration collaboration project (retired) | `backfill` | pass | B6-002 | 当时补齐的旧协作 project 后续已退役；收口复核见 `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`。 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/README.md` | `backfill` | pass | B6-002 | 已接入标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/prd.index.md` | `backfill` | pass | B6-002 | 已登记标准专题 project 入口 |
