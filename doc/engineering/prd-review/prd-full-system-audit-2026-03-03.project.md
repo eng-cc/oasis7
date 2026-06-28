@@ -12,8 +12,10 @@
 - [x] TASK-ENGINEERING-023 (PRD-ENGINEERING-014) [test_tier_required]: 清理 archive 目录与历史引用收口，补齐替代链对齐。
 - [x] TASK-ENGINEERING-024 (PRD-ENGINEERING-012/013/014) [test_tier_required]: 建立周度增量审读节奏（新增/变更 PRD 自动入清单）。
 
-## 已读清单（逐篇）
-- 模块审读清单（文件名沿用 `active-*` 以兼容 2026-03 审计与 review 引用；清单不是当前模块活跃入口或最新专题索引）：
+> Historical note: 上述 `TASK-ENGINEERING-024` 描述的是 2026-03 当期审读机制；当前不再生成旧清单文件，新增/变更文档通过模块 `README.md` / `prd.index.md` / `project.md` / `prd.md` 与 round review logs 追踪。
+
+## 历史已读留痕（逐篇）
+- 模块审读 snapshot（历史条目沿用当期模块名以兼容 2026-03 审计与 review 引用；snapshot 不是当前模块活跃入口或最新专题索引）：
   - historical core PRD review checklist snapshot（后续已删除；当前 core truth 见 `doc/core/README.md`、`doc/core/prd.index.md` 与 `doc/core/project.md`）
   - historical engineering PRD review checklist snapshot（后续已删除；当前 engineering truth 见 `doc/engineering/README.md`、`doc/engineering/prd.index.md` 与 `doc/engineering/project.md`）
   - historical game PRD review checklist snapshot（后续已删除；当前 game truth 见 `doc/game/README.md`、`doc/game/prd.index.md` 与 `doc/game/project.md`）
@@ -41,10 +43,10 @@
 
 ## 状态
 - 更新日期: 2026-03-05
-- 当前状态: active
+- 当前状态: done; historical audit evidence only
 - 当前完成: 5 / 5（全量 PRD 708 篇已完成逐篇审读与清单回填）
-- 下一任务: 周度增量巡检（沿用 TASK-ENGINEERING-024 机制）
+- 下一任务: 无当前 checklist 机制后续；新增/变更文档按模块 `README.md` / `prd.index.md` / `project.md` / `prd.md` 与 round review logs 追踪。
 - 本轮发现与修复:
   - 修复 `doc/core/prd.md` 中 `game-test` 路径为 `.prd` 命名入口。
   - 修复 79 个唯一旧路径引用（共 179 处回写），覆盖历史链路与活跃链路。
-  - 补齐 `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` 与 `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` 到已读清单，清单覆盖率提升到 708/708。
+  - 补齐 `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` 与 `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` 到当期已读留痕，历史覆盖率提升到 708/708。

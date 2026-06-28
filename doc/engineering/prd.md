@@ -38,7 +38,7 @@
   - SC-6: 重点模块（world-simulator/p2p/world-runtime/testing/site/readme/scripts/game/headless-runtime）根目录平铺专题文档迁移完成并保持引用闭环。
   - SC-8: 完成四人并行迁移分工，待迁移清单有冻结快照且每日可追踪燃尽进度。
   - SC-9: 活跃文档 `doc/...*.md` 依赖路径断链数为 0。
-  - SC-10: 全量 PRD 审读清单覆盖率 100%（当前 PRD 文档 708 份，含 `prd.md` 与 `project.md`）。
+  - SC-10: 2026-03 全量 PRD 审读历史留痕可追溯；当前模块阅读/状态 truth 通过各模块 `README.md` / `prd.index.md` / `project.md` / `prd.md` 进入。
   - SC-11: 模块入口三件套（`prd.md`/`project.md`/`prd.index.md`）已读状态长期保持 100%。
   - SC-12: 文档-代码偏差在同批次回写闭环率 100%。
   - SC-13: 新增专题文档 100% 可按“目录表达对象、后缀表达职责”规则唯一落位，并能在 5 分钟内判断应创建 `*.prd.md`、`*.design.md`、`*.project.md` 中的哪一种。
@@ -122,7 +122,7 @@
   3. Flow-ENG-003: `季度复盘 -> 汇总违规趋势 -> 调整门禁阈值 -> 发布新治理基线`
   4. Flow-ENG-004: `逐篇阅读旧文档 -> 按 strict schema 重写 -> 内容保真复核 -> 更新任务与执行日志追踪`
   5. Flow-ENG-005: `冻结待迁移清单 -> 按 Owner-A/B/C/D 切分范围 -> 并行执行 -> 每日燃尽收口`
-  6. Flow-ENG-006: `生成全量审读清单 -> 逐篇阅读并打勾 -> 核对代码/重复/上下游 -> 回写偏差并复跑门禁`
+  6. Flow-ENG-006: `读取历史审读 round logs / 已删除 checklist snapshot 条目 -> 按当前模块 README / prd.index / project / prd 定位 truth -> 核对代码/重复/上下游 -> 回写偏差并复跑门禁`
   7. Flow-ENG-007: `新专题提出 -> 选择模块/专题目录 -> 判断文档职责后创建同名 PRD/Design/Project -> 更新索引 -> 评审者按统一阅读顺序审查`
   8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/task execution log`
   9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
@@ -147,7 +147,7 @@
 | 文档分工与组织规范 | 对象层级（模块/专题/分册）、职责后缀（PRD/Design/Project/Runbook/Manual） | 为新主题选择落点并按规则建档 | `unclassified -> classified -> indexed -> reviewed` | 目录按领域/专题，文件按职责，优先同名三件套 | 作者可建档，评审者可裁定例外 |
 | 文档体量治理 | 文档总量、模块/子目录密度、消费层类型（活跃真值/审计留痕/历史归档/兼容跳转）、默认入口面 | 先冻结默认阅读面，再决定哪些文档只保留可检索性与定向引用，不再进入根入口/模块入口的主列表 | `unbounded -> classified -> reduced -> monitored` | 默认优先压缩阅读面而不是立即迁移文件；高密度模块优先按 `world-simulator -> p2p -> testing -> readme/core` 排查 | `producer_system_designer` 裁定消费层，模块 owner 回写入口与索引，评审者复核 |
 | 任务测试分层标注 | 任务ID、PRD-ID、test tier | 在模块 `project.md` 显式写 tier | `unspecified -> specified -> audited` | 先模块主项目，再专题项目 | 模块维护者审核，贡献者执行 |
-| 全量 PRD 审读清单 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 逐篇阅读后更新清单并回写偏差 | `unread -> read -> aligned` | 入口优先、风险优先 | 维护者与评审者可写，贡献者可读 |
+| 历史 PRD 审读留痕 | 文档路径、阅读时刻、代码一致性、重复性、上下游状态、处理动作 | 历史 round logs / deleted snapshot prose 仅用于追溯；当前偏差回写到模块 truth | `historical -> traced -> current_truth_updated` | 入口优先、风险优先 | 维护者与评审者可追溯，当前 truth 由模块 owner 维护 |
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 默认先 brief 后 detailed，按风险等级决定是否升级 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
 | 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-PR local role review、GitHub PR watch/fix/comment-closeout/merge 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；commit 前必须先完成本地相关角色 subagent review evidence packet，并在 findings 处置后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks、requested changes、comment/thread closeout 与 mergeability 路径，并对 normal PR 持续 watch/fix/comment-closeout/merge/cleanup；`REVIEW_REQUIRED` 仅回报不阻塞，review-approval-only `BLOCKED` 可在授权后走 repo admin merge path | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；PR 创建前的本地 role review 是 required evidence gate，但不得替代 GitHub PR 服务端 required checks、requested changes、comment closeout 或 mergeability 边界；未明确 manual packaging/release CI purpose 时不得停在 PR 创建后 | 全体贡献者遵守，治理维护者可演进 |
@@ -170,7 +170,7 @@
   - AC-11: 文档治理门禁必须校验专题 PRD/project 双向互链；缺失即失败。
   - AC-12: 模块 `project.md` 每个任务项必须显式标注 `test_tier_required` 或 `test_tier_full`（可为组合层级）。
   - AC-13: 文档治理门禁必须校验活跃文档 `doc/...*.md` 引用路径可达；断链必须阻断并修复。
-  - AC-14: 需存在全量 PRD 审读清单（按模块拆分，单一清单口径），且每条已读记录包含阅读时刻和三类核对结论（代码/重复/上下游）。
+  - AC-14: 2026-03 全量 PRD 审读留痕必须可通过 historical round logs / deleted snapshot prose 追溯；当前不再要求存在旧 checklist 目录活跃清单面。
   - AC-15: `.agents/roles/` 下需存在 7 个组合角色职责卡，覆盖制作/规则、runtime、WASM、Agent、Viewer、QA、LiveOps/社区。
   - AC-15A: 每张角色职责卡需显式给出推荐技能与典型使用场景，并声明“角色决定 owner、技能决定方法”，避免把技能误当职责边界。
   - AC-16: 根 `AGENTS.md` 的“分工”章节不再内嵌 12 个长描述，而是引用 7 个组合角色职责卡与使用约定。
@@ -292,7 +292,7 @@
   - NFR-ENG-9: 活跃专题 PRD/project 双向互链覆盖率 100%。
   - NFR-ENG-10: 模块主项目任务测试分层显式标注覆盖率 100%。
   - NFR-ENG-11: 活跃文档 `doc/...*.md` 引用路径可达性覆盖率 100%。
-  - NFR-ENG-12: 全量审读清单中“已读且已核对”条目覆盖率按周单调提升，不得回退。
+  - NFR-ENG-12: 历史全量审读留痕不得重新提升为当前活跃旧清单面；新增或变更文档的当前审读入口应通过模块 `README.md` / `prd.index.md` / `project.md` / `prd.md` 与 round review logs 追踪。
   - NFR-ENG-13: 根 `AGENTS.md` 与 `.agents/roles/*.md` 的角色映射一致率 100%，不得出现无入口角色或悬空引用。
   - NFR-ENG-14: 角色交接模板字段命名稳定，默认模板在 5 分钟内可完成填写并可被他人直接执行。
   - NFR-ENG-15: 开发工作流规则在单人执行与多角色协作两种场景下都应自洽，不得出现相互冲突的提交/回写要求。
@@ -330,7 +330,7 @@
 | PRD-ENGINEERING-009 | TASK-ENGINEERING-017 | `test_tier_required` | `doc-governance-check` 双向互链门禁验证 | PRD/project 追溯完整性 |
 | PRD-ENGINEERING-010 | TASK-ENGINEERING-018 | `test_tier_required` | 模块主项目任务项 tier 显式标注检查 | 任务到测试分层可审计性 |
 | PRD-ENGINEERING-011 | TASK-ENGINEERING-019 | `test_tier_required` | 活跃文档引用路径可达性门禁与断链修复验证 | 文档树引用完整性与迁移稳定性 |
-| PRD-ENGINEERING-012 | TASK-ENGINEERING-020/024 | `test_tier_required` | 全量审读清单覆盖率与入口文档已读率检查 | PRD 审读可追溯性 |
+| PRD-ENGINEERING-012 | TASK-ENGINEERING-020/024 | `test_tier_required` | 历史审读留痕与入口文档已读率检查 | PRD 审读可追溯性 |
 | PRD-ENGINEERING-013 | TASK-ENGINEERING-021/022 | `test_tier_required` | 代码一致性抽样与偏差回写核验 | 文档行为与实现一致性 |
 | PRD-ENGINEERING-014 | TASK-ENGINEERING-022/023/024 | `test_tier_required` + `test_tier_full` | 重复治理记录与上下游链路可达性检查 | PRD 体系清晰度与跨模块对齐 |
 | PRD-ENGINEERING-015 | TASK-ENGINEERING-025 | `test_tier_required` | 规范正文结构检查、模块入口回写、索引可达性检查 | 新增文档可发现性与详细设计落位一致性 |
@@ -368,7 +368,7 @@
 | DEC-ENG-009 | 双向互链作为门禁硬规则 | 仅人工评审追溯关系 | 自动阻断可避免追溯链路长期漂移。 |
 | DEC-ENG-010 | 模块任务项显式标注 `test_tier_required/full` | 仅在 PRD 总表声明 tier | 任务级标注更直接支撑评审与执行。 |
 | DEC-ENG-011 | 将活跃文档引用路径可达性纳入门禁并维护最小豁免白名单 | 仅靠人工抽查断链 | 迁移后断链可自动阻断，减少隐性导航故障。 |
-| DEC-ENG-012 | 采用全量逐篇审读清单（按模块拆分，单一清单口径） | 仅维护模块级进度百分比 | 逐篇清单可审计且可直接定位遗漏文档。 |
+| DEC-ENG-012 | 2026-03 阶段采用全量逐篇审读留痕；当前该旧清单面已退役为历史留痕 | 仅维护模块级进度百分比 | 当期逐篇留痕提供了审计与遗漏定位；当前 truth 已收敛到模块入口和 round logs。 |
 | DEC-ENG-013 | 审读偏差按代码实现回写文档 | 以历史文档条款反推代码变更 | 当前阶段先恢复“文档描述事实”可降低评审噪声。 |
 | DEC-ENG-014 | 重复与上下游对齐问题在同批次完成修复与回填 | 跨批次累积处理 | 同批次闭环可避免问题扩散到下一轮审读。 |
 | DEC-ENG-015 | 根 `AGENTS.md` 仅保留 7 个组合角色入口，详细职责下沉到 `.agents/roles/*.md` | 在根 `AGENTS.md` 内持续堆叠所有角色长描述 | 入口更短、更稳，且更便于按角色独立演进职责卡。 |
