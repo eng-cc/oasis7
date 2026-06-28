@@ -117,7 +117,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 | R-004 | legacy viewer rust line cap 文档（已删除） | 历史收口结论与当前代码状态漂移 | `viewer-release-full-coverage-gate.prd.md` + `doc/devlog/README.md` | done |
 | R-005 | `doc/p2p/distributed/distributed-hard-split-phase7.prd*.md`、`doc/p2p/observer/observer-sync-*.prd*.md`（前序阶段） | 历史拆分/阶段文档已完成，信息可并入现行主线 | `doc/p2p/distributed/distributed-runtime.prd.md` + 最新 observer 桥接文档 | proposed |
 | R-006 | `doc/p2p/*/*.release.md` | 与 PRD 树索引机制不一致，链路不可达 | 对应 `*.prd.md` + `*.project.md` 的状态段 | kept_with_index |
-| R-007 | `doc/engineering/prd-review/checklists/*.md` | 旧快照法与“审计轮次 + ROUND 状态”方法重复，且存在结论漂移 | `doc/core/reviews/consistency-review-round-001.md` + 文档头 `审计轮次` | proposed |
+| R-007 | historical PRD review checklist snapshots（后续已删除） | 旧快照法与“审计轮次 + ROUND 状态”方法重复，且存在结论漂移 | core review round logs + 文档头 `审计轮次` | done |
 | R-008 | `doc/site/github-pages/*.prd*.md`、`doc/site/manual/*.prd*.md` 中已完成且下一步为空的日期专题 | 大量已收口专题长期活跃化，降低主索引可读性 | `doc/site/prd.md`、`doc/site/project.md`、`site/doc/*/index.html` | proposed |
 | R-009 | `doc/readme/gap|production|governance` 与 `doc/game/gameplay` 中“已完成+无后续”的日期专题 | 与主 PRD 重复，后续很少回写 | `doc/readme/prd.md`、`doc/game/prd.md`、`README.md` | proposed |
 
@@ -150,7 +150,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 | 编号 | 原因 | 风险 | 临时缓解 | 复审日期 | 评审人 |
 | --- | --- | --- | --- | --- | --- |
 | S-001 | `runtime-numeric-correctness-phase*` 仍被部分历史链接/讨论引用，本批次先不立即归档 | 继续误导“当前状态”的风险 | 在 `doc/world-runtime/prd.index.md` 增加“历史里程碑”标记并指向主入口 | 2026-03-12 | cc |
-| S-002 | `doc/engineering/prd-review/checklists/*` 仍承担 ROUND-001 执行期临时跟踪作用 | 与新方法并存造成重复维护 | ROUND-001 收口前只增量更新；收口后统一迁移或归档 | 2026-03-12 | cc |
+| S-002 | historical PRD review checklist snapshots 曾承担 ROUND-001 执行期临时跟踪作用（后续已删除） | 与新方法并存造成重复维护 | 已迁移为 core review round logs / historical snapshot prose，不再保留 checklist 目录活跃面 | 2026-03-12 | cc |
 
 ## 复审结果
 - 复审时间：2026-03-05 00:33 CST

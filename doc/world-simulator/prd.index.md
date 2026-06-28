@@ -45,7 +45,7 @@
 
 以下文档只作为 archive-only evidence，用于审计追溯，不作为 world-simulator 日常阅读入口：
 
-- `doc/engineering/prd-review/checklists/historical-world-simulator-2026-03-05.md`
+- historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
 - `doc/core/reviews/round-005-audit-progress-log.md`
 - `doc/core/reviews/round-005-reviewed-files.md`
 - `doc/core/reviews/round-008-reviewed-files.md`
