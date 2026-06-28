@@ -37,12 +37,12 @@
 - `--status-bind <host:port>`：默认 `127.0.0.1:5121`。
 - `--node-role <sequencer|storage|observer>`：默认 `sequencer`。
 - `--node-tick-ms <n>`：默认 `200`，仅用于 worker 轮询/回退间隔。
-- `--pos-slot-duration-ms <n>`：默认 `12000`，定义 slot 时长（ms）。
-- `--pos-ticks-per-slot <n>`：默认 `10`，定义每个 slot 的逻辑 tick 数。
-- `--pos-proposal-tick-phase <n>`：默认 `9`，定义提案相位。
+- `--pos-slot-duration-ms <n>`：默认见 `config/chain-pos-defaults.env` 的 `POS_SLOT_DURATION_MS`，定义 slot 时长（ms）。
+- `--pos-ticks-per-slot <n>`：默认见 `config/chain-pos-defaults.env` 的 `POS_TICKS_PER_SLOT`，定义每个 slot 的逻辑 tick 数。
+- `--pos-proposal-tick-phase <n>`：默认见 `config/chain-pos-defaults.env` 的 `POS_PROPOSAL_TICK_PHASE`，定义提案相位。
 - `--pos-adaptive-tick-scheduler` / `--pos-no-adaptive-tick-scheduler`。
 - `--pos-slot-clock-genesis-unix-ms <n>`：可选，定义 slot 时钟起点。
-- `--pos-max-past-slot-lag <n>`：默认 `256`，定义最大允许过旧槽滞后。
+- `--pos-max-past-slot-lag <n>`：默认见 `config/chain-pos-defaults.env` 的 `POS_MAX_PAST_SLOT_LAG`，定义最大允许过旧槽滞后。
 - `--node-validator <id:stake>`：可重复；为空时默认单 validator（本节点）。
 - `--node-auto-attest-all` / `--node-no-auto-attest-all`。
 - `--node-gossip-bind <addr:port>` / `--node-gossip-peer <addr:port>`（可选）。
@@ -64,12 +64,12 @@
 - `--chain-world-id <id>`（默认跟随 scenario 推导）。
 - `--chain-node-role <role>`。
 - `--chain-node-tick-ms <n>`（worker poll/fallback interval）。
-- `--chain-pos-slot-duration-ms <n>`（默认 `12000`）。
-- `--chain-pos-ticks-per-slot <n>`（默认 `10`）。
-- `--chain-pos-proposal-tick-phase <n>`（默认 `9`）。
+- `--chain-pos-slot-duration-ms <n>`（默认见 `config/chain-pos-defaults.env` 的 `POS_SLOT_DURATION_MS`）。
+- `--chain-pos-ticks-per-slot <n>`（默认见 `config/chain-pos-defaults.env` 的 `POS_TICKS_PER_SLOT`）。
+- `--chain-pos-proposal-tick-phase <n>`（默认见 `config/chain-pos-defaults.env` 的 `POS_PROPOSAL_TICK_PHASE`）。
 - `--chain-pos-adaptive-tick-scheduler` / `--chain-pos-no-adaptive-tick-scheduler`。
 - `--chain-pos-slot-clock-genesis-unix-ms <n>`。
-- `--chain-pos-max-past-slot-lag <n>`。
+- `--chain-pos-max-past-slot-lag <n>`（默认见 `config/chain-pos-defaults.env` 的 `POS_MAX_PAST_SLOT_LAG`）。
 - `--chain-node-validator <id:stake>`（repeatable）。
 
 ### 4) 关键链路

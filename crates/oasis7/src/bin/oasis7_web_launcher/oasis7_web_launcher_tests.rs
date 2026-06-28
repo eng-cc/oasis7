@@ -46,7 +46,7 @@ fn parse_options_defaults() {
         options.initial_config.chain_replication_bootstrap_peers,
         default_chain_replication_bootstrap_peers_csv()
     );
-    assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
+    assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "8000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
     assert!(
@@ -109,7 +109,7 @@ fn parse_options_accepts_overrides() {
             "--chain-replication-network-peer",
             "/dns4/bootstrap.example/tcp/4101",
             "--chain-pos-slot-duration-ms",
-            "12000",
+            "8000",
             "--chain-pos-ticks-per-slot",
             "10",
             "--chain-pos-proposal-tick-phase",
@@ -157,7 +157,7 @@ fn parse_options_accepts_overrides() {
         options.initial_config.chain_replication_bootstrap_peers,
         "/ip4/127.0.0.1/tcp/4100,/dns4/bootstrap.example/tcp/4101"
     );
-    assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "12000");
+    assert_eq!(options.initial_config.chain_pos_slot_duration_ms, "8000");
     assert_eq!(options.initial_config.chain_pos_ticks_per_slot, "10");
     assert_eq!(options.initial_config.chain_pos_proposal_tick_phase, "9");
     assert!(
@@ -317,7 +317,7 @@ fn build_launcher_args_keeps_chain_disabled_even_when_chain_config_is_on() {
         chain_replication_bootstrap_peers:
             "/ip4/127.0.0.1/tcp/4100 /dns4/bootstrap.example/tcp/4101".to_string(),
         chain_node_tick_ms: "300".to_string(),
-        chain_pos_slot_duration_ms: "12000".to_string(),
+        chain_pos_slot_duration_ms: "8000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
         chain_pos_proposal_tick_phase: "9".to_string(),
         chain_pos_adaptive_tick_scheduler_enabled: true,
@@ -353,7 +353,7 @@ fn build_chain_runtime_args_includes_chain_overrides_for_internal_local_playtest
         chain_replication_bootstrap_peers:
             "/ip4/127.0.0.1/tcp/4100 /dns4/bootstrap.example/tcp/4101".to_string(),
         chain_node_tick_ms: "300".to_string(),
-        chain_pos_slot_duration_ms: "12000".to_string(),
+        chain_pos_slot_duration_ms: "8000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
         chain_pos_proposal_tick_phase: "9".to_string(),
         chain_pos_adaptive_tick_scheduler_enabled: true,
@@ -384,7 +384,7 @@ fn build_chain_runtime_args_includes_chain_overrides_for_internal_local_playtest
     assert!(args.contains(&"chain-a:55".to_string()));
     assert!(args.contains(&"chain-b:45".to_string()));
     assert!(args.contains(&"--pos-slot-duration-ms".to_string()));
-    assert!(args.contains(&"12000".to_string()));
+    assert!(args.contains(&"8000".to_string()));
     assert!(args.contains(&"--pos-ticks-per-slot".to_string()));
     assert!(args.contains(&"10".to_string()));
     assert!(args.contains(&"--pos-proposal-tick-phase".to_string()));
@@ -407,7 +407,7 @@ fn build_chain_runtime_args_uses_network_tier_manifest_when_present() {
         chain_p2p_user_mode: "public_entry".to_string(),
         chain_p2p_accept_public_entry: true,
         chain_node_tick_ms: "300".to_string(),
-        chain_pos_slot_duration_ms: "12000".to_string(),
+        chain_pos_slot_duration_ms: "8000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
         chain_pos_proposal_tick_phase: "9".to_string(),
         chain_pos_adaptive_tick_scheduler_enabled: true,
@@ -1180,9 +1180,8 @@ fn make_temp_dir(label: &str) -> PathBuf {
         .expect("time")
         .as_nanos();
     path.push(format!(
-        "oasis7_oasis7_web_launcher_test_{label}_{}_{}",
-        std::process::id(),
-        stamp
+        "oasis7_oasis7_web_launcher_test_{label}_{}_{stamp}",
+        std::process::id()
     ));
     fs::create_dir_all(&path).expect("create temp dir");
     path

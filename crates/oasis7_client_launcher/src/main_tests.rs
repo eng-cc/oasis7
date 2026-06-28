@@ -377,7 +377,7 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
         chain_replication_bootstrap_peers:
             "/ip4/127.0.0.1/tcp/4100,/dns4/bootstrap.example/tcp/4101".to_string(),
         chain_node_tick_ms: "350".to_string(),
-        chain_pos_slot_duration_ms: "12000".to_string(),
+        chain_pos_slot_duration_ms: "8000".to_string(),
         chain_pos_ticks_per_slot: "10".to_string(),
         chain_pos_proposal_tick_phase: "9".to_string(),
         chain_pos_adaptive_tick_scheduler_enabled: true,
@@ -402,7 +402,7 @@ fn build_chain_runtime_args_contains_chain_overrides_when_enabled() {
     assert!(args.contains(&"--node-tick-ms".to_string()));
     assert!(args.contains(&"350".to_string()));
     assert!(args.contains(&"--pos-slot-duration-ms".to_string()));
-    assert!(args.contains(&"12000".to_string()));
+    assert!(args.contains(&"8000".to_string()));
     assert!(args.contains(&"--pos-ticks-per-slot".to_string()));
     assert!(args.contains(&"10".to_string()));
     assert!(args.contains(&"--pos-proposal-tick-phase".to_string()));

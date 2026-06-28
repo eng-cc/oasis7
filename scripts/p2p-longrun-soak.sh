@@ -10,6 +10,7 @@ if (( BASH_VERSINFO[0] < 4 )); then
   exit 2
 fi
 
+source "$repo_root/config/chain-pos-defaults.env"
 source "$repo_root/scripts/cargo-dev-lib.sh"
 
 usage() {
@@ -33,14 +34,14 @@ Options:
   --poll-interval-secs <n>         monitor loop interval (default: 2)
   --curl-timeout-secs <n>          HTTP timeout for status polling (default: 2)
   --node-tick-ms <n>               worker poll/fallback interval milliseconds (default: 200)
-  --pos-slot-duration-ms <n>       PoS slot duration in milliseconds (default: 12000)
-  --pos-ticks-per-slot <n>         PoS logical ticks per slot (default: 10)
-  --pos-proposal-tick-phase <n>    PoS proposal phase within slot tick window (default: 9)
+  --pos-slot-duration-ms <n>       PoS slot duration in milliseconds (default: config POS_SLOT_DURATION_MS)
+  --pos-ticks-per-slot <n>         PoS logical ticks per slot (default: config POS_TICKS_PER_SLOT)
+  --pos-proposal-tick-phase <n>    PoS proposal phase within slot tick window (default: config POS_PROPOSAL_TICK_PHASE)
   --pos-adaptive-tick-scheduler    enable PoS adaptive tick scheduler
   --pos-no-adaptive-tick-scheduler disable PoS adaptive scheduler (default)
   --pos-slot-clock-genesis-unix-ms <n>
                                    fixed PoS slot clock genesis unix ms (default: auto)
-  --pos-max-past-slot-lag <n>      max accepted stale slot lag (default: 256)
+  --pos-max-past-slot-lag <n>      max accepted stale slot lag (default: config POS_MAX_PAST_SLOT_LAG)
   --chaos-plan <path>              JSON chaos plan for restart/pause/disconnect injections
   --chaos-continuous-enable        continuously inject chaos events during soak window
   --chaos-continuous-interval-secs <n>
@@ -223,12 +224,12 @@ startup_timeout_secs=20
 poll_interval_secs=2
 curl_timeout_secs=2
 node_tick_ms=200
-pos_slot_duration_ms=12000
-pos_ticks_per_slot=10
-pos_proposal_tick_phase=9
+pos_slot_duration_ms=${POS_SLOT_DURATION_MS:?missing POS_SLOT_DURATION_MS in config/chain-pos-defaults.env}
+pos_ticks_per_slot=${POS_TICKS_PER_SLOT:?missing POS_TICKS_PER_SLOT in config/chain-pos-defaults.env}
+pos_proposal_tick_phase=${POS_PROPOSAL_TICK_PHASE:?missing POS_PROPOSAL_TICK_PHASE in config/chain-pos-defaults.env}
 pos_adaptive_tick_scheduler_enabled=0
 pos_slot_clock_genesis_unix_ms=""
-pos_max_past_slot_lag=256
+pos_max_past_slot_lag=${POS_MAX_PAST_SLOT_LAG:?missing POS_MAX_PAST_SLOT_LAG in config/chain-pos-defaults.env}
 chaos_plan_path=""
 chaos_continuous_enabled=0
 chaos_continuous_interval_secs=30

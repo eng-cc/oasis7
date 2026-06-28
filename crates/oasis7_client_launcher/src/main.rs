@@ -17,6 +17,7 @@ use feedback_entry::FeedbackDraft;
 #[cfg(target_arch = "wasm32")]
 use gloo_net::http::Request;
 use llm_settings::LlmSettingsPanel;
+use oasis7::chain_pos_defaults;
 use oasis7::launcher_bootstrap_peers::default_chain_replication_bootstrap_peers_csv;
 use platform_ops::open_browser;
 use platform_ops::resolve_static_dir_path;
@@ -123,11 +124,7 @@ const PUBLIC_TESTNET_NETWORK_TIER_MANIFEST: &str =
 const MAINNET_NETWORK_TIER_MANIFEST: &str =
     "doc/testing/templates/network-tier-mainnet.example.json";
 const DEFAULT_CHAIN_NODE_TICK_MS: &str = "200";
-const DEFAULT_CHAIN_POS_SLOT_DURATION_MS: &str = "12000";
-const DEFAULT_CHAIN_POS_TICKS_PER_SLOT: &str = "10";
-const DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE: &str = "9";
 const DEFAULT_CHAIN_POS_SLOT_CLOCK_GENESIS_UNIX_MS: &str = "";
-const DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG: &str = "256";
 const DEFAULT_DEPLOYMENT_MODE: &str = "hosted_public_join";
 const MAX_LOG_LINES: usize = 2000;
 const OASIS7_CJK_FONT_NAME: &str = "oasis7-cjk";
@@ -524,6 +521,7 @@ struct LaunchConfig {
 
 impl Default for LaunchConfig {
     fn default() -> Self {
+        let pos_defaults = chain_pos_defaults::defaults();
         #[cfg(not(target_arch = "wasm32"))]
         let launcher_bin = resolve_launcher_binary_path().to_string_lossy().to_string();
         #[cfg(target_arch = "wasm32")]
@@ -567,13 +565,13 @@ impl Default for LaunchConfig {
             chain_p2p_accept_public_entry: false,
             chain_replication_bootstrap_peers: default_chain_replication_bootstrap_peers_csv(),
             chain_node_tick_ms: DEFAULT_CHAIN_NODE_TICK_MS.to_string(),
-            chain_pos_slot_duration_ms: DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string(),
-            chain_pos_ticks_per_slot: DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string(),
-            chain_pos_proposal_tick_phase: DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE.to_string(),
+            chain_pos_slot_duration_ms: pos_defaults.slot_duration_ms.to_string(),
+            chain_pos_ticks_per_slot: pos_defaults.ticks_per_slot.to_string(),
+            chain_pos_proposal_tick_phase: pos_defaults.proposal_tick_phase.to_string(),
             chain_pos_adaptive_tick_scheduler_enabled: false,
             chain_pos_slot_clock_genesis_unix_ms: DEFAULT_CHAIN_POS_SLOT_CLOCK_GENESIS_UNIX_MS
                 .to_string(),
-            chain_pos_max_past_slot_lag: DEFAULT_CHAIN_POS_MAX_PAST_SLOT_LAG.to_string(),
+            chain_pos_max_past_slot_lag: pos_defaults.max_past_slot_lag.to_string(),
             chain_node_validators: String::new(),
             auto_open_browser: true,
             launcher_bin,

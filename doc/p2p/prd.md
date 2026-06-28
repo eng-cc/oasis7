@@ -40,7 +40,7 @@
   - SC-8: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher/scripts` 控制面参数与状态口径与 PoS 时间锚定语义一致，不再将 `node_tick_ms` 误解为出块时间。
   - SC-9: 清理残留时序语义偏差（`tick_count` 观测命名、`oasis7_viewer_live` 旧控制面假设、`world-rule` 时间模型描述），保证规范/实现/运维口径一致。
   - SC-10: runtime/game/web/client launcher 默认 PoS 时间参数与文档一致，默认启动即满足“slot 时钟锚定 + 轮询语义解耦”口径。
-  - SC-11: runtime/game/web/client launcher 与 longrun 脚本默认参数统一为 `slot_duration_ms=12000`、`ticks_per_slot=10`、`proposal_tick_phase=9`，满足“12s 出块、每块 10 tick”基线。
+  - SC-11: runtime/game/web/client launcher 与 longrun 脚本默认参数统一读取 `config/chain-pos-defaults.env`，满足当前默认出块与槽内 tick 基线。
   - SC-12: `oasis7_viewer_live` 对外 CLI 收敛为纯观察服务，不再接受 `--release-config` 与 `--node-*` 控制面参数；误传时必须显式拒绝并提示改用 `oasis7_chain_runtime`。
   - SC-13: `oasis7_viewer_live` 移除 legacy 参数兼容层，不再接受 `--runtime-world` 等历史别名；代码库中不再保留未接入生产入口的旧 CLI 解析路径。
   - SC-14: 历史 PRD/project 文档中的 `oasis7_viewer_live` 旧文件路径完成替换，不再指向已删除的 `src/bin/oasis7_viewer_live/` 子目录文件。
@@ -178,7 +178,7 @@
   - AC-11: `node-pos-time-anchor-control-plane-alignment-2026-03-07` 专题文档落盘并映射任务链 `TASK-P2P-010`，覆盖 runtime/game/web/client launcher/scripts 与状态接口口径对齐。
   - AC-12: 残留语义项完成收敛：`world-rule` 时间模型、launcher `chain_node_tick_ms` 校验文案、`/v1/chain/status` 轮询字段命名、viewer/manual/site 与 `oasis7_viewer_live` 实际 CLI 能力保持一致。
   - AC-13: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher` 默认 `slot_duration_ms` 与文档基线一致；`oasis7_web_launcher` 校验文案明确 `chain_node_tick_ms` 为 poll interval 语义。
-  - AC-14: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher/oasis7_viewer_live/p2p-longrun/s10` 默认 `slot_duration_ms/ticks_per_slot/proposal_tick_phase` 与“12s/10/9”基线一致，相关默认值断言与手册同步更新。
+  - AC-14: `oasis7_chain_runtime/oasis7_game_launcher/oasis7_web_launcher/oasis7_client_launcher/oasis7_viewer_live/p2p-longrun/s10` 默认 `slot_duration_ms/ticks_per_slot/proposal_tick_phase` 与 `config/chain-pos-defaults.env` 基线一致，相关默认值断言与手册同步更新。
   - AC-15: `oasis7_viewer_live` 解析层移除 `--release-config` 与 `--node-*` 参数能力；定向测试覆盖“误传 legacy 参数 -> 启动失败 + 替代提示”路径。
   - AC-16: `oasis7_viewer_live` 进一步移除 `--runtime-world` 兼容别名与旧 split CLI 路径，定向测试覆盖 `--release-config/--runtime-world/--node-*` 拒绝行为。
   - AC-17: 历史文档中 `oasis7_viewer_live` 子目录旧路径完成迁移（对齐 `oasis7_viewer_live.rs` 与 `oasis7_chain_runtime/*` 现行布局），文档门禁通过。
@@ -333,7 +333,7 @@
 | PRD-P2P-007 | TASK-P2P-010 | `test_tier_required` + `test_tier_full` | runtime/game/web/client launcher/scripts 参数映射、状态观测与兼容回归 | 控制面调参、运维门禁与观测一致性 |
 | PRD-P2P-008 | TASK-P2P-011 | `test_tier_required` | 状态字段语义对齐、launcher 校验文案回归、文档一致性检查 | 运维观测、发行手册与参数治理 |
 | PRD-P2P-009 | TASK-P2P-012 | `test_tier_required` | 默认参数一致性、launcher/web 校验文案与手册口径回归 | 默认启动行为、控制面配置与运维认知一致性 |
-| PRD-P2P-009 | TASK-P2P-013 | `test_tier_required` | 默认值切换到 `12s/10/9` 并回归 CLI/脚本/文档口径 | 时间锚定基线一致性与默认运行节拍 |
+| PRD-P2P-009 | TASK-P2P-013 | `test_tier_required` | 默认值切换到 `config/chain-pos-defaults.env` 基线并回归 CLI/脚本/文档口径 | 时间锚定基线一致性与默认运行节拍 |
 | PRD-P2P-010 | TASK-P2P-014 | `test_tier_required` | `oasis7_viewer_live` legacy 参数拒绝、帮助文案收敛与文档/示例迁移回归 | Viewer/chain 控制面边界一致性 |
 | PRD-P2P-011 | TASK-P2P-015 | `test_tier_required` | `oasis7_viewer_live` 删除 `--runtime-world` 兼容别名、移除旧 split CLI 路径并回归手册/测试口径 | CLI 单一事实源与维护成本收敛 |
 | PRD-P2P-012 | TASK-P2P-016/018 | `test_tier_required` | 历史文档旧路径替换、历史专题标题零残留校验 + 文档门禁（过程日志除外） | 文档可追溯性与维护效率 |
@@ -403,7 +403,7 @@
 | DEC-P2P-009 | 将 `node_tick_ms` 定义为 worker 轮询/回退间隔，并显式暴露 slot-clock 参数 | 继续用 `node_tick_ms` 承担出块时间语义 | 减少运维误配与观测误读，保证时间锚定语义可操作。 |
 | DEC-P2P-010 | 在状态与文档中显式区分 `worker_poll_count` 与共识 tick/height 指标 | 继续沿用 `tick_count` 作为泛化进度字段 | 避免“轮询次数=出块推进”的误读，降低误判与误调参风险。 |
 | DEC-P2P-011 | 统一 runtime/game/web/client launcher 默认 `slot_duration_ms` 为文档基线值，并收敛校验文案为 poll interval 语义 | 继续维持 `slot_duration_ms=1` 且允许文案混用 tick/block 语义 | 减少“默认启动即偏离锚定口径”的隐性配置风险，降低运维误读。 |
-| DEC-P2P-012 | 默认 PoS 时间参数采用 `slot_duration_ms=12000`、`ticks_per_slot=10`、`proposal_tick_phase=9` | 保持 `200/1/0` 等压测导向默认组合 | 与“12s 出块、每块 10 tick”设计口径一致，默认体验与协议基线对齐。 |
+| DEC-P2P-012 | 默认 PoS 时间参数采用 `config/chain-pos-defaults.env` 的统一基线 | 保持 `200/1/0` 等压测导向默认组合，或在多个入口重复维护数字默认值 | 默认体验与协议基线对齐，并避免 runtime/launcher/script 配置真值漂移。 |
 | DEC-P2P-013 | `oasis7_viewer_live` 移除 `--release-config` 与 `--node-*` 控制面参数，仅保留观察服务 CLI | 继续在 viewer 保留 release/node 控制面兼容入口 | 避免控制面双入口造成运维误配，统一由 `oasis7_chain_runtime` 承担链参数与节点生命周期。 |
 | DEC-P2P-014 | `oasis7_viewer_live` 删除 `--runtime-world` 兼容别名与 legacy split CLI 代码，保留单一生产入口 `oasis7_viewer_live.rs` | 继续保留兼容别名和未接入入口的旧解析代码 | 避免“文档/测试改了但真实入口不生效”的双轨风险，降低后续维护和误判成本。 |
 | DEC-P2P-015 | 统一将历史文档中的 `oasis7_viewer_live` 旧文件路径替换为当前源码布局路径（`oasis7_viewer_live.rs` / `oasis7_chain_runtime/*`） | 保留旧路径并依赖读者自行映射 | 降低审计误导与排障成本，确保文档可直接定位现行实现。 |

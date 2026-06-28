@@ -372,6 +372,7 @@ impl ClientLauncherApp {
     }
 
     fn apply_demo_mode_safe_defaults(&mut self) {
+        let pos_defaults = oasis7::chain_pos_defaults::defaults();
         self.config.scenario = DEFAULT_SCENARIO.to_string();
         self.config.live_bind = DEFAULT_LIVE_BIND.to_string();
         self.config.web_bind = DEFAULT_WEB_BIND.to_string();
@@ -382,10 +383,9 @@ impl ClientLauncherApp {
         self.config.chain_node_id = default_chain_node_id();
         self.config.chain_node_role = DEFAULT_CHAIN_NODE_ROLE.to_string();
         self.config.chain_node_tick_ms = DEFAULT_CHAIN_NODE_TICK_MS.to_string();
-        self.config.chain_pos_slot_duration_ms = DEFAULT_CHAIN_POS_SLOT_DURATION_MS.to_string();
-        self.config.chain_pos_ticks_per_slot = DEFAULT_CHAIN_POS_TICKS_PER_SLOT.to_string();
-        self.config.chain_pos_proposal_tick_phase =
-            DEFAULT_CHAIN_POS_PROPOSAL_TICK_PHASE.to_string();
+        self.config.chain_pos_slot_duration_ms = pos_defaults.slot_duration_ms.to_string();
+        self.config.chain_pos_ticks_per_slot = pos_defaults.ticks_per_slot.to_string();
+        self.config.chain_pos_proposal_tick_phase = pos_defaults.proposal_tick_phase.to_string();
         self.config.auto_open_browser = false;
         self.config.normalize();
     }
