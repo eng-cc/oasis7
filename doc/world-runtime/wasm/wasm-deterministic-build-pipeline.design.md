@@ -12,12 +12,12 @@
 
 | 层级 | 当前实现事实（2026-03-18） | 与 Docker-first 目标的差距 |
 | --- | --- | --- |
-| 容器基础设施 | `docker/wasm-builder/Dockerfile`、`scripts/build-wasm-module.sh` 与 canonical builder digest 已落地。 | canonical builder 已存在，但跨宿主证据仍未完整归档。 |
+| 容器基础设施 | `docker/wasm-builder/Dockerfile`、`scripts/build-wasm-module.sh` 与 canonical builder digest 已落地。 | canonical builder 已存在，跨宿主证据已由 self-hosted Darwin Docker workflow 归档。 |
 | 构建入口 | `scripts/build-wasm-module.sh` 已强制 `docker run --platform linux/amd64`，且显式拒绝 host-native fallback。 | 入口已收敛，但仍需把“stable gate”和“cross-host full closure”严格区分。 |
 | 构建工具 | `tools/wasm_build_suite` 已在容器内输出 `build receipt`、`source_hash`、`build_manifest_hash`、`builder_image_digest` 与 `container_platform`。 | receipt 语义基本完成，剩余重点在 evidence 汇总与 release gate 结论。 |
-| manifest 策略 | builtin hash manifest 已改为单 canonical token `linux-x86_64=<sha256>`；identity 生成已切换为 receipt 驱动。 | 写路径已收敛，但 cross-host report 还未拿到真实 `darwin-arm64` Docker evidence。 |
+| manifest 策略 | builtin hash manifest 已改为单 canonical token `linux-x86_64=<sha256>`；identity 生成已切换为 receipt 驱动。 | 写路径已收敛，cross-host report 已拿到真实 `darwin-arm64` Docker evidence。 |
 | source compile | `compile_module_artifact_from_source` 仍保留源码包编译能力，但 production `ReleaseSecurityPolicy` 已默认拒绝该 action；仅 dev/test 可显式使用。 | external builder worker 仍未落地，当前以 production default-disable 先收敛 runtime 权限面。 |
-| CI 校验 | `.github/workflows/wasm-determinism-gate.yml` 当前已收敛为 GitHub-hosted `linux-x86_64` stable gate，并支持导入外部 summaries。 | 真实 Docker-capable `darwin-arm64` summary 仍未进入正式 evidence 报告，`WDBP-3` 未完成。 |
+| CI 校验 | `.github/workflows/wasm-determinism-gate.yml` 当前已收敛为 GitHub-hosted `linux-x86_64` stable gate，并支持导入外部 summaries；`.github/workflows/wasm-darwin-docker-evidence.yml` 可手动调度 self-hosted Darwin Docker runner 产出真实 `darwin-arm64` bundle 并触发 Linux cross-host verify。 | `WDBP-3` 的真实 `linux-x86_64 + darwin-arm64` evidence 已在 main run `28297899706` 归档；GitHub-hosted macOS 仍不作为 Docker evidence producer。 |
 | runtime 消费策略 | runtime 侧已支持 production policy 关闭 source compile / local signing / builtin fallback，但主要通过显式启用 production policy 进入。 | 主运行入口尚缺“默认 hardened policy”绑定证据，binary-only 仍未完全提升为产品默认事实。 |
 
 ## 3. 设计原则
@@ -253,15 +253,15 @@ report 聚合时必须输出：
 {
   "module_set": "m1",
   "stable_gate_passed": true,
-  "cross_host_evidence_pending": true,
+  "cross_host_evidence_pending": false,
   "expected_runners": ["linux-x86_64", "darwin-arm64"],
-  "received_runners": ["linux-x86_64"],
-  "gate_result": "conditional-go"
+  "received_runners": ["linux-x86_64", "darwin-arm64"],
+  "gate_result": "cross-host-closed"
 }
 ```
 
 #### 5.8.3 External Evidence Dispatch Runbook
-当真实 Docker-capable `darwin-arm64` runner 可用后，full-tier 证据归档流程固定为：
+真实 Docker-capable `darwin-arm64` runner 可用后，full-tier 证据归档流程固定为：
 
 优先使用手动 CI 路径：
 
@@ -270,6 +270,8 @@ report 聚合时必须输出：
 3. `collect-darwin-docker-summaries` job 会做 `Darwin arm64 + docker linux/amd64` preflight，并产出 `darwin-arm64-wasm-summary-bundle` artifact。
 4. `verify-with-linux-summaries` job 会下载该 artifact、收集 `linux-x86_64` summaries、导入 darwin bundle，并产出 `darwin-arm64-wasm-release-evidence-report` artifact。
 5. 该 report 的 `summary.json` 满足下方 closure 条件后，才可把 `WDBP-3.2` 视为完成。
+
+当前正式收口证据：`Wasm Darwin Docker Evidence` main run `28297899706` 已通过；`collect-darwin-docker-summaries` job `83840926310` 在 self-hosted Darwin runner 上产出 bundle，`verify-with-linux-summaries` job `83843884654` 完成 Linux summary 收集、Darwin bundle 导入与 cross-host report 上传。
 
 如果 self-hosted runner 不能直接接入仓库 workflow，则使用外部 dispatch 路径：
 
