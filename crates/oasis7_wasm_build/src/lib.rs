@@ -334,7 +334,7 @@ fn collect_source_files_for_hash(package_dir: &Path) -> Result<Vec<PathBuf>, Sou
 }
 
 fn sort_dedup_paths(paths: &mut Vec<PathBuf>) {
-    paths.sort();
+    paths.sort_by_cached_key(|path| path.to_string_lossy().into_owned());
     paths.dedup();
 }
 
@@ -582,9 +582,11 @@ mod tests {
     }
 
     #[test]
-    fn sort_dedup_paths_uses_stable_path_order() {
+    fn sort_dedup_paths_preserves_source_hash_label_order() {
         let mut paths = vec![
             PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
+            PathBuf::from("/tmp/workspace/zeta/src/foo/bar.rs"),
+            PathBuf::from("/tmp/workspace/zeta/src/foo.rs"),
             PathBuf::from("/tmp/workspace/alpha/Cargo.toml"),
             PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
         ];
@@ -595,6 +597,8 @@ mod tests {
             paths,
             vec![
                 PathBuf::from("/tmp/workspace/alpha/Cargo.toml"),
+                PathBuf::from("/tmp/workspace/zeta/src/foo.rs"),
+                PathBuf::from("/tmp/workspace/zeta/src/foo/bar.rs"),
                 PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
             ]
         );
