@@ -80,8 +80,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             .into_iter()
             .map(|peer_id| peer_id.to_string())
             .collect::<Vec<_>>();
-        peers.sort();
-        peers.dedup();
+        sort_dedup_peer_ids(&mut peers);
         peers
     }
 
@@ -98,8 +97,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
                 .keys()
                 .map(ToString::to_string),
         );
-        peers.sort();
-        peers.dedup();
+        sort_dedup_peer_ids(&mut peers);
         peers
     }
 
@@ -195,5 +193,29 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
 fn no_connected_providers(protocol: &str) -> WorldError {
     WorldError::NetworkProtocolUnavailable {
         protocol: format!("libp2p-replication no connected providers for protocol {protocol}"),
+    }
+}
+
+fn sort_dedup_peer_ids(peer_ids: &mut Vec<String>) {
+    peer_ids.sort();
+    peer_ids.dedup();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sort_dedup_peer_ids_preserves_sorted_unique_order() {
+        let mut peer_ids = vec![
+            "peer-c".to_string(),
+            "peer-a".to_string(),
+            "peer-b".to_string(),
+            "peer-a".to_string(),
+        ];
+
+        sort_dedup_peer_ids(&mut peer_ids);
+
+        assert_eq!(peer_ids, ["peer-a", "peer-b", "peer-c"]);
     }
 }
