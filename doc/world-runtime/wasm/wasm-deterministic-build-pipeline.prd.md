@@ -132,7 +132,7 @@
   - 风险-1: Docker builder image 维护成本上升，需要明确镜像版本、digest 与升级节奏。
   - 风险-2: 现有 keyed manifest / runtime loader / source compile 路径存在兼容债务，迁移时需要过渡窗口。
   - 风险-3: macOS 开发机在 `linux-x86_64` 容器上构建会更慢，但这是为换取 canonical publish hash 的必要代价。
-  - 风险-4（2026-03-18，P0 未收口）: GitHub-hosted workflow 当前仅稳定覆盖 `linux-x86_64`，真实 Docker-capable `darwin-arm64` evidence 仍需外部补证；如果不持续显式追踪，WDBP-3 会被误认为已完成。
+  - 风险-4（2026-03-18 记录，2026-06-28 已收口）: GitHub-hosted workflow 仍只能直接稳定覆盖 `linux-x86_64`，但真实 Docker-capable `darwin-arm64` evidence 已由 self-hosted runner workflow 补齐；`Wasm Darwin Docker Evidence` main run `28297899706` 产出 Darwin bundle 并完成 Linux cross-host verify。后续风险转为 runner 可用性与 artifact 保留期治理，而非 WDBP-3 P0 阻塞。
   - 风险-5（2026-03-18，P0 未收口）: runtime 生产入口尚未形成“默认 hardened release policy”证据闭环；若只在测试中显式启用生产策略，会让 binary-only / no-fallback 契约停留在文档层。
 
 ## 6. Validation & Decision Record

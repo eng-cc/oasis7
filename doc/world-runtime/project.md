@@ -95,7 +95,7 @@
 - [x] TASK-WORLD_RUNTIME-040 (PRD-WORLD_RUNTIME-001) [test_tier_required]: 为 provider 双轨模式补齐 mode/schema/environment/fixture/replay 元数据透传，并统一 replay/summary traceability。
 - [x] TASK-WORLD_RUNTIME-041 (PRD-WORLD_RUNTIME-020/021/022) [test_tier_required]: 将 `WASM 确定性构建与工件治理管线` 专题修正为 Docker-first canonical builder 目标态，并回写 world-runtime 根 PRD、项目索引、README 与当日 devlog。
 - [x] TASK-WORLD_RUNTIME-042 (PRD-WORLD_RUNTIME-020/021) [test_tier_required]: 新增 pinned WASM builder image 与 host wrapper，固定 `linux-x86_64` container platform 为唯一 publish build 平台；构建入口改为 Docker-only，不再保留 host-native fallback。
-- [ ] TASK-WORLD_RUNTIME-043 (PRD-WORLD_RUNTIME-021/022) [test_tier_required + test_tier_full]: 将 manifest / identity / CI summary / release evidence 切换为 Docker canonical hash，对不同宿主只比较容器输出，不再比较 host-native 发布 hash。
+- [x] TASK-WORLD_RUNTIME-043 (PRD-WORLD_RUNTIME-021/022) [test_tier_required + test_tier_full]: 将 manifest / identity / CI summary / release evidence 切换为 Docker canonical hash，对不同宿主只比较容器输出，不再比较 host-native 发布 hash。
   - 2026-03-29 drift repair: GitHub-hosted `Wasm Determinism Gate` 已暴露 `m1` tracked canonical hash 继续漂移；本轮按 runner log 回写 `m1` builtin `sha256`/identity hash token，并同步修正 `builtin_wasm_identity.rs` 中残留的旧 `m1/m5` hardcoded canonical hash，避免 required gate 继续因 stale manifest / stale test constant 双重阻断。
 - [x] wasm-darwin-docker-self-hosted-runner (PRD-WORLD_RUNTIME-021/022) [test_tier_required] + [test_tier_full]: 建立本机 Darwin ARM64 Docker-capable self-hosted runner，修正 Darwin Docker evidence workflow 与本地 WASM builder 默认 digest，使 `Wasm Darwin Docker Evidence` 可从 `main` 重新触发并产出跨平台 release evidence。 Trace: .pm/tasks/task_0a6477b5b6b34b869c8b85c81c554dc0.yaml
 - [x] TASK-WORLD_RUNTIME-044 (PRD-WORLD_RUNTIME-022) [test_tier_required]: 将 `compile_module_artifact_from_source` 的生产路径外移到 external Docker builder 或 production 默认禁用，runtime 仅消费 binary + receipt。
@@ -728,8 +728,8 @@
 ## 状态
 - 更新日期: 2026-05-26
 - 当前状态: in_progress
-- 下一任务: `TASK-WORLD_RUNTIME-043`
-- 当前窗口摘要: provider/runtime live traceability、WASM Docker builder image/wrapper、build receipt/canonical token/identity/CI summary、receipt-aware release gate、node-side proof flow 与近期 runtime 技术债 tranche 均已收口；当前剩余阻塞仍是 `TASK-WORLD_RUNTIME-043` 的真实 Docker-capable `darwin-arm64` live evidence。Trace: .pm/tasks/task_dac2a6ab38134923b8573bc74fe5743e.yaml
+- 下一任务: 无 WDBP-3.2/P0 后续阻塞；后续按 `TASK-WORLD_RUNTIME-002/003/004` 承接。
+- 当前窗口摘要: provider/runtime live traceability、WASM Docker builder image/wrapper、build receipt/canonical token/identity/CI summary、receipt-aware release gate、node-side proof flow、真实 Docker-capable `darwin-arm64` live evidence 与近期 runtime 技术债 tranche 均已收口；Darwin evidence closure 由 `Wasm Darwin Docker Evidence` main run `28297899706` 的 GitHub Actions artifact/run evidence 记录，后续长期复核以 run URL、job id 与 `.pm` evidence log 为索引。Trace: .pm/tasks/task_0a6477b5b6b34b869c8b85c81c554dc0.yaml
 - 当前窗口补充（2026-06-27 / hosted macOS Docker probe）: self-hosted Darwin Docker evidence workflow 已可手动触发但仓库级 self-hosted runner inventory 为 0，新增独立 GitHub-hosted macOS ARM64 Docker capability probe workflow 仅采集 Docker/`linux/amd64` container 能力诊断 artifact，显式 `release_evidence=false`，不替代 WDBP-3.2/P0 canonical release evidence。Trace: .pm/tasks/task_fef95d44dbba4048b574d68138431371.yaml
 - 近期收口: viewer-live integration flake、builtin-wasm integer centimeter contract、node observability、wasm timing metrics、fetch-commit / peer-record backoff、traffic/finality/consensus health metrics 与 chain-linked passive world progress 已完成；详情回看对应任务项、topic project 与 `.pm` execution logs。
 - 历史追溯: 更早 `TASK-WORLD_RUNTIME-*` 完成项不再在状态区逐条追加；需要追 WASM builder、runtime storage、release policy、source compile、module release 或 node observability 历史时，先从上方任务项、`doc/world-runtime/prd.index.md`、topic project 与 `.pm/tasks/*.execution.md` 进入。
@@ -737,7 +737,7 @@
 - 阶段 owner: `wasm_platform_engineer`（联审：`producer_system_designer`、`runtime_engineer`；验证：`qa_engineer`）
 - 阻断条件: 在 `TASK-WORLD_RUNTIME-002/003/004` 完成前，`TASK-WORLD_RUNTIME-033` 不再作为当前版本的首要发布驱动项。
 - 承接约束: `TASK-WORLD_RUNTIME-002` 完成后方可进入 `TASK-WORLD_RUNTIME-003` 与 `TASK-WORLD_RUNTIME-004`；`TASK-WORLD_RUNTIME-033` 保留为后续联合验证切片。
-- 实施备注: 仅保留 `TASK-WORLD_RUNTIME-043` 的当前阻塞与承接约束；已完成切片不再在状态区展开，统一回看上方任务项、topic project 与 `.pm` execution log。
+- 实施备注: `TASK-WORLD_RUNTIME-043` 已完成；当前状态区仅保留后续 `TASK-WORLD_RUNTIME-002/003/004` 承接约束，已完成切片统一回看上方任务项、topic project 与 `.pm` execution log。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 说明: 本文档仅维护 world-runtime 模块设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
 
