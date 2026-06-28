@@ -311,8 +311,7 @@ fn collect_local_package_dirs(
         }
     }
 
-    ordered_dirs.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
-    ordered_dirs.dedup();
+    sort_dedup_paths(&mut ordered_dirs);
     Ok(ordered_dirs)
 }
 
@@ -327,12 +326,16 @@ fn collect_source_files_for_hash(package_dir: &Path) -> Result<Vec<PathBuf>, Sou
     for root in ["src", "wit", ".cargo", "assets"] {
         collect_files_recursively(package_dir.join(root).as_path(), &mut files)?;
     }
-    files.sort_by(|left, right| left.to_string_lossy().cmp(&right.to_string_lossy()));
-    files.dedup();
+    sort_dedup_paths(&mut files);
     if files.is_empty() {
         return Err(SourceHashError::NoTrackedFiles(package_dir.to_path_buf()));
     }
     Ok(files)
+}
+
+fn sort_dedup_paths(paths: &mut Vec<PathBuf>) {
+    paths.sort_by_cached_key(|path| path.to_string_lossy().into_owned());
+    paths.dedup();
 }
 
 fn common_ancestor(paths: &[PathBuf]) -> Option<PathBuf> {
@@ -576,5 +579,28 @@ mod tests {
         assert_eq!(found.as_deref(), Some(workspace_lock.as_path()));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sort_dedup_paths_preserves_source_hash_label_order() {
+        let mut paths = vec![
+            PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
+            PathBuf::from("/tmp/workspace/zeta/src/foo/bar.rs"),
+            PathBuf::from("/tmp/workspace/zeta/src/foo.rs"),
+            PathBuf::from("/tmp/workspace/alpha/Cargo.toml"),
+            PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
+        ];
+
+        sort_dedup_paths(&mut paths);
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/tmp/workspace/alpha/Cargo.toml"),
+                PathBuf::from("/tmp/workspace/zeta/src/foo.rs"),
+                PathBuf::from("/tmp/workspace/zeta/src/foo/bar.rs"),
+                PathBuf::from("/tmp/workspace/zeta/src/lib.rs"),
+            ]
+        );
     }
 }
