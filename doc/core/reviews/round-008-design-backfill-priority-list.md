@@ -22,7 +22,7 @@
 - `defer_allowed`: 2
 
 ## 首批已补齐专题
-- `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
+- legacy doc migration collaboration (retired; excluded from ROUND-008 PRD/Project/Design backfill totals; closure evidence: `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`)
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23`
 - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03`

@@ -15,8 +15,8 @@
 | PRD | 对应 `*.prd.md` |
 | Project | 对应 `*.project.md` |
 | 模块 | 所属一级模块 |
-| 分级 | `must_backfill` / `should_backfill` / `defer_allowed` / `待判定` |
-| 当前状态 | `pending` / `in_progress` / `graded` / `backfilled` / `deferred` |
+| 分级 | `must_backfill` / `should_backfill` / `defer_allowed` / `待判定`; `retired` 行仅作历史承接，不计入 ROUND-008 补齐总数 |
+| 当前状态 | `pending` / `in_progress` / `graded` / `backfilled` / `deferred`; `retired` 表示旧专题已退出 PRD/Project/Design 补齐计数 |
 | owner role | 牵头角色 |
 | 备注 | 复杂度依据或延期理由 |
 
@@ -28,7 +28,7 @@
 ## 明细
 | 专题 basename | PRD | Project | 模块 | 分级 | 当前状态 | owner role | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| legacy doc migration collaboration (retired) | `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md` | `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md` | `engineering` | `must_backfill` | `backfilled` | `producer_system_designer` | 旧协作三件套已退役；当前保留 closure evidence |
+| legacy doc migration collaboration (retired) | n/a (retired) | n/a (retired) | `engineering` | `retired` | `retired` | `producer_system_designer` | 旧协作三件套已退出 PRD/Project/Design 补齐计数；closure evidence: `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`, `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md` |
 | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | `engineering` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.design.md` 并回写互链 |
 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | `engineering` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.design.md` 并回写互链 |
 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03` | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | `engineering` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.design.md` 并回写互链 |
