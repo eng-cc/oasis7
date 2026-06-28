@@ -1,0 +1,26 @@
+task_uid: task_3639b01d07e5450ca7868ac7859baea2
+title: "Delete next legacy doc semantics"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-legacy-doc-semantics-deletion-next-26
+execution_log_path: .pm/tasks/task_3639b01d07e5450ca7868ac7859baea2.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/engineering/project.md
+  - doc/engineering/prd.md
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-28T10:18:44+08:00
+last_started_at: 2026-06-28T10:05:53+08:00
+last_claim_type: task_complete
+last_verify_command: ./scripts/doc-governance-check.sh
+last_verified_at: 2026-06-28T10:18:42+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-28T10:18:43+08:00
