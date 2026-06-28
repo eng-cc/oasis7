@@ -41,7 +41,7 @@
 - 联审角色: `producer_system_designer`、`runtime_engineer`
 - 验证角色: `qa_engineer`
 - 阻塞项:
-  - 无 WDBP-3.2 P0 阻塞；真实 Linux + Docker-capable macOS full-tier 证据已归档。
+  - 无 WDBP-3.2 P0 阻塞；真实 Linux + Docker-capable macOS full-tier 证据已由 GitHub Actions run `28297899706` 产出并上传为 workflow artifacts。该证据不作为 repo-tracked binary 长期归档，长期复核索引用 run URL、job id 与 `.pm` execution log 保留。
   - GitHub-hosted `macos-14` runner 仍不能被当作 Docker-capable `darwin-arm64` producer；该能力边界由 self-hosted runner workflow 承接。
 - 实施备注:
   - `docker/wasm-builder/Dockerfile` 与 `scripts/build-wasm-module.sh` 已落地，当前 canonical build 已收敛为 Docker-only path，不再提供 host-native fallback。
@@ -68,4 +68,4 @@
   - `oasis7_chain_runtime` 现已把 `release_default` storage profile 绑定到 hardened `ReleaseSecurityPolicy`，并通过 `/v1/chain/status` 输出 effective policy；`NodeRuntimeExecutionDriver::new_with_storage_profile` 会在装载 execution world 时同步应用该 policy。
   - `scripts/module-release-node-acceptance.sh` 现已新增 `required_release_policy` 步骤，并在 `.tmp/module_release_node_acceptance/20260318-134705/summary.json` 留下 production policy binding/status 证据。
   - `2026-03-31` 已补完 `WDBP-3.3` 的 runtime 侧余量审计：`viewer runtime_live` bootstrap、`governance_registry_import` 新建/加载 world、`reward_runtime_worker` 以及 `execution_bridge::load_execution_world` 的缺档案/旧样本装载路径现也统一切到 hardened `ReleaseSecurityPolicy`，避免 binary-only 语义只停留在 chain runtime 主入口。
-  - `2026-06-28` 复核确认，`WDBP-3.2` 原阻塞已由 self-hosted Darwin Docker runner 与 main run `28297899706` 收口；仓库内已归档真实 Docker-capable `darwin-arm64` live summary bundle 与 `linux-x86_64 + darwin-arm64` cross-host evidence report。
+  - `2026-06-28` 复核确认，`WDBP-3.2` 原阻塞已由 self-hosted Darwin Docker runner 与 main run `28297899706` 收口；真实 Docker-capable `darwin-arm64` live summary bundle 与 `linux-x86_64 + darwin-arm64` cross-host evidence report 由该 GitHub Actions run 产出并上传为 artifacts，repo 内保留 run/job 索引和 `.pm` evidence log。
