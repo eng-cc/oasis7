@@ -11,6 +11,7 @@ source_refs:
   - AGENTS.md
 doc_refs:
   - doc/engineering/workflow/source-of-truth.md
+  - doc/p2p/project.md
 related_prd: []
 acceptance:
   - "Answer current chain block period with repo evidence and attribution boundary."
