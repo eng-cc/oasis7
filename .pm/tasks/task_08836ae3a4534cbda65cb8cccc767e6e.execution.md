@@ -74,6 +74,13 @@ Example:
 - Blocker / Next Action: no blocker; commit and request local role review.
 
 ## 2026-06-29 20:38:00 CST / tpm
+- 完成内容: Recorded formal pre-PR local role review request before dispatch.
+- 遗留事项: wait for role review returns, address valid findings, record passed review packet, rerun checks, close out task, create PR, watch CI/comments, merge, and cleanup worktree.
+- Action: Requested producer_system_designer, qa_engineer, and repository_health_engineer review of the committed cleanup diff.
+- Validation Command: `./scripts/pm/review-package.sh --base origin/main --head HEAD --task-uid task_08836ae3a4534cbda65cb8cccc767e6e`; `./scripts/pm/slice-ledger.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --print`; `git rev-parse HEAD`; `git diff --name-only origin/main...HEAD`.
+- Expected Result: review target, roles, question, evidence, and formal sink are explicit before or while dispatching subagents.
+- Actual Result: review package `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff` was generated; source head was `7a5398acd6bd87f0de0f497bec326efe55581da9`; changed paths were listed; slice ledger path was later corrected to `n/a` because no persistent artifact was emitted.
+- Blocker / Next Action: no blocker; dispatch role reviewers.
 - Review Trigger: pre-PR local role review
 - Review Scope: delete `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; update core README/index/project, root markdown allowlist, engineering project row, and `.pm` task truth.
 - Review Package: `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff`
@@ -114,3 +121,12 @@ Example:
 - LiveOps Evidence: n/a; no external messaging, community, incident, or player promise surface changed.
 - Residual Risk: low; deleted path may break historical external bookmarks, but in-repo current traceability and formal replacement evidence are preserved.
 - Slice Ledger: n/a; no persistent slice ledger artifact emitted, and this execution log is the canonical role review sink.
+
+## 2026-06-29 20:58:00 CST / tpm
+- 完成内容: Ran final current-task verification and task closeout attempt after local role review.
+- 遗留事项: commit closeout evidence, run PR preflight, create PR, watch CI/comments, merge, and cleanup worktree.
+- Action: Ran `claim-ready` for `ready_for_pr`; ran `task-closeout.sh`; fixed the current execution-log format issue reported by repo-wide `pm-lint` for this task's review request entry; accepted repo-wide historical `.pm` lint failures as out-of-scope debt after current-task lint passed.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current" --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --json`; `./scripts/pm/task-closeout.sh --role tpm --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current" --json`; `./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current`; `./scripts/doc-governance-check.sh`; `git diff --check`.
+- Expected Result: current task is verified and closeout state is recorded; repo-wide unrelated `.pm` debt does not block PR creation when current task lint passes.
+- Actual Result: `claim-ready` returned `allowed_to_claim: true`; `task-closeout.sh` updated task status to `done` but exited 1 because repo-wide `pm-lint` found unrelated historical execution-log failures plus the now-fixed current review-request entry; fresh reruns after the fix returned `workflow-lint: OK (task_08836ae3a4534cbda65cb8cccc767e6e, phase=current)`, `doc-governance-check: OK`, and `git diff --check` passed.
+- Blocker / Next Action: no current-task blocker; commit closeout evidence and create PR.
