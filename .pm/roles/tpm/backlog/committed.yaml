@@ -99,13 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_f4961c6f86a84ac696ba5929a7084957
-    title: "Continue engineering performance and abstraction optimization"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance: []
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_f4961c6f86a84ac696ba5929a7084957.yaml
