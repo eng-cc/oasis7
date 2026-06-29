@@ -99,13 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_b5173c0d4a2d4faf81589b66d5c5fd29
-    title: "Retire follow-up legacy doc surface"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance: []
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_b5173c0d4a2d4faf81589b66d5c5fd29.yaml
