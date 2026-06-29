@@ -26,9 +26,9 @@
 - 治理前快照（`scripts/doc-inventory-report.sh`，2026-04-17）:
   - `doc/world-simulator/viewer/`: 296 份 Markdown
   - `doc/world-simulator/`: 549 份 Markdown
-- 当前复算（`scripts/doc-inventory-report.sh`，2026-06-23）:
-  - `doc/world-simulator/viewer/`: 216 份 Markdown
-  - `doc/world-simulator/`: 475 份 Markdown
+- 当前复算（`scripts/doc-inventory-report.sh`，2026-06-29）:
+  - `doc/world-simulator/viewer/`: 213 份 Markdown
+  - `doc/world-simulator/`: 472 份 Markdown
 - 当前子域属于仓库最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
 
 ## 首读主题簇

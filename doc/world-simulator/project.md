@@ -76,4 +76,4 @@
 - 当前窗口摘要: launcher “打开游戏页”URL、launcher explorer 主链级重构、`/api/state.chain_replication_status` 透传与节点观测摘要卡均已收口，详情回看对应 task trace。
 - 边界说明: 已知环境限制仍是 source stack formal 启动前需要 `OASIS7_LLM_MODEL` 或等价配置；旧第二 Viewer 入口相关代码、脚本与活跃文档已移除，当前仅保留 `viewer` canonical Web 主入口与 `software_safe` compat alias。
 - 历史追溯: 最近完成项不再压缩在标题行中维护；需要追 launcher / viewer / provider-backed NPC / release distribution 历史时，先从上方任务项、topic project、`doc/world-simulator/prd.index.md` 与 `.pm/tasks/*.execution.md` 进入。
-- 当前追溯入口: 活跃任务、最近完成项、topic project、`doc/world-simulator/prd.index.md` 与 `.pm/tasks/*.execution.md`；旧 2026-03-11 root/viewer 状态 closure / handoff 文档已退役删除，当前状态、活跃任务与下一步以本文档为准。
+- 当前追溯入口: 活跃任务、最近完成项、topic project、`doc/world-simulator/prd.index.md` 与 `.pm/tasks/*.execution.md`；旧 2026-03-11 viewer 状态 closure / viewer-to-producer handoff 文档已退役删除，当前状态、活跃任务与下一步以本文档为准。
