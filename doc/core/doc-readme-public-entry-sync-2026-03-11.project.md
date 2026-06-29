@@ -15,6 +15,7 @@
 - `README.md`
 - `site/index.html`
 - `doc/core/project.md`
+- 历史 devlog 回写语义已退役；当前追溯以本项目页与 `.pm/tasks/task_<32hex>.execution.md` 为准。
 
 ## 状态
 - 更新日期: 2026-03-11

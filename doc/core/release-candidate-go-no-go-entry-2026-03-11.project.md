@@ -15,6 +15,7 @@
 - `doc/core/release-candidate-go-no-go-entry-2026-03-11.design.md`
 - `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md`
 - `doc/core/templates/stage-closure-go-no-go-template.md`
+- 历史一次性 handoff 文件已退役删除；当前追溯以正式评审记录、readme 对外口径专题与 `.pm/tasks/task_<32hex>.execution.md` 为准。
 
 ## 状态
 - 更新日期: 2026-03-11

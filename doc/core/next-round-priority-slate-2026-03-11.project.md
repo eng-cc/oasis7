@@ -15,7 +15,7 @@
 - `doc/core/project.md`
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - `doc/core/next-round-priority-slate-2026-03-11.design.md`
-- `doc/core/producer-to-qa-task-core-016-priority-slate-2026-03-11.md`
+- 历史 priority slate handoff 文件已退役删除；当前证据入口为本项目页、正式专题三件套与 `.pm/tasks/task_<32hex>.execution.md`。
 
 ## 状态
 - 更新日期: 2026-03-11

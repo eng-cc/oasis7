@@ -85,7 +85,7 @@
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
 | 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并回写模块 project | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
-| 跨角色交付矩阵 | 发起角色、接收角色、handoff 输入、产出物、回写位置、验证方式 | 发起方提交 handoff / 接收方确认 done / owner 回写 PRD、project、devlog | `requested -> accepted -> delivered -> verified` | 先按“最先落地代码/文档的 owner”排序，再按发布风险高低排序 | 仅标准角色名可出现在交付矩阵与 devlog |
+| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 `.pm` execution log / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 `.pm` task owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
 | 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims`、`gameplay_prerequisites` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `software_safe / pure_api` 两项；`non-3D / 2D 优先` 只能作优先级或范围描述；lane 只作附加维度；`pure_api` formal gameplay 默认要求 active LLM access | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |
@@ -186,7 +186,8 @@
   - `doc/testing/project.md`
   - `doc/playability_test_result/project.md`
   - `doc/headless-runtime/project.md`
-  - `doc/devlog/YYYY-MM-DD.md`
+  - `.pm/tasks/task_<32hex>.execution.md`
+  - pre-PR local role review evidence packet
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
   - 信息缺失：若模块 PRD 尚未更新，标记“口径待同步”并阻断发布结论。
@@ -194,7 +195,7 @@
   - 依赖冲突：同一链路被多个模块修改时，需合并影响面并重跑 required 级验证。
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
   - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
-  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按“最先落地代码/文档的 owner”裁定，并回写 core / project / devlog。
+  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按当前 `.pm` task owner、正式专题文档与 pre-PR role review evidence 裁定，并回写 core / project。
   - project 缺承接：若 P0 项在 PRD 已定义但对应模块 `project.md` 未承接，状态只能记为 `candidate`，不得进入发布结论。
   - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
@@ -206,7 +207,7 @@
   - NFR-CORE-5: core 主文档维持 <= 1000 行，超限必须拆分分册。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
-  - NFR-CORE-8: 跨角色 handoff 在 PRD / project / devlog 中的追溯链完整率 100%。
+  - NFR-CORE-8: 跨角色证据交接在 PRD / project / `.pm` execution log / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
   - NFR-CORE-9: 一轮模块主项目全部收口后 1 个工作日内必须形成下一轮优先级清单。
 - Security & Privacy: core 仅维护结构与治理口径；涉及密钥、签名、隐私数据的要求由对应模块 PRD 细化并执行。
   发布收口文档仅记录工程与玩法证据，不引入额外敏感数据；若引用线上/远程环境信息，需与对应模块 owner 联审后落档。

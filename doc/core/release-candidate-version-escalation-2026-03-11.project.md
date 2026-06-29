@@ -15,7 +15,7 @@
 - `doc/core/release-candidate-version-escalation-2026-03-11.design.md`
 - `doc/core/reviews/release-candidate-readiness-board-task-game-018-2026-03-11.md`
 - `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md`
-- `doc/core/producer-to-qa-task-core-019-version-candidate-escalation-2026-03-11.md`
+- 历史 version-candidate handoff 文件已退役删除；当前证据入口为本项目页、正式专题三件套、readiness board 与 `.pm/tasks/task_<32hex>.execution.md`。
 
 ## 状态
 - 更新日期: 2026-03-11
