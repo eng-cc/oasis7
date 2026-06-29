@@ -14,6 +14,8 @@
 
 - [x] chain-runtime-replication-allowlist-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize chain runtime replication allowlist sort/dedup normalization in a private helper reused by remote-writer and fetch-requester allowlist builders, preserving sorted unique signer-key output while reducing duplicate ordering logic. Trace: .pm/tasks/task_b2883927f22e4dd19236f4c3cd77ff2e.yaml
 
+- [x] runtime-restricted-grant-expiry-btreemap-order-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize restricted starter claim grant expiry to rely on `BTreeMap` beneficiary-account key order instead of sorting collected keys again, preserving deterministic same-epoch expiry event order and grant refund semantics. Trace: .pm/tasks/task_6444ae32bb7f454fa70c62891a14e4c1.yaml
+
 - [x] wasm-module-observe-btreemap-diff-merge-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm module observe metric bucket diffing to merge ordered `BTreeMap` iterators directly instead of cloning keys into a temporary vector, sorting, deduping, and re-looking up values, preserving saturating counter-delta semantics. Trace: .pm/tasks/task_abeacd11de97477c91668825da4524b5.yaml
 
 - [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml

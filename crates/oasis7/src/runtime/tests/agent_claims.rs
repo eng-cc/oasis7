@@ -899,6 +899,40 @@ fn expired_restricted_grant_returns_remaining_balance_and_redirects_release_refu
 }
 
 #[test]
+fn expired_restricted_grants_follow_btreemap_account_order() {
+    let mut world = setup_claim_world_with_treasury(1_000, 0, 0);
+    allowlist_restricted_grant_admins(&mut world, &["liveops"]);
+
+    for beneficiary_account_id in ["zara", "alice", "mike"] {
+        world.submit_action(Action::IssueRestrictedStarterClaimGrant {
+            issuer_account_id: "liveops".to_string(),
+            beneficiary_account_id: beneficiary_account_id.to_string(),
+            amount: 100,
+            issuance_reason: "same_epoch_seed".to_string(),
+            expires_at_epoch: 12,
+        });
+        world.step().expect("issue restricted grant");
+    }
+
+    let journal_len_before_expiry = world.journal().events.len();
+    for _ in 0..12 {
+        world.step().expect("advance to restricted grant expiry");
+    }
+
+    let expired_accounts = world.journal().events[journal_len_before_expiry..]
+        .iter()
+        .filter_map(|event| match &event.body {
+            WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantExpired {
+                beneficiary_account_id,
+                ..
+            }) => Some(beneficiary_account_id.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(expired_accounts, ["alice", "mike", "zara"]);
+}
+
+#[test]
 fn revoked_restricted_grant_returns_spendable_balance_and_redirects_release_refund_to_treasury() {
     let mut world = setup_claim_world_with_treasury(1_000, 150, 0);
     allowlist_restricted_grant_admins(&mut world, &["liveops"]);
