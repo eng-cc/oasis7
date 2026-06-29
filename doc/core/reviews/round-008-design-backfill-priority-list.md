@@ -3,8 +3,8 @@
 审计轮次: 8
 
 ## 缺口总数
-- 总缺口专题数: `365`
-- 已补齐专题数: `365`
+- 总缺口专题数: `363`
+- 已补齐专题数: `363`
 - 剩余待补齐专题数: `0`
 
 ## 模块分布
@@ -17,15 +17,15 @@
 - `defer_allowed`: 范围小、生命周期短、没有独立结构设计。
 
 ## 分级统计
-- `must_backfill`: 347
-- `should_backfill`: 16
+- `must_backfill`: 346
+- `should_backfill`: 15
 - `defer_allowed`: 2
 
 ## 首批已补齐专题
 - legacy doc migration collaboration (retired; excluded from ROUND-008 PRD/Project/Design backfill totals; closure evidence: `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`)
 - `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23`
-- `doc/engineering/prd-review/prd-full-system-audit-2026-03-03`
+- engineering full-PRD review triplet (retired; excluded from current PRD/Project/Design backfill totals; historical evidence remains in round review logs)
 
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26`
 

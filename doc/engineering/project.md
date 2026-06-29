@@ -134,6 +134,7 @@
 - [x] TASK-ENGINEERING-023 (PRD-ENGINEERING-014) [test_tier_required]: 完成历史专题审读与引用收口（不再保留 archive 目录）。
 - [x] TASK-ENGINEERING-024 (PRD-ENGINEERING-012/013/014) [test_tier_required]: 建立周度增量审读节奏（新增/变更 PRD 自动入清单）。
 > Historical note: `TASK-ENGINEERING-024` 描述的是 2026-03 当期审读机制；当前不再生成旧清单文件，新增/变更文档通过模块入口与 round review logs 追踪。
+- [x] prd-full-system-audit-triplet-retirement (PRD-ENGINEERING-012/013/014) [test_tier_required]: 删除已退役的 2026-03 全量 PRD 审读机制三件套，将当前审读/治理语义收敛到 core review logs、模块入口与现行 doc governance 规则。 Trace: .pm/tasks/task_19eba076d762496bbd49a9a5efda9b6c.yaml
 - [x] TASK-ENGINEERING-025 (PRD-ENGINEERING-015) [test_tier_required]: 产出“文档分工与组织规范”专题 PRD、规范正文与项目文档，冻结目录按对象、文件按职责的建档标准。
 - [x] TASK-ENGINEERING-026 (PRD-ENGINEERING-015) [test_tier_required]: 将“文档分工与组织规范”专题收敛为短文件名 `doc-structure-standard`，并同步回写索引、白名单与引用。
 - [x] TASK-ENGINEERING-030 (PRD-ENGINEERING-016) [test_tier_required]: 建立 `.agents/roles/` 七个组合角色职责卡，并将根 `AGENTS.md` 的分工章节替换为角色入口映射与协作约定。
@@ -438,8 +439,7 @@
 - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
-- `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
-- `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
+- historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/doc-governance/doc-structure-standard.project.md`
