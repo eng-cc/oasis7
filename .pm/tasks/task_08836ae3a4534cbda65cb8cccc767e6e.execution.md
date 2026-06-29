@@ -72,3 +72,45 @@ Example:
 - Expected Result: old handoff file and active references are gone; formal replacement evidence remains reachable; governance and task workflow checks pass.
 - Actual Result: `deleted-ok`, `no-old-path-references`, `no-old-devlog-sink`; TASK-CORE-005 replacement evidence is reachable; `doc-governance-check: OK`; `workflow-lint: OK (task_08836ae3a4534cbda65cb8cccc767e6e, phase=current)`; `git diff --check` passed.
 - Blocker / Next Action: no blocker; commit and request local role review.
+
+## 2026-06-29 20:38:00 CST / tpm
+- Review Trigger: pre-PR local role review
+- Review Scope: delete `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; update core README/index/project, root markdown allowlist, engineering project row, and `.pm` task truth.
+- Review Package: `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff`
+- Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
+- Review Question: confirm this old-doc deletion preserves TASK-CORE-005 product/system traceability, has sufficient verification evidence, and leaves no repo-health or doc-governance regression before PR.
+- Evidence Available: `test ! -e ...` deletion check; old-path and old-devlog-sink `rg` scans; TASK-CORE-005 replacement evidence scan; `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current`; `git diff --check`.
+- Expected Return Contract: findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk
+- Slice Ledger: n/a; `scripts/pm/slice-ledger.sh --print` only reports an ignored scratch path and no ledger artifact was emitted, so this execution log is the canonical review sink.
+- Formal Sink: `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md`
+
+## 2026-06-29 20:49:00 CST / tpm
+- 完成内容: Integrated pre-PR local role review results and addressed valid review finding.
+- 遗留事项: rerun workflow checks, close out task, prepare PR, watch CI/comments, merge, and cleanup worktree.
+- Action: Reviewed producer_system_designer, qa_engineer, and repository_health_engineer returns. producer_system_designer and qa_engineer returned `no_findings`. repository_health_engineer returned one P2 process hygiene finding: the review request pointed to a missing ignored scratch `slice-ledger.jsonl` artifact. Addressed by changing the review request `Slice Ledger` field to `n/a` and stating this execution log is the canonical review sink.
+- Validation Command: role review results from subagents `019f1354-dc78-7723-be49-5e94c570ee0f`, `019f1354-ded2-7f71-9d0e-f9fdeb632da9`, and `019f1354-e185-76b1-9742-4a42ba007981`; `ls -l .pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e || true`; `test -f .pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/slice-ledger.jsonl && echo ledger-exists || echo ledger-missing`.
+- Expected Result: all role findings are either no-findings or addressed with evidence before PR creation.
+- Actual Result: producer_system_designer `no_findings`, traceability passed, residual risk low; qa_engineer `no_findings`, verification sufficiency passed, residual risk low; repository_health_engineer doc diff passed, repo-health passed after fixing the stale missing-ledger reference; local check confirmed `ledger-missing` before the fix.
+- Blocker / Next Action: no blocker; record passed pre-PR local role review packet and rerun final checks.
+
+- Pre-PR Local Role Review: passed
+- Task UID: task_08836ae3a4534cbda65cb8cccc767e6e
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-3
+- Source Branch: task/engineering-doc-legacy-semantics-cleanup-next-3
+- Source Head: 7a5398acd6bd87f0de0f497bec326efe55581da9; later changes are limited to this task review evidence file.
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml`; `doc/.governance/module-root-md-allowlist.txt`; `doc/core/README.md`; `doc/core/prd.index.md`; `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; `doc/core/project.md`; `doc/engineering/project.md`.
+- Review Package: `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff`
+- Role Selection Basis: changed `doc/core/*` product/system traceability and old handoff semantics require producer_system_designer; verification and evidence sufficiency require qa_engineer; cross-cutting doc governance, allowlist, stale references, and debt cleanup require repository_health_engineer.
+- Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
+- Review Evidence: producer_system_designer subagent `019f1354-dc78-7723-be49-5e94c570ee0f`; qa_engineer subagent `019f1354-ded2-7f71-9d0e-f9fdeb632da9`; repository_health_engineer subagent `019f1354-e185-76b1-9742-4a42ba007981`.
+- Review Verdicts: producer_system_designer scope/spec passed and role quality/risk passed; qa_engineer scope/spec passed and role quality/risk passed; repository_health_engineer scope/spec passed and role quality/risk passed after missing-ledger sink correction.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: repository_health P2 missing-ledger reference addressed in this execution log by changing `Slice Ledger` to `n/a` and naming `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md` as canonical review sink; producer_system_designer and qa_engineer returned no findings.
+- Verification Matrix: old doc deletion -> `test ! -e ...` passed; stale old-path references -> negative `rg` scan passed; stale old devlog sink -> negative `rg` scan passed; replacement evidence reachability -> TASK-CORE-005 `rg` scan passed; doc governance -> `./scripts/doc-governance-check.sh` passed; task workflow -> `./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current` passed; whitespace -> `git diff --check` passed.
+- Visual Evidence: n/a; docs/governance cleanup with no UI or visual surface.
+- WASM Evidence: n/a; no WASM or ABI surface changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook, or release ops surface changed.
+- LiveOps Evidence: n/a; no external messaging, community, incident, or player promise surface changed.
+- Residual Risk: low; deleted path may break historical external bookmarks, but in-repo current traceability and formal replacement evidence are preserved.
+- Slice Ledger: n/a; no persistent slice ledger artifact emitted, and this execution log is the canonical role review sink.
