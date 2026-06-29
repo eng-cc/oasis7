@@ -80,6 +80,8 @@
 
 - [x] libp2p-request-peer-candidate-filtering-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize libp2p request peer candidate filtering to classify preferred and soft-deprioritized fallback peers in one pass instead of rescanning the peer vector on fallback, preserving hard-block exclusion and fallback ordering semantics. Trace: .pm/tasks/task_584c960d09974a70b98cf65f8d10afb7.yaml
 
+- [x] gameplay-tick-lifecycle-emit-filtering-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize gameplay tick lifecycle emit collection to filter non-lifecycle and non-active gameplay module emits before cloning, preserving module-driven directive semantics. Trace: .pm/tasks/task_3fa598816b3d4ffda8f44105433a032f.yaml
+
 - [x] engineering-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-engineering.md` PRD review checklist snapshot，将当前 engineering 阅读/状态语义收敛到 `doc/engineering/README.md`、`doc/engineering/prd.index.md` 与 `doc/engineering/project.md`。 Trace: .pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.yaml
 
 - [x] game-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-game.md` PRD review checklist snapshot，将当前 game 阅读/状态语义收敛到 `doc/game/README.md`、`doc/game/prd.index.md` 与 `doc/game/project.md`。 Trace: .pm/tasks/task_0f123c70222c404dacb01f7c64e24208.yaml

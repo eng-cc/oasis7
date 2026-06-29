@@ -91,13 +91,6 @@ impl World {
 
         let mut emitted = Vec::new();
         for module_emit in self.collect_gameplay_tick_emits(journal_start_event_id) {
-            if module_emit.kind != GAMEPLAY_LIFECYCLE_EMIT_KIND {
-                continue;
-            }
-            if !self.is_active_gameplay_module(module_emit.module_id.as_str()) {
-                continue;
-            }
-
             let directives = self.parse_gameplay_directives(&module_emit)?;
             for directive in directives {
                 self.apply_gameplay_directive(directive, &mut emitted)?;
@@ -137,7 +130,13 @@ impl World {
                     if module_emit.trace_id.starts_with("tick-")
                         || module_emit.trace_id.starts_with("infra-tick-") =>
                 {
-                    Some(module_emit.clone())
+                    if module_emit.kind == GAMEPLAY_LIFECYCLE_EMIT_KIND
+                        && self.is_active_gameplay_module(module_emit.module_id.as_str())
+                    {
+                        Some(module_emit.clone())
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             })
@@ -667,5 +666,110 @@ impl World {
             emitted.push(event.clone());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime::{
+        ModuleAbiContract, ModuleKind, ModuleLimits, ModuleManifest, ModuleRecord, ModuleRegistry,
+        ModuleRole,
+    };
+    use serde_json::json;
+
+    fn manifest(module_id: &str, role: ModuleRole) -> ModuleManifest {
+        ModuleManifest {
+            module_id: module_id.to_string(),
+            name: module_id.to_string(),
+            version: "0.1.0".to_string(),
+            kind: ModuleKind::Reducer,
+            role,
+            wasm_hash: format!("sha256:{module_id}"),
+            interface_version: "wasm-1".to_string(),
+            exports: vec!["reduce".to_string()],
+            subscriptions: Vec::new(),
+            required_caps: Vec::new(),
+            abi_contract: ModuleAbiContract::default(),
+            artifact_identity: None,
+            limits: ModuleLimits::unbounded(),
+        }
+    }
+
+    fn activate_module(world: &mut World, manifest: ModuleManifest) {
+        let key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
+        world
+            .module_registry
+            .active
+            .insert(manifest.module_id.clone(), manifest.version.clone());
+        world.module_registry.records.insert(
+            key,
+            ModuleRecord {
+                manifest,
+                registered_at: 0,
+                registered_by: "test".to_string(),
+                audit_event_id: None,
+            },
+        );
+    }
+
+    fn module_emit(module_id: &str, trace_id: &str, kind: &str) -> ModuleEmitEvent {
+        ModuleEmitEvent {
+            module_id: module_id.to_string(),
+            trace_id: trace_id.to_string(),
+            kind: kind.to_string(),
+            payload: json!({"directives": []}),
+        }
+    }
+
+    #[test]
+    fn collect_gameplay_tick_emits_filters_before_returning_events() {
+        let mut world = World::new();
+        activate_module(&mut world, manifest("m.gameplay", ModuleRole::Gameplay));
+        activate_module(&mut world, manifest("m.domain", ModuleRole::Domain));
+
+        world
+            .append_event(
+                WorldEventBody::ModuleEmitted(module_emit(
+                    "m.gameplay",
+                    "tick-1",
+                    GAMEPLAY_LIFECYCLE_EMIT_KIND,
+                )),
+                None,
+            )
+            .expect("append gameplay lifecycle emit");
+        world
+            .append_event(
+                WorldEventBody::ModuleEmitted(module_emit("m.gameplay", "tick-1", "telemetry")),
+                None,
+            )
+            .expect("append non-lifecycle emit");
+        world
+            .append_event(
+                WorldEventBody::ModuleEmitted(module_emit(
+                    "m.domain",
+                    "tick-1",
+                    GAMEPLAY_LIFECYCLE_EMIT_KIND,
+                )),
+                None,
+            )
+            .expect("append domain lifecycle emit");
+        world
+            .append_event(
+                WorldEventBody::ModuleEmitted(module_emit(
+                    "m.gameplay",
+                    "module-call-1",
+                    GAMEPLAY_LIFECYCLE_EMIT_KIND,
+                )),
+                None,
+            )
+            .expect("append non-tick lifecycle emit");
+
+        let emits = world.collect_gameplay_tick_emits(0);
+
+        assert_eq!(emits.len(), 1);
+        assert_eq!(emits[0].module_id, "m.gameplay");
+        assert_eq!(emits[0].trace_id, "tick-1");
+        assert_eq!(emits[0].kind, GAMEPLAY_LIFECYCLE_EMIT_KIND);
     }
 }
