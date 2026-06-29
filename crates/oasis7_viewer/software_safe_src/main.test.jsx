@@ -17,6 +17,43 @@ function viewerUrl() {
 
 let activeCleanup = null;
 const HEAVY_UI_TEST_TIMEOUT_MS = 60000;
+const TEST_ED25519_PKCS8_PREFIX = new Uint8Array([
+  0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06,
+  0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20,
+]);
+
+function createTestCrypto() {
+  const privateBytes = new Uint8Array(32).fill(7);
+  const publicBytes = new Uint8Array(32).fill(9);
+  return {
+    subtle: {
+      async generateKey() {
+        return {
+          privateKey: { kind: "test-ed25519-private" },
+          publicKey: { kind: "test-ed25519-public" },
+        };
+      },
+      async exportKey(format) {
+        if (format === "pkcs8") {
+          const out = new Uint8Array(TEST_ED25519_PKCS8_PREFIX.length + privateBytes.length);
+          out.set(TEST_ED25519_PKCS8_PREFIX, 0);
+          out.set(privateBytes, TEST_ED25519_PKCS8_PREFIX.length);
+          return out.buffer;
+        }
+        if (format === "raw") {
+          return publicBytes.buffer.slice(0);
+        }
+        throw new Error(`unsupported test key export: ${format}`);
+      },
+      async importKey() {
+        return { kind: "test-ed25519-imported" };
+      },
+      async sign() {
+        return new Uint8Array(64).fill(11).buffer;
+      },
+    },
+  };
+}
 
 function elementPrecedes(first, second) {
   return Boolean(first?.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -33,6 +70,12 @@ function sampleSnapshot(overrides = {}) {
     },
     model: {
       ...base.model,
+      agent_player_bindings: {
+        "agent-0": "local-test-player-bound",
+      },
+      agent_player_public_key_bindings: {
+        "agent-0": "abcdef0123456789abcdef0123456789",
+      },
       ...(overrides.model || {}),
     },
     player_gameplay: {
@@ -241,7 +284,7 @@ beforeEach(() => {
   window.localStorage.clear();
   Object.defineProperty(window, "crypto", {
     configurable: true,
-    value: globalThis.crypto,
+    value: globalThis.crypto?.subtle ? globalThis.crypto : createTestCrypto(),
   });
   document.body.innerHTML = "";
 });
@@ -342,6 +385,8 @@ describe("viewer web ui automation baseline", () => {
           locations: {},
           agent_prompt_profiles: {},
           agent_execution_debug_contexts: {},
+          agent_player_bindings: {},
+          agent_player_public_key_bindings: {},
         },
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
@@ -423,6 +468,8 @@ describe("viewer web ui automation baseline", () => {
           locations: {},
           agent_prompt_profiles: {},
           agent_execution_debug_contexts: {},
+          agent_player_bindings: {},
+          agent_player_public_key_bindings: {},
         },
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
@@ -1355,13 +1402,15 @@ describe("viewer web ui automation baseline", () => {
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
     let sendGameplayAction;
-    const { container } = await renderViewerApp({
+    const { core, container } = await renderViewerApp({
       snapshot: sampleSnapshot({
         model: {
           agents: {},
           locations: {},
           agent_prompt_profiles: {},
           agent_execution_debug_contexts: {},
+          agent_player_bindings: {},
+          agent_player_public_key_bindings: {},
         },
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
@@ -1398,7 +1447,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Goal Execution")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("Claim first Agent")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Claim first Agent").length).toBeGreaterThan(0);
     expect(core.buildGameplaySummary().recommendedAction).toMatchObject({
       actionId: "claim_first_agent",
       executeKind: "claim_first_agent",
@@ -1424,7 +1473,7 @@ describe("viewer web ui automation baseline", () => {
         executeKind: "claim_first_agent",
       }),
     );
-    expect(within(stagePanel).getByText(/New-user empty-world entry/i)).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText(/New-user empty-world entry/i).length).toBeGreaterThan(0);
     expect(within(targetsPanel).getByText("No agents in current snapshot.")).toBeInTheDocument();
     expect(within(targetsPanel).getByText("No locations in current snapshot.")).toBeInTheDocument();
     expect(within(targetsPanel).queryByText("Syncing agents…")).not.toBeInTheDocument();
