@@ -266,11 +266,10 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
     );
     assert_eq!(register_ack.agent_id, None);
     assert!(
-        server
+        !server
             .llm_sidecar
             .agent_player_bindings
-            .get(agent_id.as_str())
-            .is_none(),
+            .contains_key(agent_id.as_str()),
         "seed agent should start without an account binding"
     );
 
@@ -294,11 +293,10 @@ fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
     assert_eq!(err.code, "agent_control_forbidden");
     assert!(err.message.contains("has no player binding"));
     assert!(
-        server
+        !server
             .llm_sidecar
             .agent_player_bindings
-            .get(agent_id.as_str())
-            .is_none(),
+            .contains_key(agent_id.as_str()),
         "rejected chat must leave the agent unbound"
     );
 }
