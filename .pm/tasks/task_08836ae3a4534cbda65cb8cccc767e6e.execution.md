@@ -106,7 +106,7 @@ Example:
 - Source Branch: task/engineering-doc-legacy-semantics-cleanup-next-3
 - Source Head: 7a5398acd6bd87f0de0f497bec326efe55581da9; later changes are limited to this task review evidence file.
 - Comparison Ref: refs/remotes/origin/main
-- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml`; `doc/.governance/module-root-md-allowlist.txt`; `doc/core/README.md`; `doc/core/prd.index.md`; `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; `doc/core/project.md`; `doc/engineering/project.md`.
+- Reviewed Changed Paths: `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml`; `doc/.governance/module-root-md-allowlist.txt`; `doc/core/README.md`; `doc/core/prd.index.md`; `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; `doc/core/project.md`; `doc/engineering/project.md`.
 - Review Package: `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff`
 - Role Selection Basis: changed `doc/core/*` product/system traceability and old handoff semantics require producer_system_designer; verification and evidence sufficiency require qa_engineer; cross-cutting doc governance, allowlist, stale references, and debt cleanup require repository_health_engineer.
 - Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
