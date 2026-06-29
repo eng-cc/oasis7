@@ -168,3 +168,12 @@ Example:
 - Expected Result: closeout records fresh verification and closes the current task.
 - Actual Result: closeout verification ran `doc-governance-check: OK` and updated `.pm/tasks/task_19eba076d762496bbd49a9a5efda9b6c.yaml` to `status: done` with `last_verification_status: verified`; script then exited non-zero at its final repo-wide `./scripts/pm/lint.sh` step due unrelated historical `.pm/tasks/*` execution-log debt already identified by QA, not due this task UID.
 - Blocker / Next Action: no current-task blocker; continue with task-scoped workflow lint, commit, and prepare-task-pr preflight.
+
+## 2026-06-29 11:12:00 CST / tpm
+- 完成内容: PR created and normal PR watch path selected.
+- 遗留事项: push this PR-purpose log update, then watch required checks, mergeability, comments/review threads, merge, and cleanup.
+- Action: Ran `./scripts/prepare-task-pr.sh --create`; addressed strict Source Head packet metadata by creating an evidence-only follow-up commit; PR #734 was created.
+- Validation Command: `./scripts/prepare-task-pr.sh --create`
+- Expected Result: helper preflight passes, branch is pushed, and a PR is created.
+- Actual Result: preflight passed with Pre-PR Local Role Review `passed`; branch pushed to origin; PR created at `https://github.com/eng-cc/oasis7/pull/734`.
+- Blocker / Next Action: no blocker; PR purpose decision `normal_pr_ci_watch`. Continue watching GitHub required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` and `BEHIND` are informational unless GitHub merge path rejects or other blockers appear.
