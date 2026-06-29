@@ -3,6 +3,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
 
+const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
+
 fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let bind = listener.local_addr().expect("listener addr");
@@ -26,6 +28,18 @@ fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
         }
     });
     (format!("http://{bind}"), serve)
+}
+
+fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
+    server
+        .llm_sidecar
+        .bind_agent_player(
+            agent_id,
+            SNAPSHOT_PLAYER_ID,
+            Some("snapshot-public-key"),
+            false,
+        )
+        .expect("bind snapshot player to agent");
 }
 
 #[test]
@@ -63,7 +77,7 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
         .next()
         .cloned()
         .expect("seed agent");
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let context = snapshot
         .model
         .agent_execution_debug_contexts
@@ -151,7 +165,7 @@ fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
         .next()
         .cloned()
         .expect("seed agent");
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let context = snapshot
         .model
         .agent_execution_debug_contexts
@@ -179,7 +193,7 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
             .expect("runtime server");
 
     let mut server = server;
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -227,8 +241,17 @@ fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
     .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -248,6 +271,94 @@ fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
     assert_eq!(
         chat_action.disabled_reason.as_deref(),
         Some("claim starter OC before using LLM/agent chat for this Agent")
+    );
+}
+
+#[test]
+fn compat_snapshot_does_not_publish_player_bound_actions_without_bound_agent() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(gameplay.agent_claim.is_none());
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "chat_first_agent")
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_smelter_mk1")
+    );
+}
+
+#[test]
+fn compat_snapshot_with_unbound_starter_only_publishes_first_agent_claim_for_unbound_player() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    if !server
+        .world
+        .state()
+        .agents
+        .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    {
+        server
+            .world
+            .submit_action(crate::runtime::Action::RegisterAgent {
+                agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+                pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+                    .expect("formal release starter spawn"),
+            });
+        server.world.step().expect("register unbound starter agent");
+    }
+
+    let snapshot = server.compat_snapshot(Some("unbound-player"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "chat_first_agent")
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_smelter_mk1")
     );
 }
 
@@ -340,7 +451,7 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
         Some(causality),
     );
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -415,7 +526,7 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -465,12 +576,14 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
 fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
     let mut gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         &crate::runtime::WorldState::default(),
+        None,
         true,
         None,
         None,
         true,
         None,
         false,
+        true,
         None,
     );
     super::super::gameplay_snapshot::apply_runtime_snapshot_empty_entities_blocker(
@@ -524,12 +637,14 @@ fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
 fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
     let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         &crate::runtime::WorldState::default(),
+        None,
         true,
         None,
         None,
         true,
         None,
         false,
+        true,
         None,
     );
     let action = gameplay
@@ -543,6 +658,129 @@ fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
         Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
     );
     assert!(action.disabled_reason.is_none());
+}
+
+#[test]
+fn existing_world_without_bound_agent_publishes_first_agent_claim_action() {
+    let mut world = crate::runtime::World::new_production_hardened();
+    world.submit_action(crate::runtime::Action::RegisterAgent {
+        agent_id: "agent-0".to_string(),
+        pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+            .expect("formal release starter spawn"),
+    });
+    world.step().expect("register existing non-starter agent");
+    assert!(!world.state().agents.is_empty());
+    assert!(
+        !world
+            .state()
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID),
+        "minimal world should not already occupy the starter claim target"
+    );
+
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        None,
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("fresh account should be able to claim its first agent in an existing world");
+    assert_eq!(action.protocol_action, "gameplay_action.submit");
+    assert_eq!(
+        action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(action.disabled_reason.is_none());
+}
+
+#[test]
+fn existing_world_with_unbound_starter_target_publishes_first_agent_claim_action() {
+    let mut world = crate::runtime::World::new_production_hardened();
+    world
+        .submit_action(crate::runtime::Action::RegisterAgent {
+            agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+                .expect("formal release starter spawn"),
+        });
+    world.step().expect("register unbound starter claim target");
+    assert!(
+        world
+            .state()
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        None,
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("fresh account should be able to claim an existing unbound starter agent");
+    assert_eq!(action.protocol_action, "gameplay_action.submit");
+    assert_eq!(
+        action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(action.disabled_reason.is_none());
+}
+
+#[test]
+fn existing_world_with_bound_starter_claim_target_does_not_publish_duplicate_first_agent_claim() {
+    let mut world = crate::runtime::World::new_production_hardened();
+    world
+        .submit_action(crate::runtime::Action::RegisterAgent {
+            agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+                .expect("formal release starter spawn"),
+        });
+    world.step().expect("register starter claim target");
+    assert!(
+        world
+            .state()
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        world.state(),
+        None,
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        false,
+        None,
+    );
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .all(|action| action.action_id != crate::viewer::ACTION_CLAIM_FIRST_AGENT),
+        "do not publish a duplicate first-agent claim when the target id already exists"
+    );
 }
 
 #[test]
@@ -561,12 +799,14 @@ fn runtime_sync_blocker_preserves_empty_world_first_agent_claim() {
     };
     let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         &crate::runtime::WorldState::default(),
+        None,
         false,
         Some(&feedback),
         None,
         true,
         None,
         false,
+        true,
         None,
     );
 
@@ -595,6 +835,7 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -640,7 +881,22 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
         });
     server.world.step().expect("request release");
 
-    let snapshot = server.compat_snapshot();
+    let anonymous_snapshot = server.compat_snapshot(None);
+    let anonymous_gameplay = anonymous_snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("anonymous player gameplay snapshot");
+    assert!(anonymous_gameplay.agent_claim.is_none());
+    assert!(anonymous_gameplay.available_actions.iter().all(|action| {
+        action.action_id != crate::viewer::ACTION_CLAIM_STARTER_OC
+            && action.action_id != "chat_first_agent"
+            && !action
+                .target_agent_id
+                .as_deref()
+                .is_some_and(|target| target == primary_agent_id.as_str())
+    }));
+
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -683,6 +939,7 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -730,7 +987,7 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
         .step()
         .expect("claim slot 1 using restricted balance");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -762,6 +1019,7 @@ fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -785,7 +1043,7 @@ fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
         )
         .expect("seed dedicated pool");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -822,7 +1080,7 @@ fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
         delta_logical_time: 1,
         delta_event_seq: 1,
     });
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -862,7 +1120,7 @@ fn compat_snapshot_ignores_zero_delta_completed_advanced_for_last_world_change()
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -890,7 +1148,7 @@ fn compat_snapshot_keeps_first_session_loop_for_fresh_llm_session() {
     )
     .expect("runtime server");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -932,7 +1190,7 @@ fn compat_snapshot_keeps_first_session_loop_after_bootstrap_tick_blocked_feedbac
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -987,7 +1245,7 @@ fn compat_snapshot_blocks_first_session_when_chain_sync_is_unavailable() {
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -1042,7 +1300,7 @@ fn compat_snapshot_keeps_post_onboarding_blocked_after_confirmed_progress() {
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -1088,7 +1346,7 @@ fn compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress() 
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()

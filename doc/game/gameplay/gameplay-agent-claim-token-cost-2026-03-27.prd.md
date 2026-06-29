@@ -47,6 +47,7 @@
   - PRD-GAME-011C: As a limited preview / allowlist owner, I want the first `slot-1` claim to auto-draw dedicated-pool startup funds without granting transferable assets, so that test users can enter mid-loop without opening an airdrop abuse lane or waiting for manual approval.
   - PRD-GAME-011D: As a `runtime_engineer`, I want claim/refund accounting to preserve funding-source provenance, so that restricted starter funds cannot be converted into transferable main token through release or reclaim.
   - PRD-GAME-011E: As a new account entering PostOnboarding with `owned_claim_count=0`, I want a dedicated `slot-1` claim onboarding flow that reuses the canonical quote and still requires explicit confirmation, so that I can finish the first claim without hunting raw detail text or triggering a silent auto-claim.
+  - PRD-GAME-011F: As a new account entering an already populated shared world, I want existing world Agents to be visible but clearly separated from my bound/owned Agent state, so that I do not mistake another world entity for my controllable Agent.
 - Critical User Flows:
   1. Flow-AGC-001: `liveops / onboarding / QA seed 仍可显式发放 restricted starter claim balance；但默认首个 slot-1 claim 不再依赖运营审批，而是优先消费现有 restricted/liquid，并在 dedicated pool 足够时自动补足缺口`
   2. Flow-AGC-002: `玩家选择未认领 agent -> 系统返回 slot quote（activation fee / bond / upkeep / cap / eligible balances / auto starter funding）-> 若为 slot-1 则先评估现有 restricted 余额，再判断 dedicated pool 可自动补足多少缺口 -> 玩家确认 -> runtime 原子完成 auto-funding（若需要）、扣除 activation fee、锁定 bond -> agent 进入 claimed_active`
@@ -55,6 +56,7 @@
   5. Flow-AGC-004: `玩家在 cooldown 后主动 release -> 系统结清欠费 -> 按原 funding source 退还 bond 剩余部分 -> agent 回到 unclaimed`
   6. Flow-AGC-005: `claim 进入 grace 后仍未补足 upkeep 或连续闲置达到阈值 -> 系统执行 forced_reclaim -> 计算 slash / refund -> 按 funding source 回写退款 bucket -> agent 回到 unclaimed`
   7. Flow-AGC-006: `玩家尝试认领第 2/3 个 agent 或发起普通转账 -> 系统拒绝消费 restricted bucket，并返回结构化 blocker`
+  8. Flow-AGC-007: `新 player_session 进入已有 Agent 的共享世界 -> Viewer 默认 Agent 控制列表只展示当前账号绑定或当前玩家绑定待同步 Agent -> 其他账号 Agent 与未绑定 Agent 都不进入玩家 Agent 列表 -> 若当前 session 尚无 bound Agent / canonical claimer，则主 CTA 不得把世界中第一个 Agent 当作“我的 Agent”或可操作 Agent -> Viewer 必须展示当前账号尚未绑定/拥有 Agent，并引导到 claim-first starter Agent、canonical slot-1 claim quote 或等待绑定同步`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -67,7 +69,8 @@
 | Forced Reclaim | `forced_reason`、`forced_reclaim_epoch`、`forced_penalty_amount`、`bond_refund_amount`、`bond_refund_restricted_amount`、`bond_refund_liquid_amount` | 欠费超宽限或持续闲置时系统回收 | `upkeep_grace/inactive_reclaim_candidate -> forced_reclaimed -> unclaimed` | 欠费宽限 `grace_epochs = 2`；闲置阈值 `7` 个 epoch，最晚 `10` 个 epoch 完成回收；`forced_reclaim_penalty_bps = 2000`（作用于剩余 bond） | 仅系统可执行；owner 不能在最终回收点之后阻断 |
 | Transfer Guard | `transferable_balance`、`restricted_balance`、`blocked_reason` | 玩家发起普通 main token 转账或 explorer 导出余额时，系统区分可转账与不可转账余额 | `eligible -> blocked_for_restricted_only` | `transferable_balance = liquid_balance`；`restricted_balance` 只做展示，不计入可转账金额 | `TransferMainToken`、公开转账 API、explorer 排名与总额不得消费或误计 restricted bucket |
 | Reputation Cap | `reputation_tier`、`claim_cap`、`owned_agent_count` | 认领前校验当前账号可占有的 agent 上限 | `eligible -> eligible/blocked_by_cap` | `tier-0 cap=1`、`tier-1 cap=2`、`tier-2+ cap=3` | 非法 tier 或超 cap 直接拒绝，不允许只靠余额绕过 |
-| First Claim Onboarding | `owned_claim_count`、`next_claim_quote.slot_index`、`target_agent_id`、`blocked_reason`、`actor_agent_id` | `owned_claim_count=0` 且 `slot_index=1` 时，HUD 展示专用 `slot-1` CTA；玩家必须先选目标，再执行 `Prepare -> Confirm` 两段式提交 | `quote_ready -> onboarding_visible -> confirmation_open -> claim_submitted` | 只读取 canonical quote / blocker；不得在 Viewer 侧重算 claim 成本，也不得跳过确认直接自动认领 | 认领提交必须绑定当前玩家已注册的 claimer agent，会话 actor 与 claim target 必须分离 |
+| First Claim Onboarding | `owned_claim_count`、`next_claim_quote.slot_index`、`target_agent_id`、`blocked_reason`、`actor_agent_id` | `owned_claim_count=0` 且 `slot_index=1` 时，HUD 展示专用 `slot-1` CTA；若当前账号还没有 bound Agent，则展示 `claim_first_agent` starter CTA，而不是展示别人的 Agent；扩展 claim 必须先选目标，再执行 `Prepare -> Confirm` 两段式提交 | `no_agent_for_account -> claim_first_agent_visible -> bound_agent_available` 或 `quote_ready -> onboarding_visible -> confirmation_open -> claim_submitted` | 只读取 canonical quote / blocker；不得在 Viewer 侧重算 claim 成本，也不得跳过确认直接自动认领 | `claim_first_agent` 由当前 player_session 直接创建并绑定 starter Agent；扩展 `ClaimAgent` 提交必须绑定当前玩家已注册的 claimer agent，会话 actor 与 claim target 必须分离 |
+| Player Session / Agent Visibility Boundary | `player_session.player_id`、`bound_agent_id`、`claim_owner_id`、`owned_claims`、`agent_player_bindings` | 进入共享世界时，Viewer 默认 Agent 控制列表只展示当前账号绑定或当前玩家绑定待同步 Agent；其他账号 Agent 与未绑定 Agent 不进入默认 Agent 列表，也不得看到 ready chat/command 主操作 | `no_agent_for_account -> bound_agent_available` 或 `no_agent_for_account -> slot_1_claim_visible` | “我的/可操作”只来自当前 session binding 或 canonical claim/owned fields；未绑定 Agent 视为数据不完整或迁移态，不作为正常玩家对象展示；其他账号活动若需要世界感，后续放地图实体、世界事件或只读 world layer，不混入控制列表 | 不得从全局第一个 Agent、左侧默认选中目标、隐藏的世界 Agent、未绑定 Agent 或 `state.agents.keys().next()` 推断当前账号 ownership |
 
 - Acceptance Criteria:
   - AC-1: 首个 agent 认领没有任何免费分支；v1 必须显式校验 `activation_fee_amount > 0`、`claim_bond_amount > 0`、`upkeep_per_epoch > 0`。
@@ -82,6 +85,7 @@
   - AC-10: 本机制不得被表述为现实货币付费解锁、公开售卖 agent 或永久产权出售；它是 gameplay 内部的 main token 承诺成本机制与受限启动资助工具。
   - AC-11: 当玩家处于 PostOnboarding、当前 `owned_claim_count=0` 且 `next_claim_quote.slot_index=1` 时，Viewer 必须展示专用 `slot-1` 认领引导卡；该卡必须直接复用 canonical quote / blocker，并要求玩家完成“选目标 -> Prepare -> Confirm”的显式确认链路，不允许静默自动认领。
   - AC-12: 当玩家处于首个 `slot-1` claim、没有 active restricted grant、账户也没有现成 restricted starter balance，且 dedicated pool 能覆盖 upfront 缺口时，`ClaimAgent` 必须原子完成 auto-funding + claim；若 dedicated pool 仍不足，则 runtime / viewer / pure API 只返回资金不足 blocker，不再生成 pending/operator-review 状态。
+  - AC-13: 新账号进入已有 Agent 的共享世界时，Viewer / pure API 必须把 `其他账号已绑定 Agent`、`未绑定/数据不完整 Agent`、`当前 session bound Agent` 与 `claim_owner_id/owned_claims` 分开表达；Viewer 默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。若当前账号没有 bound Agent 或 canonical claimer，不得显示为“我的 Agent”、不得作为 ready chat/command 主目标，也不得展示可执行 `ClaimAgent` CTA；chat / prompt / actor gameplay action 等 direct control API 也不得把未绑定 Agent 隐式绑定给当前 session，只有显式 session recovery / claim-first 绑定路径可以创建 `agent_player_bindings`。
 - Non-Goals:
   - 不在本专题内定义现实货币购买、法币结算或站外商城。
   - 不把 agent 认领做成永久不可回收的链上产权 NFT。
@@ -89,7 +93,16 @@
   - 不在本轮为 claim 成本拍死绝对 token 数值；v1 先冻结公式、状态机和不可突破的边界。
   - 不把 `restricted starter claim balance` 扩展成通用的“全游戏不可转账 main token”体系。
 
-### 2.1 Cold-Start Resource Boundary
+### 2.1 Player Session / Bound Agent / Claim Owner Boundary
+
+- `player_session`: 浏览器或 hosted public join 发放的访问身份，包含 `player_id`、device/session 信息和公钥。它不是世界内实体，也不等于 Agent claim owner；清理浏览器 localStorage 或换 profile 只会重建该访问身份，不会清空共享世界状态。
+- `world-visible Agent`: world snapshot 中存在的 Agent。共享世界里的旧 Agent 不等于当前账号的可操作对象；若它已绑定到其他账号或缺少账号绑定，Viewer 默认不得把它放入当前账号的 Agent 控制列表。后续若需要表现“共享世界里有人活动”，应放到地图实体、世界事件或只读 world layer，而不是混进“我的 Agent”列表。
+- `bound Agent`: runtime live / viewer control plane 中当前 `player_session -> agent_id` 的控制绑定。聊天、prompt、需要 actor 的 gameplay action、以及“我的可操作 Agent”表达必须以该绑定或等价 canonical auth 字段为准。
+- `claim_owner_id`: `AgentClaimState` 中的正式 gameplay/economic claim owner。当前 runtime 语义下它是 claimer Agent id，而不是浏览器 `player_id`。`owned_claim_count`、`owned_claims` 和 cap 判断必须读取 canonical runtime claim snapshot，不得由 Viewer 自行按世界列表推导。
+- 空世界 starter path 与共享世界 slot-1 path 必须分开：`claim_first_agent` 只表示空世界 bootstrap 创建 starter Agent；已有 Agent 的共享世界中新账号不应再把该动作解释为“给当前账号领取一个新的第一个 Agent”。此时 Viewer 应进入“当前账号还没有 Agent”的 onboarding，或 canonical `slot-1 ClaimAgent` onboarding，要求明确的 claimable target、quote/blocker 和确认链路。
+- Viewer / pure API 验收边界：不得从 `state.agents.keys().next()`、左侧列表第一个 Agent、默认 selection、隐藏的其他账号 Agent、未绑定 Agent 或 legacy `first_agent_id` 推断当前账号 ownership；必须用当前 session binding、`agent_player_bindings`、`owned_claims`、`next_claim_quote` 等 canonical 字段决定“我的/可操作/可认领/不属于当前账号所以不进入默认控制列表”。
+
+### 2.2 Cold-Start Resource Boundary
 
 - `restricted starter claim balance`: 只服务 `slot-1` claim / upkeep 的受限 main-token bucket；它可以通过 dedicated pool 自动补足首个 `slot-1` upfront 缺口，但不能转账、提现、用于普通资产动作，refund 也必须保留 restricted provenance。
 - `starter OC`: 玩家完成 `claim_first_agent` 后的一次性首聊解锁动作；该动作会授予初始 liquid OC，并写入 `starter_oc_claims` 记录，当前 runtime 的 LLM/agent chat gate 以该 claim 记录为准，而不是以 liquid OC 余额作为持续预算门。当前 cold-start 动作链是 `claim_first_agent -> claim_starter_oc -> first agent chat`。
@@ -124,6 +137,7 @@
   - mixed funding：若 upfront cost 同时由 restricted 与 liquid 支付，系统必须记录 bond provenance；后续 refund/slash 结算必须按该 provenance 拆分。
   - 首次认领选中自己：若当前选中的 agent 是玩家自己的 claimer agent，Viewer 必须提示重新选择未认领目标，不得把 claimer agent 当成 claim target。
   - 首次认领已选中已持有目标：若当前选中目标已经属于玩家的 owned claims，Viewer 必须回到“重新选目标”状态，不得继续打开确认。
+  - 新账号进入已有世界：若 world snapshot 已有 Agent 但当前 `player_session` 没有 `bound_agent_id` 或 canonical claimer，Viewer 必须进入“当前账号还没有 Agent”的 onboarding，并在 runtime 发布 `claim_first_agent` 时展示认领入口；若 runtime 只发布 canonical `slot-1` quote，则展示对应 onboarding。默认 Agent 控制列表不得展示其他账号已绑定 Agent 或未绑定 Agent。不得把全局第一个 Agent 自动标为“我的 Agent”，也不得把该 Agent 的 chat/command 入口显示为 ready。
   - 并发争抢：两个提交同时命中同一 `agent_id` 时，只允许第一个写入 `claim_owner_id`；第二个返回冲突，不得重复扣费。
   - upkeep 结算时余额不足：进入 `upkeep_grace`，并写出 `grace_deadline_epoch`；宽限内补足可用余额后恢复 `claimed_active`。
   - `slot-2/3` 误用 restricted：必须拒绝，并返回 `restricted_balance_not_eligible_for_slot` 一类结构化 blocker。
@@ -146,6 +160,7 @@
   - NFR-AGC-9: 所有 claim 相关 token 变动必须能进入现有经济源汇审计，不得生成审计盲区。
   - NFR-AGC-10: restricted grant admin registry 的 source of truth 必须来自 runtime world-state 正式 registry，而不是文档约定、自由文本 `issuer_id` 或调用方本地分支逻辑。
   - NFR-AGC-11: restricted grant admin registry runtime update 必须可审计、可重放，并在 registry 尚未 bootstrap、`ecosystem_pool` controller slot 未配置、或提交者不匹配当前 controller account 时拒绝执行，不得退化为离线 import 才能变更的单一路径。
+  - NFR-AGC-12: Viewer / pure API 对 `其他账号已绑定 Agent`、`未绑定 Agent`、`bound Agent`、`owned_claims` 和 `claim quote` 的误归属率必须为 `0`；尤其不得以世界列表顺序、默认 selection、隐藏的其他账号 Agent、未绑定 Agent、direct control API 隐式绑定或兼容 `first_agent_id` 作为当前账号 ownership 证据。
 - Security & Privacy:
   - claim / release / upkeep 结算不得绕过主链 token 的签名与审计路径。
   - 不在公开 UI 中暴露与 claim 无关的账户私密资产信息；只展示本次认领所需的必要成本和状态。
@@ -212,3 +227,4 @@
 | DEC-AGC-016 | 允许 `liveops` 这类 restricted grant admin 低权限 slot 在 manifest 中显式声明 `threshold=1`，并以 `1-of-2` signer policy 进入 governance registry；其余 treasury/controller 主槽位继续默认 `2-of-3` | 要么强迫 `liveops` 也走统一 `2-of-3`，抬高运营摩擦；要么直接把所有 controller slot 的 threshold 一起降到 `1` 或 `1-of-2` | `liveops` 只负责不可转账 restricted grant 的日常发放/撤销，权限面明显低于 treasury/controller 主槽位；把 threshold 下调收口到单独 slot，既能降运营 ceremony 成本，又不把更高风险的主槽位一起放宽。 |
 | DEC-AGC-017 | 将 daily restricted grant 的 source bucket 从 `ecosystem_pool` 拆成独立 `restricted_starter_claim_liveops_pool`，并只开放一条由 `ecosystem_pool` controller-governed top-up action 负责向该池补款 | 继续让日常发放直接动 `ecosystem_pool`；或把一部分 liquid treasury 先转到 `liveops` 账户；或直接泛化成任意 treasury-to-treasury 转账框架 | 运营需要把高风险大池审批和低权限日常发放明确分层；专用池 + 固定 top-up action 既保留 `ecosystem_pool` 的 `2-of-3` 审批门槛，又不把 `liveops` 变成 liquid treasury 分发者，同时避免当前切片过早扩成通用 bucket 间转账框架。 |
 | DEC-AGC-018 | 首个 `slot-1` 启动金默认走 dedicated pool 自动补足，而不是额外运营审批；自动补足只覆盖首个 claim 的 upfront 缺口，不把已有显式 grant/balance 再次叠加成重复补贴 | 保留 `approval request -> operator review -> approve/reject` 作为首笔启动 OC 的必经路径；或把自动补足扩成“只要有 dedicated pool 就总是替玩家垫付全部 slot-1 成本” | 用户要求把日常首笔启动 OC 改成无需审批；但若对已有显式 grant/balance 继续自动叠加，会把一次性启动资助放大为隐式重复补贴，因此自动路径只覆盖“无现成 restricted starter 余额/grant 的首个 slot-1 缺口”。 |
+| DEC-AGC-019 | 将默认 Agent 控制列表限定为当前账号绑定或当前玩家绑定待同步 Agent；其他账号已绑定 Agent 与未绑定 Agent 默认不展示在控制列表中 | 把世界里第一个 Agent 继续当作当前账号的 implicit primary Agent；或把其他账号/未绑定 Agent 混进“我的 Agent”列表再用 badge 解释；或把 `player_id` 直接等同于 `claim_owner_id` | 换账号后的第一屏应服务“我的下一步”，不是调试 shared-world 全量实体。隐藏其他账号与未绑定 Agent 可以避免 ownership 误读；共享世界活动感后续应通过地图实体、世界事件或只读 world layer 呈现，不能借 Agent 控制列表补。 |

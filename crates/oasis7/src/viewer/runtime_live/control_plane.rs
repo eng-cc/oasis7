@@ -1009,6 +1009,27 @@ pub(super) fn ensure_agent_player_access_runtime(
     player_id: &str,
     public_key: Option<&str>,
 ) -> Result<(), PromptControlError> {
+    ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, false)
+}
+
+pub(super) fn ensure_agent_player_binding_target_runtime(
+    world: &RuntimeWorld,
+    sidecar: &RuntimeLlmSidecar,
+    agent_id: &str,
+    player_id: &str,
+    public_key: Option<&str>,
+) -> Result<(), PromptControlError> {
+    ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, true)
+}
+
+fn ensure_agent_player_access_runtime_inner(
+    world: &RuntimeWorld,
+    sidecar: &RuntimeLlmSidecar,
+    agent_id: &str,
+    player_id: &str,
+    public_key: Option<&str>,
+    allow_missing_binding: bool,
+) -> Result<(), PromptControlError> {
     if !world.state().agents.contains_key(agent_id) {
         return Err(PromptControlError {
             code: "agent_not_found".to_string(),
@@ -1018,7 +1039,18 @@ pub(super) fn ensure_agent_player_access_runtime(
         });
     }
     let Some(bound_player_id) = sidecar.agent_player_bindings.get(agent_id) else {
-        return Ok(());
+        if allow_missing_binding {
+            return Ok(());
+        }
+        return Err(PromptControlError {
+            code: "agent_player_binding_required".to_string(),
+            message: format!("agent {agent_id} has no player binding"),
+            agent_id: Some(agent_id.to_string()),
+            current_version: sidecar
+                .prompt_profiles
+                .get(agent_id)
+                .map(|entry| entry.version),
+        });
     };
     if bound_player_id == player_id {
         let Some(bound_public_key) = sidecar.agent_public_key_bindings.get(agent_id) else {

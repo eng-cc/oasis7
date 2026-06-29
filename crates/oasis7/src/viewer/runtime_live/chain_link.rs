@@ -199,7 +199,7 @@ impl ViewerRuntimeLiveServer {
         }
 
         if session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             responses.push(ViewerResponse::Snapshot { snapshot });
         }
 

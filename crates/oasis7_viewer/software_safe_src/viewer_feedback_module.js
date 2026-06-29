@@ -2,6 +2,7 @@ export function createViewerFeedbackModule({
   clone,
   feedbackBadgeClass,
   hostedActionPolicy,
+  isAgentVisibleToCurrentSession,
   isLocaleZh,
   localeText,
   state,
@@ -536,7 +537,8 @@ export function createViewerFeedbackModule({
       return null;
     }
 
-    const agents = Object.keys(state.snapshot?.model?.agents || {});
+    const agents = Object.keys(state.snapshot?.model?.agents || {})
+      .filter((agentId) => isAgentVisibleToCurrentSession?.(agentId) !== false);
     const locations = Object.keys(state.snapshot?.model?.locations || {});
     const missingAgents = agents.length === 0;
     const missingLocations = locations.length === 0;
@@ -584,7 +586,7 @@ export function createViewerFeedbackModule({
     const lastWorldChange = gameplay.last_world_change || null;
     const resumeAnchor = gameplay.resume_anchor || null;
     const resumeNextStep = gameplay.resume_next_step || null;
-    const availableActions = Array.isArray(gameplay.available_actions)
+    let availableActions = Array.isArray(gameplay.available_actions)
       ? gameplay.available_actions
         .map((action) => ({
           actionId: action?.action_id || null,
@@ -616,6 +618,33 @@ export function createViewerFeedbackModule({
                       : "unsupported",
         }))
       : [];
+    const boundAgentId = String(state.auth?.boundAgentId || "").trim();
+    const currentPlayerId = String(state.auth?.playerId || "").trim();
+    const boundPlayerId = boundAgentId
+      ? String(state.snapshot?.model?.agent_player_bindings?.[boundAgentId] || "").trim()
+      : "";
+    const starterOcAlreadyAccepted = state.lastGameplayActionFeedback?.kind === "gameplay_action"
+      && state.lastGameplayActionFeedback?.action === "claim_starter_oc"
+      && (state.lastGameplayActionFeedback?.accepted || state.lastGameplayActionFeedback?.stage === "ack");
+    if (
+      boundAgentId
+      && currentPlayerId
+      && boundPlayerId === currentPlayerId
+      && !starterOcAlreadyAccepted
+      && !availableActions.some((action) => action.actionId === "claim_starter_oc")
+    ) {
+      availableActions = [
+        ...availableActions,
+        {
+          actionId: "claim_starter_oc",
+          label: localeText(locale, "领取初始 OC", "Claim starter OC"),
+          protocolAction: "gameplay_action.submit",
+          targetAgentId: boundAgentId,
+          disabledReason: null,
+          executeKind: "claim_starter_oc",
+        },
+      ];
+    }
     const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
       ? {
           source: "runtime",
@@ -862,6 +891,7 @@ export function createViewerFeedbackModule({
         const priority = (action) => {
           if (starterOcBlocksChat && action.executeKind === "claim_starter_oc") return -1;
           if (isRecoveryChoiceState) {
+            if (emptyEntityBlocker && action.executeKind === "claim_first_agent") return -1;
             if (action.executeKind === "request_snapshot") return wantsSnapshotProof ? 0 : 2;
             if (action.executeKind === "step") return wantsAdvanceProof ? 0 : 1;
             if (action.executeKind === "play") return wantsResumeProof ? 1 : 2;

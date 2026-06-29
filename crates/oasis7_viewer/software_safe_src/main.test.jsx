@@ -23,7 +23,23 @@ function elementPrecedes(first, second) {
 }
 
 function sampleSnapshot(overrides = {}) {
-  return buildTaskGame076ScenarioSnapshot({ overrides });
+  const base = buildTaskGame076ScenarioSnapshot();
+  return {
+    ...base,
+    ...overrides,
+    config: {
+      ...base.config,
+      ...(overrides.config || {}),
+    },
+    model: {
+      ...base.model,
+      ...(overrides.model || {}),
+    },
+    player_gameplay: {
+      ...base.player_gameplay,
+      ...(overrides.player_gameplay || {}),
+    },
+  };
 }
 
 function sampleAgentClaimSnapshot() {
@@ -78,6 +94,29 @@ function sampleAgentClaimSnapshot() {
   });
 }
 
+function bindLocalTestAgent(core, agentId = "agent-0", playerId = "local-test-player-bound") {
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId,
+    publicKey: "abcdef0123456789abcdef0123456789",
+    privateKey: "private-key-must-stay-hidden",
+    source: "local_test_api_ephemeral",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: agentId,
+  };
+}
+
+function bindFirstSnapshotAgentForTest(core, snapshot) {
+  const agentId = Object.keys(snapshot?.model?.agents || {})[0];
+  const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
+  if (!agentId || !playerId) {
+    return;
+  }
+  bindLocalTestAgent(core, agentId, playerId);
+}
+
 function sampleHostedPublicJoinAccess(overrides = {}) {
   return {
     deployment_mode: HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -105,6 +144,8 @@ async function renderViewerApp({
   search = viewerUrl(),
   setupCore = null,
   setupAfterMount = null,
+  autoBindSnapshotAgent = true,
+  starterOcOnboardingComplete = true,
 } = {}) {
   activeCleanup?.();
   activeCleanup = null;
@@ -114,14 +155,19 @@ async function renderViewerApp({
   document.body.innerHTML = "";
 
   const core = await import("./legacy_core.js");
-  const { mountViewerApp } = await import("./main.jsx");
+  const main = await import("./main.jsx");
+  const { mountViewerApp } = main;
   const appRoot = document.createElement("div");
   appRoot.id = "app";
   document.body.appendChild(appRoot);
 
+  core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
     core.injectSnapshot(snapshot);
+    if (autoBindSnapshotAgent) {
+      bindFirstSnapshotAgentForTest(core, snapshot);
+    }
   }
   if (selection) {
     core.applySelection(selection);
@@ -129,12 +175,17 @@ async function renderViewerApp({
   if (setupCore) {
     setupCore(core);
   }
-
-  const dispose = mountViewerApp(appRoot);
+  if (autoBindSnapshotAgent) {
+    bindFirstSnapshotAgentForTest(core, core.state.snapshot);
+  }
   if (setupAfterMount) {
     setupAfterMount(core);
-    core.requestRender();
   }
+  if (starterOcOnboardingComplete) {
+    main.__markStarterOcOnboardingCompleteForTest(core.state.auth.boundAgentId);
+  }
+
+  const dispose = mountViewerApp(appRoot);
   const cleanup = () => {
     dispose();
     if (activeCleanup === cleanup) {
@@ -158,9 +209,11 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
   document.body.innerHTML = "";
 
   const core = await import("./legacy_core.js");
+  core.initializeSoftwareSafeCore();
   core.setViewerLocale("en");
   if (snapshot) {
     core.injectSnapshot(snapshot);
+    bindFirstSnapshotAgentForTest(core, snapshot);
   }
 
   const appRoot = document.createElement("div");
@@ -463,6 +516,10 @@ describe("viewer web ui automation baseline", () => {
       .toBeGreaterThan(0);
     expect(within(targetsPanel).getAllByText(/waiting for the committed chain snapshot/i).length)
       .toBeGreaterThan(0);
+    expect(within(targetsPanel).getByText(/Do not idle through sync/i)).toBeInTheDocument();
+    expect(within(targetsPanel).getByText(/Starter budget/i)).toBeInTheDocument();
+    expect(within(targetsPanel).getByText(/the OC button appears automatically after the Agent syncs/i))
+      .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
@@ -529,7 +586,7 @@ describe("viewer web ui automation baseline", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("uses snapshot refresh as the recommended recovery action when the blocker asks for fresh state", async () => {
-    const { container } = await renderViewerApp({
+    const { container, core } = await renderViewerApp({
       snapshot: sampleSnapshot({
         player_gameplay: {
           ...sampleSnapshot().player_gameplay,
@@ -799,9 +856,12 @@ describe("viewer web ui automation baseline", () => {
     await waitFor(() => expect(helpButton).toHaveAttribute("aria-expanded", "false"));
   });
 
-  it("unlocks agent chat and prompt override surfaces once an agent is selected", async () => {
+  it("unlocks agent chat and prompt override surfaces for the current bound agent", async () => {
     const { core } = await renderViewerApp({
       selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+      },
     });
 
     expect(screen.getByText("Agent Chat")).toBeInTheDocument();
@@ -819,6 +879,105 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByLabelText("Short-Term Goal Override")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview Prompt" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Apply Prompt" })).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("hides unbound agents from the current account agent list", async () => {
+    const base = sampleSnapshot();
+    const { container, core } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          ...base.model,
+          agent_player_bindings: {},
+          agent_player_public_key_bindings: {},
+        },
+      }),
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-fresh",
+          publicKey: "abcdef0123456789abcdef0123456789",
+          privateKey: "private-key-must-stay-hidden",
+          source: "local_test_api_ephemeral",
+          registrationStatus: "registered",
+          runtimeStatus: "registered_unbound",
+          boundAgentId: null,
+        };
+      },
+    });
+
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    expect(within(targetsPanel).getByText("No agents in current snapshot.")).toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("agent-0")).not.toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("World Visible")).not.toBeInTheDocument();
+    expect(within(detailsPanel).getByText(/no controllable Agent yet/i)).toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
+    expect(core.sendAgentChat("agent-0", "hello")).toEqual(
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/bound Agent/i) }),
+    );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("hides agents bound to another account from a fresh account view", async () => {
+    const base = sampleSnapshot();
+    const { container, core } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          ...base.model,
+          agent_player_bindings: {
+            "agent-0": "old-player",
+          },
+          agent_player_public_key_bindings: {
+            "agent-0": "old-public-key",
+          },
+        },
+      }),
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-fresh",
+          publicKey: "abcdef0123456789abcdef0123456789",
+          privateKey: "private-key-must-stay-hidden",
+          source: "local_test_api_ephemeral",
+          registrationStatus: "registered",
+          runtimeStatus: "registered_unbound",
+          boundAgentId: null,
+        };
+      },
+    });
+
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    const detailsPanel = container.querySelector("#viewer-details-panel");
+    expect(within(targetsPanel).getByText("No agents in current snapshot.")).toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("agent-0")).not.toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("Other Account")).not.toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("World Visible")).not.toBeInTheDocument();
+    expect(within(detailsPanel).getByText(/no controllable Agent yet/i)).toBeInTheDocument();
+    expect(within(detailsPanel).queryByText("Agent Chat")).not.toBeInTheDocument();
+    expect(core.sendAgentChat("agent-0", "hello")).toEqual(
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/bound Agent/i) }),
+    );
+    expect(core.sendPromptControl("preview", { agentId: "agent-0" })).toEqual(
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/bound Agent/i) }),
+    );
+    expect(core.sendGameplayAction({
+      protocol_action: "gameplay_action.submit",
+      action_id: "build_factory_smelter_mk1",
+      target_agent_id: "agent-0",
+    })).toEqual(
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/bound Agent/i) }),
+    );
+    expect(core.sendGameplayAction({
+      protocol_action: "gameplay_action.submit",
+      action_id: "claim_agent",
+      actor_agent_id: "agent-0",
+      target_agent_id: "agent-claim-target",
+    })).toEqual(
+      expect.objectContaining({ ok: false, reason: expect.stringMatching(/bound Agent/i) }),
+    );
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("surfaces backend agent chat rejection details without requiring diagnostics", async () => {
@@ -1011,7 +1170,7 @@ describe("viewer web ui automation baseline", () => {
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("shows guest identity before local test auth is generated", async () => {
-    const { container } = await renderViewerApp();
+    const { container } = await renderViewerApp({ autoBindSnapshotAgent: false });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(stagePanel).toBeTruthy();
@@ -1025,6 +1184,9 @@ describe("viewer web ui automation baseline", () => {
   it("surfaces the first agent claim entry from gameplay snapshot", async () => {
     const { container } = await renderViewerApp({
       snapshot: sampleAgentClaimSnapshot(),
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+      },
     });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
@@ -1034,6 +1196,59 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByRole("button", { name: "Claim Agent" })).toBeInTheDocument();
     expect(within(stagePanel).getByText("claimer=agent-0")).toBeInTheDocument();
     expect(within(stagePanel).getByText("eligible=325")).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps other-account claim-agent hidden while surfacing first-agent claim for a fresh account", async () => {
+    let sendGameplayAction;
+    const { container } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        player_gameplay: {
+          ...sampleAgentClaimSnapshot().player_gameplay,
+          available_actions: [
+            ...sampleAgentClaimSnapshot().player_gameplay.available_actions,
+            {
+              action_id: "claim_first_agent",
+              label: "Claim first Agent",
+              protocol_action: "gameplay_action.submit",
+              target_agent_id: "starter-agent-0",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-fresh",
+          publicKey: "abcdef0123456789abcdef0123456789",
+          privateKey: "private-key-must-stay-hidden",
+          source: "local_test_api_ephemeral",
+          registrationStatus: "registered",
+          runtimeStatus: "registered_unbound",
+          boundAgentId: null,
+        };
+        sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockReturnValue({ ok: true });
+      },
+    });
+
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    expect(within(stagePanel).getByText("Current Account Has No Bound Agent")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("claimer=agent-0")).toBeInTheDocument();
+    expect(within(stagePanel).queryByRole("button", { name: "Claim Agent" })).not.toBeInTheDocument();
+    expect(within(stagePanel).getAllByRole("button", { name: "Claim First Agent" }).length).toBeGreaterThan(0);
+    expect(within(targetsPanel).getByRole("button", { name: "Claim First Agent" })).toBeInTheDocument();
+    expect(within(targetsPanel).queryByText("agent-0")).not.toBeInTheDocument();
+
+    fireEvent.click(within(targetsPanel).getByRole("button", { name: "Claim First Agent" }));
+    expect(sendGameplayAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: "claim_first_agent",
+        targetAgentId: "starter-agent-0",
+        executeKind: "claim_first_agent",
+      }),
+    );
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("surfaces starter OC claim before first agent chat", async () => {
@@ -1067,19 +1282,25 @@ describe("viewer web ui automation baseline", () => {
         },
       }),
       setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
         sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockReturnValue({ ok: true });
       },
+      starterOcOnboardingComplete: false,
     });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(stagePanel).toBeTruthy();
+    const starterOcDialog = screen.getByRole("dialog", { name: "Claim Your First OC" });
     expect(within(stagePanel).getAllByText("Claim starter OC").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText(/one-time starter OC/i).length).toBeGreaterThan(0);
+    expect(starterOcDialog).toBeInTheDocument();
+    expect(within(starterOcDialog).getAllByText(/Starter budget/i).length).toBeGreaterThan(0);
+    expect(within(starterOcDialog).getAllByText(/Unlock Agent chat/i).length).toBeGreaterThan(0);
     expect(core.buildGameplaySummary().recommendedAction).toMatchObject({
       actionId: "claim_starter_oc",
       executeKind: "claim_starter_oc",
     });
-    const claimButton = within(stagePanel).getAllByRole("button", { name: "Claim Starter OC" })[0];
+    const claimButton = within(starterOcDialog).getByRole("button", { name: "Claim Starter OC" });
     expect(claimButton).toBeInTheDocument();
     fireEvent.click(claimButton);
     expect(sendGameplayAction).toHaveBeenCalledWith(
@@ -1089,7 +1310,6 @@ describe("viewer web ui automation baseline", () => {
         executeKind: "claim_starter_oc",
       }),
     );
-    expect(within(stagePanel).getByRole("button", { name: "Use Chat Panel" })).toBeDisabled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
@@ -1138,6 +1358,10 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getAllByText("Blocked").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("World Constraint")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Claim first Agent")).toBeInTheDocument();
+    expect(core.buildGameplaySummary().recommendedAction).toMatchObject({
+      actionId: "claim_first_agent",
+      executeKind: "claim_first_agent",
+    });
     const claimButton = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" })[0];
     expect(claimButton).toBeInTheDocument();
     fireEvent.click(claimButton);
@@ -1167,6 +1391,7 @@ describe("viewer web ui automation baseline", () => {
 
   it("surfaces hosted recovery and preview strong-auth truth without not-implemented drift", async () => {
     await renderViewerApp({
+      autoBindSnapshotAgent: false,
       setupAfterMount(core) {
         core.state.hostedAccess = sampleHostedPublicJoinAccess();
         core.state.auth.error = "session_revoked";
@@ -1213,6 +1438,7 @@ describe("viewer web ui automation baseline", () => {
 
   it("surfaces hosted login retry-after guidance when OTP resend is throttled", async () => {
     await renderViewerApp({
+      autoBindSnapshotAgent: false,
       setupAfterMount(core) {
         core.state.hostedAccess = sampleHostedPublicJoinAccess();
         core.state.hostedLogin.handle = "player@example.com";
@@ -1230,6 +1456,7 @@ describe("viewer web ui automation baseline", () => {
 
   it("clears hosted login retry guidance immediately when the player edits the email", async () => {
     await renderViewerApp({
+      autoBindSnapshotAgent: false,
       setupAfterMount(core) {
         core.state.hostedAccess = sampleHostedPublicJoinAccess();
         core.state.hostedLogin.handle = "player@example.com";
@@ -1250,6 +1477,7 @@ describe("viewer web ui automation baseline", () => {
 
   it("keeps keyboard focus inside the hosted login gate while it is modal", async () => {
     await renderViewerApp({
+      autoBindSnapshotAgent: false,
       setupAfterMount(core) {
         core.state.hostedAccess = sampleHostedPublicJoinAccess();
         core.state.hostedLogin.handle = "player@example.com";

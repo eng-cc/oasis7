@@ -37,7 +37,7 @@ impl ViewerRuntimeLiveServer {
             delta_event_seq,
         ));
         if session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(true)
@@ -79,7 +79,7 @@ impl ViewerRuntimeLiveServer {
         }
 
         if session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
 
@@ -97,7 +97,7 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    pub(super) fn compat_snapshot(&mut self) -> WorldSnapshot {
+    pub(super) fn compat_snapshot(&mut self, current_player_id: Option<&str>) -> WorldSnapshot {
         let runtime_snapshot = self.world.snapshot();
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
@@ -108,30 +108,59 @@ impl ViewerRuntimeLiveServer {
         } else {
             Some("gameplay requires runtime live server running with --llm".to_string())
         };
-        let primary_agent_claim = self
-            .world
-            .state()
-            .agents
-            .keys()
-            .next()
-            .and_then(|agent_id| {
-                build_player_agent_claim_snapshot(
-                    self.world.state(),
-                    agent_id.as_str(),
-                    self.world.governance_execution_policy().epoch_length_ticks,
-                )
-            });
+        let snapshot_bound_agent_id = current_player_id
+            .map(str::trim)
+            .filter(|player_id| !player_id.is_empty())
+            .and_then(|player_id| self.llm_sidecar.bound_agent_for_player(player_id));
+        let primary_agent_claim = snapshot_bound_agent_id.and_then(|agent_id| {
+            build_player_agent_claim_snapshot(
+                self.world.state(),
+                agent_id,
+                self.world.governance_execution_policy().epoch_length_ticks,
+            )
+        });
+        let first_agent_claim_target_available = snapshot_bound_agent_id.is_none()
+            && !self
+                .llm_sidecar
+                .agent_player_bindings
+                .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID);
         let model = runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar);
         let mut player_gameplay = build_player_gameplay_snapshot(
             self.world.state(),
+            snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
             self.latest_player_gameplay_causality.as_ref(),
             gameplay_gate.is_none(),
             gameplay_gate.as_deref(),
             self.llm_sidecar.is_llm_mode() && self.supports_agent_chat(),
+            first_agent_claim_target_available,
             primary_agent_claim,
         );
+        if snapshot_bound_agent_id.is_none() {
+            player_gameplay.available_actions.retain(|action| {
+                action.target_agent_id.is_none()
+                    || action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT
+            });
+            if first_agent_claim_target_available
+                && !player_gameplay
+                    .available_actions
+                    .iter()
+                    .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+            {
+                player_gameplay
+                    .available_actions
+                    .push(crate::simulator::PlayerGameplayAction {
+                        action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.to_string(),
+                        label: "Claim first Agent".to_string(),
+                        protocol_action: "gameplay_action.submit".to_string(),
+                        target_agent_id: Some(
+                            crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+                        ),
+                        disabled_reason: None,
+                    });
+            }
+        }
         apply_runtime_snapshot_empty_entities_blocker(
             &mut player_gameplay,
             model.agents.is_empty(),
@@ -285,7 +314,7 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
         if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())
@@ -335,7 +364,7 @@ impl ViewerRuntimeLiveServer {
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
         if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         Ok(())
