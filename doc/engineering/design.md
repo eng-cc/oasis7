@@ -17,7 +17,7 @@
 2. `doc/engineering/design.md`：工程治理的结构设计、规则载体与执行链路。
 3. `doc/engineering/project.md`：工程任务拆解、治理批次与状态。
 4. `doc/engineering/prd.index.md`：活跃专题入口。
-5. 下钻专题：`doc-governance/`、`rust-governance/`、`prd-review/`、`doc-migration/`、`self-evolution/` 等。
+5. 下钻专题：`doc-governance/`、`rust-governance/`、`doc-migration/`、`self-evolution/` 等；历史 PRD 审读证据见 `doc/core/reviews/`。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
@@ -26,7 +26,7 @@
 - `project.md`：定义治理任务、批次、owner 与验证口径。
 - `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
 - `rust-governance/*`：定义 Rust 体量治理、冻结基线与结构切片 burn-down 规则。
-- `prd-review/*`：定义全量审读/治理台账与进度追踪。
+- 历史 PRD 审读/治理台账：保留在 `doc/core/reviews/round-*` logs；当前新增/变更文档追踪由模块入口与 doc governance 规则承接。
 - `self-evolution/*`：定义 repo-native `.pm` 工作流、自我进化 memory 补强、closed micro-task compaction，以及外部 agent workflow 借鉴的 adopted / rejected / deferred 治理边界。
 
 ### 3.2 工程治理执行链路
@@ -50,7 +50,7 @@
 - `.agents/roles/templates/*.md`
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
-- `doc/engineering/prd-review/*.md`
+- `doc/core/reviews/round-*` logs
 - `scripts/doc-governance-check.sh`
 - `testing-manual.md`
 

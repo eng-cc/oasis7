@@ -229,8 +229,7 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical testing PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical world-runtime PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical world-simulator PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical engineering full-PRD review triplet（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题；本行仅保留历史审读证据。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd.index.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/project.md` | issue_open | I4-201 | 任务项未形成 PRD-ID->TASK->验收命令->测试证据完整链，存在高风险断链。 |

@@ -222,8 +222,7 @@
   - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
-  - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
-  - `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
+  - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
   - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`

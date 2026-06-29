@@ -35,8 +35,7 @@
 - historical testing PRD review checklist snapshot（后续已删除）
 - historical world-runtime PRD review checklist snapshot（后续已删除）
 - historical world-simulator PRD review checklist snapshot（后续已删除）
-- `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.prd.md`
-- `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.project.md`
+- historical engineering full-PRD review triplet（后续已删除）
 - `doc/engineering/prd.index.md`
 - `doc/engineering/prd.md`
 - `doc/engineering/project.md`
