@@ -70,8 +70,6 @@ doc/playability_test_result/playability_test_manual.md
 doc/playability_test_result/prd.index.md
 doc/playability_test_result/prd.md
 doc/playability_test_result/project.md
-doc/playability_test_result/qa-module-status-closure-2026-03-11.md
-doc/playability_test_result/qa-to-producer-playability-module-status-closure-2026-03-11.md
 doc/readme/README.md
 doc/readme/design.md
 doc/readme/prd.index.md
