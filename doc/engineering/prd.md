@@ -218,8 +218,7 @@
   - `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
   - `doc/.governance/doc-root-md-allowlist.txt`
   - `doc/.governance/module-root-md-allowlist.txt`
-  - `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
-  - `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
+  - historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 `.pm/tasks/task_<32hex>.execution.md`）
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
   - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）

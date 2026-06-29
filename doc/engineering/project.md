@@ -102,6 +102,8 @@
 
 - [x] legacy-doc-migration-backlog-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 2026-03-03 legacy 迁移 backlog 快照，将旧迁移池语义收敛到迁移协作完成态、doc structure standard 与 workflow semantic migration checklist。 Trace: .pm/tasks/task_72ea44c2e71f4721b04f307acc8b6f54.yaml
 
+- [x] legacy-migration-closure-record-retirement (PRD-ENGINEERING-004/005/006/007/021/025) [test_tier_required]: 删除已退役的 2026-03 legacy migration closure / handoff 记录，将当前迁移规则语义收敛到 doc structure standard、workflow source-of-truth、`.pm` execution log 与 core review logs。 Trace: .pm/tasks/task_9bf14f1b82bd4354b80503907a7604f5.yaml
+
 - [x] learning-intake-loop-closeout-workflow (PRD-ENGINEERING-021) [test_tier_required]: 将 loop engineering 的学习回流落地为 source-of-truth `Learning Intake / Loop Closeout` 梯子，同步 bootstrap/router/closeout 技能，并用 workflow behavior eval 固化 minimal record、reflection 默认行为与 working_memory 边界。 Trace: .pm/tasks/task_b16a1b14eecd460c8e6537bb609b9a61.yaml
 
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。
@@ -435,8 +437,7 @@
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `scripts/check-rust-file-size.sh`
-- `doc/engineering/doc-migration/task-engineering-009-active-legacy-migration-closure-2026-03-11.md`
-- `doc/engineering/doc-migration/task-engineering-015-migration-closure-review-2026-03-11.md`
+- historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 `.pm/tasks/task_<32hex>.execution.md`）
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
