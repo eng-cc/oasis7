@@ -39,6 +39,7 @@
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
 - 其余专题文档按主题下沉到 `nonviewer/`、`checklists/`、`templates/`。
+- 2026-03-11 模块状态 closure / handoff root 文档已退役删除；当前状态与下一任务入口以 `doc/headless-runtime/project.md` 为准。
 
 ## 维护约定
 - 无界面运行链路行为变更，优先回写 `prd.md` 与 `project.md`。

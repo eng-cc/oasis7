@@ -37,8 +37,6 @@ doc/headless-runtime/design.md
 doc/headless-runtime/prd.index.md
 doc/headless-runtime/prd.md
 doc/headless-runtime/project.md
-doc/headless-runtime/runtime-module-status-closure-2026-03-11.md
-doc/headless-runtime/runtime-to-producer-headless-module-status-closure-2026-03-11.md
 doc/p2p/README.md
 doc/p2p/design.md
 doc/p2p/prd.index.md
