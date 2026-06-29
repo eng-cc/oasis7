@@ -14,7 +14,7 @@
 - `doc/engineering/evidence/engineering-governance-trend-baseline-2026-03-11.md`
 - `./scripts/doc-governance-check.sh`
 - `doc/engineering/project.md`
-- 相关专题 PRD / Project / devlog
+- 相关专题 PRD / Project / `.pm` task evidence
 
 ## Review Checklist
 - [ ] 复核上个窗口 `违规率 / 修复时长 / 回归率` 是否恶化
@@ -31,4 +31,4 @@
 ## Result
 - 总结论: `pass` / `watchlist` / `fix_required`
 - 阻断项:
-- 回写文件:
+- 回写证据:

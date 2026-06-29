@@ -30,7 +30,7 @@
 - Critical User Flows:
   1. `进入季度窗口 -> 读取 trend baseline + 运行 doc-governance-check -> 记录问题`
   2. `发现问题 -> 生成 remediation 项 -> 指定 owner / 优先级 / 截止时间`
-  3. `季度结束 -> 复核修复项关闭情况 -> 把结果回写 project / devlog / handoff`
+  3. `季度结束 -> 复核修复项关闭情况 -> 把结果回写 project / .pm execution log / role review evidence`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -85,10 +85,10 @@
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-CYCLE-001 | `TASK-ENGINEERING-004` / `EQC-1` | `test_tier_required` | 检查季度节奏字段、角色分工与触发条件 | engineering 治理节奏稳定性 |
 | PRD-ENGINEERING-CYCLE-002 | `TASK-ENGINEERING-004` / `EQC-1` | `test_tier_required` | 检查审查模板引用 trend baseline 与 `doc-governance-check.sh` | QA / engineering 协作一致性 |
-| PRD-ENGINEERING-CYCLE-003 | `TASK-ENGINEERING-004` / `EQC-1` | `test_tier_required` | 检查 remediation 模板字段、project 回写与 handoff | 问题闭环能力 |
+| PRD-ENGINEERING-CYCLE-003 | `TASK-ENGINEERING-004` / `EQC-1` | `test_tier_required` | 检查 remediation 模板字段、project 回写与 `.pm`/role-review 证据 | 问题闭环能力 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | `DEC-EQC-001` | 先固定季度模板与节奏 | 直接做一次临时复盘 | 没有模板时，季度治理难以持续复用。 |
 | `DEC-EQC-002` | trend baseline 与 gate 脚本双输入 | 只看 baseline 或只跑脚本 | 趋势与即时规则检查缺一不可。 |
-| `DEC-EQC-003` | remediation 独立建模板 | 只把问题写在 devlog | 季度治理问题需要正式追踪与 owner。 |
+| `DEC-EQC-003` | remediation 独立建模板 | 只把问题写在历史 devlog | 季度治理问题需要正式追踪、owner 与 task evidence。 |

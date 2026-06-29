@@ -19,9 +19,9 @@
 - 修复动作:
 - 目标文件:
 - 截止时间:
-- 需要 handoff 给谁:
+- 需要复核的 owner role:
 
 ## Closure
 - 状态: `open` / `fixing` / `closed`
 - 验证命令:
-- 回写文件:
+- 回写证据:
