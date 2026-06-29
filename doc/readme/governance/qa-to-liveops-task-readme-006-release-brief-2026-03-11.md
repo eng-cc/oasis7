@@ -18,7 +18,7 @@
 - 内部版本候选已完成正式 `go/no-go`；若不及时形成对外口径，后续沟通容易出现表述漂移。
 
 ## Inputs
-- 代码 / 文档入口：`doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`、`doc/core/qa-to-liveops-task-core-022-version-go-no-go-2026-03-11.md`
+- 代码 / 文档入口：`doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`、`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - 已完成内容：内部 `go` 结论与 P1 风险已落档
 - 已知约束：不能把内部候选级 `go` 直接表述成外部正式发布
 - 依赖前置项：`TASK-CORE-022`
@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：版本候选对外口径简报
 - 接收方交付物 2：禁用表述、风险摘要与回滚说明
-- 需要回写的文档 / 日志：`doc/readme/project.md`、`doc/devlog/README.md`
+- 当前证据回写面：`doc/readme/project.md` 与对应 `.pm/tasks/task_<32hex>.execution.md`；`doc/devlog/README.md` 仅作为历史归档入口。
 
 ## Done Definition
 - [x] 已接收内部版本候选 `go` 结论

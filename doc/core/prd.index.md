@@ -20,9 +20,9 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/core/`：82 份文件
+- `doc/core/`：73 份文件
 - `doc/core/reviews/`：45 份文件
-- 根目录活跃专题与 handoff：29 份文件
+- 根目录活跃专题：20 份文件
 - `doc/core/templates/`：2 份文件
 - `doc/core/checklists/`：1 份文件
 
@@ -30,7 +30,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `reviews/` | 45 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；默认按需进入 |
-| 根目录活跃专题 | 29 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移 |
+| 根目录活跃专题 | 20 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移；2026-03 一次性 handoff 文件已退役删除 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
 
@@ -44,7 +44,7 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部活跃专题和 review 文件。
-- `reviews/`、模板、checklist 与 handoff 文档继续保留可检索性，但默认不和模块 PRD 三件套同屏平铺。
+- `reviews/`、模板与 checklist 继续保留可检索性；历史一次性 handoff 文档已退役删除，不再作为默认阅读面或证据 sink。
 - 完整专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
@@ -78,4 +78,5 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - readiness / version / go-no-go / docs-hub / player-access-mode-contract 同步专题均属于本轮 `core` 活跃执行链。
+- 2026-03 release-candidate / next-round 一次性 producer/QA/LiveOps handoff 文件已退役删除；当前追溯以正式专题三件套、`doc/core/reviews/*`、`.pm` execution log 与 role review evidence 为准。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。

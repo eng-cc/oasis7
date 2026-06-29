@@ -13,7 +13,7 @@
 ## 依赖
 - `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md`
 - `doc/core/release-candidate-readiness-entry-2026-03-11.design.md`
-- `doc/core/producer-to-qa-task-core-017-readiness-entry-2026-03-11.md`
+- 历史 readiness handoff 文件已退役删除；当前证据入口为本项目页、正式专题三件套与 `.pm/tasks/task_<32hex>.execution.md`。
 - `doc/core/project.md`
 - `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
 

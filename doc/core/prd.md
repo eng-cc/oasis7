@@ -186,7 +186,8 @@
   - `doc/testing/project.md`
   - `doc/playability_test_result/project.md`
   - `doc/headless-runtime/project.md`
-  - `doc/devlog/YYYY-MM-DD.md`
+  - `.pm/tasks/task_<32hex>.execution.md`
+  - pre-PR local role review evidence packet
 - Edge Cases & Error Handling:
   - 模块入口失效：若目标路径迁移，core 必须同步更新导航并保留可追溯说明。
   - 信息缺失：若模块 PRD 尚未更新，标记“口径待同步”并阻断发布结论。
@@ -194,7 +195,7 @@
   - 依赖冲突：同一链路被多个模块修改时，需合并影响面并重跑 required 级验证。
   - 测试证据缺口：无证据不得判定链路通过，必须补齐最小 required 证据。
   - 术语冲突：同术语多定义时优先使用 core 词典并登记决策记录。
-  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按“最先落地代码/文档的 owner”裁定，并回写 core / project / devlog。
+  - owner 冲突：多个模块同时声称同一项为 `P0` 且 owner 不一致时，按当前 `.pm` task owner、正式专题文档与 pre-PR role review evidence 裁定，并回写 core / project。
   - project 缺承接：若 P0 项在 PRD 已定义但对应模块 `project.md` 未承接，状态只能记为 `candidate`，不得进入发布结论。
   - 证据格式未统一：若测试闭环可跑但证据包未统一格式，仅可记为 `conditionally_ready`，不得视作 fully ready。
   - 资源抢占：若 launcher / explorer 新需求与 P0 资源冲突，默认降级到 P2，除非能直接服务玩法闭环或发布门禁。
@@ -206,7 +207,7 @@
   - NFR-CORE-5: core 主文档维持 <= 1000 行，超限必须拆分分册。
   - NFR-CORE-6: P0 项的 owner / 输入 / 输出 / 验收标准 / 阻断条件覆盖率 100%。
   - NFR-CORE-7: 发布评审时 P0 证据缺失数必须为 0；P1 可存在未完成项，但必须附带风险与缓解方案。
-  - NFR-CORE-8: 跨角色 handoff 在 PRD / project / devlog 中的追溯链完整率 100%。
+  - NFR-CORE-8: 跨角色证据交接在 PRD / project / `.pm` execution log / pre-PR role review evidence 中的追溯链完整率 100%；`doc/devlog` 仅作为历史归档入口。
   - NFR-CORE-9: 一轮模块主项目全部收口后 1 个工作日内必须形成下一轮优先级清单。
 - Security & Privacy: core 仅维护结构与治理口径；涉及密钥、签名、隐私数据的要求由对应模块 PRD 细化并执行。
   发布收口文档仅记录工程与玩法证据，不引入额外敏感数据；若引用线上/远程环境信息，需与对应模块 owner 联审后落档。
