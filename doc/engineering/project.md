@@ -86,6 +86,8 @@
 
 - [x] module-artifact-bid-selection-clone-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize module artifact bid matching to keep the current best bid by borrowed reference during ranking and clone only the final selected order, preserving price-kind filters, minimum price, self-bid exclusion, buyer balance, highest-price priority, and equal-price lowest-order semantics. Trace: .pm/tasks/task_a284e8f46b31441aa1685fbe9ea67f06.yaml
 
+- [x] threshold-receipt-commitment-buffer-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize threshold receipt commitment hashing to sort borrowed participant signatures and write the legacy `signer_node_id:signature_hex` payload into one pre-sized buffer instead of allocating per-participant strings plus an intermediate join, preserving threshold Ed25519 commitment bytes and receipt verification semantics. Trace: .pm/tasks/task_607211ba9e60460da109f25ab8c78f60.yaml
+
 - [x] engineering-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-engineering.md` PRD review checklist snapshot，将当前 engineering 阅读/状态语义收敛到 `doc/engineering/README.md`、`doc/engineering/prd.index.md` 与 `doc/engineering/project.md`。 Trace: .pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.yaml
 
 - [x] game-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-game.md` PRD review checklist snapshot，将当前 game 阅读/状态语义收敛到 `doc/game/README.md`、`doc/game/prd.index.md` 与 `doc/game/project.md`。 Trace: .pm/tasks/task_0f123c70222c404dacb01f7c64e24208.yaml
