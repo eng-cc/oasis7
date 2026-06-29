@@ -16,7 +16,9 @@ use crate::simulator::{
 };
 use sha2::{Digest, Sha256};
 
+mod agent_chat_intent;
 mod llm_sidecar;
+use agent_chat_intent::resolve_agent_chat_intent;
 pub(super) use llm_sidecar::{
     RuntimeLlmSidecar, simulator_action_label, simulator_action_to_runtime,
 };
@@ -31,12 +33,6 @@ const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH
 pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env()
 -> Result<Option<llm_sidecar::ProviderDecisionSettings>, String> {
     llm_sidecar::provider_settings_from_env()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ResolvedAgentChatIntent {
-    intent_tick: Option<u64>,
-    intent_seq: u64,
 }
 
 pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
@@ -1181,27 +1177,4 @@ pub(super) fn map_auth_verify_error_code(message: &str) -> &'static str {
         return "auth_claim_invalid";
     }
     "auth_invalid"
-}
-
-fn resolve_agent_chat_intent(
-    request: &AgentChatRequest,
-    verified_nonce: u64,
-) -> Result<ResolvedAgentChatIntent, String> {
-    let intent_seq = match request.intent_seq {
-        Some(0) => {
-            return Err("intent_seq must be greater than zero".to_string());
-        }
-        Some(seq) if seq != verified_nonce => {
-            return Err(format!(
-                "intent_seq {} must match auth nonce {}",
-                seq, verified_nonce
-            ));
-        }
-        Some(seq) => seq,
-        None => verified_nonce,
-    };
-    Ok(ResolvedAgentChatIntent {
-        intent_tick: request.intent_tick,
-        intent_seq,
-    })
 }
