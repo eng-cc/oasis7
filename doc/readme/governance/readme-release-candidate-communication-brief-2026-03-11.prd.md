@@ -56,7 +56,7 @@
 - Architecture Overview: 该专题位于 readme/governance，消费 core 版本级 go/no-go 记录，输出一份面向 `liveops_community` 的外部沟通简报，并通过正式评审记录、readme 专题与 `.pm` execution log 回流 `producer_system_designer` 审核。
 - Integration Points:
   - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
-  - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
+  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
   - `doc/readme/prd.md`
   - `README.md`
 - Edge Cases & Error Handling:

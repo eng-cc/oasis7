@@ -18,7 +18,7 @@
 - LiveOps 已将内部 `go` 结论翻译为外部沟通简报，需要由产品 owner 做最后口径确认。
 
 ## Inputs
-- 代码 / 文档入口：`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- 代码 / 文档入口：`doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`、`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`、`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`、`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md`
 - 已完成内容：状态摘要、禁用表述、残余风险、回滚口径已齐备
 - 已知约束：本次不扩展成正式公告正文
 - 依赖前置项：`TASK-README-006`
@@ -26,7 +26,7 @@
 ## Expected Output
 - 接收方交付物 1：确认当前简报可作为后续外部沟通底稿
 - 接收方交付物 2：如发现越界承诺，仅回写裁剪意见，不推翻内部事实链
-- 需要回写的文档 / 日志：`doc/devlog/README.md`
+- 当前证据回写面：`doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md` 与对应 `.pm/tasks/task_<32hex>.execution.md`；`doc/devlog/README.md` 仅作为历史归档入口。
 
 ## Done Definition
 - [x] 已形成可复用的对外口径简报

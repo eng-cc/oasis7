@@ -85,7 +85,7 @@
 | 关键链路追踪 | 链路名称、上游、下游、测试门禁 | 依据链路定位依赖变更与测试范围 | `identified -> validated -> archived` | 高风险链路优先检查 | 发布负责人具备最终裁定权 |
 | 术语与口径统一 | 术语名、定义、引用文档、更新时间 | 发现冲突后统一定义并回写引用 | `conflict -> resolved -> synced` | 以核心术语集为唯一优先级 | core 维护者审核后生效 |
 | 阶段优先级台账 | 优先级层级、目标、owner、输入、输出、验收标准、阻断条件 | 评审后确认 `P0/P1/P2` 与 owner 映射，并回写模块 project | `candidate -> aligned -> executing -> gated -> released` | `P0 > P1 > P2`；P0 未完成时不得提升 P1/P2 为发布结论主路径 | `producer_system_designer` 拥有排序权；模块 owner 负责承接执行 |
-| 跨角色交付矩阵 | 发起角色、接收角色、handoff 输入、产出物、回写位置、验证方式 | 发起方提交 handoff / 接收方确认 done / owner 回写 PRD、project、devlog | `requested -> accepted -> delivered -> verified` | 先按“最先落地代码/文档的 owner”排序，再按发布风险高低排序 | 仅标准角色名可出现在交付矩阵与 devlog |
+| 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 `.pm` execution log / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 `.pm` task owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
 | 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims`、`gameplay_prerequisites` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `software_safe / pure_api` 两项；`non-3D / 2D 优先` 只能作优先级或范围描述；lane 只作附加维度；`pure_api` formal gameplay 默认要求 active LLM access | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |

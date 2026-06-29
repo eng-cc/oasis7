@@ -24,6 +24,7 @@ doc_refs:
   - doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md
   - doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md
   - doc/readme/governance/qa-to-liveops-task-readme-006-release-brief-2026-03-11.md
+  - doc/readme/governance/liveops-to-producer-task-readme-006-release-brief-2026-03-11.md
   - doc/engineering/prd.index.md
   - doc/engineering/project.md
 related_prd: []

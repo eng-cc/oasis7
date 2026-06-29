@@ -12,7 +12,7 @@
 
 ## 依赖
 - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
-- `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
 - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.design.md`
 
