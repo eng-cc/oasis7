@@ -1,30 +1,48 @@
 use super::*;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::thread;
+use std::time::{Duration, Instant};
 
 const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
 
 fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set test listener nonblocking");
     let bind = listener.local_addr().expect("listener addr");
     let serve = thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept probe connection");
-            let mut request = [0_u8; 1024];
-            let bytes = stream.read(&mut request).expect("read request");
-            let request_text = String::from_utf8_lossy(&request[..bytes]);
-            let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
-            } else {
-                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-            };
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = stream.write_all(response.as_bytes());
+        let started_at = Instant::now();
+        let mut last_served_at = started_at;
+        let mut served = 0_usize;
+        while started_at.elapsed() < Duration::from_secs(2)
+            && (served < 2 || last_served_at.elapsed() < Duration::from_millis(100))
+        {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request = [0_u8; 1024];
+                    let bytes = stream.read(&mut request).expect("read request");
+                    let request_text = String::from_utf8_lossy(&request[..bytes]);
+                    let body = if request_text.contains("GET /v1/provider/info") {
+                        r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
+                    } else {
+                        r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
+                    };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    served += 1;
+                    last_served_at = Instant::now();
+                }
+                Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(err) => panic!("accept probe connection: {err}"),
+            }
         }
     });
     (format!("http://{bind}"), serve)
@@ -44,7 +62,9 @@ fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str)
 
 #[test]
 fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -136,7 +156,9 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
 
 #[test]
 fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -365,7 +387,9 @@ fn compat_snapshot_with_unbound_starter_only_publishes_first_agent_claim_for_unb
 
 #[test]
 fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
