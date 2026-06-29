@@ -14,7 +14,8 @@ use super::super::gameplay_actions::{
 };
 use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
 use super::control_plane::{
-    ensure_agent_player_access_runtime, map_auth_verify_error_code, normalize_optional_public_key,
+    ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
+    map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{IndustryStage, MaterialLedgerId, WorldState};
 use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback};
@@ -318,7 +319,7 @@ impl ViewerRuntimeLiveServer {
                     target_agent_id: Some(request.target_agent_id.clone()),
                 });
             }
-            ensure_agent_player_access_runtime(
+            ensure_agent_player_binding_target_runtime(
                 &self.world,
                 &self.llm_sidecar,
                 request.target_agent_id.as_str(),
@@ -405,7 +406,9 @@ impl ViewerRuntimeLiveServer {
                 )),
                 target_agent_id: Some(request.target_agent_id.clone()),
                 reason: None,
-                hint: Some("refresh the snapshot; the first Agent is now bound to this player".to_string()),
+                hint: Some(
+                    "refresh the snapshot; the first Agent is now bound to this player".to_string(),
+                ),
                 delta_logical_time: 0,
                 delta_event_seq: 0,
             });

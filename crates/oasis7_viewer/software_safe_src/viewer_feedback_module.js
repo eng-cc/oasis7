@@ -618,33 +618,6 @@ export function createViewerFeedbackModule({
                       : "unsupported",
         }))
       : [];
-    const boundAgentId = String(state.auth?.boundAgentId || "").trim();
-    const currentPlayerId = String(state.auth?.playerId || "").trim();
-    const boundPlayerId = boundAgentId
-      ? String(state.snapshot?.model?.agent_player_bindings?.[boundAgentId] || "").trim()
-      : "";
-    const starterOcAlreadyAccepted = state.lastGameplayActionFeedback?.kind === "gameplay_action"
-      && state.lastGameplayActionFeedback?.action === "claim_starter_oc"
-      && (state.lastGameplayActionFeedback?.accepted || state.lastGameplayActionFeedback?.stage === "ack");
-    if (
-      boundAgentId
-      && currentPlayerId
-      && boundPlayerId === currentPlayerId
-      && !starterOcAlreadyAccepted
-      && !availableActions.some((action) => action.actionId === "claim_starter_oc")
-    ) {
-      availableActions = [
-        ...availableActions,
-        {
-          actionId: "claim_starter_oc",
-          label: localeText(locale, "领取初始 OC", "Claim starter OC"),
-          protocolAction: "gameplay_action.submit",
-          targetAgentId: boundAgentId,
-          disabledReason: null,
-          executeKind: "claim_starter_oc",
-        },
-      ];
-    }
     const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object"
       ? {
           source: "runtime",

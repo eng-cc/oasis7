@@ -964,43 +964,7 @@ function starterOcAction(gameplay) {
   if (existing) {
     return existing;
   }
-  const boundAgentId = normalizedId(core.state.auth.boundAgentId);
-  const playerId = normalizedId(core.state.auth.playerId);
-  const binding = agentBindingForId(boundAgentId);
-  if (!boundAgentId || !playerId || normalizedId(binding.playerId) !== playerId) {
-    return null;
-  }
-  const feedback = core.state.lastGameplayActionFeedback;
-  if (
-    feedback?.kind === "gameplay_action"
-    && String(feedback?.action || "").includes("claim_starter_oc")
-    && (feedback?.accepted || feedback?.stage === "ack")
-  ) {
-    return null;
-  }
-  const starterOcRequiredByChat = (gameplay?.availableActions || []).some((action) => {
-    if (action?.executeKind !== "agent_chat") {
-      return false;
-    }
-    const disabledReason = String(action?.disabledReason || "").toLowerCase();
-    return action?.targetAgentId === boundAgentId && disabledReason.includes("starter oc");
-  });
-  const starterOcRequiredAfterFirstAgentClaim = Boolean(
-    feedback?.kind === "gameplay_action"
-      && String(feedback?.action || "").includes("claim_first_agent")
-      && (feedback?.accepted || feedback?.stage === "ack" || feedback?.stage === "sent"),
-  );
-  if (!starterOcRequiredByChat && !starterOcRequiredAfterFirstAgentClaim) {
-    return null;
-  }
-  return {
-    actionId: "claim_starter_oc",
-    label: tr(core.state.uiLocale, "领取初始 OC", "Claim starter OC"),
-    protocolAction: "gameplay_action.submit",
-    targetAgentId: boundAgentId,
-    disabledReason: null,
-    executeKind: "claim_starter_oc",
-  };
+  return null;
 }
 
 const starterOcOnboardingState = {
@@ -1008,7 +972,12 @@ const starterOcOnboardingState = {
   targetAgentId: null,
   completedTargetAgentId: null,
 };
+const [starterOcOnboardingRevision, setStarterOcOnboardingRevision] = createSignal(0);
 let starterOcBackgroundConfirmTimer = null;
+
+function touchStarterOcOnboardingState() {
+  setStarterOcOnboardingRevision((value) => value + 1);
+}
 
 function markStarterOcClaimPending(action) {
   if (action?.actionId !== "claim_starter_oc") {
@@ -1017,6 +986,7 @@ function markStarterOcClaimPending(action) {
   starterOcOnboardingState.pending = true;
   starterOcOnboardingState.targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id);
   starterOcOnboardingState.completedTargetAgentId = null;
+  touchStarterOcOnboardingState();
 }
 
 function scheduleStarterOcBackgroundConfirmation() {
@@ -1036,6 +1006,7 @@ function scheduleStarterOcBackgroundConfirmation() {
 function clearStarterOcClaimPending() {
   starterOcOnboardingState.pending = false;
   starterOcOnboardingState.targetAgentId = null;
+  touchStarterOcOnboardingState();
 }
 
 function completeStarterOcOnboarding() {
@@ -1043,15 +1014,18 @@ function completeStarterOcOnboarding() {
     starterOcOnboardingState.targetAgentId || core.state.auth.boundAgentId,
   );
   clearStarterOcClaimPending();
+  touchStarterOcOnboardingState();
 }
 
 export function __markStarterOcOnboardingCompleteForTest(agentId = core.state.auth.boundAgentId) {
   starterOcOnboardingState.pending = false;
   starterOcOnboardingState.targetAgentId = null;
   starterOcOnboardingState.completedTargetAgentId = normalizedId(agentId);
+  touchStarterOcOnboardingState();
 }
 
 function starterOcClaimPendingForCurrentAgent() {
+  starterOcOnboardingRevision();
   if (!starterOcOnboardingState.pending) {
     return false;
   }
@@ -1060,11 +1034,27 @@ function starterOcClaimPendingForCurrentAgent() {
 }
 
 function starterOcOnboardingCompletedForCurrentAgent() {
+  starterOcOnboardingRevision();
   const completedTargetAgentId = normalizedId(starterOcOnboardingState.completedTargetAgentId);
   return Boolean(
     completedTargetAgentId
       && completedTargetAgentId === normalizedId(core.state.auth.boundAgentId),
   );
+}
+
+function starterOcCreditVisibleForCurrentAgent() {
+  const agentId = normalizedId(core.state.auth.boundAgentId);
+  if (!agentId) {
+    return false;
+  }
+  const state = core.state.snapshot?.model || core.state.snapshot || {};
+  const starterOcClaim = state.starter_oc_claims?.[agentId] || state.starterOcClaims?.[agentId] || null;
+  if (starterOcClaim) {
+    return true;
+  }
+  const balance = state.main_token_balances?.[agentId] || state.mainTokenBalances?.[agentId] || null;
+  const liquidBalance = Number(claimField(balance, "liquid_balance", "liquidBalance", "liquid", "balance") || 0);
+  return Number.isFinite(liquidBalance) && liquidBalance > 0;
 }
 
 function rawStarterOcActionAvailable() {
@@ -1073,7 +1063,7 @@ function rawStarterOcActionAvailable() {
 }
 
 function starterOcSubmittedFeedback() {
-  if (starterOcOnboardingCompletedForCurrentAgent()) {
+  if (starterOcOnboardingCompletedForCurrentAgent() || starterOcCreditVisibleForCurrentAgent()) {
     return null;
   }
   const feedback = core.state.lastGameplayActionFeedback;
@@ -1203,7 +1193,7 @@ function StarterOcRequiredGate() {
   const action = () => starterOcAction(gameplay());
   const submittedFeedback = () => starterOcSubmittedFeedback();
   const pendingCredit = () => starterOcClaimPendingForCurrentAgent() || Boolean(submittedFeedback());
-  const creditConfirmed = () => pendingCredit() && autoConfirmAttempts() > 0 && (!rawStarterOcActionAvailable() || starterOcClaimPendingForCurrentAgent());
+  const creditConfirmed = () => pendingCredit() && starterOcCreditVisibleForCurrentAgent() && !rawStarterOcActionAvailable();
   const progressionAction = () => gameplayProgressionAction(gameplay());
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action) => action.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
@@ -1419,7 +1409,6 @@ function renderGameplayAction(action) {
   if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
     clearStarterOcClaimPending();
   } else if (action.actionId === "claim_starter_oc") {
-    completeStarterOcOnboarding();
     scheduleStarterOcBackgroundConfirmation();
     core.requestRender();
   }

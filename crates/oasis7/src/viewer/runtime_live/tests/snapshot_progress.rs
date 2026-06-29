@@ -325,8 +325,9 @@ fn compat_snapshot_with_unbound_starter_only_publishes_first_agent_claim_for_unb
             .world
             .submit_action(crate::runtime::Action::RegisterAgent {
                 agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
-                pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
-                    .expect("formal release starter spawn"),
+                pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos(
+                )
+                .expect("formal release starter spawn"),
             });
         server.world.step().expect("register unbound starter agent");
     }
@@ -706,12 +707,11 @@ fn existing_world_without_bound_agent_publishes_first_agent_claim_action() {
 #[test]
 fn existing_world_with_unbound_starter_target_publishes_first_agent_claim_action() {
     let mut world = crate::runtime::World::new_production_hardened();
-    world
-        .submit_action(crate::runtime::Action::RegisterAgent {
-            agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
-            pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
-                .expect("formal release starter spawn"),
-        });
+    world.submit_action(crate::runtime::Action::RegisterAgent {
+        agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+        pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+            .expect("formal release starter spawn"),
+    });
     world.step().expect("register unbound starter claim target");
     assert!(
         world
@@ -748,12 +748,11 @@ fn existing_world_with_unbound_starter_target_publishes_first_agent_claim_action
 #[test]
 fn existing_world_with_bound_starter_claim_target_does_not_publish_duplicate_first_agent_claim() {
     let mut world = crate::runtime::World::new_production_hardened();
-    world
-        .submit_action(crate::runtime::Action::RegisterAgent {
-            agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
-            pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
-                .expect("formal release starter spawn"),
-        });
+    world.submit_action(crate::runtime::Action::RegisterAgent {
+        agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+        pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos()
+            .expect("formal release starter spawn"),
+    });
     world.step().expect("register starter claim target");
     assert!(
         world

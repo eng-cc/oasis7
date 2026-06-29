@@ -1310,6 +1310,47 @@ describe("viewer web ui automation baseline", () => {
         executeKind: "claim_starter_oc",
       }),
     );
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: "Confirming OC Credit" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("dialog", { name: "OC Credited" })).not.toBeInTheDocument();
+    expect(within(starterOcDialog).queryByRole("button", { name: "Start First Agent Chat" })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not invent a starter OC claim action after reload when runtime no longer advertises it", async () => {
+    const snapshot = sampleSnapshot({
+      player_gameplay: {
+        ...sampleSnapshot().player_gameplay,
+        available_actions: [
+          {
+            action_id: "chat_first_agent",
+            label: "Send one chat/command to the first available agent",
+            protocol_action: "agent_chat",
+            target_agent_id: "agent-0",
+            disabled_reason: "claim starter OC before using LLM/agent chat for this Agent",
+          },
+          {
+            action_id: "request_snapshot",
+            label: "Request snapshot",
+            protocol_action: "world.request_snapshot",
+            target_agent_id: null,
+            disabled_reason: null,
+          },
+        ],
+      },
+    });
+    const { core } = await renderViewerApp({
+      snapshot,
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+      },
+      starterOcOnboardingComplete: false,
+    });
+
+    expect(core.buildGameplaySummary().availableActions.some((action) => action.actionId === "claim_starter_oc")).toBe(false);
+    expect(core.buildGameplaySummary().recommendedAction?.actionId).not.toBe("claim_starter_oc");
+    expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Claim Starter OC" })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {
