@@ -1,4 +1,5 @@
 use super::*;
+use crate::libp2p_net::api::request_candidate_peers_from_healths;
 
 fn test_peer_health(
     peer_id: PeerId,
@@ -174,5 +175,20 @@ fn admissible_request_peers_prefers_soft_deprioritized_connected_peer_over_activ
     assert_eq!(
         network.admissible_request_peers(),
         vec![connected_soft_peer]
+    );
+}
+
+#[test]
+fn request_candidate_peers_falls_back_to_soft_deprioritized_peers_in_input_order() {
+    let hard_blocked_peer = PeerId::random();
+    let soft_peer_a = PeerId::random();
+    let soft_peer_b = PeerId::random();
+    let peers = vec![hard_blocked_peer, soft_peer_a, soft_peer_b];
+    let hard_blocked_peers = HashSet::from([hard_blocked_peer]);
+    let soft_deprioritized_peers = HashSet::from([soft_peer_a, soft_peer_b]);
+
+    assert_eq!(
+        request_candidate_peers_from_healths(peers, &hard_blocked_peers, &soft_deprioritized_peers,),
+        vec![soft_peer_a, soft_peer_b]
     );
 }
