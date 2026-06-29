@@ -12,6 +12,7 @@ use super::super::{
 use super::World;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write as _;
 #[path = "governance_internal.rs"]
 mod governance_internal;
 #[path = "governance_validator_admission.rs"]
@@ -72,17 +73,22 @@ pub(super) fn governance_finality_stake_root(
     signer_node_ids: &[String],
     validator_stakes: &BTreeMap<String, u64>,
 ) -> String {
-    let payload = signer_node_ids
+    let capacity = signer_node_ids
         .iter()
-        .map(|node_id| {
-            let stake = validator_stakes
-                .get(node_id)
-                .copied()
-                .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
-            format!("{node_id}:{stake}")
-        })
-        .collect::<Vec<_>>()
-        .join("|");
+        .map(|node_id| node_id.len() + 1 + 20)
+        .sum::<usize>()
+        .saturating_add(signer_node_ids.len().saturating_sub(1));
+    let mut payload = String::with_capacity(capacity);
+    for (index, node_id) in signer_node_ids.iter().enumerate() {
+        if index > 0 {
+            payload.push('|');
+        }
+        let stake = validator_stakes
+            .get(node_id)
+            .copied()
+            .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
+        write!(&mut payload, "{node_id}:{stake}").expect("write governance stake root payload");
+    }
     sha256_hex(payload.as_bytes())
 }
 
@@ -763,5 +769,41 @@ impl World {
             signer_node_ids,
             validator_stakes: BTreeMap::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn governance_finality_stake_root_matches_legacy_payload_hash() {
+        let signer_node_ids = vec![
+            "governance.local.finality.signer.1".to_string(),
+            "governance.local.finality.signer.2".to_string(),
+            "governance.local.finality.signer.3".to_string(),
+        ];
+        let validator_stakes = BTreeMap::from([
+            ("governance.local.finality.signer.1".to_string(), 125_u64),
+            ("governance.local.finality.signer.3".to_string(), 450_u64),
+        ]);
+        let legacy_payload = signer_node_ids
+            .iter()
+            .map(|node_id| {
+                let stake = validator_stakes
+                    .get(node_id)
+                    .copied()
+                    .unwrap_or(DEFAULT_GOVERNANCE_VALIDATOR_STAKE);
+                format!("{node_id}:{stake}")
+            })
+            .collect::<Vec<_>>()
+            .join("|");
+        let expected = sha256_hex(legacy_payload.as_bytes());
+
+        assert_eq!(
+            governance_finality_stake_root(signer_node_ids.as_slice(), &validator_stakes),
+            expected
+        );
+        assert!(legacy_payload.contains("governance.local.finality.signer.2:100"));
     }
 }
