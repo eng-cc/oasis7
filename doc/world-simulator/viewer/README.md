@@ -26,9 +26,9 @@
 - 治理前快照（`scripts/doc-inventory-report.sh`，2026-04-17）:
   - `doc/world-simulator/viewer/`: 296 份 Markdown
   - `doc/world-simulator/`: 549 份 Markdown
-- 当前复算（`scripts/doc-inventory-report.sh`，2026-06-23）:
-  - `doc/world-simulator/viewer/`: 216 份 Markdown
-  - `doc/world-simulator/`: 475 份 Markdown
+- 当前复算（`scripts/doc-inventory-report.sh`，2026-06-29）:
+  - `doc/world-simulator/viewer/`: 213 份 Markdown
+  - `doc/world-simulator/`: 472 份 Markdown
 - 当前子域属于仓库最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
 
 ## 首读主题簇
@@ -94,7 +94,7 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
-- 如果你追的是历史状态收口、module status closure 或 review note，允许直接进相应 `.md` supporting spec，但不要把它们重新当作默认首读入口。
+- 旧 2026-03-11 模块状态 closure / viewer-to-producer handoff 文档已退役删除；当前状态以 `../project.md` 为准，历史专题从 `../prd.index.md`、topic project 与 `.pm` evidence 进入。
 - 如果某个主题已经出现“主文档物理合并”，应优先进入主文档，而不是从旧阶段文档开始。
 
 ## 维护约定
