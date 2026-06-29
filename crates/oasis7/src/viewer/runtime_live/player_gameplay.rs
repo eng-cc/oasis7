@@ -333,7 +333,7 @@ impl ViewerRuntimeLiveServer {
                 target_agent_id: err.agent_id,
             })?;
         } else if request.action_id == ACTION_CLAIM_STARTER_OC {
-            ensure_agent_player_access_runtime(
+            ensure_agent_player_binding_target_runtime(
                 &self.world,
                 &self.llm_sidecar,
                 request.target_agent_id.as_str(),
