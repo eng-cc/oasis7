@@ -70,7 +70,7 @@ impl World {
     ) -> Result<Vec<WorldEvent>, WorldError> {
         let current_epoch = self.current_governance_epoch();
         let mut emitted = Vec::new();
-        let mut beneficiary_account_ids = self
+        let beneficiary_account_ids = self
             .state
             .restricted_starter_claim_grants
             .iter()
@@ -80,7 +80,6 @@ impl World {
                     .then_some(account_id.clone())
             })
             .collect::<Vec<_>>();
-        beneficiary_account_ids.sort();
 
         for beneficiary_account_id in beneficiary_account_ids {
             let Some(grant) = self
