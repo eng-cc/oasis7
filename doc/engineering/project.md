@@ -106,6 +106,8 @@
 
 - [x] legacy-migration-closure-record-retirement (PRD-ENGINEERING-004/005/006/007/021/025) [test_tier_required]: 删除已退役的 2026-03 legacy migration closure / handoff 记录，将当前迁移规则语义收敛到 doc structure standard、workflow source-of-truth、`.pm` execution log 与 core review logs。 Trace: .pm/tasks/task_9bf14f1b82bd4354b80503907a7604f5.yaml
 
+- [x] governance-handoff-record-retirement (PRD-ENGINEERING-002/003/021/025) [test_tier_required]: 删除已退役的 2026-03 producer->QA 一次性 handoff 记录，将 governance trend / quarterly review 的当前证据语义收敛到 `.pm` execution log、pre-PR local role review 与 workflow source-of-truth。 Trace: .pm/tasks/task_b5173c0d4a2d4faf81589b66d5c5fd29.yaml
+
 - [x] learning-intake-loop-closeout-workflow (PRD-ENGINEERING-021) [test_tier_required]: 将 loop engineering 的学习回流落地为 source-of-truth `Learning Intake / Loop Closeout` 梯子，同步 bootstrap/router/closeout 技能，并用 workflow behavior eval 固化 minimal record、reflection 默认行为与 working_memory 边界。 Trace: .pm/tasks/task_b16a1b14eecd460c8e6537bb609b9a61.yaml
 
 - [x] TASK-ENGINEERING-001 (PRD-ENGINEERING-001) [test_tier_required]: 完成 engineering PRD 改写，建立工程治理主文档。

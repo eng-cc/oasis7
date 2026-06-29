@@ -12,7 +12,7 @@
 - 节奏层：季度正常审查 + 重大治理变化后的临时加审。
 - 输入层：trend baseline + `doc-governance-check.sh`。
 - 模板层：审查模板与 remediation 模板。
-- 回写层：project / devlog / handoff 追踪。
+- 回写层：project / `.pm` execution log / role review evidence 追踪。
 
 ## 3. 关键接口 / 入口
 - `doc/engineering/governance/engineering-quarterly-governance-review-cycle-2026-03-11.prd.md`

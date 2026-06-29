@@ -37,4 +37,5 @@
 
 ## 历史审计留痕
 - 2026-03 legacy 文档迁移 closure / handoff 记录已退役删除；历史迁移证据保留在 `doc/core/reviews/round-*` logs 与 git history，当前迁移规则入口为 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 `.pm/tasks/task_<32hex>.execution.md`。
+- 2026-03 engineering governance producer->QA 一次性 handoff 记录已退役删除；当前 governance trend / quarterly review 证据入口为 `.pm/tasks/task_<32hex>.execution.md`、pre-PR local role review packet 与 workflow source-of-truth。
 - 2026-03 全量 PRD 审读机制三件套已退役删除；历史审读证据保留在 `doc/core/reviews/round-*` logs，当前新增/变更文档追踪以模块入口、`prd.index.md`、`project.md`、`prd.md` 与现行 doc governance 规则为准。
