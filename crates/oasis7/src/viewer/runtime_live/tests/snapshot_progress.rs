@@ -1,36 +1,70 @@
 use super::*;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::thread;
+use std::time::{Duration, Instant};
+
+const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
 
 fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+    listener
+        .set_nonblocking(true)
+        .expect("set test listener nonblocking");
     let bind = listener.local_addr().expect("listener addr");
     let serve = thread::spawn(move || {
-        for _ in 0..2 {
-            let (mut stream, _) = listener.accept().expect("accept probe connection");
-            let mut request = [0_u8; 1024];
-            let bytes = stream.read(&mut request).expect("read request");
-            let request_text = String::from_utf8_lossy(&request[..bytes]);
-            let body = if request_text.contains("GET /v1/provider/info") {
-                r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
-            } else {
-                r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
-            };
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                body.len(),
-                body
-            );
-            let _ = stream.write_all(response.as_bytes());
+        let started_at = Instant::now();
+        let mut last_served_at = started_at;
+        let mut served = 0_usize;
+        while started_at.elapsed() < Duration::from_secs(2)
+            && (served < 2 || last_served_at.elapsed() < Duration::from_millis(100))
+        {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request = [0_u8; 1024];
+                    let bytes = stream.read(&mut request).expect("read request");
+                    let request_text = String::from_utf8_lossy(&request[..bytes]);
+                    let body = if request_text.contains("GET /v1/provider/info") {
+                        r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
+                    } else {
+                        r#"{"ok":true,"status":"ready","uptime_ms":42,"last_error":null,"queue_depth":0}"#
+                    };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    served += 1;
+                    last_served_at = Instant::now();
+                }
+                Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(err) => panic!("accept probe connection: {err}"),
+            }
         }
     });
     (format!("http://{bind}"), serve)
 }
 
+fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str) {
+    server
+        .llm_sidecar
+        .bind_agent_player(
+            agent_id,
+            SNAPSHOT_PLAYER_ID,
+            Some("snapshot-public-key"),
+            false,
+        )
+        .expect("bind snapshot player to agent");
+}
+
 #[test]
 fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -63,7 +97,7 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
         .next()
         .cloned()
         .expect("seed agent");
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let context = snapshot
         .model
         .agent_execution_debug_contexts
@@ -122,7 +156,9 @@ fn runtime_provider_compat_snapshot_exposes_agent_execution_debug_contexts() {
 
 #[test]
 fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -151,7 +187,7 @@ fn runtime_provider_compat_snapshot_tracks_alias_fallback_reason() {
         .next()
         .cloned()
         .expect("seed agent");
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let context = snapshot
         .model
         .agent_execution_debug_contexts
@@ -179,7 +215,7 @@ fn compat_snapshot_exposes_player_gameplay_snapshot() {
             .expect("runtime server");
 
     let mut server = server;
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -227,8 +263,17 @@ fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
     .expect("runtime server");
+    let primary_agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -252,8 +297,99 @@ fn compat_snapshot_requires_starter_oc_before_first_agent_chat() {
 }
 
 #[test]
+fn compat_snapshot_does_not_publish_player_bound_actions_without_bound_agent() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(gameplay.agent_claim.is_none());
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "chat_first_agent")
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_smelter_mk1")
+    );
+}
+
+#[test]
+fn compat_snapshot_with_unbound_starter_only_publishes_first_agent_claim_for_unbound_player() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    if !server
+        .world
+        .state()
+        .agents
+        .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    {
+        server
+            .world
+            .submit_action(crate::runtime::Action::RegisterAgent {
+                agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+                pos: crate::viewer::gameplay_actions::formal_release_default_first_agent_spawn_pos(
+                )
+                .expect("formal release starter spawn"),
+            });
+        server.world.step().expect("register unbound starter agent");
+    }
+
+    let snapshot = server.compat_snapshot(Some("unbound-player"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "chat_first_agent")
+    );
+    assert!(
+        !gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "build_factory_smelter_mk1")
+    );
+}
+
+#[test]
 fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
-    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     clear_runtime_provider_env();
     let (base_url, serve) = spawn_runtime_provider_probe_server();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
@@ -340,7 +476,7 @@ fn compat_snapshot_surfaces_agent_override_causality_from_runtime_events() {
         Some(causality),
     );
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -415,7 +551,7 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some("player-snapshot"));
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -462,127 +598,6 @@ fn compat_snapshot_surfaces_control_feeling_contract_fields_from_gameplay_feedba
 }
 
 #[test]
-fn empty_entity_guard_marks_gameplay_snapshot_blocked() {
-    let mut gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &crate::runtime::WorldState::default(),
-        true,
-        None,
-        None,
-        true,
-        None,
-        false,
-        None,
-    );
-    super::super::gameplay_snapshot::apply_runtime_snapshot_empty_entities_blocker(
-        &mut gameplay,
-        true,
-        true,
-    );
-    assert_eq!(
-        gameplay.stage_status,
-        crate::simulator::PlayerGameplayStageStatus::Blocked
-    );
-    assert_eq!(
-        gameplay.blocker_kind.as_deref(),
-        Some("runtime_snapshot_empty_entities")
-    );
-    assert!(
-        gameplay
-            .blocker_detail
-            .as_deref()
-            .is_some_and(|detail| detail.contains("no agents/locations"))
-    );
-    let request_snapshot_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.protocol_action == "request_snapshot")
-        .expect("request_snapshot action should be available");
-    assert_eq!(request_snapshot_action.protocol_action, "request_snapshot");
-    let first_agent_claim_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
-        .expect("first-agent claim action should remain available");
-    assert_eq!(
-        first_agent_claim_action.target_agent_id.as_deref(),
-        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
-    );
-    assert!(first_agent_claim_action.disabled_reason.is_none());
-    assert!(
-        gameplay
-            .available_actions
-            .iter()
-            .filter(|action| {
-                action.protocol_action != "request_snapshot"
-                    && action.action_id != crate::viewer::ACTION_CLAIM_FIRST_AGENT
-            })
-            .all(|action| action.disabled_reason.is_some())
-    );
-}
-
-#[test]
-fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
-    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &crate::runtime::WorldState::default(),
-        true,
-        None,
-        None,
-        true,
-        None,
-        false,
-        None,
-    );
-    let action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
-        .expect("first-agent claim action");
-    assert_eq!(action.protocol_action, "gameplay_action.submit");
-    assert_eq!(
-        action.target_agent_id.as_deref(),
-        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
-    );
-    assert!(action.disabled_reason.is_none());
-}
-
-#[test]
-fn runtime_sync_blocker_preserves_empty_world_first_agent_claim() {
-    let feedback = crate::simulator::PlayerGameplayRecentFeedback {
-        action: "chain_sync".to_string(),
-        stage: "blocked".to_string(),
-        effect: "committed runtime sync failed before the viewer could observe new world state"
-            .to_string(),
-        intent_summary: None,
-        target_agent_id: None,
-        reason: Some("simulated missing persistence".to_string()),
-        hint: Some("wait for execution world persistence".to_string()),
-        delta_logical_time: 0,
-        delta_event_seq: 0,
-    };
-    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &crate::runtime::WorldState::default(),
-        false,
-        Some(&feedback),
-        None,
-        true,
-        None,
-        false,
-        None,
-    );
-
-    assert_eq!(
-        gameplay.blocker_kind.as_deref(),
-        Some("runtime_sync_unavailable")
-    );
-    let first_agent_claim_action = gameplay
-        .available_actions
-        .iter()
-        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
-        .expect("first-agent claim action should remain available");
-    assert!(first_agent_claim_action.disabled_reason.is_none());
-}
-
-#[test]
 fn compat_snapshot_exposes_player_agent_claim_overview() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
@@ -595,6 +610,7 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -640,7 +656,22 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
         });
     server.world.step().expect("request release");
 
-    let snapshot = server.compat_snapshot();
+    let anonymous_snapshot = server.compat_snapshot(None);
+    let anonymous_gameplay = anonymous_snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("anonymous player gameplay snapshot");
+    assert!(anonymous_gameplay.agent_claim.is_none());
+    assert!(anonymous_gameplay.available_actions.iter().all(|action| {
+        action.action_id != crate::viewer::ACTION_CLAIM_STARTER_OC
+            && action.action_id != "chat_first_agent"
+            && !action
+                .target_agent_id
+                .as_deref()
+                .is_some_and(|target| target == primary_agent_id.as_str())
+    }));
+
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -683,6 +714,7 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -730,7 +762,7 @@ fn compat_snapshot_flags_restricted_balance_as_ineligible_for_slot_2() {
         .step()
         .expect("claim slot 1 using restricted balance");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -762,6 +794,7 @@ fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
         .next()
         .cloned()
         .expect("primary agent");
+    bind_agent_for_snapshot(&mut server, primary_agent_id.as_str());
 
     server
         .world
@@ -785,7 +818,7 @@ fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
         )
         .expect("seed dedicated pool");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));
     let claim = snapshot
         .player_gameplay
         .as_ref()
@@ -822,7 +855,7 @@ fn compat_snapshot_promotes_to_post_onboarding_after_control_feedback() {
         delta_logical_time: 1,
         delta_event_seq: 1,
     });
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -862,7 +895,7 @@ fn compat_snapshot_ignores_zero_delta_completed_advanced_for_last_world_change()
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -890,7 +923,7 @@ fn compat_snapshot_keeps_first_session_loop_for_fresh_llm_session() {
     )
     .expect("runtime server");
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -932,7 +965,7 @@ fn compat_snapshot_keeps_first_session_loop_after_bootstrap_tick_blocked_feedbac
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -987,7 +1020,7 @@ fn compat_snapshot_blocks_first_session_when_chain_sync_is_unavailable() {
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -1042,7 +1075,7 @@ fn compat_snapshot_keeps_post_onboarding_blocked_after_confirmed_progress() {
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()
@@ -1088,7 +1121,7 @@ fn compat_snapshot_keeps_post_onboarding_no_progress_after_confirmed_progress() 
         delta_event_seq: 0,
     });
 
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let gameplay = snapshot
         .player_gameplay
         .as_ref()

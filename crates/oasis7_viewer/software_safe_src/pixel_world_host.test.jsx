@@ -270,6 +270,12 @@ function sampleSnapshot() {
       },
       agent_prompt_profiles: {},
       agent_execution_debug_contexts: {},
+      agent_player_bindings: {
+        "agent-0": "player-one",
+      },
+      agent_player_public_key_bindings: {
+        "agent-0": "abcdef0123456789abcdef0123456789",
+      },
     },
     player_gameplay: {
       stage_id: "post_onboarding",
@@ -363,7 +369,28 @@ function emptyWorldSnapshot() {
   snapshot.model.locations = {};
   snapshot.model.agent_prompt_profiles = {};
   snapshot.model.agent_execution_debug_contexts = {};
+  snapshot.model.agent_player_bindings = {};
+  snapshot.model.agent_player_public_key_bindings = {};
   return snapshot;
+}
+
+function bindFirstSnapshotAgentForTest(core, snapshot) {
+  const agentId = Object.keys(snapshot?.model?.agents || {})[0];
+  const playerId = snapshot?.model?.agent_player_bindings?.[agentId];
+  if (!agentId || !playerId) {
+    return;
+  }
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId,
+    publicKey: snapshot?.model?.agent_player_public_key_bindings?.[agentId] || "abcdef0123456789abcdef0123456789",
+    privateKey: "private-key-must-stay-hidden",
+    source: "local_test_api_ephemeral",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: agentId,
+  };
 }
 
 async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test_api=1&connect=0&locale=en") {
@@ -379,6 +406,7 @@ async function renderPixelWorldHost(snapshot = sampleSnapshot(), search = "?test
 
   core.setViewerLocale("en");
   core.injectSnapshot(snapshot);
+  bindFirstSnapshotAgentForTest(core, snapshot);
 
   const view = render(() => <PixelWorldHost locale="en" />);
   activeCleanup = view.unmount;
@@ -753,7 +781,7 @@ describe("pixel world host", () => {
 
     const commandDrawer = document.querySelector(".pixel-world-focus-drawer--command");
     expect(commandDrawer.open).toBe(true);
-    expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "false");
+    expect(commandDrawer.querySelector(".pixel-world-focus-command-tray")).toHaveAttribute("data-chat-ready", "true");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--target")).toHaveTextContent("agent=agent-0");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--blocker")).toHaveAttribute("data-blocker-present", "true");
     expect(commandDrawer.querySelector(".pixel-world-focus-command-chip--receipt")).toHaveTextContent("Blocked");

@@ -114,6 +114,14 @@ export function pixelWorldSelectedBlockerVisualFixture() {
       },
       agent_prompt_profiles: {},
       agent_execution_debug_contexts: {},
+      agent_player_bindings: {
+        "agent-0": "player-one",
+        "agent-1": "player-two",
+      },
+      agent_player_public_key_bindings: {
+        "agent-0": "abcdef0123456789abcdef0123456789",
+        "agent-1": "bbbbbb0123456789bbbbbb0123456789",
+      },
     },
     player_gameplay: {
       stage_id: "post_onboarding",
@@ -188,7 +196,19 @@ function installPixelWorldVisualFixtureHook() {
   if (!fixtureName || !fixtures[fixtureName]) {
     return null;
   }
-  core.injectSnapshot(fixtures[fixtureName](), { returnState: false });
+  const fixture = fixtures[fixtureName]();
+  core.injectSnapshot(fixture, { returnState: false });
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId: "player-one",
+    publicKey: "abcdef0123456789abcdef0123456789",
+    privateKey: "private-key-must-stay-hidden",
+    source: "local_test_api_ephemeral",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: "agent-0",
+  };
   core.applySelection({ kind: "agent", id: "agent-0" });
   return fixtureName;
 }
@@ -1187,7 +1207,10 @@ function PixelRawDiagnostics(props) {
 
 function PixelWorldFocusCommandSurface(props) {
   const locale = () => props.locale();
-  const agentId = () => core.selectedAgentId();
+  const agentId = () => {
+    const id = String(core.selectedAgentId() || "").trim();
+    return id && core.isAgentVisibleToCurrentSession(id) ? id : null;
+  };
   const authSurface = () => core.buildAuthSurfaceModel();
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const binding = () => core.selectedAgentBindingInfo();

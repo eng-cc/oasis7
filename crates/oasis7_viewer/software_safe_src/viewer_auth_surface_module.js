@@ -371,10 +371,10 @@ export function createViewerAuthSurfaceModule({
         title: localeText(locale, "所选 Agent 已绑定其他玩家", "Selected agent is already bound"),
         detail: localeText(
           locale,
-          "当前 agent 已被其他 player_session 占用。请换一个未占用 Agent，或等待原会话释放后再重试。",
-          "The selected agent is already owned by another player_session. Choose an unbound agent or wait for the previous session to release it.",
+          "当前 Agent 已被其他 player_session 占用。请回到当前账号的 Agent 入口，认领或等待同步自己的 Agent。",
+          "The selected Agent is already owned by another player_session. Return to this account's Agent entry, then claim or wait for your own Agent to sync.",
         ),
-        cta: localeText(locale, "重新申请并改绑 Agent", "Retry with a different agent"),
+        cta: localeText(locale, "回到我的 Agent 入口", "Return to My Agent Entry"),
       };
     }
     if (revokeReason === "runtime_registration_failed") {

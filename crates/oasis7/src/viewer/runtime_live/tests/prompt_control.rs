@@ -548,7 +548,7 @@ fn runtime_prompt_control_apply_updates_snapshot_and_bindings() {
             .as_deref()
             .is_some_and(|summary| summary.contains(agent_id.as_str()))
     );
-    let snapshot = server.compat_snapshot();
+    let snapshot = server.compat_snapshot(None);
     let profile = snapshot
         .model
         .agent_prompt_profiles

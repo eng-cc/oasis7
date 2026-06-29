@@ -14,7 +14,8 @@ use super::super::gameplay_actions::{
 };
 use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
 use super::control_plane::{
-    ensure_agent_player_access_runtime, map_auth_verify_error_code, normalize_optional_public_key,
+    ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
+    map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{IndustryStage, MaterialLedgerId, WorldState};
 use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback};
@@ -28,13 +29,14 @@ pub(super) fn supports_runtime_gameplay_actions() -> bool {
 pub(super) fn extend_available_actions(
     state: &WorldState,
     first_agent_id: Option<&str>,
+    first_agent_claim_target_available: bool,
     actions: &mut Vec<PlayerGameplayAction>,
 ) {
     if !supports_runtime_gameplay_actions() {
         return;
     }
     let Some(agent_id) = first_agent_id else {
-        if state.agents.is_empty() {
+        if first_agent_claim_target_available {
             actions.push(PlayerGameplayAction {
                 action_id: ACTION_CLAIM_FIRST_AGENT.to_string(),
                 label: "Claim first Agent".to_string(),
@@ -252,15 +254,14 @@ impl ViewerRuntimeLiveServer {
                 });
             }
             if self
-                .world
-                .state()
-                .agents
+                .llm_sidecar
+                .agent_player_bindings
                 .contains_key(request.target_agent_id.as_str())
             {
                 return Err(GameplayActionError {
-                    code: "first_agent_already_exists".to_string(),
+                    code: "first_agent_already_bound".to_string(),
                     message: format!(
-                        "gameplay_action `{}` can only run before {} exists",
+                        "gameplay_action `{}` can only run before {} is bound to a player",
                         request.action_id, request.target_agent_id
                     ),
                     action_id: Some(request.action_id.clone()),
@@ -318,7 +319,7 @@ impl ViewerRuntimeLiveServer {
                     target_agent_id: Some(request.target_agent_id.clone()),
                 });
             }
-            ensure_agent_player_access_runtime(
+            ensure_agent_player_binding_target_runtime(
                 &self.world,
                 &self.llm_sidecar,
                 request.target_agent_id.as_str(),
@@ -332,7 +333,7 @@ impl ViewerRuntimeLiveServer {
                 target_agent_id: err.agent_id,
             })?;
         } else if request.action_id == ACTION_CLAIM_STARTER_OC {
-            ensure_agent_player_access_runtime(
+            ensure_agent_player_binding_target_runtime(
                 &self.world,
                 &self.llm_sidecar,
                 request.target_agent_id.as_str(),
@@ -379,6 +380,51 @@ impl ViewerRuntimeLiveServer {
         }
 
         let accepted_at_tick = self.world.state().time;
+        if is_first_agent_claim
+            && self
+                .world
+                .state()
+                .agents
+                .contains_key(request.target_agent_id.as_str())
+        {
+            self.bind_first_agent_claim_player(
+                request.target_agent_id.as_str(),
+                verified.player_id.as_str(),
+                public_key.as_deref(),
+                &request,
+            )?;
+            self.set_latest_player_gameplay_feedback(PlayerGameplayRecentFeedback {
+                action: format!("gameplay_action:{}", request.action_id),
+                stage: "accepted".to_string(),
+                effect: format!(
+                    "bound existing unclaimed first Agent {} to player {}",
+                    request.target_agent_id, verified.player_id
+                ),
+                intent_summary: Some(format!(
+                    "bind existing first Agent {} to player {}",
+                    request.target_agent_id, verified.player_id
+                )),
+                target_agent_id: Some(request.target_agent_id.clone()),
+                reason: None,
+                hint: Some(
+                    "refresh the snapshot; the first Agent is now bound to this player".to_string(),
+                ),
+                delta_logical_time: 0,
+                delta_event_seq: 0,
+            });
+            return Ok(GameplayActionAck {
+                action_id: request.action_id,
+                target_agent_id: request.target_agent_id,
+                player_id: verified.player_id,
+                runtime_action_id: 0,
+                accepted_at_tick,
+                message: Some(
+                    "bound existing unclaimed first Agent; refresh the snapshot to continue"
+                        .to_string(),
+                ),
+            });
+        }
+
         let chain_status_bind = self
             .config
             .chain_status_bind
