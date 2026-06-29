@@ -1003,7 +1003,7 @@ fn build_replication_remote_writer_allowlist_uses_only_validator_keys() {
 #[test]
 fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_keys() {
     let validator_signers = ["bbbb".to_string(), "aaaa".to_string(), "bbbb".to_string()];
-    let explicit = vec!["cccc".to_string(), "aaaa".to_string()];
+    let explicit = vec!["cccc".to_string(), "aaaa".to_string(), "cccc".to_string()];
 
     let allowlist =
         build_replication_fetch_requester_allowlist(validator_signers.iter(), explicit.as_slice());
