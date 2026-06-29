@@ -99,14 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_dbd38392feb44872ab7a2f5c2c0e6b25
-    title: "local testnet world playtest startup"
-    module: visualization
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Start an isolated local testnet/world playtest stack and provide the player URL."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.yaml

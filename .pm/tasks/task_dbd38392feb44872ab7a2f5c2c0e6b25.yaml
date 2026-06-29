@@ -4,16 +4,23 @@ owner_role: tpm
 module: visualization
 worktree_hint: /Users/scc/ccwork/worktrees/oasis7-visualization-local-testnet-world-playtest-20260627
 execution_log_path: .pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.execution.md
-status: committed
+status: done
 priority: P2
 source_signal: null
 source_refs:
   - testing-manual.md
   - scripts/worktree-harness.sh
-doc_refs: []
+doc_refs:
+  - doc/testing/project.md
 related_prd: []
 acceptance:
   - "Start an isolated local testnet/world playtest stack and provide the player URL."
 handoff_to: []
-updated_at: 2026-06-27T22:52:08+08:00
+updated_at: 2026-06-29T17:24:43+08:00
 last_started_at: 2026-06-27T22:52:08+08:00
+last_claim_type: task_complete
+last_verify_command: "git diff --check"
+last_verified_at: 2026-06-29T17:24:34+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-29T17:24:41+08:00
