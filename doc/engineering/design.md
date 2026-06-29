@@ -17,7 +17,7 @@
 2. `doc/engineering/design.md`：工程治理的结构设计、规则载体与执行链路。
 3. `doc/engineering/project.md`：工程任务拆解、治理批次与状态。
 4. `doc/engineering/prd.index.md`：活跃专题入口。
-5. 下钻专题：`doc-governance/`、`rust-governance/`、`doc-migration/`、`self-evolution/` 等；历史 PRD 审读证据见 `doc/core/reviews/`。
+5. 下钻专题：`doc-governance/`、`rust-governance/`、`self-evolution/` 等；历史 PRD 审读与 legacy 迁移证据见 `doc/core/reviews/`。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
