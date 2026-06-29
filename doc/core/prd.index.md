@@ -20,9 +20,9 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/core/`：73 份文件
+- `doc/core/`：72 份文件
 - `doc/core/reviews/`：45 份文件
-- 根目录活跃专题：20 份文件
+- 根目录活跃专题：19 份文件
 - `doc/core/templates/`：2 份文件
 - `doc/core/checklists/`：1 份文件
 
@@ -30,7 +30,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `reviews/` | 45 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；默认按需进入 |
-| 根目录活跃专题 | 20 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移；2026-03 一次性 handoff 文件已退役删除 |
+| 根目录活跃专题 | 19 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移；2026-03 一次性 core handoff 文件已全量退役删除 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
 
@@ -66,6 +66,7 @@
 ## 审计 / 模板 / 清单补充入口
 | 文档路径 | 类型 | 用途 |
 | --- | --- | --- |
+| `doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md` | `audit` | TASK-CORE-005 ROUND-001~008 收口结论；替代已删除的 producer->QA 一次性 handoff 作为当前追溯入口 |
 | `doc/core/reviews/consistency-review-round-009.md` | `audit` | ROUND-009 文档消费入口与手册语义收口轮记录 |
 | `doc/core/reviews/consistency-review-round-010.md` | `audit` | ROUND-010 继续复审记录 |
 | `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md` | `audit` | 版本候选 go/no-go 留痕 |
@@ -78,5 +79,5 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - readiness / version / go-no-go / docs-hub / player-access-mode-contract 同步专题均属于本轮 `core` 活跃执行链。
-- 2026-03 release-candidate / next-round 一次性 producer/QA/LiveOps handoff 文件已退役删除；当前追溯以正式专题三件套、`doc/core/reviews/*`、`.pm` execution log 与 role review evidence 为准。
+- 2026-03 core 根目录一次性 producer/QA/LiveOps handoff 文件已全量退役删除；当前追溯以正式专题三件套、`doc/core/reviews/*`、`.pm` execution log 与 role review evidence 为准，其中 TASK-CORE-005 ROUND 收口从 `doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md` 进入。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。

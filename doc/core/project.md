@@ -19,6 +19,7 @@
     - `rg -n "PRD-ID|任务ID|测试层级|命令|证据路径|结论" doc/core/templates/prd-id-test-evidence-mapping.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-005 (PRD-CORE-003) [test_tier_required]: 对模块 PRD 按轮次进行一致性审查并形成审查记录（含轮次状态与文档级审计轮次字段，缺省按 0 处理）。
+  - 当前追溯入口：ROUND-001~008 记录、`doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md`、`.pm` execution log 与 role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
 - 模块设计总览：`doc/core/design.md`
   - 产物文件: `doc/core/reviews/consistency-review-round-001.md`
   - 验收命令 (`test_tier_required`):
