@@ -133,7 +133,7 @@ Example:
 - Task UID: task_19eba076d762496bbd49a9a5efda9b6c
 - Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-deletion-next
 - Source Branch: task/engineering-doc-legacy-semantics-deletion-next
-- Source Head: cc70502c2369efe2a7a46eae7d86d578b77f1824
+- Source Head: aa0aed0d68fd95d5a90469b333fda61b4945ed8f
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_19eba076d762496bbd49a9a5efda9b6c.yaml`; `.pm/tasks/task_19eba076d762496bbd49a9a5efda9b6c.execution.md`; `doc/engineering/{prd.index.md,prd.md,project.md,design.md}`; `doc/engineering/prd-review/prd-full-system-audit-2026-03-03.{prd,design,project}.md`; selected `doc/core/reviews/*` retired-topic label updates
 - Review Package: `.pm/scratch/task_19eba076d762496bbd49a9a5efda9b6c/review-packages/review-uncommitted-doc-legacy-cleanup-with-task-truth.diff`
