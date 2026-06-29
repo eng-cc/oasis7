@@ -261,7 +261,10 @@ fn expect_player_gameplay(
     server: &mut ViewerRuntimeLiveServer,
     context: &'static str,
 ) -> crate::simulator::PlayerGameplaySnapshot {
-    server.compat_snapshot(None).player_gameplay.expect(context)
+    server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect(context)
 }
 
 fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {

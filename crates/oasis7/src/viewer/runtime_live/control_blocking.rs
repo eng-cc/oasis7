@@ -108,9 +108,10 @@ impl ViewerRuntimeLiveServer {
         } else {
             Some("gameplay requires runtime live server running with --llm".to_string())
         };
-        let snapshot_bound_agent_id = current_player_id
+        let snapshot_player_id = current_player_id
             .map(str::trim)
-            .filter(|player_id| !player_id.is_empty())
+            .filter(|player_id| !player_id.is_empty());
+        let snapshot_bound_agent_id = snapshot_player_id
             .and_then(|player_id| self.llm_sidecar.bound_agent_for_player(player_id));
         let primary_agent_claim = snapshot_bound_agent_id.and_then(|agent_id| {
             build_player_agent_claim_snapshot(
@@ -119,7 +120,8 @@ impl ViewerRuntimeLiveServer {
                 self.world.governance_execution_policy().epoch_length_ticks,
             )
         });
-        let first_agent_claim_target_available = snapshot_bound_agent_id.is_none()
+        let first_agent_claim_target_available = snapshot_player_id.is_some()
+            && snapshot_bound_agent_id.is_none()
             && !self
                 .llm_sidecar
                 .agent_player_bindings
@@ -137,7 +139,7 @@ impl ViewerRuntimeLiveServer {
             first_agent_claim_target_available,
             primary_agent_claim,
         );
-        if snapshot_bound_agent_id.is_none() {
+        if snapshot_player_id.is_some() && snapshot_bound_agent_id.is_none() {
             player_gameplay.available_actions.retain(|action| {
                 action.target_agent_id.is_none()
                     || action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT
