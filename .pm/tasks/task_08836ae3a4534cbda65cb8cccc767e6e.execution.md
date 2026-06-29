@@ -130,3 +130,25 @@ Example:
 - Expected Result: current task is verified and closeout state is recorded; repo-wide unrelated `.pm` debt does not block PR creation when current task lint passes.
 - Actual Result: `claim-ready` returned `allowed_to_claim: true`; `task-closeout.sh` updated task status to `done` but exited 1 because repo-wide `pm-lint` found unrelated historical execution-log failures plus the now-fixed current review-request entry; fresh reruns after the fix returned `workflow-lint: OK (task_08836ae3a4534cbda65cb8cccc767e6e, phase=current)`, `doc-governance-check: OK`, and `git diff --check` passed.
 - Blocker / Next Action: no current-task blocker; commit closeout evidence and create PR.
+
+- Pre-PR Local Role Review: passed
+- Task UID: task_08836ae3a4534cbda65cb8cccc767e6e
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-3
+- Source Branch: task/engineering-doc-legacy-semantics-cleanup-next-3
+- Source Head: f75b91cad45e277a483aaac9eaad01311a6eb8ea
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md`; `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml`; `doc/.governance/module-root-md-allowlist.txt`; `doc/core/README.md`; `doc/core/prd.index.md`; `doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md`; `doc/core/project.md`; `doc/engineering/project.md`.
+- Review Package: `.pm/scratch/task_08836ae3a4534cbda65cb8cccc767e6e/review-packages/review-d4c3b88eb..7a5398acd.diff`
+- Role Selection Basis: changed `doc/core/*` product/system traceability and old handoff semantics require producer_system_designer; verification and evidence sufficiency require qa_engineer; cross-cutting doc governance, allowlist, stale references, and debt cleanup require repository_health_engineer. Post-review commits only recorded review evidence and task closeout metadata.
+- Review Roles: producer_system_designer, qa_engineer, repository_health_engineer
+- Review Evidence: producer_system_designer subagent `019f1354-dc78-7723-be49-5e94c570ee0f`; qa_engineer subagent `019f1354-ded2-7f71-9d0e-f9fdeb632da9`; repository_health_engineer subagent `019f1354-e185-76b1-9742-4a42ba007981`.
+- Review Verdicts: producer_system_designer scope/spec passed and role quality/risk passed; qa_engineer scope/spec passed and role quality/risk passed; repository_health_engineer scope/spec passed and role quality/risk passed after missing-ledger sink correction.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: repository_health P2 missing-ledger reference addressed in this execution log by changing `Slice Ledger` to `n/a` and naming `.pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md` as canonical review sink; producer_system_designer and qa_engineer returned no findings.
+- Verification Matrix: old doc deletion -> `test ! -e ...` passed; stale old-path references -> negative `rg` scan passed; stale old devlog sink -> negative `rg` scan passed; replacement evidence reachability -> TASK-CORE-005 `rg` scan passed; doc governance -> `./scripts/doc-governance-check.sh` passed; task workflow -> `./scripts/pm/workflow-lint.sh --task-uid task_08836ae3a4534cbda65cb8cccc767e6e --phase current` passed; whitespace -> `git diff --check` passed; closeout evidence -> `claim-ready` allowed and current task status is `done`.
+- Visual Evidence: n/a; docs/governance cleanup with no UI or visual surface.
+- WASM Evidence: n/a; no WASM or ABI surface changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook, or release ops surface changed.
+- LiveOps Evidence: n/a; no external messaging, community, incident, or player promise surface changed.
+- Residual Risk: low; deleted path may break historical external bookmarks, but in-repo current traceability and formal replacement evidence are preserved.
+- Slice Ledger: n/a; no persistent slice ledger artifact emitted, and this execution log is the canonical role review sink.
