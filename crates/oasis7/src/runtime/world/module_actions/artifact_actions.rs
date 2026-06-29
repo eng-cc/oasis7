@@ -179,7 +179,7 @@ impl World {
         listing: &ModuleArtifactListingState,
     ) -> Option<ModuleArtifactBidState> {
         let bids = self.state.module_artifact_bids.get(wasm_hash)?;
-        let mut best: Option<ModuleArtifactBidState> = None;
+        let mut best: Option<&ModuleArtifactBidState> = None;
         for bid in bids {
             if bid.price_kind != listing.price_kind {
                 continue;
@@ -208,10 +208,10 @@ impl World {
                 None => true,
             };
             if replace {
-                best = Some(bid.clone());
+                best = Some(bid);
             }
         }
-        best
+        best.cloned()
     }
 
     pub(super) fn try_match_module_listing(

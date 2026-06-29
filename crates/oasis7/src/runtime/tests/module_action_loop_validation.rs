@@ -252,3 +252,61 @@ fn module_artifact_bid_match_prefers_highest_price() {
     };
     assert_eq!(buyer_agent_id, "buyer-high");
 }
+
+#[test]
+fn module_artifact_bid_match_prefers_earlier_order_for_equal_price() {
+    let mut world = World::new();
+    register_agent(&mut world, "seller-1");
+    register_agent(&mut world, "buyer-first");
+    register_agent(&mut world, "buyer-second");
+    set_agent_resource(&mut world, "buyer-first", ResourceKind::Data, 20);
+    set_agent_resource(&mut world, "buyer-second", ResourceKind::Data, 20);
+
+    let wasm_bytes = b"module-action-loop-bid-equal-price-priority".to_vec();
+    let wasm_hash = util::sha256_hex(&wasm_bytes);
+    world.submit_action(Action::DeployModuleArtifact {
+        publisher_agent_id: "seller-1".to_string(),
+        wasm_hash: wasm_hash.clone(),
+        wasm_bytes,
+    });
+    world.step().expect("deploy artifact");
+
+    world.submit_action(Action::PlaceModuleArtifactBid {
+        bidder_agent_id: "buyer-first".to_string(),
+        wasm_hash: wasm_hash.clone(),
+        price_kind: ResourceKind::Data,
+        price_amount: 9,
+    });
+    world.step().expect("place first bid");
+    let first_bid_order_id = match &world.journal().events.last().expect("first bid event").body {
+        WorldEventBody::Domain(DomainEvent::ModuleArtifactBidPlaced { order_id, .. }) => *order_id,
+        other => panic!("expected module artifact bid placed event: {other:?}"),
+    };
+    world.submit_action(Action::PlaceModuleArtifactBid {
+        bidder_agent_id: "buyer-second".to_string(),
+        wasm_hash: wasm_hash.clone(),
+        price_kind: ResourceKind::Data,
+        price_amount: 9,
+    });
+    world.step().expect("place second bid");
+
+    world.submit_action(Action::ListModuleArtifactForSale {
+        seller_agent_id: "seller-1".to_string(),
+        wasm_hash,
+        price_kind: ResourceKind::Data,
+        price_amount: 7,
+    });
+    world.step().expect("list and match");
+
+    let event = world.journal().events.last().expect("sale event");
+    let WorldEventBody::Domain(DomainEvent::ModuleArtifactSaleCompleted {
+        buyer_agent_id,
+        bid_order_id,
+        ..
+    }) = &event.body
+    else {
+        panic!("expected sale completion event: {:?}", event.body);
+    };
+    assert_eq!(buyer_agent_id, "buyer-first");
+    assert_eq!(*bid_order_id, Some(first_bid_order_id));
+}
