@@ -9,7 +9,6 @@ priority: P2
 source_signal: null
 source_refs:
   - doc/engineering/project.md
-doc_refs: []
 doc_refs:
   - doc/engineering/project.md
 related_prd:
