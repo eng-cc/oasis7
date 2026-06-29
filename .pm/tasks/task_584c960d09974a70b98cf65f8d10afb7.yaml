@@ -1,0 +1,28 @@
+task_uid: task_584c960d09974a70b98cf65f8d10afb7
+title: "Continue engineering performance and abstraction optimization"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-6
+execution_log_path: .pm/tasks/task_584c960d09974a70b98cf65f8d10afb7.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/project.md
+related_prd:
+  - PRD-ENGINEERING
+acceptance:
+  - "Repository-health/performance slice identifies one concrete non-duplicate performance or abstraction improvement opportunity."
+  - "Implement the selected bounded optimization with behavior-preserving tests or focused verification."
+  - "Update task/project trace evidence and pass focused verification, formatting, workflow, doc-governance, and diff hygiene checks."
+handoff_to: []
+updated_at: 2026-06-29T13:59:00+08:00
+last_claim_type: task_complete
+last_verify_command: "bash -lc './scripts/cargo-dev.sh test -p oasis7_net admissible_request_peers -- --nocapture && ./scripts/cargo-dev.sh fmt --all --check && bash scripts/doc-governance-check.sh && ./scripts/pm/workflow-lint.sh --task-uid task_584c960d09974a70b98cf65f8d10afb7 --phase current && git diff --check'"
+last_verified_at: 2026-06-29T13:58:58+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_started_at: 2026-06-29T13:57:55+08:00
+last_closed_at: 2026-06-29T13:58:59+08:00

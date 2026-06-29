@@ -183,25 +183,27 @@ fn blocked_and_soft_deprioritized_peers(
     (hard_blocked_peers, soft_deprioritized_peers)
 }
 
-fn request_candidate_peers_from_healths(
+pub(super) fn request_candidate_peers_from_healths(
     peers: Vec<PeerId>,
     hard_blocked_peers: &HashSet<PeerId>,
     soft_deprioritized_peers: &HashSet<PeerId>,
 ) -> Vec<PeerId> {
-    let preferred = peers
-        .iter()
-        .copied()
-        .filter(|peer_id| {
-            !hard_blocked_peers.contains(peer_id) && !soft_deprioritized_peers.contains(peer_id)
-        })
-        .collect::<Vec<_>>();
+    let mut preferred = Vec::new();
+    let mut fallback = Vec::new();
+    for peer_id in peers {
+        if hard_blocked_peers.contains(&peer_id) {
+            continue;
+        }
+        if soft_deprioritized_peers.contains(&peer_id) {
+            fallback.push(peer_id);
+        } else {
+            preferred.push(peer_id);
+        }
+    }
     if !preferred.is_empty() {
         return preferred;
     }
-    peers
-        .into_iter()
-        .filter(|peer_id| !hard_blocked_peers.contains(peer_id))
-        .collect()
+    fallback
 }
 
 fn active_transport_peers_from_healths(
