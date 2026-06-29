@@ -177,3 +177,12 @@ Example:
 - Expected Result: helper preflight passes, branch is pushed, and a PR is created.
 - Actual Result: preflight passed with Pre-PR Local Role Review `passed`; branch pushed to origin; PR created at `https://github.com/eng-cc/oasis7/pull/734`.
 - Blocker / Next Action: no blocker; PR purpose decision `normal_pr_ci_watch`. Continue watching GitHub required checks, mergeability, PR comments, and review threads; `REVIEW_REQUIRED` and `BEHIND` are informational unless GitHub merge path rejects or other blockers appear.
+
+## 2026-06-29 11:19:00 CST / tpm
+- 完成内容: Addressed PR review comment on ROUND-008 active totals.
+- 遗留事项: push fix, resolve thread, rerun GitHub checks, merge, and cleanup.
+- Action: Verified Codex review finding as valid: after retiring a second ROUND-008 row, active totals still reported 365/347/16 while retired rows are excluded by the legend. Updated active totals in `round-008-reviewed-files.md` and `round-008-design-backfill-priority-list.md`.
+- Validation Command: `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_19eba076d762496bbd49a9a5efda9b6c --phase current`; `git diff --check`; `rg -n '363|346|15|retired 行|缺失' doc/core/reviews/round-008-reviewed-files.md doc/core/reviews/round-008-design-backfill-priority-list.md | head -n 30`
+- Expected Result: active ROUND-008 totals exclude retired rows and local docs/task checks remain green.
+- Actual Result: `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` clean; targeted scan shows 363 active total/completed/backfilled, 346 `must_backfill`, 15 `should_backfill`, and 2 `defer_allowed`.
+- Blocker / Next Action: no blocker; commit/push and resolve PR thread `PRRT_kwDORHhWec6M2cWK`.
