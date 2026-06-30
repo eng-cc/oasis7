@@ -99,17 +99,3 @@ tasks:
     handoff_to: []
     status: committed
     task_path: .pm/tasks/task_b442769f7ef74d01894f4b8405c21301.yaml
-  - task_uid: task_ab539eb94b724db6b6f2a51846314fe3
-    title: "retire next legacy doc semantics"
-    module: engineering
-    priority: P2
-    source_signal: null
-    related_prd: []
-    acceptance:
-      - "Identify one bounded next documentation governance point with stale docs or stale semantics."
-      - "Delete obsolete current-surface documentation where canonical replacement exists."
-      - "Converge remaining current/live references to canonical docs without broad historical rewrites."
-      - "Pass doc governance, current task workflow lint, stale-reference checks, and PR review/merge flow."
-    handoff_to: []
-    status: committed
-    task_path: .pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.yaml
