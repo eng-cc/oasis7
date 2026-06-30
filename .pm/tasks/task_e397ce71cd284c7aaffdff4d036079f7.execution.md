@@ -160,3 +160,21 @@ Example:
 - LiveOps Evidence: n/a; no external messaging, player promise, incident, or community surface changed.
 - Residual Risk: Low. Risk is localized to prompt-tool pagination/count semantics and covered by focused regressions; normal PR required checks remain mandatory before merge.
 - Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl
+
+## 2026-06-30 09:47:00 CST / tpm
+- 完成内容: TASK CLOSEOUT ATTEMPTED. `task-closeout.sh` completed the task-local verification and updated task metadata to `status: done`, `last_claim_type: task_complete`, `last_verification_exit_code: 0`, `last_verification_status: verified`, and `last_closed_at`. The command then failed at repository-wide `pm-lint` due unrelated historical `.pm/tasks/*` execution-log formatting debt outside this task.
+- 遗留事项: Repo-wide historical `.pm` lint debt remains outside current scope. Current task-local workflow lint passed before closeout; task yaml shows done and verified. Continue to PR creation with the boundary recorded here.
+- Action: Record closeout boundary after repo-wide lint failure.
+- Validation Command: `rtk ./scripts/pm/task-closeout.sh --role tpm --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --verify-command "./scripts/cargo-dev.sh test -p oasis7 --no-default-features llm_agent_module_market_status_module_filters_wasm_hash -- --nocapture"`; `rtk sed -n '1,80p' .pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.yaml`
+- Expected Result: Current task verification is recorded; unrelated repo-wide lint failures are separated from task-local readiness.
+- Actual Result: TASK-LOCAL PASS / REPO-WIDE HISTORICAL PM-LINT FAIL. Task yaml shows done and verified with exit code 0; `task-closeout.sh` final exit code was 1 because historical non-current tasks have missing execution-log fields and invalid headings.
+- Blocker / Next Action: Run ready-for-PR claim and commit closeout metadata/evidence.
+
+## 2026-06-30 09:48:00 CST / tpm
+- 完成内容: CLAIM-READY EVIDENCE RECORDED. Ready-for-PR claim verification ran after final role review evidence and closeout boundary were written; current-task workflow lint passed.
+- 遗留事项: None for current task readiness evidence. PR preflight should now find the ready-for-PR claim record.
+- Action: Record explicit claim-ready command/result for `prepare-task-pr.sh` preflight.
+- Validation Command: `rtk ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --phase current"`
+- Expected Result: Claim verification exits 0 and reports `allowed_to_claim: true`.
+- Actual Result: PASS. `workflow-lint: OK (task_e397ce71cd284c7aaffdff4d036079f7, phase=current)`; `claim_type: ready_for_pr`; `verification_exit_code: 0`; `status: verified`; `allowed_to_claim: true`; `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
+- Blocker / Next Action: Commit closeout/claim evidence and rerun PR preflight.
