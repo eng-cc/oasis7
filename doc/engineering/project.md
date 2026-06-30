@@ -440,6 +440,7 @@
 - [x] world-runtime-root-legacy-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 root world-runtime PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/world-runtime/prd.md` / `doc/world-runtime/project.md`，并同步收紧 root allowlist 与 doc governance 豁免。 Trace: .pm/tasks/task_c0ad4ca7b8ee40dbb5a45598bd634cd9.yaml
 - [x] world-simulator-root-legacy-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 root world-simulator PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/world-simulator/prd.md` / `doc/world-simulator/project.md`，并同步收紧 root allowlist 与 doc governance 豁免。 Trace: .pm/tasks/task_afc61923b1404b20815ec81ce1c60a7e.yaml
 - [x] viewer-project-legacy-entry-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除孤立 Viewer project 旧入口壳，将当前 task metadata 引用收敛到 canonical `doc/world-simulator/viewer/README.md` Viewer 子域 landing page，并同步收紧 module-root markdown allowlist。 Trace: .pm/tasks/task_71a578da05dd454b821b43299eda45ca.yaml
+- [x] manifest-diff-ordered-key-merge-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: 优化 runtime manifest diff 的 JSON object key 合并路径，用有序双迭代替代每层 collect/sort/dedup，并用 ops-order regression 固定 base-only、target-only 与 nested both-present patch 顺序。 Trace: .pm/tasks/task_24271b58c442494cba84b80a8b9f0332.yaml
 
 ## File Structure / Affected Paths
 
