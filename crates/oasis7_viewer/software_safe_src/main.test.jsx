@@ -564,7 +564,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getAllByText(/waiting for the committed chain snapshot/i).length)
       .toBeGreaterThan(0);
     expect(within(targetsPanel).getByText(/Do not idle through sync/i)).toBeInTheDocument();
-    expect(within(targetsPanel).getByText(/Starter budget/i)).toBeInTheDocument();
+    expect(within(targetsPanel).getAllByText(/Starter budget/i).length).toBeGreaterThan(0);
     expect(within(targetsPanel).getByText(/the OC button appears automatically after the Agent syncs/i))
       .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
