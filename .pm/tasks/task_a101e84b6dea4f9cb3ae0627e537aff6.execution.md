@@ -61,3 +61,50 @@ Example:
 - Expected Result: one-shot role transfer docs are deleted, current/live docs point readers to formal README governance/release communication surfaces and `.pm` evidence, and broad historical topic PRD/design/project evidence remains untouched.
 - Actual Result: implemented minimal doc patch; preserved formal PRD/design/project surfaces, Moltbook 2026-03-19 channel handoffs, current runbooks/materials, and `.pm` task evidence.
 - Blocker / Next Action: no blocker; run governance and workflow verification.
+
+## 2026-06-30 09:34:11 CST / tpm
+- 完成内容: Requested fresh involved-role pre-PR local review for the fixed implementation target.
+- 遗留事项: integrate review findings, record passed review evidence, close out task, create PR, watch CI/comments, merge, and cleanup.
+- Review Trigger: pre-PR local role review
+- Review Scope: deletion of seven stale `doc/readme/governance/` 2026-03-11 one-shot role handoff briefs; convergence edits in `doc/readme/governance/README.md`, `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`, `doc/readme/README.md`, `doc/readme/prd.index.md`, `doc/engineering/project.md`, and task `.pm` evidence.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/review-packages/review-75af9be83..2a6bc89ac.diff`
+- Review Roles: repository_health_engineer, producer_system_designer, liveops_community, qa_engineer
+- Review Question: Confirm the cleanup deletes only obsolete one-shot handoff docs with canonical replacements, converges current/live references to formal README governance/release communication surfaces and `.pm` evidence, avoids broad historical rewrites, and has sufficient verification for PR readiness.
+- Evidence Available: `./scripts/doc-governance-check.sh` passed; `./scripts/pm/workflow-lint.sh --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --phase current` passed; `git diff --check` passed; stale-reference scan for deleted handoff IDs and filenames returned no matches in current docs/scripts/agents surfaces; `./scripts/doc-inventory-report.sh | rg -n 'readme|doc/readme/governance'` reported `readme=116` and `doc/readme/governance=69`.
+- Expected Return Contract: findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/slice-ledger.jsonl`
+- Formal Sink: `.pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.execution.md`
+
+## 2026-06-30 09:46:03 CST / tpm
+- 完成内容: Integrated pre-PR local role review findings and reran final documentation verification.
+- 遗留事项: close out task, create PR, watch CI/comments, merge, and cleanup.
+- Action: Addressed repository_health, producer_system_designer, and liveops_community findings that current reader-facing density counts still showed old `76` / `123` / `90` values after deletion; updated `doc/readme/governance/README.md`, `doc/readme/prd.index.md`, and `doc/readme/README.md` to `doc/readme/governance=69` and `doc/readme=116`.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: commit `62e3fe3578f354eea42ad72acc77ce57a7286e2b`; `./scripts/doc-inventory-report.sh | rg -n 'readme|doc/readme/governance'` returned `readme=116` and `doc/readme/governance=69`; current-surface stale-count scan no longer finds target stale count forms in `doc/readme/README.md`, `doc/readme/prd.index.md`, or `doc/readme/governance/README.md`.
+- Historical Evidence Boundary: repository_health noted deleted-path references remain in historical `.pm` task evidence; this is not treated as a current-reader blocker because this task intentionally avoids broad historical `.pm` evidence rewrites and converges only current docs/live semantics.
+- Validation Command: `./scripts/doc-governance-check.sh`; `./scripts/pm/workflow-lint.sh --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --phase current`; `git diff --check`; `rg -n --hidden 'HANDOFF-README-002|HANDOFF-README-003|HANDOFF-README-004|HANDOFF-README-006|HANDOFF-README-008|HANDOFF-README-010|producer-to-qa-task-readme-002|producer-to-qa-task-readme-003|producer-to-qa-task-readme-004|qa-to-liveops-task-readme-006|liveops-to-producer-task-readme-006|liveops-to-producer-task-readme-008|producer-to-qa-task-readme-010' README.md doc/readme doc/engineering .agents scripts --glob '*.md' --glob '*.yaml' --glob '*.sh'`.
+- Expected Result: governance checks pass, current task workflow remains valid, no whitespace errors, and no stale deleted handoff IDs or filenames remain in current docs/scripts/agents surfaces.
+- Actual Result: `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed; stale-reference scan returned no current-surface matches.
+- Blocker / Next Action: no blocker; record passed pre-PR local role review packet.
+
+- Pre-PR Local Role Review: passed
+- Task UID: task_a101e84b6dea4f9cb3ae0627e537aff6
+- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7`
+- Source Branch: `task/engineering-doc-legacy-semantics-cleanup-next-7`
+- Source Head: `62e3fe3578f354eea42ad72acc77ce57a7286e2b`
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.execution.md`; `.pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.yaml`; `doc/engineering/project.md`; `doc/readme/README.md`; `doc/readme/governance/README.md`; seven deleted `doc/readme/governance/*task-readme-00*.md` one-shot handoff briefs; `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`; `doc/readme/prd.index.md`.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/review-packages/review-75af9be83..62e3fe357.diff`
+- Role Selection Basis: changed README governance/current landing surfaces, release communication template semantics, public/current doc navigation, task verification claim, and cross-cutting stale-doc deletion; explicit includes from path/claim risk are repository_health_engineer, producer_system_designer, liveops_community, and qa_engineer.
+- Review Roles: repository_health_engineer, producer_system_designer, liveops_community, qa_engineer
+- Review Evidence: repository_health_engineer reported scoped deletion and canonical replacement surfaces are sound, with P2 stale-count finding addressed by `62e3fe357`; producer_system_designer reported product/system semantic direction is sound, with P2 stale-count finding addressed by `62e3fe357`; liveops_community reported release/community chain remains discoverable and no live runbooks were deleted, with P3 stale-count finding addressed by `62e3fe357`; qa_engineer reported no additional blocking checks needed for this docs-only cleanup and residual risk is only that final review evidence must be committed.
+- Review Verdicts: repository_health_engineer scope/spec partially compliant before stale-count fix and acceptable after addressed finding, role risk localized to reader clarity; producer_system_designer mostly compliant before stale-count fix and low risk after addressed finding; liveops_community mostly compliant with low release/community risk after addressed finding; qa_engineer compliant with low PR risk.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: `62e3fe3578f354eea42ad72acc77ce57a7286e2b`; `doc-governance-check: OK`; current task `workflow-lint: OK`; `git diff --check` passed; stale-reference scan returned no current-surface matches; inventory reports `readme=116` and `doc/readme/governance=69`.
+- Verification Matrix: deleted obsolete one-shot handoff docs -> file absence and stale-reference scan -> seven deleted files absent and no current-surface stale filename/ID matches; current README governance/index counts -> inventory report and count scan -> `readme=116`, `governance=69`, no stale 76/123/90 current target forms; release communication approval chain -> review package and liveops review -> formal brief/template/announcement PRD surfaces and `.pm` evidence remain; workflow/task evidence -> workflow lint -> OK.
+- Visual Evidence: n/a; docs-only governance cleanup with no player-visible UI or generated visual assets.
+- WASM Evidence: n/a; no wasm/runtime artifacts changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook execution, or release packaging surface changed.
+- LiveOps Evidence: liveops_community review confirmed release communication approval chain remains discoverable, Moltbook/current channel runbooks are preserved, deleted files were one-shot handoff briefs rather than live channel runbooks, and root README remains `limited playable technical preview`.
+- Residual Risk: historical `.pm` evidence may still mention deleted path names as archived task records; intentionally out of scope for this current-doc cleanup and suitable only for a separate PM evidence-retention policy task if needed.
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/slice-ledger.jsonl`
