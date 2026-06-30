@@ -121,7 +121,7 @@ write_project_trace() {
   fi
   cat >> "$SMOKE_WORKTREE/doc/engineering/project.md" <<EOF
 
-- [x] PREPARE-TASK-PR-SMOKE [test_tier_required]: fixture task for prepare-task-pr workflow preflight. Trace: .pm/tasks/$TASK_UID.yaml
+- [x] prepare-task-pr-smoke (PRD-ENGINEERING-999) [test_tier_required]: fixture task for prepare-task-pr workflow preflight. Trace: #123 ($TASK_UID)
 EOF
 }
 
@@ -288,6 +288,7 @@ run_prepare() {
   : > "$git_log"
   PATH="$TMPDIR/bin:$PATH" \
     PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+    PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
     TEST_GH_LOG="$gh_log" \
     TEST_GIT_LOG="$git_log" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
@@ -323,22 +324,23 @@ eval "$helper_functions"
 assert_roles_for_path() {
   local path="$1"
   local expected_role="$2"
+  local expected_qa="${3:-no}"
   local roles
   roles="$(required_review_roles_from_paths "$path")"
   if [[ ",$roles," != *",$expected_role,"* ]]; then
     echo "expected $path to require $expected_role, got $roles" >&2
     exit 1
   fi
-  if [[ ",$roles," != *",qa_engineer,"* ]]; then
+  if [[ "$expected_qa" == "yes" && ",$roles," != *",qa_engineer,"* ]]; then
     echo "expected $path to require qa_engineer, got $roles" >&2
     exit 1
   fi
 }
 
-assert_roles_for_path "doc/engineering/workflow/source-of-truth.md" "producer_system_designer"
-assert_roles_for_path ".github/workflows/rust.yml" "repository_health_engineer"
-assert_roles_for_path "scripts/ci-tests.sh" "repository_health_engineer"
-assert_roles_for_path "scripts/plan-rust-required-scope.sh" "repository_health_engineer"
+assert_roles_for_path "doc/engineering/workflow/source-of-truth.md" "producer_system_designer" "yes"
+assert_roles_for_path ".github/workflows/rust.yml" "repository_health_engineer" "yes"
+assert_roles_for_path "scripts/ci-tests.sh" "repository_health_engineer" "yes"
+assert_roles_for_path "scripts/plan-rust-required-scope.sh" "repository_health_engineer" "yes"
 assert_roles_for_path "doc/core/economy.md" "producer_system_designer"
 assert_roles_for_path "doc/game/rules.md" "producer_system_designer"
 assert_roles_for_path "doc/world-runtime/checkpoints.md" "runtime_engineer"
@@ -672,6 +674,30 @@ if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
 PY
 
+title_log="$TMPDIR/gh-title.log"
+title_git_log="$TMPDIR/git-title.log"
+title_out="$TMPDIR/title.out"
+title_err="$TMPDIR/title.err"
+run_prepare "$title_log" "$title_git_log" --create --title "Fixture PR title" >"$title_out" 2>"$title_err"
+
+python3 - "$title_log" "$title_err" "$SMOKE_BRANCH" "$TASK_UID" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[2]).read_text(encoding="utf-8")
+branch = sys.argv[3]
+task_uid = sys.argv[4]
+
+expected = f"pr create --base main --head {branch} --title Fixture PR title --body Task: {task_uid}"
+if not gh_lines or not gh_lines[0].startswith(expected):
+    raise SystemExit(f"expected titled gh pr create to include generated body, got: {gh_lines}")
+if stderr:
+    raise SystemExit(f"did not expect stderr on titled create path: {stderr}")
+PY
+
 behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
 behind_out="$TMPDIR/behind.out"
@@ -774,6 +800,8 @@ payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 review = payload["pre_pr_local_role_review"]
 if review["status"] != "passed":
     raise SystemExit(f"expected passed review status, got: {review}")
+if not review.get("evidence_sink"):
+    raise SystemExit(f"expected evidence_sink in review payload, got: {review}")
 if payload["review_request_command"] is not None:
     raise SystemExit(f"expected no reviewer request command, got: {payload['review_request_command']}")
 if review["findings_disposition"] != "no_findings":

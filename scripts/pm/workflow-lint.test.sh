@@ -17,7 +17,7 @@ cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
 cat > "$TMPDIR/doc/engineering/project.md" <<EOF
 # Engineering Project Fixture
 
-- [x] workflow-lint-pr-evidence-fixture [test_tier_required]: exercise post-pr evidence chain. Trace: .pm/tasks/$TASK_UID.yaml
+- [x] workflow-lint-pr-evidence-fixture [test_tier_required]: exercise post-pr evidence chain. Trace: #123 ($TASK_UID)
 EOF
 
 cat > "$TMPDIR/.pm/tasks/$TASK_UID.yaml" <<EOF

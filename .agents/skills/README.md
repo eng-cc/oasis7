@@ -57,7 +57,7 @@ GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-trut
 - PR 收到 review comments / requested changes，需要核实、修复、回证据并保持 thread resolution 与 merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`
 - 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 
-Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist/packet; default context delivery is full-thread/full-history fork, with explicit context packets only as delivery supplement/fallback.
+Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist; default context delivery is full-thread/full-history fork, with explicit context packets only as delivery supplement/fallback.
 
 ## Bounded Borrowing From `writing-skills`
 

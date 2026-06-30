@@ -13,6 +13,10 @@ trap cleanup EXIT
 mkdir -p "$TMPDIR/bin"
 cat > "$TMPDIR/state.json" <<'EOF'
 {
+  "reviewThreadsPageInfo": {
+    "hasNextPage": false,
+    "endCursor": null
+  },
   "threads": [
     {
       "id": "PRRT_1",
@@ -24,6 +28,10 @@ cat > "$TMPDIR/state.json" <<'EOF'
       "startLine": null,
       "originalStartLine": null,
       "comments": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
         "nodes": [
           {
             "id": "C_1",
@@ -45,6 +53,10 @@ cat > "$TMPDIR/state.json" <<'EOF'
       "startLine": null,
       "originalStartLine": null,
       "comments": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
         "nodes": [
           {
             "id": "C_2",
@@ -66,6 +78,10 @@ cat > "$TMPDIR/state.json" <<'EOF'
       "startLine": null,
       "originalStartLine": null,
       "comments": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
         "nodes": [
           {
             "id": "C_3",
@@ -155,7 +171,7 @@ from pathlib import Path
 
 state_path = Path(sys.argv[1])
 payload = json.loads(state_path.read_text(encoding="utf-8"))
-print(json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": payload["threads"]}}}}}))
+print(json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"pageInfo": payload.get("reviewThreadsPageInfo", {"hasNextPage": False, "endCursor": None}), "nodes": payload["threads"]}}}}}))
 PY
   exit 0
 fi
@@ -195,6 +211,8 @@ if payload["summary"]["reported_threads"] != 2:
     raise SystemExit("expected unresolved-only report to contain 2 threads")
 if payload["summary"]["unresolved_threads"] != 2:
     raise SystemExit("expected unresolved_threads=2")
+if payload["summary"]["partial_scan"]:
+    raise SystemExit("expected complete review-thread scan")
 if any(thread["is_resolved"] for thread in payload["threads"]):
     raise SystemExit("unresolved-only report should not contain resolved threads")
 PY
@@ -216,5 +234,29 @@ if payload["summary"]["unresolved_threads"] != 0:
 if payload["summary"]["resolved_threads"] != 3:
     raise SystemExit("expected all 3 threads to be resolved after mutation")
 PY
+
+python3 - "$TMPDIR/state.json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+state_path = Path(sys.argv[1])
+payload = json.loads(state_path.read_text(encoding="utf-8"))
+payload["reviewThreadsPageInfo"] = {"hasNextPage": True, "endCursor": "cursor-1"}
+state_path.write_text(json.dumps(payload), encoding="utf-8")
+PY
+
+PARTIAL_ERR="$TMPDIR/partial.err"
+if PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$TMPDIR/partial.json" 2>"$PARTIAL_ERR"; then
+  echo "expected partial review-thread scan to fail" >&2
+  exit 1
+fi
+if ! grep -q "review thread scan is partial" "$PARTIAL_ERR"; then
+  echo "expected explicit partial scan error" >&2
+  cat "$PARTIAL_ERR" >&2
+  exit 1
+fi
 
 echo "pr-review-thread-closeout.test: OK"

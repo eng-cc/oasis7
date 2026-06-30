@@ -9,8 +9,8 @@
 - intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override.
 - actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded.
-- mandatory context packet: fill the mandatory context checklist/packet below.
-- mandatory context checklist/packet:
+- mandatory context checklist: fill the mandatory context checklist below.
+- mandatory context checklist:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)
   - task truth: GitHub task issue + GitHub Project item/status + `.pm/github-project-sync/tasks.json` mapping record + canonical worktree/branch/base ref + PR link/status if present
@@ -39,8 +39,7 @@
 - intended model configuration: workflow source-of-truth `Default subagent runtime`
 - actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork
-- mandatory context packet: see mandatory context checklist/packet
-- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
+- mandatory context checklist: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`
@@ -51,5 +50,5 @@
 ## Notes
 - 一个 slice 一张卡；多角色并行时，必须逐张卡校验 disjoint scope checklist。
 - slice card 链接/引用必须回写 GitHub task issue evidence comments 对应条目；未写入 GitHub-backed task evidence 的派工不视为有效派工。
-- 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub-backed task truth 与 issue evidence 必须包含在 context packet 中。
+- 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub-backed task truth 与 issue evidence 必须包含在 mandatory context checklist 中。手工显式 context packet 仅作为 fallback 交付物。
 - 标准角色名以 `.agents/roles/*.md` 为准；当前包含 `producer_system_designer`、`gameplay_designer`、`game_visual_interaction_designer`、`runtime_engineer`、`blockchain_ops_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer`、`repository_health_engineer`、`liveops_community`。

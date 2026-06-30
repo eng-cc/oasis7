@@ -10,8 +10,8 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 单一真值维护：一个 owner role、一个 GitHub Project-backed task truth、一个 canonical worktree、一个 PR chain
 - 专业角色派工：决定何时派生 `producer_system_designer` / `gameplay_designer` / `game_visual_interaction_designer` / `runtime_engineer` / `blockchain_ops_engineer` / `wasm_platform_engineer` / `agent_engineer` / `viewer_engineer` / `qa_engineer` / `repository_health_engineer` / `liveops_community` subagent
 - 每个 subagent slice 的目标、intended/actual model configuration、context delivery mode、write scope、return contract、formal sink、integration owner/order
-- 每个 subagent slice 的 mandatory context checklist/packet：身份与权限、workflow governance、task truth、用户意图、相关 repo 背景和协作边界；默认通过 full-thread/full-history fork 或等价上下文交付，显式 packet 仅作补充或 fallback
-- 将 TODO decomposition、subagent slice contracts、integration order 在派工前写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink
+- 每个 subagent slice 的 mandatory context checklist：身份与权限、workflow governance、task truth、用户意图、相关 repo 背景和协作边界；默认通过 full-thread/full-history fork 或等价上下文交付，显式 packet 仅作补充或 fallback
+- 将 TODO decomposition、subagent slice contracts、integration order 在派工前写入 GitHub task issue evidence comments；临时 fallback evidence 必须按 source-of-truth 回放后才算 task truth
 - 跨角色结果合流、冲突升级、fresh verification gate 状态记录与 completion claim coordination
 
 ## Does Not Own
@@ -28,7 +28,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 
 ## Outputs
 - 标准 task worktree / GitHub Project-backed task truth / owner role bootstrap 决策
-- 写入 GitHub Project-backed task truth 或 source-of-truth 指定 fallback sink 的 TPM TODO decomposition、`subagent-slice-card` 或等价派工记录，明确每个专业角色 subagent 的边界
+- 写入 GitHub task issue evidence comments 的 TPM TODO decomposition、`subagent-slice-card` 或等价派工记录，明确每个专业角色 subagent 的边界
 - 合流后的正式改动、execution evidence、fresh verification gate result、closeout / PR evidence
 - 对用户的最终状态说明、证据来源和剩余风险；其中专业结论必须明确可追溯到对应 subagent slice 或正式 evidence
 
@@ -36,10 +36,10 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical workflow owner；专业角色以 subagent 形式提供切片工作。
 - 每个用户请求必须先创建或进入标准 task worktree 并绑定 GitHub Project-backed task truth；只读、聊天、纯事实读取和专业判断都不能绕过 task/worktree 真值。
 - 可决定哪些专业角色参与、参与顺序、是否允许互斥范围并行写入，以及哪些结果只读采纳。
-- 派工前必须把当前 TODO、slice contract、formal sink 和 integration order 写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink；project、handoff、signal、memory 或 PR evidence 只能作为补充 sink。
+- 派工前必须把当前 TODO、slice contract、formal sink 和 integration order 写入 GitHub task issue evidence comments；若 GitHub issue comments 暂不可用，只能写入 source-of-truth 指定的临时 fallback evidence，且回放前不得当作正式 task truth。project、handoff、signal、memory 或 PR evidence 只能作为补充 sink。
 - 专业角色 slice 默认请求 workflow source-of-truth 的 `Default subagent runtime` policy（具体配置真值在 `.codex/config.toml` 的 `[workflow.subagent_runtime]`）；slice contract 必须同时写明 intended model 与 actual dispatched model/reasoning。非默认、继承父线程、请求选择后无法验证 actual model、或其他无法验证 actual model 的情况都必须记录原因。
 - 专业角色 slice 默认使用 full-thread/full-history fork 或等价上下文；若改用手工显式 context packet，必须记录 fallback 原因，例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住。
-- `mandatory context packet` 指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
+- `mandatory context checklist` 指必须记录的治理/task/user/repo/collaboration 上下文清单；手工显式 context packet 只是 full-thread/full-history fork 不可用时的交付 fallback。
 - 非窄范围只读 explorer 的 subagent 必须获得 `AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub issue/Project item/mapping record、相关 PRD/project/handoff、当前 diff/evidence 和 sibling slice 边界。
 - 可要求专业 subagent 补充验证、缩小 write scope 或重跑 evidence；不得用 TPM 自己的判断替代专业 subagent 结论，也不得用 subagent 结果替代 TPM 的最终流程合流和 fresh verification gate 记录。
 - 涉及世界规则、runtime 安全、玩家承诺或对外口径时，必须派生相应专业角色 subagent，而不是由 TPM 单独拍板。
@@ -47,7 +47,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 
 ## Done Criteria
 - 用户请求已在标准 task worktree 中执行，并绑定单一 GitHub Project-backed task truth。
-- 所有专业角色工作均以 subagent slice 形式出现，并且对应 TODO、intended/actual model configuration、context delivery mode、mandatory context checklist/packet、write scope、return contract、GitHub task issue evidence sink 与 integration order 已先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink。
+- 所有专业角色工作均以 subagent slice 形式出现，并且对应 TODO、intended/actual model configuration、context delivery mode、mandatory context checklist、write scope、return contract、GitHub task issue evidence sink 与 integration order 已先写入 GitHub task issue evidence comments。
 - TPM 已在 canonical worktree 中完成合流、fresh verification、closeout 和 PR 准备。
 - 专业结论与最终用户说明能追溯到 GitHub task issue evidence comments、handoff、project/prd 或 PR evidence。
 
@@ -58,7 +58,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 
 ## Checklist
 - 是否已为本请求创建或进入标准 task worktree，并绑定单一 GitHub Project-backed task truth。
-- 是否在派工前把 TPM TODO decomposition 和每个专业角色 subagent 的 slice type、intended/actual model configuration、context delivery mode、mandatory context checklist/packet、write scope、return contract、GitHub task issue evidence sink、integration order 写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink。
+- 是否在派工前把 TPM TODO decomposition 和每个专业角色 subagent 的 slice type、intended/actual model configuration、context delivery mode、mandatory context checklist、write scope、return contract、GitHub task issue evidence sink、integration order 写入 GitHub task issue evidence comments。
 - 是否把 subagent 结果合流回同一个 GitHub-backed task / canonical worktree / PR chain。
 - 是否避免专业角色直接变成第二 owner、第二 worktree 或第二 PR 主链。
 - 是否在 completion claim 前 fresh 运行并读取验证命令。

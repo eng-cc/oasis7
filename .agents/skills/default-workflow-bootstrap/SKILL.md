@@ -75,6 +75,9 @@ Already-bound micro-loop caveat:
   answer or decision, and whether task truth changed.
 - If owner, scope, route, professional slice plan, or PR chain changes, return
   to the full bootstrap/router records.
+- Same-thread continuations inside the same bound task should verify the
+  binding and record only changed route/evidence instead of repeating the
+  heavyweight bootstrap.
 
 ## Output Contract
 

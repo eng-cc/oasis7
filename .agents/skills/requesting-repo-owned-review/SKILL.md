@@ -55,10 +55,11 @@ The formal path is:
    - include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched
    - include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched
    - include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched
-   - include `qa_engineer` when the PR claim depends on verification, release readiness, test strategy, or evidence sufficiency
+   - include `qa_engineer` when the PR changes verification helpers, testing docs, release/readiness claims, test strategy, or evidence sufficiency
    - include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
    - include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
    - treat `scripts/prepare-task-pr.sh --create` required-role inference as the minimum mechanical backstop, not as a replacement for task-history or claim-based role selection
+   - record explicit one-line skip rationale for adjacent roles that are plausible but not involved
 2. Freeze the review target:
    - changed files or path set
    - exact question to answer
@@ -72,10 +73,12 @@ The formal path is:
    - scope/spec compliance verdict
    - role quality/risk verdict
    - `residual_risk`
-5. Write the review request into a formal sink before or while dispatching:
-   - GitHub task issue evidence comments
-   - PR evidence document
-   - handoff when another role/subagent is reviewing
+5. Write the review request into GitHub task issue evidence comments before or while dispatching.
+   - PR evidence documents and handoffs may link to or summarize that request
+     only after the GitHub issue evidence sink exists.
+   - If GitHub task issue comments are temporarily unavailable, use only the
+     source-of-truth fallback evidence path and replay it to GitHub before
+     treating the request as task truth.
 6. Act on the result:
    - fix valid findings
    - record rejected/stale findings with code or doc evidence
@@ -95,7 +98,7 @@ The formal path is:
 - Evidence Available: <tests / docs / screenshots / logs>
 - Expected Return Contract: <findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk>
 - Slice Ledger: <path or n/a with reason>
-- Formal Sink: <GitHub task issue evidence comments | PR evidence | handoff>
+- Formal Sink: GitHub task issue evidence comments
 ```
 
 ## Passed Evidence Packet
@@ -126,6 +129,11 @@ role reviews and addressing findings:
 - Residual Risk: <text>
 - Slice Ledger: <path to slice ledger or n/a with reason>
 ```
+
+For small workflow/docs-only diffs, `./scripts/pm/record-pre-pr-review.sh` may
+generate the packet shape after the involved role review outcome is known. It is
+a formatting helper only; it does not replace dispatch, findings disposition, or
+fresh verification.
 
 ## Output Rules
 

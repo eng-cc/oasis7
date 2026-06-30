@@ -61,6 +61,7 @@ ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
 "$ROOT_DIR/scripts/pm/github-project-retire-tasks.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pr-review-thread-closeout.test.sh" >/dev/null
 
@@ -111,7 +112,7 @@ checks = [
             "### 1.2 Specialist Skill Reachability",
             "Specialist skills are not mandatory workflow phases.",
             "route, TODOs, and downstream handoff must still be recorded",
-            "mandatory context packet",
+            "mandatory context checklist",
             "identity and authority",
             "workflow governance",
             "task truth",
@@ -201,8 +202,8 @@ checks = [
             f"确认标准 task worktree / GitHub Project-backed task truth / owner role 真值",
             f"{bt}tpm{bt} 主 Agent + 专业角色 subagents",
             "TPM 的 TODO decomposition",
-            "mandatory context packet",
-            "必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink",
+            "mandatory context checklist",
+            "必须先写入 GitHub task issue evidence comments",
             "formal sink",
             f"{bt}liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
@@ -227,7 +228,7 @@ checks = [
             "Default subagent runtime",
             "[workflow.subagent_runtime]",
             "派工前必须把当前 TODO",
-            "mandatory context packet",
+            "mandatory context checklist",
             "workflow source-of-truth",
             "GitHub task issue evidence sink",
             "./scripts/pm/workflow-report.sh --phase start|close|review --role tpm",
@@ -266,7 +267,7 @@ checks = [
             "- role:",
             "- model configuration:",
             "`Default subagent runtime` by default",
-            "- mandatory context packet:",
+            "- mandatory context checklist:",
             "identity and authority:",
             "workflow governance:",
             "task truth:",
@@ -309,7 +310,7 @@ checks = [
             "- slice type:",
             "- model configuration:",
             "`Default subagent runtime` by default",
-            "- mandatory context packet:",
+            "- mandatory context checklist:",
             "identity and authority:",
             "workflow governance:",
             "task truth:",
@@ -660,7 +661,7 @@ scenarios = [
             "Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>",
             "LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>",
             "Slice Ledger: <path to slice ledger or n/a with reason>",
-            "Formal Sink: <GitHub task issue evidence comments | PR evidence | handoff>",
+            "Formal Sink: GitHub task issue evidence comments",
         ],
     },
     {
@@ -669,16 +670,16 @@ scenarios = [
         "surface": "AGENTS.md",
         "required_markers": [
             "其他专业角色必须以 subagent slice 形式参与",
-            "TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink",
+            "TPM 的 TODO decomposition、subagent slice contracts、mandatory context checklist 和 integration order 必须先写入 GitHub task issue evidence comments",
             "其他 formal sink 只能补充，不能替代正式 task evidence sink",
         ],
     },
     {
-        "id": "subagent_context_packet_is_mandatory_before_dispatch",
+        "id": "subagent_context_checklist_is_mandatory_before_dispatch",
         "expected_route": "TPM supplies identity, governance, task truth, user intent, repo context, and collaboration boundaries",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "The mandatory context packet must include:",
+            "The mandatory context checklist must include:",
             "identity and authority",
             "workflow governance",
             "task truth",
@@ -775,7 +776,7 @@ scenarios = [
         ],
     },
     {
-        "id": "tpm_planning_requires_task_execution_log_before_dispatch",
+        "id": "tpm_planning_requires_github_issue_evidence_before_dispatch",
         "expected_route": "TPM records TODO decomposition and slice contracts before delegated execution",
         "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
         "required_markers": [
@@ -792,6 +793,7 @@ scenarios = [
         "required_markers": [
             "Run the verification command now, read the result now, and only then make the claim.",
             "Do not use stale output, partial output, or earlier successful runs as proof.",
+            "current verification epoch",
             "./scripts/pm/claim-ready.sh",
         ],
     },
@@ -925,6 +927,15 @@ segments = [
         "evidence": {
             "helper": "workflow-lint",
             "root_pr_md_allowed": False,
+        },
+    },
+    {
+        "id": "pre_pr_review_packet_helper",
+        "command": "./scripts/pm/record-pre-pr-review.test.sh",
+        "status": "passed",
+        "evidence": {
+            "helper": "record-pre-pr-review",
+            "requires_explicit_role_evidence": True,
         },
     },
     {

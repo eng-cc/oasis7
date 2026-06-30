@@ -31,7 +31,8 @@ Checks:
      .agents/roles/*.md.
   10. Newly added `project.md` task rows must not introduce fresh `TASK-*`
       sequential identifiers; they must use `topic-slug (PRD-ID) ... Trace:
-      .pm/tasks/task_<32hex>.yaml` on a single line.
+      #<issue> (task_<32hex>)` or the equivalent GitHub issue URL on a single
+      line.
 USAGE
 }
 
@@ -376,7 +377,7 @@ check_added_project_task_row_policy() {
   local normalized_row=""
   local task_row_regex='^-[[:space:]]\[[ x]\][[:space:]]'
   local deprecated_task_regex='^-[[:space:]]\[[ x]\][[:space:]]TASK-'
-  local new_format_regex='^- \[[ x]\] [a-z0-9]+(-[a-z0-9]+)* \(PRD-[A-Z0-9_-]+(/[A-Z0-9_-]+)*\) \[test_tier_(required|full)\]( \+ \[test_tier_(required|full)\])?: .+ Trace: \.pm/tasks/task_[0-9a-f]{32}\.yaml$'
+  local new_format_regex='^- \[[ x]\] [a-z0-9]+(-[a-z0-9]+)* \(PRD-[A-Z0-9_-]+(/[A-Z0-9_-]+)*\) \[test_tier_(required|full)\]( \+ \[test_tier_(required|full)\])?: .+ Trace: ((#[0-9]+)|(https://github\.com/eng-cc/oasis7/issues/[0-9]+)) \(task_[0-9a-f]{32}\)$'
   local removed_task_rows=()
   local removed_task_row_key=""
 
