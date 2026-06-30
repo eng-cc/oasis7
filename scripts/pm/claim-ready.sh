@@ -106,6 +106,8 @@ if [[ -n "$TASK_UID" && "$CLAIM_LABEL" != "task_complete" ]]; then
 from __future__ import annotations
 
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -125,6 +127,47 @@ if not task_path.exists() and mapping_path.exists():
             "claim-ready: closed GitHub-backed task claim evidence is immutable for non-completion claims: "
             f"{task_uid} status={task_status} claim_type={claim_type}"
         )
+    raise SystemExit(0)
+if not task_path.exists() and not mapping_path.exists():
+    repo = "eng-cc/oasis7"
+    try:
+        payload = subprocess.check_output(
+            [
+                "gh",
+                "issue",
+                "list",
+                "-R",
+                repo,
+                "--search",
+                f"{task_uid} in:body",
+                "--json",
+                "number",
+                "--limit",
+                "5",
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        hits = json.loads(payload)
+        if isinstance(hits, list) and len(hits) == 1:
+            issue_payload = subprocess.check_output(
+                ["gh", "issue", "view", str(hits[0].get("number") or ""), "-R", repo, "--json", "body"],
+                text=True,
+                stderr=subprocess.PIPE,
+                timeout=180,
+            )
+            body = str(json.loads(issue_payload).get("body") or "")
+            status_match = re.search(r"^- status: `([^`]+)`$", body, re.MULTILINE)
+            task_status = status_match.group(1) if status_match else ""
+            if task_status in {"done", "deferred"}:
+                raise SystemExit(
+                    "claim-ready: closed GitHub-backed task claim evidence is immutable for non-completion claims: "
+                    f"{task_uid} status={task_status} claim_type={claim_type}"
+                )
+            raise SystemExit(0)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
+        pass
     raise SystemExit(0)
 
 fields: dict[str, str] = {}
@@ -256,6 +299,70 @@ PY
       --verified-at "$VERIFIED_AT" \
       --verification-exit-code "$VERIFY_EXIT_CODE" \
       --verification-status "$STATUS" >/dev/null
+  else
+    python3 - "$TASK_UID" "$RESULT_JSON" <<'PY'
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+task_uid = sys.argv[1]
+claim = json.loads(sys.argv[2])
+repo = "eng-cc/oasis7"
+try:
+    payload = subprocess.check_output(
+        [
+            "gh",
+            "issue",
+            "list",
+            "-R",
+            repo,
+            "--search",
+            f"{task_uid} in:body",
+            "--json",
+            "number",
+            "--limit",
+            "5",
+        ],
+        text=True,
+        stderr=subprocess.PIPE,
+        timeout=180,
+    )
+    hits = json.loads(payload)
+except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
+    hits = []
+if isinstance(hits, list) and len(hits) == 1 and hits[0].get("number"):
+    body = "\n".join(
+        [
+            "<!-- oasis7-pm-claim-verification -->",
+            f"Task UID: {task_uid}",
+            f"Claim Type: {claim['claim_type']}",
+            f"Verified At: {claim['verified_at']}",
+            f"Verification Exit Code: {claim['verification_exit_code']}",
+            f"Verification Status: {claim['status']}",
+            f"Verify Command: {claim['verify_command']}",
+            f"Claim Message: {claim['claim_message']}",
+            "",
+        ]
+    )
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+        handle.write(body)
+        body_path = Path(handle.name)
+    try:
+        subprocess.run(
+            ["gh", "issue", "comment", str(hits[0]["number"]), "-R", repo, "--body-file", str(body_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=180,
+        )
+    finally:
+        body_path.unlink(missing_ok=True)
+PY
   fi
 fi
 

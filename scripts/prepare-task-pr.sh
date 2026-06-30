@@ -444,6 +444,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
 import re
 import subprocess
 import sys
@@ -519,8 +520,95 @@ def emit(
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
 candidates: list[tuple[str, Path, str]] = []
 github_issue: dict[str, object] | None = None
+
+def parse_issue_body_fields(body: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    task_match = re.search(r"^task_uid:\s*(task_[0-9a-f]{32})$", body, re.MULTILINE)
+    if task_match:
+        fields["task_uid"] = task_match.group(1)
+    for key in ("worktree_hint",):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    return fields
+
+def github_issue_for_worktree(source_worktree: Path) -> dict[str, object] | None:
+    repo = "eng-cc/oasis7"
+    search_terms = [str(source_worktree), source_worktree.name]
+    for term in search_terms:
+        try:
+            search_payload = subprocess.check_output(
+                [
+                    "gh",
+                    "issue",
+                    "list",
+                    "-R",
+                    repo,
+                    "--search",
+                    f"{term} in:body",
+                    "--json",
+                    "number,url,title,state",
+                    "--limit",
+                    "10",
+                ],
+                text=True,
+            )
+            hits = json.loads(search_payload)
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            continue
+        if not isinstance(hits, list):
+            continue
+        matches: list[dict[str, object]] = []
+        for hit in hits:
+            if not isinstance(hit, dict) or not hit.get("number"):
+                continue
+            try:
+                issue_payload = subprocess.check_output(
+                    [
+                        "gh",
+                        "issue",
+                        "view",
+                        str(hit["number"]),
+                        "-R",
+                        repo,
+                        "--json",
+                        "body,number,title,url",
+                    ],
+                    text=True,
+                )
+                issue = json.loads(issue_payload)
+            except (subprocess.CalledProcessError, json.JSONDecodeError):
+                continue
+            fields = parse_issue_body_fields(str(issue.get("body") or ""))
+            if fields.get("worktree_hint") != str(source_worktree):
+                continue
+            task_uid = fields.get("task_uid") or ""
+            if not task_uid_re.fullmatch(task_uid):
+                continue
+            matches.append(
+                {
+                    "repo": repo,
+                    "number": int(issue.get("number") or hit["number"]),
+                    "url": str(issue.get("url") or hit.get("url") or ""),
+                    "task_uid": task_uid,
+                }
+            )
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            emit("missing", reason=f"multiple GitHub issues match worktree_hint {source_worktree}")
+    return None
+
 task_files = sorted(tasks_dir.glob("task_*.yaml")) if tasks_dir.is_dir() else []
 if task_files:
+    if os.environ.get("PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS") != "1":
+        emit(
+            "missing",
+            reason=(
+                "retired .pm/tasks files are present; GitHub Project mapping and "
+                "issue evidence comments must be the active pre-PR evidence source"
+            ),
+        )
     for task_file in task_files:
         text = task_file.read_text(encoding="utf-8")
         if f"worktree_hint: {source_worktree}" not in text:
@@ -541,31 +629,35 @@ if task_files:
         candidates.append((task_uid, root / execution_log_path, execution_log_path))
 else:
     mapping_path = root / ".pm/github-project-sync/tasks.json"
-    if not mapping_path.is_file():
-        emit("missing", reason=".pm task files absent and GitHub Project mapping missing")
-    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-    project = mapping.get("project") or {}
-    repo_name = str(project.get("repo") or "eng-cc/oasis7")
-    matched: list[dict[str, object]] = []
-    for uid, record in sorted((mapping.get("tasks") or {}).items()):
-        if str(record.get("worktree_hint") or "") == str(source_worktree):
-            record = dict(record)
-            record["task_uid"] = uid
-            matched.append(record)
-    if not matched:
-        emit("missing", reason=f"no GitHub Project task has worktree_hint {source_worktree}")
-    if len(matched) > 1:
-        emit("missing", reason=f"multiple GitHub Project tasks match worktree_hint {source_worktree}")
-    record = matched[0]
-    task_uid = str(record.get("task_uid") or "")
-    if not task_uid_re.fullmatch(task_uid):
-        emit("missing", reason=f"invalid mapped task_uid {task_uid}")
-    github_issue = {
-        "repo": repo_name,
-        "number": int(record.get("issue_number") or 0),
-        "url": str(record.get("issue_url") or ""),
-    }
-    candidates.append((task_uid, Path("/dev/null"), str(record.get("issue_url") or "")))
+    if mapping_path.is_file():
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        project = mapping.get("project") or {}
+        repo_name = str(project.get("repo") or "eng-cc/oasis7")
+        matched: list[dict[str, object]] = []
+        for uid, record in sorted((mapping.get("tasks") or {}).items()):
+            if str(record.get("worktree_hint") or "") == str(source_worktree):
+                record = dict(record)
+                record["task_uid"] = uid
+                matched.append(record)
+        if not matched:
+            emit("missing", reason=f"no GitHub Project task has worktree_hint {source_worktree}")
+        if len(matched) > 1:
+            emit("missing", reason=f"multiple GitHub Project tasks match worktree_hint {source_worktree}")
+        record = matched[0]
+        task_uid = str(record.get("task_uid") or "")
+        if not task_uid_re.fullmatch(task_uid):
+            emit("missing", reason=f"invalid mapped task_uid {task_uid}")
+        github_issue = {
+            "repo": repo_name,
+            "number": int(record.get("issue_number") or 0),
+            "url": str(record.get("issue_url") or ""),
+        }
+        candidates.append((task_uid, Path("/dev/null"), str(record.get("issue_url") or "")))
+    else:
+        github_issue = github_issue_for_worktree(source_worktree)
+        if not github_issue:
+            emit("missing", reason=f".pm task files and mapping cache absent; no GitHub issue matches worktree_hint {source_worktree}")
+        candidates.append((str(github_issue["task_uid"]), Path("/dev/null"), str(github_issue.get("url") or "")))
 
 if not candidates:
     emit("missing", reason=f"no task has worktree_hint {source_worktree}")
@@ -631,9 +723,8 @@ elif reviewed_source_head != source_head:
         log_path_rel,
         f".pm/tasks/{task_uid}.yaml",
         ".pm/registry/tasks.yaml",
+        ".pm/github-project-sync/tasks.json",
     }
-    if github_issue:
-        allowed_evidence_paths.add(".pm/github-project-sync/tasks.json")
     try:
         subprocess.check_call(
             ["git", "merge-base", "--is-ancestor", reviewed_source_head, source_head],
@@ -941,6 +1032,20 @@ if [[ "$CREATE_PR" == "1" ]]; then
     git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
   fi
   PR_URL="$("${CREATE_CMD[@]}")"
+  if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+    RECORD_PR_ERR="$(mktemp)"
+    if ! python3 "$ROOT_DIR/scripts/pm/github-project-task.py" record-pr "$SOURCE_WORKTREE" \
+      --task-uid "$LOCAL_ROLE_REVIEW_TASK_UID" \
+      --pr-url "$PR_URL" \
+      --role tpm \
+      --validation-command "$CREATE_CMD_RENDERED" \
+      --json >/dev/null 2>"$RECORD_PR_ERR"; then
+      RECORD_PR_FAILURE="$(cat "$RECORD_PR_ERR")"
+      rm -f "$RECORD_PR_ERR"
+      die "failed to record PR watch state for $LOCAL_ROLE_REVIEW_TASK_UID: $RECORD_PR_FAILURE"
+    fi
+    rm -f "$RECORD_PR_ERR"
+  fi
 fi
 
 LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"

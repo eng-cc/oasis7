@@ -59,6 +59,7 @@ ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
 "$ROOT_DIR/scripts/pm/github-project-sync.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-workflow.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-retire-tasks.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/fallback-evidence.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
@@ -145,6 +146,7 @@ checks = [
             "github-project-workflow.sh ... sync",
             "github-project-workflow.sh ... audit",
             "github-project-workflow.sh ... step3-gate",
+            "fallback-evidence.sh",
             "Lifecycle wrappers `new-task.sh`, `move-task.sh`",
         ],
     ),
@@ -903,13 +905,14 @@ segments = [
     },
     {
         "id": "github_backed_pm_runtime",
-        "command": "./scripts/pm/github-project-task.test.sh && ./scripts/pm/github-project-sync.test.sh && ./scripts/pm/github-project-workflow.test.sh && ./scripts/pm/github-project-retire-tasks.test.sh",
+        "command": "./scripts/pm/github-project-task.test.sh && ./scripts/pm/github-project-sync.test.sh && ./scripts/pm/github-project-workflow.test.sh && ./scripts/pm/github-project-retire-tasks.test.sh && ./scripts/pm/fallback-evidence.test.sh",
         "status": "passed",
         "evidence": {
             "task_adapter": "passed",
             "sync_adapter": "passed",
             "workflow_adapter": "passed",
             "retire_archive_adapter": "passed",
+            "fallback_evidence_adapter": "passed",
         },
     },
     {

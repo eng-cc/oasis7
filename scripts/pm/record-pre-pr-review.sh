@@ -132,6 +132,7 @@ from __future__ import annotations
 
 import json
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -145,6 +146,31 @@ if mapping_path.is_file():
     repo = str(project.get("repo") or repo)
     record = (mapping.get("tasks") or {}).get(task_uid) or {}
     issue = str(record.get("issue_number") or "")
+if not issue:
+    try:
+        payload = subprocess.check_output(
+            [
+                "gh",
+                "issue",
+                "list",
+                "-R",
+                repo,
+                "--search",
+                f"{task_uid} in:body",
+                "--json",
+                "number",
+                "--limit",
+                "5",
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        hits = json.loads(payload)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
+        hits = []
+    if isinstance(hits, list) and len(hits) == 1:
+        issue = str(hits[0].get("number") or "")
 print(f"MAPPED_REPO={shlex.quote(repo)}")
 print(f"MAPPED_ISSUE={shlex.quote(issue)}")
 PY

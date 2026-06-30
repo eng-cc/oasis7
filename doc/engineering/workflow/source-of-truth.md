@@ -143,8 +143,9 @@ scope, module, or PR chain changes.
 
 ### 1.2.3 GitHub Project-Backed PM Contract
 GitHub Issues + GitHub Project are the authoritative project-management
-surface for oasis7 tasks. Local files under `.pm/github-project-sync/` are a
-deterministic mirror/cache for scripts and audits, not a parallel task queue.
+surface for oasis7 tasks. Local files under `.pm/github-project-sync/` are
+generated mirrors/caches for scripts and audits, not a parallel task queue or
+per-PR truth artifact.
 
 - GitHub Issue is the task collaboration envelope.
 - GitHub Project item fields are authoritative for active queue/status views:
@@ -152,14 +153,17 @@ deterministic mirror/cache for scripts and audits, not a parallel task queue.
   cockpit views, and task-to-issue/project-item mapping.
 - `Task UID` remains the stable internal identity. GitHub issue numbers and
   Project item IDs are external object handles, not replacements for `task_uid`.
-- `.pm/github-project-sync/tasks.json` is the deterministic local mapping cache
-  from `task_uid` to issue/project item handles.
+- `.pm/github-project-sync/tasks.json`, when generated locally, is a
+  deterministic mapping cache from `task_uid` to issue/project item handles. It
+  is not required to be committed in ordinary task PRs; scripts must tolerate it
+  being absent or refresh it from GitHub/task issue evidence.
 - `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local
   archive for historical task metadata and evidence records. It is an audit
   bridge, not a planning queue.
 - Lifecycle wrappers `new-task.sh`, `move-task.sh`, `append-execution-log.sh`,
   `workflow-report.sh`, `task-closeout.sh`, and `claim-ready.sh` use GitHub
-  Issues/Project plus `.pm/github-project-sync/tasks.json`.
+  Issues/Project as task truth and may update a local generated mapping cache
+  when present or explicitly refreshed.
 - Execution evidence is recorded in GitHub task issue evidence comments.
 - role memory, task-scoped `working_memory`, signals, stage/gate state, and
   this workflow source-of-truth remain repo-local unless a later source-of-truth
@@ -171,13 +175,17 @@ Project field taxonomy:
 | --- | --- | --- | --- |
 | `Module` | TPM during task creation/routing | Large work queue and reporting group, not owner role or free tag | `engineering`, `game-strategy`, `visualization`, `chain-world-state-substrate` |
 | GitHub Project built-in `Status` | TPM and Project views | Human cockpit lane for day-to-day queue visibility | `Todo`, `In Progress`, `Blocked`, `Ready / PR`, `PR Watch`, `Done` |
-| `PM Status` | PM lifecycle scripts | Deterministic lifecycle state used by helpers/audits | `todo`, `in_progress`, `blocked`, `ready`, `pr_watch`, `done` |
+| `PM Status` | PM lifecycle scripts | Deterministic lifecycle state used by helpers/audits | `candidate`, `committed`, `blocked`, `ready`, `pr_watch`, `done`, `deferred` |
 | `Workflow Phase` | Workflow helpers | Current workflow stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pr_watch`, `closeout`, `done` |
 | Priority | Owner / TPM | Scheduling priority, not severity | repo-defined `P0`..`P3` values |
 
-Scripts that sync Project state must keep GitHub built-in `Status` and `PM
-Status` aligned through the deterministic mapping above. `Blocked`, `Ready /
-PR`, `PR Watch`, and `Done` are status lanes, not modules or owner roles.
+Scripts that sync Project state must keep GitHub built-in `Status`, custom `PM
+Status`, and `Workflow Phase` aligned through deterministic mapping:
+`candidate -> Todo/execution`, `committed -> In Progress/execution`,
+`blocked -> Blocked/blocked`, `ready -> Ready / PR/closeout`,
+`pr_watch -> PR Watch/pr_watch`, and `done|deferred -> Done/done`.
+`Blocked`, `Ready / PR`, `PR Watch`, and `Done` are cockpit lanes, not modules
+or owner roles.
 
 Deterministic script contract:
 
@@ -197,8 +205,16 @@ Deterministic script contract:
 - `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
   create issue/project task, append evidence comments, move Project status, and
   close tasks after fresh verification.
+- `./scripts/pm/task-closeout.sh` defaults to `ready` / `ready_for_pr`
+  closeout. Final `done` is reserved for post-PR merge/cleanup closeout or an
+  explicitly non-PR task and still requires verified `task_complete` evidence.
+- `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
+  the task to `pr_watch` when GitHub-backed mapping exists.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
   GitHub task issue evidence comments and mapping-backed task truth.
+- `./scripts/pm/fallback-evidence.sh` is the replay/audit helper for temporary
+  `.pm/scratch/<TASK-UID>/fallback-evidence/` packets; unreplayed fallback
+  packets do not satisfy task truth and are rejected by PR-readiness lint.
 - All future GitHub-backed create/move/report/closeout helpers must use
   deterministic `gh`/GitHub API paths, preserve or recover the `task_uid`
   mapping, and refuse ambiguous duplicate mappings.

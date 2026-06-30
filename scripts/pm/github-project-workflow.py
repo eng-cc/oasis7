@@ -12,8 +12,8 @@ from collections import Counter, OrderedDict
 from typing import Any, Optional
 
 
-ACTIVE_STATUSES = ("candidate", "committed", "blocked")
-ALL_STATUSES = ("candidate", "committed", "blocked", "done", "deferred")
+ACTIVE_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch")
+ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}")
 PROJECT_ITEM_NODES_QUERY = """
 query($ids: [ID!]!) {
@@ -336,8 +336,22 @@ def expected_project_id(args: argparse.Namespace, mapping: dict[str, Any]) -> st
 
 def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
-    workflow_phase = "blocked" if status == "blocked" else "done" if status in {"done", "deferred"} else "execution"
-    project_status = "Todo" if status == "candidate" else "In Progress" if status in {"committed", "blocked"} else "Done"
+    workflow_phase = {
+        "blocked": "blocked",
+        "ready": "closeout",
+        "pr_watch": "pr_watch",
+        "done": "done",
+        "deferred": "done",
+    }.get(status, "execution")
+    project_status = {
+        "candidate": "Todo",
+        "committed": "In Progress",
+        "blocked": "Blocked",
+        "ready": "Ready / PR",
+        "pr_watch": "PR Watch",
+        "done": "Done",
+        "deferred": "Done",
+    }.get(status, "Todo")
     return {
         "Status": project_status,
         "Task UID": str(task.get("task_uid") or ""),
@@ -347,6 +361,7 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "Workflow Phase": workflow_phase,
         "Priority": str(task.get("priority") or ""),
         "Canonical Worktree": str(task.get("worktree_hint") or ""),
+        "PR": str(task.get("pr_url") or task.get("pull_request_url") or task.get("pr_number") or ""),
         "Test Tier Required": "n/a",
     }
 

@@ -5,6 +5,7 @@ import argparse
 import importlib.util
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,7 @@ from datetime import datetime
 from typing import Any
 
 
-ALL_STATUSES = ("candidate", "committed", "blocked", "done", "deferred")
+ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
@@ -67,6 +68,77 @@ def issue_number_from_url(issue_url: str) -> int:
         raise RuntimeError(f"cannot parse issue number from {issue_url}") from exc
 
 
+def pr_number_from_url(pr_url: str) -> int | None:
+    match = re.search(r"/pull/(\d+)(?:$|[?#])", pr_url)
+    return int(match.group(1)) if match else None
+
+
+def issue_task_fields(body: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for key in ("owner_role", "module", "status", "priority", "worktree_hint"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    for key in ("pr_url", "pr_number"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    source_refs = re.findall(r"^- `([^`]+)`$", body, re.MULTILINE)
+    if source_refs:
+        fields["source_refs"] = source_refs
+    acceptance_match = re.search(r"^Acceptance:\n(?P<body>(?:^- .+\n?)+)", body, re.MULTILINE)
+    if acceptance_match:
+        fields["acceptance"] = [
+            line[2:].strip()
+            for line in acceptance_match.group("body").splitlines()
+            if line.startswith("- ")
+        ]
+    return fields
+
+
+def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
+    search_payload = run_text(
+        [
+            "gh",
+            "issue",
+            "list",
+            "-R",
+            repo,
+            "--search",
+            f"{task_uid} in:body",
+            "--json",
+            "number,url,title,state",
+            "--limit",
+            "5",
+        ]
+    )
+    hits = json.loads(search_payload)
+    if not isinstance(hits, list) or len(hits) != 1:
+        return None
+    issue_number = int(hits[0].get("number") or 0)
+    if not issue_number:
+        return None
+    issue_payload = run_text(["gh", "issue", "view", str(issue_number), "-R", repo, "--json", "body,number,title,url"])
+    issue = json.loads(issue_payload)
+    body = str(issue.get("body") or "")
+    if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
+        return None
+    record = issue_task_fields(body)
+    title = str(issue.get("title") or hits[0].get("title") or "")
+    if title.startswith("[PM] "):
+        title = title[5:]
+    record.update(
+        {
+            "task_uid": task_uid,
+            "title": title,
+            "issue_number": int(issue.get("number") or issue_number),
+            "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
+            "_github_source": "issue_search",
+        }
+    )
+    return record
+
+
 def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
     return OrderedDict(
         [
@@ -77,6 +149,8 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("worktree_hint", record.get("worktree_hint") or ""),
             ("status", record.get("status") or "candidate"),
             ("priority", record.get("priority") or "P2"),
+            ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
+            ("pr_number", record.get("pr_number") or ""),
             ("source_refs", record.get("source_refs") or []),
             ("acceptance", record.get("acceptance") or []),
             ("updated_at", record.get("updated_at") or now()),
@@ -98,6 +172,10 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
+    if task.get("pr_url"):
+        lines.append(f"- pr_url: `{task.get('pr_url')}`")
+    if task.get("pr_number"):
+        lines.append(f"- pr_number: `{task.get('pr_number')}`")
     source_refs = task.get("source_refs") or []
     if source_refs:
         lines.append("")
@@ -265,7 +343,13 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     mapping = load_mapping(mapping_path)
     record = mapping.get("tasks", {}).get(args.task_uid)
     if not record:
-        die(f"task_uid not found in mapping: {args.task_uid}")
+        try:
+            record = github_issue_record(args.repo, args.task_uid)
+        except (subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+            die(f"task_uid not found in mapping and GitHub issue lookup failed: {args.task_uid}: {exc}")
+        if not record:
+            die(f"task_uid not found in mapping or GitHub issue body: {args.task_uid}")
+        mapping.setdefault("tasks", {})[args.task_uid] = record
     return mapping_path, mapping, record
 
 
@@ -359,9 +443,12 @@ def command_move_task(args: argparse.Namespace) -> int:
     record["status"] = args.to_status
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
-    updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+    updated_fields = 0
+    if record.get("project_item_id"):
+        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
-    save_mapping(mapping_path, mapping)
+    if record.get("_github_source") != "issue_search" or mapping_path.exists():
+        save_mapping(mapping_path, mapping)
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -371,6 +458,55 @@ def command_move_task(args: argparse.Namespace) -> int:
         "updated_field_values": updated_fields,
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"move-task: moved {args.task_uid} {previous} -> {args.to_status}")
+    return 0
+
+
+def command_record_pr(args: argparse.Namespace) -> int:
+    mapping_path, mapping, record = require_record(args)
+    previous = str(record.get("status") or "")
+    record["pr_url"] = args.pr_url
+    number = pr_number_from_url(args.pr_url)
+    if number is not None:
+        record["pr_number"] = number
+    record["status"] = "pr_watch"
+    record["updated_at"] = now()
+    task = task_from_record(args.task_uid, record)
+    updated_fields = 0
+    if record.get("project_item_id"):
+        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+    update_issue_body(args.repo, int(record["issue_number"]), task)
+    comment_url = issue_comment(
+        args.repo,
+        int(record["issue_number"]),
+        evidence_body(
+            args.task_uid,
+            args.role,
+            "pr_watch",
+            {
+                "Completed": "PR created and task moved to PR watch.",
+                "Pending": "Watch required checks, mergeability, comments, and review threads.",
+                "Action": "record-pr",
+                "Validation Command": args.validation_command,
+                "Expected Result": "Task status is pr_watch and PR URL is mapped.",
+                "Actual Result": args.pr_url,
+                "Blocker / Next Action": "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+            },
+        ),
+    )
+    record.setdefault("evidence_comments", []).append(comment_url)
+    if record.get("_github_source") != "issue_search" or mapping_path.exists():
+        save_mapping(mapping_path, mapping)
+    payload = {
+        "task_uid": args.task_uid,
+        "previous_status": previous,
+        "status": "pr_watch",
+        "issue_url": record.get("issue_url"),
+        "pr_url": args.pr_url,
+        "pr_number": record.get("pr_number"),
+        "comment_url": comment_url,
+        "updated_field_values": updated_fields,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"record-pr: recorded {args.pr_url} for {args.task_uid}")
     return 0
 
 
@@ -431,6 +567,15 @@ def build_parser() -> argparse.ArgumentParser:
     move.add_argument("--to-status", required=True, choices=ALL_STATUSES)
     move.add_argument("--json", action="store_true")
     move.set_defaults(func=command_move_task)
+
+    record_pr = subparsers.add_parser("record-pr")
+    add_common(record_pr)
+    record_pr.add_argument("--task-uid", required=True)
+    record_pr.add_argument("--pr-url", required=True)
+    record_pr.add_argument("--role", default="tpm")
+    record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
+    record_pr.add_argument("--json", action="store_true")
+    record_pr.set_defaults(func=command_record_pr)
     return parser
 
 

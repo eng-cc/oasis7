@@ -56,13 +56,103 @@ try:
 except subprocess.CalledProcessError:
     branch = ""
 worktree_name = root.name
-ACTIVE_STATUSES = {"candidate", "committed", "blocked"}
+ACTIVE_STATUSES = {"candidate", "committed", "blocked", "ready", "pr_watch"}
 
 
 def parse_task(path: pathlib.Path) -> dict[str, object]:
     fields = dict(load_mapping_document(path))
     fields["path"] = str(path.relative_to(root))
     return fields
+
+
+def parse_issue_body_task_fields(body: str) -> dict[str, object]:
+    fields: dict[str, object] = {}
+    for key in ("owner_role", "module", "status", "priority", "worktree_hint"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    return fields
+
+
+def github_issue_task(explicit_uid: str) -> dict[str, object] | None:
+    repo = "eng-cc/oasis7"
+    try:
+        search_payload = subprocess.check_output(
+            [
+                "gh",
+                "issue",
+                "list",
+                "-R",
+                repo,
+                "--search",
+                f"{explicit_uid} in:body",
+                "--json",
+                "number,url,title,state",
+                "--limit",
+                "5",
+            ],
+            text=True,
+            cwd=root,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        search_hits = json.loads(search_payload)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    if not isinstance(search_hits, list):
+        return None
+    matches = [
+        hit for hit in search_hits
+        if isinstance(hit, dict) and str(hit.get("url") or "").endswith(f"/issues/{hit.get('number')}")
+    ]
+    if len(matches) != 1:
+        return None
+    issue_number = str(matches[0].get("number") or "")
+    if not issue_number:
+        return None
+    try:
+        issue_payload = subprocess.check_output(
+            ["gh", "issue", "view", issue_number, "-R", repo, "--json", "body,comments,number,title,url"],
+            text=True,
+            cwd=root,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        issue = json.loads(issue_payload)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return None
+    body = str(issue.get("body") or "")
+    if explicit_uid not in body:
+        return None
+    task = parse_issue_body_task_fields(body)
+    task.update({
+        "task_uid": explicit_uid,
+        "title": str(issue.get("title") or matches[0].get("title") or ""),
+        "issue_number": int(issue_number),
+        "issue_url": str(issue.get("url") or matches[0].get("url") or ""),
+        "path": "github-issue-search",
+        "github_project_mapping": {
+            "repo": repo,
+            "issue_number": int(issue_number),
+            "issue_url": str(issue.get("url") or matches[0].get("url") or ""),
+        },
+        "_github_source": "issue_search",
+    })
+    comments = issue.get("comments") or []
+    if isinstance(comments, list):
+        task["evidence_comments"] = [
+            str(comment.get("url") or "")
+            for comment in comments
+            if isinstance(comment, dict) and explicit_uid in str(comment.get("body") or "")
+        ]
+        if any(
+            isinstance(comment, dict)
+            and explicit_uid in str(comment.get("body") or "")
+            and "<!-- oasis7-pm-claim-verification -->" in str(comment.get("body") or "")
+            for comment in comments
+        ):
+            task["last_claim_verification_at"] = "github_issue_comment"
+    return task
 
 
 task_dir = root / ".pm" / "tasks"
@@ -79,8 +169,19 @@ if explicit_uid:
             if isinstance(record, dict):
                 github_backed = True
                 task = dict(record)
+                project = mapping.get("project") or {}
                 task["task_uid"] = explicit_uid
                 task["path"] = str(mapping_path.relative_to(root))
+                task["github_project_mapping"] = {
+                    "repo": str(project.get("repo") or "eng-cc/oasis7"),
+                    "issue_number": task.get("issue_number"),
+                    "issue_url": task.get("issue_url"),
+                }
+                tasks = [task]
+        if not tasks:
+            task = github_issue_task(explicit_uid)
+            if task is not None:
+                github_backed = True
                 tasks = [task]
 else:
     mapping_path = root / ".pm/github-project-sync/tasks.json"
@@ -148,10 +249,64 @@ pr_hits: list[str] = []
 def check(cond, bad):
     if not cond: errors.append(bad)
 
+
+def unresolved_fallback_paths(task_uid: str) -> list[str]:
+    fallback_dir = root / ".pm" / "scratch" / task_uid / "fallback-evidence"
+    if not fallback_dir.is_dir():
+        return []
+    return [
+        str(path.relative_to(root))
+        for path in sorted(fallback_dir.glob("*.md"))
+        if not path.name.endswith(".replayed.md")
+    ]
+
+
+def issue_number_from_url(value: object) -> str:
+    match = re.search(r"/issues/(\d+)(?:$|[?#])", str(value or ""))
+    return match.group(1) if match else ""
+
+
+def github_issue_comments(task: dict[str, object]) -> list[str]:
+    mapping_info = task.get("github_project_mapping")
+    repo = ""
+    if isinstance(mapping_info, dict):
+        repo = str(mapping_info.get("repo") or "")
+    repo = repo or "eng-cc/oasis7"
+    issue_number = str(task.get("issue_number") or "") or issue_number_from_url(task.get("issue_url"))
+    if not issue_number:
+        errors.append("GitHub-backed task missing issue number for live issue-comment audit")
+        return []
+    try:
+        payload = subprocess.check_output(
+            ["gh", "issue", "view", issue_number, "-R", repo, "--json", "comments"],
+            text=True,
+            cwd=root,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        errors.append(f"GitHub-backed task issue comments unreadable for live audit: {exc}")
+        return []
+    try:
+        comments = json.loads(payload).get("comments") or []
+    except json.JSONDecodeError as exc:
+        errors.append(f"GitHub-backed task issue comments JSON invalid: {exc}")
+        return []
+    return [str(comment.get("body") or "") for comment in comments if isinstance(comment, dict)]
+
+
+def comment_has(markers: tuple[str, ...], comments: list[str], task_uid: str) -> bool:
+    task_marker = f"Task UID: {task_uid}"
+    return any(task_marker in comment and all(marker in comment for marker in markers) for comment in comments)
+
 if github_backed:
     if phase in {"pr-ready", "post-pr"}:
-        check(bool(task.get("issue_number") or task.get("issue_url")), "GitHub-backed task missing issue handle in .pm/github-project-sync/tasks.json")
-        check(bool(task.get("project_item_id")), "GitHub-backed task missing project_item_id in .pm/github-project-sync/tasks.json")
+        fallback_paths = unresolved_fallback_paths(uid)
+        check(not fallback_paths, "unreplayed fallback evidence exists: " + ",".join(fallback_paths))
+        source = str(task.get("_github_source") or "mapping")
+        check(bool(task.get("issue_number") or task.get("issue_url")), "GitHub-backed task missing issue handle")
+        if source == "mapping":
+            check(bool(task.get("project_item_id")), "GitHub-backed task missing project_item_id in .pm/github-project-sync/tasks.json")
         check(bool(task.get("evidence_comments")), "GitHub-backed task missing issue evidence comment links")
         claim_records = task.get("claim_verifications")
         has_verified_claim = isinstance(claim_records, list) and any(
@@ -160,8 +315,20 @@ if github_backed:
         )
         check(has_verified_claim or bool(task.get("last_claim_verification_at")),
               "GitHub-backed task missing verified claim-ready evidence")
-        check(bool(task.get("last_closed_at")),
-              "GitHub-backed task missing closeout evidence")
+        if phase == "pr-ready":
+            check(str(task.get("status") or "") in {"ready", "pr_watch", "done"},
+                  "GitHub-backed task status must be ready/pr_watch/done for pr-ready lint")
+        if phase == "post-pr":
+            check(str(task.get("status") or "") in {"pr_watch", "done"},
+                  "GitHub-backed task status must be pr_watch/done for post-pr lint")
+        comments = github_issue_comments(task)
+        if comments:
+            check(comment_has(("<!-- oasis7-pm-claim-verification -->",), comments, uid),
+                  "GitHub issue comments missing claim-ready verification marker")
+            check(comment_has(("Pre-PR Local Role Review: passed",), comments, uid),
+                  "GitHub issue comments missing passed pre-PR local role review packet")
+            check(comment_has(("Evidence Phase: close",), comments, uid) or comment_has(("Evidence Phase: pr_watch",), comments, uid),
+                  "GitHub issue comments missing closeout or PR-watch evidence marker")
     if phase == "post-pr":
         check(bool(task.get("pr_url") or task.get("pull_request_url") or task.get("pr_number")),
               "GitHub-backed task missing PR evidence link")
