@@ -88,6 +88,8 @@
 
 - [x] threshold-receipt-commitment-buffer-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize threshold receipt commitment hashing to sort borrowed participant signatures and write the legacy `signer_node_id:signature_hex` payload into one pre-sized buffer instead of allocating per-participant strings plus an intermediate join, preserving threshold Ed25519 commitment bytes and receipt verification semantics. Trace: .pm/tasks/task_607211ba9e60460da109f25ab8c78f60.yaml
 
+- [x] module-status-limited-page-clone-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize LLM agent module lifecycle and market status tools to count filtered matches while cloning only the limited returned page, preserving total counts, output order, filters, limits, and prompt tool schema. Trace: .pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.yaml
+
 - [x] engineering-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-engineering.md` PRD review checklist snapshot，将当前 engineering 阅读/状态语义收敛到 `doc/engineering/README.md`、`doc/engineering/prd.index.md` 与 `doc/engineering/project.md`。 Trace: .pm/tasks/task_a66e81168faa4ae0ada01030bd992edd.yaml
 
 - [x] game-active-review-checklist-snapshot-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已降格为历史兼容路径的 `active-game.md` PRD review checklist snapshot，将当前 game 阅读/状态语义收敛到 `doc/game/README.md`、`doc/game/prd.index.md` 与 `doc/game/project.md`。 Trace: .pm/tasks/task_0f123c70222c404dacb01f7c64e24208.yaml
