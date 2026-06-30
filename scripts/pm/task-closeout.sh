@@ -8,14 +8,15 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/pm/task-closeout.sh --role <role> --task-uid <task_uid> [options]
 
-Close a GitHub Project-backed PM task without recreating repo-local .pm/tasks files.
+Record GitHub Project-backed workflow closeout without recreating repo-local
+.pm/tasks files. By default this marks the branch ready for PR, not final done.
 
 Options:
   --role <role>           Owner role for workflow close evidence
   --task-uid <task_uid>   Task to close
-  --to-status <status>    Final task status: done or deferred (default: done)
-  --verify-command <cmd>  Fresh verification command to execute before done closeout
-  --claim-type <type>     Claim type, must be task_complete for done (default: task_complete)
+  --to-status <status>    Target task status: ready, done, or deferred (default: ready)
+  --verify-command <cmd>  Fresh verification command to execute before ready/done closeout
+  --claim-type <type>     Claim type (default: ready_for_pr for ready, task_complete for done)
   --no-lint               Accepted for compatibility; legacy PM lint is not run
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
@@ -29,9 +30,9 @@ die() {
 
 ROLE=""
 TASK_UID=""
-TARGET_STATUS="done"
+TARGET_STATUS="ready"
 VERIFY_COMMAND=""
-CLAIM_TYPE="task_complete"
+CLAIM_TYPE=""
 OUTPUT_JSON=0
 
 while [[ $# -gt 0 ]]; do
@@ -75,12 +76,22 @@ done
 
 [[ -n "$ROLE" ]] || die "--role is required"
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
-[[ "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "deferred" ]] || die "--to-status must be done or deferred"
-if [[ "$TARGET_STATUS" == "done" && -z "$VERIFY_COMMAND" ]]; then
-  die "--verify-command is required when --to-status is done"
+[[ "$TARGET_STATUS" == "ready" || "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "deferred" ]] || die "--to-status must be ready, done, or deferred"
+if [[ -z "$CLAIM_TYPE" ]]; then
+  if [[ "$TARGET_STATUS" == "done" ]]; then
+    CLAIM_TYPE="task_complete"
+  else
+    CLAIM_TYPE="ready_for_pr"
+  fi
+fi
+if [[ "$TARGET_STATUS" != "deferred" && -z "$VERIFY_COMMAND" ]]; then
+  die "--verify-command is required when --to-status is ready or done"
 fi
 if [[ "$TARGET_STATUS" == "done" && "$CLAIM_TYPE" != "task_complete" ]]; then
   die "--claim-type must be task_complete when --to-status is done"
+fi
+if [[ "$TARGET_STATUS" == "ready" && "$CLAIM_TYPE" != "ready_for_pr" ]]; then
+  die "--claim-type must be ready_for_pr when --to-status is ready"
 fi
 
 if [[ -n "$VERIFY_COMMAND" ]]; then

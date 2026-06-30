@@ -128,8 +128,28 @@ fi
 
 GITHUB_UID="task_33333333333333333333333333333333"
 GITHUB_ROOT="$TMPDIR/github-backed"
-mkdir -p "$GITHUB_ROOT/scripts" "$GITHUB_ROOT/.pm/tasks" "$GITHUB_ROOT/.pm/github-project-sync"
+mkdir -p "$GITHUB_ROOT/scripts" "$GITHUB_ROOT/.pm/tasks" "$GITHUB_ROOT/.pm/github-project-sync" "$GITHUB_ROOT/bin"
 cp -R "$ROOT_DIR/scripts/pm" "$GITHUB_ROOT/scripts/pm"
+cat > "$GITHUB_ROOT/bin/gh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+case "\$*" in
+  "issue view 123 -R example/oasis7 --json comments")
+    cat <<'JSON'
+{"comments":[
+{"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: $GITHUB_UID\nClaim Type: ready_for_pr\nVerification Status: verified"},
+{"body":"Pre-PR Local Role Review: passed\nTask UID: $GITHUB_UID\nReview Findings Disposition: no_findings"},
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: $GITHUB_UID\nEvidence Phase: close\nRole: tpm"}
+]}
+JSON
+    ;;
+  *)
+    echo "unexpected gh invocation: \$*" >&2
+    exit 9
+    ;;
+esac
+EOF
+chmod +x "$GITHUB_ROOT/bin/gh"
 cat > "$GITHUB_ROOT/.pm/github-project-sync/tasks.json" <<EOF
 {
   "project": {
@@ -154,7 +174,7 @@ cat > "$GITHUB_ROOT/.pm/github-project-sync/tasks.json" <<EOF
       "last_claim_verification_at": "2026-06-30T00:01:00+08:00",
       "last_closed_at": "2026-06-30T00:02:00+08:00",
       "project_item_id": "PVTI_fixture",
-      "status": "done",
+      "status": "ready",
       "task_uid": "$GITHUB_UID",
       "worktree_hint": "$GITHUB_ROOT"
     }
@@ -162,10 +182,135 @@ cat > "$GITHUB_ROOT/.pm/github-project-sync/tasks.json" <<EOF
   "version": 1
 }
 EOF
-PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed.stdout"
+PATH="$GITHUB_ROOT/bin:$PATH" PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed.stdout"
 if ! grep -Fq "github-backed" "$TMPDIR/github-backed.stdout"; then
   echo "workflow-lint.test: expected GitHub-backed task fallback to pass" >&2
   cat "$TMPDIR/github-backed.stdout" >&2
+  exit 1
+fi
+
+rm -f "$GITHUB_ROOT/.pm/github-project-sync/tasks.json"
+cat > "$GITHUB_ROOT/bin/gh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+case "\$*" in
+  "issue list -R eng-cc/oasis7 --search $GITHUB_UID in:body --json number,url,title,state --limit 5")
+    cat <<'JSON'
+[{"number":123,"state":"OPEN","title":"GitHub-backed fixture","url":"https://github.com/eng-cc/oasis7/issues/123"}]
+JSON
+    ;;
+  "issue view 123 -R eng-cc/oasis7 --json body,comments,number,title,url")
+    cat <<'JSON'
+{"number":123,"title":"GitHub-backed fixture","url":"https://github.com/eng-cc/oasis7/issues/123","body":"<!-- oasis7-pm-task -->\ntask_uid: task_33333333333333333333333333333333\n\nTask metadata:\n- owner_role: \`tpm\`\n- module: \`engineering\`\n- status: \`ready\`\n- priority: \`P2\`\n- worktree_hint: \`/tmp/github-backed-fixture\`\n","comments":[
+{"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-1","body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_33333333333333333333333333333333\nClaim Type: ready_for_pr\nVerification Status: verified"},
+{"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-2","body":"Pre-PR Local Role Review: passed\nTask UID: task_33333333333333333333333333333333\nReview Findings Disposition: no_findings"},
+{"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-3","body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: close\nRole: tpm"}
+]}
+JSON
+    ;;
+  "issue view 123 -R eng-cc/oasis7 --json comments")
+    cat <<'JSON'
+{"comments":[
+{"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_33333333333333333333333333333333\nClaim Type: ready_for_pr\nVerification Status: verified"},
+{"body":"Pre-PR Local Role Review: passed\nTask UID: task_33333333333333333333333333333333\nReview Findings Disposition: no_findings"},
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: close\nRole: tpm"}
+]}
+JSON
+    ;;
+  *)
+    echo "unexpected gh invocation: \$*" >&2
+    exit 9
+    ;;
+esac
+EOF
+chmod +x "$GITHUB_ROOT/bin/gh"
+PATH="$GITHUB_ROOT/bin:$PATH" PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed-no-cache.stdout"
+if ! grep -Fq "github-backed" "$TMPDIR/github-backed-no-cache.stdout"; then
+  echo "workflow-lint.test: expected GitHub issue fallback without tasks.json to pass" >&2
+  cat "$TMPDIR/github-backed-no-cache.stdout" >&2
+  exit 1
+fi
+
+cat > "$GITHUB_ROOT/.pm/github-project-sync/tasks.json" <<EOF
+{
+  "project": {
+    "repo": "example/oasis7"
+  },
+  "tasks": {
+    "$GITHUB_UID": {
+      "claim_verifications": [
+        {
+          "status": "verified",
+          "task_uid": "$GITHUB_UID",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T00:01:00+08:00",
+          "verify_command": "fixture"
+        }
+      ],
+      "evidence_comments": [
+        "https://github.com/example/oasis7/issues/123#issuecomment-1"
+      ],
+      "issue_number": 123,
+      "issue_url": "https://github.com/example/oasis7/issues/123",
+      "last_claim_verification_at": "2026-06-30T00:01:00+08:00",
+      "last_closed_at": "2026-06-30T00:02:00+08:00",
+      "project_item_id": "PVTI_fixture",
+      "status": "ready",
+      "task_uid": "$GITHUB_UID",
+      "worktree_hint": "$GITHUB_ROOT"
+    }
+  },
+  "version": 1
+}
+EOF
+
+cat > "$GITHUB_ROOT/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "issue view 123 -R example/oasis7 --json comments")
+    cat <<'JSON'
+{"comments":[
+{"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nClaim Type: ready_for_pr\nVerification Status: verified"},
+{"body":"Pre-PR Local Role Review: passed\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReview Findings Disposition: no_findings"},
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nEvidence Phase: close\nRole: tpm"}
+]}
+JSON
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 9
+    ;;
+esac
+EOF
+chmod +x "$GITHUB_ROOT/bin/gh"
+set +e
+PATH="$GITHUB_ROOT/bin:$PATH" PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed-wrong-uid.stdout" 2>&1
+WRONG_UID_STATUS=$?
+set -e
+if [[ "$WRONG_UID_STATUS" == "0" ]]; then
+  echo "workflow-lint.test: expected marker comments with wrong Task UID to fail" >&2
+  exit 1
+fi
+if ! grep -Fq "missing claim-ready verification marker" "$TMPDIR/github-backed-wrong-uid.stdout"; then
+  echo "workflow-lint.test: expected wrong Task UID marker failure" >&2
+  cat "$TMPDIR/github-backed-wrong-uid.stdout" >&2
+  exit 1
+fi
+
+mkdir -p "$GITHUB_ROOT/.pm/scratch/$GITHUB_UID/fallback-evidence"
+printf 'fallback packet\n' > "$GITHUB_ROOT/.pm/scratch/$GITHUB_UID/fallback-evidence/unreplayed.md"
+set +e
+PATH="$GITHUB_ROOT/bin:$PATH" PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed-fallback.stdout" 2>&1
+FALLBACK_STATUS=$?
+set -e
+if [[ "$FALLBACK_STATUS" == "0" ]]; then
+  echo "workflow-lint.test: expected unreplayed fallback evidence to fail" >&2
+  exit 1
+fi
+if ! grep -Fq "unreplayed fallback evidence exists" "$TMPDIR/github-backed-fallback.stdout"; then
+  echo "workflow-lint.test: expected unreplayed fallback evidence failure" >&2
+  cat "$TMPDIR/github-backed-fallback.stdout" >&2
   exit 1
 fi
 

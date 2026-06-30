@@ -2,7 +2,7 @@
 
 `doc/` 保存正式规格、项目追踪、证据与历史归档。项目管理正在从文件化 `.pm` task
 迁移到 GitHub Issues + GitHub Project；Step 3 已删除仓库内 `.pm/tasks/*` task 文件。
-GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映射、历史归档
+GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生成缓存、历史归档
 与尚未迁出的 PM 对象：
 
 - role memory / backlog
@@ -15,7 +15,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
-- GitHub Project 是 active task queue / status cockpit 的 authoritative 入口；`.pm/github-project-sync/tasks.json` 是 `task_uid -> issue/project item` 的本地 mapping cache。
+- GitHub Project 是 active task queue / status cockpit 的 authoritative 入口；`.pm/github-project-sync/tasks.json` 只是可重新生成的 `task_uid -> issue/project item` 本地 mapping cache，普通 PR 不应为了 task-local 状态变更提交它。
 - `.pm/github-project-sync/task-archive.jsonl` 保存 Step 3 删除前的 task yaml 与 execution log 全量归档；它是审计桥，不是新的本地 planning queue。
 - `.pm/tasks/task_<32hex>.yaml` 与 `.pm/tasks/task_<32hex>.execution.md` 已退休；正常工作流不得重新创建这些 task 文件。
 - 本 README 后续仍提到旧 `.pm/tasks` 的脚本，均为 legacy 文件化 PM 入口或历史示例；除非 `source-of-truth` 重新批准，不再作为新工作流真值。
@@ -52,10 +52,11 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 - `./scripts/pm/github-project-retire-tasks.sh`：Step 3 归档/删除工具；先导出 `.pm/github-project-sync/task-archive.jsonl`，再删除 `.pm/tasks/*`。
 - `./scripts/pm/capture-todo.sh`：把还没决定创建 `.pm` task 的顺手 TODO / discovery 记录为 `source_type=reflection` signal；默认只写 `.pm/inbox/signals.jsonl`，显式 `--create-task` 时才提升成 candidate task。
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
-- `./scripts/pm/new-task.sh`：创建 GitHub Issue + GitHub Project item，写入 `.pm/github-project-sync/tasks.json` mapping，不创建 `.pm/tasks` 文件。
+- `./scripts/pm/new-task.sh`：创建 GitHub Issue + GitHub Project item，可刷新本地 `.pm/github-project-sync/tasks.json` mapping cache，不创建 `.pm/tasks` 文件。
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，证据写入 GitHub issue comment。
-- `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done/deferred` 之间同步更新 GitHub Project Status / PM Status / Workflow Phase 与 mapping。
-- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 fresh verification 通过后执行 `workflow-report close -> move-task done|deferred`，证据进入 GitHub issue comment，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/ready/pr_watch/done/deferred` 之间同步更新 GitHub Project Status / PM Status / Workflow Phase 与 mapping。
+- `./scripts/pm/task-closeout.sh`：默认 ready-for-PR close-phase helper；在 fresh verification 通过后执行 `workflow-report close -> move-task ready`，证据进入 GitHub issue comment，再进入 commit / `prepare-task-pr.sh`；只有 post-PR merge/cleanup 或显式非 PR 任务才用 `--to-status done`。
+- `./scripts/pm/fallback-evidence.sh`：GitHub issue comment 暂不可用时的 fallback packet create/audit/replay helper；回放前不算正式 task truth。
 - `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前立即执行 fresh verification command；有 task_uid 时把 verification 记录到 GitHub issue comment 和 mapping。
 - `./scripts/pm/append-execution-log.sh`：结构化追加 GitHub issue evidence comment，要求显式 task_uid、role、完成内容、遗留事项、动作与验证结果。
 - `./scripts/pm/task-execution-log-lint.sh`：legacy/local task-file lint，仅用于退役前数据或专门 fixture，不是 active GitHub-backed 证据入口。
@@ -90,15 +91,16 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 - 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只写 reflection signal。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
 - 创建任务：`./scripts/pm/new-task.sh --owner-role <owner_role> --title "<title>" --module <module> --source-ref <path> --json`
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
-- 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
+- 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`，默认进入 `ready`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status ready|done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
 - PM active lint：`./scripts/pm/lint.sh`；校验 GitHub Project mapping/archive、active lifecycle scripts、role registry、memory 与 stage 基础结构。
 - 结构化追加 execution log：`./scripts/pm/append-execution-log.sh --task-uid <TASK-UID> --role <owner_role> --completed "..." --pending "..." --action "..." --validation-command "..." --expected-result "..." --actual-result "..." --blocker-next-action "..."`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认 watch-fix-merge 边界：`./scripts/prepare-task-pr.sh`
+- fallback evidence 回放：`./scripts/pm/fallback-evidence.sh replay --task-uid <TASK-UID>`；PR readiness lint 会拒绝未回放 fallback packet。
 - 不再读写 `.pm/tasks/<TASK-UID>.execution.md`；新的任务过程证据应进入 GitHub Issue/Project-backed task envelope，或进入 source-of-truth 明确批准的替代 sink。
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
-- `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
+- `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；`ready` 表示本地 closeout 完成且准备创建 PR，`pr_watch` 表示 PR 已创建且仍在 CI/comments/merge watch 主链；任务一旦进入 `blocked/ready/pr_watch/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有最终完成 closeout evidence。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时按 `fresh verification -> pre-PR local role subagent review -> findings 处置 -> task-closeout.sh close-phase -> commit -> prepare-task-pr.sh` 顺序推进。普通 PR 创建后默认继续盯 GitHub required checks、mergeability、PR comments 与 unresolved review threads；`REVIEW_REQUIRED` 只作为状态信息回报，不是 block 项。若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则在复查 checks、mergeability、requested changes、comments/thread 后可作为正常流程使用 repo admin merge path。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或非 review-approval 原因的 GitHub merge API/branch protection 实际拒绝时，才修复/验证/推送或回复/resolve；通过且 comments/thread 已收口后合入并清理。只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
 - `./scripts/pm/workflow-behavior-eval.sh`：repo-owned workflow behavior eval 入口；把 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
 - role subagent 产出的 patch、review card、summary、incident note 或 messaging brief，只有在被 owner 回写到 `project.md`、handoff、GitHub issue evidence comment、signal/memory，或 PR evidence 中至少一处后，才算进入 canonical 主链；孤立产物本身不构成正式收口证据。

@@ -29,7 +29,6 @@ require_file ".pm/registry/codex-sessions.yaml"
 require_dir ".pm/inbox"
 require_file ".pm/inbox/signals.jsonl"
 require_dir ".pm/github-project-sync"
-require_file ".pm/github-project-sync/tasks.json"
 require_file ".pm/github-project-sync/task-archive.jsonl"
 require_dir ".pm/working_memory"
 require_file ".pm/stage/current.yaml"
@@ -50,6 +49,7 @@ require_file "scripts/pm/github-project-retire-tasks.sh"
 require_file "scripts/pm/github-project-retire-tasks.test.sh"
 require_file "scripts/pm/append-execution-log.sh"
 require_file "scripts/pm/claim-ready.sh"
+require_file "scripts/pm/fallback-evidence.sh"
 require_file "scripts/pm/lint.sh"
 require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
@@ -106,17 +106,22 @@ import sys
 
 mapping_path = pathlib.Path(".pm/github-project-sync/tasks.json")
 archive_path = pathlib.Path(".pm/github-project-sync/task-archive.jsonl")
-mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-tasks = mapping.get("tasks") or {}
-missing = [uid for uid, record in tasks.items() if not record.get("issue_url") or not record.get("issue_number") or not record.get("project_item_id")]
 archive_records = [json.loads(line) for line in archive_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-archive_uids = {record.get("task_uid") for record in archive_records}
-if missing:
-    print(f"pm-lint: FAIL: {len(missing)} mapping records missing issue/project handles")
-    sys.exit(1)
-if archive_records and not archive_uids.issubset(set(tasks)):
-    print("pm-lint: FAIL: archive contains task_uid not present in mapping")
-    sys.exit(1)
+if mapping_path.is_file():
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    tasks = mapping.get("tasks") or {}
+    missing = [
+        uid
+        for uid, record in tasks.items()
+        if not record.get("issue_url") or not record.get("issue_number") or not record.get("project_item_id")
+    ]
+    archive_uids = {record.get("task_uid") for record in archive_records}
+    if missing:
+        print(f"pm-lint: FAIL: {len(missing)} mapping records missing issue/project handles")
+        sys.exit(1)
+    if archive_records and not archive_uids.issubset(set(tasks)):
+        print("pm-lint: FAIL: archive contains task_uid not present in mapping")
+        sys.exit(1)
 PY
 
 if (( failures > 0 )); then

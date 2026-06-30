@@ -78,8 +78,58 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "issue" && "${2:-}" == "list" ]]; then
+  cat "${TEST_GH_ISSUE_LIST_JSON:?}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" && "$*" == *"--json body,comments,number,title,url"* ]]; then
+  cat "${TEST_GH_ISSUE_FULL_JSON:-${TEST_GH_ISSUE_BODY_JSON:?}}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" && "$*" == *"--json body,number,title,url"* ]]; then
+  cat "${TEST_GH_ISSUE_BODY_JSON:?}"
+  exit 0
+fi
+
 if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
   cat "${TEST_GH_ISSUE_VIEW_JSON:?}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "edit" ]]; then
+  printf 'edited\n'
+  exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "comment" ]]; then
+  printf 'https://github.com/example/oasis7/issues/%s#issuecomment-fixture\n' "${3:-0}"
+  exit 0
+fi
+
+if [[ "$*" == "project view 1 --owner eng-cc --format json" ]]; then
+  printf '{"id":"PROJECT_ID","number":1,"title":"fixture","url":"https://github.com/users/eng-cc/projects/1"}\n'
+  exit 0
+fi
+
+if [[ "$*" == "project field-list 1 --owner eng-cc --format json" ]]; then
+  cat <<'JSON'
+{"fields":[
+{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH","name":"PR Watch"}]},
+{"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
+{"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH_PM","name":"pr_watch"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"}]},
+{"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P3","name":"P3"}]},
+{"id":"FIELD_PR","name":"PR","type":"ProjectV2Field"},
+{"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
+JSON
+  exit 0
+fi
+
+if [[ "${1:-}" == "project" && "${2:-}" == "item-edit" ]]; then
+  printf '{}\n'
   exit 0
 fi
 
@@ -128,6 +178,7 @@ EOF
 write_role_review_packet() {
   local source_head="$1"
   local disposition="$2"
+  mkdir -p "$SMOKE_WORKTREE/.pm/tasks"
   cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.execution.md" <<EOF
 # $TASK_UID Execution Log
 
@@ -272,7 +323,11 @@ EOF
 }
 
 commit_fixture_evidence() {
-  "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md"
+  local add_paths=(".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md")
+  if [[ -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" ]]; then
+    add_paths+=(".pm/github-project-sync/tasks.json")
+  fi
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "${add_paths[@]}"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
     -c user.email="smoke@example.invalid" \
@@ -288,15 +343,24 @@ run_prepare() {
   : > "$git_log"
   PATH="$TMPDIR/bin:$PATH" \
     PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+    PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
     PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
     TEST_GH_LOG="$gh_log" \
     TEST_GIT_LOG="$git_log" \
+    TEST_GH_ISSUE_LIST_JSON="${TEST_GH_ISSUE_LIST_JSON:-}" \
+    TEST_GH_ISSUE_BODY_JSON="${TEST_GH_ISSUE_BODY_JSON:-}" \
+    TEST_GH_ISSUE_FULL_JSON="${TEST_GH_ISSUE_FULL_JSON:-}" \
+    TEST_GH_ISSUE_VIEW_JSON="${TEST_GH_ISSUE_VIEW_JSON:-}" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
 }
 
 reset_smoke_branch_to_base() {
   "$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard refs/remotes/origin/main >/dev/null
   "$REAL_GIT" -C "$SMOKE_WORKTREE" clean -fd >/dev/null
+}
+
+reset_project_mapping_after_record_pr() {
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" checkout -- .pm/github-project-sync/tasks.json
 }
 
 write_changed_path_fixture() {
@@ -571,6 +635,32 @@ write_project_trace
 write_role_review_packet "0000000000000000000000000000000000000000" "no_findings"
 commit_fixture_evidence
 
+retired_err="$TMPDIR/retired.err"
+PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS=0 run_prepare "$TMPDIR/gh-retired.log" "$TMPDIR/git-retired.log" --json >"$TMPDIR/retired.json" 2>"$retired_err"
+python3 - "$TMPDIR/retired.json" "$retired_err" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+stderr = Path(sys.argv[2]).read_text(encoding="utf-8")
+review = payload["pre_pr_local_role_review"]
+if stderr:
+    raise SystemExit(f"expected no stderr for retired-task json report, got: {stderr}")
+if review["status"] != "missing":
+    raise SystemExit(f"expected retired .pm/tasks default to report missing, got: {review}")
+if "retired .pm/tasks files are present" not in (review.get("reason") or ""):
+    raise SystemExit(f"expected retired .pm/tasks rejection reason, got: {review}")
+PY
+
+reset_smoke_branch_to_base
+write_task_binding
+write_project_trace
+write_role_review_packet "0000000000000000000000000000000000000000" "no_findings"
+commit_fixture_evidence
+
 stale_log="$TMPDIR/gh-stale.log"
 stale_git_log="$TMPDIR/git-stale.log"
 stale_err="$TMPDIR/stale.err"
@@ -627,8 +717,144 @@ if not expected.issubset(missing):
     raise SystemExit(f"expected exact field mismatch markers {expected}, got: {missing}")
 PY
 
+reset_smoke_branch_to_base
+rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: no-cache GitHub-backed PM fixture" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+NO_CACHE_ISSUE_LIST="$TMPDIR/no-cache-issue-list.json"
+NO_CACHE_ISSUE_BODY="$TMPDIR/no-cache-issue-body.json"
+NO_CACHE_ISSUE_FULL="$TMPDIR/no-cache-issue-full.json"
+NO_CACHE_ISSUE_COMMENTS="$TMPDIR/no-cache-issue-comments.json"
+cat > "$NO_CACHE_ISSUE_LIST" <<'EOF'
+[{"number":123,"state":"OPEN","title":"GitHub-backed no-cache fixture","url":"https://github.com/example/oasis7/issues/123"}]
+EOF
+cat > "$NO_CACHE_ISSUE_BODY" <<EOF
+{
+  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`$SMOKE_WORKTREE_CANONICAL\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
+  "number": 123,
+  "title": "GitHub-backed no-cache fixture",
+  "url": "https://github.com/example/oasis7/issues/123"
+}
+EOF
+cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
+{
+  "comments": [
+    {
+      "body": "<!-- oasis7-pm-claim-verification -->\\nTask UID: $TASK_UID\\nClaim Type: ready_for_pr\\nVerification Status: verified"
+    },
+    {
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+    },
+    {
+      "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: $SMOKE_WORKTREE_CANONICAL\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: n/a; smoke fixture\\n"
+    }
+  ]
+}
+EOF
+cat > "$NO_CACHE_ISSUE_FULL" <<EOF
+{
+  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`$SMOKE_WORKTREE_CANONICAL\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
+  "comments": [
+    {
+      "url": "https://github.com/example/oasis7/issues/123#issuecomment-1",
+      "body": "<!-- oasis7-pm-claim-verification -->\\nTask UID: $TASK_UID\\nClaim Type: ready_for_pr\\nVerification Status: verified"
+    },
+    {
+      "url": "https://github.com/example/oasis7/issues/123#issuecomment-2",
+      "body": "Pre-PR Local Role Review: passed\\nTask UID: $TASK_UID\\nReview Findings Disposition: no_findings"
+    },
+    {
+      "url": "https://github.com/example/oasis7/issues/123#issuecomment-3",
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+    }
+  ],
+  "number": 123,
+  "title": "GitHub-backed no-cache fixture",
+  "url": "https://github.com/example/oasis7/issues/123"
+}
+EOF
+no_cache_log="$TMPDIR/gh-no-cache.log"
+no_cache_git_log="$TMPDIR/git-no-cache.log"
+no_cache_out="$TMPDIR/no-cache.out"
+no_cache_err="$TMPDIR/no-cache.err"
+if ! TEST_GH_ISSUE_LIST_JSON="$NO_CACHE_ISSUE_LIST" \
+  TEST_GH_ISSUE_BODY_JSON="$NO_CACHE_ISSUE_BODY" \
+  TEST_GH_ISSUE_FULL_JSON="$NO_CACHE_ISSUE_FULL" \
+  TEST_GH_ISSUE_VIEW_JSON="$NO_CACHE_ISSUE_COMMENTS" \
+  run_prepare "$no_cache_log" "$no_cache_git_log" --create >"$no_cache_out" 2>"$no_cache_err"; then
+  cat "$no_cache_err" >&2
+  cat "$no_cache_log" >&2
+  exit 1
+fi
+python3 - "$no_cache_log" "$no_cache_out" "$no_cache_err" "$SMOKE_BRANCH" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+branch = sys.argv[4]
+
+if f"pr create --base main --head {branch} --fill" not in gh_lines:
+    raise SystemExit(f"expected gh pr create on no-cache path, got: {gh_lines}")
+if not any(line.startswith("issue list -R eng-cc/oasis7 --search") for line in gh_lines):
+    raise SystemExit(f"expected no-cache GitHub issue search, got: {gh_lines}")
+if any(line.startswith("project item-edit") for line in gh_lines):
+    raise SystemExit(f"did not expect Project item edit without cached project_item_id, got: {gh_lines}")
+if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
+    raise SystemExit(f"expected no-cache record-pr issue body update, got: {gh_lines}")
+if not any(line.startswith("issue comment 123 -R eng-cc/oasis7") for line in gh_lines):
+    raise SystemExit(f"expected no-cache record-pr PR-watch evidence comment, got: {gh_lines}")
+if "Created PR:" not in stdout:
+    raise SystemExit(f"expected PR creation output, got: {stdout}")
+if stderr:
+    raise SystemExit(f"did not expect stderr on no-cache create path: {stderr}")
+PY
+
+reset_smoke_branch_to_base
+write_task_binding
+write_project_trace
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: mapping-backed PM fixture base" >/dev/null
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_role_review_packet "$SOURCE_HEAD" "no_findings"
+mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{
+  "project": {
+    "repo": "example/oasis7"
+  },
+  "tasks": {
+    "$TASK_UID": {
+      "claim_verifications": [
+        {"status": "verified", "task_uid": "$TASK_UID", "verification_exit_code": 0, "verified_at": "2026-06-03T00:02:00+08:00", "verify_command": "fixture"}
+      ],
+      "evidence_comments": ["https://github.com/example/oasis7/issues/123#issuecomment-1"],
+      "issue_number": 123,
+      "issue_url": "https://github.com/example/oasis7/issues/123",
+      "owner_role": "tpm",
+      "priority": "P3",
+      "project_item_id": "PVTI_fixture",
+      "status": "ready",
+      "task_uid": "$TASK_UID",
+      "title": "prepare task pr role review fixture",
+      "worktree_hint": "$SMOKE_WORKTREE_CANONICAL"
+    }
+  },
+  "version": 1
+}
+EOF
 commit_fixture_evidence
 
 success_log="$TMPDIR/gh-success.log"
@@ -652,8 +878,14 @@ stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 branch = sys.argv[5]
 
-if gh_lines != [f"pr create --base main --head {branch} --fill"]:
-    raise SystemExit(f"expected only gh pr create and no reviewer API calls, got: {gh_lines}")
+if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+    raise SystemExit(f"expected gh pr create first, got: {gh_lines}")
+if not any(line.startswith("project item-edit") for line in gh_lines):
+    raise SystemExit(f"expected record-pr Project field update calls, got: {gh_lines}")
+if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
+    raise SystemExit(f"expected record-pr issue body update, got: {gh_lines}")
+if not any(line.startswith("issue comment 123 -R eng-cc/oasis7") for line in gh_lines):
+    raise SystemExit(f"expected record-pr issue evidence comment, got: {gh_lines}")
 if not any(
     line.endswith(f"push -u origin {branch}")
     or line.endswith(f"push origin {branch}")
@@ -673,12 +905,16 @@ if "- slice ledger: .pm/scratch/" not in stdout:
 if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
 PY
+reset_project_mapping_after_record_pr
 
 title_log="$TMPDIR/gh-title.log"
 title_git_log="$TMPDIR/git-title.log"
 title_out="$TMPDIR/title.out"
 title_err="$TMPDIR/title.err"
-run_prepare "$title_log" "$title_git_log" --create --title "Fixture PR title" >"$title_out" 2>"$title_err"
+if ! run_prepare "$title_log" "$title_git_log" --create --title "Fixture PR title" >"$title_out" 2>"$title_err"; then
+  cat "$title_err" >&2
+  exit 1
+fi
 
 python3 - "$title_log" "$title_err" "$SMOKE_BRANCH" "$TASK_UID" <<'PY'
 from __future__ import annotations
@@ -697,6 +933,7 @@ if not gh_lines or not gh_lines[0].startswith(expected):
 if stderr:
     raise SystemExit(f"did not expect stderr on titled create path: {stderr}")
 PY
+reset_project_mapping_after_record_pr
 
 behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
@@ -716,8 +953,10 @@ stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 branch = sys.argv[5]
 
-if gh_lines != [f"pr create --base main --head {branch} --fill"]:
-    raise SystemExit(f"expected gh pr create on behind-but-allowed path, got: {gh_lines}")
+if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+    raise SystemExit(f"expected gh pr create first on behind-but-allowed path, got: {gh_lines}")
+if not any(line.startswith("project item-edit") for line in gh_lines):
+    raise SystemExit(f"expected record-pr Project field update calls on behind-but-allowed path, got: {gh_lines}")
 if not any(
     line.endswith(f"push -u origin {branch}")
     or line.endswith(f"push origin {branch}")
@@ -731,6 +970,7 @@ if "Suggested branch sync before merge if GitHub later requires it:" not in stdo
 if stderr:
     raise SystemExit(f"did not expect stderr on behind-but-allowed path: {stderr}")
 PY
+reset_project_mapping_after_record_pr
 
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_role_review_packet "$SOURCE_HEAD" "addressed"
@@ -753,13 +993,16 @@ stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 branch = sys.argv[4]
 
-if gh_lines != [f"pr create --base main --head {branch} --fill"]:
-    raise SystemExit(f"expected only gh pr create after addressed findings, got: {gh_lines}")
+if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+    raise SystemExit(f"expected gh pr create first after addressed findings, got: {gh_lines}")
+if not any(line.startswith("project item-edit") for line in gh_lines):
+    raise SystemExit(f"expected record-pr Project field update calls after addressed findings, got: {gh_lines}")
 if "- findings disposition: addressed" not in stdout:
     raise SystemExit("expected addressed disposition in output")
 if stderr:
     raise SystemExit(f"did not expect stderr on addressed path: {stderr}")
 PY
+reset_project_mapping_after_record_pr
 
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 write_shadowed_role_review_packet "$SOURCE_HEAD"

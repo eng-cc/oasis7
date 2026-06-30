@@ -18,8 +18,8 @@ from datetime import datetime
 from typing import Any
 
 
-ACTIVE_STATUSES = ("candidate", "committed", "blocked")
-ALL_STATUSES = ("candidate", "committed", "blocked", "done", "deferred")
+ACTIVE_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch")
+ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
 FIELD_NAMES = {
     "task_uid": "Task UID",
     "owner_role": "Owner Role",
@@ -346,6 +346,10 @@ def recover_project_mapping(owner: str, number: int) -> dict[str, dict[str, str]
 def workflow_phase_for(status: str) -> str:
     if status == "blocked":
         return "blocked"
+    if status == "ready":
+        return "closeout"
+    if status == "pr_watch":
+        return "pr_watch"
     if status in {"done", "deferred"}:
         return "done"
     return "execution"
@@ -354,7 +358,13 @@ def workflow_phase_for(status: str) -> str:
 def project_status_for(status: str) -> str:
     if status == "candidate":
         return "Todo"
-    if status in {"committed", "blocked"}:
+    if status == "blocked":
+        return "Blocked"
+    if status == "ready":
+        return "Ready / PR"
+    if status == "pr_watch":
+        return "PR Watch"
+    if status == "committed":
         return "In Progress"
     if status in {"done", "deferred"}:
         return "Done"
@@ -413,7 +423,7 @@ def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "Priority": str(task.get("priority") or ""),
         "Blocked Reason": "" if task.get("status") != "blocked" else "blocked in .pm",
         "Canonical Worktree": str(task.get("worktree_hint") or ""),
-        "PR": "",
+        "PR": str(task.get("pr_url") or task.get("pull_request_url") or task.get("pr_number") or ""),
         "Test Tier Required": "n/a",
         "Last PM Update": first_date(task.get("updated_at")),
     }

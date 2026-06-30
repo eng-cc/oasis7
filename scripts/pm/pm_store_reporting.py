@@ -625,7 +625,7 @@ def build_workflow_checklist(
         add(
             "sync-backlog",
             "把本轮任务状态迁移回 backlog / task registry，避免 `.pm` 与实际执行脱节。",
-            command="./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status <candidate|committed|blocked|done|deferred>",
+            command="./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status <candidate|committed|blocked|ready|pr_watch|done|deferred>",
         )
         add(
             "sync-memory",
