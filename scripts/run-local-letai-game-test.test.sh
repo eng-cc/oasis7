@@ -345,6 +345,31 @@ assert_contains "$degraded_plan" "degraded startup will continue after provider 
 assert_contains "$degraded_plan" "--skip-llm-provider-preflight"
 assert_contains "$degraded_plan" "OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1"
 
+local_world_dry_run="$tmp_dir/local-world-dry-run.out"
+OASIS7_LOCAL_LETAI_SOURCE_BIN_DIR="$fake_bin_dir" \
+OASIS7_LOCAL_LETAI_VIEWER_DIST_DIR="$dist_dir" \
+PATH="$fake_bin_dir:$PATH" \
+  ./scripts/run-local-letai-game-test.sh \
+    --config "$config_path" \
+    --bind "$(free_bind_addr)" \
+    --no-ensure-token-config \
+    --no-default-proxy \
+    --local-world-playtest \
+    --dry-run-launch \
+    --output-dir "$tmp_dir/out-local-world-dry-run" \
+    -- \
+    --viewer-port "$(free_port)" \
+    --live-bind "$(free_bind_addr)" \
+    --web-bind "$(free_bind_addr)" \
+    >"$local_world_dry_run"
+
+assert_contains "$local_world_dry_run" "startup_profile=playtest"
+assert_contains "$local_world_dry_run" "provider_smoke_mode=skip"
+assert_contains "$local_world_dry_run" "chain_profile=local-standalone"
+assert_contains "$local_world_dry_run" "--json-ready"
+assert_not_contains "$local_world_dry_run" "local LetAI game test detached"
+assert_not_contains "$local_world_dry_run" "supervisor_script="
+
 detached_out="$tmp_dir/detached.out"
 detached_dir="$tmp_dir/out-detached"
 detached_abs_dir="$(mkdir -p "$detached_dir" && cd "$detached_dir" && pwd)"

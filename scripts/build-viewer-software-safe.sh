@@ -3,7 +3,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 source "$ROOT_DIR/scripts/viewer-web-dist-contract.sh"
-viewer_wasm_bindgen_bin="$("$ROOT_DIR/scripts/ensure-wasm-bindgen-cli.sh" --print-bin)"
 viewer_dist_dir="$ROOT_DIR/crates/oasis7_viewer/dist"
 
 if [[ "${OASIS7_FORCE_VIEWER_SOFTWARE_SAFE_BUILD:-0}" != "1" ]] \
@@ -21,6 +20,7 @@ if [[ ! -x "$ROOT_DIR/crates/oasis7_viewer/node_modules/.bin/vite" ]]; then
   )
 fi
 
+viewer_wasm_bindgen_bin="$("$ROOT_DIR/scripts/ensure-wasm-bindgen-cli.sh" --print-bin)"
 echo "+ WASM_BINDGEN_BIN=$viewer_wasm_bindgen_bin npm --prefix crates/oasis7_viewer run build:software-safe"
 (
   cd "$ROOT_DIR"

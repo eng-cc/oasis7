@@ -578,7 +578,9 @@ if [[ "$LOCAL_WORLD_PLAYTEST_PRESET" == "1" ]]; then
     PROVIDER_SMOKE_MODE_SET="1"
   fi
   REUSE_EXISTING_BUILD="1"
-  DETACH="1"
+  if [[ "$DRY_RUN_LAUNCH" == "0" ]]; then
+    DETACH="1"
+  fi
   AUTO_PLAY="0"
   CHAT_ECHO="0"
   append_launcher_arg_default --viewer-port 48420
