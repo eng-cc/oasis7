@@ -18,9 +18,9 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-06-23）:
-  - `doc/readme/governance/`: 76 份 Markdown
-  - `doc/readme/`: 123 份 Markdown
+- 快照（2026-06-30）:
+  - `doc/readme/governance/`: 69 份 Markdown
+  - `doc/readme/`: 116 份 Markdown
   - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 
