@@ -51,12 +51,14 @@ cleanup() {
 trap cleanup EXIT
 
 TASK_WORKTREE_JSON_FILE="$TMP_DIR/task-worktree.json"
-REQUIRED_TIER_JSON_FILE="$TMP_DIR/required-tier.json"
 SUBAGENT_CONTRACT_JSON_FILE="$TMP_DIR/subagent-contract.json"
 ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
 
 "$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
-"$ROOT_DIR/scripts/pm/required-tier-smoke.sh" --json > "$REQUIRED_TIER_JSON_FILE"
+"$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/github-project-sync.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/github-project-workflow.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/github-project-retire-tasks.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
@@ -136,6 +138,41 @@ checks = [
             "Candidate task or memory promotion",
             "By default this creates `source_type=reflection` only",
             "The minimum record for a micro loop inside an already-bound task is:",
+            "### 1.2.3 GitHub Project-Backed PM Migration",
+            "GitHub Project is the authoritative active-work queue",
+            "Task UID` remains the stable internal identity",
+            "github-project-workflow.sh ... sync",
+            "github-project-workflow.sh ... audit",
+            "github-project-workflow.sh ... step3-gate",
+            "Step 3 deletion is forbidden until all of these gates pass",
+        ],
+    ),
+    (
+        root / ".pm/README.md",
+        [
+            "GitHub Project-backed PM",
+            "GitHub Project 是 active work queue",
+            "github-project-workflow.sh",
+            "sync",
+            "audit",
+            "step3-gate",
+            "GitHub issue number / Project item id 只是外部对象句柄",
+        ],
+    ),
+    (
+        root / "scripts/pm/github-project-workflow.py",
+        [
+            "GitHub Project-backed oasis7 PM workflow adapter.",
+            "def command_sync",
+            "def command_audit",
+            "def command_step3_gate",
+            "duplicate GitHub Project item",
+        ],
+    ),
+    (
+        root / "scripts/pm/github-project-workflow.sh",
+        [
+            "github-project-workflow.py",
         ],
     ),
     (
@@ -145,8 +182,8 @@ checks = [
             "## Isolation Decision",
             "## Task Truth",
             "## Routed Next Phase",
-            ".pm` execution log (mandatory)",
-            "cannot replace the `.pm` execution log for task truth",
+            "GitHub issue evidence comment (mandatory)",
+            "cannot replace the GitHub-backed task evidence sink for task truth",
             "./scripts/new-task-worktree.sh",
             "./.agents/skills/repo-owned-workflow-router/SKILL.md",
             "read-only/chat-only professional judgment",
@@ -161,11 +198,11 @@ checks = [
         root / "AGENTS.md",
         [
             "default-workflow-bootstrap",
-            f"确认标准 task worktree / {bt}.pm{bt} task / owner role 真值",
+            f"确认标准 task worktree / GitHub Project-backed task truth / owner role 真值",
             f"{bt}tpm{bt} 主 Agent + 专业角色 subagents",
             "TPM 的 TODO decomposition",
             "mandatory context packet",
-            "必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
+            "必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink",
             "formal sink",
             f"{bt}liveops_community{bt} 必须参与至少一个 slice",
             "requesting-repo-owned-review/SKILL.md",
@@ -192,7 +229,7 @@ checks = [
             "派工前必须把当前 TODO",
             "mandatory context packet",
             "workflow source-of-truth",
-            "mandatory `.pm` execution-log sink",
+            "GitHub task issue evidence sink",
             "./scripts/pm/workflow-report.sh --phase start|close|review --role tpm",
         ],
     ),
@@ -282,7 +319,7 @@ checks = [
             "- write scope:",
             "- return contract:",
             "- formal sink / writeback surface:",
-            ".pm/tasks/<TASK-UID>.execution.md` (mandatory)",
+            "GitHub issue evidence comment (mandatory)",
             "- integration owner:",
             "- integration order:",
             "- context exemption:",
@@ -307,7 +344,7 @@ checks = [
         root / ".agents/skills/executing-project-tasks/SKILL.md",
         [
             "plan-gap review",
-            ".pm/tasks/<TASK-UID>.execution.md",
+            "GitHub task issue evidence comments",
             "Do not create a second planning system outside",
         ],
     ),
@@ -340,7 +377,7 @@ checks = [
         [
             "## Oasis7 Workflow Binding",
             "this skill is a specialist planning surface, not a standalone workflow",
-            ".pm/tasks/<TASK-UID>.execution.md",
+            "GitHub task issue evidence comments",
         ],
     ),
     (
@@ -471,7 +508,7 @@ scenarios = [
         "expected_route": "default-workflow-bootstrap -> task truth before direct answer",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "read-only/chat-only pure fact lookup: requires standard worktree + `.pm` task truth before direct answer",
+            "read-only/chat-only pure fact lookup: requires standard worktree + GitHub Project-backed task truth before direct answer",
             "Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.",
         ],
     },
@@ -483,8 +520,8 @@ scenarios = [
             "Every user request must enter the standard worktree flow before any substantive handling begins",
             "Read-only/chat-only requests still split by judgment type after task truth exists:",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
-            "Such read-only professional slices require the same `.pm` task and canonical task worktree as any other request.",
-            "Their required sink is `.pm/tasks/<TASK-UID>.execution.md`",
+            "Such read-only professional slices require the same GitHub-backed task and canonical task worktree as any other request.",
+            "Their required sink is GitHub task issue evidence comments",
             "TPM may gather raw files, commands, or repo context before dispatch only after bootstrap",
         ],
     },
@@ -519,7 +556,7 @@ scenarios = [
         "required_markers": [
             "Capture a lightweight pre-task TODO as a reflection signal.",
             "By default this only",
-            "appends to .pm/inbox/signals.jsonl and does not create a .pm task.",
+            "appends to .pm/inbox/signals.jsonl and does not create a GitHub-backed task.",
             "--create-task",
             "--source-type reflection",
         ],
@@ -530,7 +567,7 @@ scenarios = [
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             "Task-scoped `working_memory`",
-            "`working_memory` supplements `.pm/tasks/<TASK-UID>.execution.md`; it never",
+            "`working_memory` supplements GitHub task issue evidence comments; it never",
             "replaces task truth.",
             "Reflection signals, working memory, and",
             "replace it.",
@@ -541,7 +578,7 @@ scenarios = [
         "expected_route": "default-workflow-bootstrap -> task truth -> repo-owned-workflow-router",
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
-            "repository-changing: requires standard worktree + `.pm` task truth before edits",
+            "repository-changing: requires standard worktree + GitHub Project-backed task truth before edits",
             "choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner",
             "professional work still requires matching bounded subagent slices",
             "create a dedicated worktree unless the user explicitly authorized reuse",
@@ -592,7 +629,7 @@ scenarios = [
         "expected_route": "repo-owned-workflow-router -> executing-project-tasks",
         "surface": ".agents/skills/executing-project-tasks/SKILL.md",
         "required_markers": [
-            "the task already has written scope in `prd.md`, `project.md`, a handoff, or `.pm/tasks/<TASK-UID>.yaml`",
+            "the task already has written scope in `prd.md`, `project.md`, a handoff, or GitHub-backed task truth",
             "Run a brief plan-gap review before editing",
             "Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.",
         ],
@@ -632,8 +669,8 @@ scenarios = [
         "surface": "AGENTS.md",
         "required_markers": [
             "其他专业角色必须以 subagent slice 形式参与",
-            "TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 `.pm/tasks/<TASK-UID>.execution.md`",
-            "其他 formal sink 只能补充，不能替代 task execution log",
+            "TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink",
+            "其他 formal sink 只能补充，不能替代正式 task evidence sink",
         ],
     },
     {
@@ -699,11 +736,11 @@ scenarios = [
     },
     {
         "id": "specialist_planning_skills_bind_back_to_tpm_pm_truth",
-        "expected_route": "prd/game-architect may supplement planning but not replace TPM/.pm task truth",
+        "expected_route": "prd/game-architect may supplement planning but not replace TPM/GitHub-backed task truth",
         "surface": ".agents/skills/prd/SKILL.md",
         "required_markers": [
             "this skill is a specialist planning surface, not a standalone workflow",
-            "Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.",
+            "Record the PRD route, TODOs, and downstream handoff in GitHub task issue evidence comments.",
             "Do not treat PRD-only output as implementation-ready",
         ],
     },
@@ -713,7 +750,7 @@ scenarios = [
         "surface": ".agents/skills/game-architect/SKILL.md",
         "required_markers": [
             "this skill is a specialist architecture-planning surface, not a second project workflow",
-            "record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`",
+            "record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments",
             "Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`",
         ],
     },
@@ -742,9 +779,9 @@ scenarios = [
         "expected_route": "TPM records TODO decomposition and slice contracts before delegated execution",
         "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
         "required_markers": [
-            "TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.",
+            "TPM TODO decomposition and subagent slice contracts must be recorded in GitHub task issue evidence comments before delegated execution begins.",
             "Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.",
-            "mandatory `.pm` execution-log sink",
+            "GitHub task issue evidence sink",
             "formal docs may supplement but not replace it",
         ],
     },
@@ -812,7 +849,7 @@ print(json.dumps({"status": "ok", "scenarios": evaluated}, ensure_ascii=False))
 PY
 
 
-RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON_FILE" "$SUBAGENT_CONTRACT_JSON_FILE" "$REQUIRED_TIER_JSON_FILE" "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
+RESULT_JSON="$(python3 - "$TASK_WORKTREE_JSON_FILE" "$SUBAGENT_CONTRACT_JSON_FILE" "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -821,8 +858,7 @@ from pathlib import Path
 
 task_worktree = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 subagent_contract = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-required_tier = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
-routing_scenarios = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+routing_scenarios = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
 default_shorthand = subagent_contract["default_runtime"]["shorthand"]
 
 segments = [
@@ -864,13 +900,14 @@ segments = [
         },
     },
     {
-        "id": "closeout_and_pm_runtime",
-        "command": "./scripts/pm/required-tier-smoke.sh --json",
+        "id": "github_backed_pm_runtime",
+        "command": "./scripts/pm/github-project-task.test.sh && ./scripts/pm/github-project-sync.test.sh && ./scripts/pm/github-project-workflow.test.sh && ./scripts/pm/github-project-retire-tasks.test.sh",
         "status": "passed",
         "evidence": {
-            "task_uid": required_tier["task_closeout"]["task_uid"],
-            "claim_verification_status": required_tier["task_closeout"]["claim_verification"]["status"],
-            "final_status": required_tier["task_closeout"]["final_status"],
+            "task_adapter": "passed",
+            "sync_adapter": "passed",
+            "workflow_adapter": "passed",
+            "retire_archive_adapter": "passed",
         },
     },
     {
@@ -910,7 +947,7 @@ segments = [
 
 payload = {
     "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> task-closeout -> prepare-task-pr -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
-    "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, PM runtime smoke, and fake-gh PR helper tests",
+    "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, GitHub-backed PM runtime tests, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",
         "bootstrap creates or enters isolated task truth before fact lookup, chat answer, professional slice dispatch, or repository writeback",

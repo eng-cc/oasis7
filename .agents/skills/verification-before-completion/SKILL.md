@@ -5,6 +5,8 @@ description: Use when about to claim a task is complete, tests passed, a branch 
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
+> GitHub PM migration note: if the claim depends on PM queue/status state, include `./scripts/pm/github-project-workflow.sh ... audit` as a fresh verification input.
+
 
 # Verification Before Completion
 
@@ -67,7 +69,7 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 - Current task Doc / PM work: `./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`, `./scripts/doc-governance-check.sh`, `git diff --check`
 - Repo-wide PM governance: `./scripts/pm/lint.sh`
 - Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`
-- PR readiness: passed pre-PR local role review packet in `.pm/tasks/<TASK-UID>.execution.md`, then `./scripts/prepare-task-pr.sh`
+- PR readiness: passed pre-PR local role review packet in GitHub task issue evidence comments, then `./scripts/prepare-task-pr.sh`
 
 ## Guardrails
 

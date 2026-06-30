@@ -11,9 +11,9 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/pm/new-task-worktree-bootstrap-smoke.sh [--json] [--keep-temp]
 
-Create a temporary task worktree, bootstrap a `.pm` task inside it through
+Create a temporary task worktree, bootstrap a GitHub-backed task inside it through
 `new-task-worktree.sh --pm-*`, and assert that the source worktree stays
-unchanged while the target worktree receives the task files, start metadata,
+unchanged while the target worktree receives the mapping record, start metadata,
 a copied canonical main-worktree `config.toml`, and an ignored `target` symlink
 to the repo-family shared cargo cache. When the canonical source checkout has no
 local `config.toml`, this smoke seeds a temporary fixture so the copy path is
@@ -103,13 +103,12 @@ PM_ROOT_DIR="$WORKTREE_PATH" "$ROOT_DIR/scripts/pm/append-execution-log.sh" \
   --role producer_system_designer \
   --completed "new-task-worktree smoke appended structured evidence" \
   --pending "none" \
-  --action "exercise workflow-lint default task binding from absolute worktree_hint" \
-  --validation-command "workflow-lint --phase current" \
-  --expected-result "workflow-lint binds the bootstrapped task from absolute worktree_hint without --task-uid" \
-  --actual-result "append command wrote a complete execution-log entry before workflow-lint" \
+  --action "exercise GitHub-backed evidence append from absolute worktree_hint" \
+  --validation-command "mapping/evidence assertion" \
+  --expected-result "GitHub-backed mapping accepts the bootstrapped task mapping and evidence sink" \
+  --actual-result "append command wrote a complete GitHub issue evidence comment before mapping assertion" \
   --blocker-next-action "none" \
   --json >/dev/null
-PM_ROOT_DIR="$WORKTREE_PATH" "$ROOT_DIR/scripts/pm/workflow-lint.sh" --phase current >/dev/null
 
 SUMMARY_JSON="$(
   BOOTSTRAP_JSON="$BOOTSTRAP_JSON" python3 - "$ROOT_DIR" "$WORKTREE_PATH" "$SOURCE_STATUS_BEFORE" <<'PY'
@@ -134,25 +133,24 @@ cargo_cache_summary = payload.get("cargo_cache")
 if not cargo_cache_summary:
     raise SystemExit("cargo_cache summary missing from new-task-worktree output")
 
-task_path = worktree / pm_task["task_path"]
-execution_log_path = worktree / pm_task["execution_log_path"]
-if not task_path.is_file():
-    raise SystemExit(f"bootstrapped task file missing: {task_path}")
-if not execution_log_path.is_file():
-    raise SystemExit(f"bootstrapped execution log missing: {execution_log_path}")
-
-task_text = task_path.read_text(encoding="utf-8")
-if "status: committed" not in task_text:
-    raise SystemExit("bootstrapped task did not move to committed")
-if "last_started_at: " not in task_text or "last_started_at: null" in task_text:
+mapping_path = worktree / ".pm/github-project-sync/tasks.json"
+if not mapping_path.is_file():
+    raise SystemExit(f"bootstrapped GitHub Project mapping missing: {mapping_path}")
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+record = (mapping.get("tasks") or {}).get(pm_task["task_uid"])
+if not record:
+    raise SystemExit("bootstrapped task uid missing from GitHub Project mapping")
+if record.get("status") != "committed":
+    raise SystemExit(f"bootstrapped task did not move to committed: {record.get('status')}")
+if not record.get("last_started_at"):
     raise SystemExit("bootstrapped task missing workflow-report start timestamp")
 expected_worktree_hints = {str(worktree), str(worktree.resolve())}
-if not any(f"worktree_hint: {hint}" in task_text for hint in expected_worktree_hints):
+if str(record.get("worktree_hint") or "") not in expected_worktree_hints:
     raise SystemExit("bootstrapped task worktree_hint does not point at target worktree")
-
-execution_log_text = execution_log_path.read_text(encoding="utf-8")
-if pm_task["task_uid"] not in execution_log_text:
-    raise SystemExit("execution log missing task uid header")
+if not str(record.get("issue_url") or "").startswith("https://"):
+    raise SystemExit("bootstrapped task missing GitHub issue URL")
+if not record.get("evidence_comments"):
+    raise SystemExit("bootstrapped task missing GitHub issue evidence comments")
 
 source_config_path = Path(config_summary["source_path"])
 target_config_path = worktree / "config.toml"

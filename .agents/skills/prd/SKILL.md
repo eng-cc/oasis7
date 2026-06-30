@@ -12,12 +12,12 @@ Design comprehensive, production-grade Product Requirements Documents (PRDs) tha
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; the planning/domain conclusion must be owned by the appropriate professional slice.
+In oasis7, this skill is a specialist planning surface, not a standalone workflow. TPM must bind PRD work to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; the planning/domain conclusion must be owned by the appropriate professional slice.
 
 - Write PRD outputs to repo-owned docs such as `doc/<module>/prd.md` or `doc/**/**.prd.md`.
-- Record the PRD route, TODOs, and downstream handoff in `.pm/tasks/<TASK-UID>.execution.md`.
+- Record the PRD route, TODOs, and downstream handoff in GitHub task issue evidence comments.
 - Do not treat PRD-only output as implementation-ready unless the workflow router has also confirmed project/task execution truth and verification entry.
-- Check existing `.pm` task truth, module `prd.md`, `project.md`, handoff, and source-of-truth docs before asking the user for more information. If those sources already answer discovery questions, cite or summarize them instead of re-asking.
+- Check existing GitHub-backed task truth, module `prd.md`, `project.md`, handoff, and source-of-truth docs before asking the user for more information. If those sources already answer discovery questions, cite or summarize them instead of re-asking.
 - Ask the user only for unresolved product decisions or acceptance gaps that cannot be answered from repo truth and would materially change the PRD.
 
 ## When to Use
@@ -38,7 +38,7 @@ Use this skill when:
 
 Before writing or changing PRD content, inspect the bound task and relevant repo
 truth to fill known context. Do not assume missing product intent, but do not
-re-ask questions already answered by `.pm`, PRD, project, handoff, or
+re-ask questions already answered by GitHub-backed task truth, PRD, project, handoff, or
 source-of-truth evidence.
 
 **Check, then ask only if still unresolved:**

@@ -52,7 +52,7 @@ Do not use this skill when:
    - `prd.md` if scope/behavior/boundary changed
    - `project.md` if execution path or affected surfaces changed
    - handoff if another role/subagent will execute it
-   - `.pm/tasks/<TASK-UID>.execution.md` if the decision matters to current task truth
+   - GitHub task issue evidence comments if the decision matters to current task truth
 
 ## Expected Output
 

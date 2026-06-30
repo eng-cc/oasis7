@@ -5,6 +5,8 @@ description: Use when creating a new skill under .agents/skills, replacing an up
 
 # Writing Repo-Owned Skills
 
+> GitHub PM migration note: skill edits must not redefine the Project-backed PM migration contract; link back to `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-migration` and keep this surface operational.
+
 ## When to Use
 
 Use this skill when:

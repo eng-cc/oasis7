@@ -8,7 +8,7 @@ usage() {
 Usage: ./scripts/pm/capture-todo.sh --source-ref <path> (--summary <text> | --text <text>) [options]
 
 Capture a lightweight pre-task TODO as a reflection signal. By default this only
-appends to .pm/inbox/signals.jsonl and does not create a .pm task.
+appends to .pm/inbox/signals.jsonl and does not create a GitHub-backed task.
 
 Required:
   --source-ref <path>         Primary source reference for the discovery

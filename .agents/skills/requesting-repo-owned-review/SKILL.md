@@ -5,6 +5,8 @@ description: Use when a branch is about to create a PR and must collect fresh in
 
 # Requesting Repo-Owned Review
 
+> GitHub PM migration note: PM workflow/script changes should include repository-health review and should treat GitHub Project audit evidence as part of the review target when queue/status semantics changed.
+
 Use this skill when the work is about to enter the GitHub PR path.
 
 The review is no longer optional before PR creation. TPM must create or dispatch
@@ -71,7 +73,7 @@ The formal path is:
    - role quality/risk verdict
    - `residual_risk`
 5. Write the review request into a formal sink before or while dispatching:
-   - `.pm/tasks/<TASK-UID>.execution.md`
+   - GitHub task issue evidence comments
    - PR evidence document
    - handoff when another role/subagent is reviewing
 6. Act on the result:
@@ -98,7 +100,7 @@ The formal path is:
 
 ## Passed Evidence Packet
 
-Record this packet in `.pm/tasks/<TASK-UID>.execution.md` after integrating the
+Record this packet in GitHub task issue evidence comments after integrating the
 role reviews and addressing findings:
 
 ```markdown
@@ -149,4 +151,4 @@ role reviews and addressing findings:
 - Do not leave the review request or outcome as chat-only context.
 - Do not resolve GitHub threads based solely on this local review packet.
 - Do not paste large diffs into the task execution log when a review package can be linked instead.
-- Do not rely on the slice ledger as the only task truth; `.pm/tasks/<TASK-UID>.execution.md` remains the mandatory sink.
+- Do not rely on the slice ledger as the only task truth; GitHub task issue evidence comments remain the mandatory sink.
