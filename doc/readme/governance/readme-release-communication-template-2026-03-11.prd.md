@@ -55,7 +55,8 @@
 - Architecture Overview: 该模板专题位于 readme/governance，复用首份 communication brief 的结构，把单次实例上升为固定模板能力。
 - Integration Points:
   - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
-  - `doc/readme/governance/liveops-to-producer-task-readme-006-release-brief-2026-03-11.md`
+  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md`
+  - `.pm/tasks/task_<32hex>.execution.md` pre-PR local role review evidence for future instantiated release communication tasks
   - `doc/readme/project.md`
 - Edge Cases & Error Handling:
   - 实例缺失内部来源：模板必须显式标红“不得发布”。

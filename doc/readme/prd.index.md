@@ -17,8 +17,8 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/readme/`：123 份文件
-- `doc/readme/governance/`：76 份文件
+- `doc/readme/`：116 份文件
+- `doc/readme/governance/`：69 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
@@ -29,7 +29,7 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 76 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
+| `governance/` | 69 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
