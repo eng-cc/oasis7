@@ -322,7 +322,7 @@
 - `doc/world-simulator/project.md`
 - `doc/world-simulator/prd/acceptance/unified-checklist.md`
 - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
-- `doc/world-simulator/prd/launcher/blockchain-transfer.md`
+- retired world-simulator launcher blockchain-transfer PRD booklet
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
 - `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md`
 - `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md`

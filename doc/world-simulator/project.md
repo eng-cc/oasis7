@@ -21,6 +21,7 @@
 
 ### 历史压缩索引
 - 初始 world-simulator PRD/schema/acceptance、launcher 转账、Web 控制台、shared UI schema、Web wasm 与 native/web control plane 历史：回看 `doc/world-simulator/prd.index.md`、相关 topic project 与 GitHub task issue evidence comments。
+- 早期 launcher 链上转账基础条款 `PRD-WORLD_SIMULATOR-004/005` 已从旧 singleton 分册退役，当前追溯通过 `doc/world-simulator/prd.index.md`、`doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md` 与 `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md` 进入。
 - Viewer live/runtime-world、LLM/provider、software_safe、pixel-world 与 visual cleanup 历史：回看 `doc/world-simulator/viewer/`、`doc/world-simulator/llm/`、`doc/testing/evidence/` 与对应 task trace。
 - Release distribution、platform native entrypoints、Windows installer、Linux AppImage 与 upgrade policy 历史：回看 `doc/world-simulator/launcher/`、`doc/site/github-pages/` 与对应 task trace。
 - 本主项目页只维护当前/最近任务索引；完整执行证据以 topic project、testing evidence 与 GitHub task issue evidence comments 为准。
@@ -33,7 +34,6 @@
 - `doc/world-simulator/prd/acceptance/unified-checklist.md`
 - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
 - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
-- `doc/world-simulator/prd/launcher/blockchain-transfer.md`
 - `doc/world-simulator/launcher/game-client-launcher-web-console-2026-03-04.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-ui-schema-share-2026-03-04.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-egui-web-unification-2026-03-04.prd.md`
