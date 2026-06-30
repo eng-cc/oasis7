@@ -315,9 +315,11 @@ fn update_restricted_claim_admin_registry_rejects_controller_account_outside_eco
         .expect("registry update rejection");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| note.contains("ecosystem treasury controller slot")));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("ecosystem treasury controller slot"))
+            );
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
@@ -344,9 +346,11 @@ fn update_restricted_claim_admin_registry_rejects_account_without_signer_policy(
         .expect("registry update rejection");
     match rejection {
         RejectReason::RuleDenied { notes } => {
-            assert!(notes
-                .iter()
-                .any(|note| { note.contains("missing restricted grant admin signer policy") }));
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| { note.contains("missing restricted grant admin signer policy") })
+            );
         }
         other => panic!("expected rule denied, got {other:?}"),
     }
