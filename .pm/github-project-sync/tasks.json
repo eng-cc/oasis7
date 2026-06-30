@@ -211,7 +211,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK5hI",
       "status": "done",
       "task_uid": "task_043d5f6220444641942e631c193b5549",
-      "title": "\u5ffd\u7565 repo-owned provider workspace \u4e0b\u7684 OpenClaw \u672c\u5730\u72b6\u6001\u76ee\u5f55",
+      "title": "忽略 repo-owned provider workspace 下的 OpenClaw 本地状态目录",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-simulator-provider-workspace-openclaw-ignore"
     },
     "task_04d61dc5778e4b1683a61056daf454e3": {
@@ -450,6 +450,21 @@
       "status": "done",
       "task_uid": "task_085e8a8ad95a43de9b9c4d015decbca0",
       "title": "rename software_safe canonical ui mode to viewer"
+    },
+    "task_08836ae3a4534cbda65cb8cccc767e6e": {
+      "content_id": "I_kwDORHhWec8AAAABHI9Ftg",
+      "execution_log_path": ".pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md",
+      "issue_number": 1623,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1623",
+      "last_synced_at": "2026-06-30T13:55:53+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPePQ",
+      "status": "done",
+      "task_uid": "task_08836ae3a4534cbda65cb8cccc767e6e",
+      "title": "Retire next old doc semantics surface",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-3"
     },
     "task_088b948d76f843588493368e2c6779d3": {
       "content_id": "I_kwDORHhWec8AAAABHEgh5w",
@@ -702,7 +717,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK9U8",
       "status": "done",
       "task_uid": "task_0bac7318e0ba412cbd39469bfc096ffb",
-      "title": "\u5c06\u7eff\u6d32\u5e01 100 \u4ebf\u603b\u91cf\u843d\u5230 chain execution world fresh-init \u771f\u503c",
+      "title": "将绿洲币 100 亿总量落到 chain execution world fresh-init 真值",
       "worktree_hint": "p2p-oc-genesis-runtime-config"
     },
     "task_0c3cddc969d24f48b0575be3d7aa87f7": {
@@ -974,6 +989,20 @@
       "title": "engineering cleanup audit",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-cleanup-audit"
     },
+    "task_15225f6f3df54f629cbc3e6823fa1191": {
+      "execution_log_path": null,
+      "issue_number": 1617,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1617",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPKLQ",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_15225f6f3df54f629cbc3e6823fa1191",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.9axIAkK6ju/worktree"
+    },
     "task_1528a3f2bcd04bd6acad166c7a257bca": {
       "content_id": "I_kwDORHhWec8AAAABHEhFFw",
       "execution_log_path": ".pm/tasks/task_1528a3f2bcd04bd6acad166c7a257bca.execution.md",
@@ -1091,7 +1120,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK-HM",
       "status": "done",
       "task_uid": "task_1751b60f8aed4a4f913926368f8c72b3",
-      "title": "\u6536\u7d27 world-simulator \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 world-simulator 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-world-simulator-active-reading-surface"
     },
     "task_176c0cf78fef462a9275ac66b991e5c5": {
@@ -1194,7 +1223,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK-Ow",
       "status": "done",
       "task_uid": "task_191e827b3ba84711bd0572504aea8251",
-      "title": "\u8865\u9f50\u533a\u5757\u94fe\u76d1\u63a7\u7f3a\u53e3\u4f59\u4e0b runtime \u6307\u6807",
+      "title": "补齐区块链监控缺口余下 runtime 指标",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-runtime-chain-monitoring-gap-first-batch"
     },
     "task_1936ae26167a45088aaee9cae64a8a7c": {
@@ -1523,7 +1552,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK--E",
       "status": "done",
       "task_uid": "task_1e43a55e0fe44d4a8bc0db11388662aa",
-      "title": "\u6536\u53e3\u5269\u4f59\u4f4e\u5bc6\u5ea6\u6a21\u5757\u6587\u6863\u51cf\u91cd\u8fb9\u754c\u5e76\u538b\u6389\u91cd\u590d\u5165\u53e3",
+      "title": "收口剩余低密度模块文档减重边界并压掉重复入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-low-density-doc-entry-followup"
     },
     "task_1ed6ad641a634905a3e7bc6423d61504": {
@@ -1674,6 +1703,20 @@
       "task_uid": "task_20b6ee42182247ccbebe6a6a2c2db469",
       "title": "standardize per-module wasm observability and contract testing",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-runtime-wasm-module-observability-standardization"
+    },
+    "task_20d2a31528c24c7692b74796a9a5117d": {
+      "execution_log_path": null,
+      "issue_number": 1616,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1616",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPJ5U",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_20d2a31528c24c7692b74796a9a5117d",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.cPkMqpuU3N/worktree"
     },
     "task_21152e953bd14e4195a3f2ec3519a33b": {
       "content_id": "I_kwDORHhWec8AAAABHEhz3w",
@@ -1897,7 +1940,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK_z4",
       "status": "done",
       "task_uid": "task_231ca618613d564ca2c9ec758253c7b7",
-      "title": "TASK-ENGINEERING-086 \u5efa\u7acb\u8bb0\u5fc6\u542f\u53d1\u5f0f\u81ea\u6211\u8fdb\u5316\u8865\u5f3a\u4e13\u9898",
+      "title": "TASK-ENGINEERING-086 建立记忆启发式自我进化补强专题",
       "worktree_hint": "engineering-memory-self-evolution-prd"
     },
     "task_23748dba7c5a546694d7bfdced4429ae": {
@@ -1912,7 +1955,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxK_0o",
       "status": "done",
       "task_uid": "task_23748dba7c5a546694d7bfdced4429ae",
-      "title": "\u7edf\u4e00 subagent review \u9ed8\u8ba4\u6d41\u7a0b\u53e3\u5f84",
+      "title": "统一 subagent review 默认流程口径",
       "worktree_hint": "engineering-remove-subagent-exception-boundary"
     },
     "task_23af5676602c49c0ba233a217393f9d4": {
@@ -1957,6 +2000,21 @@
       "title": "Fix launcher open game page URL",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-simulator-launcher-open-game-page-url-fix"
     },
+    "task_24271b58c442494cba84b80a8b9f0332": {
+      "content_id": "I_kwDORHhWec8AAAABHI9Flg",
+      "execution_log_path": ".pm/tasks/task_24271b58c442494cba84b80a8b9f0332.execution.md",
+      "issue_number": 1620,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1620",
+      "last_synced_at": "2026-06-30T13:55:52+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeO8",
+      "status": "done",
+      "task_uid": "task_24271b58c442494cba84b80a8b9f0332",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-12"
+    },
     "task_24307edaa0e54122a31217723b3d048a": {
       "content_id": "I_kwDORHhWec8AAAABHEiLHw",
       "execution_log_path": ".pm/tasks/task_24307edaa0e54122a31217723b3d048a.execution.md",
@@ -1986,6 +2044,21 @@
       "task_uid": "task_24dd9a89a2084480a620e474b2dcd0e2",
       "title": "homepage first-glance game hook hardening",
       "worktree_hint": "/home/scc/worktrees/oasis7-site-homepage-first-glance-game-hook"
+    },
+    "task_259d00b070cf42fa85ad12b144745aff": {
+      "content_id": "I_kwDORHhWec8AAAABHI9FmA",
+      "execution_log_path": ".pm/tasks/task_259d00b070cf42fa85ad12b144745aff.execution.md",
+      "issue_number": 1622,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1622",
+      "last_synced_at": "2026-06-30T13:55:52+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeOs",
+      "status": "done",
+      "task_uid": "task_259d00b070cf42fa85ad12b144745aff",
+      "title": "Retire next old doc semantics surface",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-4"
     },
     "task_26cb41e1a4914a9eac0ec1728afd2079": {
       "content_id": "I_kwDORHhWec8AAAABHEiOLA",
@@ -2031,6 +2104,21 @@
       "task_uid": "task_2718880e90634a56a54c514251aac935",
       "title": "package newapi bridge service in manual CI",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-world-runtime-newapi-bridge-ci-package"
+    },
+    "task_27878601094144ecb63a6b33d2a965e3": {
+      "content_id": "I_kwDORHhWec8AAAABHI9Flw",
+      "execution_log_path": ".pm/tasks/task_27878601094144ecb63a6b33d2a965e3.execution.md",
+      "issue_number": 1621,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1621",
+      "last_synced_at": "2026-06-30T13:55:53+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPePI",
+      "status": "done",
+      "task_uid": "task_27878601094144ecb63a6b33d2a965e3",
+      "title": "retire next stale documentation semantics",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-9"
     },
     "task_27a692f876214ae182ac0de525892ef2": {
       "content_id": "I_kwDORHhWec8AAAABHEiSCg",
@@ -2478,6 +2566,20 @@
       "task_uid": "task_335bb10de14b40ea8e2800bf86c74b6a",
       "title": "Add software_safe browser regression script",
       "worktree_hint": "world-simulator-software-safe-browser-regression"
+    },
+    "task_33dd806601d141c8846768d93af25549": {
+      "execution_log_path": null,
+      "issue_number": 1615,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1615",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPJpY",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_33dd806601d141c8846768d93af25549",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.Yv38hF1xdg/worktree"
     },
     "task_3432ce6ab4fc47fb84811bcfef2c22c8": {
       "content_id": "I_kwDORHhWec8AAAABHEi9FQ",
@@ -3030,7 +3132,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLCeg",
       "status": "done",
       "task_uid": "task_3eb31966906e5ae7b8b8676d756c5510",
-      "title": "TASK-ENGINEERING-085 \u5c06 .pm \u5de5\u4f5c\u6d41\u63a5\u5165\u5f53\u524d\u5de5\u7a0b\u6d41\u7a0b",
+      "title": "TASK-ENGINEERING-085 将 .pm 工作流接入当前工程流程",
       "worktree_hint": "engineering-pm-stage-workflow-closure"
     },
     "task_3eb6197221c14d3fba72b57dd6790512": {
@@ -3107,6 +3209,21 @@
       "task_uid": "task_3f16628d366949be961decc4d5991979",
       "title": "Review site story CH-043 focused slice",
       "worktree_hint": "oasis7-site-story-next-step"
+    },
+    "task_3fa598816b3d4ffda8f44105433a032f": {
+      "content_id": "I_kwDORHhWec8AAAABHI9GzQ",
+      "execution_log_path": ".pm/tasks/task_3fa598816b3d4ffda8f44105433a032f.execution.md",
+      "issue_number": 1624,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1624",
+      "last_synced_at": "2026-06-30T13:55:56+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeQE",
+      "status": "done",
+      "task_uid": "task_3fa598816b3d4ffda8f44105433a032f",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-7"
     },
     "task_3fcca9c7548f47d9be1d79a06ffcb59f": {
       "content_id": "I_kwDORHhWec8AAAABHEkA6Q",
@@ -3194,7 +3311,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLDSI",
       "status": "done",
       "task_uid": "task_41e1aad0d5b54a20839d92b0bd58fbec",
-      "title": "\u6536\u53e3 agent \u76f4\u8fde\u63a5\u5165\u65b9\u5f0f taxonomy\uff0c\u66ff\u6362 legacy provider mode \u6b67\u4e49\u53e3\u5f84",
+      "title": "收口 agent 直连接入方式 taxonomy，替换 legacy provider mode 歧义口径",
       "worktree_hint": "/home/scc/worktrees/oasis7-core-agent-direct-connect-terminology"
     },
     "task_41f5ad97727c4641b65241d4141601b9": {
@@ -3284,6 +3401,20 @@
       "task_uid": "task_42b496aae8c8456a882acea4c2116a22",
       "title": "Find and fix next engineering governance issue",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-governance-next-issue-5-20260625"
+    },
+    "task_42f2f020e41543a0a36057ad2eafa58d": {
+      "execution_log_path": null,
+      "issue_number": 1611,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1611",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPIIU",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_42f2f020e41543a0a36057ad2eafa58d",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.RtHIt5VFQ1/worktree"
     },
     "task_43133cddb6044a38ac0c7d9cd1bdcf01": {
       "content_id": "I_kwDORHhWec8AAAABHEkXBA",
@@ -3431,7 +3562,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLEDQ",
       "status": "deferred",
       "task_uid": "task_465642c5e22b4f25a75aa15010d71c8d",
-      "title": "TASK-README-058 \u4e3a\u7b2c\u5341\u7bc7\u8865\u5145\u4f18\u79c0\u540c\u4e8b\u5bc6\u5ea6\u8bba\u70b9",
+      "title": "TASK-README-058 为第十篇补充优秀同事密度论点",
       "worktree_hint": "oasis7-readme-xiaohongshu-offer-choice-peer-density-refresh"
     },
     "task_468d5569fbd6559692870328d6c0ba94": {
@@ -3745,7 +3876,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLEXU",
       "status": "done",
       "task_uid": "task_4c463dbcad324411bd421581e26cd845",
-      "title": "TASK-ENGINEERING-115 \u5bf9\u9f50 AGENTS \u5de5\u4f5c\u6d41\u5355\u4e00\u4e8b\u5b9e\u6e90",
+      "title": "TASK-ENGINEERING-115 对齐 AGENTS 工作流单一事实源",
       "worktree_hint": "oasis7-engineering-agents-workflow-single-source-alignment"
     },
     "task_4c9d1a0350034138bbc49f8b93cf321c": {
@@ -3938,7 +4069,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLEp8",
       "status": "done",
       "task_uid": "task_5013d728670c5d9aa3f634ca6e665fab",
-      "title": "\u4fee\u590d chain runtime \u9ed8\u8ba4 loopback replication \u7f51\u7edc\u52ab\u6301\u4e09\u8282\u70b9\u5171\u8bc6\u5e7f\u64ad",
+      "title": "修复 chain runtime 默认 loopback replication 网络劫持三节点共识广播",
       "worktree_hint": "world-runtime-triad-consensus-network-fallback-fix"
     },
     "task_50239fbcd8bd470685ac673b3cf9adf7": {
@@ -3967,7 +4098,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLEs0",
       "status": "done",
       "task_uid": "task_506de4e1992d420491a33e77affa8bd1",
-      "title": "\u4e3a\u591a worktree \u63d0\u4f9b\u5171\u4eab cargo \u5f00\u53d1\u7f13\u5b58\u5165\u53e3",
+      "title": "为多 worktree 提供共享 cargo 开发缓存入口",
       "worktree_hint": "scripts-cargo-shared-cache"
     },
     "task_50fe2af50edf479db290e6fae0a215f8": {
@@ -4059,6 +4190,20 @@
       "task_uid": "task_52308ccba04f475c8d17fa5b3d3993ca",
       "title": "viewer formal lane truth alignment",
       "worktree_hint": "/home/scc/worktrees/oasis7-viewer-viewer-formal-lane-truth-align"
+    },
+    "task_52d22f09cb3f43d4a708e73bd0f3b311": {
+      "execution_log_path": null,
+      "issue_number": 1609,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1609",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPHXs",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_52d22f09cb3f43d4a708e73bd0f3b311",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.jecB58LOst/worktree"
     },
     "task_52d37909a424425096c7f2084383eb78": {
       "content_id": "I_kwDORHhWec8AAAABHEla-A",
@@ -4236,7 +4381,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLFFU",
       "status": "done",
       "task_uid": "task_56064741379e4dcfa613ce8211e26972",
-      "title": "\u5f7b\u5e95\u8fc1\u79fb\u94fe\u4e0a\u4ee3\u5e01\u6b63\u5f0f\u547d\u540d\u4e0e symbol \u5230\u7eff\u6d32\u5e01 / Oasis Coin",
+      "title": "彻底迁移链上代币正式命名与 symbol 到绿洲币 / Oasis Coin",
       "worktree_hint": "p2p-oasis-coin-full-migration"
     },
     "task_56f67be67a5a43c09027cb224f1416ad": {
@@ -4386,7 +4531,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLFXs",
       "status": "done",
       "task_uid": "task_595e340aca0c400d837ade31d69cf6c2",
-      "title": "\u5bf9\u9f50\u6839 AGENTS \u4e0e cargo-dev \u5f00\u53d1\u6001\u5165\u53e3\u53e3\u5f84",
+      "title": "对齐根 AGENTS 与 cargo-dev 开发态入口口径",
       "worktree_hint": "scripts-cargo-command-policy-alignment"
     },
     "task_5963ea33d3854bef802154b2996bea89": {
@@ -4433,6 +4578,20 @@
       "task_uid": "task_599a68313d1c46e797ab5e090b8f16de",
       "title": "document bridge receiving account strategy",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-bridge-receiving-accounts-docs"
+    },
+    "task_59e795038c9f4e64a967bba3a786f3b2": {
+      "execution_log_path": null,
+      "issue_number": 1613,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1613",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPJCQ",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_59e795038c9f4e64a967bba3a786f3b2",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.meqaL4DaiI/worktree"
     },
     "task_5a38ecfbcc394836b524614180c702eb": {
       "content_id": "I_kwDORHhWec8AAAABHElw5A",
@@ -4554,6 +4713,20 @@
       "title": "Design consumer-grade cross-platform release distribution",
       "worktree_hint": "oasis7-world-simulator-broader-user-release-distribution-design"
     },
+    "task_5d73f44e9eb64441a0c91a60248e3dab": {
+      "execution_log_path": null,
+      "issue_number": 1610,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1610",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPHqY",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_5d73f44e9eb64441a0c91a60248e3dab",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.sLAd5CG8S1/worktree"
+    },
     "task_5da43be9aa8f4bb39b6635d4b147d54f": {
       "content_id": "I_kwDORHhWec8AAAABHEl3ww",
       "execution_log_path": ".pm/tasks/task_5da43be9aa8f4bb39b6635d4b147d54f.execution.md",
@@ -4596,7 +4769,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLFnA",
       "status": "done",
       "task_uid": "task_5de9ab15e0de40fcb331745f093a0d99",
-      "title": "\u6536\u7d27 readme/core \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 readme/core 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-readme-core-active-reading-surface"
     },
     "task_5dfbbe7c8c0c4557bef2b49612da3081": {
@@ -4719,6 +4892,21 @@
       "title": "Draft site story CH-053",
       "worktree_hint": "oasis7-site-story-next-step"
     },
+    "task_607211ba9e60460da109f25ab8c78f60": {
+      "content_id": "I_kwDORHhWec8AAAABHI9G3A",
+      "execution_log_path": ".pm/tasks/task_607211ba9e60460da109f25ab8c78f60.execution.md",
+      "issue_number": 1625,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1625",
+      "last_synced_at": "2026-06-30T13:55:56+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeQM",
+      "status": "done",
+      "task_uid": "task_607211ba9e60460da109f25ab8c78f60",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-10"
+    },
     "task_619bb81ae69c415c9a7e6a29a7f3fd9d": {
       "content_id": "I_kwDORHhWec8AAAABHEmClw",
       "execution_log_path": ".pm/tasks/task_619bb81ae69c415c9a7e6a29a7f3fd9d.execution.md",
@@ -4761,7 +4949,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLF1Y",
       "status": "done",
       "task_uid": "task_61ca6b9c39214cb394522fa99b355502",
-      "title": "\u6536\u53e3 no-llm \u5bf9\u5916\u8868\u8ff0",
+      "title": "收口 no-llm 对外表述",
       "worktree_hint": "/home/scc/worktrees/oasis7-core-no-llm-wording-cleanup"
     },
     "task_61d9adfc0059495c9efdfe7ed073ae1b": {
@@ -4835,7 +5023,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLg1A",
       "status": "done",
       "task_uid": "task_63a90a761d435a1e8723c8af73bac3f4",
-      "title": "\u6536\u53e3 pure_api \u5fc5\u987b\u542f\u7528 LLM \u7684\u6b63\u5f0f\u6e38\u73a9\u53e3\u5f84",
+      "title": "收口 pure_api 必须启用 LLM 的正式游玩口径",
       "worktree_hint": "oasis7-core-llm-required-access"
     },
     "task_63bc00b7cc084542bacc309ab97fd84f": {
@@ -4850,7 +5038,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLF7E",
       "status": "done",
       "task_uid": "task_63bc00b7cc084542bacc309ab97fd84f",
-      "title": "\u5c06\u6587\u6863\u4f53\u91cf\u6cbb\u7406\u5347\u7ea7\u4e3a\u6b63\u5f0f\u4e13\u9898\u5e76\u51bb\u7ed3\u5206\u5c42\u6536\u655b\u65b9\u6848",
+      "title": "将文档体量治理升级为正式专题并冻结分层收敛方案",
       "worktree_hint": "engineering-doc-surface-area-governance"
     },
     "task_6436f1f4fd754136a7b2feb9f1b5f141": {
@@ -4940,7 +5128,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLF-8",
       "status": "done",
       "task_uid": "task_655d27d6d71142fd9df37f52e5ae0936",
-      "title": "\u5236\u5b9a\u5c0f\u7ea2\u4e66\u535a\u4e3b\u548c\u5fae\u4fe1\u516c\u4f17\u53f7\u7eff\u6d32\u5e01\u6fc0\u52b1\u65b9\u6848",
+      "title": "制定小红书博主和微信公众号绿洲币激励方案",
       "worktree_hint": "/home/scc/worktrees/oasis7-readme-media-promoter-incentive"
     },
     "task_656a707a4de145e0b1a8600160866889": {
@@ -5088,7 +5276,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLGMM",
       "status": "done",
       "task_uid": "task_6a5ec3f5819240d6ac60adbde70b63b1",
-      "title": "\u4fee\u590d oasis7 provider smoke \u81ea\u52a8 bootstrap \u6743\u9650\u963b\u585e",
+      "title": "修复 oasis7 provider smoke 自动 bootstrap 权限阻塞",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-simulator-provider-smoke-bootstrap-permission"
     },
     "task_6b28814f7caf4c5087f9471ba25e0a46": {
@@ -5193,7 +5381,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLGUA",
       "status": "done",
       "task_uid": "task_6d7c3d84f6ae5fca8966b69460033552",
-      "title": "TASK-ENGINEERING-091 \u8865\u5145 working_memory \u4e0e .codex \u4f1a\u8bdd\u5206\u6790\u53e3\u5f84",
+      "title": "TASK-ENGINEERING-091 补充 working_memory 与 .codex 会话分析口径",
       "worktree_hint": "engineering-working-memory-conversation-analysis"
     },
     "task_6dff86536191415296f4eddc517ecb21": {
@@ -5208,7 +5396,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLGUI",
       "status": "done",
       "task_uid": "task_6dff86536191415296f4eddc517ecb21",
-      "title": "\u6536\u7d27 site \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 site 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-site-active-reading-surface"
     },
     "task_6e04d52cce55592a8adaa45c9a89abf7": {
@@ -5223,7 +5411,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLGWY",
       "status": "done",
       "task_uid": "task_6e04d52cce55592a8adaa45c9a89abf7",
-      "title": "\u4fee\u590d .pm full-tier memory-regression-smoke \u56de\u5f52",
+      "title": "修复 .pm full-tier memory-regression-smoke 回归",
       "worktree_hint": "engineering-pm-lint-followup"
     },
     "task_6e23e1a96ee34d059aa62e4280a367b7": {
@@ -5550,7 +5738,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLGo4",
       "status": "done",
       "task_uid": "task_73d01224142443af9b02b1c34a9c3c06",
-      "title": "\u4fee\u590d ModuleContext manifest_hash \u8bef\u586b world_config_hash",
+      "title": "修复 ModuleContext manifest_hash 误填 world_config_hash",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-runtime-wasm-context-manifest-hash-fix"
     },
     "task_74350f4352d745f386f9e9866409560c": {
@@ -5714,7 +5902,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLG5w",
       "status": "done",
       "task_uid": "task_774fd50ebd6d4c53bc94592dbe8554cc",
-      "title": "\u5bf9\u9f50 README \u4e0e\u516c\u5f00\u6587\u6863\u7684\u2018\u6587\u660e\u6a21\u62df\u6e38\u620f\u2019\u5b9a\u4f4d\u53e3\u5f84",
+      "title": "对齐 README 与公开文档的‘文明模拟游戏’定位口径",
       "worktree_hint": "/home/scc/worktrees/oasis7-readme-game-positioning-alignment"
     },
     "task_7790ac86a31a4c509e9f6debba2f96b4": {
@@ -6088,7 +6276,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLHqI",
       "status": "done",
       "task_uid": "task_7fc83a5053f84a8a83624ebebcb719c5",
-      "title": "\u5f7b\u5e95\u6e05\u7406\u65e7 provider public/structural naming \u6b8b\u7559",
+      "title": "彻底清理旧 provider public/structural naming 残留",
       "worktree_hint": "/home/scc/worktrees/oasis7-core-provider-name-purge"
     },
     "task_81577d7e86df4cd0b7bbb1c4d08ad019": {
@@ -6730,7 +6918,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLI4M",
       "status": "done",
       "task_uid": "task_9026e48532624e84a031656172a6a684",
-      "title": "\u6536\u7d27\u666e\u901a MR \u7684\u8d21\u732e\u5956\u52b1\u4e0a\u9650\u5230 150 OC",
+      "title": "收紧普通 MR 的贡献奖励上限到 150 OC",
       "worktree_hint": "readme-reward-mr-cap-150"
     },
     "task_9051849e0c92424bb7f0ca972a7935cc": {
@@ -6820,7 +7008,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLJMk",
       "status": "done",
       "task_uid": "task_921adc6982ea5dbca0f2d2b2cd4e3f98",
-      "title": "TASK-ENGINEERING-099 \u91cd\u6784 .pm task identity \u4e3a task_uid \u5355\u4e00\u771f\u503c",
+      "title": "TASK-ENGINEERING-099 重构 .pm task identity 为 task_uid 单一真值",
       "worktree_hint": "engineering-pm-task-uid-only"
     },
     "task_92b8563352b84e80969a3305aeb464f7": {
@@ -7288,6 +7476,20 @@
       "title": "fix release build-web-dist launcher wasm regression",
       "worktree_hint": "/home/scc/worktrees/oasis7-testing-release-build-web-dist-launcher-wasm-regression"
     },
+    "task_9a4161f1692b4f689559c6363b29655e": {
+      "execution_log_path": null,
+      "issue_number": 1608,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1608",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPHA8",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_9a4161f1692b4f689559c6363b29655e",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.kPEzyjia6c/worktree"
+    },
     "task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2": {
       "content_id": "I_kwDORHhWec8AAAABHEofmg",
       "execution_log_path": ".pm/tasks/task_9a6bbbc3022f4d4e8a3f5f99fab4d1b2.execution.md",
@@ -7465,7 +7667,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLKas",
       "status": "done",
       "task_uid": "task_9d31a737a8bc4de2a6c76a50b9b29b8a",
-      "title": "\u6536\u7d27 p2p/testing \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 p2p/testing 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-p2p-testing-active-reading-surface"
     },
     "task_9d7ffaf28ce4455cbd78038c25e5a98d": {
@@ -7706,6 +7908,21 @@
       "title": "polish homepage CN/EN intro copy against comparable strategy-sim positioning",
       "worktree_hint": "/home/scc/worktrees/oasis7-site-homepage-copy-polish-cn-en"
     },
+    "task_a101e84b6dea4f9cb3ae0627e537aff6": {
+      "content_id": "I_kwDORHhWec8AAAABHI9HPQ",
+      "execution_log_path": ".pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.execution.md",
+      "issue_number": 1626,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1626",
+      "last_synced_at": "2026-06-30T13:55:57+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeQo",
+      "status": "done",
+      "task_uid": "task_a101e84b6dea4f9cb3ae0627e537aff6",
+      "title": "retire next legacy doc semantics",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7"
+    },
     "task_a133f6fec84e47b68fe68932569a1a56": {
       "content_id": "I_kwDORHhWec8AAAABHEowBw",
       "execution_log_path": ".pm/tasks/task_a133f6fec84e47b68fe68932569a1a56.execution.md",
@@ -7751,6 +7968,21 @@
       "title": "recover active-llm trust gate queued/freeze runtime floor",
       "worktree_hint": "/home/scc/worktrees/oasis7-game-active-llm-trust-gate-queued-freeze-recovery"
     },
+    "task_a1cd0a6f64584aa18b122d43f43c3584": {
+      "content_id": "I_kwDORHhWec8AAAABHI9Hcw",
+      "execution_log_path": ".pm/tasks/task_a1cd0a6f64584aa18b122d43f43c3584.execution.md",
+      "issue_number": 1627,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1627",
+      "last_synced_at": "2026-06-30T13:55:59+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeQ0",
+      "status": "done",
+      "task_uid": "task_a1cd0a6f64584aa18b122d43f43c3584",
+      "title": "retire next legacy doc semantics",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-6"
+    },
     "task_a25bf76359be45719edfcda1759626d1": {
       "content_id": "I_kwDORHhWec8AAAABHE45pQ",
       "execution_log_path": ".pm/tasks/task_a25bf76359be45719edfcda1759626d1.execution.md",
@@ -7765,6 +7997,21 @@
       "task_uid": "task_a25bf76359be45719edfcda1759626d1",
       "title": "Create viewer visual design specification",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-world-simulator-viewer-visual-design-spec"
+    },
+    "task_a284e8f46b31441aa1685fbe9ea67f06": {
+      "content_id": "I_kwDORHhWec8AAAABHI9IIg",
+      "execution_log_path": ".pm/tasks/task_a284e8f46b31441aa1685fbe9ea67f06.execution.md",
+      "issue_number": 1628,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1628",
+      "last_synced_at": "2026-06-30T13:56:01+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeRw",
+      "status": "done",
+      "task_uid": "task_a284e8f46b31441aa1685fbe9ea67f06",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-9"
     },
     "task_a28db8372d864bde9a9c5ea508bd7824": {
       "content_id": "I_kwDORHhWec8AAAABHE48Uw",
@@ -7882,7 +8129,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLhSc",
       "status": "done",
       "task_uid": "task_a47a56ae522d4ef297facb850a814db2",
-      "title": "\u6536\u7d27 game \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 game 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-game-active-reading-surface"
     },
     "task_a60d245402924d32826d7139fd1aad25": {
@@ -8140,6 +8387,21 @@
       "title": "repo-owned default workflow bootstrap",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-default-workflow-bootstrap"
     },
+    "task_ab539eb94b724db6b6f2a51846314fe3": {
+      "content_id": "I_kwDORHhWec8AAAABHI9IJg",
+      "execution_log_path": ".pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.execution.md",
+      "issue_number": 1629,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1629",
+      "last_synced_at": "2026-06-30T13:56:01+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeR0",
+      "status": "done",
+      "task_uid": "task_ab539eb94b724db6b6f2a51846314fe3",
+      "title": "retire next legacy doc semantics",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-8"
+    },
     "task_abeacd11de97477c91668825da4524b5": {
       "content_id": "I_kwDORHhWec8AAAABHE8hUQ",
       "execution_log_path": ".pm/tasks/task_abeacd11de97477c91668825da4524b5.execution.md",
@@ -8197,7 +8459,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLlTU",
       "status": "done",
       "task_uid": "task_ad34b36f56795347b73cd5aa2c7db71c",
-      "title": "\u6682\u505c 3D \u53ef\u89c6\u5316\u4e13\u9898\u5e76\u5c06\u7528\u6237\u4ea4\u4e92\u5206\u652f\u8f6c\u4e3a\u6682\u5b58\u6001",
+      "title": "暂停 3D 可视化专题并将用户交互分支转为暂存态",
       "worktree_hint": "world-simulator-pause-3d-visualization"
     },
     "task_ad5cbac95aa54e26a9fa7d7558380750": {
@@ -8317,7 +8579,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLd3c",
       "status": "done",
       "task_uid": "task_b006f2efdbd247ab883906d150cacbaf",
-      "title": "TASK-ENGINEERING-102 \u6e05\u7406\u65e7 review \u53e3\u5f84\u5e76\u843d\u5730\u65e0\u526f\u4f5c\u7528 codex snapshot review",
+      "title": "TASK-ENGINEERING-102 清理旧 review 口径并落地无副作用 codex snapshot review",
       "worktree_hint": "engineering-codex-review-flow"
     },
     "task_b0a073c3b7fd44549767d9540e8e6ec9": {
@@ -8436,7 +8698,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLeAg",
       "status": "done",
       "task_uid": "task_b21f68180cf64edb9ab5dc50bb896ed5",
-      "title": "TASK-README-070 \u4e3a\u5df2\u5408\u5165 PR \u5956\u52b1 intake \u589e\u52a0\u6309\u8f6e\u626b\u63cf\u811a\u672c",
+      "title": "TASK-README-070 为已合入 PR 奖励 intake 增加按轮扫描脚本",
       "worktree_hint": "oasis7-readme-reward-merged-pr-round-scan"
     },
     "task_b23cd4919b4c481490777293b556cc70": {
@@ -8602,6 +8864,21 @@
       "task_uid": "task_b4c03075497348cfbcf30fcb4c970226",
       "title": "repair oasis7_node replication lib regressions from issue 182",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-issue-182-replication-lib-regressions"
+    },
+    "task_b4d9072d2e274174b1b05258c9fbeabb": {
+      "content_id": "I_kwDORHhWec8AAAABHI9Ikg",
+      "execution_log_path": ".pm/tasks/task_b4d9072d2e274174b1b05258c9fbeabb.execution.md",
+      "issue_number": 1630,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1630",
+      "last_synced_at": "2026-06-30T13:56:03+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeSQ",
+      "status": "done",
+      "task_uid": "task_b4d9072d2e274174b1b05258c9fbeabb",
+      "title": "retire next legacy doc semantics",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-5"
     },
     "task_b5173c0d4a2d4faf81589b66d5c5fd29": {
       "content_id": "I_kwDORHhWec8AAAABHE2ZeQ",
@@ -9016,7 +9293,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLeko",
       "status": "done",
       "task_uid": "task_bcf53cee3ee04b6d9de9a6723ad8c313",
-      "title": "TASK-ENGINEERING-113 \u5c06\u9ed8\u8ba4\u6700\u7ec8\u5408\u6d41\u4ece\u672c\u5730 landing \u5207\u5230 GitHub PR",
+      "title": "TASK-ENGINEERING-113 将默认最终合流从本地 landing 切到 GitHub PR",
       "worktree_hint": "engineering-github-pr-landing-governance"
     },
     "task_bdacd20a0dcb4034b52208123be2c832": {
@@ -9106,7 +9383,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLeqA",
       "status": "done",
       "task_uid": "task_bed6ca16c4424d7e9b544eeb71c48a8e",
-      "title": "\u51bb\u7ed3\u94fe\u4e0a\u4ee3\u5e01\u6b63\u5f0f\u547d\u540d\u4e3a\u7eff\u6d32\u5e01 / Oasis Coin",
+      "title": "冻结链上代币正式命名为绿洲币 / Oasis Coin",
       "worktree_hint": "p2p-oasis-coin-naming"
     },
     "task_beeef4125cfc4809b1babcacd8ae833f": {
@@ -9121,7 +9398,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLesQ",
       "status": "done",
       "task_uid": "task_beeef4125cfc4809b1babcacd8ae833f",
-      "title": "\u6536\u7d27 core \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 core 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-core-active-reading-surface"
     },
     "task_bf477b3a0333411d8fa8bc2a130d1f16": {
@@ -9136,7 +9413,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLetk",
       "status": "done",
       "task_uid": "task_bf477b3a0333411d8fa8bc2a130d1f16",
-      "title": "\u5f7b\u5e95\u91cd\u6784 agent provider taxonomy \u4e0e\u65e7 provider brand \u547d\u540d\u6a21\u578b",
+      "title": "彻底重构 agent provider taxonomy 与旧 provider brand 命名模型",
       "worktree_hint": "/home/scc/worktrees/oasis7-core-provider-taxonomy-overhaul"
     },
     "task_c071bb3cba3447c6ac7041cbc7d3e701": {
@@ -9196,7 +9473,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLexU",
       "status": "done",
       "task_uid": "task_c1149e15fef14f12925182a03f37e546",
-      "title": "\u94fe\u4e0a world \u9ed8\u8ba4\u88ab\u52a8\u8ddf\u968f committed action\uff0c\u7a7a\u8f6e\u8be2\u4e0d\u63a8\u8fdb"
+      "title": "链上 world 默认被动跟随 committed action，空轮询不推进"
     },
     "task_c1560decfc2b40fab17803fa78909b34": {
       "content_id": "I_kwDORHhWec8AAAABHE3EQg",
@@ -9285,7 +9562,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLe3I",
       "status": "done",
       "task_uid": "task_c2def8d52baa4fe5a1b1df64e19a6305",
-      "title": "\u5f52\u6863\u4e09\u8282\u70b9\u94fe\u72b6\u6001\u6307\u6807\u90e8\u7f72\u4e0e\u91c7\u6837\u8bc1\u636e",
+      "title": "归档三节点链状态指标部署与采样证据",
       "worktree_hint": "/home/scc/worktrees/oasis7-testing-triad-metrics-rollout-evidence"
     },
     "task_c2fd95f7ea5c4fe6b2f1cde2843ad075": {
@@ -10061,7 +10338,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLmnk",
       "status": "done",
       "task_uid": "task_d205e719d6634bbfbf0be51944d4e7fb",
-      "title": "TASK-README-056 \u6536\u7d27\u5c0f\u7ea2\u4e66 offer \u9009\u62e9\u5e16\u7684 AI \u8f6c\u5411\u65f6\u95f4\u5224\u65ad",
+      "title": "TASK-README-056 收紧小红书 offer 选择帖的 AI 转向时间判断",
       "worktree_hint": "readme-xiaohongshu-offer-choice-wording-refresh"
     },
     "task_d27fd4eafe4c41bdb046d3fe3765033f": {
@@ -10136,7 +10413,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLm6g",
       "status": "done",
       "task_uid": "task_d2d6e47c320c44f58aa1a717738ed91b",
-      "title": "\u6536\u7d27 world-runtime \u6d3b\u8dc3\u9605\u8bfb\u9762\u5165\u53e3",
+      "title": "收紧 world-runtime 活跃阅读面入口",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-world-runtime-active-reading-surface"
     },
     "task_d2e428f00e5047e581061c8cb75963ef": {
@@ -10196,7 +10473,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLn30",
       "status": "done",
       "task_uid": "task_d35fcf0504a6400ca75d6891f4b5a24f",
-      "title": "\u5168\u4ed3\u5f7b\u5e95\u6e05\u7406\u65e7 provider \u76f4\u8fde\u547d\u540d\u6b8b\u7559",
+      "title": "全仓彻底清理旧 provider 直连命名残留",
       "worktree_hint": "/home/scc/worktrees/oasis7-core-provider-total-purge"
     },
     "task_d37f636846fa44449988240af8630454": {
@@ -10274,6 +10551,20 @@
       "title": "Wire live reachability evidence into P2P auto mode recommender",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-p2parch-live-reachability-recommender"
     },
+    "task_d46b1f36622440d6a540205dbdfeccd1": {
+      "execution_log_path": null,
+      "issue_number": 1614,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1614",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPJWE",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_d46b1f36622440d6a540205dbdfeccd1",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.F3fB79x6CE/worktree"
+    },
     "task_d4a0aba67db2412989ec9ec33af687fb": {
       "content_id": "I_kwDORHhWec8AAAABHE-dJQ",
       "execution_log_path": ".pm/tasks/task_d4a0aba67db2412989ec9ec33af687fb.execution.md",
@@ -10316,7 +10607,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLoT0",
       "status": "done",
       "task_uid": "task_d51d20e197cc54cf81460fb09098f58d",
-      "title": "\u5bf9\u9f50 3D \u6682\u505c\u540e\u7684 Viewer operator \u811a\u672c\u9ed8\u8ba4\u503c\u4e0e\u63d0\u793a",
+      "title": "对齐 3D 暂停后的 Viewer operator 脚本默认值与提示",
       "worktree_hint": "world-simulator-pause-3d-script-alignment"
     },
     "task_d5247a8f051443c38a6d551ab75efac8": {
@@ -10361,7 +10652,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLoiw",
       "status": "done",
       "task_uid": "task_d5b0c4f7b5b0448b9cbc93bc1787452d",
-      "title": "\u4e0b\u6c89 engineering \u6839\u76ee\u5f55\u6cbb\u7406\u4e13\u9898\u5e76\u6e05\u7406 root allowlist \u6b8b\u7559",
+      "title": "下沉 engineering 根目录治理专题并清理 root allowlist 残留",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-low-density-doc-entry-followup"
     },
     "task_d63088bec0f649ed935b9efac8aa07bd": {
@@ -10421,7 +10712,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLpIA",
       "status": "done",
       "task_uid": "task_d7505c05df5c55e384719816e2c36416",
-      "title": "\u5c06\u6267\u884c\u65e5\u5fd7\u6539\u4e3a\u6309\u4efb\u52a1\u5f52\u6863",
+      "title": "将执行日志改为按任务归档",
       "worktree_hint": "engineering-pm-task-local-execution-log-v2"
     },
     "task_d7c44249a4aa42c6b2ec25415873ae7f": {
@@ -10495,7 +10786,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxKRQw",
       "status": "committed",
       "task_uid": "task_d8e9b47662a24d3687bde8fe0bb6637d",
-      "title": "TASK-README-072 \u6267\u884c approved contributor reward round \u53d1\u653e\u56de\u586b",
+      "title": "TASK-README-072 执行 approved contributor reward round 发放回填",
       "worktree_hint": "oasis7-readme-reward-distribution-closure-round"
     },
     "task_d929d9a4f3e745539c68e21eff8e58bf": {
@@ -10542,6 +10833,20 @@
       "task_uid": "task_d997184193684bc4a645dc945ed3020e",
       "title": "Draft site story CH-042",
       "worktree_hint": "oasis7-site-story-next-step"
+    },
+    "task_da270975fe024547b516fc599c808758": {
+      "execution_log_path": null,
+      "issue_number": 1612,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1612",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPIY0",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_da270975fe024547b516fc599c808758",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.aBR7RwjFtH/worktree"
     },
     "task_da53f3ce27664c40a8010f813fa098ff": {
       "claim_verifications": [
@@ -10590,7 +10895,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLp9U",
       "status": "done",
       "task_uid": "task_daa6920df91d4df9807c6a04fd3cf3fc",
-      "title": "\u51bb\u7ed3\u7eff\u6d32\u5e01\u521b\u4e16\u7edd\u5bf9\u53d1\u884c\u91cf\u4e3a 100 \u4ebf OC",
+      "title": "冻结绿洲币创世绝对发行量为 100 亿 OC",
       "worktree_hint": "p2p-oc-10b-supply-freeze"
     },
     "task_dac2a6ab38134923b8573bc74fe5743e": {
@@ -10653,6 +10958,21 @@
       "title": "add prepare-task-pr planner reason summary",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down"
     },
+    "task_dbd38392feb44872ab7a2f5c2c0e6b25": {
+      "content_id": "I_kwDORHhWec8AAAABHI9I2w",
+      "execution_log_path": ".pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.execution.md",
+      "issue_number": 1631,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1631",
+      "last_synced_at": "2026-06-30T13:56:03+08:00",
+      "module": "visualization",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeSg",
+      "status": "done",
+      "task_uid": "task_dbd38392feb44872ab7a2f5c2c0e6b25",
+      "title": "local testnet world playtest startup",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-visualization-local-testnet-world-playtest-20260627"
+    },
     "task_dcd011f0e4a84239a148c44d86c3097a": {
       "content_id": "I_kwDORHhWec8AAAABHE_d3Q",
       "execution_log_path": ".pm/tasks/task_dcd011f0e4a84239a148c44d86c3097a.execution.md",
@@ -10680,7 +11000,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLqng",
       "status": "done",
       "task_uid": "task_dd49ad3480d14922993ceb3acf2555c6",
-      "title": "viewer gameplay action \u76f4\u63d0 chain runtime",
+      "title": "viewer gameplay action 直提 chain runtime",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-runtime-chain-linked-gameplay-action-submit"
     },
     "task_de0aa53e059f430c8905947515f36edf": {
@@ -10785,7 +11105,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLq_Y",
       "status": "done",
       "task_uid": "task_df8b7a58b2e75ba089fcd195ecf6ba14",
-      "title": "\u7edf\u4e00 commit \u524d subagent review \u9ed8\u8ba4\u6d41\u7a0b\u53e3\u5f84",
+      "title": "统一 commit 前 subagent review 默认流程口径",
       "worktree_hint": "engineering-subagent-review-user-authorization-template"
     },
     "task_dfb4d70a28884617b1506fa6570b34fc": {
@@ -10830,7 +11150,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLsDU",
       "status": "done",
       "task_uid": "task_dfc0ef35b0114c4589b79c97735122ca",
-      "title": "TASK-README-058 \u4e3a\u7b2c\u5341\u7bc7\u8865\u5145\u4f18\u79c0\u540c\u4e8b\u5bc6\u5ea6\u8bba\u70b9",
+      "title": "TASK-README-058 为第十篇补充优秀同事密度论点",
       "worktree_hint": "oasis7-readme-xiaohongshu-offer-choice-peer-density-refresh"
     },
     "task_dfe0d5fdffcf4e0cb5b28a28cda917c8": {
@@ -10938,6 +11258,21 @@
       "title": "rename triad local observability label from observer_local to local_node",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-triad-local-node-label-rename"
     },
+    "task_e397ce71cd284c7aaffdff4d036079f7": {
+      "content_id": "I_kwDORHhWec8AAAABHI9JeA",
+      "execution_log_path": ".pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.execution.md",
+      "issue_number": 1632,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1632",
+      "last_synced_at": "2026-06-30T13:56:06+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeTM",
+      "status": "done",
+      "task_uid": "task_e397ce71cd284c7aaffdff4d036079f7",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11"
+    },
     "task_e3e98d92b70f4168831f756a5872a4aa": {
       "content_id": "I_kwDORHhWec8AAAABHFAZ9g",
       "execution_log_path": ".pm/tasks/task_e3e98d92b70f4168831f756a5872a4aa.execution.md",
@@ -10950,7 +11285,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxLsno",
       "status": "done",
       "task_uid": "task_e3e98d92b70f4168831f756a5872a4aa",
-      "title": "TASK-GAME-076 \u524d 30 \u5206\u949f\u5438\u5f15\u529b\u73a9\u6cd5\u4e0e\u81ea\u52a8\u5316",
+      "title": "TASK-GAME-076 前 30 分钟吸引力玩法与自动化",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-game-strategy-design-todo-inventory"
     },
     "task_e479687218a94f698ef7715458543fc9": {
@@ -11100,7 +11435,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMJZ8",
       "status": "done",
       "task_uid": "task_e81d3dd8628747de9a96c6aa0eae6c82",
-      "title": "\u6536\u7d27 triad \u56fa\u5b9a\u62d3\u6251\u4f4e\u6d41\u91cf\u8fd0\u884c\u6863\u4f4d",
+      "title": "收紧 triad 固定拓扑低流量运行档位",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-triad-low-traffic-profile"
     },
     "task_e81e085cf2614cfd82e6c7bb411144d6": {
@@ -11115,7 +11450,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMJbs",
       "status": "done",
       "task_uid": "task_e81e085cf2614cfd82e6c7bb411144d6",
-      "title": "launcher \u5185\u7f6e\u5b98\u65b9 bootstrap anchors \u9ed8\u8ba4\u503c",
+      "title": "launcher 内置官方 bootstrap anchors 默认值",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-simulator-launcher-default-bootstrap-anchors"
     },
     "task_e90a10e12a4b4f498ad5691fe3aeefa8": {
@@ -11237,6 +11572,20 @@
       "task_uid": "task_eaa2499f5b38480fb1a0c3e7f1e688b3",
       "title": "deploy public testnet faucet service",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-public-testnet-faucet-service"
+    },
+    "task_eac04954d5be4c5ab8e4add168b49084": {
+      "execution_log_path": null,
+      "issue_number": 1618,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1618",
+      "module": "engineering",
+      "owner_role": "producer_system_designer",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPKcA",
+      "status": "committed",
+      "task_path": null,
+      "task_uid": "task_eac04954d5be4c5ab8e4add168b49084",
+      "title": "smoke bootstrap task",
+      "worktree_hint": "/private/var/folders/m4/6c3b0lts6bnbtjdtdmkfzlth0000gn/T/tmp.DHMfu0Ywy8/worktree"
     },
     "task_eb30491fb20e4cf9abaf95dd57b47228": {
       "content_id": "I_kwDORHhWec8AAAABHFUP8w",
@@ -11400,7 +11749,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMJ_s",
       "status": "done",
       "task_uid": "task_eceb1ea8964a449683d754632c860cdc",
-      "title": "TASK-README-057 \u4e3a\u5c0f\u7ea2\u4e66\u7b2c\u5341\u7bc7\u8865\u9f50 4 \u9875\u8f6e\u64ad\u7248\u7d20\u6750\u5305\u4e0e\u8d44\u4ea7",
+      "title": "TASK-README-057 为小红书第十篇补齐 4 页轮播版素材包与资产",
       "worktree_hint": "oasis7-readme-xiaohongshu-offer-choice-carousel"
     },
     "task_ed2dd76639264739a61a25c0d89c3352": {
@@ -11429,7 +11778,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMKBg",
       "status": "done",
       "task_uid": "task_ed73cdbf88b24025a532f46bfb4021d4",
-      "title": "TASK-README-071 \u4e3a reward round scan \u589e\u52a0 ledger draft \u5bfc\u51fa",
+      "title": "TASK-README-071 为 reward round scan 增加 ledger draft 导出",
       "worktree_hint": "oasis7-readme-reward-merged-pr-round-scan"
     },
     "task_edb2d067d4774fddaa528bf7046326b5": {
@@ -11654,7 +12003,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMKz4",
       "status": "done",
       "task_uid": "task_f15a1d9ea3194c39aa35158bf93d8ff1",
-      "title": "\u8865\u9f50\u533a\u5757\u94fe\u76d1\u63a7\u7f3a\u53e3\u9996\u6279 runtime \u6307\u6807",
+      "title": "补齐区块链监控缺口首批 runtime 指标",
       "worktree_hint": "/home/scc/worktrees/oasis7-world-runtime-chain-monitoring-gap-first-batch"
     },
     "task_f1990219b9bd41ed99db93c13a64c0c5": {
@@ -11867,6 +12216,21 @@
       "title": "Implement P2PARCH-2 QUIC TCP fallback",
       "worktree_hint": "oasis7-p2p-p2parch-2-quic-tcp-fallback"
     },
+    "task_f4961c6f86a84ac696ba5929a7084957": {
+      "content_id": "I_kwDORHhWec8AAAABHI9JeQ",
+      "execution_log_path": ".pm/tasks/task_f4961c6f86a84ac696ba5929a7084957.execution.md",
+      "issue_number": 1633,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1633",
+      "last_synced_at": "2026-06-30T13:56:06+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxPeTY",
+      "status": "done",
+      "task_uid": "task_f4961c6f86a84ac696ba5929a7084957",
+      "title": "Continue engineering performance and abstraction optimization",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-8"
+    },
     "task_f53819eea77a4c929eb3686fc676f6d4": {
       "content_id": "I_kwDORHhWec8AAAABHFWGkA",
       "execution_log_path": ".pm/tasks/task_f53819eea77a4c929eb3686fc676f6d4.execution.md",
@@ -11939,7 +12303,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMLnI",
       "status": "done",
       "task_uid": "task_f5beda0b81da4b538d168d675aed2e08",
-      "title": "\u6536\u655b libp2p \u8bf7\u6c42\u70ed\u8def\u4e0e peer manager \u5237\u65b0\u6027\u80fd\u5f00\u9500",
+      "title": "收敛 libp2p 请求热路与 peer manager 刷新性能开销",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-libp2p-hotpath-perf"
     },
     "task_f5ff387007264254b4cafde421f34e10": {
@@ -12297,7 +12661,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMMSs",
       "status": "done",
       "task_uid": "task_fa2fb263ce3b4c58bff341bf4e815408",
-      "title": "\u4fee\u590d p2p cached peer record fallback \u8bef\u8def\u7531\u4e0e miss \u9519\u8bef\u8bed\u4e49",
+      "title": "修复 p2p cached peer record fallback 误路由与 miss 错误语义",
       "worktree_hint": "/home/scc/worktrees/oasis7-p2p-cached-peer-record-fallback-fix"
     },
     "task_fae804670e22469eb7285c8c1e0b996b": {
@@ -12402,7 +12766,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMMig",
       "status": "done",
       "task_uid": "task_fbb0248046ff416dace822c4dc3ff37d",
-      "title": "TASK-README-080 \u6539\u5199\u7b2c\u5341\u4e09\u7bc7\u5171\u540c\u53c2\u4e0e\u6e38\u620f\u4e3b\u9898",
+      "title": "TASK-README-080 改写第十三篇共同参与游戏主题",
       "worktree_hint": "oasis7-readme-xiaohongshu-future-ownership"
     },
     "task_fbb38479a3ff4d0887e50bcc6ee64162": {
@@ -12477,7 +12841,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMMs8",
       "status": "done",
       "task_uid": "task_fc2393bf4e3b40999fc89761e917afcd",
-      "title": "\u91cd\u8bc4\u8ba1\u5212\u6388\u4e88 PR \u7684\u5b9e\u9645\u4ef7\u503c\u5e76\u6536\u7d27\u5f85\u53d1\u653e\u91d1\u989d",
+      "title": "重评计划授予 PR 的实际价值并收紧待发放金额",
       "worktree_hint": "readme-reward-reassess-planned-grants-value"
     },
     "task_fc499abed90742caa7c1a66166f7d926": {
@@ -12612,7 +12976,7 @@
       "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxMNEY",
       "status": "done",
       "task_uid": "task_fe1edfe8d20f4a9b946c7b8073aa6ef8",
-      "title": "TASK-ENGINEERING-PMVIEW-001 \u5c06 .pm registry/backlog \u6539\u4e3a\u672c\u5730\u751f\u6210\u89c6\u56fe\u5e76\u6536\u7d27 engineering \u6839\u9879\u76ee\u70ed\u70b9",
+      "title": "TASK-ENGINEERING-PMVIEW-001 将 .pm registry/backlog 改为本地生成视图并收紧 engineering 根项目热点",
       "worktree_hint": "engineering-github-pr-landing-governance"
     },
     "task_fe853f282152419eae1f5898c3116b85": {

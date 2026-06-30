@@ -2,16 +2,45 @@
   "archive_path": "/Users/scc/ccwork/worktrees/oasis7-engineering-github-issues-projects-pm-evaluation/.pm/github-project-sync/task-archive.jsonl",
   "archive_reused": true,
   "deletion": {
-    "deleted_count": 0,
-    "deleted_paths": []
+    "deleted_count": 28,
+    "deleted_paths": [
+      ".pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml",
+      ".pm/tasks/task_24271b58c442494cba84b80a8b9f0332.yaml",
+      ".pm/tasks/task_259d00b070cf42fa85ad12b144745aff.yaml",
+      ".pm/tasks/task_27878601094144ecb63a6b33d2a965e3.yaml",
+      ".pm/tasks/task_3fa598816b3d4ffda8f44105433a032f.yaml",
+      ".pm/tasks/task_607211ba9e60460da109f25ab8c78f60.yaml",
+      ".pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.yaml",
+      ".pm/tasks/task_a1cd0a6f64584aa18b122d43f43c3584.yaml",
+      ".pm/tasks/task_a284e8f46b31441aa1685fbe9ea67f06.yaml",
+      ".pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.yaml",
+      ".pm/tasks/task_b4d9072d2e274174b1b05258c9fbeabb.yaml",
+      ".pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.yaml",
+      ".pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.yaml",
+      ".pm/tasks/task_f4961c6f86a84ac696ba5929a7084957.yaml",
+      ".pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.execution.md",
+      ".pm/tasks/task_24271b58c442494cba84b80a8b9f0332.execution.md",
+      ".pm/tasks/task_259d00b070cf42fa85ad12b144745aff.execution.md",
+      ".pm/tasks/task_27878601094144ecb63a6b33d2a965e3.execution.md",
+      ".pm/tasks/task_3fa598816b3d4ffda8f44105433a032f.execution.md",
+      ".pm/tasks/task_607211ba9e60460da109f25ab8c78f60.execution.md",
+      ".pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.execution.md",
+      ".pm/tasks/task_a1cd0a6f64584aa18b122d43f43c3584.execution.md",
+      ".pm/tasks/task_a284e8f46b31441aa1685fbe9ea67f06.execution.md",
+      ".pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.execution.md",
+      ".pm/tasks/task_b4d9072d2e274174b1b05258c9fbeabb.execution.md",
+      ".pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.execution.md",
+      ".pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.execution.md",
+      ".pm/tasks/task_f4961c6f86a84ac696ba5929a7084957.execution.md"
+    ]
   },
   "errors": [],
-  "selected_count": 847,
+  "selected_count": 861,
   "status": "ok",
   "status_counts": {
     "candidate": 2,
-    "committed": 27,
+    "committed": 26,
     "deferred": 1,
-    "done": 817
+    "done": 832
   }
 }
