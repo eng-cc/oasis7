@@ -108,3 +108,12 @@ Example:
 - LiveOps Evidence: liveops_community review confirmed release communication approval chain remains discoverable, Moltbook/current channel runbooks are preserved, deleted files were one-shot handoff briefs rather than live channel runbooks, and root README remains `limited playable technical preview`.
 - Residual Risk: historical `.pm` evidence may still mention deleted path names as archived task records; intentionally out of scope for this current-doc cleanup and suitable only for a separate PM evidence-retention policy task if needed.
 - Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/slice-ledger.jsonl`
+
+## 2026-06-30 09:54:42 CST / tpm
+- 完成内容: Ran ready-for-PR claim and task closeout path.
+- 遗留事项: commit closeout metadata, create PR, watch CI/comments, merge, and cleanup.
+- Action: `claim-ready` verified the current task workflow gate; `task-closeout.sh` wrote current task closeout metadata (`status: done`, verification fields, removed committed backlog entry) but exited non-zero after repo-wide `.pm lint` hit pre-existing historical execution-log debt outside this task.
+- Validation Command: `./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --phase current" --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --json`; `./scripts/pm/task-closeout.sh --role tpm --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --verify-command "./scripts/pm/workflow-lint.sh --task-uid task_a101e84b6dea4f9cb3ae0627e537aff6 --phase current" --json`.
+- Expected Result: current task can be claimed ready for PR and task-local closeout metadata is written.
+- Actual Result: `claim-ready` returned `status=verified` and `allowed_to_claim=true`; `task-closeout.sh` wrote task-local closeout metadata, then failed on repo-wide historical `.pm lint` debt in unrelated task execution logs.
+- Blocker / Next Action: not a current-task blocker; preserve task-local closeout metadata and continue with PR preflight.
