@@ -90,3 +90,73 @@ Example:
 - Expected Result: Focused behavior regressions pass; formatting, doc governance, workflow lint, and diff whitespace checks pass.
 - Actual Result: PASS. Initial `fmt --check` found only formatter differences; `rtk ./scripts/cargo-dev.sh fmt --all` was applied, then `fmt --check` passed. `doc-governance-check: OK`; `workflow-lint: OK`; `git diff --check` passed.
 - Blocker / Next Action: Commit implementation snapshot and run repo-owned pre-PR role review.
+
+## 2026-06-30 09:39:00 CST / tpm
+- Review Trigger: pre-PR local role review.
+- Review Scope: `crates/oasis7/src/simulator/llm_agent/behavior_runtime_helpers.rs`; `crates/oasis7/src/simulator/llm_agent/tests_part3_module_lifecycle.rs`; `doc/engineering/project.md`; `.pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.*`.
+- Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/review-packages/review-75af9be83..722b504b8.diff`.
+- Review Roles: `agent_engineer`, `qa_engineer`, `repository_health_engineer`.
+- Review Question: Confirm the implementation preserves the LLM agent prompt tool contract while improving allocation behavior: `*_total` remains filtered total count, returned arrays are limited first-page matches in prior order, filters and schema are unchanged, and test/gate evidence is sufficient for PR.
+- Evidence Available: Focused tests for lifecycle and market status tools passed; fmt/doc-governance/workflow-lint/diff-check passed; implementation head `722b504b8c8f3fc57dec20b3e96192ee70834a9c`.
+- Expected Return Contract: findings or no_findings; scope/spec compliance verdict; role quality/risk verdict; residual_risk.
+- Slice Ledger: `/Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl`.
+- Formal Sink: this execution log.
+- Intended Dispatch: fresh bounded `agent_engineer`, `qa_engineer`, and `repository_health_engineer` pre-PR review slices.
+- Actual Limitation: current tool surface exposes no callable `multi_agent`/subagent dispatch or wait tool in this turn; `tool_search` for multi-agent/subagent tooling returned no tools.
+- Fallback Evidence Path: review package, implementation diff, focused test outputs, formatting/doc/workflow/diff gates, and prior repository-health discovery result recorded above.
+- Attribution Boundary: no independent fresh `qa_engineer` or `repository_health_engineer` pre-PR verdict is claimed here. The fallback only records transparent TPM integration evidence under the workflow limitation; GitHub required checks and PR review/comment gates remain mandatory.
+
+## 2026-06-30 09:40:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_e397ce71cd284c7aaffdff4d036079f7
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11
+- Source Branch: task/engineering-perf-abstraction-optimization-11
+- Source Head: 722b504b8c8f3fc57dec20b3e96192ee70834a9c
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `crates/oasis7/src/simulator/llm_agent/behavior_runtime_helpers.rs`; `crates/oasis7/src/simulator/llm_agent/tests_part3_module_lifecycle.rs`; `doc/engineering/project.md`; task truth under `.pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.*`.
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/review-packages/review-75af9be83..722b504b8.diff
+- Role Selection Basis: changed LLM agent prompt tool implementation and tests require `agent_engineer`; verification claim requires `qa_engineer`; abstraction and project/task trace require `repository_health_engineer`.
+- Review Roles: agent_engineer, qa_engineer, repository_health_engineer
+- Review Evidence: repository-health discovery selected this candidate and identified contract risks; agent implementation evidence recorded above; QA/repository-health fresh dispatch unavailable due current tool limitation and replaced only by fallback gate evidence with explicit attribution boundary.
+- Review Verdicts: fallback evidence supports scope/spec consistency and low residual implementation risk, but no independent fresh QA/repository-health verdict is claimed due tool limitation.
+- Review Findings Disposition: no actionable findings found in fallback evidence; independent role findings unavailable because dispatch tooling is unavailable.
+- Finding Disposition Evidence: focused regressions assert filtered totals exceed returned page length and stable first-page order; fmt/doc-governance/workflow-lint/diff-check passed.
+- Verification Matrix: LLM agent lifecycle status prompt tool -> focused lifecycle regression -> PASS; LLM agent market status prompt tool -> focused market regression -> PASS; Rust formatting -> `rtk ./scripts/cargo-dev.sh fmt --all --check` -> PASS; doc governance -> `rtk bash scripts/doc-governance-check.sh` -> PASS; workflow/task truth -> `rtk ./scripts/pm/workflow-lint.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --phase current` -> PASS; diff hygiene -> `rtk git diff --check` -> PASS.
+- Visual Evidence: n/a; no viewer/UI/visual surface changed.
+- WASM Evidence: n/a; no WASM ABI, manifest, build artifact, or determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook, packaging, or operator surface changed.
+- LiveOps Evidence: n/a; no external messaging, player promise, incident, or community surface changed.
+- Residual Risk: low. Risk is localized to prompt tool output pagination/count semantics and covered by focused regressions; normal PR required checks remain mandatory.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl
+
+## 2026-06-30 09:48:00 CST / tpm
+- 完成内容: Actual pre-PR role reviews completed and supersede the earlier fallback-only packet at `2026-06-30 09:40:00 CST`. Repository-health P2 workflow-evidence finding was addressed by recording actual `agent_engineer`, `qa_engineer`, and `repository_health_engineer` review verdicts in this execution log and in a real slice ledger. QA caveat about uncommitted evidence is addressed by committing this final evidence before PR prep.
+- 遗留事项: CI required-gate remains mandatory before merge; QA explicitly marked it as the merge gate rather than a blocker to opening PR.
+- Action: Integrate actual role reviews and findings disposition.
+- Validation Command: `multi_agent_v1.wait_agent` for reviewer ids `019f162f-2c13-7ef1-84b6-5275b7291d6b`, `019f162f-7e30-7e52-b056-2bbf6c5ec2e5`, and `019f162f-7ec9-76d1-9adf-aa7d5a2f831a`; `rtk ./scripts/pm/slice-ledger.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --role <role> --status <status> ...`
+- Expected Result: Final pre-PR evidence packet is based on actual role verdicts, not fallback-only evidence.
+- Actual Result: PASS. `agent_engineer`: no_findings, scope/spec pass, agent quality/risk pass, residual risk low. `qa_engineer`: no_findings, PR creation ready, required-gate remains merge gate, residual risk low. `repository_health_engineer`: one P2 workflow-evidence finding; code/docs/task aligned and code risk low; finding addressed by this packet and ledger update.
+- Blocker / Next Action: Commit final evidence, regenerate review package for final head if needed, then prepare PR.
+
+## 2026-06-30 09:49:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_e397ce71cd284c7aaffdff4d036079f7
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11
+- Source Branch: task/engineering-perf-abstraction-optimization-11
+- Source Head: 722b504b8c8f3fc57dec20b3e96192ee70834a9c
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `crates/oasis7/src/simulator/llm_agent/behavior_runtime_helpers.rs`; `crates/oasis7/src/simulator/llm_agent/tests_part3_module_lifecycle.rs`; `doc/engineering/project.md`; `.pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.*`; `.pm/roles/tpm/backlog/committed.yaml`
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/review-packages/review-75af9be83..722b504b8.diff
+- Role Selection Basis: LLM agent prompt tool implementation and prompt-tool output contract -> `agent_engineer`; verification sufficiency and PR readiness -> `qa_engineer`; abstraction clarity, docs/code/test/task evidence alignment, and workflow finding disposition -> `repository_health_engineer`. Runtime, WASM, viewer, gameplay, ops, and liveops roles skipped because no owned paths/contracts changed.
+- Review Roles: agent_engineer, qa_engineer, repository_health_engineer
+- Review Evidence: `agent_engineer`: no_findings; prompt tool schema/filter/limit behavior and `*_total` semantics preserved; residual risk low. `qa_engineer`: no_findings; focused lifecycle and market regressions plus diff hygiene sufficient for PR creation; CI required-gate remains merge gate; residual risk low. `repository_health_engineer`: code/spec compliant and low implementation risk; P2 evidence finding addressed by replacing fallback packet with actual review packet and ledger entries.
+- Review Verdicts: Agent scope/spec: pass; agent quality/risk: pass. QA scope/spec: pass for PR creation; QA quality/risk: sufficient evidence, required-gate before merge. Repository-health scope/spec: pass after evidence fix; repository-health quality/risk: acceptable, no code debt/follow-up signal needed.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: Repository-health P2 workflow-evidence gap addressed by this actual-review packet and slice-ledger entries for `agent_engineer`, `qa_engineer`, and `repository_health_engineer`; QA uncommitted-evidence caveat addressed by committing final execution-log evidence before PR prep.
+- Verification Matrix: LLM agent lifecycle status prompt tool -> `rtk ./scripts/cargo-dev.sh test -p oasis7 --no-default-features llm_agent_module_lifecycle_status_module_reads_observation_snapshot -- --nocapture` PASS; LLM agent market status prompt tool -> `rtk ./scripts/cargo-dev.sh test -p oasis7 --no-default-features llm_agent_module_market_status_module_filters_wasm_hash -- --nocapture` PASS; Rust formatting -> `rtk ./scripts/cargo-dev.sh fmt --all --check` PASS; doc governance -> `rtk bash scripts/doc-governance-check.sh` OK; workflow/task truth -> `rtk ./scripts/pm/workflow-lint.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --phase current` OK; diff hygiene -> `rtk git diff --check` PASS.
+- Visual Evidence: n/a; no Viewer/Web/UI/visual surface changed.
+- WASM Evidence: n/a; no WASM ABI, manifest, build artifact, or determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook, packaging, or operator surface changed.
+- LiveOps Evidence: n/a; no external messaging, player promise, incident, or community surface changed.
+- Residual Risk: Low. Risk is localized to prompt-tool pagination/count semantics and covered by focused regressions; normal PR required checks remain mandatory before merge.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl
