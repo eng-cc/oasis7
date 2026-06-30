@@ -22,18 +22,18 @@
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-06-23）
-- `doc/game/`：88 份文件
-- `doc/game/gameplay/`：83 份文件
+## 密度快照（2026-06-30）
+- `doc/game/`：86 份文件
+- `doc/game/gameplay/`：81 份文件
 - `doc/game/gameplay/` 正式专题三件套：63 份文件
-- `doc/game/gameplay/` 补充材料：18 份文件
+- `doc/game/gameplay/` 补充材料：16 份文件
 - 模块根入口：5 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `gameplay/` 正式专题三件套 | 63 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同与 mature-world 小玩家承接 |
-| `gameplay/` 补充材料 | 18 | runbook、evidence、checklist、handoff 与跨角色执行留痕 |
+| `gameplay/` 补充材料 | 16 | runbook、evidence、checklist 与跨角色执行留痕 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
@@ -92,8 +92,6 @@
 | `doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md` | `runbook` | longrun P0 replay rollback 处理 runbook |
 | `doc/game/gameplay/gameplay-micro-loop-readable-world-checklist-2026-03-10.md` | `checklist` | micro-loop readable world 验收清单 |
 | `doc/game/gameplay/gameplay-micro-loop-visual-closure-evidence-2026-03-10-round009.md` | `evidence` | micro-loop visual closure 采证 |
-| `doc/game/gameplay/producer-to-liveops-task-game-036-limited-preview-execution-2026-03-22.md` | `handoff` | limited preview 执行交接 |
-| `doc/game/gameplay/producer-to-qa-task-game-037-limited-preview-gate-watch-2026-03-22.md` | `handoff` | limited preview gate watch 交接 |
 | `doc/game/gameplay/producer-to-runtime-task-game-029-closed-beta-runtime-evidence-2026-03-21.md` | `handoff` | closed beta runtime evidence 交接 |
 
 ## 说明
