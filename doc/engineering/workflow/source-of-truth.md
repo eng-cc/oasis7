@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.4.27**
-Last Updated: **2026-06-24**
+Version: **v1.5.1**
+Last Updated: **2026-06-30**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -10,6 +10,14 @@ Mandatory rule:
 1. Any workflow change must be edited in this file first.
 2. After this file is updated, sync all related scripts/docs/skills to match.
 3. PRs that change workflow scripts without updating this file are invalid.
+
+Step 3 migration note:
+As of v1.5.1, repo-local `.pm/tasks/*` task files are retired. Outside the
+GitHub Project migration section, older references to
+`.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, `.pm task`,
+or `.pm execution log` are legacy wording and must be read as the current
+GitHub Project-backed task truth plus the evidence sink documented in
+section 1.2.3. Do not recreate `.pm/tasks/*` for normal workflow.
 
 ## 1. Phase Diagram
 ```mermaid
@@ -40,18 +48,18 @@ flowchart TD
 ```
 
 ### 1.1 Skill Map by Phase
-This map makes skill reachability explicit. TPM owns the route decision as a workflow coordination act and records the selected skill path in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+This map makes skill reachability explicit. TPM owns the route decision as a workflow coordination act and records the selected skill path in GitHub task issue evidence comments before delegated execution begins.
 
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
-| Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in `.pm/tasks/<TASK-UID>.execution.md` |
-| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in `.pm/tasks/<TASK-UID>.execution.md` and summarized to the user |
-| Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in `.pm/tasks/<TASK-UID>.execution.md` |
-| Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in execution log/project |
+| Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in GitHub task issue evidence comments |
+| Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in GitHub task issue evidence comments and summarized to the user |
+| Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in GitHub task issue evidence comments |
+| Scope is ambiguous, option-heavy, or visual enough to need ideation | `bounded-brainstorming` | Optional, risk-based | Brainstorming output or skip reason in GitHub task issue evidence comments/project |
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
-| Repo truth is ready and implementation proceeds step by step | `executing-project-tasks` | Required for non-trivial execution after route selection | Atomic step evidence in `.pm/tasks/<TASK-UID>.execution.md` |
+| Repo truth is ready and implementation proceeds step by step | `executing-project-tasks` | Required for non-trivial execution after route selection | Atomic step evidence in GitHub task issue evidence comments |
 | Bug, failing test, broken script, unexpected diff, or regression appears | `systematic-debugging` | Conditional required before speculative fixes | Reproduction, narrowed hypothesis, fix evidence |
-| Branch is about to create a PR | `requesting-repo-owned-review` | Required before PR creation; TPM must spawn or dispatch fresh local subagents for all involved relevant roles, collect review findings/no-findings/residual risk, and address or explicitly reject actionable findings with evidence before continuing | `Pre-PR Local Role Review: passed` execution-log packet with roles, review evidence, finding disposition, and residual risk |
+| Branch is about to create a PR | `requesting-repo-owned-review` | Required before PR creation; TPM must spawn or dispatch fresh local subagents for all involved relevant roles, collect review findings/no-findings/residual risk, and address or explicitly reject actionable findings with evidence before continuing | `Pre-PR Local Role Review: passed` GitHub issue evidence packet with roles, review evidence, finding disposition, and residual risk |
 | About to claim done/tests-pass/ready-for-PR/ready-to-merge | `verification-before-completion` | Required before completion claims | Fresh verification command/output or claim-ready evidence |
 | Implementation is done and branch needs closeout/commit/PR/watch/merge | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage, PR purpose decision, CI/review watch evidence, merge/cleanup evidence |
 | GitHub PR receives review comments or requested changes | `receiving-code-review` | Required for actionable PR review feedback | Comment verification, fix evidence, thread status |
@@ -60,13 +68,13 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 ### 1.2 Specialist Skill Reachability
 Specialist skills are not mandatory workflow phases. They become reachable through TPM routing or professional subagent slice planning when the task domain matches their trigger.
 
-- Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
+- Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in GitHub task issue evidence comments.
 - Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `particle-systems`, `optimization-performance`, `memory-management`, `synchronization-algorithms`.
 - Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
 - Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu-note-analyzer`.
 - Visual companion / Image2 target workflows are optional evidence, not universal gates. They may be used inside an existing task/worktree as visual target and screenshot-comparison evidence, but cannot replace implementation, real native/browser screenshots, interaction smoke, QA evidence, or PR review. Screenshot-only previews count as stable visual-comparison evidence, not real interaction coverage.
 
-If a specialist skill is used, TPM must still bind it to the same owner, `.pm` task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
+If a specialist skill is used, TPM must still bind it to the same owner, GitHub-backed task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
 
 ### 1.2.1 Friction Controls After Task Truth
 The always-bootstrap rule protects traceability, but it must not turn every
@@ -118,7 +126,7 @@ or reusable failure signature:
    candidate task unless `--create-task` is explicitly selected.
 4. **Task-scoped `working_memory`**: choose this when the current task needs a
    structured temporary memory or transcript-derived summary before closeout.
-   `working_memory` supplements `.pm/tasks/<TASK-UID>.execution.md`; it never
+   `working_memory` supplements GitHub task issue evidence comments; it never
    replaces task truth.
 5. **Candidate task or memory promotion**: choose this only after owner review
    when the signal or working memory is stable enough to become executable
@@ -133,6 +141,86 @@ The minimum record for a micro loop inside an already-bound task is:
 question or observation, evidence path or command, answer or decision, and
 whether it changes task truth. Use the full bootstrap/router packets only when
 the owner, scope, route, professional slice plan, or PR chain actually changes.
+
+### 1.2.3 GitHub Project-Backed PM Migration
+The repository has migrated project management from file-backed `.pm` task
+objects to GitHub Issues + GitHub Project. GitHub Project is the authoritative active-work queue. Step 3 deletion is forbidden until all of these gates pass;
+Step 3 retired repo-local `.pm/tasks/*` task files after full historical
+Project coverage and archive export. GitHub Project is now the authoritative
+active-work queue and external state gate.
+
+Authoritative after Step 3:
+
+- GitHub Issue is the task collaboration envelope.
+- GitHub Project item fields are authoritative for active queue/status views:
+  module grouping, priority, PM status, workflow phase, blocked/ready/PR-watch
+  cockpit views, and task-to-issue/project-item mapping.
+- `Task UID` remains the stable internal identity. GitHub issue numbers and
+  Project item IDs are external object handles, not replacements for `task_uid`.
+- `.pm/github-project-sync/tasks.json` is the deterministic local mapping cache
+  from `task_uid` to issue/project item handles.
+- `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local
+  archive for retired task metadata and historical execution logs. It is an
+  audit bridge, not a new active planning queue.
+- Active lifecycle wrappers `new-task.sh`, `move-task.sh`,
+  `append-execution-log.sh`, `workflow-report.sh`, `task-closeout.sh`, and
+  `claim-ready.sh` must use GitHub Issues/Project plus
+  `.pm/github-project-sync/tasks.json`; they must not recreate `.pm/tasks/*`.
+
+Retired after Step 3:
+
+- `.pm/tasks/<TASK-UID>.yaml` and `.pm/tasks/<TASK-UID>.execution.md` are no
+  longer active task truth and must not be recreated for normal workflow.
+- New execution evidence should be attached to the GitHub Issue/Project-backed
+  task envelope or to a deterministic replacement sink documented here before
+  use.
+- role memory, task-scoped `working_memory`, signals, stage/gate state, and
+  this workflow source-of-truth remain repo-local unless a later source-of-truth
+  update explicitly migrates them.
+
+Deterministic script contract:
+
+- `./scripts/pm/github-project-workflow.sh ... sync` applies repo-local task
+  metadata or the Step 3 archive to GitHub Issues/Project items idempotently.
+- `./scripts/pm/github-project-workflow.sh ... audit` verifies the selected
+  task set, mapping, and GitHub Project item/field state agree.
+- `./scripts/pm/github-project-workflow.sh ... step3-gate` remains the hard
+  full historical coverage check after deletion; it uses the archive fallback
+  when `.pm/tasks/*` is absent.
+- `./scripts/pm/github-project-retire-tasks.sh --delete` archives task yaml and
+  execution logs to `.pm/github-project-sync/task-archive.jsonl` before deleting
+  repo-local `.pm/tasks/*`.
+- `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
+  create issue/project task, append evidence comments, move Project status, and
+  close tasks after fresh verification.
+- `scripts/prepare-task-pr.sh` must read passed local role review packets from
+  GitHub issue comments when `.pm/tasks/*` is absent. The review gate stays the
+  same; only the evidence read path changes.
+- All future GitHub-backed create/move/report/closeout helpers must use
+  deterministic `gh`/GitHub API paths, preserve or recover the `task_uid`
+  mapping, and refuse ambiguous duplicate mappings.
+
+Step 3 deletion required these gates to pass:
+
+- New task gate: a script can create GitHub issue + Project item + `task_uid`
+  and enter the standard worktree chain deterministically.
+- Status gate: `candidate`, `committed`, `blocked`, `done`, and `deferred`
+  transitions are script-driven and Project/mapping/repo mirror state stays
+  idempotent.
+- Evidence gate: execution evidence has a proven repo-local or GitHub-backed
+  sink for slice contracts, verification, review, closeout, and PR packets.
+- PR gate: PR helpers can read required task metadata from the GitHub-backed
+  truth path or its deterministic local mirror.
+- Recovery gate: a missing local mapping can be recovered from GitHub Project
+  items and issue bodies without creating duplicates.
+- Audit gate: active tasks pass `audit`; historical `done/deferred` tasks have
+  an explicit archive/import policy and pass the full `step3-gate`.
+- Reference gate: formal docs/project traces no longer rely on paths that would
+  be deleted, or their replacement trace target is explicitly documented.
+
+The full historical task set was explicitly imported for Step 3 coverage before
+local task-file retirement. Future bulk imports must still be explicit and
+audited because the repository can contain hundreds of historical tasks.
 
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
@@ -151,25 +239,25 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
   - external messaging, community feedback, incidents, player promises, release notes, and channel runbooks by `liveops_community`
 - professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - TPM may perform mechanical orchestration edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
-- For every request, TPM planning, TODO decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to `.pm/tasks/<TASK-UID>.execution.md` before the delegated work begins.
+- For every request, TPM planning, TODO decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to GitHub task issue evidence comments before the delegated work begins.
 - Every user request must enter the standard worktree flow before any substantive handling begins, including chat-only answers, read-only inspection, fact lookup, professional slice dispatch, implementation, verification, review, and external messaging.
 - The only allowed pre-bootstrap work is mechanical enough to create or enter the task truth: inspect current git/worktree state, choose or confirm the task/worktree, and run the bootstrap helper.
 - Do not first classify a request as "read-only", "chat-only", "pure fact lookup", or "professional judgment" to decide whether task/worktree truth is needed. That classification happens only after bootstrap, inside the bound task/worktree, and only controls whether TPM can answer from objective evidence or must dispatch a professional slice.
 - Read-only/chat-only requests still split by judgment type after task truth exists:
   - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled by TPM inside the bound task worktree, as long as the answer does not present a professional/domain conclusion.
   - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", "is this gameplay loop balanced/readable", "is this documentation/code contract drifting", "what node-ops risk is present in this rollout", or "how should LiveOps message this incident".
-  - Such read-only professional slices require the same `.pm` task and canonical task worktree as any other request. Their required sink is `.pm/tasks/<TASK-UID>.execution.md`, plus the role-tagged user-facing answer.
+  - Such read-only professional slices require the same GitHub-backed task and canonical task worktree as any other request. Their required sink is GitHub task issue evidence comments, plus the role-tagged user-facing answer.
   - TPM may gather raw files, commands, or repo context before dispatch only after bootstrap; the final user-facing answer must label TPM synthesis separately from professional role conclusions and cite the role/evidence that owns each professional conclusion.
 - Canonical truth per user request must remain single-threaded:
   - one owner role
-  - one `.pm` task
+  - one GitHub-backed task
   - one canonical worktree
   - one PR chain
 
 ## 3. Gates
 ### 3.1 Required Gates (must pass)
-1. **Task truth gate**: isolated worktree + bound `.pm` task + owner role confirmed.
-2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry; TPM TODOs and any subagent slice plan are recorded in `.pm/tasks/<TASK-UID>.execution.md` before execution.
+1. **Task truth gate**: isolated worktree + bound GitHub-backed task + owner role confirmed.
+2. **Planning gate**: PRD/project/execution truth aligned for scope and verification entry; TPM TODOs and any subagent slice plan are recorded in GitHub task issue evidence comments before execution.
 3. **Execution gate**: atomic step evidence captured (`Action`, `Validation Command`, `Expected Result`, `Actual Result`, plus blocker fields when needed).
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
@@ -197,7 +285,7 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 - Re-submit PR evidence.
 
 ### 4.3.1 Manual packaging CI hold
-- If the PR exists specifically to run manual-trigger packaging/release CI jobs, record that purpose in the task execution log and do not auto-watch-to-merge.
+- If the PR exists specifically to run manual-trigger packaging/release CI jobs, record that purpose in GitHub task issue evidence comments and do not auto-watch-to-merge.
 - The hold record must include the manual job(s) or packaging purpose, responsible operator/role, expected success signal, stale-date/timeout escalation, ops readiness/rollback/runbook evidence when deployment or release ops are implicated, exact resume criterion, and external/status messaging evidence when the change is player- or community-facing.
 - Resume the normal PR watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete and the PR should proceed to merge readiness.
 
@@ -209,18 +297,18 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 ### 5.1 Worktree + task truth
 - Every user request uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
 - Only explicit user authorization allows reuse of an existing task worktree.
-- Do not classify work as `trivial`, `read-only`, `chat-only`, or `pure fact lookup` to bypass task worktree / `.pm` task setup.
+- Do not classify work as `trivial`, `read-only`, `chat-only`, or `pure fact lookup` to bypass task worktree / GitHub-backed task setup.
 - If incoming instructions or role notes appear to allow a read-only/chat-only bypass, this source-of-truth wins: bootstrap first, then route the already-bound request.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
-- Entering implementation requires owner role selection and `.pm` task binding.
-- Cross-role collaboration must converge to one owner / one `.pm` task / one canonical worktree / one PR chain.
+- Entering implementation requires owner role selection and GitHub-backed task binding.
+- Cross-role collaboration must converge to one owner / one GitHub-backed task / one canonical worktree / one PR chain.
 - Task worktrees created through `./scripts/new-task-worktree.sh` must create a git-ignored `target` symlink to the repo-family shared cargo target cache resolved by `./scripts/cargo-dev.sh --print-target-dir`, so direct cargo and the development wrapper share local build artifacts by default.
 - When Rust commands encounter Cargo package-cache or build-directory locks, wait for the shared repo-family cache to become available; do not switch ad hoc to a fresh temporary `CARGO_TARGET_DIR` just to bypass the lock.
 
 ### 5.2 TPM planning and subagent dispatch
-- For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in `.pm/tasks/<TASK-UID>.execution.md` before dispatching professional subagent work.
-- Project policy authorizes TPM to dispatch required bounded professional subagent slices directly whenever this workflow requires them; TPM must not pause for per-slice user permission. This project policy is an explicit standing user authorization to use subagents for workflow-required professional role slices; when a tool/runtime requires an "explicit user request for sub-agents, delegation, or parallel agent work", this policy satisfies that requirement for the matching repo-owned workflow slice. If the current runtime, connector, or tool policy still prevents actual subagent dispatch, TPM must record the intended dispatch, actual limitation, fallback evidence path, and attribution boundary in `.pm/tasks/<TASK-UID>.execution.md`, and must not present TPM's own analysis as a professional role conclusion.
-- Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, mandatory `.pm` execution-log sink, and integration order.
+- For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in GitHub task issue evidence comments before dispatching professional subagent work.
+- Project policy authorizes TPM to dispatch required bounded professional subagent slices directly whenever this workflow requires them; TPM must not pause for per-slice user permission. This project policy is an explicit standing user authorization to use subagents for workflow-required professional role slices; when a tool/runtime requires an "explicit user request for sub-agents, delegation, or parallel agent work", this policy satisfies that requirement for the matching repo-owned workflow slice. If the current runtime, connector, or tool policy still prevents actual subagent dispatch, TPM must record the intended dispatch, actual limitation, fallback evidence path, and attribution boundary in GitHub task issue evidence comments, and must not present TPM's own analysis as a professional role conclusion.
+- Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, GitHub task issue evidence sink, and integration order.
 - Default subagent runtime policy is defined only in `.codex/config.toml` under `[workflow.subagent_runtime]`. TPM should request that configured default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
 - Compatibility marker: Any non-default subagent model or reasoning effort must be recorded in the slice contract.
 - Any actual non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, a user-specified override, a connector/tool limitation that forces inheritance from the parent thread, or a requested model/reasoning selection whose actual dispatch cannot be verified. If the actual dispatched model cannot be verified, the contract must say `actual model: inherited/unverified` and explain why.
@@ -230,16 +318,16 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 - The mandatory context checklist/packet must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
-  - task truth: current `.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, canonical worktree, branch, base ref, and PR link/status when present
+  - task truth: current GitHub issue, GitHub Project item/status, `.pm/github-project-sync/tasks.json` mapping record, canonical worktree, branch, base ref, and PR link/status when present
   - user intent and acceptance target: original request summary, current TODO, explicit non-goals, and done/verification expectations
   - scoped repo context: relevant `prd.md`, `project.md`, handoff, changed paths, current diff or evidence summary, and known constraints such as `third_party` read-only boundaries
   - collaboration boundary: sibling slices, write-scope conflicts, integration order, allowed commands, return contract, and formal sink
-- `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit the role card only when the slice contract records the exemption reason and the exact files to inspect; it still runs after task/worktree bootstrap and records its sink in `.pm`.
+- `AGENTS.md` and the assigned role card are mandatory inputs for implementation, verification, review, or domain-specialist slices. A narrow read-only explorer slice may omit the role card only when the slice contract records the exemption reason and the exact files to inspect; it still runs after task/worktree bootstrap and records its sink in GitHub task issue evidence comments.
 - TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
-- Project docs, handoff files, signals, memory, and PR evidence may supplement the `.pm` execution log, but they do not replace it for task execution truth.
-- If the plan changes during execution, TPM must append an execution-log update before continuing the changed work.
-- Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a `.pm` task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
+- Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments, but they do not replace them for task execution truth.
+- If the plan changes during execution, TPM must append a GitHub issue evidence comment before continuing the changed work.
+- Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a GitHub-backed task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
 - After task truth exists, use the section 1.2.2 learning-intake ladder for
   discoveries and follow-ups: no-op, short execution-log note, reflection
   signal, task-scoped `working_memory`, or owner-reviewed candidate task/memory
@@ -260,9 +348,9 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
   - scoped files/commands/evidence to inspect
   - return contract with conclusion, evidence, uncertainty, and whether repository writeback is recommended
   - attribution rule for the final answer
-- Read-only specialist slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md`; chat/thread text may supplement but not replace the `.pm` sink.
+- Read-only specialist slice contracts must be recorded in GitHub task issue evidence comments; chat/thread text may supplement but not replace the GitHub task sink.
 - Pure evidence questions may be answered by TPM directly only after bootstrap and only when the user asks for an objective fact such as "does this file exist", "what command output says", or "which paths match this search".
-- If a read-only specialist slice recommends changing repository state, TPM continues in the already-bound canonical task worktree and records the changed route in `.pm` before applying changes.
+- If a read-only specialist slice recommends changing repository state, TPM continues in the already-bound canonical task worktree and records the changed route in GitHub task issue evidence comments before applying changes.
 
 ### 5.3 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
@@ -272,7 +360,7 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 ### 5.4 Claim / closeout chain
 - Before completion claims, run fresh verification (prefer `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<cmd>"` when applicable).
 - Do not move the task to final closeout / `done` before pre-PR local role review has passed when the task is on a PR path. The order is: fresh verification -> pre-PR local role review -> address findings -> final closeout/status packet -> commit -> PR preflight/create.
-- Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the execution log must label that packet as readiness evidence rather than final done state.
+- Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the GitHub issue evidence comment must label that packet as readiness evidence rather than final done state.
 - For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence.
 
 ### 5.5 PR and review chain
@@ -282,7 +370,7 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 - `scripts/prepare-task-pr.sh --create` must mechanically reject a passed review packet when changed-path inference identifies required roles that are missing from `Review Roles`. This script check is a minimum backstop; TPM remains responsible for adding roles implied by task history and user-facing claims that path inference cannot see.
 - Verification must map to the changed surface, not only to one generic command. Gameplay changes need playability/economy/motivation-loop evidence tied to `doc/game` truth; runtime changes need the relevant cargo checks/tests plus replay/recovery/checkpoint/long-run evidence where applicable; WASM ABI/platform changes need support-crate/executor tests and, for publishable or builtin module pipeline changes, deterministic build/gate evidence or an explicit defer-to-GitHub/manual evidence packet; UI/player-facing changes need S6 screenshot/model-visual-review evidence or an explicit visual-evidence exemption; release/manual packaging changes need first-class Ops Evidence covering readiness, rollback/runbook, and success/resume evidence; player- or community-facing changes need first-class LiveOps Evidence covering messaging, release-note/status, and audience impact.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
-- `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the task execution log contains a passed pre-PR local role review packet for the source worktree. The packet marker is:
+- `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the GitHub issue evidence comments contain a passed pre-PR local role review packet for the source worktree. The packet marker is:
   - `Pre-PR Local Role Review: passed`
   - `Task UID: <task_uid>`
   - `Source Worktree: <absolute path>`
@@ -304,9 +392,9 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
   - `LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>`
   - `Residual Risk: <text>`
   - `Slice Ledger: <path to slice ledger or n/a with reason>`
-- Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; the execution log records only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
+- Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; GitHub issue evidence comments record only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
 - Pre-PR local role review verdicts must distinguish scope/spec compliance from role quality/risk for each reviewer role. The role remains the professional owner; this dual-verdict structure is a packet format, not permission to replace involved-role review with a generic reviewer.
-- Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. `.pm/tasks/<TASK-UID>.execution.md` remains canonical task truth and must link to the ledger rather than relying on it as the only sink. When a review dispatch needs more roles than the current subagent runtime can run concurrently, TPM must batch the roles, record batch order and priority, record timeout/no-payload policy before dispatch, and distinguish partial results from all-role completion.
+- Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. GitHub task issue evidence comments remain canonical task truth and must link to the ledger rather than relying on it as the only sink. When a review dispatch needs more roles than the current subagent runtime can run concurrently, TPM must batch the roles, record batch order and priority, record timeout/no-payload policy before dispatch, and distinguish partial results from all-role completion.
 - Before merge, explicitly check PR comments and review threads. If any actionable comments or unresolved blocking threads exist, fix + re-verify + resolve or answer them before the merge claim.
 - After PR creation, TPM must record the PR purpose decision:
   - `normal_pr_ci_watch`: default. Use this unless the user or task truth says the PR was opened only to access manual-trigger packaging/release CI jobs.
@@ -318,18 +406,31 @@ the owner, scope, route, professional slice plan, or PR chain actually changes.
 - After merge, sync local `main` and clean up task worktree/branch.
 
 ## 6. Required Artifacts by Phase
-- Bootstrap/Router: decision record in `.pm/tasks/<TASK-UID>.execution.md`; project or handoff records may supplement it.
-- Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in `.pm/tasks/<TASK-UID>.execution.md`.
+- Bootstrap/Router: decision record in GitHub task issue evidence comments; project or handoff records may supplement it.
+- Planning/Dispatch: TPM TODO decomposition and subagent slice contracts in GitHub task issue evidence comments.
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
 - Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
 - Learning intake / loop closeout: only when reusable learning exists, record
   the chosen ladder step and evidence. Reflection signals, working memory, and
-  promoted candidate tasks/memory supplement the `.pm` execution log but do not
+  promoted candidate tasks/memory supplement GitHub task issue evidence comments but do not
   replace it.
 
 ## 7. Change Log
+- **v1.5.1 (2026-06-30)**
+  - Retired repo-local `.pm/tasks/*` files after GitHub Project Step 3 export.
+    Historical task metadata and execution logs now live in
+    `.pm/github-project-sync/task-archive.jsonl`; GitHub Project/Issues plus
+    `.pm/github-project-sync/tasks.json` are the active PM path.
+  - Replaced active PM lifecycle wrappers with GitHub Project-backed task
+    create/evidence/status/closeout behavior and kept PR preflight review
+    evidence gates by reading GitHub issue comments.
+- **v1.5.0 (2026-06-29)**
+  - Introduced the GitHub Project-backed PM migration contract: Project is the
+    authoritative active queue during Step 2, repo-local `.pm` remains the
+    execution/audit sink until Step 3 gates pass, and deterministic
+    sync/audit/step3-gate scripts are required before deleting task files.
 - **v1.4.28 (2026-06-27)**
   - Added the Learning Intake / Loop Closeout ladder so task learning can flow
     to no-op, short execution-log note, reflection signal, task-scoped

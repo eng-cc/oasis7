@@ -770,6 +770,33 @@ def is_devlog_archive_reference(source_ref: str) -> bool:
     return len(parts) >= 2 and parts[0] == "doc" and parts[1] == "devlog"
 
 
+def is_retired_task_archive_ref(root: pathlib.Path, source_ref: str) -> bool:
+    source_path = parse_reference_path(str(source_ref)).replace("\\", "/")
+    parts = pathlib.PurePosixPath(source_path).parts
+    if len(parts) != 3 or parts[0] != ".pm" or parts[1] != "tasks":
+        return False
+    name = parts[2]
+    if name.startswith("task_") and name.endswith(".yaml"):
+        task_uid = name[:-5]
+    elif name.startswith("task_") and name.endswith(".execution.md"):
+        task_uid = name[: -len(".execution.md")]
+    else:
+        return False
+    archive_path = root / ".pm/github-project-sync/task-archive.jsonl"
+    if not archive_path.is_file():
+        return False
+    for line in archive_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if record.get("task_uid") == task_uid:
+            return True
+    return False
+
+
 def ensure_non_devlog_runtime_source_ref(source_ref: str, context: str) -> None:
     if is_devlog_archive_reference(source_ref):
         raise ValueError(f"{context} must not use doc/devlog archive as runtime source_ref: {source_ref}")
@@ -778,7 +805,7 @@ def ensure_non_devlog_runtime_source_ref(source_ref: str, context: str) -> None:
 def validate_runtime_source_ref(root: pathlib.Path, source_ref: str, context: str) -> pathlib.Path:
     ensure_non_devlog_runtime_source_ref(source_ref, context)
     resolved_source = resolve_source_ref_path(root, source_ref)
-    if not resolved_source.exists():
+    if not resolved_source.exists() and not is_retired_task_archive_ref(root, source_ref):
         raise ValueError(f"{context} missing: {parse_reference_path(str(source_ref))}")
     return resolved_source
 
@@ -1110,7 +1137,7 @@ def run_working_memory_lint(root: pathlib.Path) -> None:
                         continue
                     if is_external_codex_session_ref(str(source_ref)):
                         continue
-                    if not entry_is_expired and not resolved.exists():
+                    if not entry_is_expired and not resolved.exists() and not is_retired_task_archive_ref(root, str(source_ref)):
                         fail(f"{path.relative_to(root)} {entry_id} source_ref missing: {resolved}")
 
             promoted_to = entry.get("promoted_to")
@@ -2212,7 +2239,7 @@ def run_memory_lint(root: pathlib.Path) -> None:
                         )
                     if is_external_codex_session_ref(str(source_ref)):
                         continue
-                    if not (root / source_path).exists():
+                    if not (root / source_path).exists() and not is_retired_task_archive_ref(root, str(source_ref)):
                         fail(f"{path.relative_to(root)} {record_id} source_ref missing: {source_path}")
 
             for key in ("effective_at", "last_reviewed_at"):

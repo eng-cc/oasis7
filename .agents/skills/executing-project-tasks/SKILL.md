@@ -1,15 +1,17 @@
 ---
 name: executing-project-tasks
-description: Use when a task already has repo truth such as `prd.md`, `project.md`, a handoff, or a `.pm` task, and the next job is to execute it step by step with plan-gap review, per-step verification, and explicit blocker handling.
+description: Use when a task already has repo truth such as `prd.md`, `project.md`, a handoff, or GitHub-backed task truth, and the next job is to execute it step by step with plan-gap review, per-step verification, and explicit blocker handling.
 ---
 
 # Executing Project Tasks
+
+> GitHub PM migration note: Step 3 retired repo-local `.pm/tasks/*`. Use GitHub Project as the active queue/status gate and keep atomic execution evidence in GitHub task issue comments.
 
 ## When to Use
 
 Use this skill when:
 
-- the task already has written scope in `prd.md`, `project.md`, a handoff, or `.pm/tasks/<TASK-UID>.yaml`
+- the task already has written scope in `prd.md`, `project.md`, a handoff, or GitHub-backed task truth
 - implementation should start now, but the execution path still needs a quick gap review
 - the work is large enough that step-level verification matters before final closeout
 
@@ -25,8 +27,8 @@ Do not use this skill when:
    - `doc/<module>/prd.md`
    - `doc/<module>/project.md`
    - relevant handoff, if present
-   - `.pm/tasks/<TASK-UID>.yaml`
-   - `.pm/tasks/<TASK-UID>.execution.md`, if present
+   - `.pm/github-project-sync/tasks.json`
+   - GitHub task issue evidence comments, if present
 2. Run a brief plan-gap review before editing:
    - is the affected surface explicit enough to start
    - does each requirement or acceptance point map to a task step
@@ -42,7 +44,7 @@ Do not use this skill when:
    - actual result
    - blocker / next action when they diverge
 7. If the same verification fails twice in a row without new information, stop execution and switch to explicit blocker reporting.
-8. Record important blockers, behavior changes, and verification outcomes in the task execution log or formal docs when they affect task truth.
+8. Record important blockers, behavior changes, and verification outcomes in GitHub task issue evidence comments or formal docs when they affect task truth.
 9. When scope is implemented and verified, switch to `finishing-a-development-branch` for closeout, commit, PR prep, review handling, and cleanup.
 
 ## Oasis7-Specific Surfaces
@@ -51,8 +53,8 @@ Do not use this skill when:
   - `AGENTS.md`
   - `doc/<module>/prd.md`
   - `doc/<module>/project.md`
-  - `.pm/tasks/<TASK-UID>.yaml`
-  - `.pm/tasks/<TASK-UID>.execution.md`
+  - `.pm/github-project-sync/tasks.json`
+  - GitHub task issue evidence comments
 - Planning helpers:
   - `./.agents/roles/templates/handoff-brief.md`
   - `./.agents/roles/templates/handoff-detailed.md`

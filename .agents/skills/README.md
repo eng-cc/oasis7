@@ -42,12 +42,14 @@
 
 Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`; this README is an index, not the workflow authority.
 
-- 启动任何用户请求、需要先确认标准 task worktree / `.pm` task / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
+GitHub Project-backed PM migration lives in `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-migration`; after Step 3, GitHub Issues + GitHub Project are the active task truth and GitHub issue comments are the execution/audit sink. `.pm/github-project-sync/task-archive.jsonl` is the retired local task-file audit bridge.
+
+- 启动任何用户请求、需要先确认标准 task worktree / GitHub Project-backed task truth / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
 - 只读/聊天请求也默认进入 task/worktree bootstrap；不要先用“只读/聊天/纯事实”分类决定是否跳过 bootstrap。如果要输出专业结论，进入 task truth 后仍由 TPM 派发对应 bounded 专业角色 slice。纯路径查找、命令输出复述等客观事实读取可由 TPM 在已绑定 task/worktree 内直接处理。
 - 启动已具备 task 真值的仓库变更 task、或不确定下一步该走哪条 repo-owned workflow surface 时：`.agents/skills/repo-owned-workflow-router/SKILL.md`
 - 需求仍偏模糊、需要 scope 拆分、方案对比或判断是否需要 visual companion 时：`.agents/skills/bounded-brainstorming/SKILL.md`
 - 行为变更类实现任务、且存在稳定自动化测试面时：`.agents/skills/tdd-test-writer/SKILL.md`
-- 已有正式 `project.md` / handoff / `.pm` task 后进入实施：`.agents/skills/executing-project-tasks/SKILL.md`
+- 已有正式 `project.md` / handoff / GitHub-backed task truth 后进入实施：`.agents/skills/executing-project-tasks/SKILL.md`
 - 遇到 bug、失败测试、脚本异常、意外 diff 或回归时：`.agents/skills/systematic-debugging/SKILL.md`
 - 当前 diff 已形成 major feature、高风险收敛切片，或 commit 前 claim risk 明显偏高时：`.agents/skills/requesting-repo-owned-review/SKILL.md`
 - 接近完成、准备宣称“通过 / 完成 / 可提 PR”时：`.agents/skills/verification-before-completion/SKILL.md`

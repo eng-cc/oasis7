@@ -7,9 +7,9 @@ description: Use when planning a new game architecture, major game feature, refa
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
+In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
 
-Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace `.pm` task truth.
+Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace GitHub-backed task truth.
 
 ## When to Use
 
@@ -26,10 +26,10 @@ Do not use this skill when:
 
 ## Core Workflow
 
-1. Bind the work to the existing `.pm` task/worktree and record the route before producing architecture docs.
+1. Bind the work to the existing GitHub-backed task/worktree and record the route before producing architecture docs.
 2. Use this `SKILL.md` as the entrypoint; read `references/full-guidance.md` for document templates, phase details, paradigm tables, and examples.
-3. Write architecture outputs as supplements to `prd.md`, `project.md`, and `.pm` truth, never as a replacement for them.
-4. Always record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`.
+3. Write architecture outputs as supplements to `prd.md`, `project.md`, and GitHub-backed task truth, never as a replacement for them.
+4. Always record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments.
 5. Before code changes, hand implementation back to TPM; Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks`.
 
 ## Supporting Files
@@ -45,7 +45,7 @@ Do not use this skill when:
 
 ## Known Failure Modes
 
-- Architecture docs can drift into a second workflow; keep `.pm` execution truth canonical.
+- Architecture docs can drift into a second workflow; keep GitHub task issue evidence canonical.
 - Do not let this skill own runtime, gameplay, viewer, QA, or visual conclusions without the matching professional slice.
 - Reference files are conditional; load only the system references that match the requested architecture problem.
 

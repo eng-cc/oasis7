@@ -5,6 +5,8 @@ description: "Use when implementation is done and the work needs final verificat
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
+> GitHub PM migration note: before final PM closeout or PR creation, confirm Project/mapping/local mirror consistency when the task touched PM queue/status state.
+
 
 # Finishing a Development Branch
 
@@ -12,7 +14,7 @@ description: "Use when implementation is done and the work needs final verificat
 
 Use this skill when code and docs are already updated and you are moving into branch closure:
 
-- close the task
+- close the GitHub-backed task
 - verify the final diff
 - collect fresh local involved-role subagent review
 - close the task after review findings are resolved
@@ -25,7 +27,7 @@ Use this skill when code and docs are already updated and you are moving into br
 
 ## Default Oasis7 Path
 
-1. Confirm the task has its own worktree and `.pm` task.
+1. Confirm the task has its own worktree and GitHub-backed task truth.
 2. Run the final local checks for the changed surface.
 3. Before final closeout, apply the source-of-truth Learning Intake / Loop
    Closeout ladder to reusable findings from the task:
@@ -34,7 +36,7 @@ Use this skill when code and docs are already updated and you are moving into br
    - reflection signal for useful follow-up ideas or repeated friction that is
      not ready for committed task truth
    - task-scoped `working_memory` for temporary structured learning that
-     supplements, but does not replace, the execution log
+     supplements, but does not replace, GitHub task issue evidence comments
    - candidate task or memory promotion only after owner review
 4. Dispatch fresh local subagent review for every involved relevant role, address valid findings, and record the passed evidence packet before final closeout or commit.
 
@@ -51,7 +53,7 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
 - `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
 
-5. Close the task:
+5. Close the task through the GitHub-backed closeout adapter:
 
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"
@@ -110,7 +112,7 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 ## Required Checks Before Commit
 
 - worktree diff matches task scope
-- task execution log updated
+- GitHub task issue evidence comments updated
 - relevant formal docs updated
 - local verification rerun for the affected surface
 - learning intake / loop closeout decision recorded when the task produced
@@ -135,7 +137,7 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 ## Guardrails
 
 - Do not land locally unless the user explicitly asks for local landing.
-- Do not skip `.pm` closeout just because the execution log is updated.
+- Do not skip GitHub-backed PM closeout just because evidence comments were added.
 - Do not claim "done" while the branch still lacks required verification or PR creation.
 - Do not treat review-thread resolution as merge readiness.
 - Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.

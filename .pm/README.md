@@ -1,22 +1,29 @@
-# oasis7 文件化项目管理运行层
+# oasis7 GitHub Project-backed PM 层
 
-`doc/` 保存正式规格、项目追踪、证据与历史归档；`.pm/` 保存运行态项目管理对象与 task-local execution log：
+`doc/` 保存正式规格、项目追踪、证据与历史归档。项目管理正在从文件化 `.pm` task
+迁移到 GitHub Issues + GitHub Project；Step 3 已删除仓库内 `.pm/tasks/*` task 文件。
+GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映射、历史归档
+与尚未迁出的 PM 对象：
 
 - role memory / backlog
-- task execution log
+- historical task archive
 - task-scoped working_memory
 - shared memory
 - signal inbox
-- task registry
 - stage / gate
 - 模板与脚本输入输出契约
 
 约束：
 - `.pm/` 不得重写正式 `prd.md` / `project.md` 真值。
-- `.pm/tasks/task_<32hex>.execution.md` 是任务过程日志的 canonical 位置；长期 memory/backlog 通过对应 promote/move 脚本从 signal 或 task registry 视图提升。
-- task 的唯一身份是 `task_uid`；`.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担仓库提交真值。
+- GitHub Project 是 active task queue / status cockpit 的 authoritative 入口；`.pm/github-project-sync/tasks.json` 是 `task_uid -> issue/project item` 的本地 mapping cache。
+- `.pm/github-project-sync/task-archive.jsonl` 保存 Step 3 删除前的 task yaml 与 execution log 全量归档；它是审计桥，不是新的本地 planning queue。
+- `.pm/tasks/task_<32hex>.yaml` 与 `.pm/tasks/task_<32hex>.execution.md` 已退休；正常工作流不得重新创建这些 task 文件。
+- 本 README 后续仍提到旧 `.pm/tasks` 的脚本，均为 legacy 文件化 PM 入口或历史示例；除非 `source-of-truth` 重新批准，不再作为新工作流真值。
+- task 的唯一身份是 `task_uid`；GitHub issue number / Project item id 只是外部对象句柄，不替代 `task_uid`。
+- `.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担 planning queue 真值。
+- `./scripts/pm/github-project-workflow.sh ... audit` 必须能验证 GitHub Project、mapping 与 archive/mirror 一致；`step3-gate` 是全历史覆盖检查。
 - 同一 owner / 同一工作流下若出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务，必须先把 `project.md` / topic project 的 Trace 收口到 survivor task，再通过 `./scripts/pm/compact-task-group.sh` 并档；不允许在正式文档仍引用 dropped task UID 时直接删除 canonical task 文件。
-- stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
+- stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 GitHub task issue evidence comments、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
 
 首批标准角色：
@@ -38,16 +45,20 @@
 - 再执行 `./scripts/pm/scaffold.sh <role_name>` 生成 role memory/backlog 容器。
 - 最后执行 `./scripts/pm/lint.sh`，确认 registry、模板与路径全部可枚举。
 
-当前已落地的 Phase 2 基础链路：
+当前 GitHub-backed active 基础链路：
+- `./scripts/pm/github-project-task.py`：GitHub Project-backed active lifecycle adapter；创建 task issue/project item、写 issue evidence comment、更新 Project 状态、执行 closeout evidence。
+- `./scripts/pm/github-project-workflow.sh`：GitHub Project-backed PM adapter；`sync` 将 `.pm` mirror 或 Step 3 archive 推到 GitHub Issue/Project，`audit` 校验 Project/mapping/archive 漂移，`step3-gate` 是全历史硬 gate。
+- `./scripts/pm/github-project-sync.sh`：底层 `.pm/archive -> GitHub Issues/Project` 幂等同步器，由 `github-project-workflow sync` 调用。
+- `./scripts/pm/github-project-retire-tasks.sh`：Step 3 归档/删除工具；先导出 `.pm/github-project-sync/task-archive.jsonl`，再删除 `.pm/tasks/*`。
 - `./scripts/pm/capture-todo.sh`：把还没决定创建 `.pm` task 的顺手 TODO / discovery 记录为 `source_type=reflection` signal；默认只写 `.pm/inbox/signals.jsonl`，显式 `--create-task` 时才提升成 candidate task。
 - `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
-- `./scripts/pm/new-task.sh`：从 signal 或手工输入创建 `.pm/tasks/task_<32hex>.yaml` 与对应 `.pm/tasks/task_<32hex>.execution.md`，并重建 task registry 与 owner 的 `backlog/candidate.yaml` 视图。
-- `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，避免 `.pm` task 误写回 source worktree。
-- `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done(deferred)` 之间同步迁移 task file、task registry 与 owner backlog 条目。
-- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 task 已 start、execution log 已回写、fresh verification 已通过、且 PR 路径任务的 pre-PR local role review findings 已处理后，才统一执行 `workflow-report close -> move-task done|deferred -> pm lint`，再进入 commit / `prepare-task-pr.sh`。
-- `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前，立即执行 fresh verification command；只有本次运行成功，才允许输出 claim-ready 结论。
-- `./scripts/pm/append-execution-log.sh`：结构化追加 `.pm/tasks/<TASK-UID>.execution.md` 条目，要求显式 task_uid、role、完成内容、遗留事项、动作与验证结果，避免手写漏字段。
-- `./scripts/pm/task-execution-log-lint.sh`：校验 task execution log 的路径、标题格式、角色名和条目完整性。
+- `./scripts/pm/new-task.sh`：创建 GitHub Issue + GitHub Project item，写入 `.pm/github-project-sync/tasks.json` mapping，不创建 `.pm/tasks` 文件。
+- `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，证据写入 GitHub issue comment。
+- `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/done/deferred` 之间同步更新 GitHub Project Status / PM Status / Workflow Phase 与 mapping。
+- `./scripts/pm/task-closeout.sh`：默认 close-phase helper；在 fresh verification 通过后执行 `workflow-report close -> move-task done|deferred`，证据进入 GitHub issue comment，再进入 commit / `prepare-task-pr.sh`。
+- `./scripts/pm/claim-ready.sh`：在宣称“完成 / 测试通过 / 可提 PR / 可合并”前立即执行 fresh verification command；有 task_uid 时把 verification 记录到 GitHub issue comment 和 mapping。
+- `./scripts/pm/append-execution-log.sh`：结构化追加 GitHub issue evidence comment，要求显式 task_uid、role、完成内容、遗留事项、动作与验证结果。
+- `./scripts/pm/task-execution-log-lint.sh`：legacy/local task-file lint，仅用于退役前数据或专门 fixture，不是 active GitHub-backed 证据入口。
 - `./scripts/pm/promote-memory.sh`：从 signal 提升 active memory，或显式将噪声 signal 标记为 rejected / deferred。
 - `./scripts/pm/supersede-memory.sh`：将 active memory 迁移到 superseded 文件，并补 `superseded_by` / `superseded_at` / `supersede_reason`。
 - `./scripts/pm/memory-lint.sh`：校验 role/shared memory 的字段完整性、source refs、active topic 冲突与 superseded 链。
@@ -59,47 +70,52 @@
 - `./scripts/pm/working-memory-to-signal.sh`：把选中的 `working_memory` 条目提升成 `source_type=reflection` signal，并回写 `promoted_to`。
 - `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
 - `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
-- `./scripts/pm/role-report.sh`：按角色汇总 backlog 状态、任务列表，以及该角色的 active / needs_review / superseded memory；带 `--task-uid` 时追加 task-centric collaboration view，汇总 owner/status、execution log、参与角色、slice/review marker 与收口缺口。
+- `./scripts/pm/role-report.sh`：按角色汇总本地生成视图、active / needs_review / superseded memory；带 `--task-uid` 时追加 task-centric collaboration view，辅助 owner 合流 GitHub issue evidence 与收口缺口。
 - `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
-- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写回 task file，并在输出里带出 `execution_log_path`。
-- `./scripts/pm/sync-views.sh`：从 `.pm/tasks/*.yaml` 扫描重建本地 task registry 与 role backlog 视图；lint/report/read-path 会在需要时自动刷新这些 git-ignored 视图。
-- `./scripts/pm/compact-task-group.sh`：在 survivor task 已保留正式 Trace 的前提下，将同一 owner 的 `done/deferred` 微任务安全并档回一个聚合 task；命令会阻断仍被 tracked 文档引用的 dropped task UID，合并 survivor 元数据，删除重复 canonical task 文件，并重建本地生成视图。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写入 GitHub issue comment，并在 mapping 中更新 phase 时间戳。
+- `./scripts/pm/sync-views.sh`：legacy/local-view helper；Step 3 后不再从 `.pm/tasks/*.yaml` 生成 active truth。
+- `./scripts/pm/compact-task-group.sh`：legacy/local task-file consolidation helper；Step 3 后不得作为 active task 合并入口。
 - `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径，并把 `.pm/inbox/signals.jsonl` 的安全自动修复边界收口为“保留 upstream signal id、仅重编号 branch-local 冲突项”；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
-- `./scripts/pm/migrate-task-identity.sh`：将旧的 `TASK-PM-xxxx` task/working_memory/source_ref 一次性迁到 `task_uid` canonical 模型，并重建 registry/backlog 视图。
-- `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 `seed evidence -> task execution log -> signal -> task -> memory -> stage report` required-tier 验证链。
+- `./scripts/pm/migrate-task-identity.sh`：legacy migration helper；用于旧 `TASK-PM-xxxx` 数据迁移，不是 active task 创建入口。
+- `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 PM governance required-tier 验证链；fixture 中的 task-file 片段只验证 legacy compatibility，不代表 active evidence sink。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
 
 工作流接入基础用法：
+- GitHub Project active queue 同步：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 sync --json`
+- GitHub Project 漂移审计：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 audit --json`
+- Step 3 全历史 gate：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 step3-gate --json`
+- Step 3 task 文件退休：`./scripts/pm/github-project-retire-tasks.sh --mapping .pm/github-project-sync/tasks.json --delete --json`
 - 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只写 reflection signal。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
+- 创建任务：`./scripts/pm/new-task.sh --owner-role <owner_role> --title "<title>" --module <module> --source-ref <path> --json`
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status done|deferred`
 - fresh verification claim：`./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "<fresh verification command>"`
-- 当前 task 严格 lint：`./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`；该路径只校验当前 task 的 binding、execution log、owner 与基础协作真值，不引入全仓历史 closeout/PR evidence 噪声。默认 `--phase pr-ready` 仍保留给 PR 创建前 claim-ready/closeout 门禁；`--phase post-pr` 再额外检查 PR evidence 链。
+- PM active lint：`./scripts/pm/lint.sh`；校验 GitHub Project mapping/archive、active lifecycle scripts、role registry、memory 与 stage 基础结构。
 - 结构化追加 execution log：`./scripts/pm/append-execution-log.sh --task-uid <TASK-UID> --role <owner_role> --completed "..." --pending "..." --action "..." --validation-command "..." --expected-result "..." --actual-result "..." --blocker-next-action "..."`
 - 阶段评审：`./scripts/pm/workflow-report.sh --phase review --role producer_system_designer`
 - GitHub PR preflight / 默认 watch-fix-merge 边界：`./scripts/prepare-task-pr.sh`
-- 开工前后都直接读写 `.pm/tasks/<TASK-UID>.execution.md`，不要再追加新的集中式 `doc/devlog/*.md`
+- 不再读写 `.pm/tasks/<TASK-UID>.execution.md`；新的任务过程证据应进入 GitHub Issue/Project-backed task envelope，或进入 source-of-truth 明确批准的替代 sink。
 - `producer_system_designer` 的 `review` 视图会汇总全部角色的 pending signals；其他角色的 `start/close/review` 仍默认只看本角色。
 - `committed` 只表示任务已进入 owner backlog，不强制代表已经开工；但任务一旦进入 `blocked/done/deferred`，必须已有 `workflow-report --phase start --task-uid` 留下的 `last_started_at`，而 `done/deferred` 还必须已有 `last_closed_at`。
 - 建议把 `workflow-report` 作为 worktree 创建后的第一条 PM 命令；收口时按 `fresh verification -> pre-PR local role subagent review -> findings 处置 -> task-closeout.sh close-phase -> commit -> prepare-task-pr.sh` 顺序推进。普通 PR 创建后默认继续盯 GitHub required checks、mergeability、PR comments 与 unresolved review threads；`REVIEW_REQUIRED` 只作为状态信息回报，不是 block 项。若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则在复查 checks、mergeability、requested changes、comments/thread 后可作为正常流程使用 repo admin merge path。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或非 review-approval 原因的 GitHub merge API/branch protection 实际拒绝时，才修复/验证/推送或回复/resolve；通过且 comments/thread 已收口后合入并清理。只有明确用于 manual packaging/release CI 的 PR 才能停在人工打包 gate。`prepare-task-pr.sh` 还会基于当前 changed paths 给出一条本地 required 验证建议与 planner `reason_summary`，但这些输出只负责推荐/解释，不自动执行，也不改写 `./scripts/ci-tests.sh required/full` 的既有语义。
 - `./scripts/pm/workflow-behavior-eval.sh`：repo-owned workflow behavior eval 入口；把 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
-- role subagent 产出的 patch、review card、summary、incident note 或 messaging brief，只有在被 owner 回写到 `project.md`、handoff、`.pm/tasks/<TASK-UID>.execution.md`、signal/memory，或 PR evidence 中至少一处后，才算进入 canonical 主链；孤立产物本身不构成正式收口证据。
-- 若 slice 类型是 `liveops_feedback`、`supplemental_review` 或其他非代码反馈，收口前仍必须明确它的 formal sink：至少要么 `promote-signal` / `promote-memory`，要么在 execution log / PR evidence 中留下可追溯引用。
+- role subagent 产出的 patch、review card、summary、incident note 或 messaging brief，只有在被 owner 回写到 `project.md`、handoff、GitHub issue evidence comment、signal/memory，或 PR evidence 中至少一处后，才算进入 canonical 主链；孤立产物本身不构成正式收口证据。
+- 若 slice 类型是 `liveops_feedback`、`supplemental_review` 或其他非代码反馈，收口前仍必须明确它的 formal sink：至少要么 `promote-signal` / `promote-memory`，要么在 GitHub issue evidence comment / PR evidence 中留下可追溯引用。
 - 若 owner / title / source refs 已明确，优先直接用 `./scripts/new-task-worktree.sh <module> <task> --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性进入目标 worktree 并留下 `last_started_at`；只有在需要手工拆步时，才分开执行 `new-task.sh` / `workflow-report.sh` / `move-task.sh`，或显式跳过 `task-closeout.sh`。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
 - 若 rebase 命中 `.pm/**` 冲突，先运行 `./scripts/pm/rebase-conflict-helper.sh` 盘点类别；只有 `.pm/inbox/signals.jsonl` 允许在 active rebase 中通过 `--resolve-signals` 自动修复，其余 canonical task/memory/stage 冲突仍需人工判断。
 
 QA / liveops 基础用法：
-- `./scripts/pm/promote-signal.sh --source-type task_execution_log --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in qa backlog"`
-- `./scripts/pm/promote-signal.sh --source-type incident --source-ref .pm/tasks/task_<32hex>.execution.md --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- `./scripts/pm/promote-signal.sh --source-type issue_comment --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in GitHub Project"`
+- `./scripts/pm/promote-signal.sh --source-type incident --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 
 状态迁移基础用法：
 - `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status committed`
 - `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status deferred`
-- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task task_<32hex> --source-ref .pm/tasks/task_<32hex>.execution.md`
+- `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task task_<32hex> --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID>`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
 - `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`
@@ -149,7 +165,7 @@ workflow report 基础用法：
 - `./scripts/pm/workflow-report.sh --phase close --role liveops_community --task-uid task_<32hex>`
 - `./scripts/pm/workflow-report.sh --phase review --role producer_system_designer --json`
 - `./scripts/prepare-task-pr.sh --json`
-- 输出会同时带 backlog/memory 摘要、pending signals、stage/gate 摘要与推荐动作清单；其中 producer 的 `review` 会跨角色汇总 pending signals，`start/close` 若带 `--task-uid` 还会把 `last_started_at` / `last_closed_at` 写回 task file。
+- 输出会记录或读取 GitHub-backed task evidence；`start/close` 带 `--task-uid` 时会把 `last_started_at` / `last_closed_at` 写入 mapping，并在 issue comment 留证据。
 
 阶段汇总基础用法：
 - `./scripts/pm/stage-lint.sh`

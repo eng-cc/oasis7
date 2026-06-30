@@ -1,9 +1,11 @@
 ---
 name: default-workflow-bootstrap
-description: Use when any oasis7 user request starts and needs standard task worktree, `.pm` task, owner role truth, and routing into the repo-owned workflow surface.
+description: Use when any oasis7 user request starts and needs standard task worktree, GitHub Project-backed task truth, owner role truth, and routing into the repo-owned workflow surface.
 ---
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
+
+> GitHub PM migration note: Step 3 retired repo-local `.pm/tasks/*`. GitHub Issues/Project plus `.pm/github-project-sync/tasks.json` are active task truth; task evidence is recorded as GitHub issue comments.
 
 
 # Default Workflow Bootstrap
@@ -20,12 +22,12 @@ Use this skill when:
 - any new user request starts, including read-only, chat-only, pure fact lookup, professional judgment, implementation, verification, review, or external messaging
 - a new task is starting and may change repository files, scripts, docs, tests, config, or other tracked state
 - the user said `做`, `继续`, `landing`, or otherwise expects end-to-end execution
-- you need to ensure a dedicated task worktree and `.pm` task exist before edits begin
+- you need to ensure a dedicated task worktree and GitHub Project-backed task truth exist before edits begin
 - the next step is still “set up the correct workflow surface” rather than implementation itself
 
 Do not use this skill when:
 
-- the task is already inside a bound task worktree with `.pm` task truth and an obvious current phase
+- the task is already inside a bound task worktree with GitHub Project-backed task truth and an obvious current phase
 - you are already executing a documented task and only need `executing-project-tasks`
 - you are already at claim-ready / closeout time
 
@@ -42,10 +44,10 @@ Read-only caveat:
 
 ## Core Workflow
 
-1. Treat the request as requiring standard worktree + `.pm` task truth before substantive handling. Do not first classify the request type to decide whether bootstrap is needed:
-   - repository-changing: requires standard worktree + `.pm` task truth before edits
-   - read-only/chat-only pure fact lookup: requires standard worktree + `.pm` task truth before direct answer
-   - read-only/chat-only professional judgment: requires standard worktree + `.pm` task truth before dispatching the matching professional role slice
+1. Treat the request as requiring standard worktree + GitHub Project-backed task truth before substantive handling. Do not first classify the request type to decide whether bootstrap is needed:
+   - repository-changing: requires standard worktree + GitHub Project-backed task truth before edits
+   - read-only/chat-only pure fact lookup: requires standard worktree + GitHub Project-backed task truth before direct answer
+   - read-only/chat-only professional judgment: requires standard worktree + GitHub Project-backed task truth before dispatching the matching professional role slice
 2. Verify workflow state in this order:
    - are you already in an isolated task worktree
    - is the current worktree already bound to the target task
@@ -54,12 +56,12 @@ Read-only caveat:
    - choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner
    - treat `tpm` ownership as workflow coordination only; professional work still requires matching bounded subagent slices
    - create a dedicated worktree unless the user explicitly authorized reuse
-   - bootstrap `.pm` task inside the target worktree
+   - bootstrap GitHub Project-backed task truth inside the target worktree
    - read `doc/<module>/prd.md`, `doc/<module>/project.md`, and task execution truth
 4. Once task truth exists, hand off to `repo-owned-workflow-router`.
-5. Record the bootstrap decision in `.pm/tasks/<TASK-UID>.execution.md`.
-   - `project.md` and handoff may supplement the task log
-   - they cannot replace the `.pm` execution log for task truth
+5. Record the bootstrap decision in the task GitHub issue evidence comments.
+   - `project.md` and handoff may supplement the task issue
+   - they cannot replace the GitHub-backed task evidence sink for task truth
 6. Continue into the routed phase rather than stopping at setup.
 
 Already-bound micro-loop caveat:
@@ -92,7 +94,7 @@ WORKFLOW BOOTSTRAP DECIDED
 
 ## Task Truth
 - Owner role:
-- `.pm` task:
+- GitHub Project task:
 - Formal docs:
 
 ## Routed Next Phase
@@ -102,7 +104,7 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Required Writeback
 - `prd.md`:
 - `project.md`:
-- `.pm` execution log (mandatory):
+- GitHub issue evidence comment (mandatory):
 - handoff (optional supplement):
 
 ## Next Action
@@ -123,15 +125,15 @@ WORKFLOW BOOTSTRAP DECIDED
   - `AGENTS.md`
   - `doc/<module>/prd.md`
   - `doc/<module>/project.md`
-  - `.pm/tasks/<TASK-UID>.yaml`
-  - `.pm/tasks/<TASK-UID>.execution.md`
+  - `.pm/github-project-sync/tasks.json`
+  - GitHub task issue evidence comments
 
 ## Guardrails
 
 - Do not create a second planning or bootstrap truth outside repo-owned surfaces.
 - Do not infer a read-only/chat-only bypass before bootstrap; request-type routing happens only after task truth exists.
-- Do not treat project, handoff, signal, memory, chat transcript, or PR evidence as a replacement for `.pm/tasks/<TASK-UID>.execution.md`.
-- Do not skip worktree / `.pm` task creation for any user request unless the user explicitly authorized reuse of a specific task worktree that is already bound to the same `.pm` task.
+- Do not treat project, handoff, signal, memory, chat transcript, or PR evidence as a replacement for GitHub-backed task evidence.
+- Do not skip worktree / GitHub Project task creation for any user request unless the user explicitly authorized reuse of a specific task worktree that is already bound to the same task.
 - Do not stop after saying which workflow surface should be used; continue into that phase.
 - Do not treat this skill as permission to bypass `repo-owned-workflow-router`, verification, or GitHub PR review.
 - Do force this bootstrap onto chat-only or read-only requests, even when they do not change repository state.
@@ -142,7 +144,7 @@ WORKFLOW BOOTSTRAP DECIDED
 ## Known Failure Modes
 
 - Treating a request as "just a quick question" before task/worktree truth exists; run the bootstrap first, then decide whether the answer is pure evidence or needs a role slice.
-- Creating a task from an invalid external `source_ref`; use a repository path as the PM source and record external URLs in the execution log evidence instead.
+- Creating a task from an invalid external `source_ref`; use a repository path as the PM source and record external URLs in GitHub issue evidence instead.
 - Reusing a dirty or unrelated worktree because it is convenient; reuse needs explicit user authorization and matching task truth.
 - Stopping after worktree creation; this skill's job includes routing into the next workflow surface and recording the decision.
 

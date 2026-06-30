@@ -34,6 +34,7 @@ done
 
 python3 - "$ROOT_DIR" "$TASK_UID" "$ALLOW_UNBOUND" "$PHASE" <<'PY'
 from __future__ import annotations
+import json
 import pathlib
 import re
 import subprocess
@@ -66,9 +67,21 @@ def parse_task(path: pathlib.Path) -> dict[str, object]:
 
 
 task_dir = root / ".pm" / "tasks"
+github_backed = False
 if explicit_uid:
     task_path = task_dir / f"{explicit_uid}.yaml"
     tasks = [parse_task(task_path)] if task_path.is_file() else []
+    if not tasks:
+        mapping_path = root / ".pm/github-project-sync/tasks.json"
+        if mapping_path.is_file():
+            mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+            record = (mapping.get("tasks") or {}).get(explicit_uid)
+            if isinstance(record, dict):
+                github_backed = True
+                task = dict(record)
+                task["task_uid"] = explicit_uid
+                task["path"] = str(mapping_path.relative_to(root))
+                tasks = [task]
 else:
     tasks = [parse_task(p) for p in sorted(task_dir.glob("task_*.yaml"))]
 if not tasks:
@@ -117,6 +130,33 @@ pr_hits: list[str] = []
 
 def check(cond, bad):
     if not cond: errors.append(bad)
+
+if github_backed:
+    if phase in {"pr-ready", "post-pr"}:
+        check(bool(task.get("issue_number") or task.get("issue_url")), "GitHub-backed task missing issue handle in .pm/github-project-sync/tasks.json")
+        check(bool(task.get("project_item_id")), "GitHub-backed task missing project_item_id in .pm/github-project-sync/tasks.json")
+        check(bool(task.get("evidence_comments")), "GitHub-backed task missing issue evidence comment links")
+        claim_records = task.get("claim_verifications")
+        has_verified_claim = isinstance(claim_records, list) and any(
+            isinstance(item, dict) and str(item.get("status") or "") == "verified"
+            for item in claim_records
+        )
+        check(has_verified_claim or bool(task.get("last_claim_verification_at")),
+              "GitHub-backed task missing verified claim-ready evidence")
+        check(bool(task.get("last_closed_at")),
+              "GitHub-backed task missing closeout evidence")
+    if phase == "post-pr":
+        check(bool(task.get("pr_url") or task.get("pull_request_url") or task.get("pr_number")),
+              "GitHub-backed task missing PR evidence link")
+    if errors:
+        print(f"workflow-lint: FAIL ({uid})")
+        for e in errors:
+            print(f"- {e}")
+        raise SystemExit(1)
+    print(f"workflow-lint: OK ({uid}, phase={phase}, github-backed)")
+    for hit in list(task.get("evidence_comments") or [])[:5]:
+        print(f"- evidence: {hit}")
+    raise SystemExit(0)
 
 project_docs: list[pathlib.Path] = []
 for key in ("doc_refs", "source_refs"):

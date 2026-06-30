@@ -28,7 +28,13 @@ TASK_UID="task_11111111111111111111111111111111"
   -c commit.gpgsign=false \
   commit --allow-empty --no-verify -m "test: prepare-task-pr smoke fixture" >/dev/null
 
-SMOKE_WORKTREE_CANONICAL="$(cd "$SMOKE_WORKTREE" && pwd -P)"
+SMOKE_WORKTREE_CANONICAL="$(
+  python3 - "$SMOKE_WORKTREE" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve())
+PY
+)"
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 
 mkdir -p "$TMPDIR/bin"
@@ -69,6 +75,11 @@ printf '%s\n' "$*" >> "$LOG_FILE"
 
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
   printf 'https://github.com/example/oasis7/pull/999\n'
+  exit 0
+fi
+
+if [[ "${1:-}" == "issue" && "${2:-}" == "view" ]]; then
+  cat "${TEST_GH_ISSUE_VIEW_JSON:?}"
   exit 0
 fi
 
@@ -487,6 +498,72 @@ if "missing passed pre-PR local role review evidence" not in stderr:
     raise SystemExit(f"expected missing-review error, got: {stderr}")
 PY
 
+GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
+GITHUB_FALLBACK_WORKTREE="$(
+  python3 - "$GITHUB_FALLBACK_ROOT" <<'PY'
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).resolve())
+PY
+)"
+GITHUB_FALLBACK_HEAD="1111111111111111111111111111111111111111"
+mkdir -p "$GITHUB_FALLBACK_ROOT/.pm/tasks" "$GITHUB_FALLBACK_ROOT/.pm/github-project-sync"
+touch "$GITHUB_FALLBACK_ROOT/.pm/tasks/.gitkeep"
+cat > "$GITHUB_FALLBACK_ROOT/.pm/github-project-sync/tasks.json" <<EOF
+{
+  "project": {
+    "repo": "example/oasis7"
+  },
+  "tasks": {
+    "$TASK_UID": {
+      "execution_log_path": "https://github.com/example/oasis7/issues/123",
+      "issue_number": 123,
+      "issue_url": "https://github.com/example/oasis7/issues/123",
+      "status": "committed",
+      "task_uid": "$TASK_UID",
+      "worktree_hint": "$GITHUB_FALLBACK_WORKTREE"
+    }
+  },
+  "version": 1
+}
+EOF
+GITHUB_ISSUE_VIEW_JSON="$TMPDIR/github-issue-view.json"
+cat > "$GITHUB_ISSUE_VIEW_JSON" <<EOF
+{
+  "comments": [
+    {
+      "body": "## 2026-06-03 00:00:00 CST / tpm\n- Pre-PR Local Role Review: passed\n- Task UID: $TASK_UID\n- Source Worktree: $GITHUB_FALLBACK_WORKTREE\n- Source Branch: $SMOKE_BRANCH\n- Source Head: $GITHUB_FALLBACK_HEAD\n- Comparison Ref: refs/remotes/origin/main\n- Reviewed Changed Paths: doc/engineering/project.md\n- Review Package: n/a; GitHub-backed smoke fixture\n- Role Selection Basis: GitHub-backed PM issue comment path smoke; roles producer_system_designer,repository_health_engineer,qa_engineer.\n- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer\n- Review Evidence: producer_system_designer: no_findings; repository_health_engineer: no_findings; qa_engineer: no_findings\n- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\n- Review Findings Disposition: no_findings\n- Finding Disposition Evidence: GitHub issue comment smoke evidence\n- Verification Matrix: GitHub-backed preflight -> prepare-task-pr --json -> observed\n- Visual Evidence: n/a; no visible surface\n- WASM Evidence: n/a; no WASM surface\n- Ops Evidence: n/a; no ops surface\n- LiveOps Evidence: n/a; no liveops surface\n- Residual Risk: fixture residual risk\n- Slice Ledger: n/a; smoke fixture\n"
+    }
+  ]
+}
+EOF
+local_role_review_function="$(sed -n '/^local_role_review_status()/,/^ensure_branch_exists /p' "$ROOT_DIR/scripts/prepare-task-pr.sh" | sed '$d')"
+eval "$local_role_review_function"
+github_mapping_review="$TMPDIR/github-mapping-review.env"
+: > "$TMPDIR/gh-github-mapping.log"
+PATH="$TMPDIR/bin:$PATH" TEST_GH_LOG="$TMPDIR/gh-github-mapping.log" TEST_GH_ISSUE_VIEW_JSON="$GITHUB_ISSUE_VIEW_JSON" \
+  local_role_review_status "$GITHUB_FALLBACK_WORKTREE" "$SMOKE_BRANCH" "$GITHUB_FALLBACK_HEAD" refs/remotes/origin/main > "$github_mapping_review"
+
+python3 - "$github_mapping_review" "$TMPDIR/gh-github-mapping.log" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+fields = {}
+for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
+    key, _, value = line.partition("=")
+    fields[key] = value
+gh_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+if fields.get("status") != "passed":
+    raise SystemExit(f"expected GitHub issue comment review packet to pass, got: {fields}")
+if fields.get("task_uid") != "task_11111111111111111111111111111111":
+    raise SystemExit(f"expected mapped task uid, got: {fields}")
+if not any(line.startswith("issue view 123 -R example/oasis7 --json comments") for line in gh_lines):
+    raise SystemExit(f"expected gh issue view call for GitHub-backed evidence, got: {gh_lines}")
+PY
+
+reset_smoke_branch_to_base
 write_task_binding
 write_project_trace
 write_role_review_packet "0000000000000000000000000000000000000000" "no_findings"

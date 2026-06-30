@@ -5,6 +5,8 @@ description: Use when a bound oasis7 task needs phase selection across repo-owne
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
+> GitHub PM migration note: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh ... audit` when task status or Project-backed PM state changes.
+
 
 # Repo-Owned Workflow Router
 
@@ -29,14 +31,14 @@ Do not use this skill when:
 ## Required Rules
 
 1. This skill is a router, not an external bootstrap.
-2. It must not replace `AGENTS.md`, `.pm`, `prd.md`, `project.md`, task execution logs, or GitHub PR review.
+2. It must not replace `AGENTS.md`, `.pm` mapping/archive truth, `prd.md`, `project.md`, GitHub task issue evidence comments, or GitHub PR review.
 3. It only chooses and orders repo-owned workflow skills.
-4. If the task truth changes, route decisions must be written back into `.pm/tasks/<TASK-UID>.execution.md`; formal docs may supplement but not replace it.
+4. If the task truth changes, route decisions must be written back into GitHub task issue evidence comments; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist/packet, write scope, return contract, mandatory `.pm` execution-log sink, and integration owner/order.
-7. TPM TODO decomposition and subagent slice contracts must be recorded in `.pm/tasks/<TASK-UID>.execution.md` before delegated execution begins.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist/packet, write scope, return contract, GitHub task issue evidence sink, and integration owner/order.
+7. TPM TODO decomposition and subagent slice contracts must be recorded in GitHub task issue evidence comments before delegated execution begins.
 8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
-9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in `.pm/tasks/<TASK-UID>.execution.md`.
+9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in GitHub task issue evidence comments.
 10. Already-bound micro loops may use the source-of-truth "Learning Intake /
     Loop Closeout" minimal record instead of a full route packet when the
     owner, scope, phase, professional slice plan, and PR chain do not change.
@@ -50,14 +52,15 @@ Check the task in this order:
 0. Already-bound read-only professional/domain judgment
    - Apply this router step after `default-workflow-bootstrap`; read-only professional/domain judgments must already be task-bound.
    - Dispatch the matching bounded role slice.
-   - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in `.pm`.
+   - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in GitHub task issue evidence comments.
+   - Compatibility marker: record the slice contract in `.pm` now means record it in the GitHub issue evidence comment sink backed by `.pm/github-project-sync/tasks.json`, not recreate retired `.pm/tasks/*` task files.
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
 2. `tdd-test-writer`
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
-   - Use when `prd.md` / `project.md` / handoff / `.pm` truth is ready and implementation should proceed step by step.
+   - Use when `prd.md` / `project.md` / handoff / GitHub-backed task truth is ready and implementation should proceed step by step.
 4. `systematic-debugging`
    - Use when a bug, failing test, broken script, unexpected diff, or regression appears before proposing fixes.
 5. `requesting-repo-owned-review`
@@ -113,7 +116,7 @@ WORKFLOW ROUTE DECIDED
 ## Required Writeback
 - `prd.md`:
 - `project.md`:
-- `.pm/tasks/<TASK-UID>.execution.md`:
+- GitHub task issue evidence comments:
 - handoff / project supplement:
 
 ## Subagent Slice Plan (If Needed)
@@ -133,7 +136,7 @@ WORKFLOW ROUTE DECIDED
   - collaboration boundary:
 - write scope:
 - return contract:
-- formal sink / writeback surface: `.pm/tasks/<TASK-UID>.execution.md` (mandatory)
+- formal sink / writeback surface: GitHub task issue evidence comments (mandatory)
 - integration owner:
 - integration order:
 - context exemption:
@@ -151,7 +154,7 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
-- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current `.pm` task truth, and scoped repo context recorded in the mandatory context checklist/packet.
+- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist/packet.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
 - Do not promote a lightweight observation directly into committed task truth
   when a reflection signal or task-scoped `working_memory` is the right
@@ -159,7 +162,7 @@ WORKFLOW ROUTE DECIDED
 
 ## Known Failure Modes
 
-- Treating this router as permission to skip the mandatory `.pm` execution-log writeback; route decisions are task truth.
+- Treating this router as permission to skip GitHub task issue evidence writeback; route decisions are task truth.
 - Selecting every workflow skill because the phase map exists; use the narrowest applicable surface and record skipped gates when they matter.
 - Reporting TPM evidence gathering as a professional conclusion; dispatch or attribute the matching role slice when judgment is involved.
 - Forgetting to update the route after scope changes; append the changed route before continuing work.

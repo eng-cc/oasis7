@@ -442,6 +442,7 @@ local_role_review_status() {
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import re
 import subprocess
 import sys
@@ -513,40 +514,88 @@ def emit(
     print(f"liveops_evidence={liveops_evidence}")
     raise SystemExit(0)
 
-if not tasks_dir.is_dir():
-    emit("missing", reason=".pm/tasks directory missing")
-
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
 candidates: list[tuple[str, Path, str]] = []
-for task_file in sorted(tasks_dir.glob("task_*.yaml")):
-    text = task_file.read_text(encoding="utf-8")
-    if f"worktree_hint: {source_worktree}" not in text:
-        continue
-    task_uid = ""
-    execution_log_path = ""
-    for line in text.splitlines():
-        key, _, value = line.partition(":")
-        value = value.strip().strip('"')
-        if key == "task_uid":
-            task_uid = value
-        elif key == "execution_log_path":
-            execution_log_path = value
+github_issue: dict[str, object] | None = None
+task_files = sorted(tasks_dir.glob("task_*.yaml")) if tasks_dir.is_dir() else []
+if task_files:
+    for task_file in task_files:
+        text = task_file.read_text(encoding="utf-8")
+        if f"worktree_hint: {source_worktree}" not in text:
+            continue
+        task_uid = ""
+        execution_log_path = ""
+        for line in text.splitlines():
+            key, _, value = line.partition(":")
+            value = value.strip().strip('"')
+            if key == "task_uid":
+                task_uid = value
+            elif key == "execution_log_path":
+                execution_log_path = value
+        if not task_uid_re.fullmatch(task_uid):
+            continue
+        if not execution_log_path:
+            execution_log_path = f".pm/tasks/{task_uid}.execution.md"
+        candidates.append((task_uid, root / execution_log_path, execution_log_path))
+else:
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if not mapping_path.is_file():
+        emit("missing", reason=".pm task files absent and GitHub Project mapping missing")
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    project = mapping.get("project") or {}
+    repo_name = str(project.get("repo") or "eng-cc/oasis7")
+    matched: list[dict[str, object]] = []
+    for uid, record in sorted((mapping.get("tasks") or {}).items()):
+        if str(record.get("worktree_hint") or "") == str(source_worktree):
+            record = dict(record)
+            record["task_uid"] = uid
+            matched.append(record)
+    if not matched:
+        emit("missing", reason=f"no GitHub Project task has worktree_hint {source_worktree}")
+    if len(matched) > 1:
+        emit("missing", reason=f"multiple GitHub Project tasks match worktree_hint {source_worktree}")
+    record = matched[0]
+    task_uid = str(record.get("task_uid") or "")
     if not task_uid_re.fullmatch(task_uid):
-        continue
-    if not execution_log_path:
-        execution_log_path = f".pm/tasks/{task_uid}.execution.md"
-    candidates.append((task_uid, root / execution_log_path, execution_log_path))
+        emit("missing", reason=f"invalid mapped task_uid {task_uid}")
+    github_issue = {
+        "repo": repo_name,
+        "number": int(record.get("issue_number") or 0),
+        "url": str(record.get("issue_url") or ""),
+    }
+    candidates.append((task_uid, Path("/dev/null"), str(record.get("issue_url") or "")))
 
 if not candidates:
-    emit("missing", reason=f"no .pm task has worktree_hint {source_worktree}")
+    emit("missing", reason=f"no task has worktree_hint {source_worktree}")
 if len(candidates) > 1:
-    emit("missing", reason=f"multiple .pm tasks match worktree_hint {source_worktree}")
+    emit("missing", reason=f"multiple tasks match worktree_hint {source_worktree}")
 
 task_uid, log_path, log_path_rel = candidates[0]
-if not log_path.is_file():
-    emit("missing", task_uid=task_uid, log_path=log_path_rel, reason="execution log missing")
-
-text = log_path.read_text(encoding="utf-8")
+if github_issue:
+    if not github_issue["number"]:
+        emit("missing", task_uid=task_uid, log_path=log_path_rel, reason="mapped GitHub issue number missing")
+    try:
+        issue_payload = subprocess.check_output(
+            [
+                "gh",
+                "issue",
+                "view",
+                str(github_issue["number"]),
+                "-R",
+                str(github_issue["repo"]),
+                "--json",
+                "comments",
+            ],
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        emit("missing", task_uid=task_uid, log_path=log_path_rel, reason=f"failed to read GitHub issue comments: {exc}")
+    comments = json.loads(issue_payload).get("comments") or []
+    text = "\n\n".join(str(comment.get("body") or "") for comment in comments)
+else:
+    if not log_path.is_file():
+        emit("missing", task_uid=task_uid, log_path=log_path_rel, reason="execution log missing")
+    text = log_path.read_text(encoding="utf-8")
 blocks = review_packet_blocks(text)
 if not blocks:
     emit(
@@ -581,6 +630,8 @@ elif reviewed_source_head != source_head:
         f".pm/tasks/{task_uid}.yaml",
         ".pm/registry/tasks.yaml",
     }
+    if github_issue:
+        allowed_evidence_paths.add(".pm/github-project-sync/tasks.json")
     try:
         subprocess.check_call(
             ["git", "merge-base", "--is-ancestor", reviewed_source_head, source_head],

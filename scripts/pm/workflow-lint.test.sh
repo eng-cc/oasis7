@@ -126,4 +126,47 @@ if ! grep -Fq "evidence: .pm/tasks/$TASK_UID.execution.md" "$TMPDIR/task-local.s
   exit 1
 fi
 
+GITHUB_UID="task_33333333333333333333333333333333"
+GITHUB_ROOT="$TMPDIR/github-backed"
+mkdir -p "$GITHUB_ROOT/scripts" "$GITHUB_ROOT/.pm/tasks" "$GITHUB_ROOT/.pm/github-project-sync"
+cp -R "$ROOT_DIR/scripts/pm" "$GITHUB_ROOT/scripts/pm"
+cat > "$GITHUB_ROOT/.pm/github-project-sync/tasks.json" <<EOF
+{
+  "project": {
+    "repo": "example/oasis7"
+  },
+  "tasks": {
+    "$GITHUB_UID": {
+      "claim_verifications": [
+        {
+          "status": "verified",
+          "task_uid": "$GITHUB_UID",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T00:01:00+08:00",
+          "verify_command": "fixture"
+        }
+      ],
+      "evidence_comments": [
+        "https://github.com/example/oasis7/issues/123#issuecomment-1"
+      ],
+      "issue_number": 123,
+      "issue_url": "https://github.com/example/oasis7/issues/123",
+      "last_claim_verification_at": "2026-06-30T00:01:00+08:00",
+      "last_closed_at": "2026-06-30T00:02:00+08:00",
+      "project_item_id": "PVTI_fixture",
+      "status": "done",
+      "task_uid": "$GITHUB_UID",
+      "worktree_hint": "$GITHUB_ROOT"
+    }
+  },
+  "version": 1
+}
+EOF
+PM_ROOT_DIR="$GITHUB_ROOT" "$GITHUB_ROOT/scripts/pm/workflow-lint.sh" --task-uid "$GITHUB_UID" --phase pr-ready >"$TMPDIR/github-backed.stdout"
+if ! grep -Fq "github-backed" "$TMPDIR/github-backed.stdout"; then
+  echo "workflow-lint.test: expected GitHub-backed task fallback to pass" >&2
+  cat "$TMPDIR/github-backed.stdout" >&2
+  exit 1
+fi
+
 echo "workflow-lint.test: OK"

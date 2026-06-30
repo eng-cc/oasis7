@@ -1,0 +1,17 @@
+{
+  "archive_path": "/Users/scc/ccwork/worktrees/oasis7-engineering-github-issues-projects-pm-evaluation/.pm/github-project-sync/task-archive.jsonl",
+  "archive_reused": true,
+  "deletion": {
+    "deleted_count": 0,
+    "deleted_paths": []
+  },
+  "errors": [],
+  "selected_count": 847,
+  "status": "ok",
+  "status_counts": {
+    "candidate": 2,
+    "committed": 27,
+    "deferred": 1,
+    "done": 817
+  }
+}

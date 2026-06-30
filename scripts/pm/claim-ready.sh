@@ -105,6 +105,7 @@ if [[ -n "$TASK_UID" && "$CLAIM_LABEL" != "task_complete" ]]; then
   python3 - "$ROOT_DIR" "$TASK_UID" "$CLAIM_LABEL" <<'PY'
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -112,6 +113,19 @@ root = Path(sys.argv[1])
 task_uid = sys.argv[2]
 claim_type = sys.argv[3]
 task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
+mapping_path = root / ".pm/github-project-sync/tasks.json"
+
+if not task_path.exists() and mapping_path.exists():
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    record = (mapping.get("tasks") or {}).get(task_uid) or {}
+    task_status = str(record.get("status") or "")
+    last_closed_at = str(record.get("last_closed_at") or "")
+    if task_status in {"done", "deferred"} and last_closed_at:
+        raise SystemExit(
+            "claim-ready: closed GitHub-backed task claim evidence is immutable for non-completion claims: "
+            f"{task_uid} status={task_status} claim_type={claim_type}"
+        )
+    raise SystemExit(0)
 
 fields: dict[str, str] = {}
 for raw in task_path.read_text(encoding="utf-8").splitlines():
@@ -181,13 +195,68 @@ PY
 )"
 
 if [[ -n "$TASK_UID" ]]; then
-  "$ROOT_DIR/scripts/pm/pm_store.py" record-task-claim-verification "$ROOT_DIR" \
-    --task-uid "$TASK_UID" \
-    --claim-type "$CLAIM_LABEL" \
-    --verify-command "$VERIFY_COMMAND" \
-    --verified-at "$VERIFIED_AT" \
-    --verification-exit-code "$VERIFY_EXIT_CODE" \
-    --verification-status "$STATUS" >/dev/null
+  if [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+    python3 - "$ROOT_DIR" "$TASK_UID" "$RESULT_JSON" <<'PY'
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+claim = json.loads(sys.argv[3])
+mapping_path = root / ".pm/github-project-sync/tasks.json"
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+record = (mapping.get("tasks") or {}).get(task_uid)
+if not record:
+    raise SystemExit(0)
+record.setdefault("claim_verifications", []).append(claim)
+record["last_claim_verification_at"] = claim["verified_at"]
+record["updated_at"] = claim["verified_at"]
+mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+repo = ((mapping.get("project") or {}).get("repo") or "eng-cc/oasis7")
+issue_number = int(record.get("issue_number") or 0)
+if issue_number:
+    body = "\n".join(
+        [
+            "<!-- oasis7-pm-claim-verification -->",
+            f"Task UID: {task_uid}",
+            f"Claim Type: {claim['claim_type']}",
+            f"Verified At: {claim['verified_at']}",
+            f"Verification Exit Code: {claim['verification_exit_code']}",
+            f"Verification Status: {claim['status']}",
+            f"Verify Command: {claim['verify_command']}",
+            f"Claim Message: {claim['claim_message']}",
+            "",
+        ]
+    )
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+        handle.write(body)
+        body_path = Path(handle.name)
+    try:
+        subprocess.run(
+            ["gh", "issue", "comment", str(issue_number), "-R", str(repo), "--body-file", str(body_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=180,
+        )
+    finally:
+        body_path.unlink(missing_ok=True)
+PY
+  elif [[ -f "$ROOT_DIR/.pm/tasks/$TASK_UID.yaml" ]]; then
+    "$ROOT_DIR/scripts/pm/pm_store.py" record-task-claim-verification "$ROOT_DIR" \
+      --task-uid "$TASK_UID" \
+      --claim-type "$CLAIM_LABEL" \
+      --verify-command "$VERIFY_COMMAND" \
+      --verified-at "$VERIFIED_AT" \
+      --verification-exit-code "$VERIFY_EXIT_CODE" \
+      --verification-status "$STATUS" >/dev/null
+  fi
 fi
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then

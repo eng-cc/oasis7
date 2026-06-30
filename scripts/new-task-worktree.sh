@@ -27,12 +27,12 @@ Options:
   --allow-dirty-source    Allow creating from a dirty source worktree
   --init-docs             Inspect module PRD/project in the new worktree
   --with-harness          Asynchronously prewarm ./scripts/worktree-harness.sh up in the new worktree
-  --pm-owner-role <role>  Create the .pm task inside the target worktree, move it to committed,
-                          and record workflow start with this owner role
+  --pm-owner-role <role>  Create the GitHub-backed task in the target worktree,
+                          move it to committed, and record workflow start with this owner role
   --pm-title <title>      Required when using --pm-owner-role
-  --pm-priority <P0-P3>   Optional .pm task priority (default: P2)
+  --pm-priority <P0-P3>   Optional GitHub-backed task priority (default: P2)
   --pm-source-ref <ref>   Required when using --pm-owner-role; may be passed multiple times
-  --pm-doc-ref <ref>      Optional .pm task doc ref; may be passed multiple times
+  --pm-doc-ref <ref>      Optional task doc ref; may be passed multiple times
   --pm-related-prd <id>   Optional .pm related PRD; may be passed multiple times
   --pm-acceptance <text>  Optional .pm acceptance item; may be passed multiple times
   --pm-handoff-to <role>  Optional .pm handoff target; may be passed multiple times
@@ -473,7 +473,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
     cleanup_bootstrap_failure
-    echo "error: failed to bootstrap .pm task inside target worktree; cleaned up created worktree" >&2
+    echo "error: failed to bootstrap GitHub-backed PM task inside target worktree; cleaned up created worktree" >&2
     exit "$BOOTSTRAP_STATUS"
   fi
 
@@ -491,7 +491,7 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
     cleanup_bootstrap_failure
-    echo "error: failed to move/start bootstrapped .pm task inside target worktree; cleaned up created worktree" >&2
+    echo "error: failed to move/start bootstrapped GitHub-backed PM task inside target worktree; cleaned up created worktree" >&2
     exit "$BOOTSTRAP_STATUS"
   fi
 fi
@@ -614,8 +614,8 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
 PM bootstrap:
 - owner role: $PM_OWNER_ROLE
 - task uid: $PM_TASK_UID
-- task path: $PM_TASK_PATH
-- execution log: $PM_EXECUTION_LOG_PATH
+- task issue: $PM_TASK_PATH
+- evidence sink: $PM_EXECUTION_LOG_PATH
 - task status: committed
 - workflow start: recorded
 INFO
@@ -628,11 +628,12 @@ Next:
 INFO
 
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
-  printf '  sed -n '\''1,200p'\'' %s\n' "$PM_EXECUTION_LOG_PATH"
+  printf '  # evidence sink: %s\n' "$PM_EXECUTION_LOG_PATH"
+  printf '  ./scripts/pm/workflow-report.sh --phase start --role %s --task-uid %s\n' "$PM_OWNER_ROLE" "$PM_TASK_UID"
 else
   cat <<INFO
   ./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>
-  sed -n '1,200p' .pm/tasks/<TASK-UID>.execution.md
+  # evidence is written to the GitHub task issue comment stream
 INFO
 fi
 
