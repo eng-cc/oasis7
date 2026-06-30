@@ -5,7 +5,7 @@ description: Use when a branch is about to create a PR and must collect fresh in
 
 # Requesting Repo-Owned Review
 
-> GitHub PM migration note: PM workflow/script changes should include repository-health review and should treat GitHub Project audit evidence as part of the review target when queue/status semantics changed.
+> PM truth: PM workflow/script changes should include repository-health review and should treat GitHub Project audit evidence as part of the review target when queue/status semantics changed.
 
 Use this skill when the work is about to enter the GitHub PR path.
 
@@ -140,7 +140,7 @@ role reviews and addressing findings:
 ## Known Failure Modes
 
 - Treating the local role review as optional when the branch is already on the PR path.
-- Recording a review request in chat only, leaving `.pm` without the evidence packet required by preflight.
+- Recording a review request in chat only, leaving GitHub task issue evidence comments without the packet required by preflight.
 - Selecting roles from convenience instead of changed paths, role ownership, task history, and user-facing claims.
 - Resolving or dismissing GitHub review threads based only on local repo-owned review evidence.
 

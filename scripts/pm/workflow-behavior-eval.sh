@@ -132,19 +132,19 @@ checks = [
             "Module-local verification remains distinct from integration/release readiness claims",
             "### 1.2.2 Learning Intake / Loop Closeout",
             "no-op",
-            "short execution-log note",
+            "short GitHub issue evidence note",
             "Reflection signal",
             "Task-scoped `working_memory`",
             "Candidate task or memory promotion",
             "By default this creates `source_type=reflection` only",
             "The minimum record for a micro loop inside an already-bound task is:",
-            "### 1.2.3 GitHub Project-Backed PM Migration",
-            "GitHub Project is the authoritative active-work queue",
+            "### 1.2.3 GitHub Project-Backed PM Contract",
+            "GitHub Issues + GitHub Project are the authoritative project-management",
             "Task UID` remains the stable internal identity",
             "github-project-workflow.sh ... sync",
             "github-project-workflow.sh ... audit",
             "github-project-workflow.sh ... step3-gate",
-            "Step 3 deletion is forbidden until all of these gates pass",
+            "Lifecycle wrappers `new-task.sh`, `move-task.sh`",
         ],
     ),
     (
@@ -534,7 +534,7 @@ scenarios = [
             "Already-bound read-only professional/domain judgment",
             "read-only professional/domain judgments must already be task-bound",
             "Unbound read-only professional questions are invalid under the always-bootstrap workflow",
-            "record the slice contract in `.pm`",
+            "Record the slice contract in the GitHub issue evidence comment sink",
         ],
     },
     {
@@ -562,8 +562,8 @@ scenarios = [
         ],
     },
     {
-        "id": "working_memory_supplements_not_replaces_execution_log",
-        "expected_route": "learning intake -> task-scoped working_memory may supplement execution log only",
+        "id": "working_memory_supplements_not_replaces_issue_evidence",
+        "expected_route": "learning intake -> task-scoped working_memory may supplement GitHub task issue evidence only",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             "Task-scoped `working_memory`",
@@ -631,7 +631,7 @@ scenarios = [
         "required_markers": [
             "the task already has written scope in `prd.md`, `project.md`, a handoff, or GitHub-backed task truth",
             "Run a brief plan-gap review before editing",
-            "Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.",
+            "Do not create a second planning system outside `prd.md` / `project.md` / GitHub-backed task truth.",
         ],
     },
     {

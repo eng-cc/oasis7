@@ -5,7 +5,7 @@ description: Use when any oasis7 user request starts and needs standard task wor
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
-> GitHub PM migration note: Step 3 retired repo-local `.pm/tasks/*`. GitHub Issues/Project plus `.pm/github-project-sync/tasks.json` are active task truth; task evidence is recorded as GitHub issue comments.
+> PM truth: GitHub Issues/Project plus `.pm/github-project-sync/tasks.json` are active task truth; task evidence is recorded as GitHub issue comments.
 
 
 # Default Workflow Bootstrap

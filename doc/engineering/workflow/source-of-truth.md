@@ -11,14 +11,6 @@ Mandatory rule:
 2. After this file is updated, sync all related scripts/docs/skills to match.
 3. PRs that change workflow scripts without updating this file are invalid.
 
-Step 3 migration note:
-As of v1.5.2, repo-local `.pm/tasks/*` task files are retired. Outside the
-GitHub Project migration section, older references to
-`.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, `.pm task`,
-or `.pm execution log` are legacy wording and must be read as the current
-GitHub Project-backed task truth plus the evidence sink documented in
-section 1.2.3. Do not recreate `.pm/tasks/*` for normal workflow.
-
 ## 1. Phase Diagram
 ```mermaid
 flowchart TD
@@ -83,8 +75,8 @@ small question into a heavyweight workflow.
 - Once a request is already inside the bound task/worktree, pure fact lookup,
   path lookup, command-output restatement, or mechanical evidence collection may
   use the objective-fact fast path: TPM gathers the evidence, answers directly,
-  and records a short execution-log note only when the fact materially affects
-  task truth, PR evidence, or a future decision.
+  and records a short GitHub issue evidence note only when the fact materially
+  affects task truth, PR evidence, or a future decision.
 - Read-only professional/domain questions still require a matching role slice,
   but the default slice should be bounded and time-boxed: one concrete question,
   explicit evidence paths, `findings/no_findings` or verdict return, and no file
@@ -116,7 +108,7 @@ or reusable failure signature:
 
 1. **No-op**: choose this when the observation is transient, already captured by
    the current command output, or has no likely reuse value.
-2. **Short execution-log note**: choose this when the observation changes the
+2. **Short GitHub issue evidence note**: choose this when the observation changes the
    current task's route, verification interpretation, PR evidence, or handoff,
    but should not outlive the task as a separate signal.
 3. **Reflection signal**: choose this for useful follow-up ideas, repeated
@@ -132,7 +124,7 @@ or reusable failure signature:
 5. **Candidate task or memory promotion**: choose this only after owner review
    when the signal or working memory is stable enough to become executable
    backlog work or long-term role memory. Promotion must preserve source refs
-   and must not bypass owner, role, PRD/project, or `.pm` truth.
+   and must not bypass owner, role, PRD/project, or GitHub-backed task truth.
 
 Learning intake is not a new mandatory gate before every answer. It is a
 closeout habit for moments where the task produced reusable knowledge. When the
@@ -143,14 +135,10 @@ question or observation, evidence path or command, answer or decision, and
 whether it changes task truth. Use the full bootstrap/router packets only when
 the owner, scope, route, professional slice plan, or PR chain actually changes.
 
-### 1.2.3 GitHub Project-Backed PM Migration
-The repository has migrated project management from file-backed `.pm` task
-objects to GitHub Issues + GitHub Project. GitHub Project is the authoritative active-work queue. Step 3 deletion is forbidden until all of these gates pass;
-Step 3 retired repo-local `.pm/tasks/*` task files after full historical
-Project coverage and archive export. GitHub Project is now the authoritative
-active-work queue and external state gate.
-
-Authoritative after Step 3:
+### 1.2.3 GitHub Project-Backed PM Contract
+GitHub Issues + GitHub Project are the authoritative project-management
+surface for oasis7 tasks. Local files under `.pm/github-project-sync/` are a
+deterministic mirror/cache for scripts and audits, not a parallel task queue.
 
 - GitHub Issue is the task collaboration envelope.
 - GitHub Project item fields are authoritative for active queue/status views:
@@ -161,74 +149,39 @@ Authoritative after Step 3:
 - `.pm/github-project-sync/tasks.json` is the deterministic local mapping cache
   from `task_uid` to issue/project item handles.
 - `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local
-  archive for retired task metadata and historical execution logs. It is an
-  audit bridge, not a new active planning queue.
-- Active lifecycle wrappers `new-task.sh`, `move-task.sh`,
-  `append-execution-log.sh`, `workflow-report.sh`, `task-closeout.sh`, and
-  `claim-ready.sh` must use GitHub Issues/Project plus
-  `.pm/github-project-sync/tasks.json`; they must not recreate `.pm/tasks/*`.
-
-Retired after Step 3:
-
-- `.pm/tasks/<TASK-UID>.yaml` and `.pm/tasks/<TASK-UID>.execution.md` are no
-  longer active task truth and must not be recreated for normal workflow.
-- New execution evidence should be attached to the GitHub Issue/Project-backed
-  task envelope or to a deterministic replacement sink documented here before
-  use.
+  archive for historical task metadata and evidence records. It is an audit
+  bridge, not a planning queue.
+- Lifecycle wrappers `new-task.sh`, `move-task.sh`, `append-execution-log.sh`,
+  `workflow-report.sh`, `task-closeout.sh`, and `claim-ready.sh` use GitHub
+  Issues/Project plus `.pm/github-project-sync/tasks.json`.
+- Execution evidence is recorded in GitHub task issue evidence comments.
 - role memory, task-scoped `working_memory`, signals, stage/gate state, and
   this workflow source-of-truth remain repo-local unless a later source-of-truth
   update explicitly migrates them.
 
 Deterministic script contract:
 
-- `./scripts/pm/github-project-workflow.sh ... sync` applies repo-local task
-  metadata or the Step 3 archive to GitHub Issues/Project items idempotently.
+- `./scripts/pm/github-project-workflow.sh ... sync` applies mapping/archive
+  task metadata to GitHub Issues/Project items idempotently.
 - `./scripts/pm/github-project-workflow.sh ... audit` verifies the selected
   task set, mapping, and GitHub Project item/field state agree. Its default
   path must be selected-task / mapping-targeted and must not list the full
-  Project during ordinary task closeout or PR readiness checks. After Step 3 it
-  must load task truth from archive + mapping, and fail if repo-local retired
-  `.pm/tasks/task_*.yaml` or `*.execution.md` files are present.
-- `./scripts/pm/github-project-workflow.sh ... step3-gate` remains the hard
-  full historical coverage check after deletion; it may list the full Project
-  and uses the archive fallback when `.pm/tasks/*` is absent.
-- `./scripts/pm/github-project-retire-tasks.sh --delete` archives task yaml and
-  execution logs to `.pm/github-project-sync/task-archive.jsonl` before deleting
-  repo-local `.pm/tasks/*`. If the archive already exists, it must preserve
-  existing records and upsert only the task UIDs represented by current retired
-  task files.
+  Project during ordinary task closeout or PR readiness checks. It loads task
+  truth from archive + mapping and fails if local task-file artifacts reappear.
+- `./scripts/pm/github-project-workflow.sh ... step3-gate` is the full
+  historical coverage audit for the GitHub Project/mapping/archive set.
+- `./scripts/pm/github-project-retire-tasks.sh --delete` maintains
+  `.pm/github-project-sync/task-archive.jsonl`; if the archive already exists,
+  it must preserve existing records and upsert only the task UIDs represented by
+  the current input set.
 - `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
   create issue/project task, append evidence comments, move Project status, and
   close tasks after fresh verification.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
-  GitHub task issue evidence comments and mapping-backed task truth. The review
-  gate stays the same; only the evidence read path changes.
+  GitHub task issue evidence comments and mapping-backed task truth.
 - All future GitHub-backed create/move/report/closeout helpers must use
   deterministic `gh`/GitHub API paths, preserve or recover the `task_uid`
   mapping, and refuse ambiguous duplicate mappings.
-
-Step 3 deletion required these gates to pass:
-
-- New task gate: a script can create GitHub issue + Project item + `task_uid`
-  and enter the standard worktree chain deterministically.
-- Status gate: `candidate`, `committed`, `blocked`, `done`, and `deferred`
-  transitions are script-driven and Project/mapping/repo mirror state stays
-  idempotent.
-- Evidence gate: execution evidence has a proven repo-local or GitHub-backed
-  sink for slice contracts, verification, review, closeout, and PR packets.
-- PR gate: PR helpers can read required task metadata from the GitHub-backed
-  truth path or its deterministic local mirror.
-- Recovery gate: a missing local mapping can be recovered from GitHub Project
-  items and issue bodies without creating duplicates.
-- Audit gate: active tasks pass low-cost selected-task `audit`; historical
-  `done/deferred` tasks have an explicit archive/import policy and pass the
-  full `step3-gate`.
-- Reference gate: formal docs/project traces no longer rely on paths that would
-  be deleted, or their replacement trace target is explicitly documented.
-
-The full historical task set was explicitly imported for Step 3 coverage before
-local task-file retirement. Future bulk imports must still be explicit and
-audited because the repository can contain hundreds of historical tasks.
 
 ## 2. Responsibility Boundary
 - `tpm`: default main Agent / workflow coordinator / canonical integrator only; owns phase decision, role allocation, subagent dispatch, integration order, task-truth writeback, fresh-verification gate coordination, completion-claim coordination, and PR chain coordination.
@@ -301,7 +254,7 @@ audited because the repository can contain hundreds of historical tasks.
 - If scripts/skills/docs conflict with this file, this file wins.
 - Sync downstream artifacts immediately in the same change set where possible.
 
-## 5. Normative Details (from legacy AGENTS workflow)
+## 5. Normative Details
 ### 5.1 Worktree + task truth
 - Every user request uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
 - Only explicit user authorization allows reuse of an existing task worktree.
@@ -318,11 +271,11 @@ audited because the repository can contain hundreds of historical tasks.
 - Project policy authorizes TPM to dispatch required bounded professional subagent slices directly whenever this workflow requires them; TPM must not pause for per-slice user permission. This project policy is an explicit standing user authorization to use subagents for workflow-required professional role slices; when a tool/runtime requires an "explicit user request for sub-agents, delegation, or parallel agent work", this policy satisfies that requirement for the matching repo-owned workflow slice. If the current runtime, connector, or tool policy still prevents actual subagent dispatch, TPM must record the intended dispatch, actual limitation, fallback evidence path, and attribution boundary in GitHub task issue evidence comments, and must not present TPM's own analysis as a professional role conclusion.
 - Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, GitHub task issue evidence sink, and integration order.
 - Default subagent runtime policy is defined only in `.codex/config.toml` under `[workflow.subagent_runtime]`. TPM should request that configured default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
-- Compatibility marker: Any non-default subagent model or reasoning effort must be recorded in the slice contract.
+- Any non-default subagent model or reasoning effort must be recorded in the slice contract.
 - Any actual non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, a user-specified override, a connector/tool limitation that forces inheritance from the parent thread, or a requested model/reasoning selection whose actual dispatch cannot be verified. If the actual dispatched model cannot be verified, the contract must say `actual model: inherited/unverified` and explain why.
 - Context delivery defaults to full-thread/full-history fork or the closest available equivalent so the subagent receives the same conversation and repository-governance context as TPM. The slice contract must still record a mandatory context checklist identifying the governance/task/user/repo/collaboration context the subagent is expected to have. A manually assembled explicit context packet is allowed only as a delivery supplement or fallback when full-history fork is unavailable, unsafe, stalled, or incompatible with required model/reasoning selection; the slice contract must record that fallback reason.
-- Compatibility marker: mandatory context packet means the recorded mandatory context checklist/packet, not necessarily a manually assembled explicit delivery packet.
-- Compatibility marker: The mandatory context packet must include:
+- Mandatory context packet means the recorded mandatory context checklist/packet, not necessarily a manually assembled explicit delivery packet.
+- The mandatory context packet must include:
 - The mandatory context checklist/packet must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
@@ -337,7 +290,7 @@ audited because the repository can contain hundreds of historical tasks.
 - If the plan changes during execution, TPM must append a GitHub issue evidence comment before continuing the changed work.
 - Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a GitHub-backed task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
 - After task truth exists, use the section 1.2.2 learning-intake ladder for
-  discoveries and follow-ups: no-op, short execution-log note, reflection
+  discoveries and follow-ups: no-op, short GitHub issue evidence note, reflection
   signal, task-scoped `working_memory`, or owner-reviewed candidate task/memory
   promotion. Do not skip directly from a lightweight observation to committed
   task truth unless the owner explicitly selects that promotion.
@@ -363,7 +316,7 @@ audited because the repository can contain hundreds of historical tasks.
 ### 5.3 Execution evidence
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
 - If blocked, also record `Blocker / Next Action`.
-- For tasks started with the `2026-05-23` execution-log template or later, these fields are mandatory per entry.
+- These fields are mandatory for GitHub task issue evidence entries.
 
 ### 5.4 Claim / closeout chain
 - Before completion claims, run fresh verification (prefer `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<cmd>"` when applicable).
@@ -427,34 +380,27 @@ audited because the repository can contain hundreds of historical tasks.
 
 ## 7. Change Log
 - **v1.5.2 (2026-06-30)**
-  - Hardened the post-Step 3 contract so default PM audit and lint fail when
-    retired `.pm/tasks/task_*.yaml` or `*.execution.md` files reappear.
-  - Clarified that active module grouping and subagent/evidence sinks use
-    GitHub Project fields, GitHub task issue evidence comments, and
-    `.pm/github-project-sync/tasks.json`, not repo-local task files.
-  - Required task retirement archive updates to preserve existing archive
-    records and upsert only currently retired task UIDs.
+  - Hardened the GitHub Project-backed PM contract so audit/lint reject local
+    task-file artifacts and active evidence uses GitHub task issue comments.
+  - Required archive updates to preserve existing records and upsert only the
+    task UIDs represented by the current input set.
 - **v1.5.1 (2026-06-30)**
-  - Retired repo-local `.pm/tasks/*` files after GitHub Project Step 3 export.
-    Historical task metadata and execution logs now live in
-    `.pm/github-project-sync/task-archive.jsonl`; GitHub Project/Issues plus
-    `.pm/github-project-sync/tasks.json` are the active PM path.
-  - Replaced active PM lifecycle wrappers with GitHub Project-backed task
-    create/evidence/status/closeout behavior and kept PR preflight review
-    evidence gates by reading GitHub issue comments.
+  - Completed the GitHub Project PM transition: GitHub Issues/Project plus
+    `.pm/github-project-sync/tasks.json` became the active PM path, with
+    historical records archived in `.pm/github-project-sync/task-archive.jsonl`.
+  - Moved task create/evidence/status/closeout and PR preflight evidence reads
+    to the GitHub-backed path.
 - **v1.5.0 (2026-06-29)**
-  - Introduced the GitHub Project-backed PM migration contract: Project is the
-    authoritative active queue during Step 2, repo-local `.pm` remains the
-    execution/audit sink until Step 3 gates pass, and deterministic
-    sync/audit/step3-gate scripts are required before deleting task files.
+  - Introduced the GitHub Project-backed PM migration plan and deterministic
+    sync/audit/step3-gate scripts.
 - **v1.4.28 (2026-06-27)**
   - Added the Learning Intake / Loop Closeout ladder so task learning can flow
-    to no-op, short execution-log note, reflection signal, task-scoped
+    to no-op, short GitHub issue evidence note, reflection signal, task-scoped
     `working_memory`, or owner-reviewed candidate task/memory without creating
     heavy ceremony for every small loop.
 - **v1.4.27 (2026-06-24)**
   - Added friction controls after task truth so objective fact lookups, bounded read-only role slices, and small follow-ups do not become heavyweight workflow by default.
-  - Added `.pm` task `module` as the default large-module marker for grouping, reporting, and parallel work queues.
+  - Added GitHub Project `module` as the default large-module marker for grouping, reporting, and parallel work queues.
   - Clarified that module-local test evidence does not imply integration or release readiness.
 - **v1.4.26 (2026-06-23)**
   - Tightened pre-PR role inference backstops for producer product/system docs, viewer/launcher implementation/docs/scripts, and agent/subagent workflow contract surfaces.
@@ -471,7 +417,7 @@ audited because the repository can contain hundreds of historical tasks.
   - Added surface-specific verification matrix expectations for gameplay, runtime, WASM, UI/visual, and manual packaging/release ops evidence.
   - Added batching/timeout policy for large all-role review dispatches and stronger manual packaging hold ownership/resume criteria.
 - **v1.4.23 (2026-06-22)**
-  - Added file-based review package and lightweight slice ledger artifacts for pre-PR local role review, while keeping `.pm/tasks/<TASK-UID>.execution.md` canonical.
+  - Added file-based review package and lightweight slice ledger artifacts for pre-PR local role review.
   - Required pre-PR role review packets to record `Review Package`, per-role dual `Review Verdicts`, and `Slice Ledger` fields.
   - Clarified that dual verdicts strengthen involved-role review and do not replace oasis7 professional role ownership with a generic reviewer.
 - **v1.4.22 (2026-06-18)**
@@ -510,11 +456,11 @@ audited because the repository can contain hundreds of historical tasks.
 - **v1.4.11 (2026-06-03)**
   - Replaced the optional/risk-based local supplemental review gate with a required pre-PR local role-subagent review gate.
   - Removed the Copilot review request from the standard PR helper flow.
-  - Required `prepare-task-pr.sh --create` to verify passed local role review evidence in the task execution log before creating a PR.
+  - Required `prepare-task-pr.sh --create` to verify passed local role review evidence before creating a PR.
 - **v1.4.10 (2026-06-03)**
   - Updated the default subagent runtime policy.
   - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
-  - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before any explicit `.pm` task promotion.
+  - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before explicit task promotion.
   - 2026-06-08 amendment: moved the concrete default subagent runtime value into the repo-tracked `.codex/config.toml` `[workflow.subagent_runtime]` block so the model configuration has one canonical source.
   - 2026-06-08 amendment: updated the workflow source-of-truth and workflow eval contract to reference the config-backed policy instead of carrying the concrete runtime value in prose.
 - **v1.4.9 (2026-06-02)**
@@ -522,12 +468,12 @@ audited because the repository can contain hundreds of historical tasks.
   - Required subagent slice contracts to distinguish intended default model from actual dispatched model, including inherited/unverified connector cases.
   - Made full-thread/full-history context the default subagent context delivery mode, with mandatory context checklist recording and explicit context packets as delivery supplement/fallback only when recorded.
 - **v1.4.8 (2026-06-01)**
-  - Required every user request to create or enter standard task worktree / `.pm` task truth before substantive handling, including read-only, chat-only, and pure fact lookup requests.
-  - Removed the read-only/chat-only bypass for `default-workflow-bootstrap`; read-only professional slices now record their contract and sink in `.pm/tasks/<TASK-UID>.execution.md`.
+  - Required every user request to create or enter standard task worktree/task truth before substantive handling, including read-only, chat-only, and pure fact lookup requests.
+  - Removed the read-only/chat-only bypass for `default-workflow-bootstrap`.
   - Clarified that professional routing still happens after bootstrap, but no request is handled outside task/worktree truth.
 - **v1.4.7 (2026-06-01)**
   - Defined the sink for unbound read-only professional slices as the role-tagged user-facing answer or preserved chat/thread transcript. Superseded by v1.4.8, which forbids unbound read-only professional slices.
-  - Clarified that `.pm` execution-log sinks are mandatory for task-bound or repository-changing subagent work, not for standalone read-only professional answers. Superseded by v1.4.8, which requires `.pm` task truth for every request.
+  - Clarified task-bound evidence sink expectations for repository-changing subagent work. Superseded by v1.4.8, which requires task truth for every request.
 - **v1.4.6 (2026-06-01)**
   - Added the default subagent runtime policy.
   - Required slice contracts to record model configuration and reasons for non-default model/reasoning overrides.
@@ -546,14 +492,14 @@ audited because the repository can contain hundreds of historical tasks.
   - Added the normative skill map by workflow phase so each core skill has an explicit trigger, requiredness level, and evidence sink.
   - Clarified that specialist skills are domain-triggered through TPM routing rather than mandatory default workflow phases.
 - **v1.4.1 (2026-06-01)**
-  - Tightened TPM planning governance: TODO decomposition, subagent slice contracts, and integration order must be written to the task execution log before delegated work begins.
-  - Clarified that other formal sinks may supplement but cannot replace `.pm/tasks/<TASK-UID>.execution.md` for task execution truth.
+  - Tightened TPM planning governance: TODO decomposition, subagent slice contracts, and integration order must be written to the task evidence sink before delegated work begins.
+  - Clarified that other formal sinks may supplement but cannot replace canonical task evidence.
 - **v1.4.0 (2026-06-01)**
   - Added `tpm` as the default main Agent / orchestrator / canonical integrator.
   - Required all professional roles to participate as bounded subagent slices under TPM coordination.
 - **v1.3.0 (2026-06-01)**
   - Removed the `trivial` / `non-trivial` workflow split for repository-changing work.
-  - Required every repository-changing request to enter the standard task worktree + `.pm` task flow before edits begin.
+  - Required every repository-changing request to enter the standard task worktree + task flow before edits begin.
   - Kept read-only inspection and chat-only answers outside repository writeback requirements. Superseded by v1.4.8, which requires task/worktree truth for every request.
 - **v1.2.3 (2026-05-28)**
   - Required all file edits to happen from a task worktree instead of the `main` branch/worktree.
@@ -566,19 +512,20 @@ audited because the repository can contain hundreds of historical tasks.
   - Required new task worktrees to link ignored `target` to the repo-family shared cargo target cache.
 - **v1.1.0 (2026-05-25)**
   - Restored high-impact normative details that were previously only in `AGENTS.md` (worktree/task-truth policy, execution evidence fields, claim/closeout chain, PR/review chain).
-  - Clarified semantic migration to avoid policy loss after dedup.
+  - Clarified workflow policy preservation during dedup.
 - **v1.0.0 (2026-05-25)**
   - Created single source-of-truth workflow spec with phase diagram, role boundary, required/optional gates, and rollback paths.
   - Established policy: workflow changes must update this document first, then sync scripts/docs/skills.
 
 
-## 8. Semantic Migration Checklist
-This checklist records whether key legacy `AGENTS.md` workflow semantics were preserved here to avoid policy loss during deduplication.
+## 8. Workflow Contract Checklist
+This checklist records the active workflow contract so later edits do not lose
+required task, review, verification, or merge semantics.
 
-- [x] Single owner / single `.pm` task / single worktree / single PR chain.
+- [x] Single owner / single GitHub-backed task / single worktree / single PR chain.
 - [x] Standard task worktree flow for every user request, with explicit-reuse-only policy.
-- [x] Owner role selection and `.pm` task binding before implementation.
-- [x] TPM planning/TODO decomposition and subagent slice contracts written to `.pm` execution log before delegated execution.
+- [x] Owner role selection and GitHub-backed task binding before implementation.
+- [x] TPM planning/TODO decomposition and subagent slice contracts written to GitHub task issue evidence comments before delegated execution.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
 - [x] Read-only professional/domain questions require matching bounded role slices after task/worktree bootstrap.
 - [x] Subagent intended model configuration defaults to the `Default subagent runtime` policy; actual dispatched model/reasoning and non-default/inherited/unverified rationale are recorded.

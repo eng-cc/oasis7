@@ -40,7 +40,7 @@ Do not use this skill when:
 
 ## Core Workflow
 
-1. Start from current repo truth: `.pm` task, relevant PRD/project docs, role
+1. Start from current repo truth: GitHub-backed task, relevant PRD/project docs, role
    card, and any playtest or community evidence.
 2. Pick the smallest useful theory lens, such as core loop, motivation,
    progression pressure, balance tradeoff, or player feedback timing.

@@ -15,7 +15,7 @@
 - [ ] 每条需求 / 验收点都有对应任务或验证面
   - 不能只写目标，不写落地 task、验证命令或预期结果
 - [ ] 命名保持一致
-  - `PRD-ID`、task slug、`.pm` task、分支 / worktree 名、文档标题、关键路径引用前后一致
+  - `PRD-ID`、task slug、GitHub-backed task、分支 / worktree 名、文档标题、关键路径引用前后一致
 - [ ] 原子步骤足够细
   - 接手人不需要额外口头补充，就能按步骤执行、验证、回写
 - [ ] subagent slices 已定义清楚

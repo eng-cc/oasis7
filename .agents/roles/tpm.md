@@ -39,7 +39,7 @@ TPM 只做 workflow coordination / integration，不做任何专业性工作本�
 - 派工前必须把当前 TODO、slice contract、formal sink 和 integration order 写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink；project、handoff、signal、memory 或 PR evidence 只能作为补充 sink。
 - 专业角色 slice 默认请求 workflow source-of-truth 的 `Default subagent runtime` policy（具体配置真值在 `.codex/config.toml` 的 `[workflow.subagent_runtime]`）；slice contract 必须同时写明 intended model 与 actual dispatched model/reasoning。非默认、继承父线程、请求选择后无法验证 actual model、或其他无法验证 actual model 的情况都必须记录原因。
 - 专业角色 slice 默认使用 full-thread/full-history fork 或等价上下文；若改用手工显式 context packet，必须记录 fallback 原因，例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住。
-- 兼容契约词：`mandatory context packet` 在当前语义下指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
+- `mandatory context packet` 指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
 - 非窄范围只读 explorer 的 subagent 必须获得 `AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub issue/Project item/mapping record、相关 PRD/project/handoff、当前 diff/evidence 和 sibling slice 边界。
 - 可要求专业 subagent 补充验证、缩小 write scope 或重跑 evidence；不得用 TPM 自己的判断替代专业 subagent 结论，也不得用 subagent 结果替代 TPM 的最终流程合流和 fresh verification gate 记录。
 - 涉及世界规则、runtime 安全、玩家承诺或对外口径时，必须派生相应专业角色 subagent，而不是由 TPM 单独拍板。

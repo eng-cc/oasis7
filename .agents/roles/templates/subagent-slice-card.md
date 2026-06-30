@@ -5,11 +5,11 @@
 ## Required Fields（固定字段）
 - role:
 - slice type:
-- model configuration: compatibility marker; fill the intended/actual fields below.
+- model configuration: fill the intended/actual fields below.
 - intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override.
 - actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded.
-- mandatory context packet: compatibility marker; fill the mandatory context checklist/packet below.
+- mandatory context packet: fill the mandatory context checklist/packet below.
 - mandatory context checklist/packet:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)

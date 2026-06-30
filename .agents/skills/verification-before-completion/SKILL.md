@@ -5,7 +5,7 @@ description: Use when about to claim a task is complete, tests passed, a branch 
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
-> GitHub PM migration note: if the claim depends on PM queue/status state, include `./scripts/pm/github-project-workflow.sh ... audit` as a fresh verification input.
+> PM truth: if the claim depends on PM queue/status state, include `./scripts/pm/github-project-workflow.sh ... audit` as a fresh verification input.
 
 
 # Verification Before Completion

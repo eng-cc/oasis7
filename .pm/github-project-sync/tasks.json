@@ -12638,6 +12638,57 @@
       "title": "add local changed-path required validation recommendation",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down"
     },
+    "task_f8c51bd6be804fe5bf89b233a70c7349": {
+      "acceptance": [
+        "Formal workflow source-of-truth keeps only GitHub Project / issue comments semantics outside minimal changelog history.",
+        "Active repo-owned workflow docs and skills no longer instruct readers to reinterpret .pm/tasks or execution logs as compatibility aliases."
+      ],
+      "claim_verifications": [
+        {
+          "allowed_to_claim": true,
+          "blocked_phrase": "Do not claim the task is complete.",
+          "claim_message": "Fresh verification passed; the task can now be claimed complete.",
+          "claim_type": "task_complete",
+          "status": "verified",
+          "success_phrase": "Fresh verification passed; the task can now be claimed complete.",
+          "task_uid": "task_f8c51bd6be804fe5bf89b233a70c7349",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T19:17:29+08:00",
+          "verify_command": "rtk proxy bash scripts/pm/workflow-behavior-eval.sh"
+        }
+      ],
+      "created_at": "2026-06-30T18:54:50+08:00",
+      "doc_refs": [
+        "doc/engineering/workflow/source-of-truth.md"
+      ],
+      "evidence_comments": [
+        "https://github.com/eng-cc/oasis7/issues/1640#issuecomment-4842624894",
+        "https://github.com/eng-cc/oasis7/issues/1640#issuecomment-4842628271",
+        "https://github.com/eng-cc/oasis7/issues/1640#issuecomment-4842780176",
+        "https://github.com/eng-cc/oasis7/issues/1640#issuecomment-4842789367"
+      ],
+      "evidence_sink": "https://github.com/eng-cc/oasis7/issues/1640",
+      "handoff_to": [],
+      "issue_number": 1640,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1640",
+      "last_claim_verification_at": "2026-06-30T19:17:29+08:00",
+      "last_closed_at": "2026-06-30T19:17:32+08:00",
+      "last_evidence_at": "2026-06-30T19:17:32+08:00",
+      "last_started_at": "2026-06-30T18:55:13+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxRVCQ",
+      "related_prd": [],
+      "source_refs": [
+        "doc/engineering/workflow/source-of-truth.md"
+      ],
+      "status": "done",
+      "task_uid": "task_f8c51bd6be804fe5bf89b233a70c7349",
+      "title": "Remove retired PM compatibility wording from formal workflow docs",
+      "updated_at": "2026-06-30T19:17:32+08:00",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-workflow-source-truth-new-semantics"
+    },
     "task_f8cc5a3ee1cb5adda34ca0c635a8e58f": {
       "content_id": "I_kwDORHhWec8AAAABHFW37Q",
       "execution_log_path": ".pm/tasks/task_f8cc5a3ee1cb5adda34ca0c635a8e58f.execution.md",

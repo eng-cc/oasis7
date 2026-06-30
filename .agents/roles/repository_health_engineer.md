@@ -28,7 +28,7 @@
 ## Outputs
 - 仓库健康度 findings：文档/代码不一致、语义歧义、缺陷风险、测试盲区、技术债和 owner 建议
 - 对 TPM 的合流建议：必须修复、可延后但需记录、可接受 residual risk、需要追加专业角色 slice
-- 债务处置建议：最小偿还 patch、后续 `.pm` task / reflection signal 建议、过期条件和验证命令
+- 债务处置建议：最小偿还 patch、后续 GitHub-backed task / reflection signal 建议、过期条件和验证命令
 - 文档清晰度建议：需要改写的 source-of-truth、role card、operator doc、task evidence 或错误信息
 
 ## Decisions
