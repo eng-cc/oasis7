@@ -117,3 +117,24 @@ Example:
 - Expected Result: current task can be claimed ready for PR and task-local closeout metadata is written.
 - Actual Result: `claim-ready` returned `status=verified` and `allowed_to_claim=true`; `task-closeout.sh` wrote task-local closeout metadata, then failed on repo-wide historical `.pm lint` debt in unrelated task execution logs.
 - Blocker / Next Action: not a current-task blocker; preserve task-local closeout metadata and continue with PR preflight.
+
+## 2026-06-30 10:09:31 CST / tpm
+- 完成内容: Diagnosed PR #1603 required-gate failure and applied minimal RustSec baseline fix.
+- 遗留事项: integrate follow-up repository_health / QA review, push fix, watch CI/comments, merge, and cleanup.
+- Action: `required-gate` failed in `cargo deny check advisories` on new advisory `RUSTSEC-2026-0192` (`ttf-parser` unmaintained) through `owned_ttf_parser -> ab_glyph -> egui/eframe` and `winit/bevy`; added reviewed RustSec ignore metadata in `deny.toml`, updated `scripts/check-rustsec-ignore-baseline.sh` approved baseline, and added `ttf-parser: []` to `scripts/rustsec-ignore-direct-dependency-baseline.json` to prevent future direct dependency growth.
+- Subagent Dispatch Note: attempted to spawn fresh repository_health/QA follow-up review agents for the CI-fix patch, but the current subagent tool reported an agent thread limit; reused the existing repository_health and QA review threads for bounded read-only follow-up review instead. TPM diagnosis and local verification remain separately attributed here and are not presented as professional role conclusions.
+- Validation Command: `gh run view 28414516947 --repo eng-cc/oasis7 --job 84194444288 --log-failed`; `env -u RUSTC_WRAPPER cargo tree --locked --all-features --target all -i ttf-parser`; `./scripts/check-rustsec-ignore-baseline.sh`; `./scripts/check-rustsec-ignore-baseline.test.sh`; `env -u RUSTC_WRAPPER cargo deny check advisories`; `git diff --check`.
+- Expected Result: failure signature is narrowed to a single RustSec advisory; reviewed baseline metadata is complete and unexpired; baseline self-test passes; advisory check exits 0; whitespace remains clean.
+- Actual Result: failure narrowed to `RUSTSEC-2026-0192`; local dependency tree shows `ttf-parser` reaches local crates `oasis7_client_launcher` and `pixel_world_bridge`; baseline checker passed with 3 advisories; baseline self-test passed; `cargo deny check advisories` exited 0 locally with expected warnings that the local advisory DB does not yet contain `RUSTSEC-2026-0192`; `git diff --check` passed.
+- Blocker / Next Action: wait for follow-up repository_health / QA review results, then commit and push CI fix.
+
+## 2026-06-30 10:17:58 CST / tpm
+- 完成内容: Integrated follow-up repository_health and QA reviews for the RustSec CI-fix patch.
+- 遗留事项: push fix, watch CI/comments, merge, and cleanup.
+- Action: Reused existing repository_health and QA review threads due subagent thread limit; both reviewed the `RUSTSEC-2026-0192` baseline patch as a bounded post-PR CI-fix slice.
+- Review Roles: repository_health_engineer, qa_engineer
+- Review Findings Disposition: no_findings
+- Review Evidence: repository_health_engineer confirmed the patch is the minimal repo-health response, wires the advisory through `deny.toml`, approved IDs, and direct dependency ratchet, and that `local_crates=oasis7_client_launcher,pixel_world_bridge` matches the `cargo tree` closure; qa_engineer confirmed verification is adequate for push and no additional local checks are required before relying on CI's newer advisory DB.
+- Review Verdicts: repository_health_engineer compliant with acceptable time-boxed residual dependency risk; qa_engineer compliant with low residual risk and CI as canonical confirmation for the newly published advisory.
+- Residual Risk: `ttf-parser` remains a transitive unmaintained UI/font parser dependency until upstream migration or a later dependency modernization task removes the ignore before expiry `2026-09-30`.
+- Blocker / Next Action: no blocker; commit and push the CI-fix patch.
