@@ -47,7 +47,7 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
 
 def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
@@ -119,6 +119,16 @@ def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
         body_path = handle.name
     try:
         return run_text(["gh", "issue", "create", "-R", repo, "--title", f"[PM] {task['title']}", "--body-file", body_path])
+    finally:
+        pathlib.Path(body_path).unlink(missing_ok=True)
+
+
+def update_issue_body(repo: str, issue_number: int, task: OrderedDict[str, Any]) -> None:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+        handle.write(issue_body(task))
+        body_path = handle.name
+    try:
+        run_text(["gh", "issue", "edit", str(issue_number), "-R", repo, "--body-file", body_path])
     finally:
         pathlib.Path(body_path).unlink(missing_ok=True)
 
@@ -229,7 +239,9 @@ def command_new_task(args: argparse.Namespace) -> int:
         "evidence_sink": issue_url,
     }
     mapping["tasks"][task_uid] = record
-    mapping["project"] = {"owner": args.project_owner, "number": args.project_number, "repo": args.repo}
+    project = dict(mapping.get("project") or {})
+    project.update({"owner": args.project_owner, "number": args.project_number, "repo": args.repo})
+    mapping["project"] = project
     save_mapping(mapping_path, mapping)
     payload = dict(record)
     payload.update(
@@ -348,6 +360,7 @@ def command_move_task(args: argparse.Namespace) -> int:
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+    update_issue_body(args.repo, int(record["issue_number"]), task)
     save_mapping(mapping_path, mapping)
     payload = {
         "task_uid": args.task_uid,

@@ -15,6 +15,67 @@ from typing import Any, Optional
 ACTIVE_STATUSES = ("candidate", "committed", "blocked")
 ALL_STATUSES = ("candidate", "committed", "blocked", "done", "deferred")
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}")
+PROJECT_ITEM_NODES_QUERY = """
+query($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on ProjectV2Item {
+      id
+      project {
+        id
+        number
+      }
+      content {
+        ... on Issue {
+          body
+          number
+          url
+        }
+        ... on PullRequest {
+          body
+          number
+          url
+        }
+      }
+      fieldValues(first: 100) {
+        nodes {
+          ... on ProjectV2ItemFieldTextValue {
+            text
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+          ... on ProjectV2ItemFieldSingleSelectValue {
+            name
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+          ... on ProjectV2ItemFieldDateValue {
+            date
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+          ... on ProjectV2ItemFieldNumberValue {
+            number
+            field {
+              ... on ProjectV2FieldCommon {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
 
 
 def die(message: str) -> None:
@@ -172,6 +233,112 @@ def item_task_uid(item: dict[str, Any]) -> str:
     return match.group(0) if match else ""
 
 
+def project_item_from_graphql_node(node: dict[str, Any]) -> dict[str, Any]:
+    project = node.get("project") or {}
+    item: dict[str, Any] = {
+        "id": node.get("id") or "",
+        "content": node.get("content") or {},
+        "_project_id": project.get("id") or "",
+        "_project_number": project.get("number") or "",
+    }
+    for field_value_node in ((node.get("fieldValues") or {}).get("nodes") or []):
+        field = field_value_node.get("field") or {}
+        field_name = str(field.get("name") or "")
+        if not field_name:
+            continue
+        value = ""
+        for key in ("name", "text", "date", "number"):
+            if field_value_node.get(key) is not None:
+                value = str(field_value_node.get(key))
+                break
+        item[field_name] = value
+    return item
+
+
+def fetch_project_items_by_ids(project_item_ids: list[str]) -> dict[str, dict[str, Any]]:
+    if not project_item_ids:
+        return {}
+    cmd = ["gh", "api", "graphql", "-f", f"query={PROJECT_ITEM_NODES_QUERY}"]
+    for project_item_id in project_item_ids:
+        cmd.extend(["-f", f"ids[]={project_item_id}"])
+    payload = run_json(cmd)
+    items: dict[str, dict[str, Any]] = {}
+    for node in (payload.get("data") or {}).get("nodes") or []:
+        if not node:
+            continue
+        item = project_item_from_graphql_node(node)
+        item_id = str(item.get("id") or "")
+        if item_id:
+            items[item_id] = item
+    return items
+
+
+def fetch_project_items_by_full_list(args: argparse.Namespace) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    payload = run_json(
+        [
+            "gh",
+            "project",
+            "item-list",
+            str(args.project_number),
+            "--owner",
+            args.project_owner,
+            "--limit",
+            str(args.limit),
+            "--format",
+            "json",
+        ]
+    )
+    project_items_by_task: dict[str, dict[str, Any]] = {}
+    duplicate_project_task_uids: list[str] = []
+    for item in payload.get("items", []) or []:
+        uid = item_task_uid(item)
+        if not uid:
+            continue
+        if uid in project_items_by_task:
+            duplicate_project_task_uids.append(uid)
+        project_items_by_task[uid] = item
+    return project_items_by_task, duplicate_project_task_uids
+
+
+def fetch_project_items_by_mapping(tasks: dict[str, OrderedDict[str, Any]], mapped_tasks: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    project_items_by_task: dict[str, dict[str, Any]] = {}
+    item_ids: list[str] = []
+    task_uid_by_item_id: dict[str, str] = {}
+    for uid in sorted(tasks):
+        record = mapped_tasks.get(uid) or {}
+        project_item_id = str(record.get("project_item_id") or "")
+        if not project_item_id:
+            continue
+        item_ids.append(project_item_id)
+        task_uid_by_item_id[project_item_id] = uid
+    items_by_id = fetch_project_items_by_ids(item_ids)
+    for project_item_id, uid in task_uid_by_item_id.items():
+        item = items_by_id.get(project_item_id)
+        if item:
+            project_items_by_task[uid] = item
+    return project_items_by_task, []
+
+
+def expected_project_id(args: argparse.Namespace, mapping: dict[str, Any]) -> str:
+    project = mapping.get("project") or {}
+    project_id = str(project.get("id") or "")
+    if project_id:
+        return project_id
+    payload = run_json(
+        [
+            "gh",
+            "project",
+            "view",
+            str(args.project_number),
+            "--owner",
+            args.project_owner,
+            "--format",
+            "json",
+        ]
+    )
+    return str(payload.get("id") or "")
+
+
 def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
     workflow_phase = "blocked" if status == "blocked" else "done" if status in {"done", "deferred"} else "execution"
@@ -234,30 +401,12 @@ def command_audit(args: argparse.Namespace) -> int:
     tasks = load_tasks(root, statuses, mapping)
     mapped_tasks = mapping.get("tasks", {})
 
-    payload = run_json(
-        [
-            "gh",
-            "project",
-            "item-list",
-            str(args.project_number),
-            "--owner",
-            args.project_owner,
-            "--limit",
-            str(args.limit),
-            "--format",
-            "json",
-        ]
-    )
-    items = payload.get("items", []) or []
-    project_items_by_task: dict[str, dict[str, Any]] = {}
-    duplicate_project_task_uids: list[str] = []
-    for item in items:
-        uid = item_task_uid(item)
-        if not uid:
-            continue
-        if uid in project_items_by_task:
-            duplicate_project_task_uids.append(uid)
-        project_items_by_task[uid] = item
+    if args.full_list:
+        project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_full_list(args)
+        expected_live_project_id = ""
+    else:
+        project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_mapping(tasks, mapped_tasks)
+        expected_live_project_id = expected_project_id(args, mapping)
 
     errors: list[str] = []
     warnings: list[str] = []
@@ -276,6 +425,8 @@ def command_audit(args: argparse.Namespace) -> int:
             continue
         if record.get("project_item_id") and str(record.get("project_item_id")) != str(item.get("id") or ""):
             errors.append(f"{uid}: mapping project_item_id does not match live item")
+        if expected_live_project_id and str(item.get("_project_id") or "") != expected_live_project_id:
+            errors.append(f"{uid}: live item project_id does not match configured Project")
         content = item.get("content") or {}
         if record.get("issue_url") and str(record.get("issue_url")) != str(content.get("url") or ""):
             errors.append(f"{uid}: mapping issue_url does not match live item content")
@@ -328,6 +479,7 @@ def command_audit(args: argparse.Namespace) -> int:
 def command_step3_gate(args: argparse.Namespace) -> int:
     args.include_done = True
     args.strict_mapping = True
+    args.full_list = True
     return command_audit(args)
 
 
@@ -354,6 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--include-done", action="store_true", default=argparse.SUPPRESS)
     audit.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     audit.add_argument("--limit", type=int, default=1000)
+    audit.add_argument("--full-list", action="store_true")
     audit.add_argument("--strict-mapping", action="store_true")
     audit.set_defaults(func=command_audit)
 

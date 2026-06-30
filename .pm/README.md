@@ -21,7 +21,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 - 本 README 后续仍提到旧 `.pm/tasks` 的脚本，均为 legacy 文件化 PM 入口或历史示例；除非 `source-of-truth` 重新批准，不再作为新工作流真值。
 - task 的唯一身份是 `task_uid`；GitHub issue number / Project item id 只是外部对象句柄，不替代 `task_uid`。
 - `.pm/registry/tasks.yaml` 与 role backlog 只保留可扫描重建视图，并作为 git-ignored 的本地生成文件存在，不再承担 planning queue 真值。
-- `./scripts/pm/github-project-workflow.sh ... audit` 必须能验证 GitHub Project、mapping 与 archive/mirror 一致；`step3-gate` 是全历史覆盖检查。
+- `./scripts/pm/github-project-workflow.sh ... audit` 必须能以 selected-task / mapping-targeted 低成本路径验证 GitHub Project、mapping 与 archive/mirror 一致；普通 closeout / PR readiness 不得全量拉取 Project items。`step3-gate` 是全历史覆盖检查，可全量拉取 Project。
 - 同一 owner / 同一工作流下若出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务，必须先把 `project.md` / topic project 的 Trace 收口到 survivor task，再通过 `./scripts/pm/compact-task-group.sh` 并档；不允许在正式文档仍引用 dropped task UID 时直接删除 canonical task 文件。
 - stage/gate、signal、task `source_refs` 与 memory `source_refs` 不得再把 `doc/devlog/*.md` 当运行态 source_ref；历史 `doc/devlog/*.md` 仅作归档参考，运行态证据统一来自 GitHub task issue evidence comments、正式文档或其他显式 evidence。
 - 首批角色以 `.agents/roles/*.md` 为单一事实源。
@@ -47,7 +47,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 
 当前 GitHub-backed active 基础链路：
 - `./scripts/pm/github-project-task.py`：GitHub Project-backed active lifecycle adapter；创建 task issue/project item、写 issue evidence comment、更新 Project 状态、执行 closeout evidence。
-- `./scripts/pm/github-project-workflow.sh`：GitHub Project-backed PM adapter；`sync` 将 `.pm` mirror 或 Step 3 archive 推到 GitHub Issue/Project，`audit` 校验 Project/mapping/archive 漂移，`step3-gate` 是全历史硬 gate。
+- `./scripts/pm/github-project-workflow.sh`：GitHub Project-backed PM adapter；`sync` 将 `.pm` mirror 或 Step 3 archive 推到 GitHub Issue/Project，`audit` 以 selected-task / mapping-targeted 低成本路径校验 Project/mapping/archive 漂移，`step3-gate` 是全历史硬 gate。
 - `./scripts/pm/github-project-sync.sh`：底层 `.pm/archive -> GitHub Issues/Project` 幂等同步器，由 `github-project-workflow sync` 调用。
 - `./scripts/pm/github-project-retire-tasks.sh`：Step 3 归档/删除工具；先导出 `.pm/github-project-sync/task-archive.jsonl`，再删除 `.pm/tasks/*`。
 - `./scripts/pm/capture-todo.sh`：把还没决定创建 `.pm` task 的顺手 TODO / discovery 记录为 `source_type=reflection` signal；默认只写 `.pm/inbox/signals.jsonl`，显式 `--create-task` 时才提升成 candidate task。
@@ -84,8 +84,8 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留映
 
 工作流接入基础用法：
 - GitHub Project active queue 同步：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 sync --json`
-- GitHub Project 漂移审计：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 audit --json`
-- Step 3 全历史 gate：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 step3-gate --json`
+- GitHub Project 漂移审计（普通任务默认低成本 selected-task 路径）：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 audit --json`
+- Step 3 全历史 gate（迁移/人工/定时全量审计，不进普通 PR 热路径）：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 step3-gate --json`
 - Step 3 task 文件退休：`./scripts/pm/github-project-retire-tasks.sh --mapping .pm/github-project-sync/tasks.json --delete --json`
 - 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只写 reflection signal。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
 - 创建任务：`./scripts/pm/new-task.sh --owner-role <owner_role> --title "<title>" --module <module> --source-ref <path> --json`

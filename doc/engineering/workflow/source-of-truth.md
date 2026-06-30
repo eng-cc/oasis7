@@ -183,10 +183,12 @@ Deterministic script contract:
 - `./scripts/pm/github-project-workflow.sh ... sync` applies repo-local task
   metadata or the Step 3 archive to GitHub Issues/Project items idempotently.
 - `./scripts/pm/github-project-workflow.sh ... audit` verifies the selected
-  task set, mapping, and GitHub Project item/field state agree.
+  task set, mapping, and GitHub Project item/field state agree. Its default
+  path must be selected-task / mapping-targeted and must not list the full
+  Project during ordinary task closeout or PR readiness checks.
 - `./scripts/pm/github-project-workflow.sh ... step3-gate` remains the hard
-  full historical coverage check after deletion; it uses the archive fallback
-  when `.pm/tasks/*` is absent.
+  full historical coverage check after deletion; it may list the full Project
+  and uses the archive fallback when `.pm/tasks/*` is absent.
 - `./scripts/pm/github-project-retire-tasks.sh --delete` archives task yaml and
   execution logs to `.pm/github-project-sync/task-archive.jsonl` before deleting
   repo-local `.pm/tasks/*`.
@@ -213,8 +215,9 @@ Step 3 deletion required these gates to pass:
   truth path or its deterministic local mirror.
 - Recovery gate: a missing local mapping can be recovered from GitHub Project
   items and issue bodies without creating duplicates.
-- Audit gate: active tasks pass `audit`; historical `done/deferred` tasks have
-  an explicit archive/import policy and pass the full `step3-gate`.
+- Audit gate: active tasks pass low-cost selected-task `audit`; historical
+  `done/deferred` tasks have an explicit archive/import policy and pass the
+  full `step3-gate`.
 - Reference gate: formal docs/project traces no longer rely on paths that would
   be deleted, or their replacement trace target is explicitly documented.
 

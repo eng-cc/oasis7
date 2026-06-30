@@ -29,6 +29,12 @@ case "$*" in
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
     ;;
+  "issue edit 2001 -R eng-cc/oasis7 --body-file "*)
+    printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
+    cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
+    printf '\n' >> "$GH_EDIT_BODY_LOG"
+    printf 'edited\n'
+    ;;
   "project item-add 1 --owner eng-cc --url https://github.com/eng-cc/oasis7/issues/2001 --format json")
     printf '{"id":"ITEM_ID","content":{"url":"https://github.com/eng-cc/oasis7/issues/2001"}}\n'
     ;;
@@ -65,8 +71,10 @@ chmod +x "$TMPDIR/bin/gh"
 export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
+export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
+: > "$GH_EDIT_BODY_LOG"
 
 NEW_JSON="$TMPDIR/new.json"
 python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
@@ -137,12 +145,13 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --verify-command "true" \
   --json > "$TMPDIR/closeout.json"
 
-python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" "$GH_COMMENT_LOG" <<'PY'
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" "$GH_COMMENT_LOG" "$TMPDIR/issue-body-edited.md" <<'PY'
 import json, pathlib, sys
 mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())
 uid = sys.argv[2]
 calls = pathlib.Path(sys.argv[3]).read_text()
 comments = pathlib.Path(sys.argv[4]).read_text().splitlines()
+edited_body = pathlib.Path(sys.argv[5]).read_text()
 record = mapping["tasks"][uid]
 assert record["issue_url"] == "https://github.com/eng-cc/oasis7/issues/2001", record
 assert record["project_item_id"] == "ITEM_ID", record
@@ -151,6 +160,11 @@ assert record["worktree_hint"].endswith("/worktree"), record
 assert len(comments) == 4, comments
 assert record["claim_verifications"][-1]["status"] == "verified", record
 assert "issue create" in calls, calls
+assert "issue edit 2001" in calls, calls
+assert f"task_uid: {uid}" in edited_body, edited_body
+assert "- status: `committed`" in edited_body, edited_body
+assert "- status: `done`" in edited_body, edited_body
+assert f"- worktree_hint: `{record['worktree_hint']}`" in edited_body, edited_body
 assert "project item-add" in calls, calls
 assert "project item-edit" in calls, calls
 assert not pathlib.Path(sys.argv[1]).parent.parent.joinpath("tasks").exists(), "must not create .pm/tasks"
