@@ -11,7 +11,8 @@ source_refs:
   - AGENTS.md
   - scripts/worktree-harness.sh
   - scripts/run-launcher-stack.sh
-doc_refs: []
+doc_refs:
+  - doc/world-simulator/project.md
 related_prd: []
 acceptance:
   - "Start an isolated local-only world game stack and provide a playable local URL"
