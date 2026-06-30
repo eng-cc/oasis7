@@ -290,30 +290,66 @@ fn llm_agent_module_lifecycle_status_module_reads_observation_snapshot() {
 
     let mut observation = make_observation();
     observation.module_lifecycle = crate::simulator::ObservedModuleLifecycleState {
-        artifacts: vec![crate::simulator::ObservedModuleArtifactRecord {
-            wasm_hash: "hash-live".to_string(),
-            publisher_agent_id: "agent-1".to_string(),
-            module_id_hint: Some("m.llm.lifecycle".to_string()),
-            bytes_len: 128,
-            deployed_at_tick: 42,
-        }],
-        installed_modules: vec![crate::simulator::InstalledModuleState {
-            module_id: "m.llm.lifecycle".to_string(),
-            module_version: "0.2.0".to_string(),
-            wasm_hash: "hash-live".to_string(),
-            installer_agent_id: "agent-1".to_string(),
-            install_target: ModuleInstallTarget::SelfAgent,
-            active: true,
-            installed_at_tick: 43,
-        }],
+        artifacts: vec![
+            crate::simulator::ObservedModuleArtifactRecord {
+                wasm_hash: "hash-live-a".to_string(),
+                publisher_agent_id: "agent-1".to_string(),
+                module_id_hint: Some("m.llm.lifecycle".to_string()),
+                bytes_len: 128,
+                deployed_at_tick: 42,
+            },
+            crate::simulator::ObservedModuleArtifactRecord {
+                wasm_hash: "hash-other".to_string(),
+                publisher_agent_id: "agent-2".to_string(),
+                module_id_hint: Some("m.other".to_string()),
+                bytes_len: 64,
+                deployed_at_tick: 43,
+            },
+            crate::simulator::ObservedModuleArtifactRecord {
+                wasm_hash: "hash-live-b".to_string(),
+                publisher_agent_id: "agent-3".to_string(),
+                module_id_hint: Some("m.llm.lifecycle".to_string()),
+                bytes_len: 256,
+                deployed_at_tick: 44,
+            },
+        ],
+        installed_modules: vec![
+            crate::simulator::InstalledModuleState {
+                module_id: "m.llm.lifecycle".to_string(),
+                module_version: "0.2.0".to_string(),
+                wasm_hash: "hash-live-a".to_string(),
+                installer_agent_id: "agent-1".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at_tick: 43,
+            },
+            crate::simulator::InstalledModuleState {
+                module_id: "m.other".to_string(),
+                module_version: "0.1.0".to_string(),
+                wasm_hash: "hash-other".to_string(),
+                installer_agent_id: "agent-2".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: true,
+                installed_at_tick: 44,
+            },
+            crate::simulator::InstalledModuleState {
+                module_id: "m.llm.lifecycle".to_string(),
+                module_version: "0.3.0".to_string(),
+                wasm_hash: "hash-live-b".to_string(),
+                installer_agent_id: "agent-3".to_string(),
+                install_target: ModuleInstallTarget::SelfAgent,
+                active: false,
+                installed_at_tick: 45,
+            },
+        ],
     };
     let result = behavior.run_prompt_module(
         &LlmModuleCallRequest {
             module: "module.lifecycle.status".to_string(),
             args: serde_json::json!({
                 "module_id": "m.llm.lifecycle",
-                "limit_artifacts": 4,
-                "limit_installed": 4
+                "limit_artifacts": 1,
+                "limit_installed": 1
             }),
         },
         &observation,
@@ -326,6 +362,12 @@ fn llm_agent_module_lifecycle_status_module_reads_observation_snapshot() {
     let status = result
         .get("result")
         .expect("module lifecycle status result");
+    assert_eq!(
+        status
+            .get("artifacts_total")
+            .and_then(|value| value.as_u64()),
+        Some(2)
+    );
     let artifacts = status
         .get("artifacts")
         .and_then(|value| value.as_array())
@@ -335,9 +377,15 @@ fn llm_agent_module_lifecycle_status_module_reads_observation_snapshot() {
         artifacts[0]
             .get("wasm_hash")
             .and_then(|value| value.as_str()),
-        Some("hash-live")
+        Some("hash-live-a")
     );
 
+    assert_eq!(
+        status
+            .get("installed_modules_total")
+            .and_then(|value| value.as_u64()),
+        Some(2)
+    );
     let installed = status
         .get("installed_modules")
         .and_then(|value| value.as_array())
@@ -360,7 +408,7 @@ fn llm_agent_module_lifecycle_status_module_reads_observation_snapshot() {
         installed[0]
             .get("wasm_hash")
             .and_then(|value| value.as_str()),
-        Some("hash-live")
+        Some("hash-live-a")
     );
 }
 
@@ -578,6 +626,14 @@ fn llm_agent_module_market_status_module_filters_wasm_hash() {
                 price_amount: 5,
                 listed_at_tick: 16,
             },
+            crate::simulator::ModuleArtifactListingState {
+                order_id: 15,
+                wasm_hash: "hash-b".to_string(),
+                seller_agent_id: "agent-5".to_string(),
+                price_kind: ResourceKind::Data,
+                price_amount: 11,
+                listed_at_tick: 19,
+            },
         ],
         bids: vec![
             crate::simulator::ModuleArtifactBidState {
@@ -596,6 +652,14 @@ fn llm_agent_module_market_status_module_filters_wasm_hash() {
                 price_amount: 9,
                 placed_at_tick: 18,
             },
+            crate::simulator::ModuleArtifactBidState {
+                order_id: 16,
+                wasm_hash: "hash-b".to_string(),
+                bidder_agent_id: "agent-6".to_string(),
+                price_kind: ResourceKind::Data,
+                price_amount: 12,
+                placed_at_tick: 20,
+            },
         ],
     };
 
@@ -604,8 +668,8 @@ fn llm_agent_module_market_status_module_filters_wasm_hash() {
             module: "module.market.status".to_string(),
             args: serde_json::json!({
                 "wasm_hash": "hash-b",
-                "limit_listings": 4,
-                "limit_bids": 4
+                "limit_listings": 1,
+                "limit_bids": 1
             }),
         },
         &observation,
@@ -620,10 +684,17 @@ fn llm_agent_module_market_status_module_filters_wasm_hash() {
         status
             .get("listings_total")
             .and_then(|value| value.as_u64()),
-        Some(1)
+        Some(2)
     );
     assert_eq!(
         status.get("bids_total").and_then(|value| value.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        status
+            .get("listings")
+            .and_then(|value| value.as_array())
+            .map(Vec::len),
         Some(1)
     );
     assert_eq!(
@@ -637,12 +708,37 @@ fn llm_agent_module_market_status_module_filters_wasm_hash() {
     );
     assert_eq!(
         status
+            .get("listings")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("order_id"))
+            .and_then(|value| value.as_u64()),
+        Some(12)
+    );
+    assert_eq!(
+        status
+            .get("bids")
+            .and_then(|value| value.as_array())
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        status
             .get("bids")
             .and_then(|value| value.as_array())
             .and_then(|items| items.first())
             .and_then(|item| item.get("wasm_hash"))
             .and_then(|value| value.as_str()),
         Some("hash-b")
+    );
+    assert_eq!(
+        status
+            .get("bids")
+            .and_then(|value| value.as_array())
+            .and_then(|items| items.first())
+            .and_then(|item| item.get("order_id"))
+            .and_then(|value| value.as_u64()),
+        Some(14)
     );
 }
 
