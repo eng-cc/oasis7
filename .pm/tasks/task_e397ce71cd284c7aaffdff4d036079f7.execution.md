@@ -178,3 +178,35 @@ Example:
 - Expected Result: Claim verification exits 0 and reports `allowed_to_claim: true`.
 - Actual Result: PASS. `workflow-lint: OK (task_e397ce71cd284c7aaffdff4d036079f7, phase=current)`; `claim_type: ready_for_pr`; `verification_exit_code: 0`; `status: verified`; `allowed_to_claim: true`; `claim_message: Fresh verification passed; the branch can now be claimed ready for PR.`
 - Blocker / Next Action: Commit closeout/claim evidence and rerun PR preflight.
+
+## 2026-06-30 09:56:00 CST / tpm
+- 完成内容: Supplemental required-role reviews completed and supersede the older preflight evidence gap. `runtime_engineer` and `producer_system_designer` both returned no findings for current head `b95cdb85afe5673de4e32f36ac4deb0e0ffebf08`; ledger entries were appended for both roles.
+- 遗留事项: None for pre-PR role selection. Normal CI required-gate remains mandatory before merge.
+- Action: Integrate supplemental required-role review verdicts after `prepare-task-pr.sh` preflight identified missing `runtime_engineer` and `producer_system_designer` evidence.
+- Validation Command: `multi_agent_v1.wait_agent` / subagent notifications for reviewer ids `019f163b-038d-7402-927a-7f0f67e68a1c` and `019f163b-04fa-7402-b568-85eaf9a24bef`; `rtk ./scripts/pm/slice-ledger.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --role runtime_engineer ...`; `rtk ./scripts/pm/slice-ledger.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --role producer_system_designer ...`
+- Expected Result: Current-head pre-PR review evidence covers the mechanically required runtime and producer/system roles and explains runtime replay/recovery/checkpoint/long-run applicability.
+- Actual Result: PASS. `runtime_engineer`: no_findings; runtime replay/recovery/checkpoint/long-run evidence is n/a because the patch only changes read-only simulator LLM prompt-tool JSON page materialization from existing observation snapshots and does not mutate or persist runtime state, emit world events, alter action validation/execution, modify checkpoints, or change replay inputs/outputs. `producer_system_designer`: no_findings; no product/system rule, player-visible semantic, acceptance criteria, PRD, or external-facing doc change.
+- Blocker / Next Action: Record final current-head pre-PR local role review packet, run workflow/diff hygiene, commit evidence, and rerun PR preflight.
+
+## 2026-06-30 09:56:00 CST / tpm
+- Pre-PR Local Role Review: passed
+- Task UID: task_e397ce71cd284c7aaffdff4d036079f7
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11
+- Source Branch: task/engineering-perf-abstraction-optimization-11
+- Source Head: b95cdb85afe5673de4e32f36ac4deb0e0ffebf08
+- Comparison Ref: refs/remotes/origin/main
+- Reviewed Changed Paths: `crates/oasis7/src/simulator/llm_agent/behavior_runtime_helpers.rs`; `crates/oasis7/src/simulator/llm_agent/tests_part3_module_lifecycle.rs`; `doc/engineering/project.md`; `.pm/tasks/task_e397ce71cd284c7aaffdff4d036079f7.*`; `.pm/roles/tpm/backlog/committed.yaml`
+- Review Package: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/review-packages/review-75af9be83..b95cdb85a.diff
+- Role Selection Basis: LLM agent prompt tool implementation and prompt-tool output contract -> `agent_engineer`; verification sufficiency and PR readiness -> `qa_engineer`; abstraction clarity, docs/code/test/task evidence alignment, and workflow finding disposition -> `repository_health_engineer`; mechanical runtime path classification and runtime applicability matrix -> `runtime_engineer`; producer/system semantic and acceptance boundary -> `producer_system_designer`.
+- Review Roles: agent_engineer, qa_engineer, repository_health_engineer, runtime_engineer, producer_system_designer
+- Review Evidence: `agent_engineer`: no_findings; prompt tool schema/filter/limit behavior and `*_total` semantics preserved. `qa_engineer`: no_findings; focused lifecycle and market regressions plus diff hygiene sufficient for PR creation; CI required-gate remains merge gate. `repository_health_engineer`: code/spec compliant and low implementation risk; earlier P2 evidence finding addressed by actual review packets and ledger entries. `runtime_engineer`: no_findings; replay/recovery/checkpoint/long-run n/a for this diff because it only changes read-only prompt-tool JSON page materialization from existing observation snapshots. `producer_system_designer`: no_findings; no system/product rule, player-facing semantic, PRD, acceptance, economy, lifecycle-rule, market-rule, or external-facing doc update required.
+- Review Verdicts: Agent scope/spec: pass; agent quality/risk: pass. QA scope/spec: pass for PR creation; QA quality/risk: sufficient evidence, required-gate before merge. Repository-health scope/spec: pass after evidence fix; repository-health quality/risk: acceptable, no code debt/follow-up signal needed. Runtime semantic applicability: pass, runtime replay/recovery/checkpoint/long-run n/a. Producer/system semantic applicability: pass, no PRD/product acceptance follow-up.
+- Review Findings Disposition: addressed
+- Finding Disposition Evidence: Repository-health P2 workflow-evidence gap addressed by actual role-review packet plus slice-ledger entries for all selected roles; `runtime_engineer` and `producer_system_designer` supplemental no-findings evidence addresses `prepare-task-pr.sh` missing-role and semantic-evidence preflight output.
+- Verification Matrix: LLM agent lifecycle status prompt tool -> `rtk ./scripts/cargo-dev.sh test -p oasis7 --no-default-features llm_agent_module_lifecycle_status_module_reads_observation_snapshot -- --nocapture` PASS; LLM agent market status prompt tool -> `rtk ./scripts/cargo-dev.sh test -p oasis7 --no-default-features llm_agent_module_market_status_module_filters_wasm_hash -- --nocapture` PASS; Rust formatting -> `rtk ./scripts/cargo-dev.sh fmt --all --check` PASS; doc governance -> `rtk bash scripts/doc-governance-check.sh` OK; workflow/task truth -> `rtk ./scripts/pm/workflow-lint.sh --task-uid task_e397ce71cd284c7aaffdff4d036079f7 --phase current` OK; diff hygiene -> `rtk git diff --check` PASS; runtime replay/recovery/checkpoint/long-run -> n/a by `runtime_engineer` review because no world state, event, replay, persistence, checkpoint, scheduling, runtime action execution, WASM ABI, or domain event application path changed.
+- Visual Evidence: n/a; no Viewer/Web/UI/visual surface changed.
+- WASM Evidence: n/a; no WASM ABI, manifest, build artifact, module ABI, or determinism surface changed.
+- Ops Evidence: n/a; no deployment, node ops, runbook, packaging, or operator surface changed.
+- LiveOps Evidence: n/a; no external messaging, player promise, incident, or community surface changed.
+- Residual Risk: Low. Risk is localized to prompt-tool pagination/count semantics and covered by focused regressions; normal PR required checks remain mandatory before merge.
+- Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl
