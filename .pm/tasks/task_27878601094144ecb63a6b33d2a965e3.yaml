@@ -1,0 +1,38 @@
+task_uid: task_27878601094144ecb63a6b33d2a965e3
+title: "retire next stale documentation semantics"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-9
+execution_log_path: .pm/tasks/task_27878601094144ecb63a6b33d2a965e3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/readme/README.md
+  - doc/readme/prd.index.md
+  - doc/readme/governance/README.md
+  - doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.prd.md
+  - doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.project.md
+  - doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.prd.md
+  - doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.project.md
+  - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md
+  - doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.project.md
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Identify one bounded next documentation governance point with stale docs or stale semantics."
+  - "Delete obsolete current-surface documentation where canonical replacement exists."
+  - "Converge remaining current/live references to canonical docs without broad historical rewrites."
+  - "Pass doc governance, current task workflow lint, stale-reference checks, and PR review/merge flow."
+handoff_to: []
+updated_at: 2026-06-30T12:29:29+08:00
+last_started_at: 2026-06-30T12:02:55+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_27878601094144ecb63a6b33d2a965e3 --phase current"
+last_verified_at: 2026-06-30T12:29:27+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-30T12:29:29+08:00
