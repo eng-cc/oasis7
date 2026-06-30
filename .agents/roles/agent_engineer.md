@@ -48,8 +48,8 @@
 
 ## Checklist
 - 是否更新 `doc/game/*` 或 `doc/world-simulator/*` 的相关 PRD
-- 若 `agent_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role agent_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
+- 若 `agent_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role agent_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
 - 是否说明记忆、目标、执行、反馈四段链路
 - 是否补齐稳定性 / 漂移 / 成本回归
 - 是否定义失败策略与降级路径

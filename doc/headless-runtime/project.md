@@ -71,8 +71,8 @@
 - 承接约束: 先完成 `TASK-NONVIEWER-002/003`，再与 testing 联动推进 `TASK-NONVIEWER-004`。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已补齐命名迁移后的轻量入口，当前模块无需再拆更重的 README 层级。
-- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
-- 当前追溯入口：`TASK-NONVIEWER-001~009`、`doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`、`doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md`、`doc/headless-runtime/templates/longrun-archive-incident-template.md` 与 `.pm` execution log / role review evidence；旧 2026-03-11 root 状态 closure / handoff 文档已退役删除。
+- 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。
+- 当前追溯入口：`TASK-NONVIEWER-001~009`、`doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`、`doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md`、`doc/headless-runtime/templates/longrun-archive-incident-template.md` 与 GitHub task issue evidence comments / role review evidence；旧 2026-03-11 root 状态 closure / handoff 文档已退役删除。
 
 ## 阶段收口角色交接
 ### Meta
@@ -116,13 +116,13 @@
 - 代码改动：如需，仅限支撑 headless 验证与证据采集的必要脚本改动。
 - 文档回写：`doc/headless-runtime/project.md` 与相关专题文档。
 - 测试记录：补齐 `test_tier_required`，并标注何处需后续 `test_tier_full`。
-- 任务证据记录：在对应 `.pm/tasks/task_<32hex>.execution.md` 记录门禁骨架与是否需升级优先级。
+- 任务证据记录：在对应 GitHub task issue evidence comments 记录门禁骨架与是否需升级优先级。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- 任务证据已记录到对应 `.pm/tasks/task_<32hex>.execution.md`
+- 任务证据已记录到对应 GitHub task issue evidence comments
 - [ ] required/full 测试证据已补齐或明确挂起原因
 
 ### Risks / Decisions

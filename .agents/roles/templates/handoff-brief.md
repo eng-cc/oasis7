@@ -50,7 +50,7 @@
 ## Expected Output
 - 接收方交付物 1：
 - 接收方交付物 2：
-- 需要回写的正式文档 / task execution log：
+- 需要回写的正式文档 / GitHub task issue evidence：
 
 ## Atomic Steps
 | Step | Action | Validation Command | Expected Result | Actual Result | Blocker / Next Action |

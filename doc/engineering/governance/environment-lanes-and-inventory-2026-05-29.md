@@ -209,7 +209,7 @@ Hosted-login 形态接入 testnet 大世界的追加验证：
 
 1. 本文件的对应矩阵。
 2. 相关 runbook 或 module README 的入口链接。
-3. `.pm/tasks/<TASK-UID>.execution.md` 的部署与验证证据。
+3. GitHub task issue evidence comments 的部署与验证证据。
 4. PR body 的环境状态摘要。
 
 禁止项：

@@ -9,10 +9,10 @@ The inspection is a human-triaged health review. It does not add a GitHub Action
 
 The inspection is started manually by the engineering governance owner. There is no repository-managed scheduler, GitHub Actions schedule, or other automatic trigger for this workflow.
 
-When the owner starts an inspection, still enter the standard `oasis7` workflow: create or enter one task worktree, bind one `.pm` task, and dispatch `repository_health_engineer` for professional repository-health judgment.
+When the owner starts an inspection, still enter the standard `oasis7` workflow: create or enter one task worktree, bind one GitHub-backed task, and dispatch `repository_health_engineer` for professional repository-health judgment.
 
 ## Checklist
-Run the checks from the task worktree and record the command outputs or summaries in `.pm/tasks/<TASK-UID>.execution.md`.
+Run the checks from the task worktree and record the command outputs or summaries in GitHub task issue evidence comments.
 
 ```bash
 ./scripts/doc-inventory-report.sh
@@ -54,13 +54,10 @@ Code-style and code-health conclusions need code evidence, but the inspection sh
 - Do not claim repository-wide style conformance from reports alone. Record the sampled paths, why they were selected, what code evidence was read, and whether the result is a follow-up candidate or acceptable residual risk.
 
 ## Evidence Sink
-The canonical inspection evidence is the `.pm` task execution log:
+The canonical inspection evidence is the GitHub task issue evidence comment stream
+backed by `.pm/github-project-sync/tasks.json`.
 
-```text
-.pm/tasks/<TASK-UID>.execution.md
-```
-
-The chat summary should only report the role-attributed findings, follow-up candidates, and residual risk. It is not a replacement for the execution log.
+The chat summary should only report the role-attributed findings, follow-up candidates, and residual risk. It is not a replacement for GitHub-backed task evidence.
 
 High-value but not-yet-owned follow-up work should first be captured as a reflection signal:
 

@@ -30,9 +30,9 @@
   1. Flow-DVC-001:
      `进入 doc/devlog/README.md -> 先看 retired corpus -> 阅读月度摘要 -> 回到模块 project / .pm 查当前真值`
   2. Flow-DVC-002:
-     `需要追某一轮高密度变更 -> 先看 Former Hotspots -> 再查对应模块专题文档或 .pm execution log`
+     `需要追某一轮高密度变更 -> 先看 Former Hotspots -> 再查对应模块专题文档或 GitHub task issue evidence comments`
   3. Flow-DVC-003:
-     `需要确认 devlog 当前职责 -> 读取 README 的 archive/source-of-truth 边界 -> 返回 project/task execution log`
+     `需要确认 devlog 当前职责 -> 读取 README 的 archive/source-of-truth 边界 -> 返回 project/GitHub task issue evidence comments`
 - Functional Specification Matrix:
 
 | 对象/能力 | 字段定义 | 动作/行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -71,7 +71,7 @@
   - `doc/engineering/prd.index.md`
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
 - Edge Cases & Error Handling:
-  - 未来继续增加新的历史日文件: 默认不允许；应写入 `.pm/tasks/*.execution.md`，必要时更新 `doc/devlog/README.md` 摘要。
+  - 未来继续增加新的历史日文件: 默认不允许；应写入 GitHub task issue evidence comments，必要时更新 `doc/devlog/README.md` 摘要。
   - 某天历史上下文需要补充: 更新摘要或相关专题文档，而不是恢复日文件。
   - 历史文档中仍残留“回写 devlog”口径: 作为后续治理债记录，不在本批强行批量清理。
 - Non-Functional Requirements:
@@ -85,9 +85,9 @@
   - v1.1 (2026-05-27): 用 `doc/devlog/README.md` 月度摘要替代并删除 57 份日文件。
   - v1.2: 将 lingering 的“回写 devlog”旧口径从 active 文档中清出，只保留历史上下文。
 - Technical Risks:
-  - 风险-1: 摘要会损失逐条执行细节，因此当前任务真值必须依赖 `.pm` execution log。
+  - 风险-1: 摘要会损失逐条执行细节，因此当前任务真值必须依赖 GitHub task issue evidence comments 与 mapping-backed task truth。
   - 风险-2: 若继续新增日文件，入口会再次失效。
-  - 风险-3: 历史引用改到 summary 后，读者需要通过模块专题或 `.pm` 记录追细节。
+  - 风险-3: 历史引用改到 summary 后，读者需要通过模块专题或 GitHub task issue evidence comments 追细节。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

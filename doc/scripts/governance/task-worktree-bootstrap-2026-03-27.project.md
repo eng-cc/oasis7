@@ -34,7 +34,7 @@
 | `base_ref` | 创建或附着所基于的 ref |
 | `mode` | `create_new_branch` 或 `attach_existing_branch` |
 | `doc_checks` | `--init-docs` 时的模块 PRD / project 检查结果 |
-| `pm_task.execution_log_path` | 启用 PM bootstrap 时返回的 task execution log 路径 |
+| `pm_task.issue_url` / `pm_task.mapping_path` | 启用 PM bootstrap 时返回的 GitHub task issue evidence comments 入口与 mapping 记录 |
 | `harness` | `--with-harness` 时的 bootstrap 日志、state 文件、状态与 viewer URL 摘要 |
 
 ### 3. worktree 治理口径

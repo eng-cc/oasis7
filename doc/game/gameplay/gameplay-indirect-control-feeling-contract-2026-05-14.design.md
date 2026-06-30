@@ -74,7 +74,7 @@
   - 建立 control-feeling matrix，并把 failed guarantee 作为正式 blocker 分类。
 
 ## 实施顺序
-1. `TASK-GAME-071`: 冻结专题并回挂根入口、主文档、索引、execution log。
+1. `TASK-GAME-071`: 冻结专题并回挂根入口、主文档、索引、GitHub task issue evidence comments。
 2. `TASK-GAME-072`: 对齐 canonical accepted intent / status / blocker / next-step truth。
 3. `TASK-GAME-073`: 对齐 Viewer / pure API control-feeling surface。
 4. `TASK-GAME-074`: 对齐 agent/action contract 的 interrupt / reprioritize / override semantics。

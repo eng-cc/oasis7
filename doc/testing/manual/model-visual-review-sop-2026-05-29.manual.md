@@ -137,7 +137,7 @@
 - 同一问题连续两轮模型评审仍为 `watch`。
 
 ## 正式 Sink
-- 当前 task：回写 `.pm/tasks/<TASK-UID>.execution.md`。
+- 当前 task：回写 GitHub task issue evidence comments。
 - PR：在 PR 描述或评论里附 screenshot path、review card 摘要和 residual risk。
 - 长期规则：回写 `doc/testing/**`、`doc/world-simulator/**` 或对应模块 PRD/project。
 - 只保留短期样本：可写入 `doc/ui_review_result/**`，但必须在结论稳定后迁回正式模块文档。

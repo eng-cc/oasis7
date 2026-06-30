@@ -56,7 +56,7 @@
 - Integration Points:
   - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
   - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md`
-  - `.pm/tasks/task_<32hex>.execution.md` pre-PR local role review evidence for future instantiated release communication tasks
+  - GitHub task issue evidence comments for pre-PR local role review evidence in future instantiated release communication tasks
   - `doc/readme/project.md`
 - Edge Cases & Error Handling:
   - 实例缺失内部来源：模板必须显式标红“不得发布”。

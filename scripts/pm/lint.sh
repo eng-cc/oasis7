@@ -56,6 +56,12 @@ require_file "scripts/pm/new-task.sh"
 require_file "scripts/pm/task-closeout.sh"
 require_file "scripts/pm/workflow-report.sh"
 
+if [[ "${PM_ALLOW_RETIRED_TASK_FILES:-0}" != "1" ]]; then
+  while IFS= read -r path; do
+    fail "retired .pm task file present after GitHub Project Step 3: $path"
+  done < <(find .pm/tasks -type f \( -name 'task_*.yaml' -o -name '*.execution.md' \) 2>/dev/null | sort)
+fi
+
 require_file "scripts/pm/memory-lint.sh"
 require_file "scripts/pm/memory-report.sh"
 require_file "scripts/pm/promote-memory.sh"

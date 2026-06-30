@@ -168,7 +168,7 @@
 
 ## 8. 回写要求
 - 每个窗口至少回写一次：
-  - `.pm/tasks/<TASK-UID>.execution.md`
+  - GitHub task issue evidence comments
   - 对应 track 的 QA gate `summary.json/md`
   - 当前 topic 的 `project.md`
 - 若出现 `freeze` / `rollback` / claim 风险，还必须补：

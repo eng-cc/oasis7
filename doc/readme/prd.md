@@ -33,7 +33,7 @@
   - SC-1: README 关键章节与模块 PRD 引用一致率达到 100%。
   - SC-2: 对外入口链接有效性检查持续通过。
 - SC-3: 术语与架构描述变更在 1 个工作日内同步到 README 体系。
-- SC-4: readme 相关变更全部具备 PRD-ID 与 `.pm` task execution log 追踪。
+- SC-4: readme 相关变更全部具备 PRD-ID 与 GitHub task issue evidence 追踪。
 - SC-5: Closed beta candidate 的 liveops runbook与模板能直接维持 `limited playable technical preview` 口径，并服务 `prg-game-009` 的 evidence gate。
 - SC-6: limited preview 贡献奖励流程必须具备可直接复用的 round ledger 模板，能够承接评分、审批、发放记录与归档。
 - SC-7: 小红书博主 / 微信公众号激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，固定映射 `300 / 800 / 1500 OC` 档位，而不是按播放量粗放买量。
@@ -104,8 +104,8 @@
   2. Flow-RM-002: `检测口径变更 -> 更新入口文档 -> 校验链接 -> 发布同步`
   3. Flow-RM-003: `发布前执行巡检 -> 汇总冲突 -> 修复后复核`
   4. Flow-RM-004: `读取第三方平台当前机制 -> 绑定内部 claim envelope -> 生成平台适配推广方案 -> 回流 owner 审核`
-  5. Flow-RM-005: `发布 Moltbook 帖子 -> 检查 /home / notifications / comments -> 分级回复或升级 -> 回写对应 .pm task execution log`
-  6. Flow-RM-006: `按首周模板安排 day1-day7 发帖 / 巡检 / 跟评 / 周复盘 -> 将真实信号沉淀到 runbook 与对应 .pm task execution log`
+  5. Flow-RM-005: `发布 Moltbook 帖子 -> 检查 /home / notifications / comments -> 分级回复或升级 -> 回写对应 GitHub task issue evidence`
+  6. Flow-RM-006: `按首周模板安排 day1-day7 发帖 / 巡检 / 跟评 / 周复盘 -> 将真实信号沉淀到 runbook 与对应 GitHub task issue evidence`
   7. Flow-RM-007: `复盘真实帖子表现 -> 提炼有效讨论钩子与 spam 触发条件 -> 回写 runbook -> 调整下一帖策略`
   8. Flow-RM-008: `冻结 limited preview 口径 -> 选用 invite-only callout copy -> 按固定窗口巡检 -> 将信号按 Blocking / Opportunity / Idea 归档 -> 输出 producer 摘要`
   9. Flow-RM-009: `收集 early contributor signal -> 按评分模板记录证据 -> 输出 small/medium/large reward recommendation -> 检查对外禁语 -> 回流 producer 审核`
@@ -149,7 +149,7 @@
   - AC-5: 渠道化推广方案必须显式绑定内部公开口径边界，不得把 generic marketing 文案直接外推到第三方平台。
   - AC-6: `doc/readme/governance/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
   - AC-7: `doc/readme/governance/**` 中仍作为当前公开口径使用的项目名必须统一写为 `oasis7`；旧 `oasis7` 仅允许保留在历史证据、兼容说明或外部原文引用中。
-- AC-8: 若第三方渠道进入持续运营阶段，必须补齐独立 runbook，明确巡检入口、回复边界、升级路径与 `.pm` task execution log 回写方式。
+- AC-8: 若第三方渠道进入持续运营阶段，必须补齐独立 runbook，明确巡检入口、回复边界、升级路径与 GitHub task issue evidence 回写方式。
 - AC-9: 若渠道进入首周冷启动执行阶段，runbook 必须补齐 day1-day7 模板，明确每天的主动作、检查窗口、回复目标与记录重点。
 - AC-10: 已新建 `closed beta candidate` runbook与 incident template，供招募/反馈/事故信号在 `limited playable technical preview` claim envelope 内沟通并可直接回流 unified release gate。
   - AC-11: Moltbook runbook 至少记录一轮真实执行后的“有效讨论钩子”和“高风险 spam 触发模式”，并明确下一轮如何调整。
@@ -257,7 +257,7 @@
 | PRD-README-012 | TASK-README-016 | `test_tier_required` | Moltbook 方案与帖文明确 GitHub issue / PR CTA，且不与技术预览边界冲突 | 外部反馈回流与贡献转化 |
 | PRD-README-013 | TASK-README-017 | `test_tier_required` | Moltbook 帖文主贴已压缩为更短的 feed-native 版本，且保留技术预览与 GitHub CTA 边界 | 最终发布文案可用性 |
 | PRD-README-014 | TASK-README-018/019/020 | `test_tier_required` | 根 README、公开入口文档与 `doc/readme/governance/**` 的历史标题/当前公开口径统一为 `oasis7`，并显式区分内部兼容命名 | 仓库首页认知、公开品牌一致性 |
-| PRD-README-015 | TASK-README-024 | `test_tier_required` | Moltbook runbook 明确发帖前、发帖后 24h、常规日与周复盘动作，并包含回复边界、升级路径与 `.pm` task execution log 回写要求 | 第三方渠道持续运营一致性 |
+| PRD-README-015 | TASK-README-024 | `test_tier_required` | Moltbook runbook 明确发帖前、发帖后 24h、常规日与周复盘动作，并包含回复边界、升级路径与 GitHub task issue evidence 回写要求 | 第三方渠道持续运营一致性 |
 | PRD-README-016 | TASK-README-025 | `test_tier_required` | Moltbook runbook 追加 day1-day7 首周模板，覆盖主帖节奏、检查窗口、回复目标与日志重点 | 第三方渠道冷启动执行性 |
 | PRD-README-017 | TASK-README-026 | `test_tier_required` | Closed beta candidate runbook + incident templates cover recruitment, feedback, and incident guardrails | Closed beta candidate recruiting/feedback/technical preview messaging |
 | PRD-README-018 | TASK-README-027 | `test_tier_required` | Moltbook runbook 回写真实运营经验，明确哪些内容设计更易引发讨论、哪些自评动作更易触发 spam | 第三方渠道运营复用性与风控 |
@@ -266,7 +266,7 @@
 | PRD-README-021 | TASK-README-031 | `test_tier_required` | 小红书首帖素材包明确标题、正文、封面文案、标签与“人类开发者视角”使用说明 | 新渠道冷启动识别度与口径稳定性 |
 | PRD-README-022 | TASK-README-032/067/068/069/070/073/074 | `test_tier_required` | reward ledger 模板明确 round meta、`Reward Account`、逐条贡献记录、PR import status、merged PR round scan、producer 审批、ordinary merged PR `<=150 OC` ceiling、actual-value review、distribution ref 与归档字段 | limited preview 真实贡献奖励结算闭环 |
 | PRD-README-023 | TASK-README-033 | `test_tier_required` | 小红书第二帖素材包明确 7 位 agent 队友卡文案、收束页与可截图 HTML | 渠道内容连续性与“agent 队伍”概念可理解性 |
-| PRD-README-024 | TASK-README-034 | `test_tier_required` | 小红书 runbook 明确发帖前复核、发帖后 24h 巡检、评论分级、互动引导和 `.pm` task execution log 回写要求 | 人类向渠道的持续运营一致性 |
+| PRD-README-024 | TASK-README-034 | `test_tier_required` | 小红书 runbook 明确发帖前复核、发帖后 24h 巡检、评论分级、互动引导和 GitHub task issue evidence 回写要求 | 人类向渠道的持续运营一致性 |
 | PRD-README-025 | TASK-README-035 | `test_tier_required` | 小红书第三帖素材包明确“游戏是什么”的标题、正文、轮播结构、互动问题与技术预览边界 | 渠道内容从“谁在做”过渡到“在做什么游戏”的可理解性 |
 | PRD-README-026 | TASK-README-036 | `test_tier_required` | 小红书第四帖素材包明确“玩家为什么不能直接控制角色”的标题、正文、轮播结构、互动问题与控制边界口径 | 渠道内容从“游戏是什么”过渡到“玩家如何介入世界”的可理解性 |
 | PRD-README-027 | TASK-README-037 | `test_tier_required` | 小红书第五帖素材包明确“AI时代，你变"懒"了么”的标题、正文、轮播结构、互动问题与游戏模式讨论收口 | 渠道内容从“玩家怎么介入”过渡到“AI时代下游戏应该把什么留给人”的可讨论性 |

@@ -33,7 +33,7 @@
 - 玩家流程、屏幕层级、反馈节奏和状态表达规格
 - 面向 `viewer_engineer` 的实现 brief、视觉验收 checklist 和截图审查标准
 - 面向 `producer_system_designer` 的玩法可读性风险、非目标和体验 tradeoff
-- 对应 task execution log 中可追溯的 findings、证据、建议和 residual risk
+- 对应 GitHub task issue evidence 中可追溯的 findings、证据、建议和 residual risk
 
 ## Decisions
 - 可独立判断玩家第一眼可读性、交互反馈质量、视觉层级和体验一致性
@@ -64,5 +64,5 @@
 - 若使用 Image2 / 视觉目标图，是否记录 target image、真实 native/browser screenshot、comparison/gap notes，并明确它不替代功能验收、真实交互 smoke 或 QA evidence
 - 是否给出移动端、低性能、无 renderer fallback 或可访问性风险
 - 是否把实现 brief 回流给 `viewer_engineer`，把规则/玩家承诺风险回流给对应 owner
-- 若 `game_visual_interaction_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role game_visual_interaction_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
+- 若 `game_visual_interaction_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role game_visual_interaction_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录

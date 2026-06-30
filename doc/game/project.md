@@ -7,7 +7,7 @@
 - 完整专题清单看 `doc/game/prd.index.md`。
 - 当前玩家侧目标态和 PRD-ID baseline 看 `doc/game/prd.md`。
 - gameplay 子域首读分流看 `doc/game/gameplay/README.md`。
-- 历史执行流水、已完成子任务和证据明细保留在专题 `*.project.md`、`.pm/tasks/*.execution.md`、`doc/testing/evidence/` 与 `doc/playability_test_result/`，不再在本文件平铺成长账。
+- 历史执行流水、已完成子任务和证据明细保留在专题 `*.project.md`、GitHub task issue evidence comments、`doc/testing/evidence/` 与 `doc/playability_test_result/`，不再在本文件平铺成长账。
 
 ## 当前执行看板
 | 轨道 | 当前口径 | 下一步 / owner | Trace |
@@ -27,21 +27,21 @@
 | TASK-GAME-036 | PRD-GAME-010 | `liveops_community` | in progress / waiting for real signal | 继续归档 controlled preview 的 `Blocking / Opportunity / Idea` 信号，并在 claim drift 出现时当轮纠偏。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` |
 | TASK-GAME-037 | PRD-GAME-010 | `qa_engineer` | pending preview signal | 输出 `QA Weekly / Event Verdict`，确认 unified gate 是否仍为 `pass`，或给出 continue / conditional go / no-go 建议。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md` |
 | TASK-GAME-038 | PRD-GAME-010 | `producer_system_designer` | pending TASK-GAME-036/037 | 基于真实执行样本决定继续维持、收紧节奏，或触发下一轮阶段评审。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, future producer sink |
-| TASK-GAME-076 | PRD-GAME-012 | `gameplay_designer` | required pass / live-boundary retained | 自动化、诊断框架和 content-volume supplement 已补齐：required summary 为 `attraction_pass` / `content_volume_pass`，覆盖诊断、路线取舍、微型委托、事故修复、机会扫描、回访封装和本地订单贡献。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`, `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`, Trace: .pm/tasks/task_e3e98d92b70f4168831f756a5872a4aa.yaml |
+| TASK-GAME-076 | PRD-GAME-012 | `gameplay_designer` | required pass / live-boundary retained | 自动化、诊断框架和 content-volume supplement 已补齐：required summary 为 `attraction_pass` / `content_volume_pass`，覆盖诊断、路线取舍、微型委托、事故修复、机会扫描、回访封装和本地订单贡献。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`, `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`, GitHub task issue evidence comments / mapping-backed task trace |
 
 ## 最近收口但仍影响当前判断
 | 主题 | 当前可复用结论 | Trace |
 | --- | --- | --- |
-| `issue-160-first-capability-closeout` | active-LLM formal sample 已把 trust gate 和 first capability gate 刷新为 pass；旧 `hold/not_run` 不再是当前 blocker。 | `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`, `.pm/tasks/task_4261de9e42ac422c9ecc63525740fbb9.yaml` |
-| `gameplay-high-risk-design-hardening` | bounded-response、anti-passive fallback、economic readability 与 mature-world anti-grind/anti-forced-dependency 约束已回写。 | `.pm/tasks/task_b23cd4919b4c481490777293b556cc70.yaml` |
-| `viewer-economic-readability-first-capability-surface` | `software_safe` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值。 | `.pm/tasks/task_b23cd4919b4c481490777293b556cc70.yaml` |
-| `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | `.pm/tasks/task_313368c409c54cc2bcf8ef4f47919b65.yaml` |
-| `local-standalone-submit-flow` / `chain-side-manifest-delta-runtime-readiness` | PR #547 / `a39a8d224` 后，cold-start 已形成 `claim_first_agent -> claim_starter_oc -> first agent chat` 的资源与动作链路；该进展支持 PRD-GAME-002/011 的可验证语义和 chain resource readiness，但不改变当前阶段或 claim envelope。 | `.pm/tasks/task_212396995cf3409eb34c8e9bec563ca3.yaml`, `.pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.yaml` |
-| `game-design-goal-refresh-audit` | 本轮只做根 PRD / project / gameplay README / claim 专题的冷启动链路文档刷新，明确 starter OC 与 restricted starter claim balance 的边界，不升级阶段或 claim envelope。 | Trace: .pm/tasks/task_c35014dff0ba4411a54a2a8f4fb65040.yaml |
-| `game-small-player-lane-runtime-truth` | small-player lane / anti-grind runtime truth 已落到 canonical snapshot、runtime_live 派生和正向回归；这只证明 runtime/sample truth 可测，不直接升级 mature-world QA lane verdict。 | Trace: .pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml |
-| `ai-era-opening-game-viewer-surfaces` | P0/P1/P2 producer-readable viewer surfaces 已落到 `software_safe` Formal Gameplay Summary：控制证明、能动性动词、首个胜利/anti-grind、成熟世界承接和 replay snippet；这些仍是 viewer-derived evidence，不替代 runtime/agent/QA verdict。 | Trace: .pm/tasks/task_76d64040529e464da37f08d075a05120.yaml |
-| `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | `.pm/tasks/task_834078a49c334891a3193e4f303f939a.yaml`, `.pm/tasks/task_b5440afc520648ffa963803c93da43f2.yaml` |
-| `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 `.pm` trace 承接。 | Trace: .pm/tasks/task_07cf7b41bab74286b2d4573da613779d.yaml |
+| `issue-160-first-capability-closeout` | active-LLM formal sample 已把 trust gate 和 first capability gate 刷新为 pass；旧 `hold/not_run` 不再是当前 blocker。 | `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`, GitHub task issue evidence comments |
+| `gameplay-high-risk-design-hardening` | bounded-response、anti-passive fallback、economic readability 与 mature-world anti-grind/anti-forced-dependency 约束已回写。 | GitHub task issue evidence comments |
+| `viewer-economic-readability-first-capability-surface` | `software_safe` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值。 | GitHub task issue evidence comments |
+| `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | GitHub task issue evidence comments |
+| `local-standalone-submit-flow` / `chain-side-manifest-delta-runtime-readiness` | PR #547 / `a39a8d224` 后，cold-start 已形成 `claim_first_agent -> claim_starter_oc -> first agent chat` 的资源与动作链路；该进展支持 PRD-GAME-002/011 的可验证语义和 chain resource readiness，但不改变当前阶段或 claim envelope。 | GitHub task issue evidence comments |
+| `game-design-goal-refresh-audit` | 本轮只做根 PRD / project / gameplay README / claim 专题的冷启动链路文档刷新，明确 starter OC 与 restricted starter claim balance 的边界，不升级阶段或 claim envelope。 | GitHub task issue evidence comments |
+| `game-small-player-lane-runtime-truth` | small-player lane / anti-grind runtime truth 已落到 canonical snapshot、runtime_live 派生和正向回归；这只证明 runtime/sample truth 可测，不直接升级 mature-world QA lane verdict。 | GitHub task issue evidence comments |
+| `ai-era-opening-game-viewer-surfaces` | P0/P1/P2 producer-readable viewer surfaces 已落到 `software_safe` Formal Gameplay Summary：控制证明、能动性动词、首个胜利/anti-grind、成熟世界承接和 replay snippet；这些仍是 viewer-derived evidence，不替代 runtime/agent/QA verdict。 | GitHub task issue evidence comments |
+| `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | GitHub task issue evidence comments |
+| `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 GitHub task issue evidence comments 承接。 | GitHub task issue evidence comments |
 
 ## 追踪与归档规则
 - 本文件只保留当前开放任务、近期仍影响判断的收口项、当前阶段和下一步。
@@ -49,7 +49,7 @@
   - 完整专题文件清单: `doc/game/prd.index.md`
   - 玩法骨架与历史分期: `doc/game/gameplay/gameplay-top-level-design.project.md`
   - preview / beta / retention / claim / agency / small-player / scale 的具体执行: 对应 `doc/game/gameplay/*.project.md`
-  - 任务级实际执行证据: `.pm/tasks/*.execution.md`
+  - 任务级实际执行证据: GitHub task issue evidence comments
   - QA / playability / release evidence: `doc/testing/evidence/`, `doc/playability_test_result/`
 - historical baseline 可以保留，但必须标明时间和 evidence；不得把历史 blocker 复用为当前 blocker。
 - 新增当前开放任务时，在本文件加一行；任务完成后，只保留“最近收口但仍影响当前判断”的短摘要或完全移到专题 project。

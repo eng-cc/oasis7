@@ -79,7 +79,7 @@
 - 代码改动：
 - 文档回写：
 - 测试记录：
-- task execution log：
+- GitHub task issue evidence：
 - subagent 回传物类型：
 
 ## Done Definition
@@ -89,7 +89,7 @@
 - [ ] behavior-first RED plan 已执行，或 skip 原因已写清
 - [ ] write scope / return contract / integration order 已被遵守
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `.pm/tasks/<TASK-UID>.execution.md` 已记录
+- [ ] 对应 GitHub task issue evidence comment 已记录
 - [ ] required/full 测试证据已补齐
 
 ## Risks / Decisions

@@ -36,7 +36,7 @@
 - 面向 `runtime_engineer` / `agent_engineer` / `viewer_engineer` 的可执行玩法规格和验收点
 - 面向 `producer_system_designer` 的玩法 tradeoff、平衡风险、非目标和阶段建议
 - 面向 `qa_engineer` 的 gameplay smoke / regression 关注点
-- 对应 task execution log 中可追溯的 findings、证据、建议和 residual risk
+- 对应 GitHub task issue evidence 中可追溯的 findings、证据、建议和 residual risk
 
 ## Decisions
 - 可独立判断核心玩法是否成环、玩家动作是否有意义、收益是否足够清晰、数值是否明显失衡
@@ -64,5 +64,5 @@
 - 是否给出平衡风险、滥用路径、冷启动体验和 progression 风险
 - 是否把规则/版本边界回流给 `producer_system_designer`，把表达问题回流给 `game_visual_interaction_designer`
 - 是否为实现角色提供可执行玩法 brief，为 QA 提供可验证验收点
-- 若 `gameplay_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role gameplay_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
+- 若 `gameplay_designer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role gameplay_designer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录

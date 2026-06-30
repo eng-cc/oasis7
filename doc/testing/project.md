@@ -41,7 +41,7 @@
 - `engineering-code-quality-performance-baselines` (Trace: `.pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.execution.md`): Viewer changed-path perf smoke 已接入 required-gate report-only scope；runtime module routing perf harness 已有首个 dev/release baseline。
 - `required-gate-ondemand-launcher-web-build` (Trace: `.pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml`): launcher Web `trunk build` 已按 changed-path 注入 required gate，避免 release `build-web-dist` 才暴露编译错误。
 - `release-web-*` hardening 系列 (Trace examples: `.pm/tasks/task_b7097f476e674a429469a98d6ae36794.execution.md`、`.pm/tasks/task_bca86dc8b045420baf35b7e28414818c.execution.md`、`.pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.execution.md`): release Web gate 已收口 preflight shadow、独立端口、software-safe live-control 语义与 headed/headless evidence 边界。
-- `TASK-TESTING-065/064/063/062`: 已依次收口 launcher `build-web-dist` wasm 兼容性、`release-gate-soak` S10 样本修复、Web UI 闭环 canonical manual，以及 Token 创世分配 QA 审计清单；详细验收命令回到对应 `.pm/tasks/task_<32hex>.execution.md`。
+- `TASK-TESTING-065/064/063/062`: 已依次收口 launcher `build-web-dist` wasm 兼容性、`release-gate-soak` S10 样本修复、Web UI 闭环 canonical manual，以及 Token 创世分配 QA 审计清单；详细验收命令回到对应 GitHub task issue evidence comments。
 
 ## 依赖
 - 模块设计总览: `doc/testing/design.md`
@@ -64,4 +64,4 @@
 - headless-runtime 长稳门禁联动: 已通过 `doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md` 约定证据包字段映射。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 模块进展补充（2026-03-11）: 已新增 `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`，以 launcher / game / runtime 三个近期样本建立首次通过率、阶段内逃逸率与修复时长 baseline。
-- 说明: 本文档仅维护 testing 模块当前执行窗口和高价值追溯入口；更细的历史完成项、旧阶段交接与专题收口请回到对应 topic `*.project.md`、`doc/testing/evidence/*.md` 与 `.pm/tasks/task_<32hex>.execution.md` 追溯。
+- 说明: 本文档仅维护 testing 模块当前执行窗口和高价值追溯入口；更细的历史完成项、旧阶段交接与专题收口请回到对应 topic `*.project.md`、`doc/testing/evidence/*.md` 与 GitHub task issue evidence comments 追溯。

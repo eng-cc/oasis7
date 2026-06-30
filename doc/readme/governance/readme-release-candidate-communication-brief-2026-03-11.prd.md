@@ -37,7 +37,7 @@
 | external status brief | 候选 ID、当前状态、适用范围、证据来源 | 生成对外摘要 | `draft -> reviewed -> approved` | 先写事实，再写限制，再写后续动作 | `liveops_community` 起草，`producer_system_designer` 审核 |
 | forbidden claims | 禁止用语、原因、替代表述 | 约束外部表述 | `defined -> adopted` | 高风险承诺优先列出 | `producer_system_designer` 拍板 |
 | rollback note | 触发条件、对外说明模板、升级入口 | 供异常时直接复用 | `prepared -> referenced` | 与内部 go/no-go 回滚口径一致 | `liveops_community` 维护 |
-| role evidence record | 发起角色、接收角色、输入、输出、done | 通过正式评审记录、readme 专题与 `.pm` execution log 固化口径承接链 | `sent -> reviewed -> closed` | owner 结论优先 | 发起方填写，接收方确认 |
+| role evidence record | 发起角色、接收角色、输入、输出、done | 通过正式评审记录、readme 专题与 GitHub task issue evidence comments 固化口径承接链 | `sent -> reviewed -> closed` | owner 结论优先 | 发起方填写，接收方确认 |
 - Acceptance Criteria:
   - AC-1: 产出简报专题 PRD / Design / Project。
   - AC-2: 产出一份可直接引用的版本候选对外口径简报。
@@ -53,7 +53,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 该专题位于 readme/governance，消费 core 版本级 go/no-go 记录，输出一份面向 `liveops_community` 的外部沟通简报，并通过正式评审记录、readme 专题与 `.pm` execution log 回流 `producer_system_designer` 审核。
+- Architecture Overview: 该专题位于 readme/governance，消费 core 版本级 go/no-go 记录，输出一份面向 `liveops_community` 的外部沟通简报，并通过正式评审记录、readme 专题与 GitHub task issue evidence comments 回流 `producer_system_designer` 审核。
 - Integration Points:
   - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
   - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`

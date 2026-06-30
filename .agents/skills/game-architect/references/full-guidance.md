@@ -11,10 +11,10 @@ This skill assists in the **documentation phase** of game project development. I
 
 ## Oasis7 Workflow Binding
 
-In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, `.pm` task, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
+In oasis7, this skill is a specialist architecture-planning surface, not a second project workflow. TPM must bind any `game-architect` output to the same owner role, GitHub-backed task truth, canonical worktree, and PR chain before repository writeback, but TPM only coordinates that binding; architecture conclusions must be owned by the appropriate professional slice.
 
-- If `architect/` documents are created or updated, record the route, TODOs, and downstream execution handoff in `.pm/tasks/<TASK-UID>.execution.md`.
-- Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace `.pm` task truth.
+- If `architect/` documents are created or updated, record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments.
+- Architecture documents may supplement `prd.md`, `project.md`, and handoff truth, but they do not replace GitHub-backed task truth.
 - Implementation must still route through `repo-owned-workflow-router` and `executing-project-tasks` before code changes.
 
 ## Output Documents

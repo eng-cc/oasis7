@@ -18,8 +18,8 @@
 
 ### 历史压缩索引
 - README consistency、link check、quarterly review、release communication 与 public positioning 历史：回看 `doc/readme/prd.index.md`、`doc/readme/governance/README.md` 与对应 task trace。
-- Moltbook、小红书、closed beta、limited preview、reward intake/ledger 与 community packaging 历史：回看 `doc/readme/governance/`、站点素材目录与 `.pm/tasks/*.execution.md`。
-- 本主项目页只维护当前/最近任务索引；完整素材正文、发布边界、证据和验收命令以 topic docs 与 task execution log 为准。
+- Moltbook、小红书、closed beta、limited preview、reward intake/ledger 与 community packaging 历史：回看 `doc/readme/governance/`、站点素材目录与 GitHub task issue evidence comments。
+- 本主项目页只维护当前/最近任务索引；完整素材正文、发布边界、证据和验收命令以 topic docs 与 GitHub task issue evidence comments 为准。
 
 ## 依赖
 - `doc/readme/prd.index.md`、`README.md`、`world-rule.md`、`testing-manual.md`
@@ -30,7 +30,7 @@
 - 更新日期: 2026-05-26
 - 当前状态: completed
 - 下一任务: 无（当前模块主项目无未完成任务；若后续继续扩展主站白皮书页内容或做站点内中英更多专题页，再新开独立任务。）
-- 当前窗口摘要: 最近收口集中在 `site-whitepaper-entry-alignment`、`whitepaper-style-overview` 与 `xiaohongshu-token-usage-post-pack`；对应详情保留在上方任务项、`doc/readme/governance/` 专题、`.pm/tasks/*.execution.md` 与站点改动中。
+- 当前窗口摘要: 最近收口集中在 `site-whitepaper-entry-alignment`、`whitepaper-style-overview` 与 `xiaohongshu-token-usage-post-pack`；对应详情保留在上方任务项、`doc/readme/governance/` 专题、GitHub task issue evidence comments 与站点改动中。
 - 历史追溯: 更早完成项不再在本状态区按时间追加；需要追 reward / Moltbook / 小红书 / closed beta / public positioning 历史时，先从 `doc/readme/prd.index.md`、`doc/readme/governance/README.md` 与对应 task trace 进入。
 - PRD / ROUND 状态: strict schema 已对齐（含第 6 章验证与决策记录）；gap 子簇主从化已完成（gap12345 主入口，其它 gap 专题增量维护）。
 - 模块进展补充: 已补齐 README 口径一致性巡检、链接检查、季度审查模板、对外口径简报/公告底稿模板，以及 Moltbook 推广方案、主贴模板、GitHub 反馈 CTA 与更短 feed-native 版本。

@@ -9,7 +9,7 @@ usage() {
 Usage: ./scripts/pm/slice-ledger.sh --task-uid <uid> [options]
 
 Append or print a lightweight JSONL resume map for role slices. The ledger is
-ignored scratch evidence; `.pm/tasks/<TASK-UID>.execution.md` remains canonical.
+ignored scratch evidence; GitHub task issue evidence comments remain canonical.
 
 Options:
   --task-uid <uid>          Task UID
