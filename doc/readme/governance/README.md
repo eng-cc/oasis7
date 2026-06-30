@@ -18,9 +18,9 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-06-23）:
-  - `doc/readme/governance/`: 76 份 Markdown
-  - `doc/readme/`: 123 份 Markdown
+- 快照（2026-06-30）:
+  - `doc/readme/governance/`: 69 份 Markdown
+  - `doc/readme/`: 116 份 Markdown
   - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 
@@ -114,7 +114,8 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
-- handoff、execution_log、轮播包与其它 supporting doc 继续保留可检索性，但不应重新成为默认首读入口。
+- 旧 2026-03-11 一次性 role handoff briefs 已退役删除；当前从正式专题、根 `../../../README.md`、release communication surfaces、`../prd.index.md` 与 `.pm` evidence 追溯。
+- execution_log、轮播包与其它 supporting doc 继续保留可检索性，但不应重新成为默认首读入口。
 - 如果某个主题未来形成新的主文档，应优先进入主文档，而不是继续把增量素材包维持为默认入口。
 
 ## 维护约定

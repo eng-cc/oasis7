@@ -26,6 +26,7 @@ today = os.environ.get("OASIS7_RUSTSEC_TODAY") or date.today().isoformat()
 approved = [
     "RUSTSEC-2021-0127",
     "RUSTSEC-2024-0436",
+    "RUSTSEC-2026-0192",
 ]
 required_keys = ("owner", "crate", "scope", "reason", "expiry", "validation", "local_crates")
 required_direct_baseline_keys = (
