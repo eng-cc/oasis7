@@ -15,7 +15,7 @@ In oasis7, this is a runtime domain skill for state consistency and authority
 semantics. It is domain-triggered and non-default; it does not replace
 `runtime_engineer` ownership of runtime correctness.
 
-Use it only inside the bound `.pm` task/worktree and tie conclusions to current
+Use it only inside the bound GitHub-backed task/worktree and tie conclusions to current
 runtime code, tests, design docs, traces, or playtest evidence.
 
 ## When to Use

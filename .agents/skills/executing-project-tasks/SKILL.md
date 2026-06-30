@@ -5,7 +5,7 @@ description: Use when a task already has repo truth such as `prd.md`, `project.m
 
 # Executing Project Tasks
 
-> GitHub PM migration note: Step 3 retired repo-local `.pm/tasks/*`. Use GitHub Project as the active queue/status gate and keep atomic execution evidence in GitHub task issue comments.
+> PM truth: use GitHub Project as the active queue/status gate and keep atomic execution evidence in GitHub task issue comments.
 
 ## When to Use
 
@@ -70,7 +70,7 @@ Stop and report the blocker instead of guessing when:
 
 - the written plan is missing required affected paths, verification, or acceptance mapping
 - the task has drifted beyond the documented scope
-- instructions conflict across `prd.md`, `project.md`, handoff, or `.pm` truth
+- instructions conflict across `prd.md`, `project.md`, handoff, or GitHub-backed task truth
 - the same verification keeps failing and the failure is no longer producing new information
 
 When blocked, lead with:
@@ -82,14 +82,14 @@ When blocked, lead with:
 
 ## Known Failure Modes
 
-- Executing implementation from an informal chat plan instead of canonical `.pm`, PRD, project, or handoff truth.
+- Executing implementation from an informal chat plan instead of canonical GitHub-backed task, PRD, project, or handoff truth.
 - Batching several behavior changes before recording step evidence, which makes later verification failures hard to attribute.
 - Treating planned verification as equivalent to observed verification output.
 - Continuing after repeated identical failures without recording a blocker or narrowing the failing surface.
 
 ## Guardrails
 
-- Do not create a second planning system outside `prd.md` / `project.md` / `.pm`.
+- Do not create a second planning system outside `prd.md` / `project.md` / GitHub-backed task truth.
 - Do not batch many unverified steps and only test at the very end if step-level verification was available.
 - Do not record only planned validation; step evidence must include the actual observed result.
 - Do not continue through ambiguity by silently choosing one interpretation.

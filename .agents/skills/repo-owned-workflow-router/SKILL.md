@@ -5,7 +5,7 @@ description: Use when a bound oasis7 task needs phase selection across repo-owne
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
-> GitHub PM migration note: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh ... audit` when task status or Project-backed PM state changes.
+> PM truth: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh ... audit` when task status or Project-backed PM state changes.
 
 
 # Repo-Owned Workflow Router
@@ -53,7 +53,7 @@ Check the task in this order:
    - Apply this router step after `default-workflow-bootstrap`; read-only professional/domain judgments must already be task-bound.
    - Dispatch the matching bounded role slice.
    - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in GitHub task issue evidence comments.
-   - Compatibility marker: record the slice contract in `.pm` now means record it in the GitHub issue evidence comment sink backed by `.pm/github-project-sync/tasks.json`, not recreate retired `.pm/tasks/*` task files.
+   - Record the slice contract in the GitHub issue evidence comment sink backed by `.pm/github-project-sync/tasks.json`.
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
@@ -90,7 +90,7 @@ Ask and answer these in order:
 10. Is this task editing local skill surfaces or skill governance?
 11. Did this step produce reusable learning, a follow-up idea, repeated
     friction, or a failure signature that should use the learning-intake
-    ladder: no-op, short execution-log note, reflection signal,
+    ladder: no-op, short GitHub issue evidence note, reflection signal,
     task-scoped `working_memory`, or candidate task/memory promotion?
 
 ## Expected Output
@@ -122,11 +122,11 @@ WORKFLOW ROUTE DECIDED
 ## Subagent Slice Plan (If Needed)
 - role:
 - slice type:
-- model configuration: compatibility marker; fill the intended/actual fields below
+- model configuration: fill the intended/actual fields below
 - intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override
 - actual dispatched model/reasoning: record the selected model/reasoning when the tool permits and reports it; otherwise record `inherited/unverified` plus the connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded
-- mandatory context packet: compatibility marker; fill the mandatory context checklist/packet below
+- mandatory context packet: fill the mandatory context checklist/packet below
 - mandatory context checklist/packet:
   - identity and authority:
   - workflow governance:

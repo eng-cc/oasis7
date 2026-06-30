@@ -5,7 +5,7 @@ description: Use when creating a new skill under .agents/skills, replacing an up
 
 # Writing Repo-Owned Skills
 
-> GitHub PM migration note: skill edits must not redefine the Project-backed PM migration contract; link back to `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-migration` and keep this surface operational.
+> PM truth: skill edits must not redefine the GitHub Project-backed PM contract; link back to `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract` and keep this surface operational.
 
 ## When to Use
 
@@ -62,7 +62,7 @@ Do not directly borrow:
 
 - mandatory subagent-based failing-test-first loops as a hard gate
 - generic deployment advice unrelated to oasis7
-- any process that competes with `AGENTS.md + .pm + GitHub PR review`
+- any process that competes with `AGENTS.md + GitHub-backed task truth + GitHub PR review`
 
 ## Oasis7-Specific Surfaces
 

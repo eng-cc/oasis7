@@ -42,7 +42,7 @@
 
 Canonical phase mapping lives in `doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`; this README is an index, not the workflow authority.
 
-GitHub Project-backed PM migration lives in `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-migration`; after Step 3, GitHub Issues + GitHub Project are the active task truth and GitHub issue comments are the execution/audit sink. `.pm/github-project-sync/task-archive.jsonl` is the retired local task-file audit bridge.
+GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`: GitHub Issues + GitHub Project are active task truth, GitHub issue comments are the execution/audit sink, and `.pm/github-project-sync/` is the deterministic local mapping/archive surface for scripts.
 
 - 启动任何用户请求、需要先确认标准 task worktree / GitHub Project-backed task truth / owner role 真值，并把后续阶段接回 repo-owned 主链时：`.agents/skills/default-workflow-bootstrap/SKILL.md`
 - 只读/聊天请求也默认进入 task/worktree bootstrap；不要先用“只读/聊天/纯事实”分类决定是否跳过 bootstrap。如果要输出专业结论，进入 task truth 后仍由 TPM 派发对应 bounded 专业角色 slice。纯路径查找、命令输出复述等客观事实读取可由 TPM 在已绑定 task/worktree 内直接处理。
@@ -81,7 +81,7 @@ Specialist skills are domain-triggered through TPM routing or professional subag
 
 - upstream 的 `failing test first with subagents` 作为硬性门禁
 - 与 oasis7 无关的 agent-specific 安装 / 发布说明
-- 任何会替代 `AGENTS.md + .pm + GitHub PR review` 主链的第二套流程
+- 任何会替代 `AGENTS.md + GitHub-backed task truth + GitHub PR review` 主链的第二套流程
 
 ## Notes
 

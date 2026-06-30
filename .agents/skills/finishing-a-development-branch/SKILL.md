@@ -5,7 +5,7 @@ description: "Use when implementation is done and the work needs final verificat
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
-> GitHub PM migration note: before final PM closeout or PR creation, confirm Project/mapping/local mirror consistency when the task touched PM queue/status state.
+> PM truth: before final PM closeout or PR creation, confirm Project/mapping/local mirror consistency when the task touched PM queue/status state.
 
 
 # Finishing a Development Branch
@@ -32,7 +32,7 @@ Use this skill when code and docs are already updated and you are moving into br
 3. Before final closeout, apply the source-of-truth Learning Intake / Loop
    Closeout ladder to reusable findings from the task:
    - no-op for transient observations
-   - short execution-log note for current-task-only route or evidence details
+   - short GitHub issue evidence note for current-task-only route or evidence details
    - reflection signal for useful follow-up ideas or repeated friction that is
      not ready for committed task truth
    - task-scoped `working_memory` for temporary structured learning that
@@ -144,4 +144,4 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - Do not merge a normal PR without first checking PR comments and review threads and resolving or answering actionable items.
 - Do not auto-merge PRs opened specifically for manual packaging/release CI until the operator/user resumes the normal merge path.
 - Do not turn learning intake into a universal extra gate; use no-op or a short
-  execution-log note when there is no reusable learning to preserve.
+  GitHub issue evidence note when there is no reusable learning to preserve.

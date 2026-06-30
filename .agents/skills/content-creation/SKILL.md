@@ -12,7 +12,7 @@ In oasis7, this skill is a content-format and copywriting aid, not the owner of
 player promises, incident communication, release positioning, or community
 strategy. When the content is external-facing, `liveops_community` must own or
 verify the professional conclusion, and TPM must keep the work bound to the
-same `.pm` task/worktree/PR chain.
+same GitHub-backed task/worktree/PR chain.
 
 Use this skill to shape the artifact after the task has a clear audience,
 channel, factual basis, and approval boundary. Do not use it to invent product

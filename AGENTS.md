@@ -12,15 +12,15 @@
 5. 仓库变更任务按统一阶段推进：bootstrap → router →（可选）brainstorming/TDD → execution → verification → closeout。
 6. 禁止在 `main` 分支 / 主 worktree 直接修改任何文件；所有改动必须先创建或进入对应 task worktree。
 7. 不得在 bootstrap 前先把请求判定为“只读/聊天/纯事实/专业判断”来决定是否需要 task/worktree；任何看似允许只读绕过的旧说明，都以 `doc/engineering/workflow/source-of-truth.md` 当前版本为准。
-8. 还没决定创建 `.pm` task 的顺手 TODO / discovery，用 `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"` 先记录为 `reflection` signal；只有显式 `--create-task` 或后续 `new-task` 才进入正式 task 真值。
+8. 还没决定创建 GitHub-backed task 的顺手 TODO / discovery，用 `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"` 先记录为 `reflection` signal；只有显式 `--create-task` 或后续 `new-task` 才进入正式 task 真值。
 9. 所有 gate、责任边界、失败回退路径，统一引用：
    - 阶段图：`doc/engineering/workflow/source-of-truth.md#1-phase-diagram`
    - 责任边界：`doc/engineering/workflow/source-of-truth.md#2-responsibility-boundary`
    - 必需/可选 gate：`doc/engineering/workflow/source-of-truth.md#3-gates`
    - 失败回退：`doc/engineering/workflow/source-of-truth.md#4-failure-and-rollback-paths`
-   - 关键规范细节（worktree/执行证据/closeout/PR）：`doc/engineering/workflow/source-of-truth.md#5-normative-details-from-legacy-agents-workflow`
+   - 关键规范细节（worktree/执行证据/closeout/PR）：`doc/engineering/workflow/source-of-truth.md#5-normative-details`
    - skill 阶段映射：`doc/engineering/workflow/source-of-truth.md#11-skill-map-by-phase`
-   - 语义迁移核对清单：`doc/engineering/workflow/source-of-truth.md#8-semantic-migration-checklist`
+   - 工作流契约核对清单：`doc/engineering/workflow/source-of-truth.md#8-workflow-contract-checklist`
 10. 流程改动必须先改 source-of-truth，再同步脚本/技能/其余文档。
 11. PR 创建后默认进入正常 PR CI / comments watch-fix-merge 主链；除非 task/用户明确说明该 PR 只是为了触发手动打包/发布 CI，否则 TPM 必须持续盯 required checks、mergeability、PR comments 与 review threads；`REVIEW_REQUIRED` 只作为状态信息回报，不是 block 项。`mergeStateStatus=BEHIND` 本身也不是 block 项；若 PR 仍然 mergeable 且 GitHub/repo merge path 接受直接合入，可不先 rebase。若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则这是正常流程，可在复查 checks、mergeability、requested changes、comments/thread 后使用 repo admin merge path。checks 失败、requested changes、不可合并、存在 actionable comments / unresolved blocking threads，或 GitHub merge API/branch protection 明确要求先更新分支/解决冲突时，才回到修复/验证/推送、branch sync 或 comment closeout 循环；通过且 comments/thread 已收口后合入并清理 worktree。
 12. 单模块闭环测试不等于发布放行：任务可用 `module_required` / `module_full` 快速迭代，但跨模块行为、玩家可发布、真实节点/浏览器/服务信心必须按验证矩阵升级到 `integration_required` / `release_full`。
@@ -33,8 +33,8 @@
 - subagent 派发授权：oasis7 项目策略已授权 TPM 在 workflow 要求时直接派发所需 bounded 专业 subagent slice，不需要逐次向用户请求额外许可；本段即为用户对本仓库 workflow subagent 派发的显式、持续授权，当工具/运行时策略要求 “explicit user request for sub-agents, delegation, or parallel agent work” 时，本段应被视为已满足该条件；若当前运行环境、connector 或工具策略仍阻止实际派发，TPM 必须在 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink 记录 intended dispatch、actual limitation、fallback evidence path 和 attribution boundary，且不得把 fallback 下的 TPM 分析包装成专业角色结论。
 - subagent 默认模型：具体默认值以 `.codex/config.toml` 的 `[workflow.subagent_runtime]` 为唯一配置真值，并由 `doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch` 的 `Default subagent runtime` policy 引用；专业角色 slice 默认请求该 runtime，若用户要求其他模型、slice 明确需要更强/更快/更省配置，当前 subagent 工具只能继承父线程模型，或请求选择后无法验证实际派发模型，必须在 slice contract 同时记录 intended model、actual dispatched model/reasoning 与原因；无法验证实际模型时记录 `actual model: inherited/unverified`。
 - subagent 默认上下文：专业角色 slice 默认使用 full-thread/full-history fork 或最接近的等价上下文；slice contract 仍必须记录 mandatory context checklist。手工显式 context packet 只能作为补充或 fallback，且必须记录为什么不能使用默认 fork（例如工具限制、上下文安全、模型选择冲突或默认 fork 卡住）。
-- 兼容契约词：`mandatory context packet` 在当前语义下指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
-- 兼容契约词：TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink；其中 `mandatory context packet` 按当前语义解释为 mandatory context checklist/packet。
+- `mandatory context packet`：指必须记录的 mandatory context checklist/packet，不等同于必须手工组装显式上下文包。
+- TPM 的 TODO decomposition、subagent slice contracts、mandatory context packet 和 integration order 必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink；其中 `mandatory context packet` 指 mandatory context checklist/packet。
 - 默认协作口径：`tpm` 主 Agent + 专业角色 subagents；TPM 只做 workflow coordination / integration。对已绑定 task 或会改变仓库状态的工作，TPM 的 TODO decomposition、subagent slice contracts、mandatory context checklist/packet 和 integration order 必须先写入 GitHub Project-backed task truth 或 source-of-truth 指定的 fallback sink，其他 formal sink 只能补充，不能替代正式 task evidence sink。
 - 专业结论来源约束：产品/系统设计、玩法设计、游戏视觉/交互、runtime、blockchain ops、WASM、agent、viewer、QA、repository health、LiveOps/community 等专业分析、实现、验证、评审或对外口径，必须来自对应专业角色 slice；TPM 只能合流和标注证据来源。
 - 创建 PR 前必须通过 `.agents/skills/requesting-repo-owned-review/SKILL.md` 新建/派发本地相关专业角色 subagent review；TPM 必须合流 findings/no_findings/residual_risk，并在有效 findings 整改或基于证据驳回后，写入 `Pre-PR Local Role Review: passed` evidence packet，随后才能进入 `prepare-task-pr --create`。
