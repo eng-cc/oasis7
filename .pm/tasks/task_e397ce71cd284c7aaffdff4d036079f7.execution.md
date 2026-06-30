@@ -170,6 +170,15 @@ Example:
 - Actual Result: PASS with fallback. Branch `task/engineering-perf-abstraction-optimization-11` pushed; PR URL: https://github.com/eng-cc/oasis7/pull/1604
 - Blocker / Next Action: Push this PR evidence commit, then monitor PR checks/comments/mergeability and merge when gates pass.
 
+## 2026-06-30 10:08:00 CST / tpm
+- 完成内容: PR #1604 `required-gate` failure triaged and fixed. The failure was `cargo deny check advisories` detecting newly published `RUSTSEC-2026-0192` for transitive `ttf-parser 0.25.1`; repository-health review confirmed this is valid reviewed RustSec baseline debt rather than a prompt-tool regression or required dependency migration in this PR.
+- 遗留事项: CI must rerun on the pushed fix. Follow-up debt remains to remove the `ttf-parser` transitive closure by 2026-09-30 through upstream rendering dependency modernization.
+- Action: Add reviewed RustSec ignore baseline metadata for `ttf-parser` and approved advisory id.
+- Validation Command: `env -u RUSTC_WRAPPER cargo tree --target all -i ttf-parser --prefix none`; `./scripts/check-rustsec-ignore-baseline.sh`; `./scripts/ensure-cargo-deny.sh && cargo deny check advisories`; `multi_agent_v1.wait_agent` for repository-health CI-failure review id `019f1647-b0b7-7ef2-8bee-a293f1d158b1`.
+- Expected Result: Baseline metadata is complete and unexpired; advisory deny check passes; direct dependency scope remains transitive and bounded to launcher/viewer rendering stacks.
+- Actual Result: PASS. `cargo tree --target all -i ttf-parser --prefix none` shows `oasis7_client_launcher` through `eframe/egui/ab_glyph` and `pixel_world_bridge` through `bevy/winit/sctk-adwaita`. `check-rustsec-ignore-baseline.sh` reports `ok: RustSec ignore baseline is reviewed, metadata-complete, and unexpired (3 advisories)`. `cargo deny check advisories` reports `advisories ok`. Repository-health returned no findings and recommended the exact baseline update.
+- Blocker / Next Action: Commit and push CI fix, then re-watch PR #1604 required checks.
+
 ## 2026-06-30 09:47:00 CST / tpm
 - 完成内容: TASK CLOSEOUT ATTEMPTED. `task-closeout.sh` completed the task-local verification and updated task metadata to `status: done`, `last_claim_type: task_complete`, `last_verification_exit_code: 0`, `last_verification_status: verified`, and `last_closed_at`. The command then failed at repository-wide `pm-lint` due unrelated historical `.pm/tasks/*` execution-log formatting debt outside this task.
 - 遗留事项: Repo-wide historical `.pm` lint debt remains outside current scope. Current task-local workflow lint passed before closeout; task yaml shows done and verified. Continue to PR creation with the boundary recorded here.
