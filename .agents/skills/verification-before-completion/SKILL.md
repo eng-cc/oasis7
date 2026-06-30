@@ -27,6 +27,11 @@ Run the verification command now, read the result now, and only then make the cl
 
 If the command fails, report the blocked state directly. Do not soften it into a success summary.
 
+A fresh verification claim must come from the current verification epoch: after
+the latest code/doc/script change that can affect the claim, after any valid
+review finding fix, and after any branch sync that changes the reviewed diff.
+Earlier successful output is background only.
+
 ## Preferred Workflow
 
 1. Choose the claim type:

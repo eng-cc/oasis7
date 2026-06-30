@@ -35,7 +35,7 @@ Do not use this skill when:
 3. It only chooses and orders repo-owned workflow skills.
 4. If the task truth changes, route decisions must be written back into GitHub task issue evidence comments; formal docs may supplement but not replace it.
 5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist/packet, write scope, return contract, GitHub task issue evidence sink, and integration owner/order.
+6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist, write scope, return contract, GitHub task issue evidence sink, and integration owner/order.
 7. TPM TODO decomposition and subagent slice contracts must be recorded in GitHub task issue evidence comments before delegated execution begins.
 8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
 9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in GitHub task issue evidence comments.
@@ -44,6 +44,8 @@ Do not use this skill when:
     owner, scope, phase, professional slice plan, and PR chain do not change.
     The minimal record must include the question or observation, evidence path
     or command, answer or decision, and whether task truth changed.
+    Same-thread continuations inside the current bound task only verify the
+    binding and record changed route/evidence; they do not repeat bootstrap.
 
 ## Routing Order
 
@@ -126,8 +128,8 @@ WORKFLOW ROUTE DECIDED
 - intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override
 - actual dispatched model/reasoning: record the selected model/reasoning when the tool permits and reports it; otherwise record `inherited/unverified` plus the connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded
-- mandatory context packet: fill the mandatory context checklist/packet below
-- mandatory context checklist/packet:
+- mandatory context checklist: fill the mandatory context checklist below
+- mandatory context checklist:
   - identity and authority:
   - workflow governance:
   - task truth:
@@ -154,7 +156,7 @@ WORKFLOW ROUTE DECIDED
 - Do not skip `verification-before-completion` when you are about to make a completion claim.
 - Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
 - Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
-- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist/packet.
+- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist.
 - Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
 - Do not promote a lightweight observation directly into committed task truth
   when a reflection signal or task-scoped `working_memory` is the right

@@ -8541,6 +8541,56 @@
       "title": "unified world code-layer migration follow-up",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-runtime-unified-world-code-layer-migration-follow-up"
     },
+    "task_acba9524b2164df2a67eccf330a0b904": {
+      "acceptance": [
+        "Workflow docs and helpers address the ten findings from the efficiency/ambiguity scan.",
+        "PR/review/thread, pre-PR evidence, governance trace, and workflow eval checks cover the new semantics."
+      ],
+      "claim_verifications": [
+        {
+          "allowed_to_claim": true,
+          "blocked_phrase": "Do not claim the task is complete.",
+          "claim_message": "Fresh verification passed; the task can now be claimed complete.",
+          "claim_type": "task_complete",
+          "status": "verified",
+          "success_phrase": "Fresh verification passed; the task can now be claimed complete.",
+          "task_uid": "task_acba9524b2164df2a67eccf330a0b904",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T20:33:11+08:00",
+          "verify_command": "rtk proxy bash scripts/pm/workflow-behavior-eval.sh"
+        }
+      ],
+      "created_at": "2026-06-30T19:48:43+08:00",
+      "doc_refs": [
+        "doc/engineering/workflow/source-of-truth.md"
+      ],
+      "evidence_comments": [
+        "https://github.com/eng-cc/oasis7/issues/1652#issuecomment-4843050697",
+        "https://github.com/eng-cc/oasis7/issues/1652#issuecomment-4843054745",
+        "https://github.com/eng-cc/oasis7/issues/1652#issuecomment-4843500088"
+      ],
+      "evidence_sink": "https://github.com/eng-cc/oasis7/issues/1652",
+      "handoff_to": [],
+      "issue_number": 1652,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1652",
+      "last_claim_verification_at": "2026-06-30T20:33:11+08:00",
+      "last_closed_at": "2026-06-30T20:33:15+08:00",
+      "last_evidence_at": "2026-06-30T20:33:15+08:00",
+      "last_started_at": "2026-06-30T19:49:07+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P1",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxRsiY",
+      "related_prd": [],
+      "source_refs": [
+        "doc/engineering/workflow/source-of-truth.md"
+      ],
+      "status": "done",
+      "task_uid": "task_acba9524b2164df2a67eccf330a0b904",
+      "title": "Fix workflow efficiency and ambiguity issues",
+      "updated_at": "2026-06-30T20:33:15+08:00",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-workflow-efficiency-ambiguity-fixes"
+    },
     "task_ad228902b41240aaa359aafbdd309ec2": {
       "content_id": "I_kwDORHhWec8AAAABHE8mCw",
       "execution_log_path": ".pm/tasks/task_ad228902b41240aaa359aafbdd309ec2.execution.md",

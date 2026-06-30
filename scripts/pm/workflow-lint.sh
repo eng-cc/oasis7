@@ -10,10 +10,9 @@ usage() {
 Usage: ./scripts/pm/workflow-lint.sh [--task-uid <task_uid>] [--allow-unbound] [--phase current|pr-ready|post-pr]
 
 Static consistency checks for the current task:
-- exactly one .pm task binding
-- project.md task item Trace points to task_uid
-- execution log has Action/Validation/Expected/Actual/Blocker/Next Action
-- claim-ready + closeout records present
+- GitHub Project mapping binds the current worktree/task
+- project.md task item Trace points to GitHub issue + task_uid
+- GitHub task issue evidence comments include claim/review/closeout records
 - post-PR evidence chain is task-local
 USAGE
 }
@@ -68,6 +67,7 @@ def parse_task(path: pathlib.Path) -> dict[str, object]:
 
 task_dir = root / ".pm" / "tasks"
 github_backed = False
+tasks: list[dict[str, object]] = []
 if explicit_uid:
     task_path = task_dir / f"{explicit_uid}.yaml"
     tasks = [parse_task(task_path)] if task_path.is_file() else []
@@ -83,11 +83,28 @@ if explicit_uid:
                 task["path"] = str(mapping_path.relative_to(root))
                 tasks = [task]
 else:
-    tasks = [parse_task(p) for p in sorted(task_dir.glob("task_*.yaml"))]
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if mapping_path.is_file():
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        project = mapping.get("project") or {}
+        repo_name = str(project.get("repo") or "eng-cc/oasis7")
+        for uid, record in sorted((mapping.get("tasks") or {}).items()):
+            record = dict(record)
+            record["task_uid"] = uid
+            record["path"] = str(mapping_path.relative_to(root))
+            record["github_project_mapping"] = {
+                "repo": repo_name,
+                "issue_number": record.get("issue_number"),
+                "issue_url": record.get("issue_url"),
+            }
+            tasks.append(record)
+        github_backed = bool(tasks)
+    if not tasks:
+        tasks = [parse_task(p) for p in sorted(task_dir.glob("task_*.yaml"))]
 if not tasks:
     if explicit_uid:
-        raise SystemExit(f"workflow-lint: task yaml not found for --task-uid {explicit_uid}")
-    raise SystemExit("workflow-lint: no .pm/tasks/*.yaml found")
+        raise SystemExit(f"workflow-lint: task mapping not found for --task-uid {explicit_uid}")
+    raise SystemExit("workflow-lint: no GitHub Project task mapping found for this worktree")
 
 def worktree_hint_matches(raw_hint: object) -> bool:
     hint = str(raw_hint or "")
@@ -172,9 +189,16 @@ if not project_docs:
 if phase in {"pr-ready", "post-pr"}:
     check(bool(project_docs), "project.md unresolved from task doc_refs/source_refs; fix: add module project.md to task doc_refs")
 if phase in {"pr-ready", "post-pr"} and project_docs:
-    trace_token = f"Trace: .pm/tasks/{uid}.yaml"
-    trace_found = any(p.is_file() and trace_token in p.read_text(encoding="utf-8") for p in project_docs)
-    check(trace_found, f"project task item lacks Trace for {uid}; fix: add '{trace_token}' in module project.md")
+    new_trace_re = re.compile(rf"Trace: ((#[0-9]+)|(https://github\.com/eng-cc/oasis7/issues/[0-9]+)) \({re.escape(uid)}\)")
+    trace_found = False
+    for p in project_docs:
+        if not p.is_file():
+            continue
+        text = p.read_text(encoding="utf-8")
+        if new_trace_re.search(text):
+            trace_found = True
+            break
+    check(trace_found, f"project task item lacks Trace for {uid}; fix: add 'Trace: #<issue> ({uid})' in module project.md")
 
 elog = root / str(task.get("execution_log_path") or "")
 check(elog.is_file(), f"execution log missing: {elog.relative_to(root) if str(task.get('execution_log_path') or '') else '(none)'}; fix: run workflow-report --phase start or update execution_log_path")

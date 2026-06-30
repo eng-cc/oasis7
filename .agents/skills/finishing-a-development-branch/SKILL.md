@@ -49,7 +49,7 @@ Use the same role-selection rule as `requesting-repo-owned-review`, including:
 - `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched
 - `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched
 - `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched
-- `qa_engineer` when the claim depends on verification, release readiness, test strategy, or evidence sufficiency
+- `qa_engineer` when the PR changes verification helpers, testing docs, release/readiness claims, test strategy, or evidence sufficiency
 - `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, or known technical-debt boundaries
 - `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched
 
@@ -86,6 +86,10 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - Residual Risk: <text>
 - Slice Ledger: <path to slice ledger or n/a with reason>
 ```
+
+For small workflow/docs-only diffs, `./scripts/pm/record-pre-pr-review.sh` can
+generate the packet after involved-role review has actually completed. Use it as
+a formatting helper, not as a replacement for review or verification.
 
 7. Run PR preflight / create:
 

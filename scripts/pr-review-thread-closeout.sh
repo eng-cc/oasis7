@@ -115,6 +115,10 @@ query($owner:String!, $repo:String!, $number:Int!) {
   repository(owner:$owner, name:$repo) {
     pullRequest(number:$number) {
       reviewThreads(first:100) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
         nodes {
           id
           isResolved
@@ -125,6 +129,10 @@ query($owner:String!, $repo:String!, $number:Int!) {
           startLine
           originalStartLine
           comments(first:20) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             nodes {
               id
               body
@@ -174,10 +182,23 @@ threads = (
     .get("reviewThreads", {})
     .get("nodes", [])
 )
+review_threads_payload = (
+    threads_payload.get("data", {})
+    .get("repository", {})
+    .get("pullRequest", {})
+    .get("reviewThreads", {})
+)
+partial_reasons: list[str] = []
+if review_threads_payload.get("pageInfo", {}).get("hasNextPage"):
+    partial_reasons.append("reviewThreads(first:100) has additional pages")
 
 entries: list[dict[str, object]] = []
 for thread in threads:
     comments = thread.get("comments", {}).get("nodes", [])
+    if thread.get("comments", {}).get("pageInfo", {}).get("hasNextPage"):
+        partial_reasons.append(
+            f"comments(first:20) has additional pages for {thread.get('id')}"
+        )
     latest_comment = comments[-1] if comments else None
     entries.append(
         {
@@ -220,6 +241,8 @@ payload = {
         "resolved_threads": sum(1 for entry in entries if entry["is_resolved"]),
         "reported_threads": len(reported_entries),
         "unresolved_only": unresolved_only,
+        "partial_scan": bool(partial_reasons),
+        "partial_reasons": partial_reasons,
     },
     "resolved_now": {
         "count": 0,
@@ -258,6 +281,25 @@ payload["resolved_now"]["thread_ids"] = thread_ids
 print(json.dumps(payload, ensure_ascii=True, indent=2))
 PY
   mv "$REPORT_FILE.next" "$REPORT_FILE"
+}
+
+fail_if_partial_scan() {
+  local partial_report
+  partial_report="$(python3 - "$REPORT_FILE" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+summary = payload.get("summary", {})
+if not summary.get("partial_scan"):
+    raise SystemExit(0)
+print("; ".join(summary.get("partial_reasons", [])) or "partial GraphQL page")
+PY
+)"
+  [[ -z "$partial_report" ]] || die "review thread scan is partial; refusing to continue: $partial_report"
 }
 
 refresh_pr_view_file
@@ -299,6 +341,7 @@ PY
 
 refresh_threads_file
 render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
+fail_if_partial_scan
 
 UNRESOLVED_IDS_FILE="$TMP_DIR/unresolved-ids.txt"
 if ! python3 - "$THREADS_FILE" >"$UNRESOLVED_IDS_FILE" <<'PY'
@@ -348,6 +391,7 @@ if [[ "${#THREAD_IDS_TO_RESOLVE[@]}" -gt 0 ]]; then
   refresh_pr_view_file
   refresh_threads_file
   render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
+  fail_if_partial_scan
   annotate_resolved_now
 fi
 

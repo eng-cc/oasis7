@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.2**
+Version: **v1.5.3**
 Last Updated: **2026-06-30**
 
 ## 0. Purpose
@@ -135,6 +135,12 @@ question or observation, evidence path or command, answer or decision, and
 whether it changes task truth. Use the full bootstrap/router packets only when
 the owner, scope, route, professional slice plan, or PR chain actually changes.
 
+Same-thread continuation does not re-run a heavyweight bootstrap when the
+current request is a direct continuation of the already-bound task. TPM must
+still verify the worktree/task/issue binding, record only the new route or
+evidence when it changes task truth, and create a new task only when owner,
+scope, module, or PR chain changes.
+
 ### 1.2.3 GitHub Project-Backed PM Contract
 GitHub Issues + GitHub Project are the authoritative project-management
 surface for oasis7 tasks. Local files under `.pm/github-project-sync/` are a
@@ -158,6 +164,20 @@ deterministic mirror/cache for scripts and audits, not a parallel task queue.
 - role memory, task-scoped `working_memory`, signals, stage/gate state, and
   this workflow source-of-truth remain repo-local unless a later source-of-truth
   update explicitly migrates them.
+
+Project field taxonomy:
+
+| Field | Owner | Meaning | Allowed / expected values |
+| --- | --- | --- | --- |
+| `Module` | TPM during task creation/routing | Large work queue and reporting group, not owner role or free tag | `engineering`, `game-strategy`, `visualization`, `chain-world-state-substrate` |
+| GitHub Project built-in `Status` | TPM and Project views | Human cockpit lane for day-to-day queue visibility | `Todo`, `In Progress`, `Blocked`, `Ready / PR`, `PR Watch`, `Done` |
+| `PM Status` | PM lifecycle scripts | Deterministic lifecycle state used by helpers/audits | `todo`, `in_progress`, `blocked`, `ready`, `pr_watch`, `done` |
+| `Workflow Phase` | Workflow helpers | Current workflow stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pr_watch`, `closeout`, `done` |
+| Priority | Owner / TPM | Scheduling priority, not severity | repo-defined `P0`..`P3` values |
+
+Scripts that sync Project state must keep GitHub built-in `Status` and `PM
+Status` aligned through the deterministic mapping above. `Blocked`, `Ready /
+PR`, `PR Watch`, and `Done` are status lanes, not modules or owner roles.
 
 Deterministic script contract:
 
@@ -269,14 +289,12 @@ Deterministic script contract:
 ### 5.2 TPM planning and subagent dispatch
 - For every request, TPM must record the current plan, TODO decomposition when needed, selected roles, and integration order in GitHub task issue evidence comments before dispatching professional subagent work.
 - Project policy authorizes TPM to dispatch required bounded professional subagent slices directly whenever this workflow requires them; TPM must not pause for per-slice user permission. This project policy is an explicit standing user authorization to use subagents for workflow-required professional role slices; when a tool/runtime requires an "explicit user request for sub-agents, delegation, or parallel agent work", this policy satisfies that requirement for the matching repo-owned workflow slice. If the current runtime, connector, or tool policy still prevents actual subagent dispatch, TPM must record the intended dispatch, actual limitation, fallback evidence path, and attribution boundary in GitHub task issue evidence comments, and must not present TPM's own analysis as a professional role conclusion.
-- Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist/packet, write scope, return contract, validation command, GitHub task issue evidence sink, and integration order.
+- Each subagent slice must declare role, slice type, intended model configuration, actual dispatched model/reasoning, context delivery mode, mandatory context checklist, write scope, return contract, validation command, GitHub task issue evidence sink, and integration order.
 - Default subagent runtime policy is defined only in `.codex/config.toml` under `[workflow.subagent_runtime]`. TPM should request that configured default for bounded professional slices when the available subagent tool permits model selection, unless the user explicitly requests another model or the slice contract records a concrete reason to use a stronger, faster, or cheaper model.
 - Any non-default subagent model or reasoning effort must be recorded in the slice contract.
 - Any actual non-default subagent model or reasoning effort must be recorded in the slice contract with the reason, such as high-risk architecture/review work, simple read-only exploration, a user-specified override, a connector/tool limitation that forces inheritance from the parent thread, or a requested model/reasoning selection whose actual dispatch cannot be verified. If the actual dispatched model cannot be verified, the contract must say `actual model: inherited/unverified` and explain why.
 - Context delivery defaults to full-thread/full-history fork or the closest available equivalent so the subagent receives the same conversation and repository-governance context as TPM. The slice contract must still record a mandatory context checklist identifying the governance/task/user/repo/collaboration context the subagent is expected to have. A manually assembled explicit context packet is allowed only as a delivery supplement or fallback when full-history fork is unavailable, unsafe, stalled, or incompatible with required model/reasoning selection; the slice contract must record that fallback reason.
-- Mandatory context packet means the recorded mandatory context checklist/packet, not necessarily a manually assembled explicit delivery packet.
-- The mandatory context packet must include:
-- The mandatory context checklist/packet must include:
+- The mandatory context checklist must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
   - task truth: current GitHub issue, GitHub Project item/status, `.pm/github-project-sync/tasks.json` mapping record, canonical worktree, branch, base ref, and PR link/status when present
@@ -287,6 +305,7 @@ Deterministic script contract:
 - TPM read-only exploration is allowed only to gather routing context, inspect task truth, or integrate returned evidence. It must not be reported as a professional finding unless a matching professional role slice owns or verifies that finding.
 - TPM user-facing summaries must distinguish procedural synthesis from professional conclusions. Professional conclusions must be traceable to subagent artifacts, execution evidence, handoff, project/prd records, or PR evidence.
 - Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments, but they do not replace them for task execution truth.
+- If GitHub task issue comments are temporarily unavailable, TPM may write a temporary fallback packet under `.pm/scratch/<TASK-UID>/fallback-evidence/<timestamp>.md` and must record the intended GitHub issue target, reason for fallback, attribution boundary, and replay command. Fallback packets unblock evidence capture only; they do not satisfy task truth, pre-PR review, closeout, or completion claims until replayed to the GitHub task issue comments.
 - If the plan changes during execution, TPM must append a GitHub issue evidence comment before continuing the changed work.
 - Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a GitHub-backed task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
 - After task truth exists, use the section 1.2.2 learning-intake ladder for
@@ -317,9 +336,18 @@ Deterministic script contract:
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
 - If blocked, also record `Blocker / Next Action`.
 - These fields are mandatory for GitHub task issue evidence entries.
+- Record evidence when it changes route, scope, status, claims, verification
+  interpretation, blocker state, review findings, or user-visible decisions.
+  Routine reads/searches that only support TPM routing can stay in the local
+  transcript unless they become part of a claim or handoff.
 
 ### 5.4 Claim / closeout chain
 - Before completion claims, run fresh verification (prefer `./scripts/pm/claim-ready.sh --claim-type <type> --verify-command "<cmd>"` when applicable).
+- A verification epoch starts after the latest code/doc/script change that can
+  affect the claim, after any valid review finding fix, or after any branch sync
+  that changes the reviewed diff. Completion, ready-for-PR, and ready-to-merge
+  claims must cite commands from the current epoch. Earlier successful output
+  may be background context only.
 - Do not move the task to final closeout / `done` before pre-PR local role review has passed when the task is on a PR path. The order is: fresh verification -> pre-PR local role review -> address findings -> final closeout/status packet -> commit -> PR preflight/create.
 - Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the GitHub issue evidence comment must label that packet as readiness evidence rather than final done state.
 - For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence.
@@ -327,7 +355,7 @@ Deterministic script contract:
 ### 5.5 PR and review chain
 - Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
 - The workflow no longer requests Copilot review as a PR helper step.
-- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. At minimum, use changed paths, role ownership, task slice history, user-facing claims, and verification claims to select roles; include `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change; include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched; include `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched; include `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched; include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched; include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched; include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched; include `qa_engineer` when the claim involves verification, release readiness, test strategy, or evidence sufficiency; include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, workflow scripts/skills, or known technical-debt boundaries; include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched.
+- Before PR creation, TPM must create or dispatch fresh local review subagents for every involved relevant professional role in the diff scope. Role sufficiency is based on changed paths, role ownership, task slice history, user-facing claims, verification claims, and explicit skip rationale for adjacent roles. Include `producer_system_designer` when scope, product contract, user promise, acceptance, or system-level semantics change; include `gameplay_designer` when gameplay rules, progression, balance, encounter/resource loops, or player verb semantics are touched; include `game_visual_interaction_designer` when visible UI/gameplay presentation, visual direction, interaction feel, player-facing screen flow, screenshot/visual-review surfaces, accessibility/readability, or UI-heavy claims are touched; include `runtime_engineer` when runtime/server/simulation/gameplay enforcement, replay, recovery, checkpoint, long-run behavior, or `crates/oasis7*` runtime paths are touched; include `blockchain_ops_engineer` when deployment, node ops, topology/inventory, service/host contracts, health baselines, upgrade/rollback/restore drills, packaging/release ops, or operator-facing runbooks are touched; include `wasm_platform_engineer` when `crates/oasis7_wasm_*`, builtin wasm modules, ABI/schema, manifest/hash, wasm build/receipt, wasm determinism workflows, or `doc/world-runtime/wasm/*` are touched; include `agent_engineer` when agent behavior, prompts, provider contracts, model/runtime config, subagent dispatch contracts, or agent tooling are touched; include `viewer_engineer` when Viewer/Web/UI/WebGPU/browser validation paths are touched; include `qa_engineer` when the PR changes verification helpers, testing docs, release/readiness claims, test strategy, or evidence sufficiency; include `repository_health_engineer` when the diff changes cross-cutting architecture, shared workflow surfaces, docs/code contracts, large refactors, repeated bug signatures, workflow scripts/skills, or known technical-debt boundaries; include `liveops_community` when external messaging, incidents, player promises, community feedback, release notes, or channel runbooks are touched. Do not add `qa_engineer` only because a PR has any changed file; add it when verification or evidence semantics are part of the changed surface or claim.
 - `scripts/prepare-task-pr.sh --create` must mechanically reject a passed review packet when changed-path inference identifies required roles that are missing from `Review Roles`. This script check is a minimum backstop; TPM remains responsible for adding roles implied by task history and user-facing claims that path inference cannot see.
 - Verification must map to the changed surface, not only to one generic command. Gameplay changes need playability/economy/motivation-loop evidence tied to `doc/game` truth; runtime changes need the relevant cargo checks/tests plus replay/recovery/checkpoint/long-run evidence where applicable; WASM ABI/platform changes need support-crate/executor tests and, for publishable or builtin module pipeline changes, deterministic build/gate evidence or an explicit defer-to-GitHub/manual evidence packet; UI/player-facing changes need S6 screenshot/model-visual-review evidence or an explicit visual-evidence exemption; release/manual packaging changes need first-class Ops Evidence covering readiness, rollback/runbook, and success/resume evidence; player- or community-facing changes need first-class LiveOps Evidence covering messaging, release-note/status, and audience impact.
 - Each local role review must return `findings` or `no_findings` plus `residual_risk`. TPM must fix valid findings or record why a finding is stale/rejected with code or doc evidence before PR creation.
@@ -354,6 +382,7 @@ Deterministic script contract:
   - `Residual Risk: <text>`
   - `Slice Ledger: <path to slice ledger or n/a with reason>`
 - Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; GitHub issue evidence comments record only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
+- For small workflow/docs-only diffs, TPM may use `scripts/pm/record-pre-pr-review.sh` or an equivalent packet generator to avoid hand-copy errors, but the generated packet must still record role-selection basis, explicit `n/a` exemption reasons, observed verification, and residual risk.
 - Pre-PR local role review verdicts must distinguish scope/spec compliance from role quality/risk for each reviewer role. The role remains the professional owner; this dual-verdict structure is a packet format, not permission to replace involved-role review with a generic reviewer.
 - Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. GitHub task issue evidence comments remain canonical task truth and must link to the ledger rather than relying on it as the only sink. When a review dispatch needs more roles than the current subagent runtime can run concurrently, TPM must batch the roles, record batch order and priority, record timeout/no-payload policy before dispatch, and distinguish partial results from all-role completion.
 - Before merge, explicitly check PR comments and review threads. If any actionable comments or unresolved blocking threads exist, fix + re-verify + resolve or answer them before the merge claim.
@@ -379,6 +408,14 @@ Deterministic script contract:
   replace it.
 
 ## 7. Change Log
+- **v1.5.3 (2026-06-30)**
+  - Added Project field taxonomy, same-thread continuation reuse, temporary
+    fallback evidence replay rules, and current verification epoch semantics.
+  - Renamed mandatory subagent context semantics to `mandatory context
+    checklist`; explicit context packets are only fallback/supplement delivery
+    artifacts.
+  - Tightened pre-PR role sufficiency so QA review is required for verification
+    and evidence semantics, not for every changed file by default.
 - **v1.5.2 (2026-06-30)**
   - Hardened the GitHub Project-backed PM contract so audit/lint reject local
     task-file artifacts and active evidence uses GitHub task issue comments.
@@ -486,7 +523,7 @@ Deterministic script contract:
   - Required professional/domain analysis, implementation, verification judgment, review judgment, and liveops/community messaging to come from matching bounded subagent slices.
   - Limited TPM read-only exploration to routing/integration context unless a professional slice owns or verifies the resulting conclusion.
 - **v1.4.3 (2026-06-01)**
-  - Defined the mandatory subagent context packet so identity, workflow governance, task truth, user intent, repo context, and collaboration boundaries are provided before dispatch.
+  - Defined the mandatory subagent context checklist so identity, workflow governance, task truth, user intent, repo context, and collaboration boundaries are provided before dispatch.
   - Required `AGENTS.md` and the assigned role card for non-read-only subagent slices, with explicit exemption reasons for narrow read-only explorer slices.
 - **v1.4.2 (2026-06-01)**
   - Added the normative skill map by workflow phase so each core skill has an explicit trigger, requiredness level, and evidence sink.
@@ -529,7 +566,7 @@ required task, review, verification, or merge semantics.
 - [x] TPM is workflow coordinator/integrator only; professional findings and judgments must come from matching role slices.
 - [x] Read-only professional/domain questions require matching bounded role slices after task/worktree bootstrap.
 - [x] Subagent intended model configuration defaults to the `Default subagent runtime` policy; actual dispatched model/reasoning and non-default/inherited/unverified rationale are recorded.
-- [x] Subagent context checklist/packet includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
+- [x] Mandatory subagent context checklist includes identity, governance, task truth, user intent, scoped repo context, and collaboration boundaries.
 - [x] Mandatory execution evidence fields and blocker recording.
 - [x] Current-round fresh verification before completion claim.
 - [x] Pre-PR local role-subagent review packet before PR creation.
