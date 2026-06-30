@@ -89,9 +89,9 @@ Example:
 
 - Pre-PR Local Role Review: passed
 - Task UID: task_a101e84b6dea4f9cb3ae0627e537aff6
-- Source Worktree: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7`
-- Source Branch: `task/engineering-doc-legacy-semantics-cleanup-next-7`
-- Source Head: `62e3fe3578f354eea42ad72acc77ce57a7286e2b`
+- Source Worktree: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7
+- Source Branch: task/engineering-doc-legacy-semantics-cleanup-next-7
+- Source Head: 62e3fe3578f354eea42ad72acc77ce57a7286e2b
 - Comparison Ref: refs/remotes/origin/main
 - Reviewed Changed Paths: `.pm/roles/tpm/backlog/committed.yaml`; `.pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.execution.md`; `.pm/tasks/task_a101e84b6dea4f9cb3ae0627e537aff6.yaml`; `doc/engineering/project.md`; `doc/readme/README.md`; `doc/readme/governance/README.md`; seven deleted `doc/readme/governance/*task-readme-00*.md` one-shot handoff briefs; `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`; `doc/readme/prd.index.md`.
 - Review Package: `/Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-7/.pm/scratch/task_a101e84b6dea4f9cb3ae0627e537aff6/review-packages/review-75af9be83..62e3fe357.diff`
