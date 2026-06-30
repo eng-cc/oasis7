@@ -41,6 +41,38 @@ pub(crate) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, Str
     load_execution_world_with_policy(world_dir, ReleaseSecurityPolicy::production_hardened())
 }
 
+pub(crate) fn remove_partial_execution_world_persistence_files(
+    world_dir: &Path,
+) -> Result<(), String> {
+    let snapshot_path = world_dir.join("snapshot.json");
+    let journal_path = world_dir.join("journal.json");
+    let snapshot_exists = snapshot_path.exists();
+    let journal_exists = journal_path.exists();
+    if snapshot_exists == journal_exists {
+        return Ok(());
+    }
+    for path in [snapshot_path, journal_path] {
+        match fs::remove_file(path.as_path()) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(format!(
+                    "remove partial execution world persistence file {} failed: {}",
+                    path.display(),
+                    err
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn execution_world_persistence_files_missing(world_dir: &Path) -> bool {
+    let snapshot_path = world_dir.join("snapshot.json");
+    let journal_path = world_dir.join("journal.json");
+    !snapshot_path.exists() || !journal_path.exists()
+}
+
 fn execution_world_has_pristine_main_token_state(world: &RuntimeWorld) -> bool {
     let state = world.state();
     state.main_token_supply == MainTokenSupplyState::default()
