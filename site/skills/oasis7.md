@@ -100,14 +100,15 @@ Defaults:
 For normal local real LetAI gameplay, always start from the one-command wrapper:
 
 ```bash
-./scripts/run-local-letai-game-test.sh
+./scripts/run-local-letai-game-test.sh --local-world-playtest
 ```
 
 Use this wrapper for every local real-play run unless you are deliberately doing
-low-level diagnostics. It normalizes platform credentials into a temporary
-project token config, forwards auto-topup and platform user/key environment,
-starts the Rust direct LetAI provider bridge, runs the provider contract smoke,
-and launches the game against `127.0.0.1:5841`.
+low-level diagnostics. The preset normalizes platform credentials into a
+temporary project token config, forwards auto-topup and platform user/key
+environment, starts the Rust direct LetAI provider bridge, launches the local
+runtime/viewer/local-standalone-chain stack, and reserves the daily playtest
+ports `48420/48421/48422`. It does not connect to formal/public testnet.
 
 Directly running `oasis7_provider_local_bridge`, `oasis7_game_launcher`, or an
 already-built binary is not the canonical local playtest path. If you do that
@@ -116,11 +117,14 @@ for debugging, you must manually mirror the wrapper's LetAI token,
 `OASIS7_REMOTE_LLM_AUTO_TOPUP_USD` environment; otherwise auto-topup, token
 binding, or provider-backed behavior may differ from the real local flow.
 
-Pass extra launcher flags after `--`:
+Pass extra launcher flags after `--` only for low-level diagnostics:
 
 ```bash
-./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+./scripts/run-local-letai-game-test.sh --local-world-playtest -- --viewer-port 4174 --json-ready
 ```
+
+Use `./scripts/run-local-letai-game-test.sh --help-all` to see the full
+advanced/debug option list.
 
 ### 5. Start the bridge manually for diagnostics
 

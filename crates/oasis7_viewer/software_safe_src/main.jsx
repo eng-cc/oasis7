@@ -1047,12 +1047,26 @@ function starterOcCreditVisibleForCurrentAgent() {
   if (!agentId) {
     return false;
   }
-  const state = core.state.snapshot?.model || core.state.snapshot || {};
-  const starterOcClaim = state.starter_oc_claims?.[agentId] || state.starterOcClaims?.[agentId] || null;
+  const snapshot = core.state.snapshot || {};
+  const model = snapshot.model || {};
+  const runtimeState = model.state || snapshot.state || model;
+  const starterOcClaim = runtimeState.starter_oc_claims?.[agentId]
+    || runtimeState.starterOcClaims?.[agentId]
+    || model.starter_oc_claims?.[agentId]
+    || model.starterOcClaims?.[agentId]
+    || snapshot.starter_oc_claims?.[agentId]
+    || snapshot.starterOcClaims?.[agentId]
+    || null;
   if (starterOcClaim) {
     return true;
   }
-  const balance = state.main_token_balances?.[agentId] || state.mainTokenBalances?.[agentId] || null;
+  const balance = runtimeState.main_token_balances?.[agentId]
+    || runtimeState.mainTokenBalances?.[agentId]
+    || model.main_token_balances?.[agentId]
+    || model.mainTokenBalances?.[agentId]
+    || snapshot.main_token_balances?.[agentId]
+    || snapshot.mainTokenBalances?.[agentId]
+    || null;
   const liquidBalance = Number(claimField(balance, "liquid_balance", "liquidBalance", "liquid", "balance") || 0);
   return Number.isFinite(liquidBalance) && liquidBalance > 0;
 }
@@ -1107,19 +1121,15 @@ function firstAgentChatAction(gameplay) {
     || null;
 }
 
-function StarterOcOnboardingPanel(props) {
+function StarterOcGuide(props) {
   const locale = () => props.locale;
-  const gameplay = () => props.gameplay;
-  const action = () => starterOcAction(gameplay());
-  const waitingForFirstAgent = () => Boolean(props.waitingForFirstAgent);
-  const hideActionButton = () => Boolean(props.hideActionButton);
   return (
     <div class="stack stack--compact">
       <div class="feedback-summary">
         {tr(
           locale(),
-          "等待同步时不用空等：先了解下一步。Agent 出现后，先领取第一笔 OC，再用它开启第一次 Agent 聊天和早期玩法操作。",
-          "Do not idle through sync: learn the next step now. Once the Agent appears, claim the first OC, then use it to unlock the first Agent chat and early gameplay actions.",
+          "等待同步时不用空等：先了解下一步。第一笔 OC 是新手启动资金，入账后会解锁第一次 Agent 聊天和早期玩法操作。",
+          "Do not idle through sync: learn the next step now. The first OC is starter budget; once credited, it unlocks the first Agent chat and early gameplay actions.",
         )}
       </div>
       <div class="summary-grid">
@@ -1136,6 +1146,19 @@ function StarterOcOnboardingPanel(props) {
           <div class="metric__value">{tr(locale(), "指挥 Agent 恢复产线", "Guide the Agent")}</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StarterOcOnboardingPanel(props) {
+  const locale = () => props.locale;
+  const gameplay = () => props.gameplay;
+  const action = () => starterOcAction(gameplay());
+  const waitingForFirstAgent = () => Boolean(props.waitingForFirstAgent);
+  const hideActionButton = () => Boolean(props.hideActionButton);
+  return (
+    <div class="stack stack--compact">
+      <StarterOcGuide locale={locale()} />
       <Show when={!hideActionButton()}>
         <Show
           when={action()}
@@ -1193,7 +1216,9 @@ function StarterOcRequiredGate() {
   const action = () => starterOcAction(gameplay());
   const submittedFeedback = () => starterOcSubmittedFeedback();
   const pendingCredit = () => starterOcClaimPendingForCurrentAgent() || Boolean(submittedFeedback());
-  const creditConfirmed = () => pendingCredit() && starterOcCreditVisibleForCurrentAgent() && !rawStarterOcActionAvailable();
+  const creditConfirmed = () => pendingCredit()
+    && (starterOcCreditVisibleForCurrentAgent() || Boolean(firstAgentChatAction(gameplay())))
+    && !rawStarterOcActionAvailable();
   const progressionAction = () => gameplayProgressionAction(gameplay());
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action) => action.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
@@ -1202,7 +1227,7 @@ function StarterOcRequiredGate() {
     if (creditConfirmed()) {
       return chatAction();
     }
-    return pendingCredit() ? progressionAction() : action();
+    return pendingCredit() ? snapshotRefreshAction() || progressionAction() : action();
   };
   let primaryButtonRef;
   let scheduledAutoConfirmAttempt = -1;
@@ -1296,13 +1321,13 @@ function StarterOcRequiredGate() {
                     {creditConfirmed()
                       ? tr(
                         locale(),
-                        "第一笔 OC 已经写入本地 testnet 快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。",
-                        "The first OC is now visible in the local testnet snapshot. You can start the first Agent chat and continue early gameplay actions.",
+                        "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。",
+                        "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.",
                       )
                       : tr(
                         locale(),
-                        "领取请求已经提交。系统正在自动推进并刷新本地 testnet，确认这笔初始 OC 写入可见快照。",
-                        "The claim was submitted. The system is automatically advancing and refreshing the local testnet to confirm the starter OC in the visible snapshot.",
+                        "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。",
+                        "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.",
                       )}
                   </div>
                   <div class="summary-grid">
@@ -1331,6 +1356,7 @@ function StarterOcRequiredGate() {
                       </div>
                     </div>
                   </div>
+                  <StarterOcGuide locale={locale()} />
                 </div>
               )}
             >
@@ -1346,8 +1372,8 @@ function StarterOcRequiredGate() {
                 : pendingCredit()
                 ? tr(
                   locale(),
-                  "不用空等：系统会自动推进确认。若本地 testnet 暂时没有回执，下面的按钮可以手动补一次确认。",
-                  "No need to idle: confirmation runs automatically. If the local testnet has not responded yet, the button below can retry one confirmation.",
+                  "不用空等：系统会自动推进确认。若本地世界暂时没有回执，下面的按钮可以手动补一次确认。",
+                  "No need to idle: confirmation runs automatically. If the local world has not responded yet, the button below can retry one confirmation.",
                 )
                 : tr(
                   locale(),

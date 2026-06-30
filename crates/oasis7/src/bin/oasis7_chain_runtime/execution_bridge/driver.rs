@@ -31,12 +31,12 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
+#[cfg(test)]
+pub(crate) use super::driver_persistence::load_execution_world;
 pub(crate) use super::driver_persistence::{
     load_execution_bridge_state, load_execution_world_with_policy, persist_execution_bridge_state,
-    persist_execution_world_with_chain_resource_context,
+    persist_execution_world, persist_execution_world_with_chain_resource_context,
 };
-#[cfg(test)]
-pub(crate) use super::driver_persistence::{load_execution_world, persist_execution_world};
 use super::external_effect::{
     build_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
@@ -109,6 +109,12 @@ fn remove_partial_execution_world_persistence_files(world_dir: &Path) -> Result<
     Ok(())
 }
 
+fn execution_world_persistence_files_missing(world_dir: &Path) -> bool {
+    let snapshot_path = world_dir.join("snapshot.json");
+    let journal_path = world_dir.join("journal.json");
+    !snapshot_path.exists() || !journal_path.exists()
+}
+
 impl NodeRuntimeExecutionDriver {
     pub(crate) fn new(
         state_path: std::path::PathBuf,
@@ -136,6 +142,8 @@ impl NodeRuntimeExecutionDriver {
         let release_security_policy =
             release_security_policy_for_storage_profile(storage_profile.profile);
         remove_partial_execution_world_persistence_files(world_dir.as_path())?;
+        let execution_world_bootstrap_required =
+            execution_world_persistence_files_missing(world_dir.as_path());
         let execution_world =
             load_execution_world_with_policy(world_dir.as_path(), release_security_policy)?;
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
@@ -154,8 +162,20 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
+        let simulator_world_bootstrap_required =
+            execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
+        if execution_world_bootstrap_required {
+            persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
+        }
+        if simulator_world_bootstrap_required {
+            persist_simulator_execution_world(
+                driver.simulator_world_dir.as_path(),
+                &driver.simulator_mirror,
+                None,
+            )?;
+        }
         Ok(driver)
     }
 

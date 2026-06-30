@@ -7,7 +7,7 @@ use crate::runtime::{
 use std::net::ToSocketAddrs;
 
 const CHAIN_GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
-const CHAIN_LINK_TIMEOUT_MS: u64 = 300;
+const CHAIN_LINK_TIMEOUT_MS: u64 = 1_500;
 const MAX_CHAIN_LINK_HTTP_RESPONSE_BYTES: usize = 1_048_576;
 
 #[derive(Debug, serde::Deserialize)]

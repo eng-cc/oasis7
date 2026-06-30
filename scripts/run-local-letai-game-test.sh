@@ -40,6 +40,8 @@ STARTUP_PROFILE="strict"
 PROVIDER_SMOKE_MODE=""
 PROVIDER_SMOKE_MODE_SET="0"
 REUSE_EXISTING_BUILD="0"
+LOCAL_WORLD_PLAYTEST_PRESET="0"
+STARTUP_PROFILE_SET="0"
 SOURCE_BIN_DIR="${OASIS7_LOCAL_LETAI_SOURCE_BIN_DIR:-$ROOT_DIR/target/debug}"
 VIEWER_DIST_DIR="${OASIS7_LOCAL_LETAI_VIEWER_DIST_DIR:-$ROOT_DIR/crates/oasis7_viewer/dist}"
 LAUNCHER_ARGS=()
@@ -49,21 +51,53 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/run-local-letai-game-test.sh [options] [-- launcher args...]
 
-Start the canonical local real LetAI gameplay test stack:
-1. load the operator-owned LetAI config
-2. start the local provider bridge on 127.0.0.1:5841
-3. validate chat-completions through the Rust provider bridge smoke path
-4. start run-launcher-stack.sh pointed at that bridge
+Daily manual local-only world playtest:
 
-Use this wrapper instead of manually stitching together the provider bridge and
-run-launcher-stack.sh when validating local provider-backed gameplay or
-agent_chat behavior.
-This wrapper is the canonical local real-play entrypoint: it normalizes platform
-credentials into a temporary token config, forwards auto-topup settings, starts
-the Rust provider bridge, and then launches the game stack. Direct binary
-startup is for low-level debugging only and must mirror these env vars by hand.
+  ./scripts/run-local-letai-game-test.sh --local-world-playtest
 
-Options:
+This starts the canonical local real LetAI gameplay stack: token config
+normalization, provider bridge, launcher/runtime/viewer, and a local standalone
+chain commit -> snapshot loop. It does not connect to public_testnet/formal
+testnet. Direct binary startup is for low-level debugging only and must mirror
+these env vars by hand.
+
+Common options:
+  --local-world-playtest    Daily manual local-only world preset. Implies
+                              playtest startup, provider smoke skip, reuse build,
+                              detach, manual Play, ports 48420/48421/48422,
+                              --json-ready, and local standalone chain mode.
+  --config <path>           LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
+                              /Users/scc/Documents/keys/letai.txt, then token-local fallback)
+  --output-dir <path>       Launcher output dir; bridge log goes there too
+  --preflight-only          Check local prerequisites and print the startup plan without launching
+  --dry-run-launch          Print the resolved launcher plan without starting bridge or launcher
+  --help-all                Show advanced/debug/compatibility options
+  -h, --help                Show this help
+
+Default startup launches the lower-level stack with chain runtime enabled in
+local standalone test mode. That mode keeps the local submit -> commit ->
+snapshot loop self-contained for manual playtest, and the path is considered
+ready only after the launcher-managed chain runtime also materializes
+`reward-runtime-execution-world/snapshot.json` and `journal.json`. If the page
+briefly opens and then reports `viewer.ws` errors, inspect
+`<output-dir>/launcher/oasis7_viewer_live.log` for that persistence ready gate
+before treating the Viewer as the root cause.
+
+Passing `-- --chain-disable` after this wrapper's options is a local page-play
+mitigation only. It can keep the Viewer/WebSocket stable for manual inspection,
+but it does not prove the local standalone chain-enabled world path is healthy.
+
+Examples:
+  ./scripts/run-local-letai-game-test.sh --local-world-playtest
+  # Then open GAME_URL from output/local-letai-game-test/<run>/launcher/session.meta
+USAGE
+}
+
+usage_all() {
+  usage
+  cat <<'USAGE'
+
+Advanced/debug/compatibility options:
   --config <path>             LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
                               /Users/scc/Documents/keys/letai.txt, then token-local fallback)
   --model <id>                LetAI model override (default: gpt-5.4 via helper)
@@ -78,7 +112,7 @@ Options:
   --auto-play                 Start gameplay/world progression on viewer connection
   --no-auto-play              Require manual Play before gameplay/world progression (default)
   --deployment-mode <mode>    Launcher deployment mode (default: trusted_local_only)
-  --hosted-public-join        Use hosted_public_join instead of the local trusted playtest chain
+  --hosted-public-join        Legacy compatibility only; hosted-public-join/testnet attach uses a different runbook
   --chat-probe-backend <name> rust-bridge|legacy-cli|none (default: rust-bridge)
   --skip-chat-probe           Alias for --chat-probe-backend none
   --startup-profile <mode>    strict|playtest (playtest keeps page startup usable when provider smoke degrades)
@@ -98,10 +132,12 @@ Options:
                               Runtime provider decision timeout (default: 60000)
   --output-dir <path>         Launcher output dir; bridge log goes there too
   --detach                    Start the stack in the background and return after spawning
-  -h, --help                  Show help
 
 Examples:
-  ./scripts/run-local-letai-game-test.sh
+  ./scripts/run-local-letai-game-test.sh --local-world-playtest
+  ./scripts/run-local-letai-game-test.sh --local-world-playtest -- --viewer-port 4174 --json-ready
+
+Legacy strict-provider diagnostic shape:
   ./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
 USAGE
 }
@@ -191,6 +227,43 @@ planned_launcher_ports() {
   printf 'viewer HTTP\t%s\n' "$viewer_port"
   printf 'live TCP\t%s\n' "$(addr_port "$live_bind")"
   printf 'web bridge\t%s\n' "$(addr_port "$web_bind")"
+}
+
+launcher_arg_present() {
+  local needle="$1"
+  local index=0
+  while [[ "$index" -lt "${#LAUNCHER_ARGS[@]}" ]]; do
+    if [[ "${LAUNCHER_ARGS[$index]}" == "$needle" ]]; then
+      return 0
+    fi
+    index=$((index + 1))
+  done
+  return 1
+}
+
+append_launcher_arg_default() {
+  local flag="$1"
+  shift
+  if launcher_arg_present "$flag"; then
+    return 0
+  fi
+  LAUNCHER_ARGS+=("$flag" "$@")
+}
+
+append_launcher_switch_default() {
+  local flag="$1"
+  if launcher_arg_present "$flag"; then
+    return 0
+  fi
+  LAUNCHER_ARGS+=("$flag")
+}
+
+planned_chain_profile() {
+  if launcher_arg_present --chain-disable; then
+    echo "disabled"
+  else
+    echo "local-standalone"
+  fi
 }
 
 required_source_bins() {
@@ -314,6 +387,19 @@ print_launch_plan() {
   echo "local LetAI game test launch plan"
   echo "startup_profile=$STARTUP_PROFILE"
   echo "provider_smoke_mode=$PROVIDER_SMOKE_MODE"
+  echo "provider_bind=$BIND_ADDR"
+  echo "source_build=$([[ "$REUSE_EXISTING_BUILD" == "1" ]] && echo reuse-existing || echo build-if-needed)"
+  echo "auto_play=$([[ "$AUTO_PLAY" == "1" ]] && echo enabled || echo disabled)"
+  echo "chain_profile=$(planned_chain_profile)"
+  echo "launcher_ports:"
+  planned_launcher_ports | sed 's/^/  /'
+  if [[ "${#LAUNCHER_ARGS[@]}" -gt 0 ]]; then
+    printf 'launcher_passthrough='
+    printf '%q ' "${LAUNCHER_ARGS[@]}"
+    printf '\n'
+  else
+    echo "launcher_passthrough=(none)"
+  fi
   case "$PROVIDER_SMOKE_MODE" in
     strict)
       echo "bridge_smoke=required"
@@ -338,6 +424,10 @@ print_launch_plan() {
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --local-world-playtest)
+      LOCAL_WORLD_PLAYTEST_PRESET="1"
+      shift
+      ;;
     --config)
       CONFIG_PATH="${2:-}"
       shift 2
@@ -404,6 +494,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --startup-profile)
       STARTUP_PROFILE="${2:-}"
+      STARTUP_PROFILE_SET="1"
       shift 2
       ;;
     --provider-smoke-mode)
@@ -461,6 +552,10 @@ while [[ $# -gt 0 ]]; do
       usage
       exit 0
       ;;
+    --help-all)
+      usage_all
+      exit 0
+      ;;
     --)
       shift
       LAUNCHER_ARGS+=("$@")
@@ -473,6 +568,24 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$LOCAL_WORLD_PLAYTEST_PRESET" == "1" ]]; then
+  if [[ "$STARTUP_PROFILE_SET" == "0" ]]; then
+    STARTUP_PROFILE="playtest"
+  fi
+  if [[ "$PROVIDER_SMOKE_MODE_SET" == "0" ]]; then
+    PROVIDER_SMOKE_MODE="skip"
+    PROVIDER_SMOKE_MODE_SET="1"
+  fi
+  REUSE_EXISTING_BUILD="1"
+  DETACH="1"
+  AUTO_PLAY="0"
+  CHAT_ECHO="0"
+  append_launcher_arg_default --viewer-port 48420
+  append_launcher_arg_default --web-bind 127.0.0.1:48421
+  append_launcher_arg_default --live-bind 127.0.0.1:48422
+  append_launcher_switch_default --json-ready
+fi
 
 if [[ -z "$CONFIG_PATH" || -z "$BIND_ADDR" || -z "$BRIDGE_AUTO_TOPUP_USD" || -z "$BRIDGE_SMOKE_ATTEMPTS" || -z "$DEPLOYMENT_MODE" || -z "$CHAT_PROBE_BACKEND" || -z "$CHAT_PROBE_TIMEOUT_MS" || -z "$CHAT_PROBE_ATTEMPTS" || -z "$CHAT_PROBE_RETRY_DELAY_MS" || -z "$AGENT_PROVIDER_CONNECT_TIMEOUT_MS" ]]; then
   echo "error: empty --config, --bind, --deployment-mode, --auto-topup-usd, --bridge-smoke-attempts, --chat-probe-backend, --chat-probe-timeout-ms, --chat-probe-attempts, --chat-probe-retry-delay-ms, or --agent-provider-connect-timeout-ms is not allowed" >&2
@@ -825,6 +938,7 @@ fi
 LAUNCHER_CMD=(
   "$ROOT_DIR/scripts/run-launcher-stack.sh"
   "${LAUNCHER_MODE_ARGS[@]}"
+  --chain-local-standalone-test
   --agent-decision-source provider_backed \
   --agent-provider-url "http://$BIND_ADDR" \
   --output-dir "$OUTPUT_DIR/launcher"

@@ -87,6 +87,68 @@ fn empty_runtime_snapshot_publishes_first_agent_claim_action() {
 }
 
 #[test]
+fn formal_release_empty_runtime_snapshot_publishes_first_agent_claim_action() {
+    let mut server = super::super::ViewerRuntimeLiveServer::new(
+        super::super::ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_decision_mode(super::super::ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    let snapshot = server.compat_snapshot(Some("new-player"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("first-agent claim action");
+    assert_eq!(action.protocol_action, "gameplay_action.submit");
+    assert_eq!(
+        action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(action.disabled_reason.is_none());
+}
+
+#[test]
+fn stale_starter_binding_without_runtime_agent_keeps_first_agent_claim_action() {
+    let mut server = super::super::ViewerRuntimeLiveServer::new(
+        super::super::ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_decision_mode(super::super::ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server
+        .llm_sidecar
+        .bind_agent_player(
+            crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID,
+            "stale-player",
+            None,
+            false,
+        )
+        .expect("seed stale binding");
+    server.world = crate::runtime::World::new_production_hardened();
+    assert!(server.world.state().agents.is_empty());
+
+    let snapshot = server.compat_snapshot(Some("new-player"));
+    let gameplay = snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    let action = gameplay
+        .available_actions
+        .iter()
+        .find(|action| action.action_id == crate::viewer::ACTION_CLAIM_FIRST_AGENT)
+        .expect("first-agent claim action");
+    assert_eq!(
+        action.target_agent_id.as_deref(),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(action.disabled_reason.is_none());
+}
+
+#[test]
 fn existing_world_without_bound_agent_publishes_first_agent_claim_action() {
     let mut world = crate::runtime::World::new_production_hardened();
     world.submit_action(crate::runtime::Action::RegisterAgent {

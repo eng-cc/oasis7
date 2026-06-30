@@ -57,9 +57,8 @@
 
       <section id="quickstart" class="section" data-reveal>
         <h2>本地真实 LLM 游戏测试</h2>
-        <pre><code>./scripts/run-local-letai-game-test.sh
-./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready</code></pre>
-        <p>本地真实 LetAI provider-backed 游戏试玩统一从该 wrapper 启动。它会处理 token config、chat probe、provider bridge、provider contract smoke 与 launcher/runtime/viewer 启动；脚本输出的 <code>GAME_URL</code> 是手工试玩和 agent-browser 留证入口。</p>
+        <pre><code>./scripts/run-local-letai-game-test.sh --local-world-playtest</code></pre>
+        <p>本地真实 LetAI provider-backed 游戏试玩统一从该 preset 启动。它会处理 token config、provider bridge、launcher/runtime/viewer/local-standalone-chain 启动与日常试玩端口 <code>48420/48421/48422</code>；它不连接 formal/public testnet。脚本输出的 <code>GAME_URL</code> 是手工试玩和 agent-browser 留证入口。</p>
         <p>不要把裸 <code>run-viewer-web.sh</code> 当作本地真实 provider-backed gameplay 启动方式；它只属于下方 Viewer/debug 闭环。</p>
 
         <h2>底层 Viewer Debug 快速开始</h2>

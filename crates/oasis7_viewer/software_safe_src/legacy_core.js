@@ -2666,10 +2666,16 @@ function adoptHostedRecoveryAck(ack) {
     pendingSessionRegisterWaiter = null;
     waiter.resolve(ack);
   }
+  if (ack.status === "session_registered") {
+    requestSnapshotSafe();
+  }
 }
 
 async function recoverHostedSessionFromError(error) {
-  if (!canAutoIssueHostedPlayerSession() || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (
+    (!canAutoIssueHostedPlayerSession() && !state.auth.available)
+    || state.auth.source === "legacy_viewer_auth_bootstrap"
+  ) {
     return;
   }
   const code = String(error?.code || "").trim();
