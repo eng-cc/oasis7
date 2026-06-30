@@ -56,27 +56,38 @@ def relative(root: pathlib.Path, path: pathlib.Path) -> str:
     return str(path.relative_to(root))
 
 
+def record_status_counts(records: list[dict[str, Any]]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for record in records:
+        status = str(((record.get("task") or {}).get("status") or ""))
+        if status:
+            counts[status] += 1
+    return dict(sorted(counts.items()))
+
+
 def build_archive(root: pathlib.Path, mapping_path: pathlib.Path, archive_path: pathlib.Path) -> dict[str, Any]:
     mapping = load_mapping(mapping_path)
     mapped_tasks = mapping.get("tasks", {})
-    records: list[dict[str, Any]] = []
+    records_by_uid: OrderedDict[str, dict[str, Any]] = OrderedDict()
     errors: list[str] = []
-    status_counts: Counter[str] = Counter()
     archived_at = datetime.now().astimezone().isoformat(timespec="seconds")
 
-    task_paths = sorted((root / ".pm/tasks").glob("task_*.yaml"))
-    if not task_paths and archive_path.exists():
+    if archive_path.exists():
         for line in archive_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             record = json.loads(line)
-            status_counts[str(((record.get("task") or {}).get("status") or ""))] += 1
-            records.append(record)
+            task_uid = str(record.get("task_uid") or ((record.get("task") or {}).get("task_uid") or ""))
+            if task_uid:
+                records_by_uid[task_uid] = record
+
+    task_paths = sorted((root / ".pm/tasks").glob("task_*.yaml"))
+    if not task_paths and archive_path.exists():
         return {
             "status": "ok",
             "archive_path": str(archive_path),
-            "selected_count": len(records),
-            "status_counts": dict(sorted((key, value) for key, value in status_counts.items() if key)),
+            "selected_count": len(records_by_uid),
+            "status_counts": record_status_counts(list(records_by_uid.values())),
             "errors": [],
             "archive_reused": True,
         }
@@ -113,38 +124,35 @@ def build_archive(root: pathlib.Path, mapping_path: pathlib.Path, archive_path: 
             execution_log_text = execution_log_path.read_text(encoding="utf-8")
         task_text = task_path.read_text(encoding="utf-8")
         task["task_path"] = relative(root, task_path)
-        records.append(
-            {
-                "task_uid": task_uid,
-                "archived_at": archived_at,
-                "task_path": relative(root, task_path),
-                "task_sha256": sha256_text(task_text),
-                "task": task,
-                "execution_log_path": execution_log_rel,
-                "execution_log_sha256": sha256_text(execution_log_text),
-                "execution_log_text": execution_log_text,
-                "github_project_mapping": record,
-            }
-        )
-        status_counts[status] += 1
-
+        records_by_uid[task_uid] = {
+            "task_uid": task_uid,
+            "archived_at": archived_at,
+            "task_path": relative(root, task_path),
+            "task_sha256": sha256_text(task_text),
+            "task": task,
+            "execution_log_path": execution_log_rel,
+            "execution_log_sha256": sha256_text(execution_log_text),
+            "execution_log_text": execution_log_text,
+            "github_project_mapping": record,
+        }
     archive_path.parent.mkdir(parents=True, exist_ok=True)
+    status_counts = record_status_counts(list(records_by_uid.values()))
     if errors:
         return {
             "status": "failed",
             "archive_path": str(archive_path),
-            "selected_count": len(records),
-            "status_counts": dict(sorted(status_counts.items())),
+            "selected_count": len(records_by_uid),
+            "status_counts": status_counts,
             "errors": errors,
         }
     with archive_path.open("w", encoding="utf-8") as handle:
-        for record in records:
+        for record in records_by_uid.values():
             handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
     return {
         "status": "ok",
         "archive_path": str(archive_path),
-        "selected_count": len(records),
-        "status_counts": dict(sorted(status_counts.items())),
+        "selected_count": len(records_by_uid),
+        "status_counts": status_counts,
         "errors": [],
         "archive_reused": False,
     }

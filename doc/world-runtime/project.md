@@ -262,8 +262,7 @@
     - `doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md`
     - `doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md`
     - `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
-    - `.pm/tasks/task_f0830d708c3b4f7abeea8cecf73053e4.yaml`
-    - `.pm/tasks/task_f0830d708c3b4f7abeea8cecf73053e4.execution.md`
+    - GitHub task issue evidence comments / mapping-backed task trace
   - 验收命令 (`test_tier_required`):
     - `rg -n "PRD-WORLD_RUNTIME-036|wasm-observability-timing-metrics|/v1/chain/status.wasm" doc/world-runtime/prd.md doc/world-runtime/project.md doc/world-runtime/README.md doc/world-runtime/prd.index.md doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
     - `./scripts/doc-governance-check.sh`
@@ -278,8 +277,7 @@
     - `fixtures/wasm_metrics_monitor/reset/001.json`
     - `fixtures/wasm_metrics_monitor/reset/002.json`
     - `fixtures/wasm_metrics_monitor/reset/003.json`
-    - `.pm/tasks/task_b2d79d858df949e3bddcee89b2fb9195.yaml`
-    - `.pm/tasks/task_b2d79d858df949e3bddcee89b2fb9195.execution.md`
+    - GitHub task issue evidence comments / mapping-backed task trace
     - `doc/world-runtime/project.md`
     - `doc/world-runtime/wasm/wasm-observability-timing-metrics.project.md`
   - 验收命令 (`test_tier_required`):
@@ -729,17 +727,17 @@
 - 更新日期: 2026-05-26
 - 当前状态: in_progress
 - 下一任务: 无 WDBP-3.2/P0 后续阻塞；后续按 `TASK-WORLD_RUNTIME-002/003/004` 承接。
-- 当前窗口摘要: provider/runtime live traceability、WASM Docker builder image/wrapper、build receipt/canonical token/identity/CI summary、receipt-aware release gate、node-side proof flow、真实 Docker-capable `darwin-arm64` live evidence 与近期 runtime 技术债 tranche 均已收口；Darwin evidence closure 由 `Wasm Darwin Docker Evidence` main run `28297899706` 的 GitHub Actions artifact/run evidence 记录，后续长期复核以 run URL、job id 与 `.pm` evidence log 为索引。Trace: .pm/tasks/task_0a6477b5b6b34b869c8b85c81c554dc0.yaml
-- 当前窗口补充（2026-06-27 / hosted macOS Docker probe）: 该 probe 记录的是 self-hosted runner 注册前的历史诊断，当时仓库尚未注册可承接该 workflow 的 runner；当前 WDBP-3.2 正式 closure 已由 self-hosted runner `oasis7-Mac-darwin-arm64-docker` 与 main run `28297899706` 承接。GitHub-hosted macOS ARM64 Docker capability probe 仅采集 Docker/`linux/amd64` container 能力诊断 artifact，显式 `release_evidence=false`，不替代 canonical release evidence。Trace: .pm/tasks/task_fef95d44dbba4048b574d68138431371.yaml
-- 近期收口: viewer-live integration flake、builtin-wasm integer centimeter contract、node observability、wasm timing metrics、fetch-commit / peer-record backoff、traffic/finality/consensus health metrics 与 chain-linked passive world progress 已完成；详情回看对应任务项、topic project 与 `.pm` execution logs。
-- 历史追溯: 更早 `TASK-WORLD_RUNTIME-*` 完成项不再在状态区逐条追加；需要追 WASM builder、runtime storage、release policy、source compile、module release 或 node observability 历史时，先从上方任务项、`doc/world-runtime/prd.index.md`、topic project 与 `.pm/tasks/*.execution.md` 进入。
+- 当前窗口摘要: provider/runtime live traceability、WASM Docker builder image/wrapper、build receipt/canonical token/identity/CI summary、receipt-aware release gate、node-side proof flow、真实 Docker-capable `darwin-arm64` live evidence 与近期 runtime 技术债 tranche 均已收口；Darwin evidence closure 由 `Wasm Darwin Docker Evidence` main run `28297899706` 的 GitHub Actions artifact/run evidence 记录，后续长期复核以 run URL、job id 与 GitHub task issue evidence comments 为索引。Trace: GitHub task issue evidence comments / mapping-backed task trace
+- 当前窗口补充（2026-06-27 / hosted macOS Docker probe）: 该 probe 记录的是 self-hosted runner 注册前的历史诊断，当时仓库尚未注册可承接该 workflow 的 runner；当前 WDBP-3.2 正式 closure 已由 self-hosted runner `oasis7-Mac-darwin-arm64-docker` 与 main run `28297899706` 承接。GitHub-hosted macOS ARM64 Docker capability probe 仅采集 Docker/`linux/amd64` container 能力诊断 artifact，显式 `release_evidence=false`，不替代 canonical release evidence。Trace: GitHub task issue evidence comments / mapping-backed task trace
+- 近期收口: viewer-live integration flake、builtin-wasm integer centimeter contract、node observability、wasm timing metrics、fetch-commit / peer-record backoff、traffic/finality/consensus health metrics 与 chain-linked passive world progress 已完成；详情回看对应任务项、topic project 与 GitHub task issue evidence comments。
+- 历史追溯: 更早 `TASK-WORLD_RUNTIME-*` 完成项不再在状态区逐条追加；需要追 WASM builder、runtime storage、release policy、source compile、module release 或 node observability 历史时，先从上方任务项、`doc/world-runtime/prd.index.md`、topic project 与 GitHub task issue evidence comments 进入。
 - 阶段收口优先级: `P0`
 - 阶段 owner: `wasm_platform_engineer`（联审：`producer_system_designer`、`runtime_engineer`；验证：`qa_engineer`）
 - 阻断条件: 在 `TASK-WORLD_RUNTIME-002/003/004` 完成前，`TASK-WORLD_RUNTIME-033` 不再作为当前版本的首要发布驱动项。
 - 承接约束: `TASK-WORLD_RUNTIME-002` 完成后方可进入 `TASK-WORLD_RUNTIME-003` 与 `TASK-WORLD_RUNTIME-004`；`TASK-WORLD_RUNTIME-033` 保留为后续联合验证切片。
-- 实施备注: `TASK-WORLD_RUNTIME-043` 已完成；当前状态区仅保留后续 `TASK-WORLD_RUNTIME-002/003/004` 承接约束，已完成切片统一回看上方任务项、topic project 与 `.pm` execution log。
+- 实施备注: `TASK-WORLD_RUNTIME-043` 已完成；当前状态区仅保留后续 `TASK-WORLD_RUNTIME-002/003/004` 承接约束，已完成切片统一回看上方任务项、topic project 与 GitHub task issue evidence comments。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 说明: 本文档仅维护 world-runtime 模块设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
+- 说明: 本文档仅维护 world-runtime 模块设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。
 
 ## 阶段收口角色交接
 ### Meta
@@ -783,13 +781,13 @@
 - 代码改动：如需，仅限支撑 runtime 验收与指标暴露的必要实现。
 - 文档回写：`doc/world-runtime/project.md` 与相关专题文档。
 - 测试记录：补齐 runtime `test_tier_required`，必要时标注后续 `test_tier_full`。
-- 任务证据记录：在对应 `.pm/tasks/task_<32hex>.execution.md` 记录验收项、风险与下一切片。
+- 任务证据记录：在对应 GitHub task issue evidence comments 记录验收项、风险与下一切片。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- 任务证据已记录到对应 `.pm/tasks/task_<32hex>.execution.md`
+- 任务证据已记录到对应 GitHub task issue evidence comments
 - [ ] required/full 测试证据已补齐或明确挂起原因
 
 ### Risks / Decisions

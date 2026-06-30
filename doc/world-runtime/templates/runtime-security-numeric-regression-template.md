@@ -52,4 +52,4 @@
 - 是否同时覆盖安全与数值两大维度。
 - 是否为每一项填写命令 / 方法、证据路径、结果与失败签名。
 - `fail/blocked` 是否已有问题 ID 与负责人。
-- 是否已将结果回写 `doc/world-runtime/project.md` 与对应 `.pm/tasks/task_<32hex>.execution.md`。
+- 是否已将结果回写 `doc/world-runtime/project.md` 与对应 GitHub task issue evidence comments。

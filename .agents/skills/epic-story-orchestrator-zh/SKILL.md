@@ -53,7 +53,7 @@ metadata:
     root: doc/game/lore/<story-slug>/
     append_only:
       - canon-log.md
-      - .pm/tasks/<TASK-UID>.execution.md
+      - GitHub task issue evidence comments
   permissions:
     no_delete: true
     require_explicit_confirmation_for:
@@ -211,7 +211,7 @@ Verify timeline consistency, character-state consistency, and term drift.
 
 ### 8) Formal Writeback Gate
 
-If bound to `.pm` task, append execution note to `.pm/tasks/<TASK-UID>.execution.md` with:
+If bound to GitHub-backed task truth, append execution note to GitHub task issue evidence comments with:
 
 - Action
 - Validation Command

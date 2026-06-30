@@ -47,10 +47,21 @@ cat > "$TMPDIR/.pm/github-project-sync/tasks.json" <<'JSON'
       "issue_url": "https://github.com/eng-cc/oasis7/issues/101",
       "issue_number": 101,
       "project_item_id": "ITEM_ID"
+    },
+    "task_22222222222222222222222222222222": {
+      "task_uid": "task_22222222222222222222222222222222",
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/202",
+      "issue_number": 202,
+      "project_item_id": "OLD_ITEM_ID",
+      "status": "done"
     }
   }
 }
 JSON
+
+cat > "$TMPDIR/.pm/github-project-sync/task-archive.jsonl" <<'JSONL'
+{"archived_at":"2026-06-29T00:00:00+08:00","execution_log_path":".pm/tasks/task_22222222222222222222222222222222.execution.md","execution_log_sha256":"old-log","execution_log_text":"old evidence","github_project_mapping":{"issue_number":202,"issue_url":"https://github.com/eng-cc/oasis7/issues/202","project_item_id":"OLD_ITEM_ID"},"task":{"status":"done","task_uid":"task_22222222222222222222222222222222","title":"already archived task"},"task_path":".pm/tasks/task_22222222222222222222222222222222.yaml","task_sha256":"old-task","task_uid":"task_22222222222222222222222222222222"}
+JSONL
 
 RETIRE_JSON="$TMPDIR/retire.json"
 python3 "$TMPDIR/github-project-retire-tasks.py" "$TMPDIR" \
@@ -64,10 +75,13 @@ python3 - "$RETIRE_JSON" "$TMPDIR/.pm/github-project-sync/task-archive.jsonl" <<
 import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 archive = pathlib.Path(sys.argv[2]).read_text().splitlines()
-record = json.loads(archive[0])
+records = [json.loads(line) for line in archive]
+record = next(item for item in records if item["task_uid"] == "task_11111111111111111111111111111111")
 assert payload["status"] == "ok", payload
-assert payload["selected_count"] == 1, payload
+assert payload["selected_count"] == 2, payload
 assert payload["deletion"]["deleted_count"] == 2, payload
+assert len(records) == 2, records
+assert any(item["task_uid"] == "task_22222222222222222222222222222222" for item in records), records
 assert record["task"]["task_uid"] == "task_11111111111111111111111111111111", record
 assert "evidence survives" in record["execution_log_text"], record
 assert payload["archive_reused"] is False, payload
@@ -90,8 +104,8 @@ payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 archive = pathlib.Path(sys.argv[2]).read_text().splitlines()
 assert payload["status"] == "ok", payload
 assert payload["archive_reused"] is True, payload
-assert payload["selected_count"] == 1, payload
-assert len(archive) == 1, archive
+assert payload["selected_count"] == 2, payload
+assert len(archive) == 2, archive
 PY
 
 cat > "$TMPDIR/bin/gh" <<'SH'
@@ -99,7 +113,7 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 set -euo pipefail
 case "$*" in
   "project item-list 1 --owner eng-cc --limit 1000 --format json")
-    printf '{"totalCount":1,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"}]}\n'
+    printf '{"totalCount":2,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"},{"id":"OLD_ITEM_ID","content":{"body":"task_uid: task_22222222222222222222222222222222","number":202,"url":"https://github.com/eng-cc/oasis7/issues/202"},"status":"Done","task UID":"task_22222222222222222222222222222222","pM Status":"done","workflow Phase":"done","test Tier Required":"n/a"}]}\n'
     ;;
   *)
     echo "unexpected gh invocation: $*" >&2
@@ -123,7 +137,7 @@ python3 - "$AUDIT_JSON" <<'PY'
 import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert payload["status"] == "ok", payload
-assert payload["selected_count"] == 1, payload
+assert payload["selected_count"] == 2, payload
 assert payload["errors"] == [], payload
 PY
 

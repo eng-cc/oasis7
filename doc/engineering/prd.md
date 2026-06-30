@@ -45,14 +45,14 @@
   - SC-14: 角色职责入口统一收敛到 `.agents/roles/*.md`，根 `AGENTS.md` 仅保留 7 个组合角色入口与协作规则。
   - SC-15: 角色协作交接统一使用 `.agents/roles/templates/` 模板，确保 handoff 信息完整、可执行、可追溯。
   - SC-16: `AGENTS.md` 的开发工作流已升级为角色协作版，明确 owner role、handoff 触发条件、QA 与 LiveOps 回流路径。
-  - SC-17: 任务执行日志 canonical 路径统一为 `.pm/tasks/task_<32hex>.execution.md`，多角色执行时单条记录必须显式标注角色。
-  - SC-18: task execution log / handoff 中的角色字段由 `.agents/roles/*.md` 白名单约束，新增别名违规数为 0。
+  - SC-17: 任务执行证据 canonical sink 统一为 GitHub task issue evidence comments，多角色执行时单条记录必须显式标注角色。
+  - SC-18: GitHub task issue evidence / handoff 中的角色字段由 `.agents/roles/*.md` 白名单约束，新增别名违规数为 0。
   - SC-19: 当任务需要其他伙伴协作时，执行主体必须切换到标准角色视角并加载对应职责卡；commit 前独立 review 只用于暴露风险/回归/缺测，不得替代 owner / role 协作语义。
   - SC-20: `engineering` 模块治理专题标题对外统一使用 `oasis7` 品牌，不再在活跃/历史治理入口中混用 `oasis7` 标题。
   - SC-21: 仓库内文件化项目管理层 `.pm/` 建档完成后，7 个标准角色的长期 memory/backlog、signal inbox、task registry 与 stage/gate 汇总具备正式专题规格与任务追踪入口。
   - SC-22: `self-evolution` 后续补强在借鉴外部 memory/reflective-agent 方案时，必须显式冻结 adopted / rejected / deferred 边界，且不引入外部真值系统替代 `.pm/`。
   - SC-23: 默认评审边界必须是在 commit 前先完成本地相关角色 subagent review evidence packet，并在有效 findings 整改或基于证据驳回后，再通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR，并以 required checks、requested changes、PR comment/thread closeout、mergeability 与 GitHub merge path 作为服务端正式 review/merge 流程；普通 PR 创建后必须继续盯 required checks/mergeability/comments，`REVIEW_REQUIRED` 只作为状态信息回报、不作为 block 项，`mergeStateStatus=BEHIND` 也只表示落后基线、若 GitHub merge path 仍接受则不必先 rebase；若 `mergeStateStatus=BLOCKED` 仅因缺少 review approval，且用户/task policy 明确授权跳过 approval，则复查 gates 后可作为正常流程使用 repo admin merge path；失败修复并重推，actionable comments 回复/整改/resolve 后，才能合入与清理。
-  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他独立 commit 前 review 脚本；但创建 PR 前必须由 TPM 新建/派发涉及到的相关专业角色 subagent 做本地 review，并将 findings/no_findings/residual_risk 与整改处置写入 task execution log。
+  - SC-24: 本地不再要求额外的 `codex-review-snapshot` 或其他独立 commit 前 review 脚本；但创建 PR 前必须由 TPM 新建/派发涉及到的相关专业角色 subagent 做本地 review，并将 findings/no_findings/residual_risk 与整改处置写入 GitHub task issue evidence comments。
   - SC-24A: 根 `AGENTS.md`、engineering 主 PRD、`self-evolution` 正式追踪、`.pm/README` 与 `workflow-report` close checklist 必须对该流程维持单一口径：默认执行“fresh verification -> pre-PR local role subagent review -> findings 处置 -> `./scripts/pm/task-closeout.sh --verify-command "<fresh verification command>"`（`workflow-report close -> move-task -> pm lint`）-> commit -> prepare-task-pr -> GitHub PR watch/fix/merge -> cleanup”；若 owner 选择手工拆步，也必须与该 helper 的底层顺序保持等价。只有明确用于 manual packaging/release CI 的 PR 才允许停在人工打包 gate。
   - SC-24B: required-tier smoke 必须断言 close checklist 不再要求 `codex-review-snapshot.sh`，而是要求 `Pre-PR Local Role Review: passed` evidence packet 并把 GitHub PR preflight / review 边界指向 `./scripts/prepare-task-pr.sh`。
   - SC-24C: 默认最终合流路径必须是 GitHub PR，而不是直接本地 landing 到 `main`；`./scripts/land-task-worktree.sh` 只保留给用户明确要求的 local-only / fallback 场景。
@@ -62,13 +62,13 @@
   - SC-24G: branch 跟进最新 `main` 时若命中 `.pm/**` rebase 冲突，仓库必须存在 repo-owned helper 统一分类冲突类别，并把唯一允许的自动修复边界收口为 `.pm/inbox/signals.jsonl` 的 signal-id 碰撞；git-ignored 本地视图只能提示“保留 `main` 删除并重建”，canonical task/memory/stage 冲突仍需人工处理。
   - SC-25: `workflow-report --phase close --task-uid <TASK-UID>` 的 working_memory 提示必须按当前 task 计数，而不是按角色全局计数；当当前 task 还没有 working_memory 时，应先提示 bootstrap/extract 入口，而不是直接提示 review/autoflow。
   - SC-26: `.pm` task 的 canonical identity 必须收敛为不依赖中心分配器的 `task_uid`；`TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名不得再作为任务身份真值，以消除多 worktree rebase/landing 时的结构性冲突。
-  - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或其他显式 evidence。
+  - SC-27: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 GitHub task issue evidence comments、正式文档或其他显式 evidence。
   - SC-28: `codex-working-memory.sh` 默认不得隐式读取当前/最近 Codex live session；若 owner 确实需要从 `.codex` transcript 提炼 working_memory，必须显式提供 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。
   - SC-29: 文档体量治理必须具备正式专题口径，明确 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 四层消费模型；高密度模块的默认阅读面只保留“what / where / next / risk”所需入口，不再把审计与归档材料直接暴露为主入口。
   - SC-29A: 当文档治理债已从“默认阅读面混乱”转向“文档存量维护成本”时，engineering 必须存在一份正式 follow-up 专题，提供可复算的库存报告入口，并明确 `历史压缩 / 路径级治理 / 近限文件拆分 / 季度复核` 四类后续动作。
   - SC-29B: 当某个热点子域进入后仍缺少 canonical 首读入口时，engineering 必须允许继续拆出路径级治理 follow-up；首条子域治理需至少为该热点路径补齐一个子目录 landing page，并把上游模块入口改成先命中该 landing page，而不是继续让 operator 手册或完整索引单独承担全部分流职责。
-  - SC-30: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须是 git-ignored 的本地生成视图，不再作为 Git 提交真值；engineering 根 `project.md` 不再承担手工 `最新完成` 长列表热点，新任务在 `project.md` 中默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，而不是新增 `TASK-XXX-123` 这类顺序编号；每个新任务项还必须固定提供 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）以追溯 canonical runtime task。
-  - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 `.pm` task 创建顺序、task execution log canonical 路径和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
+  - SC-30: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须是 git-ignored 的本地生成视图，不再作为 Git 提交真值；engineering 根 `project.md` 不再承担手工 `最新完成` 长列表热点，新任务在 `project.md` 中默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，而不是新增 `TASK-XXX-123` 这类顺序编号；每个新任务项还必须固定提供 GitHub-backed `task_uid` / issue / Project item 追溯入口。
+  - SC-31: 根 `AGENTS.md`、`.agents/roles/*.md` 与 `.agents/roles/templates/*.md` 必须对 GitHub-backed task 创建顺序、GitHub task issue evidence canonical sink 和“一个 task 收口后再开下一 task”的语义维持单一口径；当前态检查项不得再要求回写 `doc/devlog/YYYY-MM-DD.md`。
   - SC-32: 既有 `project.md` 中已经存在的顺序任务编号可作为历史追踪保留，不要求批量迁移；但新增任务项不得再把顺序编号当默认格式回流到正式项目页。
   - SC-33: 外部 agent workflow/methodology 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted / rejected / deferred 边界，并把 adopted 项转译为 repo-owned helper/eval/module follow-up；不得直接把外部 bootstrap、universal brainstorming/subagent/TDD 规则写成 oasis7 当前默认流程。
   - SC-34: `.pm` 必须提供 repo-owned task compaction 能力：当同一 owner / 同一工作流下出现仅承担 truth refresh、doc sync 或中段 burn-down 留痕的已关闭微任务时，必须能在正式 `project.md` / topic project Trace 已收口到 survivor task 后，把重复 canonical task 文件安全并档回单个聚合 task，而不是长期保留成 task 膨胀噪声。
@@ -93,7 +93,7 @@
   - PRD-ENGINEERING-003: As a 评审者, I want auditable governance evidence, so that review decisions are defensible.
   - PRD-ENGINEERING-004: As a 文档维护者, I want legacy docs migrated with per-doc manual review, so that content intent is preserved while converging to strict schema.
   - PRD-ENGINEERING-005 (historical): legacy migration collaboration principles were completed and retired; current doc topology rules live in `doc/engineering/doc-governance/doc-structure-standard.design.md`.
-  - PRD-ENGINEERING-006 (historical): legacy migration owner scopes were completed and retired; current task execution truth uses `.pm/tasks/task_<32hex>.execution.md`.
+  - PRD-ENGINEERING-006 (historical): legacy migration owner scopes were completed and retired; current task execution truth uses GitHub task issue evidence comments.
   - PRD-ENGINEERING-007 (historical): legacy migration closure review was completed and retired; current workflow gates live in `doc/engineering/workflow/source-of-truth.md`.
   - PRD-ENGINEERING-008: As a 文档维护者, I want per-module file-level PRD indexes, so that active docs are reachable from the root doc tree.
   - PRD-ENGINEERING-009: As a 治理维护者, I want bidirectional PRD<->project references enforced by gate, so that traceability never drifts.
@@ -124,13 +124,13 @@
   5. Flow-ENG-005: `冻结待迁移清单 -> 按 Owner-A/B/C/D 切分范围 -> 并行执行 -> 每日燃尽收口`
   6. Flow-ENG-006: `读取历史审读 round logs / 已删除 checklist snapshot 条目 -> 按当前模块 README / prd.index / project / prd 定位 truth -> 核对代码/重复/上下游 -> 回写偏差并复跑门禁`
   7. Flow-ENG-007: `新专题提出 -> 选择模块/专题目录 -> 判断文档职责后创建同名 PRD/Design/Project -> 更新索引 -> 评审者按统一阅读顺序审查`
-  8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/task execution log`
+  8. Flow-ENG-008: `需要其他伙伴协作 -> 切换到对应标准角色视角 -> 加载角色职责卡确认输入/输出/Done -> 按该角色执行或交接 -> owner 回写 PRD/project/GitHub task issue evidence`
   9. Flow-ENG-009: `执行过程产生 QA/liveops/producer 高价值信号 -> 写入 signal inbox -> 提升为 role memory 或 candidate task -> 进入 stage/gate 汇总 -> owner 决定是否回写正式 PRD/project`
   10. Flow-ENG-010: `评估外部 memory/reflective-agent 方案 -> 冻结 adopted/rejected/deferred 边界 -> 将可借鉴对象映射到 .pm/doc 现有结构 -> 再拆实现任务`
-  11. Flow-ENG-011: owner 创建 `.pm` task -> 系统本地生成 merge-stable `task_uid` -> task file / execution log / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
+  11. Flow-ENG-011: owner 创建 GitHub-backed task -> 系统本地生成 merge-stable `task_uid` -> GitHub issue evidence / mapping / working_memory / stage blocker 全部按 `task_uid` 引用 -> registry/backlog 视图由扫描重建并只落在 git-ignored 本地文件 -> rebase/landing 不再因顺序 task id 分配或共享视图 YAML 产生结构性冲突
   12. Flow-ENG-012: `模块文档体量超过可读阈值 -> 先区分活跃真值 / 审计留痕 / 历史归档 / 兼容跳转 -> 收紧 README / prd.index / 根入口默认暴露面 -> 再按优先级拆后续减重任务`
   13. Flow-ENG-013: `入口减重已完成但文档总量/热点路径/历史 backlog 继续增长 -> 运行 scripts/doc-inventory-report.sh -> 判断属于历史压缩/路径级治理/近限文件拆分中的哪一类 -> 再切独立 worktree 建 follow-up task`
-  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 `.pm` bootstrap；新 task worktree 必须把 ignored `target` 链接到 repo-family shared cargo target cache，减少多 worktree 重复编译产物；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 `.pm` task -> workflow-report start -> 执行与回写 -> fresh verification -> pre-PR local role subagent review -> findings 处置 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“`workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 记录 PR purpose decision；normal PR 盯 CI/mergeability/comments，`REVIEW_REQUIRED` 仅回报不阻塞，`mergeStateStatus=BEHIND` 若仍可直接 merge 也不强制 rebase，review-approval-only `BLOCKED` 可在授权后 admin merge，失败修复重推，comments 先处理/resolve；manual packaging/release CI PR 停在人工 gate -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
+  14. Flow-ENG-014: 新需求 -> 新建独立 worktree（若 owner/title/source refs 已明确，则优先通过 `new-task-worktree.sh --pm-*` 在目标 worktree 内原子完成 GitHub-backed PM bootstrap；新 task worktree 必须把 ignored `target` 链接到 repo-family shared cargo target cache，减少多 worktree 重复编译产物；若 canonical `main` worktree 根存在本地 `config.toml`，则同步复制到新 task worktree，避免 active-LLM / harness 复现因缺配置偏离 `main`）-> 创建并提升 GitHub-backed task -> workflow-report start -> 执行与回写 -> fresh verification -> pre-PR local role subagent review -> findings 处置 -> `task-closeout.sh --verify-command "<fresh verification command>"`（或等价的“`workflow-report close -> move-task --to-status done|deferred -> pm lint`”手工链）-> commit -> prepare-task-pr -> 记录 PR purpose decision；normal PR 盯 CI/mergeability/comments，`REVIEW_REQUIRED` 仅回报不阻塞，`mergeStateStatus=BEHIND` 若仍可直接 merge 也不强制 rebase，review-approval-only `BLOCKED` 可在授权后 admin merge，失败修复重推，comments 先处理/resolve；manual packaging/release CI PR 停在人工 gate -> merge/cleanup -> 若 project 仍有后续 task，则重新新建下一个 worktree/task
   15. Flow-ENG-015: `评估外部 agent workflow repo/skill -> 将模式写入 adopted/rejected/deferred 矩阵 -> 只有 adopted 项才允许转成 repo-owned follow-up（helper/eval/optional module technique）-> 对 rejected/deferred 项显式保持非默认边界`
   16. Flow-ENG-016: `只读问题 -> 先进入 default-workflow-bootstrap 并绑定标准 task/worktree 真值 -> 在已绑定 task 内判断是否只是客观事实读取 -> 若是则 TPM 直接复述证据 -> 若需要专业判断则派发对应 bounded role slice -> TPM 合流并标注角色来源 -> 若后续要改仓库则沿同一 canonical task/worktree 继续执行`
   17. Flow-ENG-017: `TPM 准备派发专业角色 slice -> 默认填入 workflow source-of-truth 的 Default subagent runtime -> 若要覆盖则在 slice contract 写明 override reason -> 再启动 subagent`
@@ -151,16 +151,16 @@
 | 角色职责卡 | 角色名、使命、owner 范围、输入、输出、决策边界、完成定义、推荐技能、检查清单 | 更新 `.agents/roles/*.md` 并在根 `AGENTS.md` 维护入口映射 | `draft -> aligned -> adopted` | 默认按 7 个组合角色稳定排序；技能仅作推荐方法，不改变 owner role | 全体贡献者可读，角色 owner 与治理维护者可改 |
 | 角色交接模板 | 交接标题、来源角色、目标角色、目标、上下文、输入、输出、截止、风险、阻断、验证、回写位置 | 从 `.agents/roles/templates/*.md` 复制填写并随任务流转 | `draft -> sent -> acknowledged -> delivered` | 默认先 brief 后 detailed，按风险等级决定是否升级 | 发起方负责填写，接收方负责确认，维护者可演进模板 |
 | 角色协作工作流 | owner role、角色视角切换、职责卡加载、handoff 触发条件、执行顺序、QA/LiveOps 回流、pre-PR local role review、GitHub PR watch/fix/comment-closeout/merge 默认流程 | 当需要其他伙伴协作时，先切换到对应标准角色视角并加载职责卡，再按工作流执行；commit 前必须先完成本地相关角色 subagent review evidence packet，并在 findings 处置后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR 的 required checks、requested changes、comment/thread closeout 与 mergeability 路径，并对 normal PR 持续 watch/fix/comment-closeout/merge/cleanup；`REVIEW_REQUIRED` 仅回报不阻塞，review-approval-only `BLOCKED` 可在授权后走 repo admin merge path | `defined -> adopted -> audited` | 默认按需求进入顺序执行，跨角色任务先定 owner 再流转；PR 创建前的本地 role review 是 required evidence gate，但不得替代 GitHub PR 服务端 required checks、requested changes、comment closeout 或 mergeability 边界；未明确 manual packaging/release CI purpose 时不得停在 PR 创建后 | 全体贡献者遵守，治理维护者可演进 |
-| task execution log | `task_uid`、日期、时刻、角色、完成内容、遗留事项 | 每个任务写入 `.pm/tasks/task_<32hex>.execution.md`，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认一任务一文件，按时间排序 | 全体贡献者可写，评审者可按任务/角色回溯 |
-| 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 task execution log / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
+| GitHub task issue evidence | `task_uid`、日期、时刻、角色、完成内容、遗留事项 | 每个任务写入 GitHub task issue evidence comments，并在条目级显式标角色 | `logged -> traceable -> audited` | 默认一任务一 issue evidence stream，按时间排序 | 全体贡献者可写，评审者可按任务/角色回溯 |
+| 角色名白名单校验 | 角色名、来源文件、白名单来源 | 校验 GitHub task issue evidence / handoff 中角色名是否存在于 `.agents/roles/*.md` | `pass/fail` | 以角色文件名去后缀为唯一 canonical name | 治理维护者维护角色清单，提交者必须修复别名 |
 | 文件化项目管理层 | 角色 registry、role memory/backlog、signal inbox、task registry、stage/gate 文件、task workflow evidence | 在仓库内维护 `.pm/` 运行态对象，并通过脚本做 scaffold/lint/report/promote/set-stage | `planned -> scaffolded -> adopted -> audited` | 默认按 `role_name`、`priority`、`updated_at` 排序；高严重度 signal 优先提升 | 治理维护者维护结构，owner role 维护自身 memory/backlog，producer 维护正式阶段结论 |
-| `.pm` task canonical identity | `task_uid`、`task_path`、`execution_log_path`、`working_memory_path`、`updated_at` | 创建 task 时直接生成不依赖中心序号的 `task_uid`；所有脚本按 `task_uid` 读写 canonical 对象，并在需要时重建 registry/backlog 视图 | `created -> tracked -> migrated -> closed` | `task_uid` 只负责稳定身份；排序依旧按 `priority`、`updated_at`、`owner_role`，不再依赖顺序号 | owner role 与治理维护者可创建/迁移；任何脚本不得要求中心分配 `TASK-PM-xxxx` 才能写 task |
+| GitHub-backed task canonical identity | `task_uid`、`issue_url`、`project_item_id`、`working_memory_path`、`updated_at` | 创建 task 时直接生成不依赖中心序号的 `task_uid`；所有 active lifecycle 脚本按 `task_uid` 读写 GitHub issue / Project item / mapping，并在需要时重建 registry/backlog 视图 | `created -> tracked -> migrated -> closed` | `task_uid` 只负责稳定身份；排序依旧按 `priority`、`updated_at`、`owner_role`，不再依赖顺序号 | owner role 与治理维护者可创建/迁移；任何脚本不得要求中心分配 `TASK-PM-xxxx` 才能写 task |
 | 外部 agent workflow 借鉴矩阵 | `source_name`、`pattern`、`decision`、`rationale`、`target_object`、`followup_ref` | 先在 `self-evolution` 专题中冻结 adopted / rejected / deferred，再决定是否拆 repo-owned helper/eval/module follow-up | `proposed -> adopted/rejected/deferred -> superseded` | adopted 项必须映射 repo-owned follow-up；rejected/deferred 不得回流 root 默认流程 | `producer_system_designer` 冻结结论；相关 owner 联审 |
 - Acceptance Criteria:
   - AC-1: engineering PRD 明确文件约束、脚本约束、测试分层约束。
   - AC-2: engineering project 文档维护任务拆解与状态。
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 的口径一致。
-  - AC-4: 每次工程规范变更有对应 task execution log 记录。
+  - AC-4: 每次工程规范变更有对应 GitHub task issue evidence 记录。
   - AC-5: 新增工程治理专题若引入运行态治理层，必须明确与正式文档层的分工边界，并进入主项目追踪。
   - AC-6: 文档治理脚本校验 `doc/.governance/*-allowlist.txt`，可拦截 `doc/*.md` 与 `doc/<module>/*.md` 的非预期新增。
   - AC-7: `doc/core`、`doc/engineering`、`doc/game`、`doc/headless-runtime`、`doc/p2p`、`doc/playability_test_result`、`doc/readme`、`doc/scripts`、`doc/site`、`doc/testing`、`doc/world-runtime`、`doc/world-simulator` 模块根目录仅保留 `README.md` / `prd.md` / `project.md` / `prd.index.md` 与模块当前允许的活跃卡片文件。
@@ -178,13 +178,13 @@
   - AC-18: 根 `AGENTS.md` 的“开发工作流”章节应明确 owner role、handoff 使用时机、QA/LiveOps 责任和“用户要求不提交”时的例外处理。
   - AC-18A: 根 `AGENTS.md` 的“项目运行模式”需明确：需要其他伙伴协作时，执行主体必须切换到 `.agents/roles/*.md` 中的标准角色视角并加载对应职责描述，而非依赖未定义的 `sub agent` 能力。
   - AC-18B: 根 `AGENTS.md` 不得再把本地额外 review 脚本写成默认硬门禁；正式流程必须要求 PR 创建前本地相关角色 subagent review evidence，并保留 GitHub PR required checks、requested changes、comment closeout、mergeability 与 merge path 作为服务端保护边界；`REVIEW_REQUIRED` 不得被写成 block 项，review-approval-only `BLOCKED` 在明确授权时必须被描述为正常 admin merge 路径。
-  - AC-19: 根 `AGENTS.md` 的 task execution log 规则需明确“一任务一文件、不按角色拆文件、条目级标角色”的约束。
-  - AC-20: 文档治理门禁需阻断 task execution log / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
+  - AC-19: 根 `AGENTS.md` 的 GitHub task issue evidence 规则需明确“一任务一 evidence stream、不按角色拆 task、条目级标角色”的约束。
+  - AC-20: 文档治理门禁需阻断 GitHub task issue evidence / handoff 中未在 `.agents/roles/*.md` 注册的角色名。
   - AC-21: `doc/engineering/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧 `oasis7` 仅允许出现在历史正文引用或实现兼容说明中。
   - AC-22: 外部 memory/reflective-agent 借鉴必须先在 `engineering/self-evolution` 专题中冻结 adopted/rejected/deferred 边界，再进入实现任务拆解。
-  - AC-23: `.pm` task file、execution log、working_memory、stage blocker 与 codex session 映射全部以 `task_uid` 作为唯一主键；`TASK-PM-xxxx` 顺序号、`legacy_ids` 与 `display_id` 不得再作为正式字段或路径依赖。
+  - AC-23: GitHub task issue、Project item、mapping、working_memory、stage blocker 与 codex session 映射全部以 `task_uid` 作为唯一主键；`TASK-PM-xxxx` 顺序号、`legacy_ids` 与 `display_id` 不得再作为正式字段或路径依赖。
   - AC-24: `.pm/registry/tasks.yaml` 与 role backlog 若保留，必须退化为由 canonical task 对象扫描重建的视图，且重建过程不要求 `next_sequence`、不要求中心抢号。
-  - AC-25: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 只允许引用 task execution log、`doc/devlog/**` 之外的正式文档或其他显式 evidence；若仍指向 `doc/devlog/*.md`，lint/promote/set-stage 必须阻断。
+  - AC-25: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 只允许引用 GitHub task issue evidence comments、`doc/devlog/**` 之外的正式文档或其他显式 evidence；若仍指向 `doc/devlog/*.md`，lint/promote/set-stage 必须阻断。
   - AC-26: 仓库若显式提交 `.codex/config.toml` 作为 repo-local Codex 默认执行配置，则该文件必须可被 Git 追踪，且默认 `sandbox_mode` 需以仓库工作流要求的显式值落盘，不得依赖用户本机全局配置隐式兜底。
   - AC-27: engineering 模块需存在一份正式“文档体量治理”专题，冻结 `活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的判定标准、默认入口面收敛规则、密度触发条件和首批高风险模块优先级。
   - AC-27A: engineering 必须存在 `doc-corpus-maintenance-governance` 正式专题与 `scripts/doc-inventory-report.sh` 报告入口，能够复算 `doc/` 总量、模块密度、热点子目录、`doc/devlog` backlog 与非归档 near-limit 文件，并把文档债从“入口混乱”与“存量维护成本”两阶段明确区分。
@@ -195,11 +195,11 @@
   - AC-27F: `doc/readme/governance/` 必须存在一个 canonical 子目录入口 `governance/README.md`，能把治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位入口分开导航，避免继续让 `readme` 模块 README 或 `prd.index.md` 单独承担整个热点子域的首读分流。
   - AC-27G: 后续 inventory 重新暴露的热点子域应优先补子目录级 landing page，而不是新增 full-corpus rewrite round；首批 aftercare 覆盖 `doc/world-simulator/launcher/README.md` 与 `doc/game/gameplay/README.md`，并同步模块 README / `prd.index.md` 的首读分流。
   - AC-28: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须降级为 git-ignored 的本地生成视图；PM lint/report/read-path 在这些文件缺失时必须可自动重建，而 engineering 根 `project.md` 不再手工追加 `最新完成` 长列表热点。
-  - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 `.pm` task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 `.pm` task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
-  - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，task file、execution log 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree；新建 task worktree 时必须创建 git-ignored `target` symlink，指向与 `scripts/cargo-dev.sh --print-target-dir` 一致的 repo-family shared cargo target cache；若 canonical `main` worktree 根存在本地 `config.toml`，新建 task worktree 时也必须同步复制该文件，但保持其 git-ignored 本地配置属性不变。
-  - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）字段追溯运行态对象；推荐单行模板为 `- [ ] topic-slug (PRD-XXX) [test_tier_required|full]: <summary>. Trace: .pm/tasks/task_<32hex>.yaml`。已存在的 `TASK-*` 顺序编号条目可保留为历史记录，但不作为新增任务格式继续扩散。
+  - AC-29: 根 `AGENTS.md`、角色职责卡与 handoff 模板必须显式要求“先创建/绑定 GitHub-backed task，再执行 `workflow-report --phase start`”，并明确一个 task 收口后若继续 `project.md` 下一个任务，默认重新开独立 `worktree` 与 GitHub-backed task；任何当前态 checklist 不得再把 `doc/devlog/*.md` 当必写项。
+  - AC-29A: `scripts/new-task-worktree.sh` 必须提供可选的 task-worktree 原子 bootstrap 入口；当传入 owner role / title / source refs 时，GitHub task issue evidence、mapping 与 `last_started_at` 只允许写入目标 worktree，不得污染 source worktree；新建 task worktree 时必须创建 git-ignored `target` symlink，指向与 `scripts/cargo-dev.sh --print-target-dir` 一致的 repo-family shared cargo target cache；若 canonical `main` worktree 根存在本地 `config.toml`，新建 task worktree 时也必须同步复制该文件，但保持其 git-ignored 本地配置属性不变。
+  - AC-30: 自本规则生效后，模块 `project.md` 新增任务项必须默认使用小写 kebab-case 的 `topic-slug + PRD-ID` 稳定标识，并固定包含 GitHub-backed `task_uid` / issue / Project item 追溯字段。已存在的 `TASK-*` 顺序编号条目与历史 `Trace: .pm/tasks/...` 可保留为历史记录，但不作为新增任务格式继续扩散。
   - AC-31: 外部 agent workflow/methodology 借鉴必须在 `engineering/self-evolution` 专题中形成 adopted / rejected / deferred 矩阵，并至少对 adopted 项给出 repo-owned follow-up 或模块参考边界；外部 bootstrap、universal brainstorming/subagent/TDD 规则不得未经专题裁决直接写成当前 root workflow 口径。
-  - AC-32: `scripts/pm/compact-task-group.sh` 必须只允许 compaction `done/deferred` 的 dropped task，要求 survivor 与 dropped task 同 owner_role，并在 repo 仍存在 dropped task UID 的 tracked 引用时直接失败；成功后必须合并 survivor 元数据、删除 dropped `.pm/tasks/<uid>.yaml` 与 `.execution.md`、重建 task registry/backlog 视图，并提供至少一条 focused smoke 覆盖“先因文档引用失败、Trace 收口后成功并档”的路径。
+  - AC-32: `scripts/pm/compact-task-group.sh` 是 legacy/local task-file consolidation helper；Step 3 后不得作为 active task 合并入口。若专门处理退役前数据，必须只允许 compaction `done/deferred` 的 dropped task，要求 survivor 与 dropped task 同 owner_role，并在 repo 仍存在 dropped task UID 的 tracked 引用时直接失败。
   - AC-33: `.agents/skills/default-workflow-bootstrap/SKILL.md`、`.agents/skills/README.md`、root `AGENTS.md` 与 `scripts/pm/workflow-behavior-eval.sh` 必须维持单一口径：会改变仓库状态的 task 默认先经过 repo-owned bootstrap，完成标准 task worktree / `.pm` task / owner role 真值检查与 formal doc 入口选择后，再进入 `repo-owned-workflow-router`；若其中任一 surface 缺失该入口，workflow eval 必须失败。
   - AC-34: `.agents/roles/tpm.md`、`.pm/registry/roles.yaml`、root `AGENTS.md`、`doc/engineering/workflow/source-of-truth.md` 与 `scripts/pm/workflow-behavior-eval.sh` 必须维持单一口径：`tpm` 是默认主 Agent / workflow coordinator / integrator only，专业分析、实现、验证判断、评审判断和对外口径必须来自对应 bounded subagent slice；若 role registry 缺失 `tpm` 或 workflow eval 缺失该契约，验证必须失败。
 - Non-Goals:
@@ -218,7 +218,7 @@
   - `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
   - `doc/.governance/doc-root-md-allowlist.txt`
   - `doc/.governance/module-root-md-allowlist.txt`
-  - historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 `.pm/tasks/task_<32hex>.execution.md`）
+  - historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments）
   - `doc/engineering/doc-governance/doc-structure-standard.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
   - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
@@ -276,7 +276,7 @@
   - 历史迁移快照：包含旧路径清单的迁移快照文档需通过白名单豁免，避免误判为断链。
   - 审读进度漂移：若已读清单不随批次更新，会导致“已完成”状态失真，必须在同提交更新清单。
   - 运行态真值冲突：若 `.pm/` 与正式 `doc/` 对同一阶段/任务给出不同口径，必须以正式文档为准并把 `.pm/` 记录标成待裁决。
-  - 归档源污染：若 `.pm` runtime `source_ref(s)` / `updated_from` 仍引用 `doc/devlog/**`，必须视为把历史归档误当运行态真值，lint/promote/set-stage 直接阻断并要求改为 task execution log、正式文档或显式 evidence。
+  - 归档源污染：若 `.pm` runtime `source_ref(s)` / `updated_from` 仍引用 `doc/devlog/**`，必须视为把历史归档误当运行态真值，lint/promote/set-stage 直接阻断并要求改为 GitHub task issue evidence comments、正式文档或显式 evidence。
   - `.pm` task identity 迁移：若旧 `TASK-PM-xxxx` 数据未在同批次迁到 `task_uid`，lint/report 必须阻断 mixed-identity 状态，避免新旧主键同时写入造成引用漂移。
 - Non-Functional Requirements:
   - NFR-ENG-1: required 门禁平均执行时长 <= 10 分钟。
@@ -335,9 +335,9 @@
 | PRD-ENGINEERING-016 | TASK-ENGINEERING-030/036 | `test_tier_required` | 角色职责卡存在性、字段完整性、推荐技能区段与根 `AGENTS.md` 入口映射检查 | 人机协作分工清晰度与执行一致性 |
 | PRD-ENGINEERING-017 | TASK-ENGINEERING-031 | `test_tier_required` | 交接模板存在性、字段完整性与入口可达性检查 | 跨角色协作质量与上下文传递稳定性 |
 | PRD-ENGINEERING-018 | TASK-ENGINEERING-032/049 | `test_tier_required` | `AGENTS.md` 工作流章节与项目运行模式口径一致性检查；协作语义需显式落到角色视角切换与职责卡加载，且默认评审边界需显式落到 GitHub PR review | 协作流程稳定性与执行确定性 |
-| PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | task execution log 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
-| PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 task execution log 角色标签检查 | 角色命名一致性与防漂移能力 |
-| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103/109/115/TASK-ENGINEERING-PMVIEW-001 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、task execution log schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、GitHub PR review 默认流程文案一致性、`prepare-task-pr` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求、task identity 迁移/重建视图验证、git-ignored 本地视图自动重建验证，以及根 `AGENTS.md` / 角色卡 / handoff 模板的任务创建顺序与 execution log 单一口径校验 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
+| PRD-ENGINEERING-019 | TASK-ENGINEERING-033/096 | `test_tier_required` | GitHub task issue evidence 规则、任务级留痕格式与角色标记要求一致性检查 | 任务过程可追溯性与角色责任可读性 |
+| PRD-ENGINEERING-020 | TASK-ENGINEERING-034/096 | `test_tier_required` | 白名单角色名门禁、模板字段枚举与 GitHub task issue evidence 角色标签检查 | 角色命名一致性与防漂移能力 |
+| PRD-ENGINEERING-021 | TASK-ENGINEERING-074/075/076/077/078/079/080/081/082/083/084/085/092/093/094/095/096/097/098/099/100/101/102/103/109/115/TASK-ENGINEERING-PMVIEW-001 | `test_tier_required` + `test_tier_full` | `self-evolution` 专题三件套、`.pm/` 结构 lint、GitHub task issue evidence schema、`set-stage`/stage drift 校验、`workflow-report --task-uid` 留痕、signal promotion、workflow/role/stage report、GitHub PR review 默认流程文案一致性、`prepare-task-pr` 默认流程文案一致性、task-scoped working_memory checklist 回归、角色扩容回归验证、repo-local `.codex/config.toml` 默认执行配置与 `.gitignore` 精确例外校验，以及 runtime `source_ref(s)` / `updated_from` 的非-`doc/devlog` 约束、`codex-working-memory` 默认显式 session 选择要求、task identity 迁移/重建视图验证、git-ignored 本地视图自动重建验证，以及根 `AGENTS.md` / 角色卡 / handoff 模板的任务创建顺序与 GitHub task issue evidence 单一口径校验 | 仓库内项目管理运行层、阶段评审输入、QA/liveops 回流链、默认开发工作流 |
 | PRD-ENGINEERING-021 | task-closeout-helper | `test_tier_required` | `bash -n scripts/pm/task-closeout.sh scripts/pm/required-tier-smoke.sh scripts/pm/workflow-behavior-eval.sh`、`./scripts/pm/task-closeout.sh --help`、`./scripts/pm/required-tier-smoke.sh`、`./scripts/pm/workflow-behavior-eval.sh`、`./scripts/pm/lint.sh`、文档口径一致性检查 | 仓库内默认 close-phase、fresh verification gate、`.pm` runtime bookkeeping 与 GitHub PR 前收口路径 |
 | PRD-ENGINEERING-021 | pm-rebase-conflict-helper | `test_tier_required` | `bash -n scripts/pm/rebase-conflict-helper.sh scripts/pm/rebase-conflict-helper.test.sh`、`./scripts/pm/rebase-conflict-helper.sh --help`、`./scripts/pm/rebase-conflict-helper.sh --json`、`./scripts/pm/rebase-conflict-helper.test.sh`、`./scripts/pm/lint.sh`、文档口径一致性检查 | `.pm` rebase 冲突分类、signals collision 安全自动修复与 generated-view 删除真值边界 |
 | PRD-ENGINEERING-022 | TASK-ENGINEERING-086/091/103 | `test_tier_required` | 外部方案借鉴边界专题三件套、working_memory 口径补充、phase 1 `.codex` transcript source 冻结（`session_index/history` 优先，`sessions rollout` fallback）、默认禁用当前 live session 隐式自读、engineering 根入口回写、决策记录与引用闭环验证 | `self-evolution` 后续 memory/recall/working_memory/reflection 补强 |
@@ -373,10 +373,10 @@
 | DEC-ENG-016 | 为角色协作提供统一 handoff 模板，并放在 `.agents/roles/templates/` | 继续依赖自由格式口头/临时文本交接 | 统一模板能显著降低跨角色遗漏、返工和上下文漂移。 |
 | DEC-ENG-017 | 将 `AGENTS.md` 工作流升级为角色协作版，并显式写入 handoff / QA / LiveOps / GitHub PR review / no-commit 例外 | 继续保留单线程开发表述，或让额外本地 review 替代 owner role / GitHub PR 默认评审边界 | 当前仓库已引入角色职责卡与交接模板；需要继续由角色视角承接 owner 责任，并把 GitHub PR 的 required checks、requested changes/comment closeout、mergeability 与 merge path 作为默认评审/合流边界；`REVIEW_REQUIRED` 仅回报不阻塞。 |
 | DEC-ENG-018 | 自我进化项目管理首期采用仓库内文件化运行层 | 直接将外部 PM/SaaS 作为主真值 | 当前仓库已具备 Git/worktree/正式文档治理链，先在 repo 内闭环更符合现有工程约束。 |
-| DEC-ENG-019 | 执行日志收敛为 task-local `.pm/tasks/task_<32hex>.execution.md`，并在条目级强制标注角色 | 继续维护集中式日表或按角色拆分日志文件 | `.pm` 已经以 task 为基本执行单元，任务日志跟 task file 同址更利于追溯、lint 与多 worktree 并发隔离。 |
+| DEC-ENG-019 | 执行证据收敛为 GitHub task issue evidence comments，并在条目级强制标注角色 | 继续维护集中式日表、按角色拆分日志文件或复活 repo-local task execution files | GitHub-backed task envelope 已经以 task 为基本执行单元，issue evidence stream 更利于追溯、lint 与多 worktree 并发隔离。 |
 | DEC-ENG-020 | `.pm` task canonical identity 收敛为去中心分配的 `task_uid`，registry/backlog 改为扫描重建视图 | 继续把 `TASK-PM-xxxx` 顺序号、`next_sequence` 与 task file 文件名绑定为正式主键 | 顺序号一旦同时承担主键、文件名、视图索引和人类展示作用，就会在并发 worktree 下制造结构性 rebase/landing 冲突；`task_uid` 可把冲突面收敛回真正被并发编辑的 task 对象。 |
 | DEC-ENG-020 | 角色名通过 `.agents/roles/*.md` 自动生成白名单并由门禁校验 | 允许自由填写角色名或维护独立手写名单 | 自动从单一事实源派生，最不容易漂移。 |
 | DEC-ENG-021 | 在每张角色职责卡内补充“推荐技能”区段，并明确“角色定 owner，技能定方法” | 仅在对话中临时口头说明角色与技能关系 | 关系落盘后更利于新人自助选择方法，也能降低角色/技能混用带来的协作歧义。 |
 | DEC-ENG-021 | 将“需要其他伙伴协作”的默认执行语义收敛为“切换到标准角色视角并加载职责卡” | 保留“可开启 sub agent”表述 | 角色视角切换已被现有职责卡、handoff 模板与工作流规则完整支持，且不依赖额外运行时能力，执行口径更稳定。 |
-| DEC-ENG-022 | `doc/devlog/*.md` 仅保留历史归档职责，`.pm` runtime `source_ref(s)` / `updated_from` 统一切到 task execution log、正式文档或显式 evidence | 继续让 `doc/devlog/*.md` 同时承担归档与 `.pm` 运行态真值 | 集中式日表已退役为归档层；若继续把它写进 stage/signal/task/memory 的 runtime 引用，会让 `.pm` 当前态重新依赖历史流水，削弱 worktree 隔离、lint 可判定性与 task-local traceability。 |
+| DEC-ENG-022 | `doc/devlog/*.md` 仅保留历史归档职责，`.pm` runtime `source_ref(s)` / `updated_from` 统一切到 GitHub task issue evidence comments、正式文档或显式 evidence | 继续让 `doc/devlog/*.md` 同时承担归档与 `.pm` 运行态真值 | 集中式日表已退役为归档层；若继续把它写进 stage/signal/task/memory 的 runtime 引用，会让 `.pm` 当前态重新依赖历史流水，削弱 worktree 隔离、lint 可判定性与 task-local traceability。 |
 | DEC-ENG-023 | 先冻结“阅读面分层”而不是立刻重组目录树；`活跃真值 / 审计留痕 / 历史归档 / 兼容跳转` 的差异先体现在 root README、模块 README、`prd.index.md` 与专题互链上 | 立即重引入 `archive/` 树或直接批量移动 `reviews/governance/evidence` 文件 | 当前问题首先是默认阅读面过宽，而不是路径本身不可存放；先压缩入口和消费层，风险最小，也不破坏现有引用稳定性。 |

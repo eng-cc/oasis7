@@ -58,7 +58,7 @@
 ## 维护约定
 - 脚本行为变化需同步更新对应文档、测试口径与参数契约说明。
 - 新增专题后，需同步回写 `doc/scripts/prd.index.md` 与本目录索引。
-- `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project，启用 PM bootstrap 时任务证据写入对应 `.pm/tasks/task_<32hex>.execution.md`；`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up`。
+- `scripts/new-task-worktree.sh` 为新需求默认入口；`--init-docs` 用于检查模块 PRD / project，启用 PM bootstrap 时任务证据写入对应 GitHub task issue evidence comments；`--with-harness` 用于在新 worktree 中后台预热 `./scripts/worktree-harness.sh up`。
 - `scripts/pm/task-closeout.sh` 为默认 close-phase helper；负责在 task 已 start 且 execution log 已回写后，若收口到 `done` 则先跑 fresh verification，再执行 `workflow-report close -> move-task done|deferred -> pm lint`，但不替代 commit 或 `prepare-task-pr.sh`。
 - `scripts/pm/workflow-behavior-eval.sh` 为默认 workflow behavior eval 入口；负责把 task-worktree bootstrap、可选/必需 routing scenarios、subagent contract surface、PM closeout/claim gate、PR preflight 与 review-thread closeout 串成一条可重复的本地验证链。
 - `scripts/pr-review-thread-closeout.sh` 为当前 PR 的 review-thread closeout helper；默认只读盘点 review threads，显式传 `--resolve-thread` 或 `--resolve-all-unresolved` 时才会调用 GitHub resolve mutation，且每次都会重新回报 `reviewDecision` / `mergeStateStatus`。

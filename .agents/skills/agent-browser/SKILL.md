@@ -24,7 +24,7 @@ Do not use this skill when:
 1. Start with the minimal open/snapshot/action loop and capture refs before interacting.
 2. Read `references/full-guidance.md` only for the command family you need: auth, session persistence, screenshots, diffing, locators, native mode, or templates.
 3. Prefer bounded outputs and domain/action policies when pages contain untrusted content.
-4. Record browser commands and observable results in the task execution log when the browser check is task evidence.
+4. Record browser commands and observable results in GitHub task issue evidence comments when the browser check is task evidence.
 
 ## Supporting Files
 

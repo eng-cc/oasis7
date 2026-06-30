@@ -107,7 +107,7 @@
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
-  - `.pm/tasks/task_<32hex>.execution.md`
+  - GitHub task issue evidence comments
   - `.pm/inbox/signals.jsonl`
   - `.pm/templates/role-memory-policy.yaml`
   - `.pm/roles/*/backlog/*.yaml`

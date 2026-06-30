@@ -25,7 +25,7 @@
 ## 实施顺序
 1. 先补专题文档和模块主项目 trace，冻结本轮 P0 优化边界。
 2. 再改 `pixel_world_bridge` 为常驻 grid + entity cache。
-3. 最后回跑 targeted 验证并更新 execution log。
+3. 最后回跑 targeted 验证并更新 GitHub task issue evidence comments。
 
 ## 完成记录
 - 已完成 `viewer-pixel-world-bridge-runtime-cache`：`pixel_world_bridge` 从 per-frame 全量 `despawn + spawn` 收口到 grid layout cache 与 entity cache。

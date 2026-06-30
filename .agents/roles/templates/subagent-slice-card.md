@@ -1,6 +1,6 @@
 # Subagent Slice Card
 
-> 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并必须回写 `.pm/tasks/<TASK-UID>.execution.md`。
+> 用途：在 `tpm` 派工前，先把每个专业角色 subagent slice 固化为单卡，确保 owner / task / worktree / PR 主链一致，并必须回写 GitHub task issue evidence comments。
 
 ## Required Fields（固定字段）
 - role:
@@ -13,7 +13,7 @@
 - mandatory context checklist/packet:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
   - workflow governance: `AGENTS.md` + `doc/engineering/workflow/source-of-truth.md` + selected workflow skill(s)
-  - task truth: `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + canonical worktree/branch/base ref + PR link/status if present
+  - task truth: GitHub task issue + GitHub Project item/status + `.pm/github-project-sync/tasks.json` mapping record + canonical worktree/branch/base ref + PR link/status if present
   - user intent: request summary + current TODO + non-goals + done/verification expectations
   - scoped repo context: relevant `prd.md` / `project.md` / handoff + changed paths + current diff/evidence summary + constraints
     - gameplay-sensitive slices must explicitly include `doc/game/prd.md`, `doc/game/project.md`, `doc/game/gameplay/README.md`, relevant topic PRD/project docs, and fresh playability/QA evidence expectations or an explicit non-applicability reason
@@ -21,7 +21,7 @@
 - write scope:
 - return contract:
 - validation command:
-- formal sink: `.pm/tasks/<TASK-UID>.execution.md`（mandatory；其他 sink 只能补充）
+- formal sink: GitHub task issue evidence comments（mandatory；其他 sink 只能补充）
 - integration order:
 - context exemption: none, or explicit reason for narrow read-only explorer slice only
 
@@ -40,16 +40,16 @@
 - actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
 - context delivery mode: full-thread/full-history fork
 - mandatory context packet: see mandatory context checklist/packet
-- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + `.pm/tasks/<TASK-UID>.yaml` + `.pm/tasks/<TASK-UID>.execution.md` + current branch/diff summary
+- mandatory context checklist/packet: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence
 - validation command: `./scripts/cargo-dev.sh test -p foo`
-- formal sink: `.pm/tasks/<TASK-UID>.execution.md`（mandatory）
+- formal sink: GitHub task issue evidence comments（mandatory）
 - integration order: 2/3（after runtime slice, before qa slice）
 - context exemption: none
 
 ## Notes
 - 一个 slice 一张卡；多角色并行时，必须逐张卡校验 disjoint scope checklist。
-- slice card 链接/引用必须回写 `.pm/tasks/<TASK-UID>.execution.md` 对应条目；未写入 task execution log 的派工不视为有效派工。
-- 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 `.pm` task yaml/execution log 必须包含在 context packet 中。
+- slice card 链接/引用必须回写 GitHub task issue evidence comments 对应条目；未写入 GitHub-backed task evidence 的派工不视为有效派工。
+- 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub-backed task truth 与 issue evidence 必须包含在 context packet 中。
 - 标准角色名以 `.agents/roles/*.md` 为准；当前包含 `producer_system_designer`、`gameplay_designer`、`game_visual_interaction_designer`、`runtime_engineer`、`blockchain_ops_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer`、`repository_health_engineer`、`liveops_community`。

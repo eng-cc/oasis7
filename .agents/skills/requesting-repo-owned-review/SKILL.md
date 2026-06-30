@@ -95,7 +95,7 @@ The formal path is:
 - Evidence Available: <tests / docs / screenshots / logs>
 - Expected Return Contract: <findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk>
 - Slice Ledger: <path or n/a with reason>
-- Formal Sink: <execution log | PR evidence | handoff>
+- Formal Sink: <GitHub task issue evidence comments | PR evidence | handoff>
 ```
 
 ## Passed Evidence Packet
@@ -150,5 +150,5 @@ role reviews and addressing findings:
 - Do not claim that repo-owned review makes GitHub review unnecessary.
 - Do not leave the review request or outcome as chat-only context.
 - Do not resolve GitHub threads based solely on this local review packet.
-- Do not paste large diffs into the task execution log when a review package can be linked instead.
+- Do not paste large diffs into GitHub task issue evidence comments when a review package can be linked instead.
 - Do not rely on the slice ledger as the only task truth; GitHub task issue evidence comments remain the mandatory sink.

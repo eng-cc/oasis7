@@ -660,7 +660,7 @@ scenarios = [
             "Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>",
             "LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>",
             "Slice Ledger: <path to slice ledger or n/a with reason>",
-            "Formal Sink: <execution log | PR evidence | handoff>",
+            "Formal Sink: <GitHub task issue evidence comments | PR evidence | handoff>",
         ],
     },
     {

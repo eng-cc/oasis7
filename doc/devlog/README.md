@@ -5,7 +5,7 @@
 ## Current Boundary
 - `doc/devlog` is no longer a runtime source of truth.
 - The former daily files from 2026-02-03 through 2026-04-01 were summarized here and removed from the active repository surface.
-- Current task truth lives in `.pm/tasks/task_<32hex>.yaml`, `.pm/tasks/task_<32hex>.execution.md`, and the relevant `doc/<module>/project.md` / `doc/<module>/prd.md`.
+- Current task truth lives in GitHub task issues, GitHub Project items, `.pm/github-project-sync/tasks.json`, and the relevant `doc/<module>/project.md` / `doc/<module>/prd.md`.
 - Historical references that previously pointed to a specific daily file should use this summary as the compact archive pointer.
 
 ## Retired Corpus
@@ -13,7 +13,7 @@
 | --- | ---: | ---: | --- |
 | 2026-02 | 26 | about 28.1k | High-churn implementation and migration period covering Viewer UI/LLM iteration, runtime numeric correctness phases, P2P reward/storage/network hardening, site/static-doc updates, and early documentation migration. |
 | 2026-03 | 30 | about 13.9k | Governance and release-readiness period covering strict doc schema migration, doc tree reorganization, launcher blockchain/explorer/usability work, release-candidate evidence, liveops/readme work, task-worktree governance, and P2P/shared-network follow-through. |
-| 2026-04 | 1 | 288 | PM workflow/self-evolution cleanup and transition from daily devlog truth toward `.pm` task execution logs. |
+| 2026-04 | 1 | 288 | PM workflow/self-evolution cleanup and transition from daily devlog truth toward GitHub task issue evidences. |
 
 Total retired daily files: 57. Former line count: 42,309.
 
@@ -30,11 +30,11 @@ Total retired daily files: 57. Former line count: 42,309.
 - Core governance rounds reviewed document responsibility boundaries, design backfill needs, path migrations, source-of-truth alignment, and release-candidate evidence boards.
 - Runtime/world-runtime work continued numeric/storage governance, release-candidate evidence, wasm/module observability, and runtime candidate soak handoffs.
 - Liveops/readme/game/playability work covered limited preview runbooks, closed-beta evidence templates, release messaging, Moltbook/Xiaohongshu drafts, and gameplay gate evidence.
-- Late March shifted process truth away from daily devlogs and toward `.pm` task-local execution logs, task UID identity, worktree lifecycle scripts, and role-scoped PM evidence.
+- Late March shifted process truth away from daily devlogs and toward task UID identity, worktree lifecycle scripts, role-scoped PM evidence, and task-local execution logs; GitHub task issue evidence comments are the current task-local execution sink after the Step 3 migration.
 
 ## April 2026 Summary
-- The remaining daily entry captured PM/self-evolution cleanup and confirmed that daily devlog status could drift from `.pm` truth.
-- This window is the transition point after which `.pm/tasks/*.execution.md` should be treated as the durable execution record.
+- The remaining daily entry captured PM/self-evolution cleanup and confirmed that daily devlog status could drift from PM truth.
+- This window was the transition point away from daily devlogs; after the GitHub Project Step 3 migration, GitHub task issue evidence comments are the durable execution record.
 
 ## Former Hotspots
 | Former file | Former lines | Main reason it was noisy |
@@ -48,6 +48,6 @@ Total retired daily files: 57. Former line count: 42,309.
 | `2026-03-10.md` | 1311 | Governance rounds, release evidence, runtime/viewer handoffs, and QA records converged. |
 
 ## Usage
-- For current status, read `.pm/tasks/*.execution.md` and the relevant module `project.md`; do not use this page as current truth.
+- For current status, read GitHub task issue evidence comments and the relevant module `project.md`; do not use this page as current truth.
 - For historical orientation, use the monthly summaries above, then follow the referenced module/topic documents.
-- Do not add new daily files under `doc/devlog`; create or update task-local `.pm` execution logs instead.
+- Do not add new daily files under `doc/devlog`; create or update GitHub task issue evidence comments instead.

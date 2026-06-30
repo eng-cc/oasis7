@@ -46,7 +46,13 @@ cat > "$TMPDIR/.pm/github-project-sync/tasks.json" <<'JSON'
       "task_uid": "task_11111111111111111111111111111111",
       "issue_url": "https://github.com/eng-cc/oasis7/issues/101",
       "issue_number": 101,
-      "project_item_id": "ITEM_ID"
+      "project_item_id": "ITEM_ID",
+      "title": "active task",
+      "status": "committed",
+      "priority": "P2",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "worktree_hint": "/tmp/worktree"
     }
   }
 }
@@ -77,6 +83,27 @@ chmod +x "$TMPDIR/bin/gh"
 export PATH="$TMPDIR/bin:$PATH"
 
 AUDIT_JSON="$TMPDIR/audit.json"
+set +e
+python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --json \
+  audit > "$AUDIT_JSON"
+RETIRED_EXIT=$?
+set -e
+[[ "$RETIRED_EXIT" == "1" ]]
+
+python3 - "$AUDIT_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+assert any("retired .pm/tasks files present" in item for item in payload["errors"]), payload
+PY
+
+rm -rf "$TMPDIR/.pm/tasks"
+
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \

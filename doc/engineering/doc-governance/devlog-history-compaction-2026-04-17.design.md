@@ -37,7 +37,7 @@
 首屏必须明确：
 - `doc/devlog` 是历史归档。
 - 不再承担 `.pm`、模块 `project.md` 或正式专题的运行态真值。
-- 若想看当前状态，应回到 `doc/<module>/project.md` 与 `.pm/tasks/*.execution.md`。
+- 若想看当前状态，应回到 `doc/<module>/project.md` 与 GitHub task issue evidence comments。
 
 ### 3.3 月份分组
 按月份组织：

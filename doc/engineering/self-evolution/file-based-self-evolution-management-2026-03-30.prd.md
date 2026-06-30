@@ -122,7 +122,7 @@
   - `.agents/roles/*.md`
   - `doc/engineering/prd.md`
   - `doc/engineering/project.md`
-  - `.pm/tasks/task_<32hex>.execution.md`
+  - GitHub task issue evidence comments
   - `testing-manual.md`
   - `doc/playability_test_result/*`
   - `doc/readme/*`
@@ -194,7 +194,7 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-SE-001 | 在仓库内建立文件化项目管理层 `.pm/` | 直接接入外部 PM/SaaS 作为真值 | 本地 Git/worktree 闭环更符合当前审计和隔离要求。 |
-| DEC-SE-002 | 任务过程日志收敛到 `.pm/tasks/task_<32hex>.execution.md`，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | task-local log 更利于 worktree 隔离、lint 和 signal promotion。 |
+| DEC-SE-002 | 任务过程日志收敛到 GitHub task issue evidence comments，长期 memory/backlog 下沉到 `.pm/` | 继续维护集中式日表，或让 task log / memory 共用自由文本文件 | task-local log 更利于 worktree 隔离、lint 和 signal promotion。 |
 | DEC-SE-003 | 采用 role memory + role backlog + signal inbox + task registry + stage/gate 五对象模型 | 仅做一份共享任务清单 | 自我进化需要同时覆盖长期记忆、候选任务、阶段判断和反馈回流。 |
 | DEC-SE-004 | memory 支持 `superseded` 生命周期和 source refs | 直接覆盖旧结论 | 历史裁决必须可回放。 |
 | DEC-SE-005 | 首期禁止外部网络依赖，脚本与真值全部在仓库内运行 | 依赖远程数据库、消息队列或托管服务 | 当前目标是仓库内自治，而不是平台集成展示。 |

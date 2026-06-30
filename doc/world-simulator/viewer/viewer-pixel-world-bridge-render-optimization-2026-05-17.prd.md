@@ -20,7 +20,7 @@
 - 范围内：
   - `crates/pixel_world_bridge/src/lib.rs`
   - 与 `pixel_world_bridge` 直接相关的 repo-owned build / runtime regression
-  - 对应专题文档、模块主项目追踪与 task execution log
+  - 对应专题文档、模块主项目追踪与 GitHub task issue evidence comments
 - 范围外：
   - `pixel_world_host.jsx` 宿主布局或 unavailable 文案改版
   - `pixel_world_runtime_module_wasm.js` 事件协议调整
@@ -30,7 +30,7 @@
 - 范围内：
   - `pixel_world_bridge` 的 Bevy wasm 内核结构优化。
   - 与该优化直接相关的 repo-owned wasm/unit/UI regression。
-  - 对应专题文档、模块项目页 trace 与 task execution log 回写。
+  - 对应专题文档、模块项目页 trace 与 GitHub task issue evidence 回写。
 - 范围外：
   - 宿主页面结构或文案改版。
   - 运行时协议、world DTO 字段或 JS 事件契约调整。
@@ -98,7 +98,7 @@
 ## 5. Risks & Roadmap
 - M1：完成专题 PRD / Project 建模，冻结 P0 优化边界。
 - M2：完成 `pixel_world_bridge` 的实体池与常驻 grid 改造。
-- M3：补齐定向验证、task execution log 与模块主项目追踪。
+- M3：补齐定向验证、GitHub task issue evidence comments 与模块主项目追踪。
 
 ## 里程碑
 - M1：专题 PRD / Project 建模完成。

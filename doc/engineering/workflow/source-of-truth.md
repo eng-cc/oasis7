@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.1**
+Version: **v1.5.2**
 Last Updated: **2026-06-30**
 
 ## 0. Purpose
@@ -12,7 +12,7 @@ Mandatory rule:
 3. PRs that change workflow scripts without updating this file are invalid.
 
 Step 3 migration note:
-As of v1.5.1, repo-local `.pm/tasks/*` task files are retired. Outside the
+As of v1.5.2, repo-local `.pm/tasks/*` task files are retired. Outside the
 GitHub Project migration section, older references to
 `.pm/tasks/<TASK-UID>.yaml`, `.pm/tasks/<TASK-UID>.execution.md`, `.pm task`,
 or `.pm execution log` are legacy wording and must be read as the current
@@ -95,7 +95,8 @@ small question into a heavyweight workflow.
 - Do not create a second parent/planning surface to answer a small follow-up
   inside an existing bound task; append the follow-up evidence to the current
   task unless it changes owner, scope, or PR chain.
-- Use `.pm/tasks/<TASK-UID>.yaml` `module` as the default large-module marker for
+- Use the GitHub Project `Module` field, mirrored in
+  `.pm/github-project-sync/tasks.json`, as the default large-module marker for
   ordinary task grouping, reporting, and parallel work queues. It is a small
   enum, not a free tag or owner-role substitute. Current allowed values are
   `engineering`, `game-strategy`, `visualization`, and
@@ -185,19 +186,23 @@ Deterministic script contract:
 - `./scripts/pm/github-project-workflow.sh ... audit` verifies the selected
   task set, mapping, and GitHub Project item/field state agree. Its default
   path must be selected-task / mapping-targeted and must not list the full
-  Project during ordinary task closeout or PR readiness checks.
+  Project during ordinary task closeout or PR readiness checks. After Step 3 it
+  must load task truth from archive + mapping, and fail if repo-local retired
+  `.pm/tasks/task_*.yaml` or `*.execution.md` files are present.
 - `./scripts/pm/github-project-workflow.sh ... step3-gate` remains the hard
   full historical coverage check after deletion; it may list the full Project
   and uses the archive fallback when `.pm/tasks/*` is absent.
 - `./scripts/pm/github-project-retire-tasks.sh --delete` archives task yaml and
   execution logs to `.pm/github-project-sync/task-archive.jsonl` before deleting
-  repo-local `.pm/tasks/*`.
+  repo-local `.pm/tasks/*`. If the archive already exists, it must preserve
+  existing records and upsert only the task UIDs represented by current retired
+  task files.
 - `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
   create issue/project task, append evidence comments, move Project status, and
   close tasks after fresh verification.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
-  GitHub issue comments when `.pm/tasks/*` is absent. The review gate stays the
-  same; only the evidence read path changes.
+  GitHub task issue evidence comments and mapping-backed task truth. The review
+  gate stays the same; only the evidence read path changes.
 - All future GitHub-backed create/move/report/closeout helpers must use
   deterministic `gh`/GitHub API paths, preserve or recover the `task_uid`
   mapping, and refuse ambiguous duplicate mappings.
@@ -421,6 +426,14 @@ audited because the repository can contain hundreds of historical tasks.
   replace it.
 
 ## 7. Change Log
+- **v1.5.2 (2026-06-30)**
+  - Hardened the post-Step 3 contract so default PM audit and lint fail when
+    retired `.pm/tasks/task_*.yaml` or `*.execution.md` files reappear.
+  - Clarified that active module grouping and subagent/evidence sinks use
+    GitHub Project fields, GitHub task issue evidence comments, and
+    `.pm/github-project-sync/tasks.json`, not repo-local task files.
+  - Required task retirement archive updates to preserve existing archive
+    records and upsert only currently retired task UIDs.
 - **v1.5.1 (2026-06-30)**
   - Retired repo-local `.pm/tasks/*` files after GitHub Project Step 3 export.
     Historical task metadata and execution logs now live in

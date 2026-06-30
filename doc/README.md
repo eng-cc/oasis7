@@ -16,7 +16,7 @@
 7. 继续读 `doc/<module>/project.md`，确认任务拆解、PRD-ID 映射、依赖与状态。
 8. 按需下钻模块子文档（`doc/<module>/**/*.md`）。
 9. 对照系统测试策略：`testing-manual.md` 与 `doc/testing/prd.md`。
-10. 若已知 `task_uid`，读取对应 `.pm/tasks/task_<32hex>.execution.md`；未知具体任务时，先看模块 `project.md`。
+10. 若已知 `task_uid`，读取对应 GitHub task issue evidence comments；未知具体任务时，先看模块 `project.md`。
 
 ## 按目标进入
 | 你的目标 | 第一入口 | 第二入口 | 说明 |
@@ -26,7 +26,7 @@
 | 想参与功能开发或治理任务 | `doc/core/prd.md` | `doc/<module>/prd.md` + `doc/<module>/project.md` | 先看全局目标，再进入目标模块 |
 | 想做本地验证、回归或验收 | `testing-manual.md` | `doc/testing/prd.md` | 手册负责 suite 选择，testing 模块负责测试体系建模 |
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
-| 想补过程上下文或追溯具体任务决策 | `doc/<module>/project.md` | `.pm/tasks/task_<32hex>.execution.md` | 先靠正式追踪定位任务，再看 task-scoped execution log |
+| 想补过程上下文或追溯具体任务决策 | `doc/<module>/project.md` | GitHub task issue evidence comments | 先靠正式追踪定位任务，再看 task-scoped evidence |
 
 ## 根目录入口说明
 - 根目录 legacy redirect 仅保留兼容跳转；正文与执行状态统一回收到各模块目录。
@@ -59,7 +59,7 @@
 - `doc/<module>/prd.index.md`：模块文件级 PRD 索引（活跃专题文档可达入口）。
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。
-- `.pm/tasks/task_<32hex>.execution.md`：按任务维护的 canonical 过程日志。
+- GitHub task issue evidence comments：按任务维护的 canonical 过程日志；`.pm/github-project-sync/tasks.json` 负责 `task_uid` 到 issue/project item 的本地映射。
 - `doc/devlog/README.md`：历史归档入口；原始 `doc/devlog/*.md` 仅作回溯参考，不再作为运行态真值。
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
 - `doc/**/archive/` 目录已移除；历史专题仅在模块目录内保留并在索引中标注。

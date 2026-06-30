@@ -73,6 +73,6 @@ Do not use this skill when:
 
 ## Verification
 
-- Record the owning role, theory lens, evidence, and residual risk in the task
-  execution log.
+- Record the owning role, theory lens, evidence, and residual risk in GitHub
+  task issue evidence comments.
 - Run `./scripts/lint-skills.sh` after skill-surface edits.

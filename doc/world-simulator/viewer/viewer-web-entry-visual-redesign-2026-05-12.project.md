@@ -23,7 +23,7 @@
 ## 状态
 - 更新日期: 2026-05-23
 - 当前状态: done
-- 下一任务: 若重启下一轮 Web 入口结构/视觉专题，先执行 `viewer-visual-companion-pilot-followup` contract：产出至少 2-3 个 IA / wireframe / layout compare artifact，明确推荐方向与不选路径，把结论回写到新的 task execution log、handoff 或本项目文档后，再创建新的实现 task。
+- 下一任务: 若重启下一轮 Web 入口结构/视觉专题，先执行 `viewer-visual-companion-pilot-followup` contract：产出至少 2-3 个 IA / wireframe / layout compare artifact，明确推荐方向与不选路径，把结论回写到 GitHub task issue evidence comments、handoff 或本项目文档后，再创建新的实现 task。
 - 最新完成: `viewer-web-pixel-world-wasm-only`
 - 最新完成: `viewer-web-pixel-world-content-density`
 
@@ -34,7 +34,7 @@
   - 一条推荐方向
   - 至少一条明确不选路径及理由
 - Formal Writeback:
-  - 至少写回到新的 `.pm/tasks/<TASK-UID>.execution.md`、handoff 或本项目文档之一
+  - 至少写回到 GitHub task issue evidence comments、handoff 或本项目文档之一
   - 必须说明后续实现 task 将如何继承该结论
 - Verification Boundary:
   - visual companion 只回答“结构/视觉方向是否值得进入实现”

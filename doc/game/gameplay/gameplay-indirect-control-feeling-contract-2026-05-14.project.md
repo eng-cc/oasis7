@@ -7,7 +7,8 @@
 
 ## 任务拆解
 
-- [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: `producer_system_designer` 已新增“间接控制 control-feeling 合同”专题 PRD / design / project，并完成 `game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 挂载，明确 accepted intent、主因果、重排/打断与续玩恢复四项 guarantees 是正式 agency 地板。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
+- [x] indirect-control-feeling-contract-freeze (PRD-GAME-014) [test_tier_required]: `producer_system_designer` 已新增“间接控制 control-feeling 合同”专题 PRD / design / project，并完成 `game` 根 PRD / project、`gameplay` 主文档、索引与 GitHub task issue evidence comments 挂载，明确 accepted intent、主因果、重排/打断与续玩恢复四项 guarantees 是正式 agency 地板。 Trace: .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.yaml
+  - Current evidence sink: GitHub task issue evidence comments / mapping-backed task trace; the Trace path above is historical provenance only.
 - [x] runtime-control-feeling-canonical-contract (PRD-GAME-014) [test_tier_required]: `runtime_engineer` 已对齐 canonical accepted intent、status reason、blocker/override reason、last world change、resume anchor 与 resume-next-step truth，并补齐 `gameplay_action`、`prompt_control`、`agent_chat` 与 world-control feedback 的统一 runtime surface。 Trace: .pm/tasks/task_f3c25dd6688f40fbbcf05df9036a83ec.yaml
 - [x] viewer-control-feeling-surface-alignment (PRD-GAME-014/012) [test_tier_required]: `viewer_engineer` 已把 `software_safe` / headed Web 正式玩家入口收口到“accepted intent -> execution state -> goal narrative -> recommended action”的 agency surface：首屏把 `Accepted Intent` 提升到 hero 级语义、`Current Selection` 降为辅助 badge、`Current Goal` 合并 blocker 与 next-step 叙事、available actions 补单条推荐动作 CTA，并继续把 diagnostics / advanced prompt controls 压到按需展开层；同时保持 pure API 仍直接输出同一份 canonical `snapshot.player_gameplay`。 Trace: .pm/tasks/task_55742c3195d94538bc9e9bb73426ada1.yaml
 
@@ -43,7 +44,7 @@
 ## 验收命令（草案）
 
 - `indirect-control-feeling-contract-freeze` / 文档冻结与挂载
-  - `rg -n "PRD-GAME-014|TASK-GAME-071|TASK-GAME-072|TASK-GAME-073|TASK-GAME-074|TASK-GAME-075|control-feeling|accepted intent|间接控制因果与下一步" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/gameplay-top-level-design.prd.md doc/game/gameplay/gameplay-top-level-design.project.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md .pm/tasks/task_89828a4d2c1b4e73987103699c10fa7d.execution.md`
+  - `rg -n "PRD-GAME-014|TASK-GAME-071|TASK-GAME-072|TASK-GAME-073|TASK-GAME-074|TASK-GAME-075|control-feeling|accepted intent|间接控制因果与下一步" doc/game/prd.md doc/game/project.md doc/game/prd.index.md doc/game/README.md doc/game/gameplay/gameplay-top-level-design.prd.md doc/game/gameplay/gameplay-top-level-design.project.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md`
   - `./scripts/doc-governance-check.sh`
   - `git diff --check`
 - `runtime-control-feeling-canonical-contract` / canonical contract 对齐
@@ -67,7 +68,7 @@
 ## Done Definition
 
 - `indirect-control-feeling-contract-freeze`
-  - [x] 新专题 PRD / design / project 已创建并回挂到 `game` 根入口、主文档、索引与 task execution log
+  - [x] 新专题 PRD / design / project 已创建并回挂到 `game` 根入口、主文档、索引与 GitHub task issue evidence comments
   - [x] 已冻结至少 4 条 control-feeling guarantees
   - [x] 已拆出 runtime / viewer / agent / QA follow-up 任务
 - `runtime-control-feeling-canonical-contract`

@@ -69,7 +69,7 @@ Rejected as defaults:
 - verification handoff owner: `.agents/roles/qa_engineer.md`
 - browser loop skill: `.agents/skills/agent-browser/SKILL.md`
 - visual companion skill: `.agents/skills/gpt-image-2/SKILL.md`
-- workflow evidence sink: `.pm/tasks/<TASK-UID>.execution.md`
+- workflow evidence sink: GitHub task issue evidence comments
 
 ## Known Failure Modes
 

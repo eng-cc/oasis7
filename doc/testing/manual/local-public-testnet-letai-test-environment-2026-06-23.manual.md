@@ -606,7 +606,7 @@ rtk curl -sSI 'http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&t
 
 ## 16. 记录模板
 
-每次搭建或复核，在 task execution log 或测试报告中至少记录：
+每次搭建或复核，在 GitHub task issue evidence comments 或测试报告中至少记录：
 
 ```text
 - manifest path:

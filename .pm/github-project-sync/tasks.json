@@ -930,6 +930,55 @@
       "title": "quarterly review doc inventory recomputation",
       "worktree_hint": "/home/scc/worktrees/oasis7-engineering-workflow-friction-priority-burn-down"
     },
+    "task_112d0f253784427fb6892294c0f0f3ea": {
+      "acceptance": [],
+      "claim_verifications": [
+        {
+          "allowed_to_claim": true,
+          "blocked_phrase": "Do not claim the task is complete.",
+          "claim_message": "Fresh verification passed; the task can now be claimed complete.",
+          "claim_type": "task_complete",
+          "status": "verified",
+          "success_phrase": "Fresh verification passed; the task can now be claimed complete.",
+          "task_uid": "task_112d0f253784427fb6892294c0f0f3ea",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T18:07:29+08:00",
+          "verify_command": "rtk proxy bash scripts/pm/github-project-sync.test.sh && rtk proxy bash scripts/pm/github-project-workflow.test.sh && rtk proxy bash scripts/pm/github-project-retire-tasks.test.sh && rtk proxy bash scripts/pm/lint.sh && rtk proxy bash scripts/lint-skills.sh && rtk proxy bash scripts/doc-governance-check.sh && git diff --check"
+        }
+      ],
+      "created_at": "2026-06-30T17:05:06+08:00",
+      "doc_refs": [],
+      "evidence_comments": [
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4841681177",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4841683456",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4841755194",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4841770763",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4841893239",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4842199368",
+        "https://github.com/eng-cc/oasis7/issues/1637#issuecomment-4842205001"
+      ],
+      "evidence_sink": "https://github.com/eng-cc/oasis7/issues/1637",
+      "handoff_to": [],
+      "issue_number": 1637,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1637",
+      "last_claim_verification_at": "2026-06-30T18:07:29+08:00",
+      "last_closed_at": "2026-06-30T18:07:33+08:00",
+      "last_evidence_at": "2026-06-30T18:07:33+08:00",
+      "last_started_at": "2026-06-30T17:05:31+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxQn04",
+      "related_prd": [],
+      "source_refs": [
+        "doc/engineering/workflow/source-of-truth.md"
+      ],
+      "status": "done",
+      "task_uid": "task_112d0f253784427fb6892294c0f0f3ea",
+      "title": "Post-migration PM residual scan",
+      "updated_at": "2026-06-30T18:07:33+08:00",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-post-migration-pm-residual-scan"
+    },
     "task_11e802c9a9714ef682454e63421a8f61": {
       "content_id": "I_kwDORHhWec8AAAABHEhBLQ",
       "execution_log_path": ".pm/tasks/task_11e802c9a9714ef682454e63421a8f61.execution.md",
@@ -4234,6 +4283,20 @@
       "task_uid": "task_52d93044bb645027acf249b647449fc0",
       "title": "Freeze public-chain-grade private-reachability P2P architecture",
       "worktree_hint": "oasis7-p2p-mainnet-private-reachability-architecture-2026-04-01"
+    },
+    "task_52ecb41a63a54808bad86bc9ffc77c15": {
+      "execution_log_path": ".pm/tasks/task_52ecb41a63a54808bad86bc9ffc77c15.execution.md",
+      "issue_number": 1638,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1638",
+      "last_synced_at": "2026-06-30T17:17:44+08:00",
+      "module": "visualization",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxQttA",
+      "status": "done",
+      "task_uid": "task_52ecb41a63a54808bad86bc9ffc77c15",
+      "title": "local-only world playtest",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-visualization-local-testnet-world-playtest-20260629"
     },
     "task_533ac29c20a84ee8a5e6914839ad0761": {
       "content_id": "I_kwDORHhWec8AAAABHElcfA",

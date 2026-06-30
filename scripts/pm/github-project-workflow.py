@@ -118,21 +118,16 @@ def load_simple_yaml(path: pathlib.Path) -> OrderedDict[str, Any]:
 
 def load_tasks(root: pathlib.Path, statuses: set[str], mapping: Optional[dict[str, Any]] = None) -> dict[str, OrderedDict[str, Any]]:
     tasks: dict[str, OrderedDict[str, Any]] = {}
-    task_paths = sorted((root / ".pm/tasks").glob("task_*.yaml"))
-    if not task_paths:
-        tasks.update(load_archived_tasks(root, statuses))
-        if mapping:
-            tasks.update(load_mapping_tasks(mapping, statuses))
-        return tasks
-    for path in task_paths:
-        task = load_simple_yaml(path)
-        task_uid = str(task.get("task_uid") or "")
-        status = str(task.get("status") or "")
-        if not task_uid.startswith("task_") or status not in statuses:
-            continue
-        task["task_path"] = str(path.relative_to(root))
-        tasks[task_uid] = task
+    tasks.update(load_archived_tasks(root, statuses))
+    if mapping:
+        tasks.update(load_mapping_tasks(mapping, statuses))
     return tasks
+
+
+def retired_task_files(root: pathlib.Path) -> list[str]:
+    task_dir = root / ".pm/tasks"
+    paths = sorted(task_dir.glob("task_*.yaml")) + sorted(task_dir.glob("*.execution.md"))
+    return [str(path.relative_to(root)) for path in paths]
 
 
 def load_mapping_tasks(mapping: dict[str, Any], statuses: set[str]) -> dict[str, OrderedDict[str, Any]]:
@@ -400,6 +395,7 @@ def command_audit(args: argparse.Namespace) -> int:
     mapping = load_mapping(mapping_path)
     tasks = load_tasks(root, statuses, mapping)
     mapped_tasks = mapping.get("tasks", {})
+    retired_files = retired_task_files(root)
 
     if args.full_list:
         project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_full_list(args)
@@ -410,6 +406,12 @@ def command_audit(args: argparse.Namespace) -> int:
 
     errors: list[str] = []
     warnings: list[str] = []
+    if retired_files:
+        errors.append(
+            "retired .pm/tasks files present after GitHub Project Step 3: "
+            + ", ".join(retired_files[:10])
+            + (" ..." if len(retired_files) > 10 else "")
+        )
     status_counts = Counter(str(task.get("status") or "") for task in tasks.values())
     for uid, task in sorted(tasks.items()):
         record = mapped_tasks.get(uid) or {}

@@ -11,7 +11,7 @@
 - 语义清晰度：命名、边界、注释、错误信息、operator-facing 文档和任务证据是否能被后续维护者正确理解
 - Bug 风险发现：跨模块不变量破坏、测试盲区、重复失败签名、隐藏 fallback、异常路径和回归风险
 - 技术债管理：债务识别、影响面分级、owner 建议、偿还顺序、临时豁免条件和回收触发器
-- 相关文档：`doc/engineering/*`、`.agents/roles/*`、`.agents/skills/*`、`.pm/tasks/*` 中与工程治理、健康度、债务和对齐有关的证据
+- 相关文档：`doc/engineering/*`、`.agents/roles/*`、`.agents/skills/*`、GitHub task issue evidence comments、`.pm/github-project-sync/*` 中与工程治理、健康度、债务和对齐有关的证据
 
 ## Does Not Own
 - 具体业务/玩法/视觉/runtime/WASM/agent/viewer/blockchain ops 实现的最终专业判断
@@ -21,7 +21,7 @@
 
 ## Inputs
 - `tpm` 提供的 subagent slice 目标、write scope、return contract、formal sink 与 integration order
-- 相关 PRD / project / handoff / `.pm` task execution log
+- 相关 PRD / project / handoff / GitHub task issue evidence comments
 - 当前 diff、历史失败签名、CI / lint / test 输出、doc-governance 检查结果
 - 各专业角色提供的实现说明、验证证据、residual risk 和已知 debt
 
@@ -43,7 +43,7 @@
 - 每个必须修复项都有文件/命令/证据定位，以及建议 owner 或下一步
 - 每个允许延后的债务都有记录位置、过期条件和重新触发验证的方式
 - 没有把本角色的健康度判断包装成 QA 放行、runtime 正确性、产品方向或对外口径结论
-- 结论已回写 `.pm/tasks/<TASK-UID>.execution.md`，并按需补充到正式 docs / handoff / signal
+- 结论已回写 GitHub task issue evidence comments，并按需补充到正式 docs / handoff / signal
 
 ## Recommended Skills
 - 主技能：`systematic-debugging`、`verification-before-completion`，用于复核失败签名、验证 claim 和约束 completion 口径。
@@ -57,6 +57,6 @@
 - 是否检查命名、注释、错误信息、operator-facing 文档和 source-of-truth 语义是否清晰
 - 是否在涉及领域正确性时要求对应专业角色复核
 - 是否在涉及发布阻断/放行时回流给 `qa_engineer`
-- 若 `repository_health_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role repository_health_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 `.pm/tasks/<TASK-UID>.execution.md`，而不是用非 owner role 调用 `workflow-report`
-- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 task execution log 局部记录
-- 是否已回写 `.pm/tasks/<TASK-UID>.execution.md` 与必要的正式治理文档
+- 若 `repository_health_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role repository_health_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
+- 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
+- 是否已回写 GitHub task issue evidence comments 与必要的正式治理文档

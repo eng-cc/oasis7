@@ -167,7 +167,7 @@
 
 ## 9. 回写要求
 每次正式推进 live candidate checklist，至少回写：
-- `.pm/tasks/<TASK-UID>.execution.md`
+- GitHub task issue evidence comments
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`
 - `testing-manual.md`（若 canonical 命令或 claim boundary 变化）
 - lane evidence 文档与 TSV

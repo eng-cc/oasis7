@@ -30,7 +30,7 @@
 - Critical User Flows:
   1. `进入季度窗口 -> 读取 trend baseline + 运行 doc-governance-check -> 记录问题`
   2. `发现问题 -> 生成 remediation 项 -> 指定 owner / 优先级 / 截止时间`
-  3. `季度结束 -> 复核修复项关闭情况 -> 把结果回写 project / .pm execution log / role review evidence`
+  3. `季度结束 -> 复核修复项关闭情况 -> 把结果回写 project / GitHub task issue evidence comments / role review evidence`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |

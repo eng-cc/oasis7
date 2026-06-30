@@ -482,7 +482,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 
 #### Step G: 证据回写
 
-每个 persona 跑完后，必须记录到 `.pm/tasks/<TASK-UID>.execution.md`，并为正式 QA closeout 增补一个 sanitized evidence 文件，例如 `doc/testing/evidence/oc-letai-bridge-full-chain-e2e-<date>.md`：
+每个 persona 跑完后，必须记录到 GitHub task issue evidence comments，并为正式 QA closeout 增补一个 sanitized evidence 文件，例如 `doc/testing/evidence/oc-letai-bridge-full-chain-e2e-<date>.md`：
 
 - persona slug，不含私钥。
 - `newapi_user_ref`、`bridge_user_id`、`route_id`、`deposit_account_id`、`deposit_token`。
@@ -547,7 +547,7 @@ OASIS7_CI_RUN_PROVIDER_LIVE_GATE=true ./scripts/ci-tests.sh --required
 
 ## 10. 证据回写
 每次正式部署、首次演练或异常收口后，至少回写：
-- `.pm/tasks/<TASK-UID>.execution.md`
+- GitHub task issue evidence comments
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.project.md`
 - 必要时附：
   - health 快照
