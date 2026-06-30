@@ -3,8 +3,8 @@
 审计轮次: 7
 
 ## 任务拆解（含 PRD-ID 映射）
-> 说明：本页既有 `TASK-*` 顺序编号条目作为历史追踪保留，不做批量迁移；自该规则冻结后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 `Trace: .pm/tasks/task_<32hex>.yaml`（或等价 `task_uid`）追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 `.pm` 的 canonical `task_uid`。
-> 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: .pm/tasks/task_<32hex>.yaml`
+> 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
+> 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
 - [x] legacy-doc-migration-collaboration-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且仍占据 active doc surface 的 2026-03-03 legacy migration collaboration PRD/design/project triplet，将旧迁移协作语义收敛到 closure evidence、doc structure standard 与 workflow source-of-truth。 Trace: .pm/tasks/task_7c106fd04be24599878a480b810627ba.yaml
 

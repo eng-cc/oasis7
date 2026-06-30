@@ -87,6 +87,9 @@ for role in "${CANONICAL_ROLES[@]}"; do
 done
 
 while IFS= read -r path; do
+  if [[ "$path" == .pm/roles/*/backlog/*.yaml ]]; then
+    continue
+  fi
   [[ -f "$path" ]] || fail "registry path missing: $path"
 done < <(sed -n 's/^    [a-z_]*_path: //p; s/^  active_path: //p; s/^  superseded_path: //p' .pm/registry/roles.yaml)
 

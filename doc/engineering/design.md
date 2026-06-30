@@ -31,9 +31,9 @@
 
 ### 3.2 工程治理执行链路
 - 规范定义：`doc/engineering/doc-governance/*`、`doc/engineering/rust-governance/*`、`doc/engineering/governance/*`
-- 项目追踪：`doc/engineering/project.md`、专题 `*.project.md`
-- 过程记录：`.pm/tasks/task_<32hex>.execution.md`
-- 聚合归档：`scripts/pm/compact-task-group.sh` 在正式 Trace 已收口后，将 closed micro-task group 并回 survivor task，避免 `.pm/tasks/` 长期堆叠一次性 truth-refresh task。
+- 项目追踪：GitHub Project、GitHub task issue、`doc/engineering/project.md`、专题 `*.project.md`
+- 过程记录：GitHub task issue evidence comments；历史 `.pm/tasks/*` 记录已归档到 `.pm/github-project-sync/task-archive.jsonl`
+- 聚合归档：历史 `.pm/tasks/*` 已由 GitHub Project migration Step 3 归档；新任务不得再创建 repo-local task yaml/execution log。
 - 静态校验：`scripts/doc-governance-check.sh`
 - ROUND 台账：`doc/core/reviews/consistency-review-round-*.md`
 

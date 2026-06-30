@@ -35,6 +35,12 @@ YAML
 cat > "$TMPDIR/.pm/github-project-sync/tasks.json" <<'JSON'
 {
   "version": 1,
+  "project": {
+    "id": "PROJECT_ID",
+    "number": 1,
+    "owner": "eng-cc",
+    "repo": "eng-cc/oasis7"
+  },
   "tasks": {
     "task_11111111111111111111111111111111": {
       "task_uid": "task_11111111111111111111111111111111",
@@ -50,11 +56,15 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  "project item-list 1 --owner eng-cc --limit 1000 --format json")
+  api\ graphql*)
+    project_id="PROJECT_ID"
+    if [[ "${GH_FAKE_WRONG_PROJECT:-0}" == "1" ]]; then
+      project_id="OTHER_PROJECT_ID"
+    fi
     if [[ "${GH_FAKE_DRIFT:-0}" == "1" ]]; then
-      printf '{"totalCount":1,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"blocked","workflow Phase":"blocked","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"}]}\n'
+      printf '{"data":{"nodes":[{"id":"ITEM_ID","project":{"id":"%s","number":1},"content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_11111111111111111111111111111111","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"blocked","field":{"name":"PM Status"}},{"name":"blocked","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n' "$project_id"
     else
-      printf '{"totalCount":1,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"}]}\n'
+      printf '{"data":{"nodes":[{"id":"ITEM_ID","project":{"id":"%s","number":1},"content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_11111111111111111111111111111111","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n' "$project_id"
     fi
     ;;
   *)
@@ -103,11 +113,70 @@ assert payload["status"] == "failed", payload
 assert any("PM Status" in item for item in payload["errors"]), payload
 PY
 
+WRONG_PROJECT_JSON="$TMPDIR/wrong-project.json"
+set +e
+GH_FAKE_WRONG_PROJECT=1 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --json \
+  audit > "$WRONG_PROJECT_JSON"
+WRONG_PROJECT_EXIT=$?
+set -e
+[[ "$WRONG_PROJECT_EXIT" == "1" ]]
+
+python3 - "$WRONG_PROJECT_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+assert any("project_id" in item for item in payload["errors"]), payload
+PY
+
+cat > "$TMPDIR/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "project item-list 1 --owner eng-cc --limit 1000 --format json")
+    printf '{"totalCount":1,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"}]}\n'
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 9
+    ;;
+esac
+SH
+chmod +x "$TMPDIR/bin/gh"
+
+STEP3_JSON="$TMPDIR/step3.json"
+python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --json \
+  step3-gate > "$STEP3_JSON"
+
+python3 - "$STEP3_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "ok", payload
+assert payload["selected_count"] == 1, payload
+assert payload["project_item_count"] == 1, payload
+assert payload["errors"] == [], payload
+PY
+
 MAPPING_ONLY="$TMPDIR/mapping-only"
 mkdir -p "$MAPPING_ONLY/.pm/github-project-sync"
 cat > "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" <<'JSON'
 {
   "version": 1,
+  "project": {
+    "id": "PROJECT_ID",
+    "number": 1,
+    "owner": "eng-cc",
+    "repo": "eng-cc/oasis7"
+  },
   "tasks": {
     "task_33333333333333333333333333333333": {
       "task_uid": "task_33333333333333333333333333333333",
@@ -128,11 +197,11 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
-  "project item-list 1 --owner eng-cc --limit 1000 --format json")
+  api\ graphql*)
     if [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
-      printf '{"totalCount":1,"items":[{"id":"MAPPING_ITEM_ID","content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"status":"In Progress","task UID":"task_33333333333333333333333333333333","owner Role":"tpm","module":"engineering","pM Status":"blocked","workflow Phase":"blocked","priority":"P2","canonical Worktree":"/tmp/mapping-worktree","test Tier Required":"n/a"}]}\n'
+      printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"blocked","field":{"name":"PM Status"}},{"name":"blocked","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     else
-      printf '{"totalCount":1,"items":[{"id":"MAPPING_ITEM_ID","content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"status":"In Progress","task UID":"task_33333333333333333333333333333333","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/mapping-worktree","test Tier Required":"n/a"}]}\n'
+      printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     fi
     ;;
   *)
