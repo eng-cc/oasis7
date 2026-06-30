@@ -129,3 +129,41 @@ manifest = {
 manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 }
+
+viewer_web_dist_check_freshness() {
+  local repo_root=$1
+  local dist_dir=$2
+  local manifest_path current_json
+  manifest_path="$dist_dir/$(viewer_web_dist_manifest_name)"
+  if [[ ! -f "$manifest_path" ]]; then
+    echo "viewer dist freshness manifest missing: $manifest_path" >&2
+    return 1
+  fi
+  while read -r required_file; do
+    if [[ ! -f "$dist_dir/$required_file" ]]; then
+      echo "viewer dist required file missing: $dist_dir/$required_file" >&2
+      return 1
+    fi
+  done < <(viewer_web_dist_required_files)
+  current_json=$(viewer_web_dist_source_metadata_json "$repo_root")
+  python3 - "$manifest_path" "$current_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+current = json.loads(sys.argv[2])
+if manifest.get("sourceFingerprint") != current.get("sourceFingerprint"):
+    print(
+        "viewer dist is stale relative to current workspace: "
+        f"dist latest={manifest.get('sourceLatestPath')}, "
+        f"current latest={current.get('sourceLatestPath')}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+print("viewer dist freshness ok")
+PY
+}

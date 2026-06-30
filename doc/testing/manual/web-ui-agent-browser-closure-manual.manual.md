@@ -11,7 +11,7 @@
 - 适用于 `oasis7_viewer_live` + `software_safe` Viewer Web 页面闭环。
 - 不适用于 `oasis7_web_launcher` / launcher Web 控制面产品动作；后者默认先走 GUI Agent，再用页面校验状态与字段。
 - 本手册只覆盖当前仍存在的 Web 链路，不再覆盖历史第二 Viewer 或退役视觉专项工具。
-- 若目标是纯本地真实 LetAI provider-backed 游戏试玩或复现 `agent_chat`，先使用 `./scripts/run-local-letai-game-test.sh` 启动完整 bridge + runtime/game 栈；下方 live server + `run-viewer-web.sh` 步骤只作为 Viewer/debug 闭环。纯本地测试不等同于“本地启动 test 环境”。
+- 若目标是纯本地真实 LetAI provider-backed 游戏试玩或复现 `agent_chat`，先使用 `./scripts/run-local-letai-game-test.sh --local-world-playtest` 启动完整 bridge + runtime/game/local-standalone-chain 栈；下方 live server + `run-viewer-web.sh` 步骤只作为 Viewer/debug 闭环。该入口不连接 formal/public testnet；纯本地测试不等同于“本地启动 test 环境”。
 
 ## 前置条件
 - 已安装 `agent-browser`
@@ -21,11 +21,11 @@
 
 ## 纯本地真实 LLM 游戏测试入口
 ```bash
-./scripts/run-local-letai-game-test.sh
-./scripts/run-local-letai-game-test.sh -- --viewer-port 4174 --json-ready
+./scripts/run-local-letai-game-test.sh --local-world-playtest
 ```
 
-- 该入口会统一处理 LetAI token config、默认 Rust direct `127.0.0.1:5841` provider bridge、Rust bridge chat probe/provider contract smoke 与 launcher/runtime/viewer 启动。
+- 该入口会统一处理 LetAI token config、默认 Rust direct `127.0.0.1:5841` provider bridge 与 launcher/runtime/viewer/local-standalone-chain 启动，并固化日常试玩端口 `48420/48421/48422`。
+- 低层调试参数仍保留给专项排障；需要完整列表时执行 `./scripts/run-local-letai-game-test.sh --help-all`。
 - 需要对已经启动的页面做 agent-browser 留证时，优先复用脚本输出的 `GAME_URL`，再执行本手册的采样步骤。
 - 不要把单独的 `run-viewer-web.sh` 当作本地真实 provider-backed gameplay 启动方式；它不负责 provider bridge 或 launcher bootstrap。
 - 若目标是本地启动 test 环境并证明本机入口接入 formal `public_testnet` 大世界，而不是纯本地 LetAI playtest 栈，先按 `doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md` 启动并复核，再用本手册做页面采样。

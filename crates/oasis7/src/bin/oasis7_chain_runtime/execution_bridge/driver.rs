@@ -31,12 +31,14 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
-pub(crate) use super::driver_persistence::{
-    load_execution_bridge_state, load_execution_world_with_policy, persist_execution_bridge_state,
-    persist_execution_world_with_chain_resource_context,
-};
 #[cfg(test)]
-pub(crate) use super::driver_persistence::{load_execution_world, persist_execution_world};
+pub(crate) use super::driver_persistence::load_execution_world;
+pub(crate) use super::driver_persistence::{
+    execution_world_persistence_files_missing, load_execution_bridge_state,
+    load_execution_world_with_policy, persist_execution_bridge_state, persist_execution_world,
+    persist_execution_world_with_chain_resource_context,
+    remove_partial_execution_world_persistence_files,
+};
 use super::external_effect::{
     build_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
@@ -85,30 +87,6 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) checkpoint_keep_latest: usize,
 }
 
-fn remove_partial_execution_world_persistence_files(world_dir: &Path) -> Result<(), String> {
-    let snapshot_path = world_dir.join("snapshot.json");
-    let journal_path = world_dir.join("journal.json");
-    let snapshot_exists = snapshot_path.exists();
-    let journal_exists = journal_path.exists();
-    if snapshot_exists == journal_exists {
-        return Ok(());
-    }
-    for path in [snapshot_path, journal_path] {
-        match fs::remove_file(path.as_path()) {
-            Ok(()) => {}
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                return Err(format!(
-                    "remove partial execution world persistence file {} failed: {}",
-                    path.display(),
-                    err
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
 impl NodeRuntimeExecutionDriver {
     pub(crate) fn new(
         state_path: std::path::PathBuf,
@@ -136,6 +114,8 @@ impl NodeRuntimeExecutionDriver {
         let release_security_policy =
             release_security_policy_for_storage_profile(storage_profile.profile);
         remove_partial_execution_world_persistence_files(world_dir.as_path())?;
+        let execution_world_bootstrap_required =
+            execution_world_persistence_files_missing(world_dir.as_path());
         let execution_world =
             load_execution_world_with_policy(world_dir.as_path(), release_security_policy)?;
         let execution_sandbox: Box<dyn ModuleSandbox + Send> = Box::new(
@@ -154,8 +134,20 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_keep as usize,
         );
         remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
+        let simulator_world_bootstrap_required =
+            execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
+        if execution_world_bootstrap_required {
+            persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
+        }
+        if simulator_world_bootstrap_required {
+            persist_simulator_execution_world(
+                driver.simulator_world_dir.as_path(),
+                &driver.simulator_mirror,
+                None,
+            )?;
+        }
         Ok(driver)
     }
 

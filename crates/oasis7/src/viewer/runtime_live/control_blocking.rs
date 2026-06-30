@@ -120,12 +120,18 @@ impl ViewerRuntimeLiveServer {
                 self.world.governance_execution_policy().epoch_length_ticks,
             )
         });
-        let first_agent_claim_target_available = snapshot_player_id.is_some()
-            && snapshot_bound_agent_id.is_none()
-            && !self
+        let first_agent_claim_target_bound = self
+            .world
+            .state()
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+            && self
                 .llm_sidecar
                 .agent_player_bindings
                 .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID);
+        let first_agent_claim_target_available = snapshot_player_id.is_some()
+            && snapshot_bound_agent_id.is_none()
+            && !first_agent_claim_target_bound;
         let model = runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar);
         let mut player_gameplay = build_player_gameplay_snapshot(
             self.world.state(),

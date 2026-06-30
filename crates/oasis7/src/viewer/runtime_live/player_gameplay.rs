@@ -254,9 +254,14 @@ impl ViewerRuntimeLiveServer {
                 });
             }
             if self
-                .llm_sidecar
-                .agent_player_bindings
+                .world
+                .state()
+                .agents
                 .contains_key(request.target_agent_id.as_str())
+                && self
+                    .llm_sidecar
+                    .agent_player_bindings
+                    .contains_key(request.target_agent_id.as_str())
             {
                 return Err(GameplayActionError {
                     code: "first_agent_already_bound".to_string(),

@@ -5,6 +5,7 @@
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
 
 ### 最近完成（保留一跳 Trace）
+- [x] local-only-world-playtest-startup (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 收敛本地大世界试玩脚本为 local-only 语义，修复 first Agent claim / starter OC pending 体验、链提交快照同步与 Viewer 本地世界措辞，并保留 testnet attach 为独立 runbook。 Trace: .pm/tasks/task_52ecb41a63a54808bad86bc9ffc77c15.yaml
 - [x] viewer-retired-visualization-route-cleanup (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 清理活跃 Viewer/source/docs/site 中旧第二 Viewer 入口、native 启动口径与视觉专项工具链残留，保留历史 provenance 但不再作为当前入口或评审权威。 Trace: .pm/tasks/task_e6edcb09bd774941bdcbde32bb9ea007.yaml
 - [x] chain-side-manifest-delta-runtime-readiness (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 定义链侧资源 manifest/delta schema，接入 simulator/runtime snapshot、provider/testnet readiness 与本地 standalone submit 闭环。 Trace: .pm/tasks/task_a0e15f2d5d0547a3a13c93caab49b611.yaml
 - [x] viewer-visual-hierarchy-polish (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 按 Image2 视觉目标与总体/分模块设计优化 `software_safe` Viewer 首屏层级、command strip、action receipt、focus HUD 与移动 focus overlay，并用 UI/build/pixel-world visual smoke 验证收口。 Trace: .pm/tasks/task_e7760ad76a0046dfa5a17d0a5a89e59c.yaml

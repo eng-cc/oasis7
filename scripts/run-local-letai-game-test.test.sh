@@ -19,6 +19,17 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local path="$1"
+  local unexpected="$2"
+  if grep -Fq -- "$unexpected" "$path"; then
+    echo "expected $path not to contain: $unexpected" >&2
+    echo "--- $path ---" >&2
+    sed -n '1,200p' "$path" >&2 || true
+    exit 1
+  fi
+}
+
 free_bind_addr() {
   python3 - <<'PY'
 from __future__ import annotations
@@ -60,6 +71,20 @@ done
 dist_dir="$tmp_dir/dist"
 mkdir -p "$dist_dir"
 touch "$dist_dir/index.html"
+
+help_out="$tmp_dir/help.out"
+./scripts/run-local-letai-game-test.sh --help >"$help_out"
+assert_contains "$help_out" "Daily manual local-only world playtest"
+assert_contains "$help_out" "--local-world-playtest"
+assert_contains "$help_out" "--help-all"
+assert_not_contains "$help_out" "--chat-probe-timeout-ms"
+assert_not_contains "$help_out" "--skip-bridge-smoke"
+
+help_all_out="$tmp_dir/help-all.out"
+./scripts/run-local-letai-game-test.sh --help-all >"$help_all_out"
+assert_contains "$help_all_out" "Advanced/debug/compatibility options"
+assert_contains "$help_all_out" "--chat-probe-timeout-ms"
+assert_contains "$help_all_out" "--skip-bridge-smoke"
 
 preflight_out="$tmp_dir/preflight.out"
 OASIS7_LOCAL_LETAI_SOURCE_BIN_DIR="$fake_bin_dir" \
@@ -283,6 +308,7 @@ PATH="$fake_bin_dir:$PATH" \
 
 assert_contains "$strict_plan" "provider_smoke_mode=strict"
 assert_contains "$strict_plan" "bridge_smoke=required"
+assert_contains "$strict_plan" "chain_profile=disabled"
 if grep -Fq -- "--skip-bridge-smoke" "$strict_plan"; then
   echo "strict provider smoke mode must not skip bridge smoke" >&2
   exit 1
@@ -313,10 +339,36 @@ PATH="$fake_bin_dir:$PATH" \
 	    >"$degraded_plan"
 
 assert_contains "$degraded_plan" "provider_smoke_mode=degraded"
+assert_contains "$degraded_plan" "chain_profile=disabled"
 assert_contains "$degraded_plan" "bridge_smoke=degrade-on-failure"
 assert_contains "$degraded_plan" "degraded startup will continue after provider smoke failure"
 assert_contains "$degraded_plan" "--skip-llm-provider-preflight"
 assert_contains "$degraded_plan" "OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1"
+
+local_world_dry_run="$tmp_dir/local-world-dry-run.out"
+OASIS7_LOCAL_LETAI_SOURCE_BIN_DIR="$fake_bin_dir" \
+OASIS7_LOCAL_LETAI_VIEWER_DIST_DIR="$dist_dir" \
+PATH="$fake_bin_dir:$PATH" \
+  ./scripts/run-local-letai-game-test.sh \
+    --config "$config_path" \
+    --bind "$(free_bind_addr)" \
+    --no-ensure-token-config \
+    --no-default-proxy \
+    --local-world-playtest \
+    --dry-run-launch \
+    --output-dir "$tmp_dir/out-local-world-dry-run" \
+    -- \
+    --viewer-port "$(free_port)" \
+    --live-bind "$(free_bind_addr)" \
+    --web-bind "$(free_bind_addr)" \
+    >"$local_world_dry_run"
+
+assert_contains "$local_world_dry_run" "startup_profile=playtest"
+assert_contains "$local_world_dry_run" "provider_smoke_mode=skip"
+assert_contains "$local_world_dry_run" "chain_profile=local-standalone"
+assert_contains "$local_world_dry_run" "--json-ready"
+assert_not_contains "$local_world_dry_run" "local LetAI game test detached"
+assert_not_contains "$local_world_dry_run" "supervisor_script="
 
 detached_out="$tmp_dir/detached.out"
 detached_dir="$tmp_dir/out-detached"

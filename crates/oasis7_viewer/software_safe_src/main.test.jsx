@@ -564,7 +564,7 @@ describe("viewer web ui automation baseline", () => {
     expect(within(targetsPanel).getAllByText(/waiting for the committed chain snapshot/i).length)
       .toBeGreaterThan(0);
     expect(within(targetsPanel).getByText(/Do not idle through sync/i)).toBeInTheDocument();
-    expect(within(targetsPanel).getByText(/Starter budget/i)).toBeInTheDocument();
+    expect(within(targetsPanel).getAllByText(/Starter budget/i).length).toBeGreaterThan(0);
     expect(within(targetsPanel).getByText(/the OC button appears automatically after the Agent syncs/i))
       .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -1309,6 +1309,12 @@ describe("viewer web ui automation baseline", () => {
               action_id: "advance_step",
               label: "Advance 1 step",
               protocol_action: "live_control.step",
+              disabled_reason: "waiting for starter OC credit confirmation",
+            },
+            {
+              action_id: "request_snapshot",
+              label: "Refresh snapshot",
+              protocol_action: "world.request_snapshot",
               disabled_reason: null,
             },
             {
@@ -1357,9 +1363,23 @@ describe("viewer web ui automation baseline", () => {
         executeKind: "claim_starter_oc",
       }),
     );
+    let confirmingDialog;
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Confirming OC Credit" })).toBeInTheDocument();
+      confirmingDialog = screen.getByRole("dialog", { name: "Confirming OC Credit" });
+      expect(confirmingDialog).toBeInTheDocument();
     });
+    expect(within(confirmingDialog).getAllByText(/Starter budget/i).length).toBeGreaterThan(0);
+    expect(within(confirmingDialog).getAllByText(/Unlock Agent chat/i).length).toBeGreaterThan(0);
+    expect(within(confirmingDialog).getAllByText(/starter budget/i).length).toBeGreaterThan(0);
+    const retryButton = within(confirmingDialog).getByRole("button", { name: "Retry Confirmation" });
+    expect(retryButton).toBeEnabled();
+    fireEvent.click(retryButton);
+    expect(sendGameplayAction).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        actionId: "request_snapshot",
+        executeKind: "request_snapshot",
+      }),
+    );
     expect(screen.queryByRole("dialog", { name: "OC Credited" })).not.toBeInTheDocument();
     expect(within(starterOcDialog).queryByRole("button", { name: "Start First Agent Chat" })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -1398,6 +1418,100 @@ describe("viewer web ui automation baseline", () => {
     expect(core.buildGameplaySummary().recommendedAction?.actionId).not.toBe("claim_starter_oc");
     expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Claim Starter OC" })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("closes starter OC confirmation when committed snapshot exposes runtime state credit", async () => {
+    const base = sampleSnapshot();
+    const snapshot = sampleSnapshot({
+      model: {
+        ...base.model,
+        state: {
+          ...(base.model.state || {}),
+          starter_oc_claims: {
+            "agent-0": {
+              agent_id: "agent-0",
+              player_id: "local-test-player-bound",
+              amount: 100000000,
+              claimed_at: 14,
+            },
+          },
+        },
+      },
+      player_gameplay: {
+        ...base.player_gameplay,
+        available_actions: [
+          {
+            action_id: "advance_step",
+            label: "Advance 1 step",
+            protocol_action: "live_control.step",
+            target_agent_id: "agent-0",
+            disabled_reason: null,
+          },
+          {
+            action_id: "chat_first_agent",
+            label: "Send one chat/command to the first available agent",
+            protocol_action: "agent_chat",
+            target_agent_id: "agent-0",
+            disabled_reason: null,
+          },
+        ],
+        recent_feedback: {
+          action: "claim_starter_oc",
+          stage: "accepted",
+        },
+      },
+    });
+    await renderViewerApp({
+      snapshot,
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+      },
+      starterOcOnboardingComplete: false,
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Confirming OC Credit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("viewer-playthrough-action-chat-first-agent")).toBeEnabled();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("closes starter OC confirmation when committed gameplay unlocks first agent chat", async () => {
+    const base = sampleSnapshot();
+    const snapshot = sampleSnapshot({
+      player_gameplay: {
+        ...base.player_gameplay,
+        available_actions: [
+          {
+            action_id: "advance_step",
+            label: "Advance 1 step",
+            protocol_action: "live_control.step",
+            target_agent_id: "agent-0",
+            disabled_reason: null,
+          },
+          {
+            action_id: "chat_first_agent",
+            label: "Send one chat/command to the first available agent",
+            protocol_action: "agent_chat",
+            target_agent_id: "agent-0",
+            disabled_reason: null,
+          },
+        ],
+        recent_feedback: {
+          action: "claim_starter_oc",
+          stage: "accepted",
+        },
+      },
+    });
+    await renderViewerApp({
+      snapshot,
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "agent-0");
+      },
+      starterOcOnboardingComplete: false,
+    });
+
+    expect(screen.queryByRole("dialog", { name: "Confirming OC Credit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("viewer-playthrough-action-chat-first-agent")).toBeEnabled();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("forces goal execution blocked when the empty-entity guard trips", async () => {

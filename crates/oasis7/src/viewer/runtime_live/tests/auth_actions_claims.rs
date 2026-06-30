@@ -74,6 +74,68 @@ fn runtime_gameplay_action_claim_first_agent_registers_starter_agent() {
 }
 
 #[test]
+fn runtime_gameplay_action_claim_first_agent_recovers_stale_binding_without_agent() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.world = crate::runtime::World::new_production_hardened();
+    server
+        .llm_sidecar
+        .bind_agent_player(
+            crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID,
+            "stale-player",
+            None,
+            false,
+        )
+        .expect("seed stale binding");
+    assert!(server.world.state().agents.is_empty());
+
+    let (public_key, private_key) = test_signer(95);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-recovered-first-agent",
+        None,
+        95,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.to_string(),
+            target_agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            actor_agent_id: None,
+            player_id: "player-recovered-first-agent".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        96,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let ack = server
+        .handle_gameplay_action(request)
+        .expect("stale first-agent claim action accepted");
+    assert_eq!(ack.action_id, crate::viewer::ACTION_CLAIM_FIRST_AGENT);
+    assert_eq!(
+        server
+            .llm_sidecar
+            .bound_agent_for_player("player-recovered-first-agent"),
+        Some(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert_eq!(
+        server.llm_sidecar.bound_agent_for_player("stale-player"),
+        None
+    );
+}
+
+#[test]
 fn runtime_gameplay_action_claim_starter_oc_grants_first_llm_budget() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

@@ -826,8 +826,8 @@ export function createViewerFeedbackModule({
     const narrativeNextStep = pendingEmptyWorldClaimSync
       ? localeText(
         locale,
-        "认领动作已提交到本地 testnet，正在等待 committed world sync；同步完成后 Agent 会出现在世界里。",
-        "The claim has been submitted to the local testnet and is waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
+        "认领动作已提交到本地世界，正在等待 committed world sync；同步完成后 Agent 会出现在世界里。",
+        "The claim has been submitted to the local world and is waiting for committed world sync; the Agent will appear after the synced snapshot lands.",
       )
       : emptyEntityBlocker
       ? emptyEntityBlocker.nextStepHint

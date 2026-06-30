@@ -56,7 +56,7 @@ regressions.
 
 Operator-facing playtest entries:
 - Local real LetAI provider-backed playtest:
-  ./scripts/run-local-letai-game-test.sh
+  ./scripts/run-local-letai-game-test.sh --local-world-playtest
 - Producer / release manual playtest:
   ./scripts/run-producer-playtest.sh --open-headed
 
@@ -67,6 +67,17 @@ Advanced bundle bootstrap:
 
 Development / debugging fallback:
 - source oasis7_game_launcher via cargo run with the same runtime defaults
+
+Chain-enabled ready boundary:
+- `--chain-enable` is the default and starts launcher-managed chain runtime.
+- The launcher does not treat that path as healthy until
+  `output/chain-runtime/<node-id>/reward-runtime-execution-world/snapshot.json`
+  and `journal.json` exist. If they do not appear before the ready timeout, the
+  launcher exits; browsers that already loaded the page may surface this as
+  `viewer.ws` / WebSocket errors.
+- `--chain-disable` is useful only as a local Viewer/page-play mitigation. It
+  bypasses the chain persistence ready gate and must not be reported as a
+  chain-enabled local standalone world pass.
 
 Options:
   --scenario <name>        Optional debug scenario; default uses formal release fixed world
@@ -82,13 +93,13 @@ Options:
                            Allow trusted_local_only for local-only playtest stacks
   --viewer-static-dir <p>  Override viewer static dir; source mode defaults to fresh `web`, bundle mode only uses this as an advanced override
   --allow-stale-bundle    Skip workspace freshness guard for --bundle-dir (advanced / explicit override)
-  --chain-enable           Enable chain runtime (default)
-  --chain-disable          Disable chain runtime
+  --chain-enable           Enable chain runtime (default; requires execution-world persistence ready)
+  --chain-disable          Disable chain runtime (Viewer/page-play mitigation only)
   --chain-node-id <id>     Override chain node id (default: fresh per run)
   --chain-status-bind <a:p> Override chain status HTTP bind (default: web-bind port + 110)
   --chain-link-policy <p>  enforcing or shadow (default: shadow for trusted local playtest, otherwise enforcing)
   --chain-local-standalone-test
-                           Start a no-testnet single-node chain profile for local submit/commit/snapshot testing
+                           Start a single-node local chain profile for submit/commit/snapshot testing
   --chain-node-validator <v:s>
                            Add a local validator for oasis7_chain_runtime (repeatable)
   --chain-node-auto-attest-all
