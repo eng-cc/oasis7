@@ -161,6 +161,15 @@ Example:
 - Residual Risk: Low. Risk is localized to prompt-tool pagination/count semantics and covered by focused regressions; normal PR required checks remain mandatory before merge.
 - Slice Ledger: /Users/scc/ccwork/worktrees/oasis7-engineering-perf-abstraction-optimization-11/.pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/slice-ledger.jsonl
 
+## 2026-06-30 10:00:00 CST / tpm
+- 完成内容: GitHub PR created for the task branch after `prepare-task-pr.sh` preflight passed. `gh pr create` hit GraphQL rate limit after pushing the branch, so TPM used the GitHub REST pulls API with the same title, base, head, and PR body.
+- 遗留事项: Required checks, PR comments/review threads, and mergeability still need watch/fix/merge follow-through.
+- Action: Create PR and record PR locator.
+- Validation Command: `PATH=/opt/homebrew/bin:$PATH rtk ./scripts/prepare-task-pr.sh --create --title "Optimize module status prompt pagination" --body-file .pm/scratch/task_e397ce71cd284c7aaffdff4d036079f7/pr-body.md`; fallback `gh api repos/eng-cc/oasis7/pulls -X POST ...`
+- Expected Result: Task branch is pushed and a GitHub PR is opened against `main`.
+- Actual Result: PASS with fallback. Branch `task/engineering-perf-abstraction-optimization-11` pushed; PR URL: https://github.com/eng-cc/oasis7/pull/1604
+- Blocker / Next Action: Push this PR evidence commit, then monitor PR checks/comments/mergeability and merge when gates pass.
+
 ## 2026-06-30 09:47:00 CST / tpm
 - 完成内容: TASK CLOSEOUT ATTEMPTED. `task-closeout.sh` completed the task-local verification and updated task metadata to `status: done`, `last_claim_type: task_complete`, `last_verification_exit_code: 0`, `last_verification_status: verified`, and `last_closed_at`. The command then failed at repository-wide `pm-lint` due unrelated historical `.pm/tasks/*` execution-log formatting debt outside this task.
 - 遗留事项: Repo-wide historical `.pm` lint debt remains outside current scope. Current task-local workflow lint passed before closeout; task yaml shows done and verified. Continue to PR creation with the boundary recorded here.
