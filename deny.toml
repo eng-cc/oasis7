@@ -16,6 +16,8 @@ ignore = [
   "RUSTSEC-2021-0127", # serde_cbor unmaintained
   # rustsec-ignore: owner=repository_health_engineer; crate=paste; scope=transitive macro dependency debt; reason=paste remains in the current dependency closure and should be removed by upstream crate modernization; expiry=2026-09-30; validation=cargo tree --target all -i paste; local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node
   "RUSTSEC-2024-0436", # paste unmaintained
+  # rustsec-ignore: owner=repository_health_engineer; crate=ttf-parser; scope=transitive UI font parser debt via egui/bevy/winit; reason=RUSTSEC-2026-0192 has no safe upgrade and currently enters only through launcher/viewer UI dependency closures pending upstream migration to maintained font parsing crates; expiry=2026-09-30; validation=cargo tree --locked --all-features --target all -i ttf-parser; local_crates=oasis7_client_launcher,pixel_world_bridge
+  "RUSTSEC-2026-0192", # ttf-parser unmaintained
 ]
 
 [licenses]

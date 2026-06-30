@@ -442,12 +442,37 @@ fn verify_single_ed25519_signature(
 fn threshold_signature_commitment(
     participant_signatures: &[ReceiptParticipantSignature],
 ) -> String {
-    let mut entries: Vec<String> = participant_signatures
+    let mut entries: Vec<&ReceiptParticipantSignature> = participant_signatures.iter().collect();
+    entries.sort_by(|left, right| {
+        threshold_signature_entry_bytes(left).cmp(threshold_signature_entry_bytes(right))
+    });
+
+    let payload_len = entries
         .iter()
-        .map(|entry| format!("{}:{}", entry.signer_node_id, entry.signature_hex))
-        .collect();
-    entries.sort();
-    sha256_hex(entries.join("|").as_bytes())
+        .map(|entry| entry.signer_node_id.len() + 1 + entry.signature_hex.len())
+        .sum::<usize>()
+        + entries.len().saturating_sub(1);
+    let mut payload = String::with_capacity(payload_len);
+    for (index, entry) in entries.iter().enumerate() {
+        if index > 0 {
+            payload.push('|');
+        }
+        payload.push_str(entry.signer_node_id.as_str());
+        payload.push(':');
+        payload.push_str(entry.signature_hex.as_str());
+    }
+
+    sha256_hex(payload.as_bytes())
+}
+
+fn threshold_signature_entry_bytes(
+    entry: &ReceiptParticipantSignature,
+) -> impl Iterator<Item = u8> + '_ {
+    entry
+        .signer_node_id
+        .bytes()
+        .chain(std::iter::once(b':'))
+        .chain(entry.signature_hex.bytes())
 }
 
 fn receipt_signing_bytes(
@@ -497,4 +522,43 @@ fn decode_hex_array<const N: usize>(raw: &str) -> Result<[u8; N], WorldError> {
         .as_slice()
         .try_into()
         .map_err(|_| WorldError::SignatureKeyInvalid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn threshold_signature_commitment_matches_legacy_payload_order() {
+        let participant_signatures = vec![
+            ReceiptParticipantSignature {
+                signer_node_id: "node.10".to_string(),
+                signature_hex: "receiptsig:ed25519:v1:cccc".to_string(),
+            },
+            ReceiptParticipantSignature {
+                signer_node_id: "node.1".to_string(),
+                signature_hex: "receiptsig:ed25519:v1:aaaa".to_string(),
+            },
+            ReceiptParticipantSignature {
+                signer_node_id: "node.1".to_string(),
+                signature_hex: "receiptsig:ed25519:v1:bbbb".to_string(),
+            },
+        ];
+
+        let optimized = threshold_signature_commitment(&participant_signatures);
+        let legacy = legacy_threshold_signature_commitment(&participant_signatures);
+
+        assert_eq!(optimized, legacy);
+    }
+
+    fn legacy_threshold_signature_commitment(
+        participant_signatures: &[ReceiptParticipantSignature],
+    ) -> String {
+        let mut entries: Vec<String> = participant_signatures
+            .iter()
+            .map(|entry| format!("{}:{}", entry.signer_node_id, entry.signature_hex))
+            .collect();
+        entries.sort();
+        sha256_hex(entries.join("|").as_bytes())
+    }
 }

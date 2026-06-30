@@ -1,0 +1,36 @@
+task_uid: task_ab539eb94b724db6b6f2a51846314fe3
+title: "retire next legacy doc semantics"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-8
+execution_log_path: .pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/project.md
+doc_refs:
+  - doc/engineering/workflow/source-of-truth.md
+  - doc/game/project.md
+  - doc/game/prd.index.md
+  - doc/game/gameplay/README.md
+  - doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md
+  - doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md
+  - doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md
+  - doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md
+  - doc/engineering/project.md
+related_prd: []
+acceptance:
+  - "Identify one bounded next documentation governance point with stale docs or stale semantics."
+  - "Delete obsolete current-surface documentation where canonical replacement exists."
+  - "Converge remaining current/live references to canonical docs without broad historical rewrites."
+  - "Pass doc governance, current task workflow lint, stale-reference checks, and PR review/merge flow."
+handoff_to: []
+updated_at: 2026-06-30T11:20:58+08:00
+last_started_at: 2026-06-30T10:32:07+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_ab539eb94b724db6b6f2a51846314fe3 --phase current"
+last_verified_at: 2026-06-30T11:20:37+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-30T11:20:54+08:00

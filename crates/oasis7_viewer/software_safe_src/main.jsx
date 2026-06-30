@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
@@ -847,6 +847,34 @@ function isPendingFirstAgentClaimSync(action, gameplay) {
   return feedbackAction.includes("claim_first_agent") && PENDING_GAMEPLAY_FEEDBACK_STAGES.has(feedbackStage);
 }
 
+function gameplayActionControlBoundaryReason(action, locale) {
+  const actionId = normalizedId(action?.actionId || action?.action_id);
+  const protocolAction = normalizedId(action?.protocolAction || action?.protocol_action);
+  const targetAgentId = normalizedId(action?.targetAgentId || action?.target_agent_id);
+  if (!targetAgentId || actionId === "claim_first_agent") {
+    return null;
+  }
+  if (protocolAction === "request_snapshot" || protocolAction === "live_control.step" || protocolAction === "live_control.play") {
+    return null;
+  }
+  const boundAgentId = normalizedId(core.state.auth.boundAgentId);
+  if (!boundAgentId) {
+    return tr(
+      locale,
+      "当前账号尚未绑定 Agent；这个动作来自共享世界快照，不能作为当前账号动作执行。",
+      "The current account has no bound Agent; this action came from the shared world snapshot and cannot be executed as the current account.",
+    );
+  }
+  if (targetAgentId !== boundAgentId) {
+    return tr(
+      locale,
+      `这个动作目标是 ${targetAgentId}，但当前账号绑定的是 ${boundAgentId}。`,
+      `This action targets ${targetAgentId}, but the current account is bound to ${boundAgentId}.`,
+    );
+  }
+  return null;
+}
+
 function gameplayActionDisabledReason(action, gameplay, locale) {
   if (action?.disabledReason) {
     return action.disabledReason;
@@ -857,6 +885,10 @@ function gameplayActionDisabledReason(action, gameplay, locale) {
       "认领已提交，正在等待链上 committed 快照同步。",
       "Claim submitted; waiting for the committed chain snapshot to sync.",
     );
+  }
+  const controlBoundaryReason = gameplayActionControlBoundaryReason(action, locale);
+  if (controlBoundaryReason) {
+    return controlBoundaryReason;
   }
   return null;
 }
@@ -920,12 +952,467 @@ function gameplayActionDetail(action, gameplay, locale) {
     || tr(locale, "可以直接从正式网页入口执行。", "Playable directly from the formal Web entry.");
 }
 
+function starterOcAction(gameplay) {
+  if (starterOcOnboardingCompletedForCurrentAgent()) {
+    return null;
+  }
+  const pendingTargetAgentId = normalizedId(starterOcOnboardingState.targetAgentId);
+  if (starterOcOnboardingState.pending && pendingTargetAgentId) {
+    return null;
+  }
+  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc");
+  if (existing) {
+    return existing;
+  }
+  return null;
+}
+
+const starterOcOnboardingState = {
+  pending: false,
+  targetAgentId: null,
+  completedTargetAgentId: null,
+};
+const [starterOcOnboardingRevision, setStarterOcOnboardingRevision] = createSignal(0);
+let starterOcBackgroundConfirmTimer = null;
+
+function touchStarterOcOnboardingState() {
+  setStarterOcOnboardingRevision((value) => value + 1);
+}
+
+function markStarterOcClaimPending(action) {
+  if (action?.actionId !== "claim_starter_oc") {
+    return;
+  }
+  starterOcOnboardingState.pending = true;
+  starterOcOnboardingState.targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id);
+  starterOcOnboardingState.completedTargetAgentId = null;
+  touchStarterOcOnboardingState();
+}
+
+function scheduleStarterOcBackgroundConfirmation() {
+  if (starterOcBackgroundConfirmTimer != null) {
+    window.clearTimeout(starterOcBackgroundConfirmTimer);
+  }
+  starterOcBackgroundConfirmTimer = window.setTimeout(() => {
+    const refreshAction = (core.buildGameplaySummary(uiLocale()).availableActions || [])
+      .find((action) => action.executeKind === "request_snapshot");
+    if (refreshAction) {
+      core.sendGameplayAction(refreshAction);
+    }
+    starterOcBackgroundConfirmTimer = null;
+  }, 450);
+}
+
+function clearStarterOcClaimPending() {
+  starterOcOnboardingState.pending = false;
+  starterOcOnboardingState.targetAgentId = null;
+  touchStarterOcOnboardingState();
+}
+
+function completeStarterOcOnboarding() {
+  starterOcOnboardingState.completedTargetAgentId = normalizedId(
+    starterOcOnboardingState.targetAgentId || core.state.auth.boundAgentId,
+  );
+  clearStarterOcClaimPending();
+  touchStarterOcOnboardingState();
+}
+
+export function __markStarterOcOnboardingCompleteForTest(agentId = core.state.auth.boundAgentId) {
+  starterOcOnboardingState.pending = false;
+  starterOcOnboardingState.targetAgentId = null;
+  starterOcOnboardingState.completedTargetAgentId = normalizedId(agentId);
+  touchStarterOcOnboardingState();
+}
+
+function starterOcClaimPendingForCurrentAgent() {
+  starterOcOnboardingRevision();
+  if (!starterOcOnboardingState.pending) {
+    return false;
+  }
+  const targetAgentId = normalizedId(starterOcOnboardingState.targetAgentId);
+  return Boolean(targetAgentId && targetAgentId === normalizedId(core.state.auth.boundAgentId));
+}
+
+function starterOcOnboardingCompletedForCurrentAgent() {
+  starterOcOnboardingRevision();
+  const completedTargetAgentId = normalizedId(starterOcOnboardingState.completedTargetAgentId);
+  return Boolean(
+    completedTargetAgentId
+      && completedTargetAgentId === normalizedId(core.state.auth.boundAgentId),
+  );
+}
+
+function starterOcCreditVisibleForCurrentAgent() {
+  const agentId = normalizedId(core.state.auth.boundAgentId);
+  if (!agentId) {
+    return false;
+  }
+  const state = core.state.snapshot?.model || core.state.snapshot || {};
+  const starterOcClaim = state.starter_oc_claims?.[agentId] || state.starterOcClaims?.[agentId] || null;
+  if (starterOcClaim) {
+    return true;
+  }
+  const balance = state.main_token_balances?.[agentId] || state.mainTokenBalances?.[agentId] || null;
+  const liquidBalance = Number(claimField(balance, "liquid_balance", "liquidBalance", "liquid", "balance") || 0);
+  return Number.isFinite(liquidBalance) && liquidBalance > 0;
+}
+
+function rawStarterOcActionAvailable() {
+  return (core.state.snapshot?.player_gameplay?.available_actions || [])
+    .some((action) => action?.action_id === "claim_starter_oc");
+}
+
+function starterOcSubmittedFeedback() {
+  if (starterOcOnboardingCompletedForCurrentAgent() || starterOcCreditVisibleForCurrentAgent()) {
+    return null;
+  }
+  const feedback = core.state.lastGameplayActionFeedback;
+  if (
+    feedback?.kind === "gameplay_action"
+    && String(feedback?.action || "").includes("claim_starter_oc")
+    && (feedback?.accepted || feedback?.stage === "ack" || feedback?.stage === "sent")
+  ) {
+    return feedback;
+  }
+  const runtimeFeedback = core.state.snapshot?.player_gameplay?.recent_feedback;
+  if (
+    String(runtimeFeedback?.action || "").includes("claim_starter_oc")
+    && ["accepted", "queued", "sent"].includes(String(runtimeFeedback?.stage || ""))
+  ) {
+    return runtimeFeedback;
+  }
+  return null;
+}
+
+function shouldShowStarterOcRequiredGate(gameplay = core.buildGameplaySummary(uiLocale())) {
+  return Boolean(starterOcAction(gameplay) || starterOcSubmittedFeedback() || starterOcClaimPendingForCurrentAgent());
+}
+
+function visibleGameplayActionsForPanels(gameplay) {
+  const actions = Array.isArray(gameplay?.availableActions) ? gameplay.availableActions : [];
+  if (!shouldShowStarterOcRequiredGate(gameplay)) {
+    return actions;
+  }
+  return actions.filter((action) => action.actionId !== "claim_starter_oc");
+}
+
+function gameplayProgressionAction(gameplay) {
+  return (gameplay?.availableActions || []).find((action) => action.executeKind === "step")
+    || (gameplay?.availableActions || []).find((action) => action.executeKind === "request_snapshot")
+    || null;
+}
+
+function firstAgentChatAction(gameplay) {
+  return (gameplay?.availableActions || []).find((action) => action.executeKind === "agent_chat" && !gameplayActionDisabledReason(action, gameplay, uiLocale()))
+    || null;
+}
+
+function StarterOcOnboardingPanel(props) {
+  const locale = () => props.locale;
+  const gameplay = () => props.gameplay;
+  const action = () => starterOcAction(gameplay());
+  const waitingForFirstAgent = () => Boolean(props.waitingForFirstAgent);
+  const hideActionButton = () => Boolean(props.hideActionButton);
+  return (
+    <div class="stack stack--compact">
+      <div class="feedback-summary">
+        {tr(
+          locale(),
+          "等待同步时不用空等：先了解下一步。Agent 出现后，先领取第一笔 OC，再用它开启第一次 Agent 聊天和早期玩法操作。",
+          "Do not idle through sync: learn the next step now. Once the Agent appears, claim the first OC, then use it to unlock the first Agent chat and early gameplay actions.",
+        )}
+      </div>
+      <div class="summary-grid">
+        <div class="metric">
+          <div class="metric__label">{tr(locale(), "第一笔 OC", "First OC")}</div>
+          <div class="metric__value">{tr(locale(), "新手启动资金", "Starter budget")}</div>
+        </div>
+        <div class="metric">
+          <div class="metric__label">{tr(locale(), "用途", "Use")}</div>
+          <div class="metric__value">{tr(locale(), "解锁 Agent 聊天", "Unlock Agent chat")}</div>
+        </div>
+        <div class="metric">
+          <div class="metric__label">{tr(locale(), "玩法目标", "Play Goal")}</div>
+          <div class="metric__value">{tr(locale(), "指挥 Agent 恢复产线", "Guide the Agent")}</div>
+        </div>
+      </div>
+      <Show when={!hideActionButton()}>
+        <Show
+          when={action()}
+          fallback={(
+            <div class="feedback-detail">
+              {waitingForFirstAgent()
+                ? tr(
+                  locale(),
+                  "当前还在等第一个 Agent 写入 committed 快照；OC 按钮会在 Agent 同步后自动出现。",
+                  "The first Agent is still waiting for the committed snapshot; the OC button appears automatically after the Agent syncs.",
+                )
+                : tr(
+                  locale(),
+                  "如果聊天提示 OC 不足，回到这里领取初始 OC。",
+                  "If chat says OC is missing, return here to claim starter OC.",
+                )}
+            </div>
+          )}
+        >
+          {(starterAction) => (
+            <div class="toolbar">
+              <button
+                disabled={Boolean(gameplayActionDisabledReason(starterAction(), gameplay(), locale()))}
+                onClick={() => renderGameplayAction(starterAction())}
+              >
+                {gameplayActionButtonLabel(starterAction(), locale())}
+              </button>
+            </div>
+          )}
+        </Show>
+      </Show>
+      <Show when={hideActionButton() && !action()}>
+        <div class="feedback-detail">
+          {waitingForFirstAgent()
+            ? tr(
+              locale(),
+              "当前还在等第一个 Agent 写入 committed 快照；OC 按钮会在 Agent 同步后自动出现。",
+              "The first Agent is still waiting for the committed snapshot; the OC button appears automatically after the Agent syncs.",
+            )
+            : tr(
+              locale(),
+              "如果聊天提示 OC 不足，回到这里领取初始 OC。",
+              "If chat says OC is missing, return here to claim starter OC.",
+            )}
+        </div>
+      </Show>
+    </div>
+  );
+}
+
+function StarterOcRequiredGate() {
+  const locale = () => uiLocale();
+  const [autoConfirmAttempts, setAutoConfirmAttempts] = createSignal(0);
+  const gameplay = () => core.buildGameplaySummary(locale());
+  const action = () => starterOcAction(gameplay());
+  const submittedFeedback = () => starterOcSubmittedFeedback();
+  const pendingCredit = () => starterOcClaimPendingForCurrentAgent() || Boolean(submittedFeedback());
+  const creditConfirmed = () => pendingCredit() && starterOcCreditVisibleForCurrentAgent() && !rawStarterOcActionAvailable();
+  const progressionAction = () => gameplayProgressionAction(gameplay());
+  const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action) => action.executeKind === "request_snapshot") || null;
+  const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
+  const chatAction = () => firstAgentChatAction(gameplay());
+  const primaryAction = () => {
+    if (creditConfirmed()) {
+      return chatAction();
+    }
+    return pendingCredit() ? progressionAction() : action();
+  };
+  let primaryButtonRef;
+  let scheduledAutoConfirmAttempt = -1;
+  let autoConfirmTimer = null;
+  let autoCompleteTimer = null;
+
+  createEffect(() => {
+    if (gateOpen()) {
+      window.setTimeout(() => primaryButtonRef?.focus(), 0);
+    }
+  });
+
+  createEffect(() => {
+    if (creditConfirmed()) {
+      if (autoCompleteTimer == null) {
+        autoCompleteTimer = window.setTimeout(() => {
+          completeStarterOcOnboarding();
+          setAutoConfirmAttempts(0);
+          core.requestRender();
+          autoCompleteTimer = null;
+        }, 1200);
+      }
+      return;
+    }
+    if (autoCompleteTimer != null) {
+      window.clearTimeout(autoCompleteTimer);
+      autoCompleteTimer = null;
+    }
+    if (!pendingCredit() || creditConfirmed()) {
+      scheduledAutoConfirmAttempt = -1;
+      if (!pendingCredit()) {
+        setAutoConfirmAttempts(0);
+      }
+      return;
+    }
+    const nextAction = snapshotRefreshAction();
+    const attempt = autoConfirmAttempts();
+    if (!nextAction || attempt >= 3 || scheduledAutoConfirmAttempt === attempt) {
+      return;
+    }
+    if (gameplayActionDisabledReason(nextAction, gameplay(), locale())) {
+      return;
+    }
+    scheduledAutoConfirmAttempt = attempt;
+    autoConfirmTimer = window.setTimeout(() => {
+      renderGameplayAction(nextAction);
+      setAutoConfirmAttempts((value) => value + 1);
+    }, attempt === 0 ? 450 : 1600);
+  });
+
+  onCleanup(() => {
+    if (autoConfirmTimer != null) {
+      window.clearTimeout(autoConfirmTimer);
+    }
+    if (autoCompleteTimer != null) {
+      window.clearTimeout(autoCompleteTimer);
+    }
+  });
+
+  return (
+    <Show when={gateOpen()}>
+      {() => (
+        <div
+          class="auth-gate"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="starter-oc-gate-title"
+          data-viewer-fixture-state="starter_oc_required_gate"
+        >
+          <div class="auth-gate__dialog">
+            <div class="auth-gate__header">
+              <div>
+                <div class="panel__eyebrow">{tr(locale(), "新手必经步骤", "Required Onboarding Step")}</div>
+                <h1 id="starter-oc-gate-title" class="auth-gate__title">
+                  {creditConfirmed()
+                    ? tr(locale(), "OC 已入账", "OC Credited")
+                    : pendingCredit()
+                    ? tr(locale(), "正在确认 OC 入账", "Confirming OC Credit")
+                    : tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
+                </h1>
+              </div>
+              <Badge class={creditConfirmed() ? "badge badge--good" : pendingCredit() ? "badge badge--accent" : "badge badge--good"}>
+                {creditConfirmed() ? "credited" : pendingCredit() ? "syncing" : "ready"}
+              </Badge>
+            </div>
+            <Show
+              when={!pendingCredit()}
+              fallback={(
+                <div class="stack stack--compact">
+                  <div class="feedback-summary">
+                    {creditConfirmed()
+                      ? tr(
+                        locale(),
+                        "第一笔 OC 已经写入本地 testnet 快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。",
+                        "The first OC is now visible in the local testnet snapshot. You can start the first Agent chat and continue early gameplay actions.",
+                      )
+                      : tr(
+                        locale(),
+                        "领取请求已经提交。系统正在自动推进并刷新本地 testnet，确认这笔初始 OC 写入可见快照。",
+                        "The claim was submitted. The system is automatically advancing and refreshing the local testnet to confirm the starter OC in the visible snapshot.",
+                      )}
+                  </div>
+                  <div class="summary-grid">
+                    <div class="metric">
+                      <div class="metric__label">{tr(locale(), "状态", "Status")}</div>
+                      <div class="metric__value">
+                        {creditConfirmed()
+                          ? tr(locale(), "已入账", "Credited")
+                          : tr(locale(), "自动确认中", "Auto-confirming")}
+                      </div>
+                    </div>
+                    <div class="metric">
+                      <div class="metric__label">{tr(locale(), "进度", "Progress")}</div>
+                      <div class="metric__value">
+                        {creditConfirmed()
+                          ? tr(locale(), "完成", "Done")
+                          : tr(locale(), `第 ${Math.min(autoConfirmAttempts() + 1, 3)} 次确认`, `Check ${Math.min(autoConfirmAttempts() + 1, 3)} of 3`)}
+                      </div>
+                    </div>
+                    <div class="metric">
+                      <div class="metric__label">{tr(locale(), "你可以做什么", "What To Do")}</div>
+                      <div class="metric__value">
+                        {creditConfirmed()
+                          ? tr(locale(), "开始聊天", "Start chat")
+                          : tr(locale(), "先看玩法说明", "Read the guide")}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            >
+              <StarterOcOnboardingPanel gameplay={gameplay()} locale={locale()} hideActionButton={true} />
+            </Show>
+            <div class="feedback-detail">
+              {creditConfirmed()
+                ? tr(
+                  locale(),
+                  "OC 会作为第一次 LLM/Agent chat 的启动预算；用它向 Agent 发第一条指令，推动产线恢复。",
+                  "OC is the starter budget for the first LLM/Agent chat. Use it to send the first command and move production forward.",
+                )
+                : pendingCredit()
+                ? tr(
+                  locale(),
+                  "不用空等：系统会自动推进确认。若本地 testnet 暂时没有回执，下面的按钮可以手动补一次确认。",
+                  "No need to idle: confirmation runs automatically. If the local testnet has not responded yet, the button below can retry one confirmation.",
+                )
+                : tr(
+                  locale(),
+                  "这是进入 Agent 聊天和早期玩法动作前必须完成的一步。领取后会进入入账确认。",
+                  "This step is required before Agent chat and early gameplay actions. Claiming it moves you to credit confirmation.",
+                )}
+            </div>
+            <div class="toolbar">
+              <Show when={primaryAction()}>
+                {(nextAction) => (
+                  <button
+                    ref={primaryButtonRef}
+                    disabled={Boolean(gameplayActionDisabledReason(nextAction(), gameplay(), locale()))}
+                    onClick={() => {
+                      if (creditConfirmed()) {
+                        completeStarterOcOnboarding();
+                        setAutoConfirmAttempts(0);
+                      }
+                      renderGameplayAction(nextAction());
+                    }}
+                  >
+                    {creditConfirmed()
+                      ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat")
+                      : pendingCredit()
+                      ? tr(locale(), "手动再确认一次", "Retry Confirmation")
+                      : gameplayActionButtonLabel(nextAction(), locale())}
+                  </button>
+                )}
+              </Show>
+              <Show when={creditConfirmed() && !primaryAction()}>
+                <button
+                  ref={primaryButtonRef}
+                  onClick={() => {
+                    completeStarterOcOnboarding();
+                    setAutoConfirmAttempts(0);
+                    core.requestRender();
+                  }}
+                >
+                  {tr(locale(), "继续", "Continue")}
+                </button>
+              </Show>
+            </div>
+          </div>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 function renderGameplayAction(action) {
   if (action.executeKind === "agent_chat") {
     core.applySelection({ kind: "agent", id: action.targetAgentId });
     return;
   }
-  core.sendGameplayAction(action);
+  if (action.actionId === "claim_starter_oc") {
+    markStarterOcClaimPending(action);
+  }
+  const result = core.sendGameplayAction(action);
+  if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
+    clearStarterOcClaimPending();
+  } else if (action.actionId === "claim_starter_oc") {
+    scheduleStarterOcBackgroundConfirmation();
+    core.requestRender();
+  }
+  return result;
 }
 
 function buildAgentClaimTargets(snapshot, agentClaim) {
@@ -947,11 +1434,86 @@ function buildAgentClaimTargets(snapshot, agentClaim) {
   return unclaimedNonActor.length > 0 ? unclaimedNonActor : candidates;
 }
 
+function normalizedId(value) {
+  return String(value || "").trim();
+}
+
+function agentBindingForId(agentId, snapshot = core.state.snapshot) {
+  const id = normalizedId(agentId);
+  if (!id) {
+    return { playerId: null, publicKey: null };
+  }
+  return {
+    playerId: snapshot?.model?.agent_player_bindings?.[id] || null,
+    publicKey: snapshot?.model?.agent_player_public_key_bindings?.[id] || null,
+  };
+}
+
+function describeAgentSessionStatus(agentId, locale, snapshot = core.state.snapshot) {
+  const id = normalizedId(agentId);
+  const boundAgentId = normalizedId(core.state.auth.boundAgentId);
+  const playerId = normalizedId(core.state.auth.playerId);
+  const binding = agentBindingForId(id, snapshot);
+  const boundPlayerId = normalizedId(binding.playerId);
+  const isCurrentBoundAgent = Boolean(id && boundAgentId && id === boundAgentId);
+  const isBoundToCurrentPlayer = Boolean(boundPlayerId && playerId && boundPlayerId === playerId);
+
+  if (isCurrentBoundAgent) {
+    return {
+      kind: "current",
+      isCurrentSessionAgent: true,
+      badge: tr(locale, "我的 Agent", "My Agent"),
+      detail: tr(locale, "当前会话绑定，可执行聊天和指挥。", "Bound to the current session; chat and command controls are available."),
+      badgeClass: "badge badge--good",
+      binding,
+    };
+  }
+  if (isBoundToCurrentPlayer) {
+    return {
+      kind: "current_player_binding_pending",
+      isCurrentSessionAgent: false,
+      badge: tr(locale, "绑定待同步", "Binding Pending"),
+      detail: tr(
+        locale,
+        "快照显示这个 Agent 绑定到当前玩家，但当前会话还没有同步 boundAgent；聊天和指挥暂不开放。",
+        "The snapshot shows this Agent bound to the current player, but this session has not synced boundAgent yet; chat and command stay unavailable.",
+      ),
+      badgeClass: "badge badge--accent",
+      binding,
+    };
+  }
+  if (boundPlayerId) {
+    return {
+      kind: "other_bound",
+      isCurrentSessionAgent: false,
+      badge: tr(locale, "已隐藏", "Hidden"),
+      detail: tr(locale, "这个 Agent 已绑定到其他账号，默认不在当前账号的 Agent 列表中展示。", "This Agent is bound to another account and is hidden from the current account's Agent list by default."),
+      badgeClass: "badge badge--warn",
+      binding,
+    };
+  }
+  return {
+    kind: "unbound_agent_hidden",
+    isCurrentSessionAgent: false,
+    badge: tr(locale, "未绑定", "Unbound"),
+    detail: tr(locale, "这个 Agent 没有账号绑定，默认不在玩家 Agent 列表中展示。", "This Agent has no account binding and is hidden from the player Agent list by default."),
+    badgeClass: "badge badge--warn",
+    binding,
+  };
+}
+
+function agentClaimUsesCurrentBoundAgent(agentClaim) {
+  const claimerAgentId = normalizedId(agentClaim?.claimer_agent_id);
+  const boundAgentId = normalizedId(core.state.auth.boundAgentId);
+  return Boolean(claimerAgentId && boundAgentId && claimerAgentId === boundAgentId);
+}
+
 function buildAgentClaimAction(agentClaim, targetAgentId) {
   const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
+  const boundAgentId = normalizedId(core.state.auth.boundAgentId);
   const target = String(targetAgentId || "").trim();
   const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
-  if (!claimerAgentId || !target || blockedReason) {
+  if (!claimerAgentId || !target || blockedReason || !boundAgentId || claimerAgentId !== boundAgentId) {
     return null;
   }
   return {
@@ -971,11 +1533,47 @@ function buildAgentClaimAction(agentClaim, targetAgentId) {
 }
 
 function hasExecutableAgentClaim(snapshot, agentClaim) {
-  if (!agentClaim || String(agentClaim?.next_claim_quote?.blocked_reason || "").trim()) {
+  if (!agentClaim || !agentClaimUsesCurrentBoundAgent(agentClaim) || String(agentClaim?.next_claim_quote?.blocked_reason || "").trim()) {
     return false;
   }
   const targets = buildAgentClaimTargets(snapshot, agentClaim);
   return targets.length > 0 && Boolean(buildAgentClaimAction(agentClaim, targets[0]?.id));
+}
+
+function hasAgentClaimSessionBoundary(agentClaim) {
+  return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
+}
+
+function AgentClaimSessionBoundaryCard(props) {
+  const locale = () => props.locale ?? uiLocale();
+  const agentClaim = () => props.gameplay?.agentClaim || null;
+  return (
+    <CalloutCard
+      title={tr(locale(), "当前账号尚未绑定 Agent", "Current Account Has No Bound Agent")}
+      badge="observe"
+      badgeClass="badge badge--accent"
+    >
+      <div class="feedback-summary">
+        {tr(
+          locale(),
+          "这个世界已经有 Agent，但当前账号还没有可作为 claimer 的绑定 Agent。",
+          "This world already has Agents, but the current account has no bound Agent that can act as the claimer.",
+        )}
+      </div>
+      <div class="feedback-detail">
+        {tr(
+          locale(),
+          "可以先观察世界对象；认领入口必须来自当前会话绑定和 canonical slot-1 quote，不能从世界里的第一个 Agent 推断。",
+          "You can observe world objects first; claim entry must come from the current session binding and canonical slot-1 quote, not from the first Agent in the world.",
+        )}
+      </div>
+      <div class="badge-row">
+        <Badge>{`boundAgent=${core.state.auth.boundAgentId || "-"}`}</Badge>
+        <Badge>{`claimer=${agentClaim()?.claimer_agent_id || "-"}`}</Badge>
+        <Badge>{`owned=${agentClaim()?.owned_claim_count ?? 0}/${agentClaim()?.claim_cap ?? "-"}`}</Badge>
+      </div>
+    </CalloutCard>
+  );
 }
 
 function AgentClaimPanel(props) {
@@ -1344,11 +1942,17 @@ function TargetsPanel() {
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const firstAgentClaimAction = () =>
     (gameplaySummary()?.availableActions || []).find((action) => action.actionId === "claim_first_agent");
+  const firstAgentClaimWaiting = () => Boolean(gameplayActionDisabledReason(firstAgentClaimAction(), gameplaySummary(), locale()));
   const hasSnapshot = () => Boolean(core.state.snapshot);
-  const selectedLabel = () =>
-    core.state.selectedKind && core.state.selectedId
-      ? `${core.state.selectedKind}:${core.state.selectedId}`
-      : null;
+  const selectedLabel = () => {
+    if (!core.state.selectedKind || !core.state.selectedId) {
+      return null;
+    }
+    if (core.state.selectedKind === "agent" && !core.isAgentVisibleToCurrentSession(core.state.selectedId)) {
+      return null;
+    }
+    return `${core.state.selectedKind}:${core.state.selectedId}`;
+  };
 
   return (
     <div class="stack">
@@ -1371,9 +1975,9 @@ function TargetsPanel() {
         {(action) => (
           <CalloutCard
             title={tr(locale(), "认领第一个 Agent", "Claim Your First Agent")}
-            badge={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "waiting" : "ready"}
-            badgeClass={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "badge badge--accent" : "badge badge--good"}
-            variant={gameplayActionDisabledReason(action(), gameplaySummary(), locale()) ? "warn" : null}
+            badge={firstAgentClaimWaiting() ? "waiting" : "ready"}
+            badgeClass={firstAgentClaimWaiting() ? "badge badge--accent" : "badge badge--good"}
+            variant={firstAgentClaimWaiting() ? "warn" : null}
           >
             <div class="feedback-summary">
               {gameplayActionDisabledReason(action(), gameplaySummary(), locale())
@@ -1383,6 +1987,13 @@ function TargetsPanel() {
                   "This is a new-user empty world: claim the first Agent first, then it will appear in the agent list after chain submission and sync.",
                 )}
             </div>
+            <Show when={firstAgentClaimWaiting()}>
+              <StarterOcOnboardingPanel
+                gameplay={gameplaySummary()}
+                locale={locale()}
+                waitingForFirstAgent={true}
+              />
+            </Show>
             <div class="toolbar">
               <button
                 disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
@@ -1416,21 +2027,32 @@ function TargetsPanel() {
             }
           >
             <For each={lists().agents}>
-              {(agent, index) => (
-                <button
-                  class="list-item"
-                  data-testid={index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`}
-                  data-select-kind="agent"
-                  data-select-id={agent.id}
-                  data-selected={core.state.selectedKind === "agent" && core.state.selectedId === agent.id}
-                  onClick={() => core.applySelection({ kind: "agent", id: agent.id })}
-                >
-                  <div class="list-item__title">{agent.id}</div>
-                  <div class="list-item__meta">
-                    {`${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`}
-                  </div>
-                </button>
-              )}
+              {(agent, index) => {
+                const status = () => describeAgentSessionStatus(agent.id, locale());
+                return (
+                  <button
+                    class="list-item"
+                    data-testid={index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`}
+                    data-select-kind="agent"
+                    data-select-id={agent.id}
+                    data-agent-session-status={status().kind}
+                    data-selected={core.state.selectedKind === "agent" && core.state.selectedId === agent.id}
+                    onClick={() => core.applySelection({ kind: "agent", id: agent.id })}
+                  >
+                    <div class="list-item__title">{agent.id}</div>
+                    <div class="badge-row">
+                      <Badge class={status().badgeClass}>{status().badge}</Badge>
+                      <Show when={status().binding.playerId}>
+                        <Badge>{`boundPlayer=${status().binding.playerId}`}</Badge>
+                      </Show>
+                    </div>
+                    <div class="list-item__meta">
+                      {`${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`}
+                    </div>
+                    <div class="list-item__meta">{status().detail}</div>
+                  </button>
+                );
+              }}
             </For>
           </Show>
         </div>
@@ -1478,6 +2100,7 @@ function WorldSummaryPanel() {
   const locale = () => uiLocale();
   const state = core.state;
   const gameplaySummary = () => core.buildGameplaySummary(locale());
+  const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
   const gameplayActionFeedback = () => core.snapshotSemanticFeedback(state.lastGameplayActionFeedback);
   const promptFeedback = () => core.snapshotSemanticFeedback(state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(state.lastChatFeedback);
@@ -1517,7 +2140,17 @@ function WorldSummaryPanel() {
   ];
 
   return (
-    <details class="gameplay-details-surface" id="viewer-gameplay-details" open>
+    <>
+      <Show when={!starterOcGateOpen() && starterOcAction(gameplaySummary())}>
+        <CalloutCard
+          title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
+          badge="ready"
+          badgeClass="badge badge--good"
+        >
+          <StarterOcOnboardingPanel gameplay={gameplaySummary()} locale={locale()} />
+        </CalloutCard>
+      </Show>
+      <details class="gameplay-details-surface" id="viewer-gameplay-details" open>
       <summary class="gameplay-details-surface__summary">
         <div class="diagnostic-surface__title">
           <span>{tr(locale(), "玩法明细", "Gameplay Details")}</span>
@@ -1880,17 +2513,29 @@ function WorldSummaryPanel() {
                   </CalloutCard>
                 )}
               </Show>
+              <Show when={!shouldShowStarterOcRequiredGate(gameplay()) && (gameplay().recommendedAction?.actionId === "claim_starter_oc" || starterOcAction(gameplay()))}>
+                <CalloutCard
+                  title={tr(locale(), "领取第一笔 OC", "Claim Your First OC")}
+                  badge={starterOcAction(gameplay()) ? "ready" : "next"}
+                  badgeClass={starterOcAction(gameplay()) ? "badge badge--good" : "badge badge--accent"}
+                >
+                  <StarterOcOnboardingPanel gameplay={gameplay()} locale={locale()} />
+                </CalloutCard>
+              </Show>
               <Show when={hasExecutableAgentClaim(core.state.snapshot, gameplay().agentClaim)}>
                 <AgentClaimPanel gameplay={gameplay()} locale={locale()} />
+              </Show>
+              <Show when={hasAgentClaimSessionBoundary(gameplay().agentClaim)}>
+                <AgentClaimSessionBoundaryCard gameplay={gameplay()} locale={locale()} />
               </Show>
               <div>
                 <div class="panel__title panel__title--spaced">{tr(locale(), "可用玩法动作", "Available Gameplay Actions")}</div>
                 <div class="action-grid">
                   <Show
-                    when={gameplay().availableActions.length > 0}
+                    when={visibleGameplayActionsForPanels(gameplay()).length > 0}
                     fallback={<EmptyState>{tr(locale(), "当前还没有发布规范玩法动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
                   >
-                    <For each={gameplay().availableActions}>
+                    <For each={visibleGameplayActionsForPanels(gameplay())}>
                       {(action) => (
                         <EventCard
                           class="event-card event-card--action"
@@ -2270,13 +2915,21 @@ function WorldSummaryPanel() {
         </div>
       </details>
       </div>
-    </details>
+      </details>
+    </>
   );
 }
 
 function InteractionPanel() {
   const locale = () => uiLocale();
-  const agentId = () => core.selectedAgentId();
+  const selectedAgentId = () => core.selectedAgentId();
+  const agentId = () => {
+    const id = normalizedId(selectedAgentId());
+    if (!id || !core.isAgentVisibleToCurrentSession(id)) {
+      return null;
+    }
+    return id;
+  };
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const authSurface = () => core.buildAuthSurfaceModel();
   const promptCapability = () => authSurface().capabilities.prompt_control;
@@ -2284,6 +2937,9 @@ function InteractionPanel() {
   const mainTokenTransferCapability = () => authSurface().capabilities.main_token_transfer;
   const mainTokenTransferPolicy = () => core.hostedActionPolicy("main_token_transfer");
   const binding = () => core.selectedAgentBindingInfo();
+  const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
+  const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
+  const selectedAgentControlReason = () => selectedAgentStatus().detail;
   const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
@@ -2294,6 +2950,10 @@ function InteractionPanel() {
       .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
       .slice(0, 12);
   const interactionEnabled = () => promptCapability().enabled;
+  const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
+  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent();
+  const commandStarterOcAction = () => starterOcAction(gameplaySummary());
+  const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
   const promptOverridesVisible = () => !!core.state.promptOverridesVisible;
   const assetLaneStatusText = () =>
     mainTokenTransferCapability().enabled
@@ -2323,6 +2983,28 @@ function InteractionPanel() {
     promptOverridesVisible()
       ? tr(locale(), "收起提示词覆盖", "Hide Prompt Overrides")
       : tr(locale(), "显示提示词覆盖", "Show Prompt Overrides");
+  const playerSessionReadyCopy = () =>
+    tr(
+      locale(),
+      "当前 Agent 已绑定到你的本地玩家会话。可以直接发送第一条聊天指令；提示词和资产治理能力先收在后置区域。",
+      "This Agent is bound to your local player session. Send the first chat command here; prompt and asset/governance controls stay in the deferred area.",
+    );
+  const commandBoundaryCopy = () =>
+    canControlSelectedAgent()
+      ? playerSessionReadyCopy()
+      : selectedAgentControlReason();
+
+  if (selectedAgentId() && !agentId()) {
+    return (
+      <EmptyState>
+        {tr(
+          locale(),
+          "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
+          "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
+        )}
+      </EmptyState>
+    );
+  }
 
   if (!agentId()) {
     if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
@@ -2336,35 +3018,52 @@ function InteractionPanel() {
       <div class="badge-row command-surface__target-row">
         <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
-        <Badge class={chatCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
-          {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
+        <Badge class={selectedAgentStatus().badgeClass}>{selectedAgentStatus().badge}</Badge>
+        <Badge class={chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
+          {chatControlsEnabled() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
         </Badge>
       </div>
       <Show
-        when={interactionEnabled()}
-        fallback={<EmptyState class="command-surface__auth-boundary">{promptCapability().reason}</EmptyState>}
+        when={interactionEnabled() && canControlSelectedAgent()}
+        fallback={
+          <EmptyState class="command-surface__auth-boundary">
+            {commandBoundaryCopy()}
+          </EmptyState>
+        }
       >
         <div class="badge-row command-surface__auth-boundary">
           <Badge class="badge badge--good">{authSurface().currentTier}</Badge>
           <Badge>{`player=${core.state.auth.playerId}`}</Badge>
           <Badge>{`source=${authSurface().source}`}</Badge>
         </div>
-        <EmptyState class="command-surface__auth-boundary">{promptCapability().reason}</EmptyState>
+        <EmptyState class="command-surface__auth-boundary">{playerSessionReadyCopy()}</EmptyState>
       </Show>
       <div class="badge-row command-surface__capability-row">
         <Badge>{`boundPlayer=${binding()?.playerId || "-"}`}</Badge>
         <Badge>{`boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`}</Badge>
-        <Badge class={promptCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
-          {`prompt=${promptCapability().enabled ? "enabled" : promptCapability().code}`}
+        <Badge class={promptControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
+          {`prompt=${promptControlsEnabled() ? "enabled" : promptCapability().code || "agent_not_bound"}`}
         </Badge>
-        <Badge class={chatCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
-          {`chat=${chatCapability().enabled ? "enabled" : chatCapability().code}`}
+        <Badge class={chatControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
+          {`chat=${chatControlsEnabled() ? "enabled" : chatCapability().code || "agent_not_bound"}`}
         </Badge>
         <Badge class={mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn"}>
           {`mainToken=${assetLaneStatusText()}`}
         </Badge>
       </div>
       <EmptyState class="command-surface__asset-boundary">{assetLaneDetail()}</EmptyState>
+      <Show when={!starterOcGateOpen() && canControlSelectedAgent() && commandStarterOcAction()}>
+        {(action) => (
+          <div class="toolbar">
+            <button
+              disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+              onClick={() => renderGameplayAction(action())}
+            >
+              {gameplayActionButtonLabel(action(), locale())}
+            </button>
+          </div>
+        )}
+      </Show>
       <PanelSection
         class="command-surface__chat-panel"
         title={tr(locale(), "行动体聊天", "Agent Chat")}
@@ -2373,24 +3072,24 @@ function InteractionPanel() {
       >
         <div class="field">
           <label for="agent-chat-message">{tr(locale(), "消息", "Message")}</label>
-          <textarea
-            id="agent-chat-message"
-            rows="4"
-            placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
-            disabled={!chatCapability().enabled}
-            value={core.state.chatDraft.message}
-            onInput={(event) => {
+              <textarea
+                id="agent-chat-message"
+                rows="4"
+                placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
+                disabled={!chatControlsEnabled()}
+                value={core.state.chatDraft.message}
+                onInput={(event) => {
               core.state.chatDraft.message = String(event.currentTarget.value || "");
               core.state.chatDraft.dirty = true;
             }}
           />
         </div>
         <div class="toolbar">
-          <button
-            data-chat-send="1"
-            disabled={!chatCapability().enabled}
-            onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
-          >
+            <button
+              data-chat-send="1"
+              disabled={!chatControlsEnabled()}
+              onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
+            >
             {tr(locale(), "发送聊天", "Send Chat")}
           </button>
         </div>
@@ -2438,10 +3137,11 @@ function InteractionPanel() {
         </div>
         <EmptyState>{promptSettingsSummary()}</EmptyState>
         <div class="toolbar">
-          <button
-            data-prompt-visibility-toggle="1"
-            onClick={() => core.togglePromptOverridesVisible()}
-          >
+            <button
+              data-prompt-visibility-toggle="1"
+              disabled={!canControlSelectedAgent()}
+              onClick={() => core.togglePromptOverridesVisible()}
+            >
             {promptSettingsButtonLabel()}
           </button>
         </div>
@@ -2472,10 +3172,10 @@ function InteractionPanel() {
           <div class="field">
             <label for="prompt-system">{tr(locale(), "系统提示词覆盖", "System Prompt Override")}</label>
             <textarea
-              id="prompt-system"
-              rows="4"
-              disabled={!promptCapability().enabled}
-              value={core.state.promptDraft.systemPrompt}
+                id="prompt-system"
+                rows="4"
+                disabled={!promptControlsEnabled()}
+                value={core.state.promptDraft.systemPrompt}
               onInput={(event) => {
                 core.state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
                 core.state.promptDraft.dirty = true;
@@ -2485,10 +3185,10 @@ function InteractionPanel() {
           <div class="field">
             <label for="prompt-short">{tr(locale(), "短期目标覆盖", "Short-Term Goal Override")}</label>
             <textarea
-              id="prompt-short"
-              rows="3"
-              disabled={!promptCapability().enabled}
-              value={core.state.promptDraft.shortTermGoal}
+                id="prompt-short"
+                rows="3"
+                disabled={!promptControlsEnabled()}
+                value={core.state.promptDraft.shortTermGoal}
               onInput={(event) => {
                 core.state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
                 core.state.promptDraft.dirty = true;
@@ -2498,10 +3198,10 @@ function InteractionPanel() {
           <div class="field">
             <label for="prompt-long">{tr(locale(), "长期目标覆盖", "Long-Term Goal Override")}</label>
             <textarea
-              id="prompt-long"
-              rows="3"
-              disabled={!promptCapability().enabled}
-              value={core.state.promptDraft.longTermGoal}
+                id="prompt-long"
+                rows="3"
+                disabled={!promptControlsEnabled()}
+                value={core.state.promptDraft.longTermGoal}
               onInput={(event) => {
                 core.state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
                 core.state.promptDraft.dirty = true;
@@ -2509,17 +3209,17 @@ function InteractionPanel() {
             />
           </div>
           <div class="toolbar">
-            <button
-              data-prompt-action="preview"
-              disabled={!promptCapability().enabled}
-              onClick={() => core.sendPromptControl("preview", null)}
+              <button
+                data-prompt-action="preview"
+                disabled={!promptControlsEnabled()}
+                onClick={() => core.sendPromptControl("preview", null)}
             >
               {tr(locale(), "预览提示词", "Preview Prompt")}
             </button>
-            <button
-              data-prompt-action="apply"
-              disabled={!promptCapability().enabled}
-              onClick={() => core.sendPromptControl("apply", null)}
+              <button
+                data-prompt-action="apply"
+                disabled={!promptControlsEnabled()}
+                onClick={() => core.sendPromptControl("apply", null)}
             >
               {tr(locale(), "应用提示词", "Apply Prompt")}
             </button>
@@ -2529,10 +3229,10 @@ function InteractionPanel() {
               <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
               <input
                 id="prompt-rollback-version"
-                type="number"
-                min="0"
-                step="1"
-                disabled={!promptCapability().enabled}
+                  type="number"
+                  min="0"
+                  step="1"
+                  disabled={!promptControlsEnabled()}
                 value={Number(core.state.promptDraft.rollbackTargetVersion || 0)}
                 onInput={(event) => {
                   const nextValue = Number(event.currentTarget.value || 0);
@@ -2541,10 +3241,10 @@ function InteractionPanel() {
                 }}
               />
             </div>
-            <button
-              data-prompt-action="rollback"
-              disabled={!promptCapability().enabled}
-              onClick={() => {
+              <button
+                data-prompt-action="rollback"
+                disabled={!promptControlsEnabled()}
+                onClick={() => {
                 core.sendPromptControl("rollback", {
                   toVersion: Number(core.state.promptDraft.rollbackTargetVersion || 0),
                 });
@@ -2615,9 +3315,14 @@ function DetailsPanel() {
     return segments.length > 0 ? segments.join(" · ") : tr(locale(), "当前未发布世界尺度摘要。", "No world scale summary is published yet.");
   };
   const selectedLabel = () =>
-    core.state.selectedKind && core.state.selectedId
+    core.state.selectedKind && core.state.selectedId && !hiddenSelectedAgent()
       ? `${core.state.selectedKind}:${core.state.selectedId}`
       : tr(locale(), "未选择", "nothing selected");
+  const hiddenSelectedAgent = () =>
+    core.state.selectedKind === "agent"
+    && core.state.selectedId
+    && !core.isAgentVisibleToCurrentSession(core.state.selectedId);
+  const hasVisibleSelectedObject = () => core.state.selectedObject && !hiddenSelectedAgent();
   const snapshotSummary = () => ({
     config: core.state.snapshot?.config || null,
     counts: {
@@ -2644,9 +3349,22 @@ function DetailsPanel() {
         <Badge class="badge badge--accent">{tr(locale(), "当前命令目标", "Current Command Target")}</Badge>
         <Badge>{selectedLabel()}</Badge>
       </div>
-      <InteractionPanel />
       <Show
-        when={core.state.selectedObject}
+        when={!hiddenSelectedAgent()}
+        fallback={
+          <EmptyState>
+            {tr(
+              locale(),
+              "当前账号还没有可控 Agent。请先完成认领或等待自己的 Agent 绑定同步。",
+              "The current account has no controllable Agent yet. Claim one or wait for your own Agent binding to sync.",
+            )}
+          </EmptyState>
+        }
+      >
+        <InteractionPanel />
+      </Show>
+      <Show
+        when={hasVisibleSelectedObject()}
         fallback={
           gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"
             ? (
@@ -2708,11 +3426,19 @@ function DetailsPanel() {
 function AppShell() {
   const locale = () => uiLocale();
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
+  const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
   return (
     <>
       <MobileJumpRail />
       <HostedLoginGate />
-      <section class="panel panel--targets" id="viewer-targets-panel" data-viewer-surface="targets">
+      <StarterOcRequiredGate />
+      <section
+        class="panel panel--targets"
+        id="viewer-targets-panel"
+        data-viewer-surface="targets"
+        aria-hidden={starterOcGateOpen() ? "true" : undefined}
+        inert={starterOcGateOpen() ? true : undefined}
+      >
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
@@ -2724,7 +3450,13 @@ function AppShell() {
           <TargetsPanel />
         </div>
       </section>
-      <section class="panel panel--stage" id="viewer-stage-panel" data-viewer-surface="stage">
+      <section
+        class="panel panel--stage"
+        id="viewer-stage-panel"
+        data-viewer-surface="stage"
+        aria-hidden={starterOcGateOpen() ? "true" : undefined}
+        inert={starterOcGateOpen() ? true : undefined}
+      >
         <div class="panel__body panel__body--stage">
           <div class="stack">
             <Show when={diagnosticsVisualFixture()}>
@@ -2738,7 +3470,13 @@ function AppShell() {
           </div>
         </div>
       </section>
-      <section class="panel panel--details" id="viewer-details-panel" data-viewer-surface="command">
+      <section
+        class="panel panel--details"
+        id="viewer-details-panel"
+        data-viewer-surface="command"
+        aria-hidden={starterOcGateOpen() ? "true" : undefined}
+        inert={starterOcGateOpen() ? true : undefined}
+      >
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "指挥与核查", "Command and Inspect")}</div>
           <div class="panel__title">{tr(locale(), "交互与明细", "Interact and Inspect")}</div>
@@ -2770,7 +3508,7 @@ function viewerTestApiEnabled() {
 }
 
 function viewerFixtureBaseSnapshot(overrides = {}) {
-  return {
+  const base = {
     time: 12,
     config: {
       space: {
@@ -2867,6 +3605,14 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
           provider_reported_supported_action_sets: ["agent_chat"],
         },
       },
+      agent_player_bindings: {
+        "agent-0": "viewer-bound",
+        "agent-1": "viewer-other",
+      },
+      agent_player_public_key_bindings: {
+        "agent-0": "oc:pk:viewer-session-key",
+        "agent-1": "oc:pk:viewer-other-session-key",
+      },
     },
     player_gameplay: {
       stage_id: "post_onboarding",
@@ -2914,7 +3660,22 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
       },
       agent_claim: null,
     },
+  };
+  return {
+    ...base,
     ...overrides,
+    config: {
+      ...base.config,
+      ...(overrides.config || {}),
+    },
+    model: {
+      ...base.model,
+      ...(overrides.model || {}),
+    },
+    player_gameplay: {
+      ...base.player_gameplay,
+      ...(overrides.player_gameplay || {}),
+    },
   };
 }
 
@@ -2925,6 +3686,8 @@ function emptyWorldRecoverySnapshot() {
       locations: {},
       agent_prompt_profiles: {},
       agent_execution_debug_contexts: {},
+      agent_player_bindings: {},
+      agent_player_public_key_bindings: {},
     },
     player_gameplay: {
       stage_id: "world_bootstrap",
@@ -3094,6 +3857,7 @@ function installViewerVisualFixture() {
     shell_selected_blocker() {
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });
       core.applySelection({ kind: "agent", id: "agent-0" });
+      setFixturePlayerAuth();
     },
     agent_chat_history() {
       core.injectSnapshot(viewerFixtureBaseSnapshot(), { returnState: false });

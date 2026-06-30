@@ -24,6 +24,26 @@ globalThis.document = {
 
 const core = await import("../software_safe_src/legacy_core.js");
 
+function buildBoundTaskGame076ScenarioSnapshot(options) {
+  const snapshot = buildTaskGame076ScenarioSnapshot(options);
+  core.state.auth = {
+    ...core.state.auth,
+    available: true,
+    playerId: "contract-player",
+    source: "hosted_browser_storage",
+    registrationStatus: "registered",
+    runtimeStatus: "registered",
+    boundAgentId: "agent-0",
+    error: null,
+  };
+  snapshot.model = snapshot.model || {};
+  snapshot.model.agent_player_bindings = {
+    ...(snapshot.model.agent_player_bindings || {}),
+    "agent-0": "contract-player",
+  };
+  return snapshot;
+}
+
 {
   const display = core.describeSemanticFeedback({
     kind: "chat",
@@ -86,7 +106,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
-  core.state.snapshot = buildTaskGame076ScenarioSnapshot();
+  core.state.snapshot = buildBoundTaskGame076ScenarioSnapshot();
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.stageId, "post_onboarding");
   assert.equal(gameplaySummary.stageStatus, "blocked");
@@ -128,7 +148,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
-  core.state.snapshot = buildTaskGame076ScenarioSnapshot({ variant: "weak_blocked" });
+  core.state.snapshot = buildBoundTaskGame076ScenarioSnapshot({ variant: "weak_blocked" });
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.agencyMoves.interrupt, "unavailable");
   assert.equal(gameplaySummary.agencyMoves.reprioritize, "unavailable");
@@ -176,7 +196,7 @@ const core = await import("../software_safe_src/legacy_core.js");
 }
 
 {
-  core.state.snapshot = buildTaskGame076ScenarioSnapshot({ variant: "weak_high_progress" });
+  core.state.snapshot = buildBoundTaskGame076ScenarioSnapshot({ variant: "weak_high_progress" });
   const gameplaySummary = core.buildGameplaySummary();
   assert.equal(gameplaySummary.progressPercent, 92);
   assert.equal(gameplaySummary.attractionProof.verdict, "progression_pass_but_attraction_weak");

@@ -234,6 +234,7 @@ const {
   clone,
   feedbackBadgeClass,
   hostedActionPolicy,
+  isAgentVisibleToCurrentSession,
   isLocaleZh,
   localeText,
   state,
@@ -499,6 +500,50 @@ function entityCollections() {
   };
 }
 
+function agentBindingForId(agentId) {
+  const id = String(agentId || "").trim();
+  if (!id) {
+    return { playerId: null, publicKey: null };
+  }
+  return {
+    playerId: state.snapshot?.model?.agent_player_bindings?.[id] || null,
+    publicKey: state.snapshot?.model?.agent_player_public_key_bindings?.[id] || null,
+  };
+}
+
+function isAgentVisibleToCurrentSession(agentId) {
+  const id = String(agentId || "").trim();
+  if (!id) {
+    return false;
+  }
+  const boundAgentId = String(state.auth.boundAgentId || "").trim();
+  const currentPlayerId = String(state.auth.playerId || "").trim();
+  const binding = agentBindingForId(id);
+  const boundPlayerId = String(binding.playerId || "").trim();
+  if (boundAgentId && id === boundAgentId) {
+    return true;
+  }
+  if (boundPlayerId && currentPlayerId && boundPlayerId === currentPlayerId) {
+    return true;
+  }
+  return false;
+}
+
+function currentBoundAgentControlError(agentId, actionLabel = "agent action") {
+  const id = String(agentId || "").trim();
+  if (!id) {
+    return `${actionLabel} requires a non-empty agent id`;
+  }
+  const boundAgentId = String(state.auth.boundAgentId || "").trim();
+  if (!boundAgentId) {
+    return `${actionLabel} requires the current account to have a bound Agent`;
+  }
+  if (id !== boundAgentId) {
+    return `${actionLabel} target ${id} does not match current bound Agent ${boundAgentId}`;
+  }
+  return null;
+}
+
 function selectedAgentId() {
   return state.selectedKind === "agent" ? state.selectedId : null;
 }
@@ -524,10 +569,7 @@ function selectedAgentBindingInfo() {
   if (!agentId) {
     return null;
   }
-  return {
-    playerId: state.snapshot?.model?.agent_player_bindings?.[agentId] || null,
-    publicKey: state.snapshot?.model?.agent_player_public_key_bindings?.[agentId] || null,
-  };
+  return agentBindingForId(agentId);
 }
 
 function selectedAgentExecutionDebugContext() {
@@ -1037,6 +1079,7 @@ function handleSnapshot(snapshot) {
   state.snapshot = snapshot;
   state.logicalTime = Math.max(state.logicalTime, Number(snapshot?.time || 0));
   state.tick = state.logicalTime;
+  adoptCurrentPlayerBindingFromSnapshot(snapshot);
   const { agents, locations } = entityCollections();
   if (!state.selectedObject) {
     if (agents[0]) {
@@ -1049,6 +1092,27 @@ function handleSnapshot(snapshot) {
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
+}
+
+function adoptCurrentPlayerBindingFromSnapshot(snapshot) {
+  const playerId = String(state.auth.playerId || "").trim();
+  if (!playerId) {
+    return;
+  }
+  const bindings = snapshot?.model?.agent_player_bindings || {};
+  const boundAgentId = Object.entries(bindings)
+    .find(([, boundPlayerId]) => String(boundPlayerId || "").trim() === playerId)?.[0] || null;
+  if (!boundAgentId || state.auth.boundAgentId === boundAgentId) {
+    return;
+  }
+  state.auth.boundAgentId = boundAgentId;
+  state.auth.pendingRequestedAgentId = boundAgentId;
+  state.auth.registrationStatus = "registered";
+  state.auth.runtimeStatus = "registered";
+  state.auth.error = null;
+  if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
+    persistHostedPlayerSession(state.auth);
+  }
 }
 
 function injectSnapshot(snapshot, options = {}) {
@@ -2019,6 +2083,10 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
   if (!agentId) {
     return { ok: false, reason: "agent chat requires a selected agent or explicit agentId" };
   }
+  const controlError = currentBoundAgentControlError(agentId, "agent_chat");
+  if (controlError) {
+    return { ok: false, reason: controlError };
+  }
   if (!message.trim()) {
     return { ok: false, reason: "agent chat message cannot be empty" };
   }
@@ -2071,6 +2139,10 @@ function sendPromptControl(mode, payload = null) {
   const agentId = String(payload?.agentId || payload?.agent_id || selectedId || "");
   if (!agentId) {
     return { ok: false, reason: "prompt control requires a selected agent or explicit agentId" };
+  }
+  const controlError = currentBoundAgentControlError(agentId, "prompt_control");
+  if (controlError) {
+    return { ok: false, reason: controlError };
   }
   let request;
   try {
@@ -2170,6 +2242,33 @@ function normalizeGameplayActionRequest(action) {
   return normalized;
 }
 
+function gameplayActionControlError(action) {
+  const normalized = normalizeGameplayActionRequest(action);
+  if (!normalized || normalized.protocol_action !== "gameplay_action.submit") {
+    return null;
+  }
+  const actionId = String(normalized.action_id || "").trim();
+  const targetAgentId = String(normalized.target_agent_id || "").trim();
+  const actorAgentId = String(normalized.actor_agent_id || "").trim();
+  if (!actionId || !targetAgentId || actionId === "claim_first_agent") {
+    return null;
+  }
+  if (gameplayActionRequiresActorAgent(actionId)) {
+    const actorControlError = currentBoundAgentControlError(
+      actorAgentId || state.auth.boundAgentId,
+      `${actionId} actor`,
+    );
+    if (actorControlError) {
+      return actorControlError;
+    }
+    if (actorAgentId && actorAgentId !== state.auth.boundAgentId) {
+      return `${actionId} actor ${actorAgentId} does not match current bound Agent ${state.auth.boundAgentId}`;
+    }
+    return null;
+  }
+  return currentBoundAgentControlError(targetAgentId, actionId);
+}
+
 function resolveGameplayActionRequest(actionOrId) {
   if (typeof actionOrId === "string") {
     const actions = Array.isArray(state.snapshot?.player_gameplay?.available_actions)
@@ -2238,6 +2337,10 @@ function sendGameplayAction(actionOrId) {
   if (disabledReason) {
     return { ok: false, reason: disabledReason };
   }
+  const controlError = gameplayActionControlError(action);
+  if (controlError) {
+    return { ok: false, reason: controlError };
+  }
 
   const feedback = createSemanticFeedback("gameplay_action", actionId, targetAgentId, {
     effect: "queued for signing and send",
@@ -2303,6 +2406,16 @@ function handleGameplayActionAck(ack) {
   feedback.effect = ack?.message || `gameplay action accepted at tick ${Number(ack?.accepted_at_tick || state.logicalTime)}`;
   feedback.response = clone(ack);
   state.lastGameplayActionFeedback = feedback;
+  if (ack?.player_id) {
+    state.auth.playerId = ack.player_id;
+  }
+  if (ack?.action_id === "claim_first_agent" && ack?.target_agent_id) {
+    state.auth.boundAgentId = ack.target_agent_id;
+    state.auth.pendingRequestedAgentId = ack.target_agent_id;
+    state.auth.registrationStatus = "registered";
+    state.auth.runtimeStatus = "registered";
+    state.auth.error = null;
+  }
   requestSnapshotSafe();
 }
 
@@ -2318,6 +2431,17 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
     target_agent_id: targetAgentId,
   });
   if (!action) {
+    return;
+  }
+  const controlError = gameplayActionControlError(action);
+  if (controlError) {
+    feedback.stage = "error";
+    feedback.ok = false;
+    feedback.accepted = false;
+    feedback.reason = controlError;
+    feedback.effect = "player session refresh blocked by current account Agent boundary";
+    state.lastGameplayActionFeedback = feedback;
+    render();
     return;
   }
   feedback.sessionRefreshRetryAttempted = true;
@@ -2796,6 +2920,7 @@ function modelLists() {
   };
   return {
     agents: agents
+      .filter((agent) => isAgentVisibleToCurrentSession(agent.id))
       .filter((agent) => filter(agent, `${agent.id} ${agent.location_id}`))
       .sort((a, b) => String(a.id).localeCompare(String(b.id))),
     locations: locations
@@ -3128,7 +3253,8 @@ function renderSummary() {
 }
 
 function renderInteractionPanel() {
-  const agentId = selectedAgentId();
+  const rawAgentId = selectedAgentId();
+  const agentId = rawAgentId && isAgentVisibleToCurrentSession(rawAgentId) ? rawAgentId : null;
   if (!agentId) {
     return '<div class="empty">Select an agent to unlock prompt/chat controls.</div>';
   }
@@ -3568,6 +3694,7 @@ export {
   chatHistoryStorageKey,
   hostedActionPolicy,
   injectSnapshot,
+  isAgentVisibleToCurrentSession,
   modelLists,
   pushChatHistory,
   refreshHostedAdmissionState,

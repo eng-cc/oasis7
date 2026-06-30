@@ -279,7 +279,7 @@ impl ViewerRuntimeLiveServer {
         if session.subscribed.contains(&ViewerStream::Snapshot)
             && should_emit_runtime_advance_snapshot(session, "play", false)
         {
-            let snapshot = self.compat_snapshot();
+            let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         session.metrics = runtime_metrics(&self.world);
@@ -452,7 +452,7 @@ impl ViewerRuntimeLiveServer {
                 if session.subscribed.is_empty()
                     || session.subscribed.contains(&ViewerStream::Snapshot)
                 {
-                    let snapshot = self.compat_snapshot();
+                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                 }
                 if session.subscribed.is_empty()
@@ -532,7 +532,15 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::GameplayAction { request } => match self.handle_gameplay_action(request)
             {
                 Ok(ack) => {
+                    let ack_player_id = ack.player_id.clone();
                     send_response(writer, &ViewerResponse::GameplayActionAck { ack })?;
+                    if !ack_player_id.trim().is_empty() {
+                        session.current_player_id = Some(ack_player_id);
+                    }
+                    if session.subscribed.contains(&ViewerStream::Snapshot) {
+                        let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                        send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                    }
                 }
                 Err(error) => {
                     send_response(writer, &ViewerResponse::GameplayActionError { error })?;
@@ -557,9 +565,22 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::AuthoritativeRecovery { command } => {
                 match self.handle_authoritative_recovery(command) {
                     Ok((ack, emit_snapshot_after_ack)) => {
+                        let ack_player_id = ack.player_id.clone();
+                        let ack_status = ack.status;
                         send_response(writer, &ViewerResponse::AuthoritativeRecoveryAck { ack })?;
+                        if let Some(player_id) = ack_player_id.as_deref() {
+                            match ack_status {
+                                AuthoritativeRecoveryStatus::SessionRevoked => {
+                                    if session.current_player_id.as_deref() == Some(player_id) {
+                                        session.current_player_id = None;
+                                    }
+                                }
+                                _ => session.current_player_id = Some(player_id.to_string()),
+                            }
+                        }
                         if emit_snapshot_after_ack {
-                            let snapshot = self.compat_snapshot();
+                            let snapshot =
+                                self.compat_snapshot(session.current_player_id.as_deref());
                             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                             self.emit_authoritative_batch_snapshot(writer)?;
                             self.emit_authoritative_challenge_snapshot(writer)?;
@@ -836,7 +857,7 @@ impl ViewerRuntimeLiveServer {
             if session.subscribed.contains(&ViewerStream::Snapshot)
                 && should_emit_runtime_advance_snapshot(session, action, emit_while_paused)
             {
-                let snapshot = self.compat_snapshot();
+                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
 
@@ -881,7 +902,7 @@ impl ViewerRuntimeLiveServer {
                 player_gameplay_causality_from_runtime_events(&runtime_events_for_feedback);
             self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
             if session.subscribed.contains(&ViewerStream::Snapshot) {
-                let snapshot = self.compat_snapshot();
+                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;

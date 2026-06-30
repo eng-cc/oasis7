@@ -261,7 +261,10 @@ fn expect_player_gameplay(
     server: &mut ViewerRuntimeLiveServer,
     context: &'static str,
 ) -> crate::simulator::PlayerGameplaySnapshot {
-    server.compat_snapshot().player_gameplay.expect(context)
+    server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect(context)
 }
 
 fn small_player_test_factory_spec(factory_id: &str) -> FactoryModuleSpec {
@@ -323,7 +326,7 @@ fn runtime_gameplay_snapshot_flags_grind_only_after_repeating_same_loop_without_
     );
 
     let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
-        &state, true, None, None, true, None, false, None,
+        &state, None, true, None, None, true, None, false, true, None,
     );
 
     assert_eq!(
@@ -371,12 +374,14 @@ fn runtime_gameplay_snapshot_marks_forced_major_power_dependency_when_no_local_r
     };
     let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
         &WorldState::default(),
+        None,
         true,
         Some(&feedback),
         None,
         true,
         None,
         false,
+        true,
         None,
     );
 

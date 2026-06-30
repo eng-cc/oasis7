@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-06-23
+更新时间：2026-06-30
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,9 +16,9 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-06-23）
-- `doc/readme/`：123 份文件
-- `doc/readme/governance/`：76 份文件
+## 密度快照（2026-06-30）
+- `doc/readme/`：114 份文件
+- `doc/readme/governance/`：67 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
@@ -29,7 +29,7 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 76 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
+| `governance/` | 67 | 根 README 对齐、release communication、Moltbook/Xiaohongshu runbook、invite/reward/material/execution 入口 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
@@ -136,3 +136,4 @@
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
+- 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前 Moltbook 追溯以 promotion plan、post drafts、liveops runbook 的 canonical PRD/project/runbook 与 `.pm` evidence 为准。

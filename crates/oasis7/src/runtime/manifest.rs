@@ -242,13 +242,9 @@ fn diff_json(
 
     match (base, target) {
         (JsonValue::Object(base_map), JsonValue::Object(target_map)) => {
-            let mut keys: Vec<String> = base_map.keys().chain(target_map.keys()).cloned().collect();
-            keys.sort();
-            keys.dedup();
-
-            for key in keys {
+            for_each_ordered_json_object_key(base_map, target_map, |key| {
                 path.push(key.clone());
-                match (base_map.get(&key), target_map.get(&key)) {
+                match (base_map.get(key), target_map.get(key)) {
                     (Some(base_val), Some(target_val)) => {
                         diff_json(base_val, target_val, path, ops);
                     }
@@ -264,7 +260,7 @@ fn diff_json(
                     (None, None) => {}
                 }
                 path.pop();
-            }
+            });
         }
         _ => {
             ops.push(ManifestPatchOp::Set {
@@ -272,6 +268,31 @@ fn diff_json(
                 value: target.clone(),
             });
         }
+    }
+}
+
+fn for_each_ordered_json_object_key(
+    base_map: &serde_json::Map<String, JsonValue>,
+    target_map: &serde_json::Map<String, JsonValue>,
+    mut visit: impl FnMut(&String),
+) {
+    let mut base_keys = base_map.keys().peekable();
+    let mut target_keys = target_map.keys().peekable();
+    loop {
+        let key = match (base_keys.peek(), target_keys.peek()) {
+            (Some(base_key), Some(target_key)) => match base_key.cmp(target_key) {
+                std::cmp::Ordering::Less => base_keys.next().expect("peeked base key"),
+                std::cmp::Ordering::Equal => {
+                    target_keys.next();
+                    base_keys.next().expect("peeked base key")
+                }
+                std::cmp::Ordering::Greater => target_keys.next().expect("peeked target key"),
+            },
+            (Some(_), None) => base_keys.next().expect("peeked base key"),
+            (None, Some(_)) => target_keys.next().expect("peeked target key"),
+            (None, None) => break,
+        };
+        visit(key);
     }
 }
 

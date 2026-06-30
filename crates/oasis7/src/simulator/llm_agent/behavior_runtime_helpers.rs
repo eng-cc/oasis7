@@ -848,24 +848,25 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     .filter(|value| !value.is_empty());
                 let limit_artifacts = parse_limit_arg(request.args.get("limit_artifacts"), 32, 256);
                 let limit_installed = parse_limit_arg(request.args.get("limit_installed"), 32, 256);
-                let mut artifacts = observation.module_lifecycle.artifacts.clone();
-                if let Some(module_id) = module_id_filter {
-                    artifacts.retain(|artifact| {
-                        artifact
-                            .module_id_hint
-                            .as_deref()
-                            .is_some_and(|hint| hint == module_id)
-                    });
-                }
-                let artifacts_total = artifacts.len();
-                artifacts.truncate(limit_artifacts);
-
-                let mut installed_modules = observation.module_lifecycle.installed_modules.clone();
-                if let Some(module_id) = module_id_filter {
-                    installed_modules.retain(|installed| installed.module_id == module_id);
-                }
-                let installed_total = installed_modules.len();
-                installed_modules.truncate(limit_installed);
+                let (artifacts_total, artifacts) = limited_filtered_page(
+                    observation.module_lifecycle.artifacts.iter(),
+                    limit_artifacts,
+                    |artifact| {
+                        module_id_filter.is_none_or(|module_id| {
+                            artifact
+                                .module_id_hint
+                                .as_deref()
+                                .is_some_and(|hint| hint == module_id)
+                        })
+                    },
+                );
+                let (installed_total, installed_modules) = limited_filtered_page(
+                    observation.module_lifecycle.installed_modules.iter(),
+                    limit_installed,
+                    |installed| {
+                        module_id_filter.is_none_or(|module_id| installed.module_id == module_id)
+                    },
+                );
                 Ok(serde_json::json!({
                     "artifacts_total": artifacts_total,
                     "artifacts": artifacts,
@@ -893,16 +894,18 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     .filter(|value| !value.is_empty());
                 let limit_listings = parse_limit_arg(request.args.get("limit_listings"), 32, 256);
                 let limit_bids = parse_limit_arg(request.args.get("limit_bids"), 32, 256);
-                let mut listings = observation.module_market.listings.clone();
-                let mut bids = observation.module_market.bids.clone();
-                if let Some(wasm_hash) = wasm_hash_filter {
-                    listings.retain(|listing| listing.wasm_hash == wasm_hash);
-                    bids.retain(|bid| bid.wasm_hash == wasm_hash);
-                }
-                let listings_total = listings.len();
-                let bids_total = bids.len();
-                listings.truncate(limit_listings);
-                bids.truncate(limit_bids);
+                let (listings_total, listings) = limited_filtered_page(
+                    observation.module_market.listings.iter(),
+                    limit_listings,
+                    |listing| {
+                        wasm_hash_filter.is_none_or(|wasm_hash| listing.wasm_hash == wasm_hash)
+                    },
+                );
+                let (bids_total, bids) = limited_filtered_page(
+                    observation.module_market.bids.iter(),
+                    limit_bids,
+                    |bid| wasm_hash_filter.is_none_or(|wasm_hash| bid.wasm_hash == wasm_hash),
+                );
                 Ok(serde_json::json!({
                     "listings_total": listings_total,
                     "listings": listings,
@@ -991,6 +994,25 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         }
         Some(trace)
     }
+}
+
+fn limited_filtered_page<'a, T: Clone + 'a>(
+    items: impl Iterator<Item = &'a T>,
+    limit: usize,
+    mut include: impl FnMut(&T) -> bool,
+) -> (usize, Vec<T>) {
+    let mut total = 0usize;
+    let mut page = Vec::new();
+    for item in items {
+        if !include(item) {
+            continue;
+        }
+        total += 1;
+        if page.len() < limit {
+            page.push(item.clone());
+        }
+    }
+    (total, page)
 }
 
 #[cfg(test)]

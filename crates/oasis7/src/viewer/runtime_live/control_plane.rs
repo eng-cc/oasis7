@@ -16,7 +16,9 @@ use crate::simulator::{
 };
 use sha2::{Digest, Sha256};
 
+mod agent_chat_intent;
 mod llm_sidecar;
+use agent_chat_intent::resolve_agent_chat_intent;
 pub(super) use llm_sidecar::{
     RuntimeLlmSidecar, simulator_action_label, simulator_action_to_runtime,
 };
@@ -31,12 +33,6 @@ const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH
 pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env()
 -> Result<Option<llm_sidecar::ProviderDecisionSettings>, String> {
     llm_sidecar::provider_settings_from_env()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct ResolvedAgentChatIntent {
-    intent_tick: Option<u64>,
-    intent_seq: u64,
 }
 
 pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
@@ -1009,6 +1005,27 @@ pub(super) fn ensure_agent_player_access_runtime(
     player_id: &str,
     public_key: Option<&str>,
 ) -> Result<(), PromptControlError> {
+    ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, false)
+}
+
+pub(super) fn ensure_agent_player_binding_target_runtime(
+    world: &RuntimeWorld,
+    sidecar: &RuntimeLlmSidecar,
+    agent_id: &str,
+    player_id: &str,
+    public_key: Option<&str>,
+) -> Result<(), PromptControlError> {
+    ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, true)
+}
+
+fn ensure_agent_player_access_runtime_inner(
+    world: &RuntimeWorld,
+    sidecar: &RuntimeLlmSidecar,
+    agent_id: &str,
+    player_id: &str,
+    public_key: Option<&str>,
+    allow_missing_binding: bool,
+) -> Result<(), PromptControlError> {
     if !world.state().agents.contains_key(agent_id) {
         return Err(PromptControlError {
             code: "agent_not_found".to_string(),
@@ -1018,7 +1035,18 @@ pub(super) fn ensure_agent_player_access_runtime(
         });
     }
     let Some(bound_player_id) = sidecar.agent_player_bindings.get(agent_id) else {
-        return Ok(());
+        if allow_missing_binding {
+            return Ok(());
+        }
+        return Err(PromptControlError {
+            code: "agent_player_binding_required".to_string(),
+            message: format!("agent {agent_id} has no player binding"),
+            agent_id: Some(agent_id.to_string()),
+            current_version: sidecar
+                .prompt_profiles
+                .get(agent_id)
+                .map(|entry| entry.version),
+        });
     };
     if bound_player_id == player_id {
         let Some(bound_public_key) = sidecar.agent_public_key_bindings.get(agent_id) else {
@@ -1149,27 +1177,4 @@ pub(super) fn map_auth_verify_error_code(message: &str) -> &'static str {
         return "auth_claim_invalid";
     }
     "auth_invalid"
-}
-
-fn resolve_agent_chat_intent(
-    request: &AgentChatRequest,
-    verified_nonce: u64,
-) -> Result<ResolvedAgentChatIntent, String> {
-    let intent_seq = match request.intent_seq {
-        Some(0) => {
-            return Err("intent_seq must be greater than zero".to_string());
-        }
-        Some(seq) if seq != verified_nonce => {
-            return Err(format!(
-                "intent_seq {} must match auth nonce {}",
-                seq, verified_nonce
-            ));
-        }
-        Some(seq) => seq,
-        None => verified_nonce,
-    };
-    Ok(ResolvedAgentChatIntent {
-        intent_tick: request.intent_tick,
-        intent_seq,
-    })
 }

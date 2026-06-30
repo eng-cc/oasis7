@@ -594,7 +594,7 @@ impl ViewerRuntimeLiveServer {
         public_key: Option<&str>,
         allow_player_rebind: bool,
     ) -> Result<(), String> {
-        control_plane::ensure_agent_player_access_runtime(
+        control_plane::ensure_agent_player_binding_target_runtime(
             &self.world,
             &self.llm_sidecar,
             agent_id,

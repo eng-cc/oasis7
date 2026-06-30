@@ -1,0 +1,27 @@
+task_uid: task_259d00b070cf42fa85ad12b144745aff
+title: "Retire next old doc semantics surface"
+owner_role: tpm
+module: engineering
+worktree_hint: /Users/scc/ccwork/worktrees/oasis7-engineering-doc-legacy-semantics-cleanup-next-4
+execution_log_path: .pm/tasks/task_259d00b070cf42fa85ad12b144745aff.execution.md
+status: done
+priority: P2
+source_signal: null
+source_refs:
+  - doc/engineering/workflow/source-of-truth.md
+doc_refs:
+  - doc/headless-runtime/README.md
+  - doc/headless-runtime/project.md
+  - doc/engineering/project.md
+  - doc/.governance/module-root-md-allowlist.txt
+related_prd: []
+acceptance: []
+handoff_to: []
+updated_at: 2026-06-29T21:17:30+08:00
+last_started_at: 2026-06-29T21:02:40+08:00
+last_claim_type: task_complete
+last_verify_command: "./scripts/pm/workflow-lint.sh --task-uid task_259d00b070cf42fa85ad12b144745aff --phase current"
+last_verified_at: 2026-06-29T21:17:30+08:00
+last_verification_exit_code: 0
+last_verification_status: verified
+last_closed_at: 2026-06-29T21:17:30+08:00

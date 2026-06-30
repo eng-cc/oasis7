@@ -8,7 +8,6 @@ doc/core/next-round-priority-slate-2026-03-11.prd.md
 doc/core/next-round-priority-slate-2026-03-11.project.md
 doc/core/prd.index.md
 doc/core/prd.md
-doc/core/producer-to-qa-task-core-005-round-audit-closure-2026-03-11.md
 doc/core/player-access-mode-contract-2026-03-19.design.md
 doc/core/player-access-mode-contract-2026-03-19.prd.md
 doc/core/player-access-mode-contract-2026-03-19.project.md
@@ -38,8 +37,6 @@ doc/headless-runtime/design.md
 doc/headless-runtime/prd.index.md
 doc/headless-runtime/prd.md
 doc/headless-runtime/project.md
-doc/headless-runtime/runtime-module-status-closure-2026-03-11.md
-doc/headless-runtime/runtime-to-producer-headless-module-status-closure-2026-03-11.md
 doc/p2p/README.md
 doc/p2p/design.md
 doc/p2p/prd.index.md
@@ -73,8 +70,6 @@ doc/playability_test_result/playability_test_manual.md
 doc/playability_test_result/prd.index.md
 doc/playability_test_result/prd.md
 doc/playability_test_result/project.md
-doc/playability_test_result/qa-module-status-closure-2026-03-11.md
-doc/playability_test_result/qa-to-producer-playability-module-status-closure-2026-03-11.md
 doc/readme/README.md
 doc/readme/design.md
 doc/readme/prd.index.md

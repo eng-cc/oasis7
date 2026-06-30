@@ -926,7 +926,7 @@ mod tests {
             WorldScenario::Minimal,
         ))
         .expect("runtime server");
-        let snapshot = server.compat_snapshot();
+        let snapshot = server.compat_snapshot(None);
         assert!(snapshot.runtime_snapshot.is_some());
         assert_eq!(
             snapshot.runtime_snapshot.as_ref().unwrap().journal_len,

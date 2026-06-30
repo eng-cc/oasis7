@@ -466,23 +466,29 @@ fn finalize_player_gameplay_snapshot(
 
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
+    controlled_agent_id: Option<&str>,
     confirmed_gameplay_progress: bool,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
     gameplay_enabled: bool,
     gameplay_disabled_reason: Option<&str>,
     supports_agent_chat: bool,
+    first_agent_claim_target_available: bool,
     agent_claim: Option<PlayerAgentClaimSnapshot>,
 ) -> PlayerGameplaySnapshot {
-    let first_agent_id = state.agents.keys().next().cloned();
     let mut available_actions = base_available_actions(
-        first_agent_id.as_deref(),
+        controlled_agent_id,
         gameplay_enabled,
         gameplay_disabled_reason,
         supports_agent_chat,
     );
     if gameplay_enabled {
-        extend_available_actions(state, first_agent_id.as_deref(), &mut available_actions);
+        extend_available_actions(
+            state,
+            controlled_agent_id,
+            first_agent_claim_target_available,
+            &mut available_actions,
+        );
     }
     let finalize =
         |gameplay| finalize_player_gameplay_snapshot(gameplay, recent_feedback, causality_signal);

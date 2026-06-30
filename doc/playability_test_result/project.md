@@ -71,6 +71,7 @@
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已为 evidence-first 消费者补齐轻量入口，当前模块无需再做更重的根 README 拆分。
 - 说明: 本文档仅维护可玩性结果模块设计执行状态；当前任务过程记录以对应 `.pm/tasks/task_<32hex>.execution.md` 为准，正式发布/可玩性证据继续回写 evidence bundle 与模块 project/prd。
+- 当前追溯入口：`playability-player-leverage-rubric`、`TASK-PLAYABILITY_TEST_RESULT-001~013`、`doc/playability_test_result/evidence/`、`doc/playability_test_result/topics/`、`doc/playability_test_result/templates/` 与 `.pm` execution log / role review evidence；旧 2026-03-11 root 状态 closure / QA-to-producer handoff 文档已退役删除。
 
 ## 阶段收口角色交接
 ### Meta

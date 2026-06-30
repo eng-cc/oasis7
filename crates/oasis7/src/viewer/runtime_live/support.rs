@@ -214,6 +214,7 @@ impl RuntimeLiveScript {
 pub(super) struct RuntimeLiveSession {
     pub(super) subscribed: HashSet<ViewerStream>,
     pub(super) event_filters: Option<HashSet<ViewerEventKind>>,
+    pub(super) current_player_id: Option<String>,
     pub(super) playing: bool,
     pub(super) next_play_step_at: Option<Instant>,
     pub(super) next_background_snapshot_at: Option<Instant>,
@@ -233,6 +234,7 @@ impl RuntimeLiveSession {
         Self {
             subscribed: HashSet::new(),
             event_filters: None,
+            current_player_id: None,
             playing,
             next_play_step_at: None,
             next_background_snapshot_at: None,

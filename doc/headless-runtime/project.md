@@ -72,6 +72,7 @@
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已补齐命名迁移后的轻量入口，当前模块无需再拆更重的 README 层级。
 - 说明: 本文档仅维护 headless-runtime（原 nonviewer）设计执行状态；历史过程归档见 `doc/devlog/README.md`，当前任务执行证据以 `.pm/tasks/task_<32hex>.execution.md` 为准。
+- 当前追溯入口：`TASK-NONVIEWER-001~009`、`doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`、`doc/headless-runtime/templates/headless-runtime-release-gate-linkage.md`、`doc/headless-runtime/templates/longrun-archive-incident-template.md` 与 `.pm` execution log / role review evidence；旧 2026-03-11 root 状态 closure / handoff 文档已退役删除。
 
 ## 阶段收口角色交接
 ### Meta

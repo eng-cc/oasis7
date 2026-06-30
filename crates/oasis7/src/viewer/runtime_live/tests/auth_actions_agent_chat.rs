@@ -145,15 +145,15 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
     )
     .expect("runtime server");
     assert!(server.llm_sidecar.supports_agent_chat());
-    let gameplay = server
-        .compat_snapshot()
+    let anonymous_gameplay = server
+        .compat_snapshot(None)
         .player_gameplay
-        .expect("player gameplay snapshot");
+        .expect("anonymous player gameplay snapshot");
     assert!(
-        gameplay
+        anonymous_gameplay
             .available_actions
             .iter()
-            .any(|action| action.protocol_action == "agent_chat")
+            .all(|action| action.protocol_action != "agent_chat")
     );
     let agent_id = server
         .world
@@ -165,6 +165,29 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
         .expect("seed agent");
     seed_agent_chat_oc(&mut server, agent_id.as_str());
     let (public_key, private_key) = test_signer(34);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        33,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let gameplay = server
+        .compat_snapshot(Some("player-a"))
+        .player_gameplay
+        .expect("player gameplay snapshot");
+    assert!(
+        gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.protocol_action == "agent_chat"
+                && action.target_agent_id.as_deref() == Some(agent_id.as_str()))
+    );
     let request = signed_agent_chat_request(
         crate::viewer::AgentChatRequest {
             agent_id: agent_id.clone(),
@@ -179,19 +202,6 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
         public_key.as_str(),
         private_key.as_str(),
     );
-    let register_ack = register_runtime_session(
-        &mut server,
-        "player-a",
-        Some(agent_id.as_str()),
-        33,
-        public_key.as_str(),
-        private_key.as_str(),
-    );
-    assert_eq!(
-        register_ack.status,
-        AuthoritativeRecoveryStatus::SessionRegistered
-    );
-
     let ack = server.handle_agent_chat(request).expect("chat accepted");
     assert_eq!(ack.agent_id, agent_id);
     server.enqueue_pending_provider_agent_chat_replies();
@@ -222,6 +232,73 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
             if event_agent_id == &agent_id && message.contains("[local-mock-receipt]")
     )));
     clear_runtime_provider_env();
+}
+
+#[test]
+fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(39);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        None,
+        38,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(register_ack.agent_id, None);
+    assert!(
+        !server
+            .llm_sidecar
+            .agent_player_bindings
+            .contains_key(agent_id.as_str()),
+        "seed agent should start without an account binding"
+    );
+
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello unbound".to_string(),
+            intent_tick: Some(39),
+            intent_seq: Some(39),
+        },
+        39,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let err = server
+        .handle_agent_chat(request)
+        .expect_err("agent chat must not implicitly bind an unbound agent");
+    assert_eq!(err.code, "agent_control_forbidden");
+    assert!(err.message.contains("has no player binding"));
+    assert!(
+        !server
+            .llm_sidecar
+            .agent_player_bindings
+            .contains_key(agent_id.as_str()),
+        "rejected chat must leave the agent unbound"
+    );
 }
 
 #[test]
