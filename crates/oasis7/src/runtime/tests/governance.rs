@@ -29,6 +29,10 @@ fn local_guardians() -> Vec<String> {
     ]
 }
 
+fn manifest_path(parts: &[&str]) -> Vec<String> {
+    parts.iter().map(|part| (*part).to_string()).collect()
+}
+
 fn finality_signing_key(seed_label: &str) -> SigningKey {
     let seed = util::sha256_hex(seed_label.as_bytes());
     let seed_bytes = hex::decode(seed).expect("decode governance finality seed");
@@ -474,14 +478,37 @@ fn governance_patch_updates_manifest() {
 fn manifest_diff_and_merge() {
     let base = Manifest {
         version: 1,
-        content: json!({ "a": 1, "b": { "c": 2 } }),
+        content: json!({ "a": 1, "b": { "a_base_only": 1, "m_both": 2 }, "c_base_only": true }),
     };
     let target = Manifest {
         version: 2,
-        content: json!({ "a": 1, "b": { "c": 3 }, "d": 4 }),
+        content: json!({ "a": 1, "b": { "b_target_only": 4, "m_both": 3 }, "d_target_only": false }),
     };
 
     let patch = diff_manifest(&base, &target).unwrap();
+    assert_eq!(
+        patch.ops,
+        vec![
+            ManifestPatchOp::Remove {
+                path: manifest_path(&["b", "a_base_only"])
+            },
+            ManifestPatchOp::Set {
+                path: manifest_path(&["b", "b_target_only"]),
+                value: json!(4),
+            },
+            ManifestPatchOp::Set {
+                path: manifest_path(&["b", "m_both"]),
+                value: json!(3),
+            },
+            ManifestPatchOp::Remove {
+                path: manifest_path(&["c_base_only"])
+            },
+            ManifestPatchOp::Set {
+                path: manifest_path(&["d_target_only"]),
+                value: json!(false),
+            },
+        ]
+    );
     let applied = apply_manifest_patch(&base, &patch).unwrap();
     assert_eq!(applied, target);
 
@@ -489,7 +516,7 @@ fn manifest_diff_and_merge() {
     let patch1 = ManifestPatch {
         base_manifest_hash: base_hash.clone(),
         ops: vec![ManifestPatchOp::Set {
-            path: vec!["b".to_string(), "c".to_string()],
+            path: manifest_path(&["b", "m_both"]),
             value: json!(3),
         }],
         new_version: Some(2),
@@ -497,7 +524,7 @@ fn manifest_diff_and_merge() {
     let patch2 = ManifestPatch {
         base_manifest_hash: base_hash,
         ops: vec![ManifestPatchOp::Set {
-            path: vec!["e".to_string()],
+            path: manifest_path(&["e"]),
             value: json!(5),
         }],
         new_version: Some(3),
@@ -507,7 +534,7 @@ fn manifest_diff_and_merge() {
     let merged_applied = apply_manifest_patch(&base, &merged).unwrap();
     let expected = Manifest {
         version: 3,
-        content: json!({ "a": 1, "b": { "c": 3 }, "e": 5 }),
+        content: json!({ "a": 1, "b": { "a_base_only": 1, "m_both": 3 }, "c_base_only": true, "e": 5 }),
     };
     assert_eq!(merged_applied, expected);
 }
