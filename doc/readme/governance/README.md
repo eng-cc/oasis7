@@ -114,7 +114,8 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
-- handoff、execution_log、轮播包与其它 supporting doc 继续保留可检索性，但不应重新成为默认首读入口。
+- 旧 2026-03-11 一次性 role handoff briefs 已退役删除；当前从正式专题、根 `../../../README.md`、release communication surfaces、`../prd.index.md` 与 `.pm` evidence 追溯。
+- execution_log、轮播包与其它 supporting doc 继续保留可检索性，但不应重新成为默认首读入口。
 - 如果某个主题未来形成新的主文档，应优先进入主文档，而不是继续把增量素材包维持为默认入口。
 
 ## 维护约定

@@ -17,8 +17,8 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/readme/`：123 份文件
-- `doc/readme/governance/`：76 份文件
+- `doc/readme/`：116 份文件
+- `doc/readme/governance/`：69 份文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）

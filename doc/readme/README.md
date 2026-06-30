@@ -33,12 +33,12 @@
 - 承接 release communication、公告底稿、运营 runbook 与根 README 状态同步等对外口径闭环。
 
 ## 热点子域导航（2026-04-18 快照）
-- `governance/`（97）：根 README 对齐、release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口。
+- `governance/`（90）：根 README 对齐、release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口。
 - `gap/`（27）：README 与实现/流程间差距闭环，适合 owner 排查口径或能力缺口时进入。
 - `production/`（12）：生产收口、阶段边界与 readiness 主题。
 
 ## 高密度提示
-- `doc/readme/` 当前共有 123 份文件；这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
+- `doc/readme/` 当前共有 116 份文件；这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；进入 `governance/` 时，优先先读 `doc/readme/governance/README.md` 再继续下钻；需要素材包、执行记录或历史专题时，再按具体子域进入。
 
 ## 根目录收口
