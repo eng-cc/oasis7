@@ -37,7 +37,8 @@
   - `doc/world-simulator/prd/acceptance/unified-checklist.md`
   - `doc/world-simulator/prd/acceptance/web-llm-evidence-template.md`
   - `doc/world-simulator/prd/quality/experience-trend-tracking.md`
-  - `doc/world-simulator/prd/launcher/blockchain-transfer.md`
+  - `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
+  - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
 
 ## 模块基线
 - world-simulator 连接 runtime 与 viewer，负责把世界状态、场景初始化、规则执行、LLM/provider 决策与启动器控制面收敛为可交互体验。

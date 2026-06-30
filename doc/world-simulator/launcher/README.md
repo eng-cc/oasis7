@@ -66,6 +66,7 @@
 ### 5. Feedback、transfer 与自引导体验
 - 首读入口:
   - `game-client-launcher-feedback-entry-2026-03-02.prd.md`
+  - `game-client-launcher-web-transfer-closure-2026-03-06.prd.md`
   - `game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md`
   - `game-client-launcher-self-guided-experience-2026-03-08.prd.md`
 - 适合问题:

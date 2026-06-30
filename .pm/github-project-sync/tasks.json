@@ -7000,6 +7000,54 @@
       "title": "add repository health stewardship role",
       "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-repo-health-role"
     },
+    "task_8fed406689c94f6cbaf8efe6da0df6a1": {
+      "acceptance": [
+        "Identify the next repository governance point focused on stale doc semantics convergence and obsolete doc deletion.",
+        "Record repository_health_engineer evidence and provide a scoped recommendation with candidate files, risks, owner, and verification path."
+      ],
+      "claim_verifications": [
+        {
+          "allowed_to_claim": true,
+          "blocked_phrase": "Do not claim the task is complete.",
+          "claim_message": "Fresh verification passed; the task can now be claimed complete.",
+          "claim_type": "task_complete",
+          "status": "verified",
+          "success_phrase": "Fresh verification passed; the task can now be claimed complete.",
+          "task_uid": "task_8fed406689c94f6cbaf8efe6da0df6a1",
+          "verification_exit_code": 0,
+          "verified_at": "2026-06-30T21:47:29+08:00",
+          "verify_command": "rg -n \"doc/world-simulator/prd/launcher/blockchain-transfer.md|prd/launcher/blockchain-transfer\" doc scripts .agents AGENTS.md; test $? -eq 1 && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && git diff --check"
+        }
+      ],
+      "created_at": "2026-06-30T21:19:26+08:00",
+      "doc_refs": [],
+      "evidence_comments": [
+        "https://github.com/eng-cc/oasis7/issues/1663#issuecomment-4843914849",
+        "https://github.com/eng-cc/oasis7/issues/1663#issuecomment-4844161575"
+      ],
+      "evidence_sink": "https://github.com/eng-cc/oasis7/issues/1663",
+      "handoff_to": [],
+      "issue_number": 1663,
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/1663",
+      "last_claim_verification_at": "2026-06-30T21:47:29+08:00",
+      "last_closed_at": "2026-06-30T21:47:33+08:00",
+      "last_evidence_at": "2026-06-30T21:47:33+08:00",
+      "last_started_at": "2026-06-30T21:19:52+08:00",
+      "module": "engineering",
+      "owner_role": "tpm",
+      "priority": "P2",
+      "project_item_id": "PVTI_lAHOALIiks4Bb-WtzgxSUt4",
+      "related_prd": [],
+      "source_refs": [
+        "doc/engineering/workflow/source-of-truth.md",
+        "doc/engineering/project.md"
+      ],
+      "status": "done",
+      "task_uid": "task_8fed406689c94f6cbaf8efe6da0df6a1",
+      "title": "Converge stale governance docs",
+      "updated_at": "2026-06-30T21:47:33+08:00",
+      "worktree_hint": "/Users/scc/ccwork/worktrees/oasis7-engineering-doc-governance-convergence"
+    },
     "task_901c035693624a08b8270ade99c3e9c7": {
       "content_id": "I_kwDORHhWec8AAAABHEn7Lw",
       "execution_log_path": ".pm/tasks/task_901c035693624a08b8270ade99c3e9c7.execution.md",
