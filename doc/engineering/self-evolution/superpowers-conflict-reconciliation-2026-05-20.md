@@ -22,7 +22,7 @@
 
 后续任何互借都不能绕开当前默认执行链：
 
-`new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/review-thread closeout/merge`
+`new-task-worktree -> GitHub-backed task bootstrap -> tpm orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/review-thread closeout/merge`
 
 因此外部 workflow 只有四种合法落点：
 
@@ -46,7 +46,7 @@
 冲突点：
 
 - 用户经常直接要求“做 / 继续 / landing”，默认期望立即执行。
-- 当前正式计划真值已经是 `prd.md` / `project.md` / `.pm` task。
+- 当前正式计划/执行真值已经是 `prd.md` / `project.md` / GitHub-backed task truth（GitHub task issue evidence comments + Project fields）。
 - 当前测试真值是 `test_tier_required / test_tier_full` 分层，不是 universal TDD。
 
 已吸收的部分：
@@ -86,7 +86,7 @@
 
 - 外部 bootstrap 本体
 - packaging / distribution 先于 repo-owned truth
-- 任何会竞争 `AGENTS.md + .pm + GitHub PR review` 的并行入口
+- 任何会竞争 `AGENTS.md + workflow source-of-truth + GitHub-backed task evidence + GitHub PR review` 的并行入口
 
 重开条件：
 
@@ -101,7 +101,7 @@
 
 已吸收的部分：
 
-- `producer_system_designer` orchestrator + 标准角色 subagents
+- `tpm` orchestrator + 标准角色 subagents
 - bounded subagent-driven execution
 - `slice type / write scope / return contract / integration order` handoff/planning contract
 - disjoint write scope 的并行原则
@@ -146,9 +146,9 @@
 | `requesting-code-review` | adopted（bounded） | every-task reviewer ritual、把本地 review 提升为正式评审主链 | `requesting-repo-owned-review`、review packet、`findings / no_findings / residual_risk` formal sink | 只允许补强 high-risk local diff；不得替代 GitHub PR review |
 | `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task、local review ritual、subagent 独立真值化 | bounded subagent-driven execution、任务拆分、上下文最小化、write-scope / return-contract contract | 仅当 repo-owned multi-agent eval 稳定且 review 边界变化时重开 |
 | `test-driven-development` | adopted（bounded） | universal TDD gate、对无稳定 harness 任务强套 RED | behavior-first / regression-first contract、`tdd-test-writer`、RED command or skip reason | 只允许在更细局部领域继续扩张；不得升成 universal gate |
-| `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / `.pm` 形成第二套计划真值 | `File Structure / Affected Paths`、handoff 原子步骤、planning self-checklist | 只有在不竞争正式计划真值时才允许继续局部 salvage |
+| `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / GitHub-backed task evidence 形成第二套计划真值 | `File Structure / Affected Paths`、handoff 原子步骤、planning self-checklist | 只有在不竞争正式计划真值时才允许继续局部 salvage |
 | `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap 与当前 root workflow 真值冲突 | `default-workflow-bootstrap`、`repo-owned-workflow-router`、触发说明、skill 发现习惯 | bootstrap / packaging / 第二套入口语义继续 rejected |
-| `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行 | `producer_system_designer` orchestrator + role subagents、parallel task decomposition、disjoint write scope | 仅当 multi-agent eval 稳定后，才应继续评估 swarm / packaging 扩张 |
+| `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行 | `tpm` orchestrator + role subagents、parallel task decomposition、disjoint write scope | 仅当 multi-agent eval 稳定后，才应继续评估 swarm / packaging 扩张 |
 | `executing-plans` | deferred（整体 skill） | 整包引入会与正式 project/task 执行链重复 | `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、blocker handling | 剩余会话包装与默认收尾假设继续 deferred |
 | `writing-skills` | deferred（整体 skill） | 分发/作者规范容易先于治理真值 | `.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist | 剩余分发部署与上游 gate 部分继续 deferred |
 
@@ -166,7 +166,7 @@
 
 后续若要重开某个冲突项，至少要同时满足：
 
-1. 不替代 `AGENTS.md`、`.pm` task、task execution log、GitHub PR review 四条正式真值。
+1. 不替代 `AGENTS.md`、workflow source-of-truth、GitHub-backed task evidence、GitHub PR review 四条正式真值。
 2. 能说明落点是 helper、skill、eval，还是模块专题内的 optional technique。
 3. 有明确 owner。
 4. 有明确验证面。
@@ -187,4 +187,4 @@
 1. 本文档：先看冲突发生在哪个真值层。
 2. `agent-workflow-borrowing-governance-2026-05-19.prd.md`：看当前正式裁决。
 3. `agent-workflow-borrowing-governance-2026-05-19.project.md`：看当前正式 follow-up。
-4. 若仍值得推进，再新开独立 worktree 和 `.pm` task。
+4. 若仍值得推进，再新开独立 worktree 和 GitHub-backed task。
