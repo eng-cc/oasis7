@@ -5,7 +5,7 @@ description: Use when a bound oasis7 task needs phase selection across repo-owne
 
 > Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
 
-> PM truth: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh ... audit` when task status or Project-backed PM state changes.
+> PM truth: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh audit --task-uid <TASK-UID> --json` when task status or Project-backed PM state changes.
 
 
 # Repo-Owned Workflow Router

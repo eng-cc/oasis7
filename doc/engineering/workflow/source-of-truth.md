@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.3**
-Last Updated: **2026-06-30**
+Version: **v1.5.4**
+Last Updated: **2026-07-01**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -198,6 +198,10 @@ Deterministic script contract:
   path must be selected-task / mapping-targeted and must not list the full
   Project during ordinary task closeout or PR readiness checks. It loads task
   truth from archive + mapping and fails if local task-file artifacts reappear.
+  For a single task, use
+  `./scripts/pm/github-project-workflow.sh audit --task-uid <TASK-UID> --json`;
+  the helper reads `repo`, `project-owner`, and `project-number` defaults from
+  `.pm/github-project-sync/tasks.json` when they are present.
 - `./scripts/pm/github-project-workflow.sh ... step3-gate` is the full
   historical coverage audit for the GitHub Project/mapping/archive set.
 - `./scripts/pm/github-project-retire-tasks.sh --delete` maintains
@@ -428,6 +432,10 @@ Deterministic script contract:
   replace it.
 
 ## 7. Change Log
+- **v1.5.4 (2026-07-01)**
+  - Made task-scoped GitHub Project audit copy-pasteable with
+    `github-project-workflow.sh audit --task-uid <TASK-UID> --json`, backed by
+    mapping-derived Project defaults.
 - **v1.5.3 (2026-06-30)**
   - Added Project field taxonomy, same-thread continuation reuse, temporary
     fallback evidence replay rules, and current verification epoch semantics.

@@ -241,9 +241,6 @@ chmod +x "$TMPDIR/bin/gh"
 
 MAPPING_ONLY_JSON="$TMPDIR/mapping-only.json"
 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
-  --repo eng-cc/oasis7 \
-  --project-owner eng-cc \
-  --project-number 1 \
   --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
   --json \
   audit > "$MAPPING_ONLY_JSON"
@@ -253,6 +250,24 @@ import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 assert payload["status"] == "ok", payload
 assert payload["selected_count"] == 1, payload
+assert payload["errors"] == [], payload
+assert payload["project_owner"] == "eng-cc", payload
+assert payload["project_number"] == 1, payload
+PY
+
+TASK_AUDIT_JSON="$TMPDIR/task-audit.json"
+python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json \
+  audit --task-uid task_33333333333333333333333333333333 > "$TASK_AUDIT_JSON"
+
+python3 - "$TASK_AUDIT_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "ok", payload
+assert payload["task_uid"] == "task_33333333333333333333333333333333", payload
+assert payload["selected_count"] == 1, payload
+assert payload["selected_statuses"] == ["blocked", "candidate", "committed", "deferred", "done", "pr_watch", "ready"], payload
 assert payload["errors"] == [], payload
 PY
 
