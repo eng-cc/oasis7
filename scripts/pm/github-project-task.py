@@ -257,6 +257,39 @@ def update_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any],
     return int(updated)
 
 
+def update_done_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
+    sync = load_sync_module()
+    project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    required_fields = {"Status", "PM Status", "Workflow Phase"}
+    values = sync.project_field_values(task)
+    missing: list[str] = []
+    for field_name in sorted(required_fields):
+        value = str(values.get(field_name) or "")
+        field = fields.get(field_name)
+        if not field:
+            missing.append(f"{field_name}:missing_field")
+            continue
+        if not value:
+            missing.append(f"{field_name}:empty_value")
+            continue
+        if field_name in sync.SINGLE_SELECT_FIELDS and value not in (field.get("options_by_name") or {}):
+            missing.append(f"{field_name}:missing_option:{value}")
+    if missing:
+        die(
+            "move-task: refusing done because required GitHub Project fields are unavailable: "
+            + ", ".join(missing)
+        )
+    updated, skipped = sync.update_fields(project_id, project_item_id, task, fields, only_fields=required_fields)
+    if skipped:
+        print(f"github-project-task: skipped done fields: {', '.join(skipped)}", file=sys.stderr)
+    if int(updated) != len(required_fields):
+        die(
+            "move-task: refusing done because required GitHub Project fields were not updated: "
+            f"updated={updated}/{len(required_fields)}"
+        )
+    return int(updated)
+
+
 def add_project_item(args: argparse.Namespace, issue_url: str) -> str:
     payload = json.loads(
         run_text(
@@ -370,6 +403,16 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     return mapping_path, mapping, record
 
 
+def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
+    if record.get("project_item_id"):
+        return
+    try:
+        recovered = load_sync_module().recover_project_mapping(args.project_owner, args.project_number)
+    except Exception:
+        return
+    record.update(recovered.get(args.task_uid) or {})
+
+
 def has_verified_task_complete(record: dict[str, Any]) -> bool:
     for item in record.get("claim_verifications") or []:
         if not isinstance(item, dict):
@@ -457,13 +500,24 @@ def command_move_task(args: argparse.Namespace) -> int:
             "run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid "
             f"{args.task_uid} --verify-command '<cmd>'"
         )
+    if args.to_status == "done":
+        recover_missing_project_item(args, record)
+    if args.to_status == "done" and not record.get("project_item_id"):
+        die(
+            "move-task: refusing done because GitHub Project item mapping could not be recovered; "
+            f"task_uid={args.task_uid}"
+        )
     record["status"] = args.to_status
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
-    if record.get("project_item_id"):
+    if args.to_status == "done":
+        updated_fields = update_done_project_fields(args, task, str(record["project_item_id"]))
+    elif record.get("project_item_id"):
         updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
+    if args.to_status == "done":
+        run_text(["gh", "issue", "close", str(record["issue_number"]), "-R", args.repo, "--reason", "completed"])
     if record.get("_github_source") != "issue_search" or mapping_path.exists():
         save_mapping(mapping_path, mapping)
     payload = {

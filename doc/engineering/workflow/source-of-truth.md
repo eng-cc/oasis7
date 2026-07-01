@@ -206,10 +206,12 @@ Deterministic script contract:
   the current input set.
 - `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
   create issue/project task, append evidence comments, move Project status, and
-  close tasks after fresh verification.
+  close task issues after fresh verification-backed `done` moves.
 - `./scripts/pm/task-closeout.sh` defaults to `ready` / `ready_for_pr`
   closeout. Final `done` is reserved for post-PR merge/cleanup closeout or an
-  explicitly non-PR task and still requires verified `task_complete` evidence.
+  explicitly non-PR task and still requires verified `task_complete` evidence;
+  `done` closeout must update issue metadata, set GitHub Project task fields to
+  `Done` / `done` / `done`, and close the GitHub task issue.
 - `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
   the task to `pr_watch` when GitHub-backed mapping exists.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
@@ -368,7 +370,7 @@ Deterministic script contract:
   may be background context only.
 - Do not move the task to final closeout / `done` before pre-PR local role review has passed when the task is on a PR path. The order is: fresh verification -> pre-PR local role review -> address findings -> final closeout/status packet -> commit -> PR preflight/create.
 - Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the GitHub issue evidence comment must label that packet as readiness evidence rather than final done state.
-- For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence.
+- For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence. The final status move must preserve or recover the task mapping, update GitHub Project `Status` / `PM Status` / `Workflow Phase`, update the GitHub issue task body to `status: done`, and close the GitHub issue as completed.
 
 ### 5.5 PR and review chain
 - Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
@@ -419,7 +421,7 @@ Deterministic script contract:
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
-- Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
+- Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, cleanup evidence, and final GitHub task issue closure for `done`.
 - Learning intake / loop closeout: only when reusable learning exists, record
   the chosen ladder step and evidence. Reflection signals, working memory, and
   promoted candidate tasks/memory supplement GitHub task issue evidence comments but do not

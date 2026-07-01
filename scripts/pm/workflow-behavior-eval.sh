@@ -976,6 +976,7 @@ payload = {
         f"subagent slice contracts record {default_shorthand} as the source-of-truth default model configuration unless an override reason is present",
         "PR creation requires local involved-role subagent review evidence before GitHub PR watch/fix/merge",
         "done closeout refuses to proceed without fresh verification",
+        "done closeout updates GitHub issue metadata, Project task fields, and closes the GitHub task issue",
         "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
         "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, authorized review-approval admin merge when policy allows, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
         "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
