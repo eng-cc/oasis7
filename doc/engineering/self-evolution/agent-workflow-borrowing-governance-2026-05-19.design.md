@@ -20,7 +20,7 @@
 
 外部 workflow 借鉴不得替换当前默认执行链：
 
-`new-task-worktree -> workflow-report start -> producer orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/review-thread closeout/merge`
+`new-task-worktree -> GitHub-backed task bootstrap -> tpm orchestrate / role subagent dispatch -> implementation/docs/tests -> task-closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/review-thread closeout/merge`
 
 因此 adopted 项只能以三种形态落地：
 
@@ -33,9 +33,9 @@
 当前已吸收并接回主链的只有以下几层：
 
 - workflow router：把 `brainstorming -> TDD -> execution -> verification -> closeout` 串成 repo-owned phase order，只路由本地 skills 和 root workflow，不引入外部 bootstrap。
-- default role-subagent orchestration：固定为 `producer_system_designer` orchestrator + 标准角色 subagents，同时保留单 owner role、单 `.pm` task、单 canonical worktree 与 GitHub PR review 主链。
+- default role-subagent orchestration：固定为 `tpm` orchestrator + 标准角色 subagents，同时保留单 owner role、单 GitHub-backed task truth、单 canonical worktree 与 GitHub PR review 主链。
 - bounded subagent-driven execution：允许把分析、实现、验证、补充 review 切成 subagent slices，但每个 slice 必须写清 `slice type / write scope / return contract / integration order`。
-- bounded brainstorming：只在方向仍模糊、范围过大或问题本身偏产品 / 架构 / UI 取舍时启用，产出必须回写 `prd.md` / `project.md` / handoff / execution log。
+- bounded brainstorming：只在方向仍模糊、范围过大或问题本身偏产品 / 架构 / UI 取舍时启用，产出必须回写 `prd.md` / `project.md` / handoff / GitHub task issue evidence comments。
 - bounded behavior-first testing：只约束“行为变更且存在稳定自动化 harness”的实现任务，要么给出 RED command，要么显式写 skip reason。
 - completion-claim verification：任何“完成 / 通过 / 可提 PR”都必须先跑 fresh verification 并读取结果。
 
@@ -49,7 +49,7 @@
 以下内容继续被挡在设计层之外：
 
 - external bootstrap 作为默认入口
-- `prd.md` / `project.md` / `.pm` 之外的第二套计划真值
+- `prd.md` / `project.md` / GitHub-backed task evidence 之外的第二套计划真值
 - universal brainstorming gate
 - universal TDD gate
 - fresh subagent-per-task + local two-stage review ritual
@@ -79,7 +79,7 @@
 ## 里程碑
 
 - 第一阶段：冻结 adopted / rejected / deferred 边界，并把 planning / execution / skill-authoring 的可 salvage 部分翻译成 repo-owned surface。
-- 第二阶段：把默认协作收口为 `producer_system_designer` orchestrator + role subagents，并把 bounded brainstorming / TDD / execution / verification / closeout 接回 root workflow。
+- 第二阶段：把默认协作收口为 `tpm` orchestrator + role subagents，并把 bounded brainstorming / TDD / execution / verification / closeout 接回 root workflow。
 - 第三阶段：补齐 `task-closeout` fresh verification gate 与 `workflow-behavior-eval.sh`，让默认链路可以通过 repo-owned eval 回放。
 
 ## 风险

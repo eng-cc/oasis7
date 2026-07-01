@@ -115,13 +115,13 @@
 - 代码改动：通常无需代码；如需，仅限卡片生成支撑脚本。
 - 文档回写：`doc/playability_test_result/project.md` 与相关模板文档。
 - 测试记录：补齐 `test_tier_required` 的字段抽样与模板引用验证。
-- devlog 记录：记录评分口径、模板与未决风险。
+- GitHub task issue evidence comments：记录评分口径、模板与未决风险。
 
 ### Done Definition
 - [ ] 输出满足目标与成功标准
 - [ ] 影响面已核对 `producer_system_designer` / `qa_engineer` / `viewer_engineer`
 - [ ] 对应 `prd.md` / `project.md` 已回写
-- [ ] 对应 `doc/devlog/YYYY-MM-DD.md` 已记录
+- 对应 GitHub task issue evidence comments 已记录
 - [ ] required 证据已补齐
 
 ### Risks / Decisions
