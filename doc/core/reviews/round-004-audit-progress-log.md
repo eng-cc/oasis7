@@ -186,8 +186,8 @@
 | 2026-03-06 11:48:20  | codex | `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
 | 2026-03-06 11:48:20  | codex | `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.prd.md` | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
-| 2026-03-06 11:48:20  | codex | `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.project.md` | issue_open | I4-003 | project 缺可执行命令片段 |
+| 2026-03-06 11:48:20  | codex | viewer live release-locked launch PRD (deleted obsolete doc) | issue_open | I4-001,I4-004,I4-006 | 追溯任务写为 T0~Tn 占位；PRD 缺验收命令段；PRD 含过程化迁移描述 |
+| 2026-03-06 11:48:20  | codex | viewer live release-locked launch project plan (deleted obsolete doc) | issue_open | I4-003 | project 缺可执行命令片段 |
 | 2026-03-06 11:48:36 +0800 | codex | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` | issue_open | I4-003 | 同文并存 `审计轮次: 4` 与列表项 `- 审计轮次: 2`，审计标记口径冲突会误导轮次统计。 |
 | 2026-03-06 11:48:38 +0800 | codex | `doc/scripts/precommit/pre-commit.project.md` | pass | - | 项目文档中的核心验收命令（pre-commit/fmt/wasm check）均可直接执行。 |
 | 2026-03-06 11:48:54 +0800 | Codex-G4-001 | `doc/core/README.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |

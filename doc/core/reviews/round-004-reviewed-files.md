@@ -238,8 +238,8 @@
 - `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.project.md`
 - `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.prd.md`
 - `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.project.md`
-- `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.prd.md`
-- `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.project.md`
+- viewer live release-locked launch PRD (deleted obsolete doc)
+- viewer live release-locked launch project plan (deleted obsolete doc)
 - historical deleted root playability card shell
 - `doc/playability_test_result/README.md`
 - `doc/playability_test_result/card_2026_02_28_19_22_20.md`
