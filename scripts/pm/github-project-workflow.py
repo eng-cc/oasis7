@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import pathlib
 import re
@@ -173,6 +174,11 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def run_json(cmd: list[str]) -> dict[str, Any]:
     result = run_subprocess_with_retry(cmd)
     stdout = result.stdout.strip()
@@ -209,6 +215,16 @@ def run_subprocess_with_retry(cmd: list[str], *, retries: int = 4) -> subprocess
 
 def run_passthrough(cmd: list[str]) -> int:
     return subprocess.run(cmd, check=False).returncode
+
+
+def load_sync_module() -> Any:
+    path = pathlib.Path(__file__).with_name("github-project-sync.py")
+    spec = importlib.util.spec_from_file_location("github_project_sync", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def field_value(item: dict[str, Any], field_name: str) -> str:
@@ -378,6 +394,40 @@ def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
     return path if path.is_absolute() else root / path
 
 
+def recover_missing_mapping_records(
+    args: argparse.Namespace,
+    mapping: dict[str, Any],
+    tasks: dict[str, OrderedDict[str, Any]],
+) -> tuple[bool, str]:
+    missing = [uid for uid in sorted(tasks) if not (mapping.get("tasks") or {}).get(uid)]
+    if not missing:
+        return False, ""
+    try:
+        project_id = str((mapping.get("project") or {}).get("id") or "") or expected_project_id(args, mapping)
+        recovered = load_sync_module().recover_project_mapping_for_task_uids(
+            args.project_owner,
+            args.project_number,
+            args.repo,
+            missing,
+            project_id,
+        )
+    except Exception as exc:
+        return False, f"mapping recovery failed before audit validation: {exc}"
+    changed = False
+    mapped_tasks = mapping.setdefault("tasks", {})
+    for uid in missing:
+        item = recovered.get(uid)
+        if not item:
+            continue
+        record = mapped_tasks.setdefault(uid, {})
+        for key in ("issue_url", "issue_number", "project_item_id"):
+            value = item.get(key)
+            if value and not record.get(key):
+                record[key] = int(value) if key == "issue_number" else value
+                changed = True
+    return changed, ""
+
+
 def command_sync(args: argparse.Namespace) -> int:
     script = pathlib.Path(__file__).with_name("github-project-sync.py")
     cmd = [
@@ -409,18 +459,29 @@ def command_audit(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
     tasks = load_tasks(root, statuses, mapping)
+    recovered_mapping, recovery_error = recover_missing_mapping_records(args, mapping, tasks)
+    if recovered_mapping:
+        save_mapping(mapping_path, mapping)
+        tasks = load_tasks(root, statuses, mapping)
     mapped_tasks = mapping.get("tasks", {})
     retired_files = retired_task_files(root)
 
-    if args.full_list:
-        project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_full_list(args)
-        expected_live_project_id = ""
-    else:
-        project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_mapping(tasks, mapped_tasks)
-        expected_live_project_id = expected_project_id(args, mapping)
-
     errors: list[str] = []
     warnings: list[str] = []
+    if recovery_error:
+        errors.append(recovery_error)
+    try:
+        if args.full_list:
+            project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_full_list(args)
+            expected_live_project_id = ""
+        else:
+            project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_mapping(tasks, mapped_tasks)
+            expected_live_project_id = expected_project_id(args, mapping)
+    except Exception as exc:
+        project_items_by_task = {}
+        duplicate_project_task_uids = []
+        expected_live_project_id = ""
+        errors.append(f"GitHub Project item fetch failed before audit validation: {exc}")
     if retired_files:
         errors.append(
             "retired .pm/tasks files present after GitHub Project Step 3: "
