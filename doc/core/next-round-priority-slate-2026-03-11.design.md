@@ -17,7 +17,7 @@
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - `doc/core/next-round-priority-slate-2026-03-11.project.md`
 - `doc/core/project.md`
-- `doc/engineering/governance/module-project-closure-summary-2026-03-11.md`
+- 历史输入：2026-03-11 模块主项目收口总览已退役删除；当前入口以本专题三件套、`doc/core/project.md`、`doc/core/prd.index.md` 与 GitHub task issue evidence comments 为准。
 
 ## 4. 约束与边界
 - 本专题只做排序与入口冻结，不直接实现第一优先级功能。

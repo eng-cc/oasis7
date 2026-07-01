@@ -48,9 +48,9 @@
 - `scripts/pm/*.sh`
 
 ## 状态
-- 更新日期: 2026-04-10
-- 当前阶段: active
-- 当前任务: 回到 `TASK-ENGINEERING-089/090` 的 recall / reflection 契约与质量回归；`TASK-ENGINEERING-113` 已把默认最终合流切到 GitHub PR，`TASK-ENGINEERING-099/100` 分别完成 `task_uid` 单一真值与 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口。
+- 更新日期: 2026-07-01
+- 当前阶段: historical / superseded for task-truth semantics
+- 当前任务: 本专题三件套保留为 2026-03 `.pm` 文件化治理设计背景；当前 task truth、execution evidence、reflection intake、PR-readiness evidence 与 GitHub Project-backed task lifecycle 统一以 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract` 为准。`TASK-ENGINEERING-113` 已把默认最终合流切到 GitHub PR，`TASK-ENGINEERING-099/100` 分别完成 `task_uid` 单一身份与 `doc/devlog/*.md` 退出 `.pm` 运行态真值的收口；后续 recall / reflection 补强应进入当前 GitHub-backed task / intake 链，不再恢复 `.pm/tasks/*` 或 `.pm/inbox/signals.jsonl` 作为任务真值。
 - 阻塞项:
   - 无；该专题 workflow integration tranche 已闭环。
 - 最新完成:

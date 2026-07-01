@@ -11,11 +11,11 @@
 - [x] CPS-3 (PRD-CORE-PRIORITY-002/003) [test_tier_required]: 完成 `producer_system_designer -> qa_engineer` handoff，并为下一步专题开工做准备。
 
 ## 依赖
-- `doc/engineering/governance/module-project-closure-summary-2026-03-11.md`
+- 历史输入：2026-03-11 模块主项目收口总览已退役删除；当前追溯以本项目页、正式专题三件套、`doc/core/project.md`、`doc/core/prd.index.md` 与 GitHub task issue evidence comments 为准。
 - `doc/core/project.md`
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - `doc/core/next-round-priority-slate-2026-03-11.design.md`
-- 历史 priority slate handoff 文件已退役删除；当前证据入口为本项目页、正式专题三件套与 `.pm/tasks/task_<32hex>.execution.md`。
+- 历史 priority slate handoff 文件已退役删除；当前证据入口为本项目页、正式专题三件套与 GitHub task issue evidence comments。
 
 ## 状态
 - 更新日期: 2026-03-11
