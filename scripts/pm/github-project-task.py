@@ -75,7 +75,7 @@ def pr_number_from_url(pr_url: str) -> int | None:
 
 def issue_task_fields(body: str) -> dict[str, Any]:
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "priority", "worktree_hint"):
+    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -149,6 +149,9 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("worktree_hint", record.get("worktree_hint") or ""),
             ("status", record.get("status") or "candidate"),
             ("priority", record.get("priority") or "P2"),
+            ("source_signal", record.get("source_signal") or ""),
+            ("source_type", record.get("source_type") or ""),
+            ("severity", record.get("severity") or ""),
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
             ("source_refs", record.get("source_refs") or []),
@@ -172,6 +175,14 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
+    if task.get("source_signal") or task.get("source_type") or task.get("severity"):
+        lines.extend(
+            [
+                f"- source_signal: `{task.get('source_signal') or ''}`",
+                f"- source_type: `{task.get('source_type') or ''}`",
+                f"- severity: `{task.get('severity') or ''}`",
+            ]
+        )
     if task.get("pr_url"):
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
@@ -284,6 +295,9 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("worktree_hint", args.worktree_hint or ""),
             ("status", "candidate"),
             ("priority", args.priority),
+            ("source_signal", args.source_signal or ""),
+            ("source_type", args.source_type or ""),
+            ("severity", args.severity or ""),
             ("source_refs", args.source_ref or []),
             ("doc_refs", args.doc_ref or []),
             ("related_prd", args.related_prd or []),
@@ -304,6 +318,9 @@ def command_new_task(args: argparse.Namespace) -> int:
         "worktree_hint": args.worktree_hint or "",
         "status": "candidate",
         "priority": args.priority,
+        "source_signal": args.source_signal or "",
+        "source_type": args.source_type or "",
+        "severity": args.severity or "",
         "source_refs": args.source_ref or [],
         "doc_refs": args.doc_ref or [],
         "related_prd": args.related_prd or [],
@@ -529,6 +546,8 @@ def build_parser() -> argparse.ArgumentParser:
     new_task.add_argument("--module")
     new_task.add_argument("--priority", choices=("P0", "P1", "P2", "P3"), default="P2")
     new_task.add_argument("--source-signal")
+    new_task.add_argument("--source-type")
+    new_task.add_argument("--severity", choices=("low", "medium", "high", "critical"))
     new_task.add_argument("--source-ref", action="append", default=[], required=True)
     new_task.add_argument("--doc-ref", action="append", default=[])
     new_task.add_argument("--related-prd", action="append", default=[])

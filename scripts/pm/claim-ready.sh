@@ -257,6 +257,11 @@ record = (mapping.get("tasks") or {}).get(task_uid)
 if not record:
     raise SystemExit(0)
 record.setdefault("claim_verifications", []).append(claim)
+record["last_claim_type"] = claim["claim_type"]
+record["last_verify_command"] = claim["verify_command"]
+record["last_verified_at"] = claim["verified_at"]
+record["last_verification_exit_code"] = claim["verification_exit_code"]
+record["last_verification_status"] = claim["status"]
 record["last_claim_verification_at"] = claim["verified_at"]
 record["updated_at"] = claim["verified_at"]
 mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")

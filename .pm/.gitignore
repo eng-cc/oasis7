@@ -1,3 +1,4 @@
 /registry/tasks.yaml
 /roles/*/backlog/*.yaml
 /scratch/
+/github-project-sync/intake-signals.json

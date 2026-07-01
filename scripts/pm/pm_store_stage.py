@@ -26,7 +26,14 @@ def run_stage_lint(
     stage_current = load_mapping_document(root / ".pm/stage/current.yaml")
     gate = load_mapping_document(root / ".pm/stage/gate.yaml")
     _, registry_entries = load_list_document(task_registry_path(root), "tasks")
-    task_uids = {str(entry.get("task_uid")) for entry in registry_entries if entry.get("task_uid")}
+    all_task_entries = list(registry_entries)
+    github_mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if github_mapping_path.exists():
+        mapping = json.loads(github_mapping_path.read_text(encoding="utf-8"))
+        tasks = mapping.get("tasks") or {}
+        if isinstance(tasks, dict):
+            all_task_entries.extend(tasks.values())
+    task_uids = {str(entry.get("task_uid")) for entry in all_task_entries if entry.get("task_uid")}
 
     def require_keys(doc_name: str, payload: OrderedDict[str, object], required: set[str]) -> None:
         missing = sorted(required - set(payload.keys()))
@@ -111,7 +118,7 @@ def run_stage_lint(
     tracked_blocking_ids = {
         str(task_uid) for task_uid in list(stage_current.get("blocking_tasks", [])) + list(gate.get("blocking_tasks", []))
     }
-    for entry in registry_entries:
+    for entry in all_task_entries:
         if entry.get("status") != "blocked":
             continue
         task_uid = str(entry.get("task_uid"))

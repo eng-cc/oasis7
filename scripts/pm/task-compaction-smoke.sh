@@ -86,7 +86,6 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     "version: 1\nscope: shared\nkind: memory_superseded\nrecords: []\n",
     encoding="utf-8",
 )
-(root / ".pm/inbox/signals.jsonl").write_text("", encoding="utf-8")
 (root / ".pm/stage/current.yaml").write_text(
     "version: 1\ncurrent_stage: null\ncandidate_stage: null\nclaim_envelope: null\ndecision_date: null\nupdated_from: []\nblocking_tasks: []\n",
     encoding="utf-8",
@@ -108,6 +107,7 @@ for path in (root / ".pm/working_memory").glob("*.yaml"):
     encoding="utf-8",
 )
 (root / ".pm/registry/codex-sessions.yaml").write_text("version: 1\nsessions: []\n", encoding="utf-8")
+(root / ".pm/tasks").mkdir(parents=True, exist_ok=True)
 
 for backlog_path in (root / ".pm/roles").glob("*/backlog/*.yaml"):
     role = backlog_path.parts[-3]
@@ -129,7 +129,7 @@ EOF
 create_task() {
   local title="$1"
   local acceptance="$2"
-  PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+  python3 "$ROOT_DIR/scripts/pm/pm_store.py" new-task "$TMPDIR" \
     --owner-role producer_system_designer \
     --title "$title" \
     --source-ref doc/engineering/project.md \
@@ -178,9 +178,27 @@ append_log_entry "$SURVIVOR_UID" "aggregate workflow task"
 append_log_entry "$DROP_A_UID" "doc truth refresh micro task"
 append_log_entry "$DROP_B_UID" "conflict table refresh micro task"
 
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$SURVIVOR_UID" --to-status done >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$DROP_A_UID" --to-status done >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$DROP_B_UID" --to-status deferred >/dev/null
+python3 - "$TMPDIR" "$SURVIVOR_UID" "$DROP_A_UID" "$DROP_B_UID" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+statuses = {
+    sys.argv[2]: "done",
+    sys.argv[3]: "done",
+    sys.argv[4]: "deferred",
+}
+
+for task_uid, status in statuses.items():
+    path = root / ".pm/tasks" / f"{task_uid}.yaml"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("status: candidate\n", f"status: {status}\n")
+    text = text.replace("updated_at:", "last_started_at: 2026-05-22T18:00:00+08:00\nlast_closed_at: 2026-05-22T18:10:00+08:00\nupdated_at:", 1)
+    path.write_text(text, encoding="utf-8")
+PY
+python3 "$ROOT_DIR/scripts/pm/pm_store.py" sync-views "$TMPDIR" >/dev/null
 
 REFUSAL_OUTPUT="$(
   PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/compact-task-group.sh" \

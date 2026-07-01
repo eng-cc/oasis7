@@ -266,6 +266,39 @@ def issue_number_from_url(value: object) -> str:
     return match.group(1) if match else ""
 
 
+def issue_comments_via_rest(repo: str, issue_number: str) -> list[dict[str, object]]:
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        raise subprocess.CalledProcessError(2, ["gh", "api", "invalid-repo"])
+    payload = subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/issues/{issue_number}/comments",
+            "--paginate",
+        ],
+        text=True,
+        cwd=root,
+        stderr=subprocess.PIPE,
+        timeout=180,
+    )
+    if not payload.strip():
+        return []
+    decoder = json.JSONDecoder()
+    comments: list[dict[str, object]] = []
+    idx = 0
+    while idx < len(payload):
+        while idx < len(payload) and payload[idx].isspace():
+            idx += 1
+        if idx >= len(payload):
+            break
+        page, next_idx = decoder.raw_decode(payload, idx)
+        if isinstance(page, list):
+            comments.extend(comment for comment in page if isinstance(comment, dict))
+        idx = next_idx
+    return comments
+
+
 def github_issue_comments(task: dict[str, object]) -> list[str]:
     mapping_info = task.get("github_project_mapping")
     repo = ""
@@ -285,13 +318,17 @@ def github_issue_comments(task: dict[str, object]) -> list[str]:
             timeout=180,
         )
     except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        errors.append(f"GitHub-backed task issue comments unreadable for live audit: {exc}")
-        return []
-    try:
-        comments = json.loads(payload).get("comments") or []
-    except json.JSONDecodeError as exc:
-        errors.append(f"GitHub-backed task issue comments JSON invalid: {exc}")
-        return []
+        try:
+            comments = issue_comments_via_rest(repo, issue_number)
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError) as rest_exc:
+            errors.append(f"GitHub-backed task issue comments unreadable for live audit: {exc}; REST fallback failed: {rest_exc}")
+            return []
+    else:
+        try:
+            comments = json.loads(payload).get("comments") or []
+        except json.JSONDecodeError as exc:
+            errors.append(f"GitHub-backed task issue comments JSON invalid: {exc}")
+            return []
     return [str(comment.get("body") or "") for comment in comments if isinstance(comment, dict)]
 
 
@@ -300,6 +337,25 @@ def comment_has(markers: tuple[str, ...], comments: list[str], task_uid: str) ->
     return any(task_marker in comment and all(marker in comment for marker in markers) for comment in comments)
 
 if github_backed:
+    log_path = str(task.get("execution_log_path") or "")
+    if phase == "current" and log_path and not log_path.startswith(("http://", "https://")):
+        elog = root / log_path
+        check(elog.is_file(), f"execution log missing: {elog.relative_to(root)}; fix: run workflow-report --phase start or update execution_log_path")
+        if elog.exists():
+            et = elog.read_text(encoding="utf-8")
+            heading_re = re.compile(r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} CST / [a-z_][a-z0-9_]*$", re.MULTILINE)
+            headings = list(heading_re.finditer(et))
+            entries = []
+            for idx, match in enumerate(headings):
+                start = match.end()
+                end = headings[idx + 1].start() if idx + 1 < len(headings) else len(et)
+                entries.append(et[start:end])
+            required_fields = ["完成内容:", "遗留事项:", "Action:", "Validation Command:", "Expected Result:", "Actual Result:", "Blocker / Next Action:"]
+            check(bool(entries), "execution log missing real entries; fix: use ./scripts/pm/append-execution-log.sh to add a timestamped entry")
+            if entries:
+                complete_entry_found = any(all(fld in entry for fld in required_fields) for entry in entries)
+                missing = [fld for fld in required_fields if not any(fld in entry for entry in entries)]
+                check(complete_entry_found, f"execution log missing Actual Result or one complete structured entry; fix: use ./scripts/pm/append-execution-log.sh or補齊 execution log fields ({', '.join(missing) if missing else 'fields split across entries'})")
     if phase in {"pr-ready", "post-pr"}:
         fallback_paths = unresolved_fallback_paths(uid)
         check(not fallback_paths, "unreplayed fallback evidence exists: " + ",".join(fallback_paths))
@@ -383,7 +439,7 @@ if elog.exists():
     if entries:
         complete_entry_found = any(all(fld in entry for fld in required_fields) for entry in entries)
         missing = [fld for fld in required_fields if not any(fld in entry for entry in entries)]
-        check(complete_entry_found, f"execution log missing one complete structured entry; fix: use ./scripts/pm/append-execution-log.sh or補齊 execution log fields ({', '.join(missing) if missing else 'fields split across entries'})")
+        check(complete_entry_found, f"execution log missing Actual Result or one complete structured entry; fix: use ./scripts/pm/append-execution-log.sh or補齊 execution log fields ({', '.join(missing) if missing else 'fields split across entries'})")
     if phase in {"pr-ready", "post-pr"}:
         check("claim-ready.sh" in et or "claim-ready" in et, "execution log missing claim-ready evidence; fix: append claim-ready command/result entry")
         check("task-closeout.sh" in et or "workflow-report.sh --phase close" in et, "execution log missing closeout evidence; fix: append closeout command/result entry")

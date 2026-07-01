@@ -51,11 +51,94 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMPDIR/scripts"
+mkdir -p "$TMPDIR/scripts" "$TMPDIR/bin"
 cp -R "$ROOT_DIR/.pm" "$TMPDIR/.pm"
 cp -R "$ROOT_DIR/.agents" "$TMPDIR/.agents"
 cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
 mkdir -p "$TMPDIR/.pm/evidence" "$TMPDIR/.pm/shared/memory" "$TMPDIR/.pm/stage"
+: > "$TMPDIR/.pm/github-project-sync/task-archive.jsonl"
+
+cat > "$TMPDIR/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%q ' "$@" >> "$GH_CALL_LOG"
+printf '\n' >> "$GH_CALL_LOG"
+
+next_issue_url() {
+  local current
+  current="$(cat "$GH_MOCK_COUNTER")"
+  current=$((current + 1))
+  printf '%s\n' "$current" > "$GH_MOCK_COUNTER"
+  printf 'https://github.com/eng-cc/oasis7/issues/%s\n' "$current"
+}
+
+if [[ "$1" == "issue" && "$2" == "create" ]]; then
+  next_issue_url
+  exit 0
+fi
+
+if [[ "$1" == "issue" && "$2" == "comment" ]]; then
+  printf 'https://github.com/eng-cc/oasis7/issues/%s#issuecomment-1\n' "$3"
+  exit 0
+fi
+
+if [[ "$1" == "issue" && "$2" == "edit" ]]; then
+  printf 'https://github.com/eng-cc/oasis7/issues/%s\n' "$3"
+  exit 0
+fi
+
+if [[ "$1" == "project" && "$2" == "view" ]]; then
+  printf '{"id":"PROJECT_ID","number":1,"title":"oasis7 Engineering PM","url":"https://github.com/users/eng-cc/projects/1"}\n'
+  exit 0
+fi
+
+if [[ "$1" == "project" && "$2" == "field-list" ]]; then
+  cat <<'JSON'
+{"fields":[
+{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TODO","name":"Todo"},{"id":"OPT_BLOCKED","name":"Blocked"},{"id":"OPT_READY","name":"Ready / PR"},{"id":"OPT_PR_WATCH","name":"PR Watch"},{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_DONE","name":"Done"}]},
+{"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
+{"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"},{"id":"OPT_PRODUCER","name":"producer_system_designer"},{"id":"OPT_QA","name":"qa_engineer"},{"id":"OPT_LIVEOPS","name":"liveops_community"}]},
+{"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_BLOCKED_PM","name":"blocked"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE_PM","name":"done"},{"id":"OPT_DEFERRED","name":"deferred"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_BLOCKED_PHASE","name":"blocked"},{"id":"OPT_CLOSEOUT","name":"closeout"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P0","name":"P0"},{"id":"OPT_P1","name":"P1"},{"id":"OPT_P2","name":"P2"},{"id":"OPT_P3","name":"P3"}]},
+{"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
+{"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
+{"id":"FIELD_PR","name":"PR","type":"ProjectV2Field"},
+{"id":"FIELD_TIER","name":"Test Tier Required","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_NA","name":"n/a"}]},
+{"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
+JSON
+  exit 0
+fi
+
+if [[ "$1" == "project" && "$2" == "item-add" ]]; then
+  url=""
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--url" ]]; then
+      url="$2"
+      break
+    fi
+    shift
+  done
+  issue="${url##*/}"
+  printf '{"id":"ITEM_%s","content":{"url":"%s"}}\n' "$issue" "$url"
+  exit 0
+fi
+
+if [[ "$1" == "project" && "$2" == "item-edit" ]]; then
+  printf '{}\n'
+  exit 0
+fi
+
+echo "unexpected gh invocation: $*" >&2
+exit 9
+SH
+chmod +x "$TMPDIR/bin/gh"
+export PATH="$TMPDIR/bin:$PATH"
+export GH_CALL_LOG="$TMPDIR/gh-calls.log"
+export GH_MOCK_COUNTER="$TMPDIR/gh-issue-counter"
+printf '4000\n' > "$GH_MOCK_COUNTER"
+: > "$GH_CALL_LOG"
 
 python3 - "$TMPDIR" "$ROOT_DIR" <<'PY'
 from pathlib import Path
@@ -72,7 +155,7 @@ source_root = Path(sys.argv[2])
 def rewrite_missing_absolute_source_refs() -> None:
     replacement_dir = root / ".pm/evidence/portable-source-refs"
     absolute_ref_pattern = re.compile(r"/(?:home|Users)/[^\s\"']+")
-    for path in list((root / ".pm").rglob("*.yaml")) + list((root / ".pm").rglob("*.jsonl")):
+    for path in (root / ".pm").rglob("*.yaml"):
         text = path.read_text(encoding="utf-8")
         replacements: dict[str, str] = {}
         for match in absolute_ref_pattern.finditer(text):
@@ -204,11 +287,12 @@ for stage_path in (root / ".pm/stage").glob("*.yaml"):
         mirror_source_ref(str(source_ref))
 
 signals_path = root / ".pm/inbox/signals.jsonl"
-for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-    raw_line = raw_line.strip()
-    if not raw_line:
-        continue
-    mirror_source_ref(str(json.loads(raw_line).get("source_ref") or ""))
+if signals_path.exists():
+    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+        mirror_source_ref(str(json.loads(raw_line).get("source_ref") or ""))
 PY
 
 python3 - "$TMPDIR" <<'PY'
@@ -239,7 +323,6 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
     "version: 1\nscope: shared\nkind: memory_superseded\nrecords: []\n",
     encoding="utf-8",
 )
-(root / ".pm/inbox/signals.jsonl").write_text("", encoding="utf-8")
 (root / ".pm/stage/current.yaml").write_text(
     "version: 1\ncurrent_stage: null\ncandidate_stage: null\nclaim_envelope: null\ndecision_date: null\nupdated_from: []\nblocking_tasks: []\n",
     encoding="utf-8",
@@ -288,7 +371,7 @@ SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --json)"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_uid"])' <<<"$SIGNAL_JSON")"
-TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["execution_log_path"])' <<<"$SIGNAL_JSON")"
+TASK_LOG_PATH=".pm/evidence/${TASK_UID}.execution.md"
 cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 # $TASK_UID Execution Log
 
@@ -375,6 +458,74 @@ REJECTED_MEMORY_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memo
   --role qa_engineer \
   --reject-reason one_off_operation \
   --json)"
+
+python3 - "$REJECTED_MEMORY_JSON" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+if payload.get("state_sink") != "github_intake_cache":
+    raise SystemExit(f"memory rejection should report the actual local mirror sink: {payload}")
+PY
+
+MAPPING_ONLY_SIGNAL_ID="sig_mapping_only_000000000000000000000001"
+python3 - "$TMPDIR" "$MAPPING_ONLY_SIGNAL_ID" <<'PY'
+from __future__ import annotations
+
+import json
+from collections import OrderedDict
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+signal_id = sys.argv[2]
+mapping_path = root / ".pm/github-project-sync/tasks.json"
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict)
+tasks = mapping.setdefault("tasks", OrderedDict())
+tasks["task_mapping_only_00000000000000000001"] = OrderedDict(
+    [
+        ("task_uid", "task_mapping_only_00000000000000000001"),
+        ("issue_url", "https://github.com/eng-cc/oasis7/issues/2999"),
+        ("status", "candidate"),
+        ("owner_role", "qa_engineer"),
+        ("title", "mapping-only signal should fail closed"),
+        ("source_signal", signal_id),
+        ("source_type", "reflection"),
+        ("source_refs", ["doc/engineering/workflow/source-of-truth.md"]),
+        ("severity", "low"),
+    ]
+)
+mapping_path.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
+
+MAPPING_ONLY_STDERR="$TMPDIR/mapping-only-promote-memory.stderr"
+if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-memory.sh" \
+  --signal-id "$MAPPING_ONLY_SIGNAL_ID" \
+  --role qa_engineer \
+  --reject-reason one_off_operation \
+  --json > /dev/null 2>"$MAPPING_ONLY_STDERR"; then
+  echo "required-tier-smoke: expected mapping-only GitHub signal memory decision to fail closed" >&2
+  exit 1
+fi
+if ! grep -q "requires local intake mirror entry" "$MAPPING_ONLY_STDERR"; then
+  echo "required-tier-smoke: mapping-only memory decision failure did not mention missing intake mirror entry" >&2
+  cat "$MAPPING_ONLY_STDERR" >&2
+  exit 1
+fi
+python3 - "$TMPDIR" <<'PY'
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+mapping_path = root / ".pm/github-project-sync/tasks.json"
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+tasks = mapping.get("tasks") or {}
+tasks.pop("task_mapping_only_00000000000000000001", None)
+mapping_path.write_text(json.dumps(mapping, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+PY
 
 LIVEOPS_SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --source-type incident \
@@ -489,37 +640,11 @@ BROKEN_BACKLOG="$TMPDIR/.pm/roles/qa_engineer/backlog/blocked.yaml"
 cp "$BROKEN_BACKLOG" "$BROKEN_BACKLOG.bak"
 printf 'this is not a valid backlog doc\n' > "$BROKEN_BACKLOG"
 WORKFLOW_FAIL_STDERR="$TMPDIR/workflow-report-fail.stderr"
-if PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json > /dev/null 2>"$WORKFLOW_FAIL_STDERR"; then
-  echo "required-tier-smoke: expected workflow-report to fail when backlog input is malformed" >&2
+if ! PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json > /dev/null 2>"$WORKFLOW_FAIL_STDERR"; then
+  echo "required-tier-smoke: expected workflow-report to regenerate malformed generated backlog view" >&2
+  cat "$WORKFLOW_FAIL_STDERR" >&2
   exit 1
 fi
-python3 - "$TMPDIR" "$TASK_UID" <<'PY'
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1])
-task_uid = sys.argv[2]
-task_path = root / f".pm/tasks/{task_uid}.yaml"
-
-
-def parse_simple_yaml(path: Path):
-    parsed = {}
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.rstrip()
-        if not line or line.startswith(" ") or line.lstrip().startswith("#") or ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        value = value.strip()
-        parsed[key] = None if value == "null" else value.strip('"')
-    return parsed
-
-
-payload = parse_simple_yaml(task_path)
-if payload.get("last_started_at") not in (None, ""):
-    raise SystemExit(f"workflow-report failure should not write last_started_at for {task_uid}")
-if payload.get("last_closed_at") not in (None, ""):
-    raise SystemExit(f"workflow-report failure should not write last_closed_at for {task_uid}")
-PY
 mv "$BROKEN_BACKLOG.bak" "$BROKEN_BACKLOG"
 
 python3 - "$TMPDIR" <<'PY'
@@ -643,24 +768,6 @@ CLOSEOUT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --acceptance "task closeout helper can close the task only after fresh verification" \
   --json)"
 CLOSEOUT_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$CLOSEOUT_TASK_JSON")"
-CLOSEOUT_TASK_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$CLOSEOUT_TASK_JSON")"
-cat > "$TMPDIR/$CLOSEOUT_TASK_LOG_PATH" <<EOF
-# $CLOSEOUT_TASK_UID Execution Log
-
-- task_uid: $CLOSEOUT_TASK_UID
-- title: closeout helper smoke task
-- owner_role: qa_engineer
-- worktree_hint: null
-
-## 2026-03-30 22:50:00 CST / qa_engineer
-- 完成内容: prepared a started task for one-command closeout validation.
-- 遗留事项: helper should close the task and keep PM lint green.
-- Action: 为 task-closeout helper 准备一个已启动的 committed task。
-- Validation Command: PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json
-- Expected Result: task 记录 fresh last_started_at，后续 task-closeout.sh 只在提供 --verify-command 时允许收口到 done。
-- Actual Result: smoke task 已成功进入 started committed 状态，随后用它验证 closeout helper 的 verify-command 强制要求。
-- Blocker / Next Action: helper should close the task and keep PM lint green.
-EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$CLOSEOUT_TASK_UID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$CLOSEOUT_TASK_UID" --json >/dev/null
 set +e
@@ -682,14 +789,18 @@ root = Path(sys.argv[1])
 task_uid = sys.argv[2]
 task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
 
-fields = {}
-for raw in task_path.read_text(encoding="utf-8").splitlines():
-    if not raw or raw.startswith(" ") or raw.startswith("-"):
-        continue
-    key, sep, value = raw.partition(":")
-    if not sep:
-        continue
-    fields[key.strip()] = value.strip()
+if task_path.is_file():
+    fields = {}
+    for raw in task_path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith(" ") or raw.startswith("-"):
+            continue
+        key, sep, value = raw.partition(":")
+        if not sep:
+            continue
+        fields[key.strip()] = value.strip()
+else:
+    mapping = json.loads((root / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
+    fields = (mapping.get("tasks") or {}).get(task_uid) or {}
 
 print(
     json.dumps(
@@ -720,14 +831,18 @@ root = Path(sys.argv[1])
 task_uid = sys.argv[2]
 task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
 
-fields = {}
-for raw in task_path.read_text(encoding="utf-8").splitlines():
-    if not raw or raw.startswith(" ") or raw.startswith("-"):
-        continue
-    key, sep, value = raw.partition(":")
-    if not sep:
-        continue
-    fields[key.strip()] = value.strip()
+if task_path.is_file():
+    fields = {}
+    for raw in task_path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith(" ") or raw.startswith("-"):
+            continue
+        key, sep, value = raw.partition(":")
+        if not sep:
+            continue
+        fields[key.strip()] = value.strip()
+else:
+    mapping = json.loads((root / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
+    fields = (mapping.get("tasks") or {}).get(task_uid) or {}
 
 print(
     json.dumps(
@@ -762,14 +877,18 @@ root = Path(sys.argv[1])
 task_uid = sys.argv[2]
 task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
 
-fields = {}
-for raw in task_path.read_text(encoding="utf-8").splitlines():
-    if not raw or raw.startswith(" ") or raw.startswith("-"):
-        continue
-    key, sep, value = raw.partition(":")
-    if not sep:
-        continue
-    fields[key.strip()] = value.strip().strip('"')
+if task_path.is_file():
+    fields = {}
+    for raw in task_path.read_text(encoding="utf-8").splitlines():
+        if not raw or raw.startswith(" ") or raw.startswith("-"):
+            continue
+        key, sep, value = raw.partition(":")
+        if not sep:
+            continue
+        fields[key.strip()] = value.strip().strip('"')
+else:
+    mapping = json.loads((root / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
+    fields = (mapping.get("tasks") or {}).get(task_uid) or {}
 
 print(
     json.dumps(
@@ -793,7 +912,26 @@ MISSING_ACTUAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" 
   --source-ref .pm/evidence/bootstrap.md \
   --json)"
 MISSING_ACTUAL_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$MISSING_ACTUAL_JSON")"
-MISSING_ACTUAL_LOG_PATH="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["execution_log_path"])' <<<"$MISSING_ACTUAL_JSON")"
+MISSING_ACTUAL_LOG_PATH=".pm/evidence/${MISSING_ACTUAL_TASK_UID}.execution.md"
+python3 - "$TMPDIR" "$MISSING_ACTUAL_TASK_UID" "$MISSING_ACTUAL_LOG_PATH" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+log_path = sys.argv[3]
+mapping_path = root / ".pm/github-project-sync/tasks.json"
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+record = (mapping.get("tasks") or {}).get(task_uid)
+if not record:
+    raise SystemExit(f"missing mapping record for {task_uid}")
+record["execution_log_path"] = log_path
+record["updated_at"] = "2026-03-30T23:10:00+08:00"
+mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
 cat > "$TMPDIR/$MISSING_ACTUAL_LOG_PATH" <<EOF
 # $MISSING_ACTUAL_TASK_UID Execution Log
 
@@ -825,11 +963,11 @@ EOF
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$MISSING_ACTUAL_TASK_UID" --to-status committed >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$MISSING_ACTUAL_TASK_UID" --json >/dev/null
 set +e
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-execution-log-lint.sh" >/dev/null 2>"$TMPDIR/task-execution-log-missing-actual.err"
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-lint.sh" --task-uid "$MISSING_ACTUAL_TASK_UID" --phase current >"$TMPDIR/task-execution-log-missing-actual.err" 2>&1
 TASK_EXECUTION_LOG_MISSING_ACTUAL_STATUS=$?
 set -e
 if [[ "$TASK_EXECUTION_LOG_MISSING_ACTUAL_STATUS" == "0" ]]; then
-  echo "required-tier-smoke: expected task-execution-log-lint to reject a started task missing Actual Result" >&2
+  echo "required-tier-smoke: expected workflow-lint to reject a started task missing Actual Result" >&2
   exit 1
 fi
 if ! rg -q "missing Actual Result" "$TMPDIR/task-execution-log-missing-actual.err"; then
@@ -837,7 +975,7 @@ if ! rg -q "missing Actual Result" "$TMPDIR/task-execution-log-missing-actual.er
   exit 1
 fi
 
-RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STATUS" "$CLOSED_TASK_READY_CLAIM_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STDERR" "$APPEND_LOG_JSON" "$ROLE_REPORT_TASK_JSON" "$WORKFLOW_CURRENT_LINT_STDOUT" "$APPEND_CROSS_ROLE_JSON" "$EMPTY_LOG_CURRENT_LINT_STATUS" "$EMPTY_LOG_CURRENT_LINT_STDOUT" <<'PY'
+RESULT_JSON="$(python3 - "$TMPDIR" "$SIGNAL_JSON" "$MOVE_JSON" "$QA_MEMORY_JSON" "$PRODUCER_MEMORY_JSON" "$SHARED_MEMORY_JSON" "$REJECTED_MEMORY_JSON" "$LIVEOPS_SIGNAL_JSON" "$SET_STAGE_JSON" "$MEMORY_REPORT_JSON" "$ROLE_REPORT_JSON" "$REGEN_ROLE_REPORT_JSON" "$WORKFLOW_START_JSON" "$WORKFLOW_CLOSE_JSON" "$WORKFLOW_CLOSE_WITH_WM_JSON" "$WORKFLOW_REVIEW_JSON" "$STAGE_REPORT_JSON" "$TASK_CLOSEOUT_JSON" "$CLOSEOUT_TASK_UID" "$TASK_CLOSEOUT_MISSING_VERIFY_STATUS" "$TASK_CLOSEOUT_NO_VERIFY_STATE_JSON" "$TASK_CLOSEOUT_BYPASS_STATUS" "$TASK_CLOSEOUT_BYPASS_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STATUS" "$CLOSED_TASK_READY_CLAIM_STATE_JSON" "$CLOSED_TASK_READY_CLAIM_STDERR" "$APPEND_LOG_JSON" "$ROLE_REPORT_TASK_JSON" "$WORKFLOW_CURRENT_LINT_STDOUT" "$APPEND_CROSS_ROLE_JSON" "$EMPTY_LOG_CURRENT_LINT_STATUS" "$EMPTY_LOG_CURRENT_LINT_STDOUT" "$TASK_EXECUTION_LOG_MISSING_ACTUAL_STATUS" "$TMPDIR/task-execution-log-missing-actual.err" <<'PY'
 from __future__ import annotations
 
 import json
@@ -875,6 +1013,75 @@ workflow_current_lint_stdout = sys.argv[29]
 append_cross_role = json.loads(sys.argv[30])
 empty_log_lint_status = int(sys.argv[31])
 empty_log_lint_stdout = sys.argv[32]
+empty_lint_text = open(empty_log_lint_stdout, encoding="utf-8").read()
+missing_actual_lint_status = int(sys.argv[33])
+missing_actual_lint_stdout = sys.argv[34]
+missing_actual_lint_text = open(missing_actual_lint_stdout, encoding="utf-8").read()
+
+if "signal_summary" not in workflow_start:
+    if workflow_start.get("status") != "ok" or workflow_start.get("phase") != "start":
+        raise SystemExit("GitHub-backed workflow start should record start evidence")
+    if workflow_close.get("status") != "ok" or workflow_close.get("phase") != "close":
+        raise SystemExit("GitHub-backed workflow close should record close evidence")
+    if workflow_review.get("status") != "ok" or workflow_review.get("phase") != "review":
+        raise SystemExit("GitHub-backed workflow review should return an authoritative review payload")
+    if append_log.get("task_uid") != move_payload["task_uid"]:
+        raise SystemExit("append-execution-log should append to the explicit GitHub-backed task")
+    if append_cross_role.get("task_uid") != move_payload["task_uid"]:
+        raise SystemExit("append-execution-log should allow canonical non-owner GitHub-backed entries")
+    if missing_actual_lint_status == 0 or "missing Actual Result" not in missing_actual_lint_text:
+        raise SystemExit("workflow-lint current should reject the missing Actual Result fixture")
+    if missing_verify_status == 0:
+        raise SystemExit("task closeout helper should fail when ready closeout omits --verify-command")
+    if missing_verify_state["status"] != "committed":
+        raise SystemExit("task closeout helper should leave task status unchanged when verification is missing")
+    if bypass_status == 0:
+        raise SystemExit("direct move-task done closeout should fail without persisted task_complete evidence")
+    if bypass_state["status"] != "committed":
+        raise SystemExit("direct move-task done closeout should leave task status unchanged")
+    if task_closeout["task_uid"] != closeout_task_uid:
+        raise SystemExit("task closeout helper should report the closed task uid")
+    if task_closeout["final_status"] != "ready":
+        raise SystemExit("task closeout helper should move GitHub-backed tasks to ready by default")
+    if task_closeout["claim_verification"]["status"] != "verified":
+        raise SystemExit("task closeout helper should include verified claim evidence after fresh verification")
+    if task_closeout["claim_verification"]["claim_type"] != "ready_for_pr":
+        raise SystemExit("task closeout helper should default GitHub-backed ready closeout to ready_for_pr")
+    if closed_task_ready_claim_status != 0:
+        raise SystemExit("ready task should accept later ready_for_pr claim evidence")
+    if closed_task_ready_claim_state["last_claim_type"] != "ready_for_pr":
+        raise SystemExit("ready task should persist ready_for_pr claim evidence")
+    if task_closeout["recommended_next_command"] != "./scripts/prepare-task-pr.sh":
+        raise SystemExit("task closeout helper should point to prepare-task-pr as the next step")
+    print(
+        json.dumps(
+            {
+                "temp_root": sys.argv[1],
+                "signal": signal_payload,
+                "move": move_payload,
+                "qa_memory": qa_memory,
+                "producer_memory": producer_memory,
+                "shared_memory": shared_memory,
+                "rejected_memory": rejected_memory,
+                "liveops_signal": liveops_signal,
+                "set_stage": set_stage,
+                "memory_report": memory_report,
+                "role_report": role_report,
+                "regen_role_report": regen_role_report,
+                "workflow_start": workflow_start,
+                "workflow_close": workflow_close,
+                "workflow_close_with_wm": workflow_close_with_wm,
+                "workflow_review": workflow_review,
+                "stage_report": stage_report,
+                "task_closeout": task_closeout,
+                "append_log": append_log,
+                "append_cross_role": append_cross_role,
+                "role_report_task": role_report_task,
+            },
+            ensure_ascii=False,
+        )
+    )
+    raise SystemExit(0)
 
 if workflow_start["signal_summary"]["pending_count"] != 0:
     raise SystemExit("qa workflow start should not treat rejected signal as pending")
@@ -1080,10 +1287,14 @@ print(f"- shared_active_memory: {len(stage['memory_inputs']['shared_active'])}")
 print(f"- needs_review_memory: {payload['memory_report']['counts']['needs_review']}")
 print(f"- superseded_memory: {payload['memory_report']['counts']['superseded']}")
 print(f"- qa_blocked_tasks: {payload['role_report']['roles']['qa_engineer']['backlog_counts']['blocked']}")
-print(f"- qa_pending_signals: {payload['workflow_start']['signal_summary']['pending_count']}")
-print(f"- qa_close_actions: {len(payload['workflow_close']['checklist'])}")
+workflow_start_signal_summary = payload["workflow_start"].get("signal_summary") or {"pending_count": "github-backed"}
+workflow_close_checklist = payload["workflow_close"].get("checklist") or []
+workflow_review_signal_summary = payload["workflow_review"].get("signal_summary") or {"pending_count": "github-backed"}
+workflow_review_checklist = payload["workflow_review"].get("checklist") or []
+print(f"- qa_pending_signals: {workflow_start_signal_summary['pending_count']}")
+print(f"- qa_close_actions: {len(workflow_close_checklist)}")
 print(f"- closeout_helper_final_status: {payload['task_closeout']['final_status']}")
-print(f"- producer_pending_signals: {payload['workflow_review']['signal_summary']['pending_count']}")
-print(f"- producer_review_actions: {len(payload['workflow_review']['checklist'])}")
+print(f"- producer_pending_signals: {workflow_review_signal_summary['pending_count']}")
+print(f"- producer_review_actions: {len(workflow_review_checklist)}")
 print(f"- rejected_memory_signal: {payload['rejected_memory']['signal_id']}")
 PY
