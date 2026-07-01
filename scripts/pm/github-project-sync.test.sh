@@ -77,8 +77,12 @@ case "$*" in
 {"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
 JSON
     ;;
-  "project item-list 1 --owner eng-cc --limit 1000 --format json")
-    printf '{"items":[],"totalCount":0}\n'
+  api\ graphql*)
+    if [[ "${GH_FAKE_RECOVER_EXISTING:-0}" == "1" ]]; then
+      printf '{"data":{"s0":{"nodes":[{"number":101,"body":"task_uid: task_11111111111111111111111111111111","url":"https://github.com/eng-cc/oasis7/issues/101","projectItems":{"nodes":[{"id":"WRONG_ITEM_ID","project":{"id":"OTHER_PROJECT_ID","number":1}},{"id":"ITEM_ID","project":{"id":"PROJECT_ID","number":1}}]}}]}}}\n'
+    else
+      printf '{"data":{"s0":{"nodes":[]}}}\n'
+    fi
     ;;
   issue\ create*)
     printf 'https://github.com/eng-cc/oasis7/issues/101\n'
@@ -102,7 +106,7 @@ export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 : > "$GH_CALL_LOG"
 
 DRY_JSON="$TMPDIR/dry.json"
-python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
+GH_FAKE_RECOVER_EXISTING=1 python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
   --project-number 1 \
@@ -116,7 +120,12 @@ payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
 calls = pathlib.Path(sys.argv[2]).read_text()
 assert payload["selected_count"] == 1, payload
 assert payload["dry_run"] is True, payload
-assert calls == "", calls
+assert payload["tasks"][0]["would_create_issue"] is False, payload
+assert payload["tasks"][0]["would_add_item"] is False, payload
+assert "api graphql" in calls, calls
+assert "project item-list" not in calls, calls
+assert "issue create" not in calls, calls
+assert "project item-add" not in calls, calls
 PY
 
 APPLY_JSON="$TMPDIR/apply.json"

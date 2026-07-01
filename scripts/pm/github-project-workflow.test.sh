@@ -276,4 +276,66 @@ assert payload["status"] == "failed", payload
 assert any("PM Status" in item for item in payload["errors"]), payload
 PY
 
+ARCHIVE_RECOVERY="$TMPDIR/archive-recovery"
+mkdir -p "$ARCHIVE_RECOVERY/.pm/github-project-sync"
+cat > "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" <<'JSON'
+{
+  "version": 1,
+  "project": {
+    "id": "PROJECT_ID",
+    "number": 1,
+    "owner": "eng-cc",
+    "repo": "eng-cc/oasis7"
+  },
+  "tasks": {}
+}
+JSON
+cat > "$ARCHIVE_RECOVERY/.pm/github-project-sync/task-archive.jsonl" <<'JSONL'
+{"task":{"task_uid":"task_44444444444444444444444444444444","title":"archive committed task","owner_role":"tpm","module":"engineering","worktree_hint":"/tmp/archive-worktree","status":"committed","priority":"P2"},"task_path":".pm/tasks/task_44444444444444444444444444444444.yaml","execution_log_path":".pm/tasks/task_44444444444444444444444444444444.execution.md"}
+JSONL
+cat > "$TMPDIR/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "project item-list 1 --owner eng-cc --limit 1000 --format json")
+    echo "unexpected full Project scan during selected audit recovery" >&2
+    exit 9
+    ;;
+  api\ graphql*)
+    if [[ "$*" == *"ids[]=ARCHIVE_ITEM_ID"* ]]; then
+      printf '{"data":{"nodes":[{"id":"ARCHIVE_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_44444444444444444444444444444444","number":404,"url":"https://github.com/eng-cc/oasis7/issues/404"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_44444444444444444444444444444444","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/archive-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
+    else
+      printf '{"data":{"s0":{"nodes":[{"number":404,"body":"task_uid: task_44444444444444444444444444444444","url":"https://github.com/eng-cc/oasis7/issues/404","projectItems":{"nodes":[{"id":"WRONG_ARCHIVE_ITEM_ID","project":{"id":"OTHER_PROJECT_ID","number":1}},{"id":"ARCHIVE_ITEM_ID","project":{"id":"PROJECT_ID","number":1}}]}}]}}}\n'
+    fi
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 9
+    ;;
+esac
+SH
+chmod +x "$TMPDIR/bin/gh"
+
+ARCHIVE_RECOVERY_JSON="$TMPDIR/archive-recovery.json"
+python3 "$TMPDIR/github-project-workflow.py" "$ARCHIVE_RECOVERY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" \
+  --status committed \
+  --json \
+  audit > "$ARCHIVE_RECOVERY_JSON"
+
+python3 - "$ARCHIVE_RECOVERY_JSON" "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+mapping = json.loads(pathlib.Path(sys.argv[2]).read_text())
+uid = "task_44444444444444444444444444444444"
+assert payload["status"] == "ok", payload
+assert payload["selected_count"] == 1, payload
+assert payload["errors"] == [], payload
+assert mapping["tasks"][uid]["issue_number"] == 404, mapping
+assert mapping["tasks"][uid]["project_item_id"] == "ARCHIVE_ITEM_ID", mapping
+PY
+
 echo "github-project-workflow.test: OK"

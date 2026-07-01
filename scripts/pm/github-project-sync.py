@@ -44,6 +44,7 @@ SINGLE_SELECT_FIELDS = {
 }
 TASK_UID_RE = re.compile(r"task_uid:\s*(task_[0-9a-f]{32})")
 ISSUE_URL_RE = re.compile(r"/issues/(\d+)(?:$|[?#])")
+RECOVERY_BATCH_SIZE = 10
 
 
 def die(message: str) -> None:
@@ -325,6 +326,14 @@ def project_context(owner: str, number: int) -> tuple[str, dict[str, dict[str, A
     return project_id, fields
 
 
+def project_id_for(owner: str, number: int, mapping: dict[str, Any]) -> str:
+    project_id = str((mapping.get("project") or {}).get("id") or "")
+    if project_id:
+        return project_id
+    project = run_json(["gh", "project", "view", str(number), "--owner", owner, "--format", "json"])
+    return str(project.get("id") or "")
+
+
 def recover_project_mapping(owner: str, number: int) -> dict[str, dict[str, str]]:
     payload = run_json(["gh", "project", "item-list", str(number), "--owner", owner, "--limit", "1000", "--format", "json"])
     recovered: dict[str, dict[str, str]] = {}
@@ -340,6 +349,80 @@ def recover_project_mapping(owner: str, number: int) -> dict[str, dict[str, str]
                 "issue_number": str(issue_number_from_url(issue_url) or ""),
                 "project_item_id": item_id,
             }
+    return recovered
+
+
+def recover_project_mapping_for_task_uids(
+    owner: str,
+    number: int,
+    repo: str,
+    task_uids: list[str],
+    project_id: str = "",
+) -> dict[str, dict[str, str]]:
+    recovered: dict[str, dict[str, str]] = {}
+    selected = []
+    for task_uid in sorted(set(task_uids)):
+        if not TASK_UID_RE.fullmatch(f"task_uid: {task_uid}"):
+            continue
+        selected.append(task_uid)
+    for start in range(0, len(selected), RECOVERY_BATCH_SIZE):
+        batch = selected[start : start + RECOVERY_BATCH_SIZE]
+        variable_defs = ", ".join(f"$q{index}: String!" for index in range(len(batch)))
+        searches = "\n".join(
+            f"""
+            s{index}: search(query: $q{index}, type: ISSUE, first: 2) {{
+              nodes {{
+                ... on Issue {{
+                  number
+                  url
+                  body
+                  projectItems(first: 20) {{
+                    nodes {{
+                      id
+                      project {{
+                        id
+                        number
+                      }}
+                    }}
+                  }}
+                }}
+              }}
+            }}
+            """
+            for index in range(len(batch))
+        )
+        query = f"query({variable_defs}) {{\n{searches}\n}}"
+        cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
+        for index, task_uid in enumerate(batch):
+            cmd.extend(["-f", f"q{index}=repo:{repo} {task_uid} in:body"])
+        payload = run_json(cmd)
+        data = payload.get("data") or {}
+        for index, task_uid in enumerate(batch):
+            nodes = ((data.get(f"s{index}") or {}).get("nodes") or [])
+            matches = []
+            for issue in nodes:
+                body = str(issue.get("body") or "")
+                if re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body, re.MULTILINE):
+                    matches.append(issue)
+            if len(matches) != 1:
+                continue
+            issue = matches[0]
+            item_id = ""
+            for node in ((issue.get("projectItems") or {}).get("nodes") or []):
+                project = node.get("project") or {}
+                if project_id and str(project.get("id") or "") != project_id:
+                    continue
+                if int(project.get("number") or 0) == int(number):
+                    item_id = str(node.get("id") or "")
+                    break
+            issue_url = str(issue.get("url") or "")
+            issue_number = int(issue.get("number") or issue_number_from_url(issue_url) or 0)
+            if item_id and issue_url and issue_number:
+                recovered[task_uid] = {
+                    "issue_url": issue_url,
+                    "issue_number": str(issue_number),
+                    "project_item_id": item_id,
+                }
     return recovered
 
 
@@ -550,7 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-done", action="store_true", help="include done and deferred tasks")
     parser.add_argument("--limit", type=int, default=0, help="maximum tasks to sync after filtering")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dry-run", action="store_true", help="plan only; do not call gh")
+    mode.add_argument("--dry-run", action="store_true", help="plan only after read-only GitHub Project mapping recovery")
     mode.add_argument("--apply", action="store_true", help="create/update GitHub issues and project items")
     parser.add_argument("--direct-api", action="store_true", help="use GitHub REST/GraphQL directly instead of per-field gh subprocesses")
     parser.add_argument("--jobs", type=int, default=4, help="parallel jobs for --direct-api")
@@ -591,6 +674,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.limit:
         tasks = tasks[: args.limit]
 
+    if not args.skip_recover:
+        selected_uids = [str(task["task_uid"]) for task in tasks]
+        project_id = project_id_for(args.project_owner, args.project_number, mapping)
+        for uid, recovered in recover_project_mapping_for_task_uids(
+            args.project_owner,
+            args.project_number,
+            args.repo,
+            selected_uids,
+            project_id,
+        ).items():
+            record = mapping["tasks"].setdefault(uid, {})
+            record.setdefault("issue_url", recovered["issue_url"])
+            if recovered.get("issue_number"):
+                record.setdefault("issue_number", int(recovered["issue_number"]))
+            record.setdefault("project_item_id", recovered["project_item_id"])
+
     summary: dict[str, Any] = {
         "dry_run": bool(args.dry_run),
         "selected_count": len(tasks),
@@ -625,13 +724,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     project_id, fields = project_context(args.project_owner, args.project_number)
-    if not args.skip_recover:
-        for uid, recovered in recover_project_mapping(args.project_owner, args.project_number).items():
-            record = mapping["tasks"].setdefault(uid, {})
-            record.setdefault("issue_url", recovered["issue_url"])
-            if recovered.get("issue_number"):
-                record.setdefault("issue_number", int(recovered["issue_number"]))
-            record.setdefault("project_item_id", recovered["project_item_id"])
     if args.direct_api:
         token = github_token()
         mapping_lock = threading.Lock()
