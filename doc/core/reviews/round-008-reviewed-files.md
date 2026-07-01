@@ -3,9 +3,9 @@
 审计轮次: 8
 
 ## 清单状态
-- 当前目标缺口专题数: 363
-- 当前已完成分级专题数: 363
-- 当前已补齐 Design 专题数: 363
+- 当前目标缺口专题数: 360
+- 当前已完成分级专题数: 360
+- 当前已补齐 Design 专题数: 360
 - 当前状态: `completed`
 
 ## 字段说明
@@ -23,7 +23,7 @@
 ## 汇总
 | 范围 | 数量 | 状态 |
 | --- | --- | --- |
-| 缺失 `*.design.md` 专题总数（不含 retired 行） | 363 | completed |
+| 缺失 `*.design.md` 专题总数（不含 retired 行） | 360 | completed |
 
 ## 明细
 | 专题 basename | PRD | Project | 模块 | 分级 | 当前状态 | owner role | 备注 |
@@ -329,10 +329,10 @@
 | `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview` | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.prd` | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.project` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.design` 并回写互链 |
 | `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2` | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd` | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.design` 并回写互链 |
 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.design.md` 并回写互链 |
-| retired viewer-control-feedback-iteration-checklist-2026-02-27 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
-| retired viewer-control-feedback-step-recovery-p0-2026-02-27 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
+| retired viewer-control-feedback-iteration-checklist-2026-02-27 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `retired` | `retired` | `producer_system_designer` | 原审计目标已退役并退出 ROUND-008 补齐计数，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
+| retired viewer-control-feedback-step-recovery-p0-2026-02-27 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `retired` | `retired` | `producer_system_designer` | 原审计目标已退役并退出 ROUND-008 补齐计数，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.design.md` 并回写互链 |
-| retired viewer-control-predictability-tasklist-2026-02-28 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
+| retired viewer-control-predictability-tasklist-2026-02-28 topic | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md` | `world-simulator` | `retired` | `retired` | `producer_system_designer` | 原审计目标已退役并退出 ROUND-008 补齐计数，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | `doc/world-simulator/viewer/viewer-copyable-text` | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/world-simulator/viewer/viewer-copyable-text.design.md` 并回写互链 |
 | `doc/world-simulator/viewer/viewer-dual-view-2d-3d` | `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.prd` | `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.project` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.design` 并回写互链 |
 | `doc/world-simulator/viewer/viewer-egui-right-panel` | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` | `world-simulator` | `must_backfill` | `backfilled` | `producer_system_designer` | 已补齐 `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` 并回写互链 |
