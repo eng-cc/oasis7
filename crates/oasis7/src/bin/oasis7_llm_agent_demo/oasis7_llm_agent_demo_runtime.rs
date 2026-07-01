@@ -406,7 +406,7 @@ fn build_demo_behavior(
             let adapter = ProviderLoopbackAdapter::new(
                 base_url,
                 options.agent_provider_auth_token.as_deref(),
-                options.agent_provider_connect_timeout_ms,
+                resolve_provider_loopback_transport_timeout_ms(options),
             )
             .map_err(|err| err.to_string())?;
             let mut behavior = ProviderBackedAgentBehavior::new(
@@ -433,6 +433,12 @@ fn build_demo_behavior(
             })
         }
     }
+}
+
+fn resolve_provider_loopback_transport_timeout_ms(options: &CliOptions) -> u64 {
+    options
+        .agent_provider_connect_timeout_ms
+        .max(options.agent_provider_decision_timeout_ms)
 }
 
 fn write_report_json(path: &str, run_report: &DemoRunReport) -> Result<(), String> {

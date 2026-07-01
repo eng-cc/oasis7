@@ -138,6 +138,26 @@ fn parse_options_accepts_provider_loopback_http() {
 }
 
 #[test]
+fn provider_loopback_transport_timeout_preserves_decision_budget() {
+    let options = parse_options(
+        [
+            "--decision-source",
+            "provider_loopback_http",
+            "--agent-provider-url",
+            "http://127.0.0.1:5841",
+            "--agent-provider-connect-timeout-ms",
+            "1000",
+            "--agent-provider-decision-timeout-ms",
+            "60000",
+        ]
+        .into_iter(),
+    )
+    .expect("provider loopback options");
+
+    assert_eq!(resolve_provider_loopback_transport_timeout_ms(&options), 60_000);
+}
+
+#[test]
 fn provider_prompt_context_partial_switch_preserves_existing_parts() {
     let options = parse_options(
         [
