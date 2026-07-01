@@ -137,12 +137,19 @@ def build_task_collaboration_summary(
     load_mapping_document,
 ) -> OrderedDict[str, object]:
     task_path = root / ".pm" / "tasks" / f"{task_uid}.yaml"
-    if not task_path.is_file():
-        raise ValueError(f"task not found: {task_uid}")
-    task_fields = load_mapping_document(task_path)
+    if task_path.is_file():
+        task_fields = load_mapping_document(task_path)
+    else:
+        mapping_path = root / ".pm/github-project-sync/tasks.json"
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8")) if mapping_path.is_file() else {}
+        task_fields = OrderedDict((mapping.get("tasks") or {}).get(task_uid) or {})
+        if not task_fields:
+            raise ValueError(f"task not found: {task_uid}")
     execution_log_path = str(task_fields.get("execution_log_path") or f".pm/tasks/{task_uid}.execution.md")
     execution_log_file = root / execution_log_path
-    text = execution_log_file.read_text(encoding="utf-8") if execution_log_file.is_file() else ""
+    text = "" if execution_log_path.startswith(("http://", "https://")) else (
+        execution_log_file.read_text(encoding="utf-8") if execution_log_file.is_file() else ""
+    )
 
     entry_roles: list[str] = []
     for match in re.finditer(r"^## \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} CST / ([a-z_][a-z0-9_]*)$", text, re.MULTILINE):
@@ -284,19 +291,14 @@ def build_role_report(
         }
 
     role_payloads: OrderedDict[str, dict[str, object]] = OrderedDict()
-    backlog_totals: OrderedDict[str, int] = OrderedDict(
-        (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
-    )
+    task_statuses = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
+    backlog_totals: OrderedDict[str, int] = OrderedDict((status, 0) for status in task_statuses)
 
     for role in included_roles:
-        backlog_counts: OrderedDict[str, int] = OrderedDict(
-            (status, 0) for status in ("candidate", "committed", "blocked", "done", "deferred")
-        )
-        tasks_by_status: OrderedDict[str, list[dict[str, object]]] = OrderedDict(
-            (status, []) for status in ("candidate", "committed", "blocked", "done", "deferred")
-        )
+        backlog_counts: OrderedDict[str, int] = OrderedDict((status, 0) for status in task_statuses)
+        tasks_by_status: OrderedDict[str, list[dict[str, object]]] = OrderedDict((status, []) for status in task_statuses)
 
-        for file_status in ("candidate", "committed", "blocked", "done"):
+        for file_status in ("candidate", "committed", "blocked", "ready", "pr_watch", "done"):
             path = role_backlog_path(root, role, file_status)
             _, entries = load_list_document(path, "tasks")
             for entry in entries:
@@ -596,8 +598,8 @@ def build_workflow_checklist(
             )
             add(
                 "autoflow-working-memory",
-                "可先用安全默认自动化把 working_memory 提成 reflection signal 和 candidate task，再进入 owner review。",
-                command="./scripts/pm/working-memory-autoflow.sh --task-uid <TASK-UID> --severity medium --priority P2",
+                "先用 dry-run 规划 working_memory 可提升项，再通过 GitHub-backed promote-signal 显式创建 intake 或 candidate task。",
+                command="./scripts/pm/working-memory-autoflow.sh --task-uid <TASK-UID> --severity medium --priority P2 --dry-run --json",
             )
         if pending_reflections > 0:
             add(
@@ -619,7 +621,7 @@ def build_workflow_checklist(
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(
                 "promote-signals",
-                "把新增的高价值 QA / liveops / incident 结论提升到 signal inbox，而不是只留在 task execution log。",
+                "把新增的高价值 QA / liveops / incident 结论提升到 GitHub-backed reflection intake，而不是只留在 task execution log。",
                 command=f"./scripts/pm/promote-signal.sh ... --role-hint {role}",
             )
         add(

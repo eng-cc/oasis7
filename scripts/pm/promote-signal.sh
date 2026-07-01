@@ -9,8 +9,9 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/pm/promote-signal.sh --source-type <type> --source-ref <path> --role-hint <role> --severity <level> --summary <text> [options]
 
-Append one signal to .pm/inbox/signals.jsonl. When --create-task is supplied, also
-create a candidate task through ./scripts/pm/new-task.sh.
+Create a GitHub-backed reflection intake issue for one signal. When
+--create-task is supplied, also create a candidate task through
+./scripts/pm/new-task.sh.
 
 Required:
   --source-type <type>        e.g. task_execution_log, incident, qa_block, community_feedback
@@ -20,7 +21,7 @@ Required:
   --summary <text>            Signal summary
 
 Optional:
-  --signal-id <id>            Override auto-generated SIG-PM-XXXX id
+  --signal-id <id>            Override auto-generated SIG-GH-* id
   --create-task               Also create a candidate task
   --title <title>             Task title; defaults to summary
   --owner-role <role>         Task owner; defaults to role_hint
@@ -34,8 +35,10 @@ Optional:
   -h, --help                  Show help
 
 Notes:
-  - Without --create-task, the signal is written with promotion_state=triaged.
-  - With --create-task, the signal is written with promotion_state=promoted_candidate_task.
+  - Signals are represented by GitHub intake issues.
+  - Without --create-task, the intake issue remains promotion_state=triaged.
+  - With --create-task, the intake issue is linked to the candidate task.
+  - The local .pm/inbox/signals.jsonl queue is retired and must not be recreated.
   - Use PM_ROOT_DIR=/tmp/... to smoke-test against a copied .pm tree.
 USAGE
 }
@@ -165,6 +168,8 @@ source_ref = sys.argv[2]
 source_path = source_ref.split("#", 1)[0]
 if not source_path:
     raise SystemExit("promote-signal: empty source_ref path")
+if source_path.startswith(("http://", "https://")):
+    raise SystemExit(0)
 parts = pathlib.PurePosixPath(source_path.replace("\\", "/")).parts
 if len(parts) >= 2 and parts[0] == "doc" and parts[1] == "devlog":
     raise SystemExit(
@@ -181,62 +186,13 @@ grep -Fxq "$ROLE_HINT" < <(sed -n 's/^  - role_name: //p' .pm/registry/roles.yam
   exit 2
 }
 
-SIGNAL_LOCK_DIR=".pm/inbox/signals.lock"
-SIGNAL_LOCK_ACQUIRED=0
-SIGNAL_LOCK_WAIT_SECONDS="${PM_SIGNAL_LOCK_WAIT_SECONDS:-300}"
-if [[ ! "$SIGNAL_LOCK_WAIT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
-  echo "promote-signal: PM_SIGNAL_LOCK_WAIT_SECONDS must be a positive integer: $SIGNAL_LOCK_WAIT_SECONDS" >&2
-  exit 2
-fi
-release_signal_lock() {
-  if [[ "$SIGNAL_LOCK_ACQUIRED" == "1" ]]; then
-    rmdir "$SIGNAL_LOCK_DIR" 2>/dev/null || true
-    SIGNAL_LOCK_ACQUIRED=0
-  fi
-}
-trap release_signal_lock EXIT
-
-acquire_signal_lock() {
-  local attempts=0
-  local max_attempts=$((SIGNAL_LOCK_WAIT_SECONDS * 10))
-  while ! mkdir "$SIGNAL_LOCK_DIR" 2>/dev/null; do
-    attempts=$((attempts + 1))
-    if [[ "$attempts" -ge "$max_attempts" ]]; then
-      echo "promote-signal: timed out waiting for signal inbox lock: $SIGNAL_LOCK_DIR" >&2
-      exit 1
-    fi
-    sleep 0.1
-  done
-  SIGNAL_LOCK_ACQUIRED=1
-}
-
-acquire_signal_lock
-
 if [[ -z "$SIGNAL_ID" ]]; then
-  SIGNAL_ID="$(python3 - "$ROOT_DIR" <<'PY'
+  SIGNAL_ID="$(python3 - <<'PY'
 from __future__ import annotations
 
-import json
-import pathlib
-import re
-import sys
+import uuid
 
-signals_path = pathlib.Path(sys.argv[1]) / ".pm/inbox/signals.jsonl"
-if not signals_path.exists():
-    print("SIG-PM-0001")
-    raise SystemExit(0)
-
-max_seq = 0
-for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-    line = raw_line.strip()
-    if not line:
-        continue
-    payload = json.loads(line)
-    signal_id = payload.get("signal_id", "")
-    match = re.fullmatch(r"SIG-PM-(\d{4})", signal_id)
-    if match:
-        max_seq = max(max_seq, int(match.group(1)))
-print(f"SIG-PM-{max_seq + 1:04d}")
+print(f"SIG-GH-{uuid.uuid4().hex[:12]}")
 PY
 )"
 fi
@@ -248,41 +204,73 @@ import json
 import pathlib
 import sys
 
-signals_path = pathlib.Path(sys.argv[1]) / ".pm/inbox/signals.jsonl"
+root = pathlib.Path(sys.argv[1])
+cache_path = root / ".pm/github-project-sync/intake-signals.json"
+mapping_path = root / ".pm/github-project-sync/tasks.json"
 signal_id = sys.argv[2]
-if not signals_path.exists():
-    raise SystemExit(0)
-for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-    line = raw_line.strip()
-    if not line:
-        continue
-    payload = json.loads(line)
-    if payload.get("signal_id") == signal_id:
+if cache_path.exists():
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    signals = cache.get("signals") or {}
+    if signal_id in signals:
         raise SystemExit(f"promote-signal: duplicate signal_id: {signal_id}")
+if mapping_path.exists():
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    for record in (mapping.get("tasks") or {}).values():
+        if str(record.get("source_signal") or "") == signal_id:
+            raise SystemExit(f"promote-signal: duplicate signal_id: {signal_id}")
 PY
 
+INTAKE_BODY="$(mktemp)"
+cleanup_intake_body() {
+  rm -f "$INTAKE_BODY"
+}
+trap cleanup_intake_body EXIT
+
+cat > "$INTAKE_BODY" <<EOF
+<!-- oasis7-pm-signal -->
+signal_id: $SIGNAL_ID
+
+GitHub-backed oasis7 PM intake signal.
+
+Signal metadata:
+- source_type: \`$SOURCE_TYPE\`
+- source_ref: \`$SOURCE_REF\`
+- role_hint: \`$ROLE_HINT\`
+- severity: \`$SEVERITY\`
+- promotion_state: \`triaged\`
+- memory_promotion_state: \`pending\`
+
+Summary:
+$SUMMARY
+EOF
+
+INTAKE_URL="$(gh issue create -R "${GITHUB_REPOSITORY:-eng-cc/oasis7}" --title "[PM Signal] $SUMMARY" --body-file "$INTAKE_BODY")"
+INTAKE_ISSUE_NUMBER="${INTAKE_URL##*/}"
 PROMOTION_STATE="triaged"
 TASK_JSON="null"
+
+if [[ -z "$PRIORITY" ]]; then
+  case "$SEVERITY" in
+    critical) PRIORITY="P0" ;;
+    high) PRIORITY="P1" ;;
+    medium) PRIORITY="P2" ;;
+    low) PRIORITY="P3" ;;
+  esac
+fi
 
 if [[ "$CREATE_TASK" == "1" ]]; then
   [[ -n "$TASK_TITLE" ]] || TASK_TITLE="$SUMMARY"
   [[ -n "$OWNER_ROLE" ]] || OWNER_ROLE="$ROLE_HINT"
-
-  if [[ -z "$PRIORITY" ]]; then
-    case "$SEVERITY" in
-      critical) PRIORITY="P0" ;;
-      high) PRIORITY="P1" ;;
-      medium) PRIORITY="P2" ;;
-      low) PRIORITY="P3" ;;
-    esac
-  fi
 
   TASK_ARGS=(
     --owner-role "$OWNER_ROLE"
     --title "$TASK_TITLE"
     --priority "$PRIORITY"
     --source-signal "$SIGNAL_ID"
+    --source-type "$SOURCE_TYPE"
+    --severity "$SEVERITY"
     --source-ref "$SOURCE_REF"
+    --source-ref "$INTAKE_URL"
     --json
   )
 
@@ -316,55 +304,59 @@ if [[ "$CREATE_TASK" == "1" ]]; then
 
   TASK_JSON="$("$SCRIPT_DIR/new-task.sh" "${TASK_ARGS[@]}")"
   PROMOTION_STATE="promoted_candidate_task"
+  TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$TASK_JSON")"
+  gh issue comment "$INTAKE_ISSUE_NUMBER" -R "${GITHUB_REPOSITORY:-eng-cc/oasis7}" --body "Signal promoted to candidate task: $TASK_UID" >/dev/null
 fi
 
-touch .pm/inbox/signals.jsonl
-python3 - "$ROOT_DIR" "$SIGNAL_ID" "$SOURCE_TYPE" "$SOURCE_REF" "$ROLE_HINT" "$SEVERITY" "$SUMMARY" "$PROMOTION_STATE" <<'PY'
+python3 - "$ROOT_DIR" "$SIGNAL_ID" "$SOURCE_TYPE" "$SOURCE_REF" "$ROLE_HINT" "$SEVERITY" "$SUMMARY" "$PROMOTION_STATE" "$INTAKE_URL" "$TASK_JSON" <<'PY'
 from __future__ import annotations
 
 import json
 import pathlib
 import sys
+from collections import OrderedDict
 
 root = pathlib.Path(sys.argv[1])
-signals_path = root / ".pm/inbox/signals.jsonl"
 signal_id = sys.argv[2]
-if signals_path.exists():
-    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        payload = json.loads(line)
-        if payload.get("signal_id") == signal_id:
-            raise SystemExit(f"promote-signal: duplicate signal_id: {signal_id}")
-payload = {
-    "signal_id": signal_id,
-    "source_type": sys.argv[3],
-    "source_ref": sys.argv[4],
-    "role_hint": sys.argv[5],
-    "severity": sys.argv[6],
-    "summary": sys.argv[7],
-    "promotion_state": sys.argv[8],
-    "memory_promotion_state": "pending",
-}
-
-with signals_path.open("a", encoding="utf-8") as handle:
-    handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+task_payload = None if sys.argv[10] == "null" else json.loads(sys.argv[10])
+cache_path = root / ".pm/github-project-sync/intake-signals.json"
+if cache_path.exists():
+    cache = json.loads(cache_path.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict)
+else:
+    cache = OrderedDict([("version", 1), ("signals", OrderedDict())])
+signals = cache.setdefault("signals", OrderedDict())
+signals[signal_id] = OrderedDict(
+    [
+        ("signal_id", signal_id),
+        ("source_type", sys.argv[3]),
+        ("source_ref", sys.argv[4]),
+        ("role_hint", sys.argv[5]),
+        ("severity", sys.argv[6]),
+        ("summary", sys.argv[7]),
+        ("promotion_state", sys.argv[8]),
+        ("memory_promotion_state", "pending"),
+        ("issue_url", sys.argv[9]),
+        ("task_uid", (task_payload or {}).get("task_uid", "")),
+        ("task_url", (task_payload or {}).get("issue_url", "")),
+    ]
+)
+cache_path.parent.mkdir(parents=True, exist_ok=True)
+cache_path.write_text(json.dumps(cache, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 PY
-release_signal_lock
 
-RESULT_JSON="$(python3 - "$SIGNAL_ID" "$PROMOTION_STATE" "$TASK_JSON" <<'PY'
+RESULT_JSON="$(python3 - "$SIGNAL_ID" "$PROMOTION_STATE" "$INTAKE_URL" "$TASK_JSON" <<'PY'
 from __future__ import annotations
 
 import json
 import sys
 
-task_payload = None if sys.argv[3] == "null" else json.loads(sys.argv[3])
+task_payload = None if sys.argv[4] == "null" else json.loads(sys.argv[4])
 print(
     json.dumps(
         {
             "signal_id": sys.argv[1],
             "promotion_state": sys.argv[2],
+            "issue_url": sys.argv[3],
             "task": task_payload,
         },
         ensure_ascii=False,
@@ -380,7 +372,7 @@ fi
 
 if [[ "$CREATE_TASK" == "1" ]]; then
   TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task"]["task_uid"])' <<<"$RESULT_JSON")"
-  echo "promote-signal: wrote $SIGNAL_ID and created $TASK_UID"
+  echo "promote-signal: created $SIGNAL_ID and candidate task $TASK_UID"
 else
-  echo "promote-signal: wrote $SIGNAL_ID"
+  echo "promote-signal: created $SIGNAL_ID"
 fi

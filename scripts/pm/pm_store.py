@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -43,8 +44,8 @@ from pm_store_stage import (
 )
 from pm_store_task_lint import run_task_backlog_lint as run_task_backlog_lint_helper
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
-TASK_STATUSES = {"candidate", "committed", "blocked", "done", "deferred"}
-LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked"}
+TASK_STATUSES = {"candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred"}
+LIVE_BACKLOG_STATUSES = {"candidate", "committed", "blocked", "ready", "pr_watch"}
 TASK_EXECUTION_STEP_EVIDENCE_EFFECTIVE_AT = datetime.fromisoformat("2026-05-23T00:00:00+08:00")
 ALLOWED_SIGNAL_STATES = {"new", "triaged", "promoted_candidate_task", "discarded", "deferred"}
 ALLOWED_MEMORY_PROMOTION_STATES = {"pending", "promoted", "rejected", "deferred"}
@@ -258,7 +259,7 @@ def is_generated_task_view_relative_path(relative_path: str) -> bool:
         and parts[0] == ".pm"
         and parts[1] == "roles"
         and parts[3] == "backlog"
-        and parts[4] in {"candidate.yaml", "committed.yaml", "blocked.yaml", "done.yaml"}
+        and parts[4] in {"candidate.yaml", "committed.yaml", "blocked.yaml", "ready.yaml", "pr_watch.yaml", "done.yaml"}
     )
 
 
@@ -471,7 +472,18 @@ def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
         task_uid = str(fields.get("task_uid") or "")
         if not task_uid:
             continue
-        task_records.append((path, fields))
+        task_records.append((str(path.relative_to(root)), fields))
+    github_mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if github_mapping_path.exists():
+        mapping = json.loads(github_mapping_path.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict)
+        tasks = mapping.get("tasks") or {}
+        if isinstance(tasks, dict):
+            for record in tasks.values():
+                task_uid = str(record.get("task_uid") or "")
+                if not task_uid:
+                    continue
+                loaded_task_count += 1
+                task_records.append((str(record.get("issue_url") or record.get("task_path") or ""), record))
 
     task_records.sort(key=lambda item: task_order_key(item[1]))
     roles = sorted(load_roles(root))
@@ -484,11 +496,11 @@ def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
         ]
     )
     registry_entries: list[OrderedDict[str, object]] = []
-    for path, fields in task_records:
+    for task_path_value, fields in task_records:
         registry_entry = OrderedDict(
             [
-                ("task_uid", fields.get("task_uid")),
-                ("owner_role", fields.get("owner_role")),
+                    ("task_uid", fields.get("task_uid")),
+                    ("owner_role", fields.get("owner_role")),
             ]
         )
         if fields.get("module") is not None:
@@ -496,7 +508,7 @@ def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
         registry_entry.update(
             OrderedDict(
                 [
-                    ("task_path", str(path.relative_to(root))),
+                    ("task_path", task_path_value),
                     ("status", fields.get("status")),
                     ("priority", fields.get("priority")),
                     ("source_signal", fields.get("source_signal")),
@@ -512,14 +524,14 @@ def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
     dump_list_document(registry_path, registry_header, "tasks", registry_entries)
 
     for role in roles:
-        for file_status in ("candidate", "committed", "blocked", "done"):
+        for file_status in ("candidate", "committed", "blocked", "ready", "pr_watch", "done"):
             backlog_path = role_backlog_path(root, role, file_status)
             if backlog_path.exists():
                 header, _ = load_list_document(backlog_path, "tasks")
             else:
                 header = OrderedDict([("version", 1), ("role", role), ("status", file_status)])
             items: list[OrderedDict[str, object]] = []
-            for path, fields in task_records:
+            for task_path_value, fields in task_records:
                 if str(fields.get("owner_role") or "") != role:
                     continue
                 status = str(fields.get("status") or "")
@@ -542,7 +554,7 @@ def rebuild_task_views(root: pathlib.Path) -> dict[str, int]:
                             ("acceptance", list(fields.get("acceptance", []))),
                             ("handoff_to", list(fields.get("handoff_to", []))),
                             ("status", status),
-                            ("task_path", str(path.relative_to(root))),
+                            ("task_path", task_path_value),
                         ]
                     )
                 )
@@ -706,23 +718,165 @@ def collect_signals(root: pathlib.Path) -> tuple[set[str], set[str]]:
 
 
 def load_signal_entries(root: pathlib.Path) -> list[OrderedDict[str, object]]:
-    signals_path = root / ".pm/inbox/signals.jsonl"
-    entries: list[OrderedDict[str, object]] = []
-    if not signals_path.exists():
-        return entries
-    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
+    by_id: OrderedDict[str, OrderedDict[str, object]] = OrderedDict()
+    intake_cache_path = root / ".pm/github-project-sync/intake-signals.json"
+    if intake_cache_path.exists():
+        cache = json.loads(intake_cache_path.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict)
+        signals = cache.get("signals") or OrderedDict()
+        signal_values = signals.values() if isinstance(signals, dict) else signals
+        for payload in signal_values:
+            signal_id = str(payload.get("signal_id") or "")
+            if signal_id:
+                shaped = OrderedDict(payload)
+                shaped["_signal_store"] = "github_intake_cache"
+                by_id[signal_id] = shaped
+    else:
+        for payload in sync_github_intake_signal_cache(root):
+            signal_id = str(payload.get("signal_id") or "")
+            if signal_id:
+                shaped = OrderedDict(payload)
+                shaped["_signal_store"] = "github_intake_cache"
+                by_id[signal_id] = shaped
+
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if not mapping_path.exists():
+        return list(by_id.values())
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    tasks = mapping.get("tasks") or {}
+    for record in tasks.values():
+        signal_id = str(record.get("source_signal") or "")
+        if not signal_id:
             continue
-        entries.append(json.loads(line, object_pairs_hook=OrderedDict))
-    return entries
+        source_refs = record.get("source_refs") or []
+        existing = by_id.get(signal_id, OrderedDict())
+        existing.update(
+            OrderedDict(
+                [
+                    ("signal_id", signal_id),
+                    ("source_type", existing.get("source_type") or record.get("source_type") or "github_candidate_task"),
+                    ("source_ref", existing.get("source_ref") or (source_refs[0] if source_refs else "")),
+                    ("role_hint", existing.get("role_hint") or record.get("owner_role") or ""),
+                    ("severity", existing.get("severity") or record.get("severity") or "medium"),
+                    ("summary", existing.get("summary") or record.get("title") or ""),
+                    ("promotion_state", "promoted_candidate_task"),
+                    ("memory_promotion_state", existing.get("memory_promotion_state") or "pending"),
+                    ("task_uid", record.get("task_uid") or ""),
+                    ("issue_url", existing.get("issue_url") or ""),
+                    ("task_url", record.get("issue_url") or ""),
+                    ("_signal_store", "github_project_mapping"),
+                ]
+            )
+        )
+        by_id[signal_id] = existing
+    return list(by_id.values())
+
+
+def github_repo_for_pm_root(root: pathlib.Path) -> str:
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if mapping_path.exists():
+        try:
+            mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+            project = mapping.get("project") or {}
+            repo = str(project.get("repo") or "")
+            if repo:
+                return repo
+        except (json.JSONDecodeError, OSError):
+            pass
+    return os.environ.get("GITHUB_REPOSITORY", "eng-cc/oasis7")
+
+
+def parse_github_intake_signal_issue(issue: dict[str, object]) -> OrderedDict[str, object] | None:
+    body = str(issue.get("body") or "")
+    if "<!-- oasis7-pm-signal -->" not in body:
+        return None
+    signal_match = re.search(r"^signal_id:\s*(\S+)\s*$", body, re.MULTILINE)
+    if not signal_match:
+        return None
+
+    fields: dict[str, str] = {}
+    for key in ("source_type", "source_ref", "role_hint", "severity", "promotion_state", "memory_promotion_state"):
+        match = re.search(rf"^- {re.escape(key)}: `([^`]*)`\s*$", body, re.MULTILINE)
+        if match:
+            fields[key] = match.group(1)
+    summary = ""
+    summary_match = re.search(r"^Summary:\s*\n(?P<summary>.*)\s*$", body, re.MULTILINE | re.DOTALL)
+    if summary_match:
+        summary = summary_match.group("summary").strip()
+    issue_url = str(issue.get("html_url") or issue.get("url") or "")
+    return OrderedDict(
+        [
+            ("signal_id", signal_match.group(1)),
+            ("source_type", fields.get("source_type", "reflection")),
+            ("source_ref", fields.get("source_ref", "")),
+            ("role_hint", fields.get("role_hint", "")),
+            ("severity", fields.get("severity", "medium")),
+            ("summary", summary),
+            ("promotion_state", fields.get("promotion_state", "triaged")),
+            ("memory_promotion_state", fields.get("memory_promotion_state", "pending")),
+            ("issue_url", issue_url),
+        ]
+    )
+
+
+def sync_github_intake_signal_cache(root: pathlib.Path) -> list[OrderedDict[str, object]]:
+    repo = github_repo_for_pm_root(root)
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        return []
+    try:
+        search_payload = subprocess.check_output(
+            [
+                "gh",
+                "api",
+                "search/issues",
+                "-f",
+                f"q=repo:{repo} oasis7-pm-signal in:body",
+                "-f",
+                "per_page=100",
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        search = json.loads(search_payload)
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return []
+
+    signals: OrderedDict[str, OrderedDict[str, object]] = OrderedDict()
+    for item in search.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        number = str(item.get("number") or "")
+        if not number:
+            continue
+        try:
+            issue_payload = subprocess.check_output(
+                ["gh", "api", f"repos/{owner}/{name}/issues/{number}"],
+                text=True,
+                stderr=subprocess.PIPE,
+                timeout=180,
+            )
+            issue = json.loads(issue_payload)
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            continue
+        signal = parse_github_intake_signal_issue(issue)
+        if signal is None:
+            continue
+        signals[str(signal["signal_id"])] = signal
+
+    if signals:
+        cache_path = root / ".pm/github-project-sync/intake-signals.json"
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache = OrderedDict([("version", 1), ("signals", signals)])
+        cache_path.write_text(json.dumps(cache, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return list(signals.values())
 
 
 def dump_signal_entries(root: pathlib.Path, entries: list[OrderedDict[str, object]]) -> None:
-    signals_path = root / ".pm/inbox/signals.jsonl"
-    with signals_path.open("w", encoding="utf-8") as handle:
-        for payload in entries:
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    raise ValueError(
+        "local signal inbox is retired; update GitHub-backed intake tasks instead "
+        "of writing .pm/inbox/signals.jsonl"
+    )
 
 
 def find_signal_entry(
@@ -734,6 +888,32 @@ def find_signal_entry(
         if payload.get("signal_id") == signal_id:
             return entries, payload
     raise ValueError(f"signal not found in inbox: {signal_id}")
+
+
+def update_github_intake_cache_signal(
+    root: pathlib.Path,
+    signal_id: str,
+    updates: dict[str, object],
+) -> str:
+    cache_path = root / ".pm/github-project-sync/intake-signals.json"
+    if not cache_path.exists():
+        raise ValueError(
+            "GitHub-backed signal decision requires local intake mirror; "
+            f"missing {cache_path.relative_to(root)} for signal {signal_id}"
+        )
+    cache = json.loads(cache_path.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict)
+    signals = cache.get("signals")
+    if not isinstance(signals, dict) or signal_id not in signals:
+        raise ValueError(
+            "GitHub-backed signal decision requires local intake mirror entry; "
+            f"missing signal {signal_id} in {cache_path.relative_to(root)}"
+        )
+    signal_payload = signals[signal_id]
+    if not isinstance(signal_payload, dict):
+        raise ValueError(f"invalid intake mirror entry for signal {signal_id}")
+    signal_payload.update(updates)
+    cache_path.write_text(json.dumps(cache, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return "github_intake_cache"
 
 
 def parse_reference_path(value: str) -> str:
@@ -1590,42 +1770,11 @@ def summarize_working_memory_signal_plan(
 
 
 def apply_working_memory_signal_plan(plan: dict[str, object], root: pathlib.Path) -> dict[str, object]:
-    path = plan["path"]
-    header = plan["header"]
-    entries = plan["entries"]
-    entries_by_id = {str(entry.get("entry_id") or ""): entry for entry in entries}
-    signal_entries = load_signal_entries(root)
-
-    for item in plan["plans"]:
-        if item["decision"] == "reuse":
-            signal_id = str(item["signal_id"])
-            entry = entries_by_id[str(item["entry_id"])]
-            if signal_id not in entry["promoted_to"]:
-                entry["promoted_to"].append(signal_id)
-            continue
-
-        signal_id = next_signal_id(root)
-        payload = OrderedDict(
-            [
-                ("signal_id", signal_id),
-                ("source_type", "reflection"),
-                ("source_ref", item["source_ref"]),
-                ("role_hint", plan["role"]),
-                ("severity", plan["severity"]),
-                ("summary", item["summary"]),
-                ("promotion_state", "triaged"),
-                ("memory_promotion_state", "pending"),
-            ]
-        )
-        signal_entries.append(payload)
-        item["signal_id"] = signal_id
-        entry = entries_by_id[str(item["entry_id"])]
-        if signal_id not in entry["promoted_to"]:
-            entry["promoted_to"].append(signal_id)
-
-    dump_signal_entries(root, signal_entries)
-    dump_list_document(path, header, "entries", entries)
-    return summarize_working_memory_signal_plan(plan, applied=True)
+    raise ValueError(
+        "working_memory signal apply is disabled because .pm/inbox/signals.jsonl "
+        "is retired; use working-memory-autoflow --dry-run, then create GitHub "
+        "candidate intake with ./scripts/pm/promote-signal.sh"
+    )
 
 
 def next_signal_id(root: pathlib.Path) -> str:
@@ -1997,6 +2146,11 @@ def autoflow_working_memory(
             signals_by_entry_id[str(item["entry_id"])] = str(signal_id)
 
     if not dry_run and signal_plan is not None:
+        raise ValueError(
+            "working-memory-autoflow apply is disabled because local signal/task "
+            "creation is retired; run with --dry-run and promote selected items "
+            "through GitHub-backed ./scripts/pm/promote-signal.sh"
+        )
         signal_result = apply_working_memory_signal_plan(signal_plan, root)
         path, header, entries = load_working_memory_document(root, task_uid)
         signals_by_entry_id = {}
@@ -2406,6 +2560,7 @@ def run_task_backlog_lint(root: pathlib.Path, *, views_already_synced: bool = Fa
         sync_task_views=(lambda _root: None) if views_already_synced else sync_task_views,
         load_roles=load_roles,
         collect_signals=collect_signals,
+        load_signal_entries=load_signal_entries,
         is_devlog_archive_reference=is_devlog_archive_reference,
         resolve_source_ref_path=resolve_source_ref_path,
         parse_reference_path=parse_reference_path,
@@ -2853,6 +3008,7 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
     root = args.root
     updated_at = args.effective_at or now_iso()
     signal_entries, signal_entry = find_signal_entry(root, args.signal_id)
+    signal_store = str(signal_entry.get("_signal_store") or "")
 
     memory_state = str(signal_entry.get("memory_promotion_state", "pending"))
     if memory_state != "pending":
@@ -2861,6 +3017,28 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
     if args.reject_reason:
         if args.reject_reason not in ALLOWED_MEMORY_REJECTION_REASONS:
             raise ValueError(f"unsupported rejection reason: {args.reject_reason}")
+        if signal_store.startswith("github_"):
+            state_sink = update_github_intake_cache_signal(
+                root,
+                args.signal_id,
+                {
+                    "memory_promotion_state": "rejected",
+                    "memory_rejection_reason": args.reject_reason,
+                    "memory_decision_at": updated_at,
+                },
+            )
+            result = {
+                "signal_id": args.signal_id,
+                "decision": "rejected",
+                "rejection_reason": args.reject_reason,
+                "decided_at": updated_at,
+                "state_sink": state_sink,
+            }
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False))
+            else:
+                print(f"promote-memory: rejected {args.signal_id} ({args.reject_reason})")
+            return 0
         signal_entry["memory_promotion_state"] = "rejected"
         signal_entry["memory_rejection_reason"] = args.reject_reason
         signal_entry["memory_decision_at"] = updated_at
@@ -2878,6 +3056,28 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
         return 0
 
     if args.defer_reason:
+        if signal_store.startswith("github_"):
+            state_sink = update_github_intake_cache_signal(
+                root,
+                args.signal_id,
+                {
+                    "memory_promotion_state": "deferred",
+                    "memory_deferred_reason": args.defer_reason,
+                    "memory_decision_at": updated_at,
+                },
+            )
+            result = {
+                "signal_id": args.signal_id,
+                "decision": "deferred",
+                "defer_reason": args.defer_reason,
+                "decided_at": updated_at,
+                "state_sink": state_sink,
+            }
+            if args.json:
+                print(json.dumps(result, ensure_ascii=False))
+            else:
+                print(f"promote-memory: deferred {args.signal_id} ({args.defer_reason})")
+            return 0
         signal_entry["memory_promotion_state"] = "deferred"
         signal_entry["memory_deferred_reason"] = args.defer_reason
         signal_entry["memory_decision_at"] = updated_at
@@ -2910,6 +3110,9 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
     if any(str(record.get("id")) == memory_id for _, _, _, _, records in collect_memory_documents(root) for record in records):
         raise ValueError(f"memory id already exists: {memory_id}")
 
+    if signal_store.startswith("github_"):
+        update_github_intake_cache_signal(root, args.signal_id, {})
+
     source_refs: list[str] = []
     for source_ref in [str(signal_entry["source_ref"]), *args.source_ref]:
         ensure_non_devlog_runtime_source_ref(str(source_ref), "memory source_ref")
@@ -2935,14 +3138,29 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
     active_records.append(record)
     dump_list_document(active_path, active_header, "records", active_records)
 
-    signal_entry["memory_promotion_state"] = "promoted"
-    signal_entry["memory_decision_at"] = updated_at
-    signal_entry["memory_id"] = memory_id
-    signal_entry["memory_scope"] = args.scope
-    signal_entry["memory_role"] = record_role
-    signal_entry["memory_topic"] = args.topic
-    signal_entry["memory_promotion_reason"] = args.promotion_reason
-    dump_signal_entries(root, signal_entries)
+    if not signal_store.startswith("github_"):
+        signal_entry["memory_promotion_state"] = "promoted"
+        signal_entry["memory_decision_at"] = updated_at
+        signal_entry["memory_id"] = memory_id
+        signal_entry["memory_scope"] = args.scope
+        signal_entry["memory_role"] = record_role
+        signal_entry["memory_topic"] = args.topic
+        signal_entry["memory_promotion_reason"] = args.promotion_reason
+        dump_signal_entries(root, signal_entries)
+    else:
+        state_sink = update_github_intake_cache_signal(
+            root,
+            args.signal_id,
+            {
+                "memory_promotion_state": "promoted",
+                "memory_decision_at": updated_at,
+                "memory_id": memory_id,
+                "memory_scope": args.scope,
+                "memory_role": record_role,
+                "memory_topic": args.topic,
+                "memory_promotion_reason": args.promotion_reason,
+            },
+        )
 
     result = {
         "signal_id": args.signal_id,
@@ -2954,6 +3172,8 @@ def cmd_promote_memory(args: argparse.Namespace) -> int:
         "promotion_reason": args.promotion_reason,
         "effective_at": updated_at,
     }
+    if signal_store.startswith("github_"):
+        result["state_sink"] = state_sink
     if args.json:
         print(json.dumps(result, ensure_ascii=False))
     else:
