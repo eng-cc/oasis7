@@ -50,7 +50,7 @@
 - `doc/core/reviews/round-005-audit-progress-log.md`
 - `doc/core/reviews/round-005-reviewed-files.md`
 - `doc/core/reviews/round-008-reviewed-files.md`
-- Viewer 旧控制反馈三件套已从下方活跃专题清单移出，只保留文件自身互链和历史审计可检索性：`viewer-control-feedback-iteration-checklist-2026-02-27.*`、`viewer-control-feedback-step-recovery-p0-2026-02-27.*`、`viewer-control-predictability-tasklist-2026-02-28.*`。当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
+- Viewer 旧控制反馈三件套已删除并压缩为历史归档说明 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
