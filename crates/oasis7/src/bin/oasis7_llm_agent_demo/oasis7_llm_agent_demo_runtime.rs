@@ -29,7 +29,7 @@ fn main() {
         }
     };
 
-    let mut runner: AgentRunner<LlmAgentBehavior<_>> = AgentRunner::new();
+    let mut runner: AgentRunner<DemoAgentBehavior> = AgentRunner::new();
     let mut agent_ids: Vec<String> = kernel.model().agents.keys().cloned().collect();
     agent_ids.sort();
 
@@ -39,20 +39,13 @@ fn main() {
     }
 
     for agent_id in &agent_ids {
-        let mut behavior = match LlmAgentBehavior::from_env(agent_id.clone()) {
+        let behavior = match build_demo_behavior(agent_id, &options) {
             Ok(behavior) => behavior,
             Err(err) => {
-                eprintln!("failed to create llm behavior for {agent_id}: {err}");
+                eprintln!("failed to create {} behavior for {agent_id}: {err}", options.decision_source.as_str());
                 process::exit(1);
             }
         };
-        if options.has_initial_prompt_override() {
-            behavior.apply_prompt_overrides(
-                options.llm_system_prompt.clone(),
-                options.llm_short_term_goal.clone(),
-                options.llm_long_term_goal.clone(),
-            );
-        }
         runner.register(behavior);
     }
 
@@ -63,6 +56,10 @@ fn main() {
         println!("state_dir_loaded: {path}");
     }
     println!("ticks: {}", options.ticks);
+    println!("decision_source: {}", options.decision_source.as_str());
+    if let Some(url) = options.agent_provider_url.as_ref() {
+        println!("agent_provider_url: {url}");
+    }
     println!(
         "runtime_gameplay_bridge: {}",
         if options.runtime_gameplay_bridge {
@@ -167,15 +164,7 @@ fn main() {
             let switch = options.prompt_switches[next_prompt_switch_idx].clone();
             for agent_id in runner.agent_ids() {
                 if let Some(agent) = runner.get_mut(agent_id.as_str()) {
-                    let current = agent.behavior.prompt_overrides();
-                    agent.behavior.apply_prompt_overrides(
-                        switch.llm_system_prompt.clone().or(current.system_prompt),
-                        switch
-                            .llm_short_term_goal
-                            .clone()
-                            .or(current.short_term_goal),
-                        switch.llm_long_term_goal.clone().or(current.long_term_goal),
-                    );
+                    agent.behavior.apply_prompt_switch(&switch);
                 }
             }
             println!(
@@ -392,6 +381,60 @@ fn main() {
     );
 }
 
+fn build_demo_behavior(
+    agent_id: &str,
+    options: &CliOptions,
+) -> Result<DemoAgentBehavior, String> {
+    match options.decision_source {
+        DecisionSource::LlmResponses => {
+            let mut behavior =
+                LlmAgentBehavior::from_env(agent_id.to_string()).map_err(|err| err.to_string())?;
+            if options.has_initial_prompt_override() {
+                behavior.apply_prompt_overrides(
+                    options.llm_system_prompt.clone(),
+                    options.llm_short_term_goal.clone(),
+                    options.llm_long_term_goal.clone(),
+                );
+            }
+            Ok(DemoAgentBehavior::Llm(behavior))
+        }
+        DecisionSource::ProviderLoopbackHttp => {
+            let base_url = options.agent_provider_url.as_deref().ok_or_else(|| {
+                "--agent-provider-url is required when --decision-source provider_loopback_http"
+                    .to_string()
+            })?;
+            let adapter = ProviderLoopbackAdapter::new(
+                base_url,
+                options.agent_provider_auth_token.as_deref(),
+                options.agent_provider_connect_timeout_ms,
+            )
+            .map_err(|err| err.to_string())?;
+            let mut behavior = ProviderBackedAgentBehavior::new(
+                agent_id.to_string(),
+                adapter,
+                provider_phase1_action_catalog(),
+            )
+            .with_provider_config_ref(format!(
+                "provider://loopback-http/llm-agent-demo/pid-{}/{}",
+                process::id(),
+                agent_id
+            ))
+            .with_agent_profile(options.agent_provider_profile.clone())
+            .with_execution_mode(ProviderExecutionMode::HeadlessAgent)
+            .with_timeout_budget_ms(options.agent_provider_decision_timeout_ms)
+            .with_environment_class("llm_agent_demo");
+            let prompt_context = ProviderPromptContext::from_options(options);
+            if let Some(memory_summary) = prompt_context.memory_summary() {
+                behavior = behavior.with_memory_summary(memory_summary);
+            }
+            Ok(DemoAgentBehavior::ProviderBacked {
+                behavior,
+                prompt_context,
+            })
+        }
+    }
+}
+
 fn write_report_json(path: &str, run_report: &DemoRunReport) -> Result<(), String> {
     let report_path = Path::new(path);
     if let Some(parent) = report_path.parent() {
@@ -519,6 +562,64 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                             raw
                         )
                     })?;
+            }
+            "--decision-source" | "--agent-decision-source" => {
+                let raw = iter
+                    .next()
+                    .ok_or_else(|| "--decision-source requires a source name".to_string())?
+                    .to_string();
+                options.decision_source = DecisionSource::parse(raw.as_str()).ok_or_else(|| {
+                    format!(
+                        "invalid --decision-source: {} (expected llm_responses|provider_loopback_http)",
+                        raw
+                    )
+                })?;
+            }
+            "--agent-provider-url" => {
+                options.agent_provider_url = Some(
+                    iter.next()
+                        .ok_or_else(|| "--agent-provider-url requires a URL".to_string())?
+                        .to_string(),
+                );
+            }
+            "--agent-provider-auth-token" => {
+                options.agent_provider_auth_token = Some(
+                    iter.next()
+                        .ok_or_else(|| "--agent-provider-auth-token requires a token".to_string())?
+                        .to_string(),
+                );
+            }
+            "--agent-provider-connect-timeout-ms" => {
+                let raw = iter.next().ok_or_else(|| {
+                    "--agent-provider-connect-timeout-ms requires a positive integer".to_string()
+                })?;
+                options.agent_provider_connect_timeout_ms = raw
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or_else(|| {
+                        "--agent-provider-connect-timeout-ms requires a positive integer"
+                            .to_string()
+                    })?;
+            }
+            "--agent-provider-decision-timeout-ms" => {
+                let raw = iter.next().ok_or_else(|| {
+                    "--agent-provider-decision-timeout-ms requires a positive integer".to_string()
+                })?;
+                options.agent_provider_decision_timeout_ms = raw
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or_else(|| {
+                        "--agent-provider-decision-timeout-ms requires a positive integer"
+                            .to_string()
+                    })?;
+            }
+            "--agent-provider-profile" => {
+                options.agent_provider_profile = iter
+                    .next()
+                    .ok_or_else(|| "--agent-provider-profile requires a profile name".to_string())?
+                    .to_string();
             }
             "--load-state-dir" => {
                 options.load_state_dir = Some(
@@ -688,6 +789,14 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
                 .to_string(),
         );
     }
+    if options.decision_source == DecisionSource::ProviderLoopbackHttp
+        && options.agent_provider_url.is_none()
+    {
+        return Err(
+            "--agent-provider-url is required when --decision-source provider_loopback_http"
+                .to_string(),
+        );
+    }
 
     Ok(options)
 }
@@ -711,6 +820,17 @@ fn print_help() {
     println!(
         "  --runtime-gameplay-preset <name>  Seed runtime gameplay events before loop (none|civic_hotspot_v1)"
     );
+    println!(
+        "  --decision-source <name>  Decision backend: llm_responses|provider_loopback_http (default: llm_responses)"
+    );
+    println!("  --agent-provider-url <url>  Local provider bridge URL for provider_loopback_http");
+    println!(
+        "  --agent-provider-connect-timeout-ms <n>  Provider bridge connect timeout (default: 60000)"
+    );
+    println!(
+        "  --agent-provider-decision-timeout-ms <n>  Provider decision budget (default: 60000)"
+    );
+    println!("  --agent-provider-profile <name>  Provider agent profile label");
     println!("  --print-llm-io     Print LLM input/output to stdout for each tick");
     println!("  --llm-io-max-chars <n>  Truncate each LLM input/output block to n chars");
     println!("  --llm-system-prompt <text>  Override default system prompt for this run");

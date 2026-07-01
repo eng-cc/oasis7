@@ -535,6 +535,10 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         self
     }
 
+    pub fn replace_memory_summary(&mut self, memory_summary: Option<String>) {
+        self.base_memory_summary = memory_summary;
+    }
+
     fn composed_memory_summary(&self) -> Option<String> {
         match (
             self.base_memory_summary.as_deref(),

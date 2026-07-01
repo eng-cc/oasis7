@@ -42,6 +42,31 @@ Options:
   --release-gate               Enable release defaults (min kinds + core actions)
   --release-gate-profile <p>   Release gate profile: industrial | gameplay | hybrid (default: hybrid)
   --coverage-bootstrap-profile <p>  Deterministic bootstrap before LLM loop: none | industrial | gameplay | hybrid
+  --with-letai-config          Load current LetAI/oasis7 LLM env via scripts/with-letai-llm-config.sh before running
+  --letai-config <path>        Config path passed to --with-letai-config
+  --letai-model <id>           Model passed to --with-letai-config
+  --letai-base-url <url>       Base URL passed to --with-letai-config
+  --with-local-letai-provider-bridge
+                              Run through the local LetAI provider bridge/adapter instead of direct Responses API
+  --local-provider-bind <host:port>
+                              Local provider bridge bind/reuse address (default: 127.0.0.1:5841)
+  --local-provider-config <path>
+                              LetAI config passed to run-local-letai-provider-bridge.sh
+  --local-provider-model <id>  Model passed to run-local-letai-provider-bridge.sh
+  --local-provider-auto-topup-usd <amount>
+                              Auto top up amount for local bridge (default: 0.1)
+  --reuse-local-provider-bridge
+                              Reuse an already-listening local provider bridge instead of starting one
+  --no-ensure-token-config     Use --local-provider-config directly; do not generate local token config first
+  --proxy <url>                HTTP/HTTPS proxy for local LetAI bridge startup (default: http://127.0.0.1:7897)
+  --socks-proxy <url>          all_proxy value for local LetAI bridge startup (default: socks5://127.0.0.1:7897)
+  --no-default-proxy           Do not set local proxy defaults for bridge startup
+  --agent-provider-connect-timeout-ms <n>
+                              Provider bridge connect timeout passed to demo (default: 60000)
+  --agent-provider-decision-timeout-ms <n>
+                              Provider decision budget passed to demo (default: 60000)
+  --agent-provider-profile <name>
+                              Provider agent profile passed to demo (default: oasis7_p0_low_freq_npc)
   --no-llm-io                  Disable LLM input/output logging in run.log
   --llm-io-max-chars <n>       Truncate each LLM input/output block to n chars
   --keep-out-dir               Keep existing out dir content
@@ -70,6 +95,11 @@ Notes:
   - runtime gameplay bridge 默认开启：将 simulator 的 runtime-only gameplay/economic 动作接入 runtime World，降低非预期拒绝
   - runtime gameplay preset 可注入可续跑的治理事件句柄（待投票提案/活跃危机/待结算合约）
   - state dir 参数仅支持单场景模式（便于构建/复用同一阶段基线）
+  - --no-llm-io only disables raw LLM I/O logging; this stress runner still needs an active LLM provider.
+    For direct Responses API diagnostics, use --with-letai-config or wrap this command with
+    ./scripts/with-letai-llm-config.sh -- <command>.
+  - --with-local-letai-provider-bridge uses the local bridge/adapter path backed by
+    scripts/run-local-letai-provider-bridge.sh, including its LetAI auto-topup support.
 
 Output:
   - report json: detailed run metrics emitted by oasis7_llm_agent_demo
@@ -78,9 +108,217 @@ Output:
 USAGE
 }
 
+maybe_reexec_with_letai_config() {
+  if [[ "${OASIS7_LLM_LONGRUN_STRESS_WRAPPED:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  local help_arg
+  for help_arg in "$@"; do
+    if [[ "$help_arg" == "-h" || "$help_arg" == "--help" ]]; then
+      return 0
+    fi
+  done
+
+  local with_letai_config=0
+  local letai_config=""
+  local letai_model=""
+  local letai_base_url=""
+  local arg
+  local next
+  local -a filtered_args=()
+  local -a wrapper_args=()
+
+  while [[ $# -gt 0 ]]; do
+    arg=$1
+    case "$arg" in
+      --with-letai-config)
+        with_letai_config=1
+        shift
+        ;;
+      --letai-config)
+        with_letai_config=1
+        letai_config="${2:-}"
+        shift 2
+        ;;
+      --letai-model)
+        with_letai_config=1
+        letai_model="${2:-}"
+        shift 2
+        ;;
+      --letai-base-url)
+        with_letai_config=1
+        letai_base_url="${2:-}"
+        shift 2
+        ;;
+      --)
+        filtered_args+=("$arg")
+        shift
+        while [[ $# -gt 0 ]]; do
+          filtered_args+=("$1")
+          shift
+        done
+        ;;
+      *)
+        filtered_args+=("$arg")
+        if [[ $# -gt 1 ]]; then
+          next=$2
+          case "$arg" in
+            --scenario|--scenarios|--ticks|--jobs|--out-dir|--report-json|--log-file|--summary-file|--llm-system-prompt|--llm-short-goal|--llm-long-goal|--prompt-pack|--prompt-switch-tick|--switch-llm-system-prompt|--switch-llm-short-goal|--switch-llm-long-goal|--prompt-switches-json|--llm-execute-until-auto-reenter-ticks|--runtime-gameplay-preset|--load-state-dir|--save-state-dir|--max-llm-errors|--max-parse-errors|--max-repair-rounds-max|--min-active-ticks|--min-action-kinds|--require-action-kind|--release-gate-profile|--coverage-bootstrap-profile|--llm-io-max-chars|--local-provider-bind|--local-provider-config|--local-provider-model|--local-provider-auto-topup-usd|--proxy|--socks-proxy|--agent-provider-connect-timeout-ms|--agent-provider-decision-timeout-ms|--agent-provider-profile)
+              filtered_args+=("$next")
+              shift 2
+              continue
+              ;;
+          esac
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if (( with_letai_config == 0 )); then
+    return 0
+  fi
+
+  if [[ -n "$letai_config" ]]; then
+    wrapper_args+=(--config "$letai_config")
+  fi
+  if [[ -n "$letai_model" ]]; then
+    wrapper_args+=(--model "$letai_model")
+  fi
+  if [[ -n "$letai_base_url" ]]; then
+    wrapper_args+=(--base-url "$letai_base_url")
+  fi
+
+  echo "+ OASIS7_LLM_LONGRUN_STRESS_WRAPPED=1 $repo_root/scripts/with-letai-llm-config.sh ${wrapper_args[*]-} -- $0 ${filtered_args[*]-}"
+  if (( ${#wrapper_args[@]} > 0 )); then
+    OASIS7_LLM_LONGRUN_STRESS_WRAPPED=1 exec "$repo_root/scripts/with-letai-llm-config.sh" "${wrapper_args[@]}" -- "$0" "${filtered_args[@]}"
+  fi
+  OASIS7_LLM_LONGRUN_STRESS_WRAPPED=1 exec "$repo_root/scripts/with-letai-llm-config.sh" -- "$0" "${filtered_args[@]}"
+}
+
+maybe_reexec_with_letai_config "$@"
+
 run() {
   echo "+ $*"
   "$@"
+}
+
+local_provider_base_url() {
+  printf 'http://%s' "$local_provider_bind"
+}
+
+local_provider_info_url() {
+  printf '%s/v1/provider/info' "$(local_provider_base_url)"
+}
+
+local_provider_ready() {
+  curl -fsS "$(local_provider_info_url)" >/dev/null 2>&1
+}
+
+cleanup_local_provider_bridge() {
+  if [[ -n "${local_provider_bridge_pid:-}" ]] && kill -0 "$local_provider_bridge_pid" >/dev/null 2>&1; then
+    kill "$local_provider_bridge_pid" >/dev/null 2>&1 || true
+    wait "$local_provider_bridge_pid" >/dev/null 2>&1 || true
+  fi
+}
+
+configure_local_provider_proxy_env() {
+  if (( with_local_provider_bridge == 0 || use_default_proxy == 0 )); then
+    return 0
+  fi
+
+  export https_proxy="${https_proxy:-$proxy_url}"
+  export http_proxy="${http_proxy:-$proxy_url}"
+  export all_proxy="${all_proxy:-$socks_proxy_url}"
+
+  local loopback_no_proxy="127.0.0.1,localhost,::1"
+  if [[ -n "${no_proxy:-}" ]]; then
+    case ",$no_proxy," in
+      *",127.0.0.1,"*) ;;
+      *) export no_proxy="$loopback_no_proxy,$no_proxy" ;;
+    esac
+  else
+    export no_proxy="$loopback_no_proxy"
+  fi
+  if [[ -n "${NO_PROXY:-}" ]]; then
+    case ",$NO_PROXY," in
+      *",127.0.0.1,"*) ;;
+      *) export NO_PROXY="$loopback_no_proxy,$NO_PROXY" ;;
+    esac
+  else
+    export NO_PROXY="$loopback_no_proxy"
+  fi
+}
+
+start_or_reuse_local_provider_bridge() {
+  if (( with_local_provider_bridge == 0 )); then
+    return 0
+  fi
+
+  local provider_url
+  provider_url=$(local_provider_base_url)
+  configure_local_provider_proxy_env
+  if local_provider_ready; then
+    if (( reuse_local_provider_bridge == 1 )); then
+      echo "local LetAI provider bridge: reusing $provider_url"
+      return 0
+    fi
+    echo "error: local provider bridge already listening at $provider_url" >&2
+    echo "hint: stop the existing bridge, choose --local-provider-bind <free host:port>, or pass --reuse-local-provider-bridge to accept existing bridge config/token state." >&2
+    exit 2
+  fi
+
+  local effective_provider_config="$local_provider_config"
+  if (( ensure_token_config == 1 )); then
+    effective_provider_config="$out_dir/letai-local-token.env"
+    local -a ensure_cmd=(
+      "$repo_root/scripts/ensure-letai-local-token-config.sh"
+      --out "$effective_provider_config"
+    )
+    if [[ -n "$local_provider_config" ]]; then
+      ensure_cmd+=(--config "$local_provider_config")
+    fi
+    if [[ -n "$local_provider_model" ]]; then
+      ensure_cmd+=(--model "$local_provider_model")
+    fi
+    run "${ensure_cmd[@]}"
+  fi
+
+  local_provider_bridge_log="$out_dir/local-letai-provider-bridge.log"
+  local -a bridge_cmd=(
+    "$repo_root/scripts/run-local-letai-provider-bridge.sh"
+    --bind "$local_provider_bind"
+    --auto-topup-usd "$local_provider_auto_topup_usd"
+  )
+  if [[ -n "$effective_provider_config" ]]; then
+    bridge_cmd+=(--config "$effective_provider_config")
+  fi
+  if [[ -n "$local_provider_model" ]]; then
+    bridge_cmd+=(--model "$local_provider_model")
+  fi
+
+  echo "+ ${bridge_cmd[*]} > $local_provider_bridge_log 2>&1 &"
+  "${bridge_cmd[@]}" >"$local_provider_bridge_log" 2>&1 &
+  local_provider_bridge_pid=$!
+  trap cleanup_local_provider_bridge EXIT INT TERM
+
+  for _ in $(seq 1 90); do
+    if ! kill -0 "$local_provider_bridge_pid" >/dev/null 2>&1; then
+      echo "error: local LetAI provider bridge exited early; log: $local_provider_bridge_log" >&2
+      tail -n 120 "$local_provider_bridge_log" >&2 || true
+      exit 1
+    fi
+    if local_provider_ready; then
+      echo "local LetAI provider bridge: started $provider_url pid=$local_provider_bridge_pid"
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "error: local LetAI provider bridge did not become ready at $provider_url; log: $local_provider_bridge_log" >&2
+  tail -n 120 "$local_provider_bridge_log" >&2 || true
+  exit 1
 }
 
 ensure_positive_int() {
@@ -439,36 +677,103 @@ runtime_perf_bottleneck="none"
 runtime_perf_tick_p95_ms="0"
 runtime_perf_tick_over_budget_ratio_ppm=0
 
+assign_metrics_from_report_lines() {
+  local report_metrics=$1
+  local metric_index=0
+  local metric_value=""
+
+  while IFS= read -r metric_value; do
+    metric_index=$((metric_index + 1))
+    case "$metric_index" in
+      1) active_ticks=$metric_value ;;
+      2) total_decisions=$metric_value ;;
+      3) total_actions=$metric_value ;;
+      4) action_success=$metric_value ;;
+      5) action_failure=$metric_value ;;
+      6) llm_skipped_ticks=$metric_value ;;
+      7) llm_skipped_tick_ratio_ppm=$metric_value ;;
+      8) llm_errors=$metric_value ;;
+      9) parse_errors=$metric_value ;;
+      10) repair_rounds_total=$metric_value ;;
+      11) repair_rounds_max=$metric_value ;;
+      12) llm_input_chars_total=$metric_value ;;
+      13) llm_input_chars_avg=$metric_value ;;
+      14) llm_input_chars_max=$metric_value ;;
+      15) clipped_sections=$metric_value ;;
+      16) decision_wait=$metric_value ;;
+      17) decision_wait_ticks=$metric_value ;;
+      18) decision_act=$metric_value ;;
+      19) module_call_count=$metric_value ;;
+      20) plan_count=$metric_value ;;
+      21) execute_until_continue_count=$metric_value ;;
+      22) runtime_perf_health=$metric_value ;;
+      23) runtime_perf_bottleneck=$metric_value ;;
+      24) runtime_perf_tick_p95_ms=$metric_value ;;
+      25) runtime_perf_tick_over_budget_ratio_ppm=$metric_value ;;
+    esac
+  done <<<"$report_metrics"
+
+  active_ticks=${active_ticks:-0}
+  total_decisions=${total_decisions:-0}
+  total_actions=${total_actions:-0}
+  action_success=${action_success:-0}
+  action_failure=${action_failure:-0}
+  llm_skipped_ticks=${llm_skipped_ticks:-0}
+  llm_skipped_tick_ratio_ppm=${llm_skipped_tick_ratio_ppm:-0}
+  llm_errors=${llm_errors:-0}
+  parse_errors=${parse_errors:-0}
+  repair_rounds_total=${repair_rounds_total:-0}
+  repair_rounds_max=${repair_rounds_max:-0}
+  llm_input_chars_total=${llm_input_chars_total:-0}
+  llm_input_chars_avg=${llm_input_chars_avg:-0}
+  llm_input_chars_max=${llm_input_chars_max:-0}
+  clipped_sections=${clipped_sections:-0}
+  decision_wait=${decision_wait:-0}
+  decision_wait_ticks=${decision_wait_ticks:-0}
+  decision_act=${decision_act:-0}
+  module_call_count=${module_call_count:-0}
+  plan_count=${plan_count:-0}
+  execute_until_continue_count=${execute_until_continue_count:-0}
+  runtime_perf_health=${runtime_perf_health:-unknown}
+  runtime_perf_bottleneck=${runtime_perf_bottleneck:-none}
+  runtime_perf_tick_p95_ms=${runtime_perf_tick_p95_ms:-0}
+  runtime_perf_tick_over_budget_ratio_ppm=${runtime_perf_tick_over_budget_ratio_ppm:-0}
+}
+
 load_metrics_from_report() {
   local report_path=$1
   local log_path=$2
+  local report_metrics=""
 
   if command -v jq >/dev/null 2>&1; then
-    active_ticks=$(jq -r '.active_ticks // 0' "$report_path")
-    total_decisions=$(jq -r '.total_decisions // 0' "$report_path")
-    total_actions=$(jq -r '.total_actions // 0' "$report_path")
-    action_success=$(jq -r '.action_success // 0' "$report_path")
-    action_failure=$(jq -r '.action_failure // 0' "$report_path")
-    llm_skipped_ticks=$(jq -r '.trace_counts.llm_skipped_ticks // 0' "$report_path")
-    llm_skipped_tick_ratio_ppm=$(jq -r '.trace_counts.llm_skipped_tick_ratio_ppm // 0' "$report_path")
-    llm_errors=$(jq -r '.trace_counts.llm_errors // 0' "$report_path")
-    parse_errors=$(jq -r '.trace_counts.parse_errors // 0' "$report_path")
-    repair_rounds_total=$(jq -r '.trace_counts.repair_rounds_total // 0' "$report_path")
-    repair_rounds_max=$(jq -r '.trace_counts.repair_rounds_max // 0' "$report_path")
-    llm_input_chars_total=$(jq -r '.trace_counts.llm_input_chars_total // 0' "$report_path")
-    llm_input_chars_avg=$(jq -r '.trace_counts.llm_input_chars_avg // 0' "$report_path")
-    llm_input_chars_max=$(jq -r '.trace_counts.llm_input_chars_max // 0' "$report_path")
-    clipped_sections=$(jq -r '.trace_counts.prompt_section_clipped // 0' "$report_path")
-    decision_wait=$(jq -r '.decision_counts.wait // 0' "$report_path")
-    decision_wait_ticks=$(jq -r '.decision_counts.wait_ticks // 0' "$report_path")
-    decision_act=$(jq -r '.decision_counts.act // 0' "$report_path")
-    module_call_count=$(jq -r '.trace_counts.step_type_counts.module_call // 0' "$report_path")
-    plan_count=$(jq -r '.trace_counts.step_type_counts.plan // 0' "$report_path")
-    execute_until_continue_count=$(jq -r '.trace_counts.step_type_counts.execute_until_continue // 0' "$report_path")
-    runtime_perf_health=$(jq -r '.runtime_perf.health // "unknown"' "$report_path")
-    runtime_perf_bottleneck=$(jq -r '.runtime_perf.bottleneck // "none"' "$report_path")
-    runtime_perf_tick_p95_ms=$(jq -r '.runtime_perf.tick.p95_ms // 0' "$report_path")
-    runtime_perf_tick_over_budget_ratio_ppm=$(jq -r '.runtime_perf.tick.over_budget_ratio_ppm // 0' "$report_path")
+    report_metrics=$(jq -r '[
+      (.active_ticks // 0),
+      (.total_decisions // 0),
+      (.total_actions // 0),
+      (.action_success // 0),
+      (.action_failure // 0),
+      (.trace_counts.llm_skipped_ticks // 0),
+      (.trace_counts.llm_skipped_tick_ratio_ppm // 0),
+      (.trace_counts.llm_errors // 0),
+      (.trace_counts.parse_errors // 0),
+      (.trace_counts.repair_rounds_total // 0),
+      (.trace_counts.repair_rounds_max // 0),
+      (.trace_counts.llm_input_chars_total // 0),
+      (.trace_counts.llm_input_chars_avg // 0),
+      (.trace_counts.llm_input_chars_max // 0),
+      (.trace_counts.prompt_section_clipped // 0),
+      (.decision_counts.wait // 0),
+      (.decision_counts.wait_ticks // 0),
+      (.decision_counts.act // 0),
+      (.trace_counts.step_type_counts.module_call // 0),
+      (.trace_counts.step_type_counts.plan // 0),
+      (.trace_counts.step_type_counts.execute_until_continue // 0),
+      (.runtime_perf.health // "unknown"),
+      (.runtime_perf.bottleneck // "none"),
+      (.runtime_perf.tick.p95_ms // 0),
+      (.runtime_perf.tick.over_budget_ratio_ppm // 0)
+    ] | .[]' "$report_path")
+    assign_metrics_from_report_lines "$report_metrics"
   elif command -v python3 >/dev/null 2>&1; then
     report_metrics=$(python3 - "$report_path" <<'__PYJSON__'
 import json
@@ -519,56 +824,7 @@ for key in keys:
     print(get(key, 0))
 __PYJSON__
 )
-    active_ticks=$(printf '%s\n' "$report_metrics" | sed -n '1p')
-    total_decisions=$(printf '%s\n' "$report_metrics" | sed -n '2p')
-    total_actions=$(printf '%s\n' "$report_metrics" | sed -n '3p')
-    action_success=$(printf '%s\n' "$report_metrics" | sed -n '4p')
-    action_failure=$(printf '%s\n' "$report_metrics" | sed -n '5p')
-    llm_skipped_ticks=$(printf '%s\n' "$report_metrics" | sed -n '6p')
-    llm_skipped_tick_ratio_ppm=$(printf '%s\n' "$report_metrics" | sed -n '7p')
-    llm_errors=$(printf '%s\n' "$report_metrics" | sed -n '8p')
-    parse_errors=$(printf '%s\n' "$report_metrics" | sed -n '9p')
-    repair_rounds_total=$(printf '%s\n' "$report_metrics" | sed -n '10p')
-    repair_rounds_max=$(printf '%s\n' "$report_metrics" | sed -n '11p')
-    llm_input_chars_total=$(printf '%s\n' "$report_metrics" | sed -n '12p')
-    llm_input_chars_avg=$(printf '%s\n' "$report_metrics" | sed -n '13p')
-    llm_input_chars_max=$(printf '%s\n' "$report_metrics" | sed -n '14p')
-    clipped_sections=$(printf '%s\n' "$report_metrics" | sed -n '15p')
-    decision_wait=$(printf '%s\n' "$report_metrics" | sed -n '16p')
-    decision_wait_ticks=$(printf '%s\n' "$report_metrics" | sed -n '17p')
-    decision_act=$(printf '%s\n' "$report_metrics" | sed -n '18p')
-    module_call_count=$(printf '%s\n' "$report_metrics" | sed -n '19p')
-    plan_count=$(printf '%s\n' "$report_metrics" | sed -n '20p')
-    execute_until_continue_count=$(printf '%s\n' "$report_metrics" | sed -n '21p')
-    runtime_perf_health=$(printf '%s\n' "$report_metrics" | sed -n '22p')
-    runtime_perf_bottleneck=$(printf '%s\n' "$report_metrics" | sed -n '23p')
-    runtime_perf_tick_p95_ms=$(printf '%s\n' "$report_metrics" | sed -n '24p')
-    runtime_perf_tick_over_budget_ratio_ppm=$(printf '%s\n' "$report_metrics" | sed -n '25p')
-    active_ticks=${active_ticks:-0}
-    total_decisions=${total_decisions:-0}
-    total_actions=${total_actions:-0}
-    action_success=${action_success:-0}
-    action_failure=${action_failure:-0}
-    llm_skipped_ticks=${llm_skipped_ticks:-0}
-    llm_skipped_tick_ratio_ppm=${llm_skipped_tick_ratio_ppm:-0}
-    llm_errors=${llm_errors:-0}
-    parse_errors=${parse_errors:-0}
-    repair_rounds_total=${repair_rounds_total:-0}
-    repair_rounds_max=${repair_rounds_max:-0}
-    llm_input_chars_total=${llm_input_chars_total:-0}
-    llm_input_chars_avg=${llm_input_chars_avg:-0}
-    llm_input_chars_max=${llm_input_chars_max:-0}
-    clipped_sections=${clipped_sections:-0}
-    decision_wait=${decision_wait:-0}
-    decision_wait_ticks=${decision_wait_ticks:-0}
-    decision_act=${decision_act:-0}
-    module_call_count=${module_call_count:-0}
-    plan_count=${plan_count:-0}
-    execute_until_continue_count=${execute_until_continue_count:-0}
-    runtime_perf_health=${runtime_perf_health:-unknown}
-    runtime_perf_bottleneck=${runtime_perf_bottleneck:-none}
-    runtime_perf_tick_p95_ms=${runtime_perf_tick_p95_ms:-0}
-    runtime_perf_tick_over_budget_ratio_ppm=${runtime_perf_tick_over_budget_ratio_ppm:-0}
+    assign_metrics_from_report_lines "$report_metrics"
   else
     active_ticks=$(extract_metric_from_log "active_ticks" "$log_path" || echo 0)
     total_decisions=$(extract_metric_from_log "total_decisions" "$log_path" || echo 0)
@@ -734,6 +990,9 @@ write_summary_file() {
     echo "runtime_gameplay_bridge=$runtime_gameplay_bridge"
     echo "runtime_gameplay_preset=${runtime_gameplay_preset:-none}"
     echo "coverage_bootstrap_profile=${coverage_bootstrap_profile:-none}"
+    echo "local_provider_bridge=$with_local_provider_bridge"
+    echo "local_provider_url=$([[ "$with_local_provider_bridge" == "1" ]] && local_provider_base_url || echo none)"
+    echo "agent_provider_profile=$([[ "$with_local_provider_bridge" == "1" ]] && echo "$agent_provider_profile" || echo none)"
     echo "load_state_dir=${load_state_dir:-none}"
     echo "save_state_dir=${save_state_dir:-none}"
     echo "prompt_pack=${prompt_pack:-none}"
@@ -760,6 +1019,15 @@ run_scenario_to_log() {
     --ticks "$ticks"
     --report-json "$scenario_report_path"
   )
+  if (( with_local_provider_bridge == 1 )); then
+    cmd+=(
+      --decision-source provider_loopback_http
+      --agent-provider-url "$(local_provider_base_url)"
+      --agent-provider-connect-timeout-ms "$agent_provider_connect_timeout_ms"
+      --agent-provider-decision-timeout-ms "$agent_provider_decision_timeout_ms"
+      --agent-provider-profile "$agent_provider_profile"
+    )
+  fi
   if [[ $runtime_gameplay_bridge -eq 1 ]]; then
     cmd+=(--runtime-gameplay-bridge)
   else
@@ -918,6 +1186,21 @@ runtime_gameplay_bridge=1
 runtime_gameplay_preset=""
 load_state_dir=""
 save_state_dir=""
+with_local_provider_bridge=0
+reuse_local_provider_bridge=0
+local_provider_bind="127.0.0.1:5841"
+local_provider_config=""
+local_provider_model=""
+local_provider_auto_topup_usd="0.1"
+ensure_token_config=1
+proxy_url="http://127.0.0.1:7897"
+socks_proxy_url="socks5://127.0.0.1:7897"
+use_default_proxy=1
+agent_provider_connect_timeout_ms="60000"
+agent_provider_decision_timeout_ms="60000"
+agent_provider_profile="oasis7_p0_low_freq_npc"
+local_provider_bridge_pid=""
+local_provider_bridge_log=""
 declare -a required_action_kinds=()
 declare -a required_action_min_counts=()
 required_action_kinds_config="none"
@@ -1054,6 +1337,69 @@ while [[ $# -gt 0 ]]; do
       coverage_bootstrap_profile_explicit=1
       shift 2
       ;;
+    --with-letai-config)
+      shift
+      ;;
+    --letai-config|--letai-model|--letai-base-url)
+      shift 2
+      ;;
+    --with-local-letai-provider-bridge)
+      with_local_provider_bridge=1
+      shift
+      ;;
+    --local-provider-bind)
+      with_local_provider_bridge=1
+      local_provider_bind=${2:-}
+      shift 2
+      ;;
+    --local-provider-config)
+      with_local_provider_bridge=1
+      local_provider_config=${2:-}
+      shift 2
+      ;;
+    --local-provider-model)
+      with_local_provider_bridge=1
+      local_provider_model=${2:-}
+      shift 2
+      ;;
+    --local-provider-auto-topup-usd)
+      with_local_provider_bridge=1
+      local_provider_auto_topup_usd=${2:-}
+      shift 2
+      ;;
+    --reuse-local-provider-bridge)
+      with_local_provider_bridge=1
+      reuse_local_provider_bridge=1
+      shift
+      ;;
+    --no-ensure-token-config)
+      ensure_token_config=0
+      shift
+      ;;
+    --proxy)
+      proxy_url=${2:-}
+      shift 2
+      ;;
+    --socks-proxy)
+      socks_proxy_url=${2:-}
+      shift 2
+      ;;
+    --no-default-proxy)
+      use_default_proxy=0
+      shift
+      ;;
+    --agent-provider-connect-timeout-ms)
+      agent_provider_connect_timeout_ms=${2:-}
+      shift 2
+      ;;
+    --agent-provider-decision-timeout-ms)
+      agent_provider_decision_timeout_ms=${2:-}
+      shift 2
+      ;;
+    --agent-provider-profile)
+      agent_provider_profile=${2:-}
+      shift 2
+      ;;
     --no-llm-io)
       print_llm_io=0
       shift
@@ -1120,8 +1466,14 @@ ensure_positive_int "--max-llm-errors" "$max_llm_errors"
 ensure_positive_int "--max-parse-errors" "$max_parse_errors"
 ensure_positive_int "--max-repair-rounds-max" "$max_repair_rounds_max"
 ensure_positive_int "--min-action-kinds" "$min_action_kinds"
+ensure_positive_int "--agent-provider-connect-timeout-ms" "$agent_provider_connect_timeout_ms"
+ensure_positive_int "--agent-provider-decision-timeout-ms" "$agent_provider_decision_timeout_ms"
 if [[ -n "$llm_io_max_chars" ]]; then
   ensure_positive_int "--llm-io-max-chars" "$llm_io_max_chars"
+fi
+if (( with_local_provider_bridge == 1 )) && [[ -z "$local_provider_bind" || -z "$local_provider_auto_topup_usd" || -z "$agent_provider_profile" ]]; then
+  echo "--local-provider-bind, --local-provider-auto-topup-usd, and --agent-provider-profile cannot be empty" >&2
+  exit 2
 fi
 if [[ -n "$prompt_switch_tick" ]]; then
   ensure_positive_int "--prompt-switch-tick" "$prompt_switch_tick"
@@ -1210,6 +1562,7 @@ if [[ $keep_out_dir -eq 0 ]]; then
 fi
 run mkdir -p "$out_dir"
 run mkdir -p "$(dirname "$report_json")" "$(dirname "$log_file")" "$(dirname "$summary_file")"
+start_or_reuse_local_provider_bridge
 
 metrics_tsv="$out_dir/scenario_metrics.tsv"
 if [[ $multi_mode -eq 1 ]]; then
@@ -1314,6 +1667,15 @@ for scenario in "${scenarios[@]}"; do
       --ticks "$ticks"
       --report-json "$scenario_report_json"
     )
+    if (( with_local_provider_bridge == 1 )); then
+      cmd+=(
+        --decision-source provider_loopback_http
+        --agent-provider-url "$(local_provider_base_url)"
+        --agent-provider-connect-timeout-ms "$agent_provider_connect_timeout_ms"
+        --agent-provider-decision-timeout-ms "$agent_provider_decision_timeout_ms"
+        --agent-provider-profile "$agent_provider_profile"
+      )
+    fi
     if [[ $runtime_gameplay_bridge -eq 1 ]]; then
       cmd+=(--runtime-gameplay-bridge)
     else

@@ -524,16 +524,16 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 ```
 - LLM 长稳：
 ```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240
 ```
 - LLM 覆盖门禁（发行口径）：
 ```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --release-gate --release-gate-profile hybrid
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --release-gate --release-gate-profile hybrid
 ```
 - LLM gameplay 对照（bridge 开/关）：
 ```bash
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --runtime-gameplay-bridge
-./scripts/llm-longrun-stress.sh --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --no-runtime-gameplay-bridge
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --runtime-gameplay-bridge
+./scripts/llm-longrun-stress.sh --with-local-letai-provider-bridge --scenario llm_bootstrap --ticks 240 --prompt-pack story_balanced --no-runtime-gameplay-bridge
 ```
 - git 跟踪基线 fixture smoke（`test_tier_full`）：
 ```bash
@@ -545,6 +545,7 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 ```
 - 说明：
   - 详细参数与 profile 组合请以 `./scripts/llm-longrun-stress.sh --help` 为准；
+  - `llm-longrun-stress.sh` 是 provider-backed LLM 长跑入口；`--no-llm-io` 只关闭 raw LLM I/O 日志，不会禁用 provider。日常本机 LetAI 长跑优先使用 `--with-local-letai-provider-bridge`，让脚本生成临时 token config、继承本地代理并启动本地 Rust provider bridge，保留 auto-topup；若确实要复用已启动 bridge，必须显式传 `--reuse-local-provider-bridge` 接受既有 bridge 的 config/token 状态。`--with-letai-config` 只保留给直连 Responses API 的低层排障；
   - `./scripts/runtime-module-routing-perf-harness.sh` 现在走专用 bin `cargo run -p oasis7 --bin oasis7_runtime_module_routing_perf`，避免继续依赖 ignored test 的重编译路径；它会把稳定内环 module routing 的 event/action 平均耗时写到 `.tmp/runtime_module_routing_perf/<run>/summary.{json,md}`；当前目的是提供日常可回归的轻量 runtime perf 入口，不替代长窗 `runtime_perf.tick.*` 指标；
   - 当前已记录首个 `release` baseline 数值：`modules=192`、`iterations=80`、`event_avg_ms=5.591`、`action_avg_ms=6.992`；对应一次本地验证 run 的冷 `release` 编译耗时约 `23m 10s`。原始 `summary.json` 属于本地临时产物，应以 task execution log 中登记的验证记录为证据来源；因此当前更适合先作为本地/report-only 基线，而不是立刻升成默认 blocking gate；
   - Viewer 性能 probe 使用当前 `crates/oasis7_viewer` software-safe Web 入口，通过 `agent-browser` 采集 rAF frame timing、Long Task、ready time、DOM 规模与 gate 结果，并输出 `output/playwright/viewer-performance/<run>/summary.{json,md}`；
