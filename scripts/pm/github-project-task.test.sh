@@ -29,6 +29,9 @@ case "$*" in
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
     ;;
+  "issue close 2001 -R eng-cc/oasis7 --reason completed")
+    printf 'closed\n'
+    ;;
   "issue edit 2001 -R eng-cc/oasis7 --body-file "*)
     printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
@@ -49,6 +52,15 @@ JSON
     printf '\n' >> "$GH_EDIT_BODY_LOG"
     printf 'edited\n'
     ;;
+  "issue edit 2004 -R eng-cc/oasis7 --body-file "*)
+    printf '%s\n' '--- issue edit body 2004 ---' >> "$GH_EDIT_BODY_LOG"
+    cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
+    printf '\n' >> "$GH_EDIT_BODY_LOG"
+    printf 'edited\n'
+    ;;
+  "issue close 2004 -R eng-cc/oasis7 --reason completed")
+    printf 'closed\n'
+    ;;
   "issue comment 2003 -R eng-cc/oasis7 --body-file "*)
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
@@ -59,6 +71,12 @@ JSON
     ;;
   "project view 1 --owner eng-cc --format json")
     printf '{"id":"PROJECT_ID","number":1,"title":"oasis7 Engineering PM","url":"https://github.com/users/eng-cc/projects/1"}\n'
+    ;;
+  "project view 2 --owner eng-cc --format json")
+    printf '{"id":"PROJECT_ID_2","number":2,"title":"oasis7 Engineering PM Empty Fixture","url":"https://github.com/users/eng-cc/projects/2"}\n'
+    ;;
+  "project view 3 --owner eng-cc --format json")
+    printf '{"id":"PROJECT_ID_3","number":3,"title":"oasis7 Engineering PM Missing Done Option Fixture","url":"https://github.com/users/eng-cc/projects/3"}\n'
     ;;
   "project field-list 1 --owner eng-cc --format json")
     cat <<'JSON'
@@ -75,6 +93,25 @@ JSON
 {"id":"FIELD_PR","name":"PR","type":"ProjectV2Field"},
 {"id":"FIELD_TIER","name":"Test Tier Required","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_NA","name":"n/a"}]},
 {"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
+JSON
+    ;;
+  "project field-list 2 --owner eng-cc --format json")
+    printf '{"fields":[]}\n'
+    ;;
+  "project field-list 3 --owner eng-cc --format json")
+    cat <<'JSON'
+{"fields":[
+{"id":"FIELD_STATUS_3","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TODO_3","name":"Todo"},{"id":"OPT_IN_PROGRESS_3","name":"In Progress"}]},
+{"id":"FIELD_PM_STATUS_3","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM_3","name":"done"}]},
+{"id":"FIELD_WORKFLOW_PHASE_3","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE_3","name":"done"}]}
+]}
+JSON
+    ;;
+  "project item-list 1 --owner eng-cc --limit 1000 --format json")
+    cat <<'JSON'
+{"items":[
+{"id":"ITEM_ID_2004","content":{"url":"https://github.com/eng-cc/oasis7/issues/2004","body":"<!-- oasis7-pm-task -->\ntask_uid: task_44444444444444444444444444444444\n\nGitHub-backed oasis7 PM task.\n"}}
+]}
 JSON
     ;;
   project\ item-edit*)
@@ -172,6 +209,14 @@ python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --pr-url "https://github.com/eng-cc/oasis7/pull/2002" \
   --json > "$TMPDIR/record-pr.json"
 
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+  --role tpm \
+  --task-uid "$TASK_UID" \
+  --to-status done \
+  --verify-command "true" \
+  --claim-type task_complete \
+  --json > "$TMPDIR/done-closeout.json"
+
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" "$GH_COMMENT_LOG" "$TMPDIR/issue-body-edited.md" <<'PY'
 import json, pathlib, sys
 mapping = json.loads(pathlib.Path(sys.argv[1]).read_text())
@@ -182,18 +227,21 @@ edited_body = pathlib.Path(sys.argv[5]).read_text()
 record = mapping["tasks"][uid]
 assert record["issue_url"] == "https://github.com/eng-cc/oasis7/issues/2001", record
 assert record["project_item_id"] == "ITEM_ID", record
-assert record["status"] == "pr_watch", record
+assert record["status"] == "done", record
 assert record["pr_url"] == "https://github.com/eng-cc/oasis7/pull/2002", record
 assert record["pr_number"] == 2002, record
 assert record["worktree_hint"].endswith("/worktree"), record
-assert len(comments) == 5, comments
+assert len(comments) == 7, comments
+assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record
 assert record["claim_verifications"][-1]["status"] == "verified", record
 assert "issue create" in calls, calls
 assert "issue edit 2001" in calls, calls
+assert "issue close 2001" in calls, calls
 assert f"task_uid: {uid}" in edited_body, edited_body
 assert "- status: `committed`" in edited_body, edited_body
 assert "- status: `ready`" in edited_body, edited_body
 assert "- status: `pr_watch`" in edited_body, edited_body
+assert "- status: `done`" in edited_body, edited_body
 assert f"- worktree_hint: `{record['worktree_hint']}`" in edited_body, edited_body
 assert "project item-add" in calls, calls
 assert "project item-edit" in calls, calls
@@ -237,5 +285,198 @@ assert "- pr_url: `https://github.com/eng-cc/oasis7/pull/2003`" in edited_body, 
 assert "- pr_number: `2003`" in edited_body, edited_body
 assert "- status: `pr_watch`" in edited_body, edited_body
 PY
+
+PARTIAL_ROOT="$TMPDIR/partial-cache"
+PARTIAL_UID="task_44444444444444444444444444444444"
+mkdir -p "$PARTIAL_ROOT/.pm/github-project-sync"
+cat > "$PARTIAL_ROOT/.pm/github-project-sync/tasks.json" <<JSON
+{
+  "tasks": {
+    "$PARTIAL_UID": {
+      "task_uid": "$PARTIAL_UID",
+      "title": "Partial cache done closeout",
+      "owner_role": "tpm",
+      "module": "engineering",
+      "status": "pr_watch",
+      "priority": "P2",
+      "worktree_hint": "/tmp/partial-cache-worktree",
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/2004",
+      "issue_number": 2004,
+      "last_closed_at": "2026-07-01T12:00:00+08:00",
+      "claim_verifications": [
+        {
+          "claim_type": "task_complete",
+          "verify_command": "true",
+          "verified_at": "2026-07-01T12:00:00+08:00",
+          "verification_exit_code": 0,
+          "status": "verified",
+          "allowed_to_claim": true,
+          "claim_message": "Fresh verification passed; the task can now be claimed complete."
+        }
+      ]
+    }
+  },
+  "version": 1
+}
+JSON
+
+python3 "$TMPDIR/github-project-task.py" move-task "$PARTIAL_ROOT" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --task-uid "$PARTIAL_UID" \
+  --to-status done \
+  --json > "$TMPDIR/partial-done.json"
+
+python3 - "$PARTIAL_ROOT/.pm/github-project-sync/tasks.json" "$TMPDIR/partial-done.json" "$GH_CALL_LOG" "$TMPDIR/issue-body-edited.md" <<'PY'
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+mapping = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+calls = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+edited_body = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
+record = mapping["tasks"]["task_44444444444444444444444444444444"]
+assert record["status"] == "done", record
+assert record["project_item_id"] == "ITEM_ID_2004", record
+assert payload["updated_field_values"] == 3, payload
+assert "project item-list 1 --owner eng-cc --limit 1000 --format json" in calls, calls
+assert "project item-edit" in calls, calls
+assert "issue close 2004 -R eng-cc/oasis7 --reason completed" in calls, calls
+assert "- status: `done`" in edited_body, edited_body
+PY
+
+NOOP_PROJECT_ROOT="$TMPDIR/noop-project"
+NOOP_UID="task_55555555555555555555555555555555"
+mkdir -p "$NOOP_PROJECT_ROOT/.pm/github-project-sync"
+cat > "$NOOP_PROJECT_ROOT/.pm/github-project-sync/tasks.json" <<JSON
+{
+  "tasks": {
+    "$NOOP_UID": {
+      "task_uid": "$NOOP_UID",
+      "title": "No-op Project field update",
+      "owner_role": "tpm",
+      "module": "engineering",
+      "status": "pr_watch",
+      "priority": "P2",
+      "worktree_hint": "/tmp/noop-project-worktree",
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/2005",
+      "issue_number": 2005,
+      "project_item_id": "ITEM_ID_2005",
+      "last_closed_at": "2026-07-01T12:00:00+08:00",
+      "claim_verifications": [
+        {
+          "claim_type": "task_complete",
+          "verify_command": "true",
+          "verified_at": "2026-07-01T12:00:00+08:00",
+          "verification_exit_code": 0,
+          "status": "verified",
+          "allowed_to_claim": true,
+          "claim_message": "Fresh verification passed; the task can now be claimed complete."
+        }
+      ]
+    }
+  },
+  "version": 1
+}
+JSON
+
+set +e
+python3 "$TMPDIR/github-project-task.py" move-task "$NOOP_PROJECT_ROOT" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 2 \
+  --task-uid "$NOOP_UID" \
+  --to-status done \
+  --json > "$TMPDIR/noop-project-done.json" 2>"$TMPDIR/noop-project-done.err"
+NOOP_PROJECT_DONE_STATUS=$?
+set -e
+if [[ "$NOOP_PROJECT_DONE_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected no-op Project field update to refuse done" >&2
+  exit 1
+fi
+if ! grep -Fq "refusing done because required GitHub Project fields are unavailable" "$TMPDIR/noop-project-done.err"; then
+  echo "github-project-task.test: expected no-op Project update failure message" >&2
+  cat "$TMPDIR/noop-project-done.err" >&2
+  exit 1
+fi
+if grep -Fq "issue close 2005" "$GH_CALL_LOG" || grep -Fq "issue edit 2005" "$GH_CALL_LOG"; then
+  echo "github-project-task.test: no-op Project update must not edit or close issue 2005" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
+
+MISSING_OPTION_ROOT="$TMPDIR/missing-option"
+MISSING_OPTION_UID="task_66666666666666666666666666666666"
+mkdir -p "$MISSING_OPTION_ROOT/.pm/github-project-sync"
+cat > "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" <<JSON
+{
+  "tasks": {
+    "$MISSING_OPTION_UID": {
+      "task_uid": "$MISSING_OPTION_UID",
+      "title": "Missing Done option",
+      "owner_role": "tpm",
+      "module": "engineering",
+      "status": "pr_watch",
+      "priority": "P2",
+      "worktree_hint": "/tmp/missing-option-worktree",
+      "issue_url": "https://github.com/eng-cc/oasis7/issues/2006",
+      "issue_number": 2006,
+      "project_item_id": "ITEM_ID_2006",
+      "last_closed_at": "2026-07-01T12:00:00+08:00",
+      "claim_verifications": [
+        {
+          "claim_type": "task_complete",
+          "verify_command": "true",
+          "verified_at": "2026-07-01T12:00:00+08:00",
+          "verification_exit_code": 0,
+          "status": "verified",
+          "allowed_to_claim": true,
+          "claim_message": "Fresh verification passed; the task can now be claimed complete."
+        }
+      ]
+    }
+  },
+  "version": 1
+}
+JSON
+
+set +e
+python3 "$TMPDIR/github-project-task.py" move-task "$MISSING_OPTION_ROOT" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 3 \
+  --task-uid "$MISSING_OPTION_UID" \
+  --to-status done \
+  --json > "$TMPDIR/missing-option-done.json" 2>"$TMPDIR/missing-option-done.err"
+MISSING_OPTION_DONE_STATUS=$?
+set -e
+if [[ "$MISSING_OPTION_DONE_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected missing Done option to refuse done" >&2
+  exit 1
+fi
+if ! grep -Fq "refusing done because required GitHub Project fields are unavailable" "$TMPDIR/missing-option-done.err"; then
+  echo "github-project-task.test: expected required Project fields failure message" >&2
+  cat "$TMPDIR/missing-option-done.err" >&2
+  exit 1
+fi
+if ! grep -Fq "Status:missing_option:Done" "$TMPDIR/missing-option-done.err"; then
+  echo "github-project-task.test: expected skipped missing Done option evidence" >&2
+  cat "$TMPDIR/missing-option-done.err" >&2
+  exit 1
+fi
+if grep -Fq "issue close 2006" "$GH_CALL_LOG" || grep -Fq "issue edit 2006" "$GH_CALL_LOG"; then
+  echo "github-project-task.test: missing Done option must not edit or close issue 2006" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
+if grep -Fq "ITEM_ID_2006" "$GH_CALL_LOG"; then
+  echo "github-project-task.test: missing Done option must not edit Project item 2006" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
 
 echo "github-project-task.test: OK"

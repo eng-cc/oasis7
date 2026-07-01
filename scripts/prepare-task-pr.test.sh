@@ -326,7 +326,7 @@ commit_fixture_evidence() {
   local add_paths=(".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md")
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add "${add_paths[@]}"
   if [[ -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" ]]; then
-    "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
   fi
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
@@ -561,8 +561,9 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
-if gh_lines:
-    raise SystemExit(f"expected no gh calls before missing-review failure, got: {gh_lines}")
+unexpected_gh = [line for line in gh_lines if not line.startswith("issue list ")]
+if unexpected_gh:
+    raise SystemExit(f"expected only read-only issue lookup before missing-review failure, got: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before missing-review failure, got: {git_lines}")
 if "missing passed pre-PR local role review evidence" not in stderr:
@@ -684,8 +685,9 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
-if gh_lines:
-    raise SystemExit(f"expected no gh calls before stale-review failure, got: {gh_lines}")
+unexpected_gh = [line for line in gh_lines if not line.startswith("issue list ")]
+if unexpected_gh:
+    raise SystemExit(f"expected only read-only issue lookup before stale-review failure, got: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before stale-review failure, got: {git_lines}")
 if "Source Head ancestor" not in stderr:
@@ -727,6 +729,8 @@ rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
 if "$REAL_GIT" -C "$SMOKE_WORKTREE" ls-files --error-unmatch .pm/github-project-sync/tasks.json >/dev/null 2>&1; then
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/github-project-sync/tasks.json
 fi
+printf '\n# no-cache GitHub-backed PM fixture\n' >> "$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh
 "$REAL_GIT" -C "$SMOKE_WORKTREE" \
   -c user.name="oasis7 smoke" \
   -c user.email="smoke@example.invalid" \
