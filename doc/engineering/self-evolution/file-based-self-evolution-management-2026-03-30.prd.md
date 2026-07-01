@@ -7,9 +7,14 @@
 
 - 对应标准执行入口: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
 
+## 当前状态（2026-07）
+- 本专题保留为 2026-03 `.pm` 文件化项目管理设计背景与仍有效的 memory / working_memory / stage-gate repo-local 边界说明。
+- 当前 task truth、execution evidence、reflection intake 与 PR-readiness evidence 以 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract` 为准：GitHub Issue + GitHub Project 是任务协作真值，execution evidence 写入 GitHub task issue evidence comments，`.pm/github-project-sync/*` 只作为 generated mirror / archive / cache。
+- 本文早期出现的 `.pm/tasks/<task_uid>.yaml`、`.pm/tasks/<task_uid>.execution.md`、`.pm/inbox/signals.jsonl`、task registry / backlog 作为当前任务真值的描述，均只保留为历史 rollout 语境；不得作为新任务、当前 evidence sink 或新文档的默认口径引用。
+
 ## 1. Executive Summary
-- Problem Statement: 当前仓库已有 `PRD / project / handoff / worktree` 主链，但跨天状态、阶段判断、候选任务池和真实反馈回流仍依赖人工拼接散落文档，缺少一个 task-centric、可审计的运行态层。
-- Proposed Solution: 在仓库内建立基于文件的 `.pm/` 运行层，统一承载 role memory、role backlog、signal inbox、task registry、stage/gate 与 workflow scripts，并继续与 `doc/` 正式文档分层；registry/backlog 只保留为 git-ignored 本地重建视图，canonical task file 仍是提交真值。
+- Problem Statement: 2026-03 时仓库已有 `PRD / project / handoff / worktree` 主链，但跨天状态、阶段判断、候选任务池和真实反馈回流仍依赖人工拼接散落文档，缺少一个 task-centric、可审计的运行态层。
+- Proposed Solution: 当时方案是在仓库内建立基于文件的 `.pm/` 运行层，统一承载 role memory、role backlog、signal inbox、task registry、stage/gate 与 workflow scripts，并继续与 `doc/` 正式文档分层；当前 task/evidence/signal 真值已迁移到 GitHub-backed PM contract，上方“当前状态”优先生效。
 - Success Criteria:
   - SC-1: 首批 7 个标准角色全部具备独立长期 memory namespace 和 backlog 容器，且角色扩容时无需修改历史文件结构。
   - SC-2: 进入长期 memory 的记录 100% 带有 `source_refs`、`effective_at`、`last_reviewed_at` 和 `status(active/superseded)` 字段，不再直接把集中式日表条目当最终真值。

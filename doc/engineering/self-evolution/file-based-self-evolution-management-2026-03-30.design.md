@@ -7,9 +7,9 @@
 
 ## 1. 设计定位
 
-这份设计文档只保留 `.pm/` 运行层仍需要的结构设计与流程约束，不再重复 PRD 的背景、project 的 rollout、或历史阶段流水账。
+这份设计文档保留 2026-03 `.pm/` 运行层的结构设计背景，以及仍有效的 repo-local memory / working_memory / stage-gate 边界；task truth、execution evidence、reflection intake 与 PR-readiness evidence 的当前规则以 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract` 为准。
 
-`doc/**` 继续负责规格与计划，`.pm/` 只负责运行态对象、视图重建和流程留痕。
+`doc/**` 继续负责规格与计划。当前 task collaboration envelope 是 GitHub Issue，GitHub Project 承担队列/status 真值，GitHub task issue evidence comments 承担 execution evidence sink；`.pm/github-project-sync/*` 是 generated mirror / archive / cache，不是平行任务队列。repo-local `.pm` 仍可承载 role memory、task-scoped `working_memory`、stage/gate state 与生成视图，除非 workflow source-of-truth 后续另行迁移。
 
 ## 2. Canonical Object Model
 
@@ -66,10 +66,11 @@
 
 ### 2.4 Signal Inbox
 
-- 文件: `.pm/inbox/signals.jsonl`
+- 当前真值: GitHub-backed intake issues；本地镜像为 `.pm/github-project-sync/intake-signals.json`
 - 设计原则:
-  - 只追加写入
-  - promotion 决定是否进入长期 memory 或 task registry
+  - retired `.pm/inbox/signals.jsonl` 不得重建
+  - `capture-todo.sh` / `promote-signal.sh` 创建或更新 GitHub-backed reflection intake
+  - promotion 决定是否进入长期 memory 或候选 task
 - 最小字段:
   - `signal_id`
   - `source_type`
@@ -81,13 +82,13 @@
 
 ### 2.5 Task Registry
 
-- canonical object: `.pm/tasks/<task_uid>.yaml`
-- 重建视图: `.pm/registry/tasks.yaml`
+- current task truth: GitHub Issue + GitHub Project item + `task_uid` mapping
+- generated/archive paths: `.pm/github-project-sync/tasks.json`、`.pm/github-project-sync/task-archive.jsonl`
 - 约束:
-  - 任务主键真值只存在于 canonical task file
-  - `task_uid` 本地生成，不依赖顺序号
-  - registry / backlog 只做扫描重建视图，不承担主键真值
-  - `.pm/registry/tasks.yaml` 与 backlog 视图均为 git-ignored 本地缓存
+  - `task_uid` 仍是稳定内部身份，GitHub issue number / Project item id 是外部对象 handle
+  - `.pm/github-project-sync/tasks.json` 是 generated mapping cache，可缺失或从 GitHub/task evidence 刷新
+  - `.pm/github-project-sync/task-archive.jsonl` 是历史 task metadata / evidence audit bridge，不是 planning queue
+  - 旧 `.pm/tasks/<task_uid>.yaml` / `.execution.md` 不再作为新任务真值或 execution evidence sink
 - 最小字段:
   - `task_uid`
   - `owner_role`
@@ -114,8 +115,8 @@
 
 ### 3.1 Signal -> Memory / Task
 
-1. 角色写 `.pm/tasks/<task_uid>.execution.md`
-2. `promote-signal.sh` 提炼高价值条目写入 `.pm/inbox/signals.jsonl`
+1. 角色把 execution evidence 写入 GitHub task issue evidence comments。
+2. `capture-todo.sh` / `promote-signal.sh` 将高价值条目创建为 GitHub-backed reflection intake。
 3. owner 决定将 signal 提升为:
    - role memory
    - candidate task
@@ -151,9 +152,9 @@
 ## 4. Script Surface
 
 - `scaffold.sh`: 建 `.pm/` 骨架与模板
-- `new-task.sh`: 创建 canonical task file
-- `promote-signal.sh`: 将高价值条目送入 signal inbox
-- `sync-views.sh`: 从 canonical task files 重建 backlog / registry 本地视图
+- `new-task.sh`: 通过 GitHub-backed task lifecycle 创建或绑定 task truth
+- `promote-signal.sh`: 将高价值条目送入 GitHub-backed reflection intake
+- `sync-views.sh`: 从 GitHub-backed mapping / archive / intake mirror 重建本地视图
 - `lint.sh`: 校验字段、链路、source refs 与 stage drift
 - `stage-report.sh`: 聚合阶段视图
 - `role-report.sh`: 聚合角色 backlog / memory / stale

@@ -54,7 +54,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该专题是 core 层的调度与裁剪入口，消费当前模块完成态、已有证据链与核心风险列表，输出下一轮排序与第一优先级建议。
 - Integration Points:
-  - `doc/engineering/governance/module-project-closure-summary-2026-03-11.md`
+  - 历史输入：2026-03-11 模块主项目收口总览已退役删除；当前追溯以本专题三件套、`doc/core/project.md`、`doc/core/prd.index.md` 与 GitHub task issue evidence comments 为准。
   - `doc/core/project.md`
   - `doc/core/prd.md`
   - 各模块 `project.md`
