@@ -383,6 +383,8 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
 
 
 def selected_statuses(args: argparse.Namespace) -> set[str]:
+    if getattr(args, "task_uid", None) and not getattr(args, "status", None) and not args.include_done:
+        return set(ALL_STATUSES)
     statuses = set(args.status or ACTIVE_STATUSES)
     if args.include_done:
         statuses.update({"done", "deferred"})
@@ -459,10 +461,15 @@ def command_audit(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
     tasks = load_tasks(root, statuses, mapping)
+    task_uid = getattr(args, "task_uid", None)
+    if task_uid:
+        tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     recovered_mapping, recovery_error = recover_missing_mapping_records(args, mapping, tasks)
     if recovered_mapping:
         save_mapping(mapping_path, mapping)
         tasks = load_tasks(root, statuses, mapping)
+        if task_uid:
+            tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     mapped_tasks = mapping.get("tasks", {})
     retired_files = retired_task_files(root)
 
@@ -470,6 +477,8 @@ def command_audit(args: argparse.Namespace) -> int:
     warnings: list[str] = []
     if recovery_error:
         errors.append(recovery_error)
+    if task_uid and not tasks:
+        errors.append(f"{task_uid}: task not found in selected mapping/archive records")
     try:
         if args.full_list:
             project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_full_list(args)
@@ -519,7 +528,7 @@ def command_audit(args: argparse.Namespace) -> int:
 
     for uid in duplicate_project_task_uids:
         errors.append(f"{uid}: duplicate GitHub Project item")
-    extra_mapped = sorted(set(mapped_tasks) - set(tasks))
+    extra_mapped = [] if task_uid else sorted(set(mapped_tasks) - set(tasks))
     if extra_mapped and args.strict_mapping:
         errors.extend(f"{uid}: mapping exists outside selected statuses" for uid in extra_mapped)
     elif extra_mapped:
@@ -530,6 +539,7 @@ def command_audit(args: argparse.Namespace) -> int:
         "project_owner": args.project_owner,
         "project_number": args.project_number,
         "mapping_path": str(mapping_path),
+        "task_uid": task_uid or "",
         "selected_count": len(tasks),
         "project_item_count": len(project_items_by_task),
         "selected_statuses": sorted(statuses),
@@ -564,9 +574,9 @@ def command_step3_gate(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="GitHub Project-backed oasis7 PM workflow adapter.")
     parser.add_argument("root", type=pathlib.Path, help="repository root")
-    parser.add_argument("--repo", required=True, help="GitHub repository, e.g. eng-cc/oasis7")
-    parser.add_argument("--project-owner", required=True)
-    parser.add_argument("--project-number", type=int, required=True)
+    parser.add_argument("--repo", help="GitHub repository, e.g. eng-cc/oasis7; defaults to mapping project.repo")
+    parser.add_argument("--project-owner", help="GitHub Project owner; defaults to mapping project.owner")
+    parser.add_argument("--project-number", type=int, help="GitHub Project number; defaults to mapping project.number")
     parser.add_argument("--mapping", default=".pm/github-project-sync/tasks.json")
     parser.add_argument("--status", action="append", choices=ALL_STATUSES)
     parser.add_argument("--include-done", action="store_true")
@@ -586,6 +596,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--limit", type=int, default=1000)
     audit.add_argument("--full-list", action="store_true")
     audit.add_argument("--strict-mapping", action="store_true")
+    audit.add_argument("--task-uid", help="Audit one task_uid across all statuses unless --status is supplied")
     audit.set_defaults(func=command_audit)
 
     step3_gate = subparsers.add_parser(
@@ -598,8 +609,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def apply_project_defaults(args: argparse.Namespace) -> None:
+    mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
+    mapping = load_mapping(mapping_path)
+    project = mapping.get("project") or {}
+    if not args.repo:
+        args.repo = str(project.get("repo") or "")
+    if not args.project_owner:
+        args.project_owner = str(project.get("owner") or "")
+    if args.project_number is None and project.get("number") not in (None, ""):
+        args.project_number = int(project["number"])
+    missing = []
+    if not args.repo:
+        missing.append("--repo")
+    if not args.project_owner:
+        missing.append("--project-owner")
+    if args.project_number is None:
+        missing.append("--project-number")
+    if missing:
+        die(
+            "missing "
+            + ", ".join(missing)
+            + "; pass explicit values or refresh .pm/github-project-sync/tasks.json project metadata"
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    apply_project_defaults(args)
     return args.func(args)
 
 
