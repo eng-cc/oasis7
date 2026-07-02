@@ -67,7 +67,7 @@
 - 阶段 owner: `qa_engineer`（联审：`producer_system_designer`）
 - 阻断条件: 在 `TASK-PLAYABILITY_TEST_RESULT-002/003` 完成前，可玩性问题不得作为统一格式证据进入发布 go/no-go 评审。
 - 承接约束: 先固化反馈卡字段与评分口径，再建立高优问题闭环模板，最后再接入发布证据包格式。
-- 专题入口状态: `game-test`/`playability_test_card`/`playability_test_manual` 已收敛到模块目录。
+- 专题入口状态: `game-test`、`playability_test_card`、`topics/`、`evidence/` 与 `templates/` 已收敛到模块目录；旧 `playability_test_manual` 归档提示已退役删除。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND-010 入口治理状态: 已为 evidence-first 消费者补齐轻量入口，当前模块无需再做更重的根 README 拆分。
 - 说明: 本文档仅维护可玩性结果模块设计执行状态；当前任务过程记录以对应 GitHub task issue evidence comments 为准，正式发布/可玩性证据继续回写 evidence bundle 与模块 project/prd。
