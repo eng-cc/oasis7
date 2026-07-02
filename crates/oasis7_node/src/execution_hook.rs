@@ -6,6 +6,7 @@ use crate::NodeConsensusAction;
 pub struct NodeExecutionCommitContext {
     pub world_id: String,
     pub node_id: String,
+    pub proposer_id: String,
     pub height: u64,
     pub slot: u64,
     pub epoch: u64,

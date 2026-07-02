@@ -189,6 +189,7 @@ fn pos_engine_quarantines_validator_on_commit_equivocation() {
         height: 8,
         slot: 8,
         epoch: 0,
+        proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Pending,
         block_hash: "pending".to_string(),
         action_root: empty_action_root(),

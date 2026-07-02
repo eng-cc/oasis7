@@ -58,6 +58,7 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,

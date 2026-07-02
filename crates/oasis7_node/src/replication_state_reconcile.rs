@@ -15,6 +15,8 @@ pub(super) struct ReplicationCommitPayloadView {
 pub(super) struct ReplicationCommitPayload {
     pub(super) world_id: String,
     pub(super) node_id: String,
+    #[serde(default)]
+    pub(super) proposer_id: Option<String>,
     pub(super) height: u64,
     pub(super) slot: u64,
     pub(super) epoch: u64,

@@ -48,6 +48,7 @@ fn committed_decision(height: u64) -> PosDecision {
         height,
         slot: height,
         epoch: 0,
+        proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Committed,
         block_hash: format!("block-{height}"),
         action_root: empty_action_root(),

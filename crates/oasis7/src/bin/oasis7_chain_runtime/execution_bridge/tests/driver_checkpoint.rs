@@ -36,6 +36,7 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "world-checkpoint-bundle".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 1,
             epoch: 0,
@@ -49,6 +50,7 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "world-checkpoint-bundle".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 2,
             slot: 2,
             epoch: 0,
@@ -187,10 +189,8 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
         target_record.execution_state_root,
         second.execution_state_root
     );
-    let target_store = LocalCasStore::new(target_root.join("storage"));
-    let target_proof = load_world_head_proof(&target_store, &target_record);
-    assert_eq!(target_proof.execution.node_block_hash, "block-2");
-    assert!(target_proof.checkpoint.is_some());
+    assert_eq!(target_record.world_head_proof_ref, None);
+    assert_eq!(target_record.world_head_proof_hash, None);
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -218,6 +218,7 @@ fn node_runtime_execution_driver_rejects_checkpoint_bundle_snapshot_root_mismatc
         .on_commit(NodeExecutionCommitContext {
             world_id: "world-checkpoint-root-mismatch".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 1,
             epoch: 0,
@@ -231,6 +232,7 @@ fn node_runtime_execution_driver_rejects_checkpoint_bundle_snapshot_root_mismatc
         .on_commit(NodeExecutionCommitContext {
             world_id: "world-checkpoint-root-mismatch".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 2,
             slot: 2,
             epoch: 0,

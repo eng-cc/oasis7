@@ -388,6 +388,10 @@ impl PosNodeEngine {
             height: payload.height,
             slot: payload.slot,
             epoch: payload.epoch,
+            proposer_id: payload
+                .proposer_id
+                .clone()
+                .unwrap_or_else(|| payload.node_id.clone()),
             status: PosConsensusStatus::Committed,
             block_hash: payload.block_hash.clone(),
             action_root: payload.action_root.clone(),

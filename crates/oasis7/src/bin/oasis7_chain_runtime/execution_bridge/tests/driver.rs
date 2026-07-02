@@ -98,6 +98,7 @@ fn node_runtime_execution_driver_rejects_expected_hash_mismatch_before_persistin
             NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height: 1,
                 slot: 0,
                 epoch: 0,
@@ -161,6 +162,7 @@ fn rejected_expected_hash_does_not_persist_simulator_mirror() {
             NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height: 1,
                 slot: 0,
                 epoch: 0,
@@ -225,6 +227,7 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 42,
             epoch: 3,
@@ -433,6 +436,7 @@ fn node_runtime_execution_driver_commit_routes_modules_via_step_with_modules() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -470,6 +474,7 @@ fn node_runtime_execution_driver_persists_chain_records() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -483,6 +488,7 @@ fn node_runtime_execution_driver_persists_chain_records() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 2,
             slot: 1,
             epoch: 0,
@@ -598,6 +604,7 @@ fn node_runtime_execution_driver_rejects_non_contiguous_commit_without_predecess
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -611,6 +618,7 @@ fn node_runtime_execution_driver_rejects_non_contiguous_commit_without_predecess
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 3,
             slot: 2,
             epoch: 0,
@@ -651,6 +659,7 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -664,6 +673,7 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 2,
             slot: 1,
             epoch: 0,
@@ -677,6 +687,7 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 3,
             slot: 2,
             epoch: 0,
@@ -691,6 +702,7 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -714,6 +726,7 @@ fn node_runtime_execution_driver_restores_predecessor_before_gap_commit() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 3,
             slot: 2,
             epoch: 0,
@@ -758,6 +771,7 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
                 .on_commit(NodeExecutionCommitContext {
                     world_id: "w1".to_string(),
                     node_id: "node-a".to_string(),
+                    proposer_id: "node-a".to_string(),
                     height,
                     slot: height.saturating_sub(1),
                     epoch: 0,
@@ -783,6 +797,7 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 33,
             slot: 32,
             epoch: 0,
@@ -809,6 +824,7 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 34,
             slot: 33,
             epoch: 0,
@@ -849,6 +865,7 @@ fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
                 .on_commit(NodeExecutionCommitContext {
                     world_id: "w1".to_string(),
                     node_id: "node-a".to_string(),
+                    proposer_id: "node-a".to_string(),
                     height,
                     slot: height.saturating_sub(1),
                     epoch: 0,
@@ -883,6 +900,7 @@ fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 3,
             slot: 2,
             epoch: 0,
@@ -939,6 +957,7 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
             .on_commit(NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height,
                 slot: height.saturating_sub(1),
                 epoch: 0,
@@ -993,6 +1012,7 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -1016,6 +1036,7 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 2,
             slot: 1,
             epoch: 0,
@@ -1075,6 +1096,7 @@ fn node_runtime_execution_driver_rejects_stale_restore_from_other_world() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -1102,6 +1124,7 @@ fn node_runtime_execution_driver_rejects_stale_restore_from_other_world() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w2".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -1142,6 +1165,7 @@ fn node_runtime_execution_driver_uses_storage_profile_checkpoint_interval() {
             .on_commit(NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height,
                 slot: height.saturating_sub(1),
                 epoch: 0,

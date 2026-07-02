@@ -715,7 +715,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             context.height,
             node_block_hash.clone(),
             prev_node_block_hash,
-            context.node_id.clone(),
+            context.proposer_id.clone(),
             context.action_root.clone(),
             execution_block_hash.clone(),
             execution_state_root.clone(),
@@ -1012,8 +1012,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             height: context.height,
             node_block_hash: Some(context.node_block_hash.clone()),
             prev_node_block_hash: None,
-            proposer_id: Some(context.node_id.clone()),
-            action_root: Some("checkpoint_install".to_string()),
+            proposer_id: None,
+            action_root: None,
             execution_block_hash: context.execution_block_hash.clone(),
             execution_state_root: context.execution_state_root.clone(),
             journal_len: snapshot.journal_len,
@@ -1028,8 +1028,6 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             simulator_mirror: None,
             timestamp_ms: context.committed_at_unix_ms,
         };
-        let mut record = record;
-        persist_world_head_proof_for_record(&self.execution_store, &mut record, Some(&manifest))?;
         persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
 
         self.state.last_applied_committed_height = context.height;

@@ -129,6 +129,7 @@ fn observer_restart_replays_persisted_commits_when_execution_head_lags_committed
             height,
             slot: height,
             epoch: 0,
+            proposer_id: "node-a".to_string(),
             status: PosConsensusStatus::Committed,
             block_hash: format!("block-{height}"),
             action_root: empty_action_root(),

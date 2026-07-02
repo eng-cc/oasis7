@@ -218,6 +218,7 @@ fn runtime_network_replication_gap_sync_prefers_dht_blob_providers() {
             height,
             slot: height.saturating_sub(1),
             epoch: 0,
+            proposer_id: "node-a".to_string(),
             status: PosConsensusStatus::Committed,
             block_hash: format!("block-{height}"),
             action_root: empty_action_root(),

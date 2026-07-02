@@ -445,6 +445,7 @@ fn node_runtime_execution_driver_uses_storage_profile_hot_window_budget() {
             .on_commit(NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height,
                 slot: height.saturating_sub(1),
                 epoch: 0,
