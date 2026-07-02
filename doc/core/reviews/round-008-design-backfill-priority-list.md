@@ -214,7 +214,7 @@
 - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05`
 - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28`
-- `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27`
+- `historical removed viewer live tick-driven doc archive`
 - `doc/world-simulator/viewer/viewer-location-depletion-visualization`
 - `doc/world-simulator/viewer/viewer-location-fine-grained-rendering`
 - `doc/world-simulator/viewer/viewer-minimal-system`

@@ -189,7 +189,7 @@
 
 
 | 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `historical removed viewer live tick-driven doc archive` | `backfill` | pass | I8-001/I8-002 | 已补齐 `historical removed viewer live tick-driven doc archive: design` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-location-depletion-visualization` | `backfill` | pass | I8-001/I8-002 | 已补齐 `historical removed standard_3d viewer doc set: viewer-location-depletion-visualization.design` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-location-fine-grained-rendering` | `backfill` | pass | I8-001/I8-002 | 已补齐 `historical removed standard_3d viewer doc set: viewer-location-fine-grained-rendering.design` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 09:05:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 121 个专题、剩余 244 个缺口 |
