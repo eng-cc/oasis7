@@ -3,59 +3,28 @@
 - 对应设计文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.design.md`
 - 对应项目管理文档: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
 
-审计轮次: 4
+状态：retired historical pointer。
 
-- 对应标准执行入口: `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
+本文件保留给历史审读台账引用，不再作为当前 PRD 或执行入口维护。
 
 ## 目标
-- 将当前“依赖人工约定”的文档治理升级为“可自动检查、可持续执行、可在 CI 门禁生效”的工程化机制。
-- 全量清理非 devlog 文档中的环境相关绝对路径，统一为仓库相对路径口径，降低跨机器协作成本。
-- 为设计文档/项目管理文档建立最小结构约束（必备章节）与行数约束检查，防止后续文档再次漂移。
+- 保留历史路径可检索性，避免 2026-03 core review logs 的旧引用失效。
+- 将当前工程文档治理目标导向现行入口，而不是继续复制 2026-02 closure 语义。
 
 ## 范围
+- In Scope: 本 retired pointer、配对 design/project 互链、当前入口指针与旧 evidence sink 语义说明。
+- Out of Scope: 重新定义文档治理规则、重写历史 review logs、恢复 devlog 运行态证据职责。
 
-### In Scope
-- 新增文档治理检查脚本（shell），支持本地与 CI 执行。
-- 检查规则覆盖：
-  - 设计文档必备章节：`目标`、`范围`、`接口/数据`、`里程碑`、`风险`
-  - 项目管理文档必备章节：`任务拆解`、`依赖`、`状态`
-  - 非 devlog 文档禁止出现指向本仓库的绝对路径（如 `<ABS_ROOT>/oasis7/...`）
-  - 非 devlog 文档单文件行数上限 1000
-- 全量修复非 devlog 文档中的历史绝对路径。
-- 将文档治理检查接入 `scripts/ci-tests.sh`，并同步 `testing-manual.md`。
-
-### Out of Scope
-- 不修改 `doc/devlog/` 历史记录内容（遵循任务日志“后续不改”原则）。
-- 不在本轮引入外部 lint 框架（如 Node/Python 依赖），保持仓库原生 shell 可执行。
-
-## 接口/数据
-
-### 新增脚本接口
-- `scripts/doc-governance-check.sh`
-  - 默认模式：执行全量检查，发现问题即非零退出。
-  - 输出：按规则分组列出违规文件与行号，最终返回统一失败摘要。
-
-### 检查数据源
-- 设计文档集合：存在同名 `.project.md` 配对的设计文档。
-- 项目文档集合：`doc/**/*.project.md`。
-
-### 关键正则口径
-- 绝对路径违规：仅针对用户主目录下的环境相关绝对路径前缀（如 `<ABS_HOME>/...`）。
-- 章节检查：使用标题关键字匹配，兼容常见空格变体（如 `接口 / 数据`）。
+## 接口 / 数据
+- 当前工程治理 PRD：`doc/engineering/prd.md`
+- 文档结构规范：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 文档存量维护成本治理：`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
+- 工作流唯一真值：`doc/engineering/workflow/source-of-truth.md`
 
 ## 里程碑
-- M0：完成设计文档与项目管理文档建档。
-- M1：落地文档治理检查脚本并本地验证。
-- M2：完成非 devlog 文档绝对路径全量修复。
-- M3：接入 CI 测试脚本与手册，形成持续门禁。
-- M4：回归验证、项目文档收口与 devlog 记录完成。
+- 原 2026-02 closure 已完成。
+- 当前路径仅作为 historical pointer 保留；新治理工作必须进入 GitHub-backed task truth 与当前 doc-governance/source-of-truth 入口。
 
 ## 风险
-- 历史文档命名/格式多样，章节关键字匹配可能出现误报；需通过白名单与正则收敛控制。
-- 批量替换路径存在误替换风险；需先统计再执行，并以 `git diff` 复核。
-- 接入 CI 后会提升门禁严格度，短期内可能暴露更多历史问题；需一次性清理后再固化规则。
-
-## 原文约束点映射（内容保真）
-- 约束-1（目标与问题定义）：沿用原“目标”章节约束，不改变问题定义与解决方向。
-- 约束-2（范围边界）：沿用原“范围”章节的 In Scope/Out of Scope 语义，不扩散到新增范围。
-- 约束-3（接口/里程碑/风险）：沿用原接口字段、阶段节奏与风险口径，并保持可追溯。
+- 若继续把本文件当作标准执行入口，会重新扩散“补齐当日 devlog / project 文件即执行真值”的旧语义。
+- 当前执行证据 canonical sink 为 GitHub task issue evidence comments。
