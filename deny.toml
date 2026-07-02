@@ -18,6 +18,10 @@ ignore = [
   "RUSTSEC-2024-0436", # paste unmaintained
   # rustsec-ignore: owner=repository_health_engineer; crate=ttf-parser; scope=transitive UI font parser debt via egui/bevy/winit; reason=RUSTSEC-2026-0192 has no safe upgrade and currently enters only through launcher/viewer UI dependency closures pending upstream migration to maintained font parsing crates; expiry=2026-09-30; validation=cargo tree --locked --all-features --target all -i ttf-parser; local_crates=oasis7_client_launcher,pixel_world_bridge
   "RUSTSEC-2026-0192", # ttf-parser unmaintained
+  # rustsec-ignore: owner=repository_health_engineer; crate=quick-xml; scope=transitive Wayland UI scanner debt via wayland-scanner/smithay/winit; reason=RUSTSEC-2026-0194 has no compatible wayland-scanner upgrade because wayland-scanner 0.31.10 requires quick-xml ^0.39 while remediation requires quick-xml >=0.41.0; expiry=2026-09-30; validation=cargo tree --locked --target all -i quick-xml; local_crates=oasis7_client_launcher,pixel_world_bridge
+  "RUSTSEC-2026-0194", # quick-xml duplicate attribute quadratic CPU DoS via Wayland scanner closure
+  # rustsec-ignore: owner=repository_health_engineer; crate=quick-xml; scope=transitive Wayland UI scanner debt via wayland-scanner/smithay/winit; reason=RUSTSEC-2026-0195 has no compatible wayland-scanner upgrade because wayland-scanner 0.31.10 requires quick-xml ^0.39 while remediation requires quick-xml >=0.41.0; expiry=2026-09-30; validation=cargo tree --locked --target all -i quick-xml; local_crates=oasis7_client_launcher,pixel_world_bridge
+  "RUSTSEC-2026-0195", # quick-xml NsReader namespace allocation DoS via Wayland scanner closure
 ]
 
 [licenses]
