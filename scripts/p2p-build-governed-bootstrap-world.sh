@@ -10,6 +10,7 @@ Usage:
   ./scripts/p2p-build-governed-bootstrap-world.sh create \
     --genesis <path> \
     --out-dir <path> \
+    [--world-scenario <scenario>] \
     [--merged-manifest-out <path>] \
     [--allow-overwrite]
 
@@ -53,6 +54,7 @@ out_dir=""
 merged_manifest_out=""
 world_dir=""
 merged_public_manifest=""
+world_scenario=""
 allow_overwrite=0
 
 while [[ $# -gt 0 ]]; do
@@ -67,6 +69,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --merged-manifest-out)
       merged_manifest_out=${2:-}
+      shift 2
+      ;;
+    --world-scenario)
+      world_scenario=${2:-}
       shift 2
       ;;
     --world-dir)
@@ -217,6 +223,72 @@ with dst.open("w", encoding="utf-8") as fh:
 PY
 }
 
+validate_generated_world_artifact() {
+  local world_dir_abs=$1
+  local provenance_abs=$2
+  local merged_public_manifest_abs=$3
+
+  python3 - "$world_dir_abs" "$provenance_abs" "$merged_public_manifest_abs" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+world_dir = pathlib.Path(sys.argv[1]).resolve()
+provenance_path = pathlib.Path(sys.argv[2]).resolve()
+merged_public_manifest_path = pathlib.Path(sys.argv[3]).resolve()
+snapshot_path = world_dir / "snapshot.json"
+journal_path = world_dir / "journal.json"
+
+for path in (snapshot_path, journal_path, provenance_path, merged_public_manifest_path):
+    if not path.is_file():
+        raise SystemExit(f"generated world artifact missing required file: {path}")
+
+with provenance_path.open("r", encoding="utf-8") as fh:
+    provenance = json.load(fh)
+if provenance.get("artifact_kind") != "simulator_world_generation":
+    raise SystemExit(f"generated world provenance has unexpected artifact_kind: {provenance_path}")
+if not provenance.get("scenario_id"):
+    raise SystemExit(f"generated world provenance missing scenario_id: {provenance_path}")
+if not isinstance(provenance.get("seed"), int) or provenance["seed"] <= 0:
+    raise SystemExit(f"generated world provenance seed must be positive: {provenance_path}")
+config = provenance.get("config")
+if not isinstance(config, dict) or not config:
+    raise SystemExit(f"generated world provenance config must be a non-empty object: {provenance_path}")
+
+manifest_bytes = merged_public_manifest_path.read_bytes()
+actual_manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+if provenance.get("public_manifest_sha256") != actual_manifest_sha256:
+    raise SystemExit(
+        f"generated world provenance public_manifest_sha256 mismatch: {provenance_path}"
+    )
+try:
+    public_manifest = json.loads(manifest_bytes)
+except json.JSONDecodeError as exc:
+    raise SystemExit(f"generated world public manifest is invalid json: {merged_public_manifest_path}: {exc}") from exc
+if not isinstance(public_manifest, list) or not public_manifest:
+    raise SystemExit(f"generated world public manifest must be a non-empty array: {merged_public_manifest_path}")
+if provenance.get("public_manifest_entry_count") != len(public_manifest):
+    raise SystemExit(
+        f"generated world provenance public_manifest_entry_count mismatch: {provenance_path}"
+    )
+
+with snapshot_path.open("r", encoding="utf-8") as fh:
+    snapshot = json.load(fh)
+locations = snapshot.get("model", {}).get("locations")
+if not isinstance(locations, dict) or not locations:
+    raise SystemExit(f"generated world snapshot has no model.locations: {snapshot_path}")
+
+with journal_path.open("r", encoding="utf-8") as fh:
+    journal = json.load(fh)
+events = journal.get("events")
+if not isinstance(events, list):
+    raise SystemExit(f"generated world journal events must be a list: {journal_path}")
+if not any(event.get("kind", {}).get("type") == "ChunkGenerated" for event in events if isinstance(event, dict)):
+    raise SystemExit(f"generated world journal has no ChunkGenerated event: {journal_path}")
+PY
+}
+
 case "$mode" in
   create)
     require_non_empty "--genesis" "$genesis_path"
@@ -252,6 +324,13 @@ case "$mode" in
     rm -rf "$out_dir"
     mkdir -p "$out_dir"
     canonicalize_world "$tmp_world_dir" "$out_dir/world"
+    if [[ -n "$world_scenario" ]]; then
+      ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_generate_world_artifact -- \
+        --scenario "$world_scenario" \
+        --world-dir "$out_dir/generated-scenario-world" \
+        --provenance-out "$out_dir/world-generation-provenance.json" \
+        --public-manifest "$tmp_merged_manifest"
+    fi
     cp "$tmp_merged_manifest" "$merged_manifest_out"
 
     printf '%s\n' "$out_dir"
@@ -281,6 +360,12 @@ PY
       --world-dir "$world_dir" \
       --public-manifest "$merged_public_manifest" \
       --strict-manifest-match
+    generated_root="$(dirname "$world_dir")"
+    generated_provenance="$generated_root/world-generation-provenance.json"
+    generated_world_dir="$generated_root/generated-scenario-world"
+    if [[ -f "$generated_provenance" ]]; then
+      validate_generated_world_artifact "$generated_world_dir" "$generated_provenance" "$merged_public_manifest"
+    fi
     ;;
   *)
     usage >&2
