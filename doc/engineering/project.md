@@ -8,6 +8,8 @@
 
 - [x] legacy-doc-migration-collaboration-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且仍占据 active doc surface 的 2026-03-03 legacy migration collaboration PRD/design/project triplet，将旧迁移协作语义收敛到 closure evidence、doc structure standard 与 workflow source-of-truth。 Trace: .pm/tasks/task_7c106fd04be24599878a480b810627ba.yaml
 
+- [x] engineering-doc-governance-legacy-doc-cleanup (PRD-ENGINEERING-015/PRD-ENGINEERING-021/PRD-ENGINEERING-025) [test_tier_required]: 将已完成且继续暴露旧执行语义的 2026-02-27 documentation-governance-engineering closure 三件套收敛为 retired historical pointer，把当前结构检查、入口职责与持续门禁语义指回 doc-structure-standard、workflow source-of-truth、`scripts/doc-governance-check.sh` 与 GitHub task issue evidence comments。 Trace: #1783 (task_5164d10c39bc4bec926251de02bf68fb)
+
 - [x] wasm-build-path-sort-dedup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm build source-hash path ordering to reuse a private `PathBuf` sort/dedup helper instead of repeated lossy-string comparator conversion in package-dir and source-file collection, preserving deterministic source-hash traversal for normal repo paths. Trace: .pm/tasks/task_f7a74ed95c704c09899a494237e500d7.yaml
 
 - [x] wasm-router-bounded-cache-entry-efficiency (PRD-ENGINEERING-021) [test_tier_required]: Optimize wasm router bounded cache insertion to use `HashMap::entry` for existing-key updates and vacant under-capacity inserts while preserving FIFO eviction order and zero-capacity behavior. Trace: #1775 (task_b4e8be63f59048229996d98587abab98)
