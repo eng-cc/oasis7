@@ -9,9 +9,7 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
-use super::driver::{
-    bridge_committed_heights, load_execution_bridge_state, persist_execution_bridge_state,
-};
+use super::driver::{load_execution_bridge_state, persist_execution_bridge_state};
 use super::external_effect::{
     execution_committed_actions_hash, execution_module_anchor_hash,
     persist_execution_external_effect_materialization,
@@ -20,7 +18,6 @@ use super::*;
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7::runtime::{BlobStore, LocalCasStore, ModuleArtifactIdentity, World as RuntimeWorld};
 use oasis7_node::{NodeConsensusSnapshot, NodeRole, NodeSnapshot};
-use oasis7_proto::distributed::WorldHeadProofV1 as ProtoWorldHeadProofV1;
 use oasis7_wasm_abi::ModuleOutput;
 use oasis7_wasm_executor::FixedSandbox;
 use sha2::{Digest, Sha256};
@@ -74,15 +71,6 @@ fn load_world_head_proof(
     assert_eq!(
         record.world_head_proof_hash.as_deref(),
         Some(proof_hash.as_str())
-    );
-    let proto_proof: ProtoWorldHeadProofV1 =
-        serde_cbor::from_slice(bytes.as_slice()).expect("decode proto proof");
-    proto_proof
-        .validate_contract()
-        .expect("validate proto proof");
-    assert_eq!(
-        proto_proof.proof_hash().expect("proto proof hash"),
-        proof_hash
     );
     proof
 }

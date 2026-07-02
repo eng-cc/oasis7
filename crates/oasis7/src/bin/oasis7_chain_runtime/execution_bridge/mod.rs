@@ -2,11 +2,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
-use oasis7_proto::distributed::{
-    BlobRef, CheckpointClosureEvidenceV1, ExecutionBindingEvidenceV1, HeadConsensusEvidenceV1,
-    WIRE_ENCODING_CBOR, WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_V1_SCHEMA,
-    WorldBlock, WorldHeadAnnounce, WorldHeadProofV1,
-};
+use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,8 +19,222 @@ pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V3: u32 = 3;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST: usize = 4;
+pub(super) const WORLD_HEAD_PROOF_V1_SCHEMA: u16 = 1;
+pub(super) const WORLD_HEAD_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_head_proof.v1";
+pub(super) const WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1: &str =
+    "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness";
 fn execution_bridge_record_schema_v1() -> u32 {
     EXECUTION_BRIDGE_RECORD_SCHEMA_V1
+}
+
+fn world_head_proof_v1_schema() -> u16 {
+    WORLD_HEAD_PROOF_V1_SCHEMA
+}
+
+fn world_head_proof_claim_boundary_v1() -> String {
+    WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1.to_string()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct HeadConsensusEvidenceV1 {
+    pub consensus_status: String,
+    pub proposer_id: String,
+    #[serde(default)]
+    pub quorum_threshold: u64,
+    #[serde(default)]
+    pub validator_count: u64,
+    #[serde(default)]
+    pub vote_count: u64,
+    #[serde(default)]
+    pub approver_ids: Vec<String>,
+    #[serde(default)]
+    pub evidence_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct ExecutionBindingEvidenceV1 {
+    pub execution_height: u64,
+    pub node_block_hash: String,
+    pub execution_block_hash: String,
+    pub execution_state_root: String,
+    pub action_root: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct CheckpointClosureEvidenceV1 {
+    pub checkpoint_height: u64,
+    pub execution_block_hash: String,
+    pub execution_state_root: String,
+    pub manifest_ref: String,
+    #[serde(default)]
+    pub manifest_hash: String,
+    #[serde(default)]
+    pub pinned_refs: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) struct WorldHeadProofV1 {
+    #[serde(default = "world_head_proof_v1_schema")]
+    pub schema_version: u16,
+    pub world_id: String,
+    pub height: u64,
+    pub timestamp_ms: i64,
+    pub head: WorldHeadAnnounce,
+    pub block: WorldBlock,
+    pub snapshot_manifest_ref: BlobRef,
+    pub journal_segments_ref: BlobRef,
+    pub consensus: HeadConsensusEvidenceV1,
+    pub execution: ExecutionBindingEvidenceV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<CheckpointClosureEvidenceV1>,
+    #[serde(default = "world_head_proof_claim_boundary_v1")]
+    pub claim_boundary: String,
+}
+
+impl WorldHeadProofV1 {
+    pub(super) fn validate_contract(&self) -> Result<(), String> {
+        if self.schema_version != WORLD_HEAD_PROOF_V1_SCHEMA {
+            return Err(format!(
+                "unsupported world head proof schema: {}",
+                self.schema_version
+            ));
+        }
+        if self.claim_boundary != WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1 {
+            return Err(format!(
+                "unexpected world head proof claim boundary: {}",
+                self.claim_boundary
+            ));
+        }
+        if self.world_id != self.head.world_id || self.world_id != self.block.world_id {
+            return Err(format!(
+                "world_id mismatch: proof={} head={} block={}",
+                self.world_id, self.head.world_id, self.block.world_id
+            ));
+        }
+        if self.height != self.head.height || self.height != self.block.height {
+            return Err(format!(
+                "height mismatch: proof={} head={} block={}",
+                self.height, self.head.height, self.block.height
+            ));
+        }
+        if self.timestamp_ms != self.head.timestamp_ms
+            || self.timestamp_ms != self.block.timestamp_ms
+        {
+            return Err(format!(
+                "timestamp mismatch: proof={} head={} block={}",
+                self.timestamp_ms, self.head.timestamp_ms, self.block.timestamp_ms
+            ));
+        }
+        let computed_block_hash = blake3_hex(to_cbor(&self.block)?.as_slice());
+        if self.head.block_hash != computed_block_hash {
+            return Err(format!(
+                "head block hash mismatch: head={} block={}",
+                self.head.block_hash, computed_block_hash
+            ));
+        }
+        if self.head.state_root != self.block.state_root {
+            return Err(format!(
+                "head state_root mismatch: head={} block={}",
+                self.head.state_root, self.block.state_root
+            ));
+        }
+        if self.block.snapshot_ref != self.snapshot_manifest_ref.content_hash {
+            return Err(format!(
+                "snapshot_ref mismatch: block={} proof={}",
+                self.block.snapshot_ref, self.snapshot_manifest_ref.content_hash
+            ));
+        }
+        if self.block.journal_ref != self.journal_segments_ref.content_hash {
+            return Err(format!(
+                "journal_ref mismatch: block={} proof={}",
+                self.block.journal_ref, self.journal_segments_ref.content_hash
+            ));
+        }
+        if self.execution.execution_height != self.height {
+            return Err(format!(
+                "execution height mismatch: proof={} execution={}",
+                self.height, self.execution.execution_height
+            ));
+        }
+        if self.execution.node_block_hash.trim().is_empty() {
+            return Err("execution node block hash must not be empty".to_string());
+        }
+        if self.execution.execution_state_root != self.block.state_root {
+            return Err(format!(
+                "execution state_root mismatch: execution={} block={}",
+                self.execution.execution_state_root, self.block.state_root
+            ));
+        }
+        if self.execution.action_root != self.block.action_root {
+            return Err(format!(
+                "execution action_root mismatch: execution={} block={}",
+                self.execution.action_root, self.block.action_root
+            ));
+        }
+        if self.consensus.consensus_status != "committed" {
+            return Err(format!(
+                "world head proof requires committed consensus status, got {}",
+                self.consensus.consensus_status
+            ));
+        }
+        if self.consensus.proposer_id != self.block.proposer_id {
+            return Err(format!(
+                "consensus proposer mismatch: consensus={} block={}",
+                self.consensus.proposer_id, self.block.proposer_id
+            ));
+        }
+        if let Some(checkpoint) = &self.checkpoint {
+            if checkpoint.manifest_ref.is_empty() {
+                return Err("checkpoint manifest_ref must not be empty".to_string());
+            }
+            if !checkpoint
+                .pinned_refs
+                .iter()
+                .any(|reference| reference == &self.snapshot_manifest_ref.content_hash)
+            {
+                return Err(format!(
+                    "checkpoint pinned refs missing snapshot manifest ref: {}",
+                    self.snapshot_manifest_ref.content_hash
+                ));
+            }
+            if !checkpoint
+                .pinned_refs
+                .iter()
+                .any(|reference| reference == &self.journal_segments_ref.content_hash)
+            {
+                return Err(format!(
+                    "checkpoint pinned refs missing journal segments ref: {}",
+                    self.journal_segments_ref.content_hash
+                ));
+            }
+            if checkpoint.checkpoint_height != self.height {
+                return Err(format!(
+                    "checkpoint height mismatch: proof={} checkpoint={}",
+                    self.height, checkpoint.checkpoint_height
+                ));
+            }
+            if checkpoint.execution_block_hash != self.execution.execution_block_hash {
+                return Err(format!(
+                    "checkpoint execution block mismatch: checkpoint={} execution={}",
+                    checkpoint.execution_block_hash, self.execution.execution_block_hash
+                ));
+            }
+            if checkpoint.execution_state_root != self.execution.execution_state_root {
+                return Err(format!(
+                    "checkpoint execution state mismatch: checkpoint={} execution={}",
+                    checkpoint.execution_state_root, self.execution.execution_state_root
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn proof_hash(&self) -> Result<String, String> {
+        self.validate_contract()?;
+        Ok(blake3_hex(
+            to_cbor(&(WORLD_HEAD_PROOF_HASH_DOMAIN_V1, self))?.as_slice(),
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -531,6 +741,7 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 
 mod checkpoint;
 mod driver;
+mod driver_committed_heights;
 mod driver_persistence;
 mod external_effect;
 mod simulator_mirror;
@@ -539,5 +750,7 @@ mod tests;
 
 #[allow(unused_imports)]
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
+#[allow(unused_imports)]
+pub(super) use self::driver_committed_heights::bridge_committed_heights;
 #[allow(unused_imports)]
 pub(super) use self::driver_persistence::load_execution_world;

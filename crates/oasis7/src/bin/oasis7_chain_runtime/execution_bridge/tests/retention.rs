@@ -5,8 +5,8 @@ use super::super::checkpoint::{
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
     run_execution_bridge_retention_maintenance, sync_execution_bridge_pin_set,
 };
-use super::super::driver::{NodeRuntimeExecutionDriver, bridge_committed_heights};
 use super::super::external_effect::build_execution_replay_plan;
+use super::super::{bridge_committed_heights, driver::NodeRuntimeExecutionDriver};
 use super::*;
 use std::collections::BTreeSet;
 
