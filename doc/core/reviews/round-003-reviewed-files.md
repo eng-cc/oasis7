@@ -18,8 +18,8 @@
 - 2026-03-03 legacy migration backlog snapshot（后续已删除）
 - legacy doc migration collaboration PRD (retired/deleted)
 - legacy doc migration collaboration project (retired/deleted)
-- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md`
-- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md`
+- documentation-governance-engineering closure PRD (retired/deleted)
+- documentation-governance-engineering closure project (retired/deleted)
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
 - historical core PRD review checklist snapshot（后续已删除）
@@ -66,10 +66,10 @@
 - `doc/game/prd.md`
 - `doc/game/project.md`
 - `doc/headless-runtime/README.md`
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.prd.md`
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.project.md`
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.prd.md`
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.project.md`
+- nonviewer design-alignment closure PRD (retired/deleted)
+- nonviewer design-alignment closure project (retired/deleted)
+- nonviewer design-alignment review PRD (retired/deleted)
+- nonviewer design-alignment review project (retired/deleted)
 - `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.prd.md`
 - `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.project.md`
 - `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md`

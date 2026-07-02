@@ -14,7 +14,7 @@
 ## 执行清单
 | 编号 | 保留文档（源） | 替代链 | 索引回写 | redirect 方式 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| R-001 | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-*.prd*.md` | `doc/headless-runtime/prd.md` + ROUND 记录 | 待执行（headless-runtime 索引） | 计划 soft redirect | pending |
+| R-001 | nonviewer design-alignment PRD/project/design triplets (retired/deleted) | `doc/headless-runtime/prd.md` + ROUND 记录 | 已执行：从 headless-runtime 活跃索引移除，并保留模块 README / project 的追溯说明 | 已执行：旧设计对齐审查三件套已删除 | done |
 | R-002 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase*` | `doc/world-runtime/prd.md` | 待执行（受 `S-001` 约束） | 计划 soft redirect | deferred (`S-001`) |
 | R-003 | legacy launcher desktop/unified 文档（已删除） | `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md` + `game-client-launcher-web-console-2026-03-04.prd.md` | 已执行：从索引中移除旧文档并保留替代入口 | 已执行：旧文档已删除 | done |
 | R-004 | legacy viewer rust line cap 文档（已删除） | `viewer-release-full-coverage-gate.prd.md` + `viewer-visual-release-readiness-hardening-2026-03-01.prd.md` | 已执行：从索引中移除旧文档并保留替代入口 | 已执行：旧文档已删除 | done |

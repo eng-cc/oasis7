@@ -19,7 +19,6 @@
 | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.prd.md` | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.design.md` | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.project.md` |
 | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md` |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md` | `doc/engineering/doc-governance/doc-structure-standard.project.md` |
-| `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.design.md` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` |
 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.design.md` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md` | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md` |
 | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md` | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md` | `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md` |
@@ -37,6 +36,7 @@
 
 ## 历史审计留痕
 - 2026-03 legacy 文档迁移 closure / handoff 记录已退役删除；历史迁移证据保留在 `doc/core/reviews/round-*` logs 与 git history，当前迁移规则入口为 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments。
+- 2026-02 documentation-governance-engineering closure 三件套已退役删除；历史审读证据保留在 `doc/core/reviews/round-*` logs 与 git history，当前工程文档治理入口为 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments。
 - 2026-03 engineering governance producer->QA 一次性 handoff 记录已退役删除；当前 governance trend / quarterly review 证据入口为 GitHub task issue evidence comments、pre-PR local role review packet 与 workflow source-of-truth。
 - 2026-03 全量 PRD 审读机制三件套已退役删除；历史审读证据保留在 `doc/core/reviews/round-*` logs，当前新增/变更文档追踪以模块入口、`prd.index.md`、`project.md`、`prd.md` 与现行 doc governance 规则为准。
 - 2026-03 core release-candidate / next-round producer/QA/LiveOps 一次性 handoff 面已退役删除；历史发布候选证据保留在正式 core 专题三件套、`doc/core/reviews/*` 与 git history，当前角色证据 sink 为 `.pm` execution log 和 pre-PR local role review packet。

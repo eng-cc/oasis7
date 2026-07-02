@@ -23,7 +23,7 @@
 
 ## 首批已补齐专题
 - legacy doc migration collaboration (retired/deleted; excluded from ROUND-008 PRD/Project/Design backfill totals; history retained in round logs and git history)
-- `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27`
+- documentation-governance-engineering closure (retired/deleted)
 - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23`
 - engineering full-PRD review triplet (retired; excluded from current PRD/Project/Design backfill totals; historical evidence remains in round review logs)
 
@@ -143,8 +143,8 @@
 - `doc/game/gameplay/gameplay-release-production-closure` — context:closure,release; content:design-signals; lines:133
 - `doc/game/gameplay/gameplay-runtime-governance-closure` — path:governance,runtime; context:closure; content:design-signals; lines:125
 - `doc/game/gameplay/gameplay-top-level-design` — content:design-signals; lines:561
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25` — path:runtime,viewer; context:closure; content:design-signals; lines:116
-- `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25` — path:runtime,viewer; context:review; content:design-signals; lines:128
+- nonviewer design-alignment closure (retired/deleted) — path:runtime,viewer; context:closure; content:design-signals; historical lines:116
+- nonviewer design-alignment review (retired/deleted) — path:runtime,viewer; context:review; content:design-signals; historical lines:128
 - `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23` — path:archive,hardening,runtime,trace; content:design-signals; lines:146
 - `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening` — path:auth,hardening,protocol,runtime; content:design-signals; lines:143
 - `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase2` — path:blockchain,hardening,p2pfs; context:phase; content:design-signals; lines:108; module:priority
