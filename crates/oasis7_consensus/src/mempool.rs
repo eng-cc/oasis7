@@ -1,6 +1,6 @@
 // Action mempool aggregation and deduplication.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 
 use oasis7_proto::distributed::{ActionBatch, ActionEnvelope};
 use serde::Serialize;
@@ -103,8 +103,13 @@ impl ActionMempool {
     }
 
     pub fn remove_action(&mut self, action_id: &str) -> Option<ActionEnvelope> {
-        let action = self.actions.remove(action_id)?;
+        let action = self.remove_action_indexes(action_id)?;
         self.arrival.retain(|id| id != action_id);
+        Some(action)
+    }
+
+    fn remove_action_indexes(&mut self, action_id: &str) -> Option<ActionEnvelope> {
+        let action = self.actions.remove(action_id)?;
         if let Some(actor_actions) = self.per_actor.get_mut(&action.actor_id) {
             actor_actions.retain(|id| id != action_id);
             if actor_actions.is_empty() {
@@ -123,6 +128,56 @@ impl ActionMempool {
             }
         }
         Some(action)
+    }
+
+    fn remove_actions<I>(&mut self, action_ids: I) -> Vec<ActionEnvelope>
+    where
+        I: IntoIterator<Item = String>,
+    {
+        let mut removed_actions = Vec::new();
+        let mut removed_action_ids = HashSet::new();
+        for action_id in action_ids {
+            if let Some(action) = self.remove_action_indexes(action_id.as_str()) {
+                removed_action_ids.insert(action_id);
+                removed_actions.push(action);
+            }
+        }
+        if !removed_action_ids.is_empty() {
+            self.arrival
+                .retain(|action_id| !removed_action_ids.contains(action_id));
+        }
+        removed_actions
+    }
+
+    fn remove_action_groups(
+        &mut self,
+        selected_action_groups: Vec<Vec<String>>,
+        extra_action_ids: Vec<String>,
+    ) -> Vec<Vec<ActionEnvelope>> {
+        let mut removed_action_ids = HashSet::new();
+        for action_id in extra_action_ids {
+            if self.remove_action_indexes(action_id.as_str()).is_some() {
+                removed_action_ids.insert(action_id);
+            }
+        }
+
+        let mut removed_groups = Vec::with_capacity(selected_action_groups.len());
+        for selected_action_ids in selected_action_groups {
+            let mut removed_group = Vec::with_capacity(selected_action_ids.len());
+            for action_id in selected_action_ids {
+                if let Some(action) = self.remove_action_indexes(action_id.as_str()) {
+                    removed_action_ids.insert(action_id);
+                    removed_group.push(action);
+                }
+            }
+            removed_groups.push(removed_group);
+        }
+
+        if !removed_action_ids.is_empty() {
+            self.arrival
+                .retain(|action_id| !removed_action_ids.contains(action_id));
+        }
+        removed_groups
     }
 
     pub fn take_batch(
@@ -181,20 +236,13 @@ impl ActionMempool {
             (selected_action_ids, oversized_action_ids)
         };
 
-        for action_id in oversized_action_ids {
-            self.remove_action(action_id.as_str());
-        }
+        self.remove_actions(oversized_action_ids);
 
         if selected_action_ids.is_empty() {
             return Ok(None);
         }
 
-        let mut actions = Vec::with_capacity(selected_action_ids.len());
-        for action_id in selected_action_ids {
-            if let Some(action) = self.remove_action(action_id.as_str()) {
-                actions.push(action);
-            }
-        }
+        let actions = self.remove_actions(selected_action_ids);
         if actions.is_empty() {
             return Ok(None);
         }
@@ -259,18 +307,8 @@ impl ActionMempool {
             (selected_batch_ids, oversized_action_ids)
         };
 
-        for action_id in oversized_action_ids {
-            self.remove_action(action_id.as_str());
-        }
-
         let mut batches = Vec::new();
-        for selected_ids in selected_batch_ids {
-            let mut selected = Vec::with_capacity(selected_ids.len());
-            for action_id in selected_ids {
-                if let Some(action) = self.remove_action(action_id.as_str()) {
-                    selected.push(action);
-                }
-            }
+        for selected in self.remove_action_groups(selected_batch_ids, oversized_action_ids) {
             if selected.is_empty() {
                 continue;
             }
@@ -498,6 +536,47 @@ mod tests {
     }
 
     #[test]
+    fn take_batch_removes_selected_and_oversized_indexes_once() {
+        let mut pool = ActionMempool::new(ActionMempoolConfig::default());
+        let mut oversized = action_with_meta("a1", "actor1", 1, "idem-a1", "intent-a1");
+        oversized.payload_cbor = vec![0u8; 2048];
+        assert!(pool.add_action(oversized));
+        assert!(pool.add_action(action_with_meta("a2", "actor1", 2, "idem-a2", "intent-a2")));
+        assert!(pool.add_action(action_with_meta("a3", "actor1", 3, "idem-a3", "intent-a3")));
+
+        let batch = pool
+            .take_batch_with_rules(
+                "w1",
+                "seq",
+                ActionBatchRules {
+                    max_actions: 1,
+                    max_payload_bytes: 512,
+                },
+                10,
+            )
+            .expect("batch result")
+            .expect("batch");
+
+        assert_eq!(batch.actions.len(), 1);
+        assert_eq!(batch.actions[0].action_id, "a2");
+        assert_eq!(
+            pool.arrival.iter().cloned().collect::<Vec<_>>(),
+            vec!["a3".to_string()]
+        );
+        assert_eq!(
+            pool.per_actor.get("actor1").cloned(),
+            Some(vec!["a3".to_string()])
+        );
+        assert!(!pool.idempotency_index.contains_key("actor1:idem-a1"));
+        assert!(!pool.idempotency_index.contains_key("actor1:idem-a2"));
+        assert_eq!(
+            pool.idempotency_index.get("actor1:idem-a3"),
+            Some(&"a3".to_string())
+        );
+        assert!(pool.add_action(action_with_meta("a4", "actor1", 4, "idem-a1", "intent-a4")));
+    }
+
+    #[test]
     fn checked_usize_add_rejects_overflow() {
         let err =
             checked_usize_add(usize::MAX, 1, "mempool checked add").expect_err("must overflow");
@@ -562,5 +641,56 @@ mod tests {
             assert_eq!(zones.len(), 1);
         }
         assert!(pool.is_empty());
+    }
+
+    #[test]
+    fn take_zone_batches_removes_selected_and_oversized_indexes_once() {
+        let mut pool = ActionMempool::new(ActionMempoolConfig::default());
+        let mut oversized = action_with_meta("a1", "actor1", 1, "idem-a1", "intent-a1");
+        oversized.payload_cbor = vec![0u8; 2048];
+        oversized.zone_id = "zone-a".to_string();
+        let mut zone_a_selected = action_with_meta("a2", "actor1", 2, "idem-a2", "intent-a2");
+        zone_a_selected.zone_id = "zone-a".to_string();
+        let mut zone_b_selected = action_with_meta("a3", "actor1", 3, "idem-a3", "intent-a3");
+        zone_b_selected.zone_id = "zone-b".to_string();
+        let mut zone_a_remaining = action_with_meta("a4", "actor1", 4, "idem-a4", "intent-a4");
+        zone_a_remaining.zone_id = "zone-a".to_string();
+
+        assert!(pool.add_action(oversized));
+        assert!(pool.add_action(zone_a_selected));
+        assert!(pool.add_action(zone_b_selected));
+        assert!(pool.add_action(zone_a_remaining));
+
+        let batches = pool
+            .take_zone_batches_with_rules(
+                "w1",
+                "seq",
+                ActionBatchRules {
+                    max_actions: 1,
+                    max_payload_bytes: 512,
+                },
+                10,
+            )
+            .expect("zone batches");
+
+        assert_eq!(batches.len(), 2);
+        assert_eq!(batches[0].actions[0].action_id, "a2");
+        assert_eq!(batches[1].actions[0].action_id, "a3");
+        assert_eq!(
+            pool.arrival.iter().cloned().collect::<Vec<_>>(),
+            vec!["a4".to_string()]
+        );
+        assert_eq!(
+            pool.per_actor.get("actor1").cloned(),
+            Some(vec!["a4".to_string()])
+        );
+        assert!(!pool.idempotency_index.contains_key("actor1:idem-a1"));
+        assert!(!pool.idempotency_index.contains_key("actor1:idem-a2"));
+        assert!(!pool.idempotency_index.contains_key("actor1:idem-a3"));
+        assert_eq!(
+            pool.idempotency_index.get("actor1:idem-a4"),
+            Some(&"a4".to_string())
+        );
+        assert!(pool.add_action(action_with_meta("a5", "actor1", 5, "idem-a1", "intent-a5")));
     }
 }
