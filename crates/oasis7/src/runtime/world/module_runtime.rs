@@ -16,6 +16,7 @@ use super::super::{
     ModuleLimits, ModuleManifest, ModuleRegistry, ModuleSubscriptionStage, WorldError, WorldEvent,
     WorldEventBody,
 };
+use super::PreparedSubscriptionCacheEntry;
 use super::World;
 use super::module_runtime_labels::{
     action_kind_label, event_kind_label, module_kind_label, module_role_label,
@@ -41,6 +42,14 @@ fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, 
         "{record_key}|wasm={}|subs={subscription_hash}",
         manifest.wasm_hash
     ))
+}
+
+fn prepared_subscription_lookup_key(manifest: &ModuleManifest) -> String {
+    format!(
+        "{}|wasm={}",
+        ModuleRegistry::record_key(&manifest.module_id, &manifest.version),
+        manifest.wasm_hash
+    )
 }
 
 #[derive(Debug, Clone)]
@@ -137,14 +146,23 @@ impl World {
         &mut self,
         manifest: &ModuleManifest,
     ) -> Result<Arc<[PreparedSubscription]>, WorldError> {
-        let key = prepared_subscription_cache_key(manifest)?;
-        if let Some(prepared) = self.prepared_subscription_cache.get(&key) {
-            return Ok(prepared.clone());
+        let key = prepared_subscription_lookup_key(manifest);
+        if let Some(entry) = self.prepared_subscription_cache.get(&key)
+            && entry.subscriptions == manifest.subscriptions
+        {
+            return Ok(entry.prepared.clone());
         }
+        let subscription_fingerprint = prepared_subscription_cache_key(manifest)?;
         let prepared = prepare_subscriptions(&manifest.subscriptions, &manifest.module_id)
             .map_err(|reason| WorldError::ModuleChangeInvalid { reason })?;
-        self.prepared_subscription_cache
-            .insert(key, prepared.clone());
+        self.prepared_subscription_cache.insert(
+            key,
+            PreparedSubscriptionCacheEntry {
+                subscriptions: manifest.subscriptions.clone(),
+                _subscription_fingerprint: subscription_fingerprint,
+                prepared: prepared.clone(),
+            },
+        );
         Ok(prepared)
     }
 

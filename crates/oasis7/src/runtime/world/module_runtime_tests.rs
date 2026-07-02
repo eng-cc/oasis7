@@ -86,6 +86,77 @@ fn prepared_subscription_cache_key_tracks_manifest_identity() {
 }
 
 #[test]
+fn prepared_subscription_cache_lookup_key_uses_stable_record_identity() {
+    let base = manifest_with_subscription("hash-a", "world.tick");
+    let changed_hash = manifest_with_subscription("hash-b", "world.tick");
+    let changed_subscription = manifest_with_subscription("hash-a", "world.event");
+
+    let base_lookup_key = prepared_subscription_lookup_key(&base);
+    assert_ne!(
+        base_lookup_key,
+        prepared_subscription_lookup_key(&changed_hash)
+    );
+    assert_eq!(
+        base_lookup_key,
+        prepared_subscription_lookup_key(&changed_subscription)
+    );
+}
+
+#[test]
+fn prepared_subscription_cache_entry_keeps_full_subscription_fingerprint() {
+    let manifest = manifest_with_subscription("hash-a", "world.tick");
+    let expected_fingerprint = prepared_subscription_cache_key(&manifest).expect("fingerprint");
+    let lookup_key = prepared_subscription_lookup_key(&manifest);
+    let mut world = World::new();
+
+    let prepared = world
+        .prepared_subscriptions_for_manifest(&manifest)
+        .expect("prepared subscriptions");
+    let entry = world
+        .prepared_subscription_cache
+        .get(&lookup_key)
+        .expect("cache entry");
+
+    assert_eq!(entry._subscription_fingerprint, expected_fingerprint);
+    assert_eq!(entry.subscriptions, manifest.subscriptions);
+    assert_eq!(entry.prepared.len(), prepared.len());
+}
+
+#[test]
+fn prepared_subscription_cache_refreshes_when_subscription_fingerprint_changes() {
+    let base = manifest_with_subscription("hash-a", "world.tick");
+    let changed_subscription = manifest_with_subscription("hash-a", "world.event");
+    let lookup_key = prepared_subscription_lookup_key(&base);
+    let mut world = World::new();
+
+    let _ = world
+        .prepared_subscriptions_for_manifest(&base)
+        .expect("prepare base subscriptions");
+    let base_fingerprint = world
+        .prepared_subscription_cache
+        .get(&lookup_key)
+        .expect("base cache entry")
+        ._subscription_fingerprint
+        .clone();
+
+    let _ = world
+        .prepared_subscriptions_for_manifest(&changed_subscription)
+        .expect("prepare changed subscriptions");
+    let changed_fingerprint = world
+        .prepared_subscription_cache
+        .get(&lookup_key)
+        .expect("changed cache entry")
+        ._subscription_fingerprint
+        .clone();
+
+    assert_ne!(base_fingerprint, changed_fingerprint);
+    assert_eq!(
+        changed_fingerprint,
+        prepared_subscription_cache_key(&changed_subscription).expect("changed fingerprint")
+    );
+}
+
+#[test]
 fn active_module_invocation_for_id_resolves_due_instance_only() {
     let due_manifest = manifest_with_subscription("hash-due", "world.tick");
     let other_manifest = manifest_with_subscription("hash-other", "world.tick");

@@ -55,12 +55,19 @@ use super::governance::{
 };
 use super::main_token::main_token_account_id_from_node_public_key;
 use super::manifest::Manifest;
-use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry};
+use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry, ModuleSubscription};
 use super::policy::PolicySet;
 use super::signer::ReceiptSigner;
 use super::snapshot::{Journal, SnapshotCatalog};
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
+
+#[derive(Debug, Clone)]
+pub(super) struct PreparedSubscriptionCacheEntry {
+    pub(super) subscriptions: Vec<ModuleSubscription>,
+    pub(super) _subscription_fingerprint: String,
+    pub(super) prepared: Arc<[PreparedSubscription]>,
+}
 
 const DEFAULT_MAX_PENDING_ACTIONS: usize = 8_192;
 const DEFAULT_MAX_PENDING_EFFECTS: usize = 8_192;
@@ -239,7 +246,7 @@ pub struct World {
     #[serde(skip)]
     module_cache: ModuleCache,
     #[serde(skip)]
-    prepared_subscription_cache: BTreeMap<String, Arc<[PreparedSubscription]>>,
+    prepared_subscription_cache: BTreeMap<String, PreparedSubscriptionCacheEntry>,
     module_limits_max: ModuleLimits,
     snapshot_catalog: SnapshotCatalog,
     state: WorldState,
