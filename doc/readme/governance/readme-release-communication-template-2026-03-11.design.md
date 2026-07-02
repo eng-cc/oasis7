@@ -18,7 +18,7 @@
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.project.md`
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.md`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 
 ## 4. 约束与边界
 - 模板不直接包含具体候选结论。

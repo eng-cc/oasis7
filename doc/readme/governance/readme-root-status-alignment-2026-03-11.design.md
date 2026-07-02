@@ -21,7 +21,7 @@
 ## 3. 关键接口 / 入口
 - `README.md`
 - `site/index.html`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 
 ## 4. 约束与边界
 - 不重写整份 README。

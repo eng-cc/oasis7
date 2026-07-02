@@ -18,7 +18,7 @@
 ## 依赖
 - `README.md`
 - `site/index.html`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 
 ## 状态
 - 更新日期: 2026-03-11

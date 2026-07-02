@@ -10,7 +10,7 @@
 - Proposed Solution: 抽象一份对外口径简报模板，固定状态摘要、禁用表述、残余风险、回滚口径和审批链字段，使后续候选只需填充实际内容。
 - Success Criteria:
   - SC-1: 模板覆盖状态摘要、风险边界、禁用表述、rollback note、审批链五类必填字段。
-  - SC-2: 模板能直接映射到已完成的 `readme-release-candidate-communication-brief-2026-03-11.md`。
+  - SC-2: 模板能直接映射到历史压缩的 `readme-release-candidate-communication-brief-2026-03-11.prd.md`。
   - SC-3: `liveops_community` 后续可在不重写结构的前提下生成新版本简报。
   - SC-4: readme 主项目可追踪模板化闭环，而非停留在单次实例。
 
@@ -54,7 +54,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该模板专题位于 readme/governance，复用首份 communication brief 的结构，把单次实例上升为固定模板能力。
 - Integration Points:
-  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
   - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md`
   - GitHub task issue evidence comments for pre-PR local role review evidence in future instantiated release communication tasks
   - `doc/readme/project.md`

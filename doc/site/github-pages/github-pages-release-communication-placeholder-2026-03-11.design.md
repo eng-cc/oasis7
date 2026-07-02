@@ -18,7 +18,7 @@
 - `site/en/index.html`
 - `site/doc/cn/index.html`
 - `site/doc/en/index.html`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`
 
 ## 4. 约束与边界
 - 不改变“技术预览（尚不可玩）”主结论。

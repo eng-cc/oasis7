@@ -54,7 +54,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 模板位于 readme/governance，复用首份 announcement draft 的结构，把单次实例上升为标准化文案底稿能力。
 - Integration Points:
-  - `doc/readme/governance/readme-release-announcement-draft-2026-03-11.md`
+  - `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md`
   - `doc/readme/governance/readme-release-communication-template-2026-03-11.md`
   - `doc/readme/project.md`
 - Edge Cases & Error Handling:

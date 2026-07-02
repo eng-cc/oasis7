@@ -18,7 +18,7 @@
 - `doc/readme/governance/readme-release-announcement-template-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-announcement-template-2026-03-11.project.md`
 - `doc/readme/governance/readme-release-announcement-template-2026-03-11.md`
-- `doc/readme/governance/readme-release-announcement-draft-2026-03-11.md`
+- `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md`
 
 ## 4. 约束与边界
 - 模板不包含具体候选内容。

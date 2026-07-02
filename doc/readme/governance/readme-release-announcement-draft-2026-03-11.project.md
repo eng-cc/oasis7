@@ -11,7 +11,7 @@
 - [x] ANN-3 (PRD-README-ANN-003) [test_tier_required]: 完成 `liveops_community -> producer_system_designer` 审核交接，并回写 readme 主项目。
 
 ## 依赖
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.md`
 - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
 

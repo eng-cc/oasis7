@@ -17,7 +17,7 @@
 ## 3. 关键接口 / 入口
 - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
 
 ## 4. 约束与边界

@@ -55,7 +55,7 @@
 ## 4. Technical Specifications
 - Architecture Overview: 该专题位于 readme/governance，消费 communication brief 与模板，输出一份结构稳定的公告 / changelog 底稿，服务后续外部渠道或站点文案加工。
 - Integration Points:
-  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
   - `doc/readme/governance/readme-release-communication-template-2026-03-11.md`
   - `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
 - Edge Cases & Error Handling:
