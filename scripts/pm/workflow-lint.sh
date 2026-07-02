@@ -250,6 +250,16 @@ def check(cond, bad):
     if not cond: errors.append(bad)
 
 
+def file_contains_pattern(path: pathlib.Path, pattern: re.Pattern[str]) -> bool:
+    with path.open("r", encoding="utf-8") as handle:
+        return any(pattern.search(line) for line in handle)
+
+
+def file_contains_text(path: pathlib.Path, needle: str) -> bool:
+    with path.open("r", encoding="utf-8") as handle:
+        return any(needle in line for line in handle)
+
+
 def unresolved_fallback_paths(task_uid: str) -> list[str]:
     fallback_dir = root / ".pm" / "scratch" / task_uid / "fallback-evidence"
     if not fallback_dir.is_dir():
@@ -417,8 +427,7 @@ if phase in {"pr-ready", "post-pr"} and project_docs:
     for p in project_docs:
         if not p.is_file():
             continue
-        text = p.read_text(encoding="utf-8")
-        if new_trace_re.search(text):
+        if file_contains_pattern(p, new_trace_re):
             trace_found = True
             break
     check(trace_found, f"project task item lacks Trace for {uid}; fix: add 'Trace: #<issue> ({uid})' in module project.md")
@@ -456,11 +465,11 @@ if phase in {"pr-ready", "post-pr"}:
           "closeout record missing last_closed_at; fix: run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <task_uid> --verify-command '<cmd>'")
 
 for p in [root / ".pm" / "signals" / "inbox.yaml", root / ".pm" / "signals" / "archive.yaml", root / ".pm" / "working_memory"]:
-    if p.is_file() and uid in p.read_text(encoding="utf-8"):
+    if p.is_file() and file_contains_text(p, uid):
         pr_hits.append(str(p.relative_to(root)))
     elif p.is_dir():
         for f in p.glob("*.yaml"):
-            if uid in f.read_text(encoding="utf-8"):
+            if file_contains_text(f, uid):
                 pr_hits.append(str(f.relative_to(root)))
 if phase == "post-pr":
     check(bool(pr_hits), "PR evidence chain not locatable; fix: append task-local PR evidence to the execution log or .pm signal/memory")
