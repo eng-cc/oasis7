@@ -35,7 +35,7 @@
   - SC-9: `.pm` task 的唯一身份必须收敛为去中心分配的 `task_uid`；`TASK-PM-xxxx`、`display_id`、`legacy_ids` 与 `next_sequence` 均不得再作为正式字段或路径依赖。
   - SC-10: task file、execution log、working_memory、stage blocker、source refs 与 codex session 映射都必须直接以 `task_uid` 引用；registry/backlog 如保留，只能作为由 canonical task 对象扫描重建的视图。
   - SC-10B: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须改为 git-ignored 的本地生成视图；fresh checkout 下即使这些文件缺失，PM 读路径也能自动重建，不再要求它们参与 Git 冲突解决。
-  - SC-10A: stage/gate、signal、task 与 memory 的 `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 task execution log、正式文档或显式 evidence。
+  - SC-10A: stage/gate、signal、task 与 memory 的 `source_ref(s)` / `updated_from` 不得再把 `doc/devlog/*.md` 当运行态真值；历史 `doc/devlog/*.md` 仅保留归档职责，运行态证据统一来自 GitHub task issue evidence comments、正式文档或其他显式 evidence；历史 task execution log 只作为退役前追溯层。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -96,7 +96,7 @@
   - AC-11: `.pm` task canonical object 必须以 `task_uid` 为唯一主键；新任务创建不再依赖 `next_sequence` 或任何顺序 `TASK-PM-xxxx` 分配。
   - AC-12: 旧 `.pm` 数据向 `task_uid` 模型迁移后，不允许出现 mixed identity 状态；若 task file、execution log、working_memory、stage blocker、registry/backlog 中仍残留未迁移的旧 task 主键，lint 必须失败。
   - AC-12A: `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 必须作为 git-ignored 本地生成视图存在；`sync-views.sh` 与 PM 读路径在这些文件缺失时必须可自动重建。
-  - AC-13: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 必须阻断 `doc/devlog/*.md`；若输入仍指向历史归档，promote/lint/set-stage 必须要求改为 task execution log、正式文档或显式 evidence。
+  - AC-13: `.pm` 的 stage/gate、signal、task 与 memory `source_ref(s)` / `updated_from` 必须阻断 `doc/devlog/*.md`；若输入仍指向历史归档，promote/lint/set-stage 必须要求改为 GitHub task issue evidence comments、正式文档或其他显式 evidence；历史 task execution log 仅作迁移前 provenance。
 - Non-Goals:
   - 不引入 OpenProject、Mem0、Graphiti、Supabase 或外部 SaaS 作为首期真值系统。
   - 不要求首期自动修改 `doc/**/prd.md` 或 `doc/**/project.md`；正式规格仍由 owner 审核回写。

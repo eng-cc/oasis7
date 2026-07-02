@@ -74,7 +74,7 @@
 处理顺序：
 1. 先确认保留追溯要求。
 2. 再补中间索引、月度/阶段摘要或压缩策略。
-3. 当 `.pm` execution log 已成为运行态证据时，用 compact archive summary 替代并退役日文件。
+3. 当 GitHub task issue evidence comments + Project/mapping-backed task truth 已成为运行态证据时，用 compact archive summary 替代并退役日文件；历史 `.pm` task archive 只保留迁移追溯语义。
 
 ### 5.2 路径级治理
 适用对象：
