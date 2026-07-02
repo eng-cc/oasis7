@@ -10,6 +10,8 @@
 
 - [x] engineering-doc-governance-legacy-doc-cleanup (PRD-ENGINEERING-015/PRD-ENGINEERING-021/PRD-ENGINEERING-025) [test_tier_required]: 将已完成且继续暴露旧执行语义的 2026-02-27 documentation-governance-engineering closure 三件套收敛为 retired historical pointer，把当前结构检查、入口职责与持续门禁语义指回 doc-structure-standard、workflow source-of-truth、`scripts/doc-governance-check.sh` 与 GitHub task issue evidence comments。 Trace: #1783 (task_5164d10c39bc4bec926251de02bf68fb)
 
+- [x] documentation-governance-closure-pointer-deletion (PRD-ENGINEERING-015/021/025) [test_tier_required]: 删除已降格为 retired historical pointer 的 2026-02-27 documentation-governance-engineering closure 三件套，将当前索引移出活专题表，历史追溯仅保留在 core round logs、git history 与 GitHub task issue evidence comments。 Trace: #1790 (task_747c60075cb6474fbb16d7b276eb86e4)
+
 - [x] wasm-build-path-sort-dedup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm build source-hash path ordering to reuse a private `PathBuf` sort/dedup helper instead of repeated lossy-string comparator conversion in package-dir and source-file collection, preserving deterministic source-hash traversal for normal repo paths. Trace: .pm/tasks/task_f7a74ed95c704c09899a494237e500d7.yaml
 
 - [x] wasm-router-bounded-cache-entry-efficiency (PRD-ENGINEERING-021) [test_tier_required]: Optimize wasm router bounded cache insertion to use `HashMap::entry` for existing-key updates and vacant under-capacity inserts while preserving FIFO eviction order and zero-capacity behavior. Trace: #1775 (task_b4e8be63f59048229996d98587abab98)

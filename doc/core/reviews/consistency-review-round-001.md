@@ -111,7 +111,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
 ## 归档候选
 | 编号 | 候选文档（簇） | 归档理由 | 替代入口 | 状态 |
 | --- | --- | --- | --- | --- |
-| R-001 | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.prd.md`、`doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.prd.md` | 一次性设计对齐收口文档，项目状态已完成 | `doc/headless-runtime/prd.md` + `doc/core/reviews/consistency-review-round-001.md` | proposed |
+| R-001 | nonviewer design-alignment closure/review PRDs (retired/deleted) | 一次性设计对齐收口文档，项目状态已完成，后续已退役删除 | `doc/headless-runtime/prd.md` + `doc/core/reviews/consistency-review-round-001.md` | done |
 | R-002 | `doc/world-runtime/runtime/runtime-numeric-correctness-phase1~15*.prd*.md`、`runtime-infinite-sequence-rollover.prd.md` | 阶段性里程碑文档大量保留在活跃区，维护噪声高 | `doc/world-runtime/prd.md`（建议补一份汇总页） | proposed |
 | R-003 | legacy launcher desktop/unified 文档（已删除） | 已被 2026-03-04 控制面统一系列文档替代 | `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md` | done |
 | R-004 | legacy viewer rust line cap 文档（已删除） | 历史收口结论与当前代码状态漂移 | `viewer-release-full-coverage-gate.prd.md` + `doc/devlog/README.md` | done |

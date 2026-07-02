@@ -107,7 +107,7 @@
 | 2026-03-09 22:15:00 +0800 | `producer_system_designer` | `doc/world-simulator/prd.index.md` | `backfill` | pass | B6-001 | B6-001 已登记模块 design / project 入口 |
 
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/doc-structure-standard.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:28:00 +0800 | `producer_system_designer` | documentation-governance-engineering closure project (retired/deleted) | `backfill` | pass | B6-002 | 当时已补标准专题 project 入口；该 2026-02 closure 三件套后续已退役删除，本行仅保留历史 backfill 证据。 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | legacy doc migration collaboration project (retired/deleted) | `backfill` | pass | B6-002 | 当时补齐的旧协作 project 与后续 closure 记录均已退役删除；本行仅保留历史 backfill 证据。 |
 | 2026-03-09 22:28:00 +0800 | `producer_system_designer` | engineering full-PRD review triplet project (retired) | `backfill` | pass | B6-002 | 当时补齐的 2026-03 全量 PRD 审读 project 后续已退役删除；本行仅保留历史 backfill 证据。 |

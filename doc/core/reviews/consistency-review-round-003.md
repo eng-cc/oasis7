@@ -62,10 +62,10 @@ rg -n "^审计轮次:\s*3$" doc --glob '*.md'
 | I3-004 | node 子目录存在缺少 `node-` 前缀的 PRD，且 `readme-*` 语义不清晰。 | `doc/p2p/node/{builtin-wasm-fetch-fallback-compile,readme-p2-node-net-stack-unification}.prd(.project).md` | 已更名为 `node-builtin-wasm-fetch-fallback-compile` 与 `node-net-stack-unification-readme`. | medium | `done` |
 | I3-005 | distfs 子目录存在缺少 `distfs-` 前缀的 PRD，命名与同目录不一致。 | `doc/p2p/distfs/{builtin-wasm-distfs-api-closure,builtin-wasm-distfs-storage}.prd(.project).md` | 已更名为 `distfs-builtin-wasm-api-closure`、`distfs-builtin-wasm-storage`. | medium | `done` |
 | I3-006 | 工程专题使用 `round3` 但无其它轮次文件，阶段语义不成立。 | `doc/engineering/oversized-rust-file-splitting-round3-2026-02-23.prd(.project).md` | 已更名为 `oversized-rust-file-splitting-2026-02-23`. | medium | `done` |
-| I3-007 | headless-runtime 专题使用 `round2` 但无其它轮次文件，阶段语义不成立。 | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-round2-2026-02-25.prd(.project).md` | 已更名为 `nonviewer-design-alignment-review-2026-02-25`. | medium | `done` |
+| I3-007 | headless-runtime 专题使用 `round2` 但无其它轮次文件，阶段语义不成立。 | nonviewer design-alignment review round2 docs (renamed, later retired/deleted) | 已更名为 `nonviewer-design-alignment-review-2026-02-25`. | medium | `done` |
 | I3-008 | 命名以 `fix/ fixes` 作为主语义，语义模糊且难以长期复用。 | `doc/scripts/precommit/fix-precommit.prd(.project).md` | 已更名为 `precommit-remediation-playbook`. | low | `done` |
 | I3-009 | viewer 多篇专题以 `*-fix` 结尾，语义偏“临时修复”。 | `doc/world-simulator/viewer/viewer-*-fix.prd(.project).md`（deadlock/frag-scale/2d-3d-clarity） | 已更名为 `*-resolution` / `*-stability` / `*-improvement` 风格命名。 | medium | `done` |
-| I3-010 | nonviewer 设计对齐专题使用 `fixes`，语义模糊。 | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-fixes-2026-02-25.prd(.project).md` | 已更名为 `nonviewer-design-alignment-closure-2026-02-25`. | low | `done` |
+| I3-010 | nonviewer 设计对齐专题使用 `fixes`，语义模糊。 | nonviewer design-alignment fixes docs (renamed, later retired/deleted) | 已更名为 `nonviewer-design-alignment-closure-2026-02-25`. | low | `done` |
 | I3-011 | github-pages 专题使用 `fixes`，命名偏过程词。 | `doc/site/github-pages/github-pages-user-perspective-fixes-2026-02-26.prd(.project).md` | 已更名为 `github-pages-user-perspective-adjustments-2026-02-26`. | low | `done` |
 
 ## 整改项

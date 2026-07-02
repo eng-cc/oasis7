@@ -212,8 +212,8 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | 2026-03-03 legacy migration backlog snapshot（后续已删除） | issue_open | I4-202 | 快照保留大量旧 .project.md 路径且被引用可达门禁豁免，存在中风险可达性债务。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | legacy doc migration collaboration PRD (retired/deleted) | pass | - | 当时审查的旧协作 PRD 与后续 closure 记录均已退役删除；本行仅保留历史审读证据。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | legacy doc migration collaboration project (retired/deleted) | pass | - | 当时审查的旧协作 project 与后续 closure 记录均已退役删除；本行仅保留历史审读证据。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/doc-governance/documentation-governance-engineering-closure-2026-02-27.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | documentation-governance-engineering closure PRD (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 2026-02 closure 三件套后续已退役删除。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | documentation-governance-engineering closure project (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 2026-02 closure 三件套后续已退役删除。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical core PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
@@ -374,10 +374,10 @@
 | 2026-03-06 11:58:32 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd` | pass | - | 回归命令参数完整且产物路径明确，可直接复现框架验证结果。 |
 | 2026-03-06 11:58:49 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project` | pass | - | 任务拆解与依赖链路清晰，未发现命令可执行性相关异常。 |
 | 2026-03-06 11:59:08 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-03-01.prd` | pass | - | 关键回归产物与参数结果可追溯，未见不可执行验收命令表达。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-closure-2026-02-25.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
-| 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-design-alignment-review-2026-02-25.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
+| 2026-03-06 11:59:25 +0800 | codex | nonviewer design-alignment closure PRD (retired/deleted) | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链；该一次性审查 PRD 后续已退役删除。 |
+| 2026-03-06 11:59:25 +0800 | codex | nonviewer design-alignment closure project (retired/deleted) | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整；该一次性审查 project 后续已退役删除。 |
+| 2026-03-06 11:59:25 +0800 | codex | nonviewer design-alignment review PRD (retired/deleted) | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链；该一次性审查 PRD 后续已退役删除。 |
+| 2026-03-06 11:59:25 +0800 | codex | nonviewer design-alignment review project (retired/deleted) | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整；该一次性审查 project 后续已退役删除。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.project.md` | issue_open | I4-015 | “含 PRD-ID 映射”下任务未全量标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:59:25 +0800 | codex | `doc/world-runtime/module/agent-default-modules.prd.md` | issue_open | I4-014 | Traceability 表沿用“文档内既有任务条目”，未建立专题 PRD-ID->TASK->命令/证据链。 |
