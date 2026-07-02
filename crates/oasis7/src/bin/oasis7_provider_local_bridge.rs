@@ -43,6 +43,9 @@ fn default_provider_cli_bin() -> String {
         .unwrap_or_else(|| ["open", "claw"].concat())
 }
 
+#[cfg(test)]
+#[path = "oasis7_provider_local_bridge/api_test_support.rs"]
+mod api;
 #[path = "oasis7_provider_local_bridge/auth_support.rs"]
 mod auth_support;
 #[allow(dead_code)]
@@ -54,46 +57,6 @@ mod http_bridge_support;
 mod letai_direct;
 #[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
-#[cfg(test)]
-mod api {
-    use std::io::Write;
-
-    pub(super) fn write_http_response<W: Write>(
-        stream: &mut W,
-        status_code: u16,
-        content_type: &str,
-        body: &[u8],
-        head_only: bool,
-    ) -> Result<(), String> {
-        let status_text = match status_code {
-            200 => "OK",
-            201 => "Created",
-            400 => "Bad Request",
-            404 => "Not Found",
-            405 => "Method Not Allowed",
-            409 => "Conflict",
-            500 => "Internal Server Error",
-            502 => "Bad Gateway",
-            503 => "Service Unavailable",
-            _ => "Error",
-        };
-        let headers = format!(
-            "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        );
-        stream
-            .write_all(headers.as_bytes())
-            .map_err(|err| format!("write response header failed: {err}"))?;
-        if !head_only {
-            stream
-                .write_all(body)
-                .map_err(|err| format!("write response body failed: {err}"))?;
-        }
-        stream
-            .flush()
-            .map_err(|err| format!("flush response failed: {err}"))
-    }
-}
 #[cfg(test)]
 #[path = "oasis7_provider_local_bridge/tests.rs"]
 mod tests;

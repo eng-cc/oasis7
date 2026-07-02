@@ -298,10 +298,7 @@ pub(super) fn terminal_control_ack(response: &ViewerResponse, request_id: u64) -
 pub(super) fn terminal_agent_chat(response: &ViewerResponse) -> bool {
     match response {
         ViewerResponse::AgentChatError { .. } => true,
-        ViewerResponse::Event { event } => matches!(
-            &event.kind,
-            WorldEventKind::AgentSpoke { .. }
-        ),
+        ViewerResponse::Event { event } => matches!(&event.kind, WorldEventKind::AgentSpoke { .. }),
         _ => false,
     }
 }
