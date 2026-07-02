@@ -55,7 +55,7 @@
 - Architecture Overview: 该专题位于 readme/governance，聚焦根 README 与 site / communication brief 的状态对齐。
 - Integration Points:
   - `README.md`
-  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
   - `site/index.html`
 - Edge Cases & Error Handling:
   - 如果后续正式公告发布：README 状态段需同步更新，不能长期保留“准备态”。

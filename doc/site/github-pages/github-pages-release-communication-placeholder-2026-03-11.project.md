@@ -15,7 +15,7 @@
 - `site/en/index.html`
 - `site/doc/cn/index.html`
 - `site/doc/en/index.html`
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`
 
 ## 状态
 - 更新日期: 2026-03-11

@@ -58,8 +58,8 @@
   - `site/en/index.html`
   - `site/doc/cn/index.html`
   - `site/doc/en/index.html`
-  - `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
-  - `doc/readme/governance/readme-release-announcement-draft-2026-03-11.md`
+  - `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`
+  - `doc/readme/governance/readme-release-announcement-template-2026-03-11.prd.md`
 - Edge Cases & Error Handling:
   - 如果未来正式公告已发布：占位文案应切换为正式公告入口，而不是继续停留在“准备态”。
   - 如果内部候选状态变化：占位文案必须与最新口径同步，不得继续沿用过时说明。

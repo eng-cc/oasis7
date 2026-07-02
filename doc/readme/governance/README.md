@@ -1,13 +1,13 @@
 # `readme/governance` 热点子域入口
 
-更新时间: 2026-06-30
+更新时间: 2026-07-03
 
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
 - 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
-- 想确认 release communication、brief、announcement draft 或 template：先读 `readme-release-candidate-communication-brief-2026-03-11.prd.md`、`readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-draft-2026-03-11.prd.md`
+- 想确认 release communication 的可复用流程或 announcement/changelog 骨架：先读 `readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-template-2026-03-11.prd.md`
 - 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
-- 想确认 limited preview、reward review、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-invite-pack-2026-03-22.md`、`readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
+- 想确认 limited playable technical preview 的贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 想确认资源模型分层、世界规则入口收口或公开定位相关口径：先读 `readme-resource-model-layering.prd.md` 或 `readme-world-rules-consolidation.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -18,9 +18,9 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-06-30）:
-  - `doc/readme/governance/`: 67 份 Markdown
-  - `doc/readme/`: 114 份 Markdown
+- 快照（2026-07-03）:
+  - `doc/readme/governance/`: 65 份 Markdown
+  - `doc/readme/`: 112 份 Markdown
   - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 
@@ -59,15 +59,15 @@
   - 这些专题已完成且无当前下一步，不再作为默认首读入口。
   - 当前公开状态以根 `../../../README.md` 为准，治理节奏从一致性 checklist、季度复核、release communication surfaces 和 `../prd.index.md` 的历史压缩清单进入。
 
-### 2. Release communication 与 announcement
+### 2. Release communication 与 announcement 模板
 - 首读入口:
-  - `readme-release-candidate-communication-brief-2026-03-11.prd.md`
   - `readme-release-communication-template-2026-03-11.prd.md`
-  - `readme-release-announcement-draft-2026-03-11.prd.md`
+  - `readme-release-announcement-template-2026-03-11.prd.md`
 - 适合问题:
-  - 对外 release brief / template / announcement draft 该从哪里开始
-  - 哪些文档定义 release communication 的默认边界
-  - 当前对外通告结构和安全基线在哪里
+  - 后续 release brief / announcement / changelog 的可复用结构该从哪里开始
+  - 哪些模板定义 release communication 的默认边界
+  - 如何避免把历史 2026-03-11 release-candidate 实例误读为当前发布 lane
+  - 当前对外状态仍以根 `../../../README.md` 为准：limited playable technical preview，不是 closed beta 或 public launch
 
 ### 3. Moltbook 运营与 follow-up
 - 首读入口:
@@ -79,15 +79,27 @@
   - 已批准主贴、首评、reply boundary 与 follow-up 素材在哪
   - 当前信任修复 / repair certification 讨论链从哪里进入
 
-### 4. Limited preview、reward 与台账执行
+### 4. Limited playable technical preview 贡献奖励与台账执行
 - 首读入口:
-  - `readme-limited-preview-invite-pack-2026-03-22.md`
   - `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
   - `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
 - 适合问题:
-  - invite-only limited preview 的 operator 入口是什么
-  - 贡献奖励、ledger、distribution closure 与 merged PR round scan 该从哪里看
+  - 贡献奖励、ledger、distribution closure 与 merged PR round scan 当前该从哪里看
   - reward 审批、distribution ref、actual-value review 需要看哪组文档
+  - 哪些奖励表述被禁止，如何避免 `play-to-earn`、登录奖励或固定 token 汇率误读
+
+### 历史压缩：release-candidate 与 closed-beta candidate
+- 追溯入口:
+  - `readme-release-candidate-communication-brief-2026-03-11.prd.md`
+  - `readme-release-announcement-draft-2026-03-11.prd.md`
+  - `readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
+- 适合问题:
+  - 2026-03-11 版本候选实例当时如何生成 release brief / announcement draft
+  - closed-beta-candidate 预备 runbook 当时如何守住 technical preview 禁语
+- 当前边界:
+  - 这些是历史实例或预备 runbook，不再作为默认活跃首读入口。
+  - 当前公开状态以根 `../../../README.md` 为准：limited playable technical preview；不是 closed beta、public launch 或正式玩家发布。
+  - release communication 后续复用从模板专题进入；closed-beta 术语替换前保留原 runbook 供 claim-control 追溯，不删除。
 
 ### 5. 小红书与外宣激励
 - 首读入口:

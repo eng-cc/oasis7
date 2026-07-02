@@ -11,7 +11,7 @@
 - [x] COMM-T3 (PRD-README-TEMPLATE-001/002/003) [test_tier_required]: 回写 readme 主项目与后续复用入口。
 
 ## 依赖
-- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.md`
+- `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md`
 - `doc/readme/governance/readme-release-communication-template-2026-03-11.design.md`
 
