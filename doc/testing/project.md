@@ -32,7 +32,7 @@
 | Performance coverage and baselines | `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`testing-manual.md` 的 required-gate / Viewer performance probe 段落 |
 
 ## 最近高价值完成摘要
-- `local-testnet-agent-onboarding-account-boundary` (Trace: .pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.yaml): 本地 testnet 大世界试玩链路收口账号绑定 Agent 可见性、first Agent claim 恢复、starter OC 必经弹窗、OC 后只刷新快照不触发 provider step、三栏布局恢复，以及 real LetAI bridge degraded 时的残余风险边界。
+- `local-testnet-agent-onboarding-account-boundary` (Trace: .pm/tasks/task_dbd38392feb44872ab7a2f5c2c0e6b25.yaml): 纯本地 local-standalone-chain 大世界试玩链路收口账号绑定 Agent 可见性、first Agent claim 恢复、starter OC 必经弹窗、OC 后只刷新快照不触发 provider step、三栏布局恢复，以及 real LetAI bridge degraded 时的残余风险边界；不等同于接入 formal `public_testnet` world state 的本地测试环境。
 - `public-testnet-health-and-rebuild-recovery` (Trace: .pm/tasks/task_b7b231c0f8c244f382757499d955f2b6.yaml): public_testnet 节点健康检查、manifest-backed 启动、从零重建恢复、以及本地 test 环境 readiness 证据边界已收口；validator 恢复明确禁止手工 checkpoint/data copy，只能自动恢复或按 governed bootstrap 从当前 deployment truth 重建。
 - `local-public-testnet-letai-test-environment` (Trace: .pm/tasks/task_d7ed20f1f06843fa9f7fe9d9ed30926b.yaml): 本地 public_testnet observer + submit-capable endpoint + NewAPI quota bridge + LetAI provider bridge 测试环境 runbook/script 已收口，明确纯本地测试、本地启动 test 环境、DApp-like broadcast 和 OC -> NewAPI/LetAI 充值证据边界。
 - `starter-resource-genesis-for-empty-testnet-worlds` (Trace: .pm/tasks/task_656a707a4de145e0b1a8600160866889.yaml): Fresh testnet runtime snapshots now publish deterministic starter resource chunks from committed execution context, preserve starter resources after first Agent claim, and keep later committed heights schema-current without replaying genesis resource deltas.

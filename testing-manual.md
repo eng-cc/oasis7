@@ -451,11 +451,18 @@ cargo run -q -p oasis7 --bin oasis7_pure_api_client -- --addr 127.0.0.1:5023 rec
     当前脚本已覆盖 `player_gameplay`、正式 `gameplay_action` 推进、`reconnect-sync --with-snapshot` 恢复，以及 `FirstSessionLoop -> PostOnboarding -> establish_first_capability|stabilize_first_line_after_output|choose_midloop_path` 的 required/full 收口路径。
     `parity_verified` 当前以 `doc/testing/evidence/pure-api-shared-player-gameplay-parity-2026-04-28.md` 为准；旧 `doc/testing/evidence/pure-api-parity-validation-2026-03-19.md` 只保留历史输入，不再作为 no-LLM 正式可玩性的现行依据。
 - 本地试玩入口瘦身口径：普通操作者只需要按意图记住 `2 + 1` 个入口；底层脚本仍保留给 wrapper、排障和专项回归使用。
+  - 入口语义先分流：
+
+| 意图 | 入口 | 连接的 world state | 不能声明 |
+| --- | --- | --- | --- |
+| 纯本地试玩 / local-only gameplay | `./scripts/run-local-letai-game-test.sh --local-world-playtest` | local-standalone-chain | formal/public testnet connected |
+| 本地接入 public_testnet 测试环境 | `./scripts/run-local-public-testnet-letai-test-environment.sh` | formal `public_testnet` node + submit-capable endpoint | 仅因页面打开就声明 public_testnet ready |
+
   - 本地真实 LetAI bridge + runtime/game：
 ```bash
 ./scripts/run-local-letai-game-test.sh --local-world-playtest
 ```
-    常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh --local-world-playtest` 启动；这个入口只代表完全本地的 provider/runtime/viewer/local-standalone-chain 试玩，不连接 formal/public testnet。每次本地试玩都应优先使用这个 preset，而不是手工分别启动 provider bridge / launcher / viewer binary，或展开端口、detach、reuse、provider smoke、chain profile 等低层参数。该 preset 固化 playtest startup、provider smoke skip、reuse existing source build、后台启动、手动 Play、viewer/web/live 标准端口 `48420/48421/48422`、`--json-ready` 与 wrapper 默认的 local standalone chain。脚本仍默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，规范化临时 project token config，转发 `--auto-topup-usd`、`OASIS7_REMOTE_LLM_PLATFORM_KEY`、`OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 等真实 provider 必需环境，后台启动默认 `rust-direct-letai` 的 `127.0.0.1:5841` Rust provider bridge，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数仅在高级排障时放在 `--` 之后。该 wrapper 默认保持 `OASIS7_RUNTIME_AGENT_CHAT_ECHO` 关闭，使本地 playtest 遵循真实 provider-backed 路径；只有做低层 receipt/debug 验证时才显式传 `--chat-echo`。若直接跑已编译二进制或手工拼装脚本，操作者必须自行保证这些 env 与 wrapper 完全等价，否则可能出现不自动充值、token/project 绑定不一致、或 mock/receipt 路径误入本地试玩证据。需要查完整调试参数时，用 `./scripts/run-local-letai-game-test.sh --help-all`。
+    常规本地真实 LLM 游戏测试统一从 `scripts/run-local-letai-game-test.sh --local-world-playtest` 启动；这个入口只代表完全本地的 provider/runtime/viewer/local-standalone-chain 试玩，不连接 formal/public testnet。若目标是“本地入口读取/提交 formal `public_testnet` world state”，不要使用这个 preset，改走 `scripts/run-local-public-testnet-letai-test-environment.sh` 和对应 runbook。每次纯本地试玩都应优先使用这个 preset，而不是手工分别启动 provider bridge / launcher / viewer binary，或展开端口、detach、reuse、provider smoke、chain profile 等低层参数。该 preset 固化 playtest startup、provider smoke skip、reuse existing source build、后台启动、手动 Play、viewer/web/live 标准端口 `48420/48421/48422`、`--json-ready` 与 wrapper 默认的 local standalone chain。脚本仍默认优先读取 `OASIS7_LETAI_CONFIG_PATH`，再使用 `/Users/scc/Documents/keys/letai.txt`，最后回退到 `OASIS7_LETAI_TOKEN_CONFIG_PATH` 或 `/Users/scc/Documents/keys/letai-token-local.txt`，设置本地代理默认值，规范化临时 project token config，转发 `--auto-topup-usd`、`OASIS7_REMOTE_LLM_PLATFORM_KEY`、`OASIS7_REMOTE_LLM_PLATFORM_USER_ID` 等真实 provider 必需环境，后台启动默认 `rust-direct-letai` 的 `127.0.0.1:5841` Rust provider bridge，再启动 `run-launcher-stack.sh` 指向该 bridge；额外 launcher 参数仅在高级排障时放在 `--` 之后。该 wrapper 默认保持 `OASIS7_RUNTIME_AGENT_CHAT_ECHO` 关闭，使本地 playtest 遵循真实 provider-backed 路径；只有做低层 receipt/debug 验证时才显式传 `--chat-echo`。若直接跑已编译二进制或手工拼装脚本，操作者必须自行保证这些 env 与 wrapper 完全等价，否则可能出现不自动充值、token/project 绑定不一致、或 mock/receipt 路径误入本地试玩证据。需要查完整调试参数时，用 `./scripts/run-local-letai-game-test.sh --help-all`。
   - 制作人 / 发布前人工验收：
 ```bash
 ./scripts/run-producer-playtest.sh --open-headed

@@ -118,8 +118,9 @@ pub use provider_loopback_http::{
     ProviderAgentChatResponse, ProviderCompatibilityReport, ProviderCompatibilityStatus,
     ProviderFeedbackAck, ProviderHealth, ProviderInfo, ProviderLoopbackHttpClient,
     ProviderLoopbackHttpError, REMOTE_HTTPS_PROVIDER_TRANSPORT, evaluate_provider_compatibility,
-    provider_phase1_required_actions, provider_phase1_required_capabilities,
-    validate_provider_http_base_url, validate_provider_loopback_http_base_url,
+    provider_agent_chat_log_key, provider_phase1_required_actions,
+    provider_phase1_required_capabilities, validate_provider_http_base_url,
+    validate_provider_loopback_http_base_url,
 };
 pub use runner::{
     AgentQuota, AgentRunner, AgentStats, AgentTickResult, RateLimitPolicy, RateLimitState,

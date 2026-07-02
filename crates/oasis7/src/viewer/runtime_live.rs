@@ -522,7 +522,10 @@ impl ViewerRuntimeLiveServer {
             ViewerRequest::AgentChat { request } => match self.handle_agent_chat(request) {
                 Ok(ack) => {
                     send_response(writer, &ViewerResponse::AgentChatAck { ack })?;
-                    self.enqueue_pending_provider_agent_chat_replies();
+                    let provider_errors = self.enqueue_pending_provider_agent_chat_replies();
+                    for error in provider_errors {
+                        send_response(writer, &ViewerResponse::AgentChatError { error })?;
+                    }
                     self.flush_pending_virtual_events(session, writer)?;
                 }
                 Err(error) => {

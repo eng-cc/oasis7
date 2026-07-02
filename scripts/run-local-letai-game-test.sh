@@ -61,6 +61,10 @@ chain commit -> snapshot loop. It does not connect to public_testnet/formal
 testnet. Direct binary startup is for low-level debugging only and must mirror
 these env vars by hand.
 
+For a local environment attached to formal public_testnet world state, use:
+
+  ./scripts/run-local-public-testnet-letai-test-environment.sh
+
 Common options:
   --local-world-playtest    Daily manual local-only world preset. Implies
                               playtest startup, provider smoke skip, reuse build,

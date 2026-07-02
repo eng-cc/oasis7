@@ -1179,6 +1179,9 @@ function PixelWorldFocusMinimapCard(props) {
 }
 
 function chatEntryTitle(entry, locale) {
+  if (entry.source === "error") {
+    return `${entry.targetAgentId || entry.agentId || "agent"} ${tr(locale, "回复失败", "reply failed")}`;
+  }
   if (entry.source === "player") {
     return `${tr(locale, "玩家", "Player")} -> ${entry.targetAgentId || entry.agentId || "agent"}`;
   }
@@ -1186,6 +1189,10 @@ function chatEntryTitle(entry, locale) {
 }
 
 function chatEntryMeta(entry, locale) {
+  if (entry.source === "error") {
+    const code = entry.code ? ` · code=${entry.code}` : "";
+    return `${entry.speaker || "runtime"}${code} · tick=${Number(entry.tick || 0)}`;
+  }
   const speaker = entry.speaker || entry.playerId || tr(locale, "未知发言者", "unknown speaker");
   const location = entry.locationId || tr(locale, "未知地点", "unknown location");
   return `${speaker} · ${location} · tick=${Number(entry.tick || 0)}`;

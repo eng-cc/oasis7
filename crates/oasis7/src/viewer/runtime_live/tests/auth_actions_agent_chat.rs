@@ -235,6 +235,127 @@ fn runtime_agent_chat_provider_mode_accepts_feedback_without_echo_receipt() {
 }
 
 #[test]
+fn runtime_agent_chat_provider_mode_surfaces_async_reply_failure_after_ack() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    let recorded = Arc::new(Mutex::new(Vec::<RecordedHttpRequest>::new()));
+    let base_url = spawn_runtime_live_mock_http_server(5, {
+        let recorded = Arc::clone(&recorded);
+        move |request| {
+            recorded
+                .lock()
+                .expect("recorded lock")
+                .push(request.clone());
+            match (request.method.as_str(), request.path.as_str()) {
+                ("GET", "/v1/provider/info") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({
+                        "provider_id": "provider_local_bridge",
+                        "capabilities": ["decision", "feedback", "agent_chat"],
+                        "chain_resource_manifest_schema_version": "oasis7.world_resource_manifest.v1",
+                        "chain_resource_delta_schema_version": "oasis7.world_resource_delta.v1",
+                        "supported_action_sets": ["phase1_low_frequency"]
+                    })
+                    .to_string(),
+                },
+                ("GET", "/v1/provider/health") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({"ok": true, "status": "ok"}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/feedback") => MockHttpResponse {
+                    status_code: 200,
+                    body: serde_json::json!({"ok": true}).to_string(),
+                },
+                ("POST", "/v1/world-simulator/agent-chat") => MockHttpResponse {
+                    status_code: 500,
+                    body: serde_json::json!({
+                        "error_code": "provider_agent_chat_failed",
+                        "error": "upstream chat completion returned HTTP 401: Invalid token"
+                    })
+                    .to_string(),
+                },
+                _ => MockHttpResponse {
+                    status_code: 404,
+                    body: serde_json::json!({"ok": false, "error": "not_found"}).to_string(),
+                },
+            }
+        }
+    });
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_loopback_http");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, base_url);
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+    }
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_AGENT_CHAT_ECHO_ENV, "0");
+    }
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    seed_agent_chat_oc(&mut server, agent_id.as_str());
+    let (public_key, private_key) = test_signer(55);
+    let register_ack = register_runtime_session(
+        &mut server,
+        "player-a",
+        Some(agent_id.as_str()),
+        54,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        register_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    let request = signed_agent_chat_request(
+        crate::viewer::AgentChatRequest {
+            agent_id: agent_id.clone(),
+            player_id: Some("player-a".to_string()),
+            public_key: None,
+            auth: None,
+            message: "hello provider async failure".to_string(),
+            intent_tick: Some(55),
+            intent_seq: Some(55),
+        },
+        55,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let ack = server.handle_agent_chat(request).expect("chat accepted");
+    assert_eq!(ack.agent_id, agent_id);
+    let errors = server.enqueue_pending_provider_agent_chat_replies();
+
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "provider_unreachable");
+    assert_eq!(errors[0].agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(errors[0].message.contains("provider_agent_chat_failed"));
+    assert!(server.pending_virtual_events.iter().all(|event| !matches!(
+        &event.kind,
+        crate::simulator::WorldEventKind::AgentSpoke { agent_id: event_agent_id, .. }
+            if event_agent_id == &agent_id
+    )));
+    clear_runtime_provider_env();
+}
+
+#[test]
 fn runtime_agent_chat_rejects_unbound_agent_after_session_registration() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

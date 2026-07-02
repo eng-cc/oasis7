@@ -234,6 +234,7 @@ fn send_letai_chat_completion_with_retries(
                     "event": "rust_direct_letai_chat_retry",
                     "attempt": attempt + 1,
                     "retry_count": config.retry_count,
+                    "chat_request_key": invocation.chat_request_key.as_deref(),
                     "reason": summarize_text(last_error.as_str(), 300),
                     "diagnostics": error_diagnostics_json(last_error.as_str()),
                 });
@@ -374,6 +375,7 @@ fn send_letai_chat_completion(
             "system_prompt_present": config.system_prompt.is_some(),
             "prompt_len": invocation.prompt.len(),
             "agent_id": invocation.agent_id,
+            "chat_request_key": invocation.chat_request_key.as_deref(),
         })
     );
     let mut response = client

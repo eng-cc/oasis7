@@ -3,7 +3,13 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-NODE_BASE_URL="${OASIS7_PUBLIC_TESTNET_NODE_BASE_URL:-http://127.0.0.1:19083}"
+if [[ -n "${OASIS7_PUBLIC_TESTNET_NODE_BASE_URL:-}" ]]; then
+  NODE_BASE_URL="$OASIS7_PUBLIC_TESTNET_NODE_BASE_URL"
+  NODE_BASE_URL_EXPLICIT="1"
+else
+  NODE_BASE_URL="http://127.0.0.1:19083"
+  NODE_BASE_URL_EXPLICIT="0"
+fi
 CHAIN_SUBMIT_BIND="${OASIS7_PUBLIC_TESTNET_CHAIN_SUBMIT_BIND:-}"
 CHAIN_SUBMIT_BASE_URL="${OASIS7_PUBLIC_TESTNET_CHAIN_SUBMIT_BASE_URL:-}"
 MANIFEST_PATH="${OASIS7_TESTNET_MANIFEST:-}"
@@ -55,7 +61,8 @@ operator command template so the operator can choose persona, nonce, amount,
 and memo explicitly.
 
 Options:
-  --node-base-url <url>          Local public_testnet node base URL (default: http://127.0.0.1:19083)
+  --node-base-url <url>          public_testnet status/read node base URL (default: http://127.0.0.1:19083, or --chain-submit-base-url when only that is set)
+  --public-testnet-base-url <url> Use one remote public_testnet node for both status/read and submit
   --chain-submit-bind <host:port> Submit-capable public_testnet endpoint for gameplay/transfer transactions
   --chain-submit-base-url <url>  HTTP submit-capable endpoint; converted to host:port for viewer live and transfer submit
   --manifest <path>              Formal public_testnet manifest path (or OASIS7_TESTNET_MANIFEST)
@@ -406,9 +413,23 @@ PY
 check_chain_submit_endpoint() {
   local submit_base_url="$1"
   local status_json
+  local output
+  local curl_error
+  local attempt
   log "checking public_testnet submit endpoint: $submit_base_url"
-  status_json="$(curl_json "$submit_base_url/v1/chain/status")"
-  STATUS_JSON="$status_json" python3 - <<'PY'
+  for attempt in 1 2 3 4 5; do
+    curl_error=""
+    if ! status_json="$(curl_json "$submit_base_url/v1/chain/status" 2>&1)"; then
+      curl_error="$status_json"
+      if [[ "$attempt" -eq 5 ]]; then
+        printf '%s\n' "$curl_error" >&2
+        return 1
+      fi
+      log "public_testnet submit endpoint not reachable yet (attempt $attempt/5); retrying"
+      sleep 2
+      continue
+    fi
+    if output="$(STATUS_JSON="$status_json" python3 - <<'PY' 2>&1
 import json
 import os
 
@@ -455,6 +476,17 @@ print(json.dumps({
 if errors:
     raise SystemExit("public_testnet submit endpoint is not ready/sequencer-capable: " + "; ".join(errors))
 PY
+    )"; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    if [[ "$attempt" -eq 5 ]]; then
+      printf '%s\n' "$output" >&2
+      return 1
+    fi
+    log "public_testnet submit endpoint not ready yet (attempt $attempt/5); retrying"
+    sleep 2
+  done
 }
 
 merge_letai_config_if_needed() {
@@ -525,8 +557,22 @@ PY
 check_public_testnet_node() {
   log "checking public_testnet node: $NODE_BASE_URL"
   local status_json
-  status_json="$(curl_json "$NODE_BASE_URL/v1/chain/status")"
-  STATUS_JSON="$status_json" python3 - <<'PY'
+  local output
+  local curl_error
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    curl_error=""
+    if ! status_json="$(curl_json "$NODE_BASE_URL/v1/chain/status" 2>&1)"; then
+      curl_error="$status_json"
+      if [[ "$attempt" -eq 5 ]]; then
+        printf '%s\n' "$curl_error" >&2
+        return 1
+      fi
+      log "public_testnet node not reachable yet (attempt $attempt/5); retrying"
+      sleep 2
+      continue
+    fi
+    if output="$(STATUS_JSON="$status_json" python3 - <<'PY' 2>&1
 import json
 import os
 import sys
@@ -571,6 +617,17 @@ print(json.dumps({
 if errors:
     raise SystemExit("public_testnet node is not ready: " + "; ".join(errors))
 PY
+    )"; then
+      printf '%s\n' "$output"
+      return 0
+    fi
+    if [[ "$attempt" -eq 5 ]]; then
+      printf '%s\n' "$output" >&2
+      return 1
+    fi
+    log "public_testnet node not ready yet (attempt $attempt/5); retrying"
+    sleep 2
+  done
 }
 
 build_bins() {
@@ -803,7 +860,13 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --node-base-url) NODE_BASE_URL="${2:-}"; shift 2 ;;
+    --node-base-url) NODE_BASE_URL="${2:-}"; NODE_BASE_URL_EXPLICIT="1"; shift 2 ;;
+    --public-testnet-base-url)
+      NODE_BASE_URL="${2:-}"
+      CHAIN_SUBMIT_BASE_URL="${2:-}"
+      NODE_BASE_URL_EXPLICIT="1"
+      shift 2
+      ;;
     --chain-submit-bind) CHAIN_SUBMIT_BIND="${2:-}"; shift 2 ;;
     --chain-submit-base-url) CHAIN_SUBMIT_BASE_URL="${2:-}"; shift 2 ;;
     --manifest) MANIFEST_PATH="${2:-}"; shift 2 ;;
@@ -838,6 +901,14 @@ while [[ $# -gt 0 ]]; do
     *) usage >&2; die "unknown option: $1" ;;
   esac
 done
+
+if [[ "$NODE_BASE_URL_EXPLICIT" != "1" ]]; then
+  if [[ -n "$CHAIN_SUBMIT_BASE_URL" ]]; then
+    NODE_BASE_URL="$(origin_from_url "$CHAIN_SUBMIT_BASE_URL")"
+  elif [[ -n "$CHAIN_SUBMIT_BIND" ]]; then
+    NODE_BASE_URL="http://$CHAIN_SUBMIT_BIND"
+  fi
+fi
 
 [[ -n "$NODE_BASE_URL" ]] || die "--node-base-url cannot be empty"
 if [[ -n "$CHAIN_SUBMIT_BIND" && -n "$CHAIN_SUBMIT_BASE_URL" ]]; then
