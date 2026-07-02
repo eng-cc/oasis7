@@ -579,6 +579,19 @@ mod tests {
     }
 
     #[test]
+    fn bounded_cache_updates_existing_entry_without_refreshing_eviction_order() {
+        let mut cache = BoundedCache::new(2);
+        cache.insert("a".to_string(), Arc::new(1u32));
+        cache.insert("b".to_string(), Arc::new(2u32));
+        cache.insert("a".to_string(), Arc::new(10u32));
+        cache.insert("c".to_string(), Arc::new(3u32));
+
+        assert!(cache.get_cloned("a").is_none());
+        assert_eq!(cache.get_cloned("b").as_deref(), Some(&2u32));
+        assert_eq!(cache.get_cloned("c").as_deref(), Some(&3u32));
+    }
+
+    #[test]
     fn prepared_subscriptions_match_equivalent_event_and_action_routes() {
         let event_subscriptions = vec![event_subscription(
             &["world.*"],

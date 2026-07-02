@@ -10,6 +10,8 @@
 
 - [x] wasm-build-path-sort-dedup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm build source-hash path ordering to reuse a private `PathBuf` sort/dedup helper instead of repeated lossy-string comparator conversion in package-dir and source-file collection, preserving deterministic source-hash traversal for normal repo paths. Trace: .pm/tasks/task_f7a74ed95c704c09899a494237e500d7.yaml
 
+- [x] wasm-router-bounded-cache-entry-efficiency (PRD-ENGINEERING-021) [test_tier_required]: Optimize wasm router bounded cache insertion to use `HashMap::entry` for existing-key updates and vacant under-capacity inserts while preserving FIFO eviction order and zero-capacity behavior. Trace: #1775 (task_b4e8be63f59048229996d98587abab98)
+
 - [x] libp2p-peer-id-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize libp2p replication peer-id sort/dedup normalization in a private helper for connected and known peer-id lists, preserving sorted unique diagnostic/network-bridge output while reducing duplicate ordering logic. Trace: .pm/tasks/task_97177b0362184061ad7b4a244926abd8.yaml
 
 - [x] chain-runtime-replication-allowlist-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize chain runtime replication allowlist sort/dedup normalization in a private helper reused by remote-writer and fetch-requester allowlist builders, preserving sorted unique signer-key output while reducing duplicate ordering logic. Trace: .pm/tasks/task_b2883927f22e4dd19236f4c3cd77ff2e.yaml
