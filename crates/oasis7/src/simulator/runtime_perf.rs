@@ -225,8 +225,7 @@ impl PerfSeriesState {
     }
 
     fn snapshot(&self) -> RuntimePerfSeriesSnapshot {
-        let mut samples: Vec<f64> = self.window_samples.iter().copied().collect();
-        samples.sort_by(|left, right| left.partial_cmp(right).unwrap_or(std::cmp::Ordering::Equal));
+        let window = WindowSampleStats::from_samples(&self.window_samples);
         let avg_ms = if self.samples_total > 0 {
             self.total_ms / self.samples_total as f64
         } else {
@@ -240,15 +239,15 @@ impl PerfSeriesState {
 
         RuntimePerfSeriesSnapshot {
             samples_total: self.samples_total,
-            samples_window: samples.len(),
+            samples_window: window.len,
             budget_ms: self.budget_ms,
             last_ms: self.last_ms,
             avg_ms,
             min_ms: self.min_ms,
             max_ms: self.max_ms,
-            p50_ms: percentile(&samples, 0.50),
-            p95_ms: percentile(&samples, 0.95),
-            p99_ms: percentile(&samples, 0.99),
+            p50_ms: window.p50_ms,
+            p95_ms: window.p95_ms,
+            p99_ms: window.p99_ms,
             over_budget_total: self.over_budget_total,
             over_budget_ratio_ppm,
         }
@@ -269,12 +268,47 @@ fn duration_to_ms(duration: Duration) -> f64 {
     duration.as_secs_f64() * 1000.0
 }
 
-fn percentile(samples: &[f64], percentile: f64) -> f64 {
-    if samples.is_empty() {
-        return 0.0;
+#[derive(Debug, Clone, Copy)]
+struct WindowSampleStats {
+    len: usize,
+    p50_ms: f64,
+    p95_ms: f64,
+    p99_ms: f64,
+}
+
+impl WindowSampleStats {
+    fn from_samples(samples: &VecDeque<f64>) -> Self {
+        let len = samples.len();
+        if len == 0 {
+            return Self {
+                len,
+                p50_ms: 0.0,
+                p95_ms: 0.0,
+                p99_ms: 0.0,
+            };
+        }
+
+        let mut values: Vec<f64> = samples.iter().copied().collect();
+        let p50_index = percentile_index(len, 0.50);
+        let p95_index = percentile_index(len, 0.95);
+        let p99_index = percentile_index(len, 0.99);
+
+        Self {
+            len,
+            p50_ms: select_percentile_value(&mut values, p50_index),
+            p95_ms: select_percentile_value(&mut values, p95_index),
+            p99_ms: select_percentile_value(&mut values, p99_index),
+        }
     }
-    let index = ((samples.len() - 1) as f64 * percentile.clamp(0.0, 1.0)).round() as usize;
-    samples[index]
+}
+
+fn percentile_index(len: usize, percentile: f64) -> usize {
+    ((len - 1) as f64 * percentile.clamp(0.0, 1.0)).round() as usize
+}
+
+fn select_percentile_value(values: &mut [f64], index: usize) -> f64 {
+    let (_, value, _) = values.select_nth_unstable_by(index, |left, right| left.total_cmp(right));
+    *value
 }
 
 fn is_critical_stage(stage: &RuntimePerfSeriesSnapshot) -> bool {
