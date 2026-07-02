@@ -599,6 +599,50 @@ def github_issue_for_worktree(source_worktree: Path) -> dict[str, object] | None
             emit("missing", reason=f"multiple GitHub issues match worktree_hint {source_worktree}")
     return None
 
+def worktree_hint_matches(raw_hint: object, source_worktree: Path) -> bool:
+    hint = str(raw_hint or "").strip().strip('"')
+    if not hint:
+        return False
+    if hint == str(source_worktree) or hint == source_worktree.name:
+        return True
+    hint_path = Path(hint).expanduser()
+    candidates = {hint_path.name}
+    if hint_path.is_absolute():
+        try:
+            candidates.add(str(hint_path.resolve()))
+        except OSError:
+            candidates.add(str(hint_path))
+    return str(source_worktree) in candidates or source_worktree.name in candidates
+
+def issue_comments_via_rest(repo: str, issue_number: int) -> list[dict[str, object]]:
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        raise subprocess.CalledProcessError(2, ["gh", "api", "invalid-repo"])
+    payload = subprocess.check_output(
+        [
+            "gh",
+            "api",
+            f"repos/{owner}/{name}/issues/{issue_number}/comments",
+            "--paginate",
+        ],
+        text=True,
+    )
+    if not payload.strip():
+        return []
+    decoder = json.JSONDecoder()
+    comments: list[dict[str, object]] = []
+    idx = 0
+    while idx < len(payload):
+        while idx < len(payload) and payload[idx].isspace():
+            idx += 1
+        if idx >= len(payload):
+            break
+        page, next_idx = decoder.raw_decode(payload, idx)
+        if isinstance(page, list):
+            comments.extend(comment for comment in page if isinstance(comment, dict))
+        idx = next_idx
+    return comments
+
 task_files = sorted(tasks_dir.glob("task_*.yaml")) if tasks_dir.is_dir() else []
 if task_files:
     if os.environ.get("PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS") != "1":
@@ -611,10 +655,9 @@ if task_files:
         )
     for task_file in task_files:
         text = task_file.read_text(encoding="utf-8")
-        if f"worktree_hint: {source_worktree}" not in text:
-            continue
         task_uid = ""
         execution_log_path = ""
+        worktree_hint = ""
         for line in text.splitlines():
             key, _, value = line.partition(":")
             value = value.strip().strip('"')
@@ -622,6 +665,10 @@ if task_files:
                 task_uid = value
             elif key == "execution_log_path":
                 execution_log_path = value
+            elif key == "worktree_hint":
+                worktree_hint = value
+        if not worktree_hint_matches(worktree_hint, source_worktree):
+            continue
         if not task_uid_re.fullmatch(task_uid):
             continue
         if not execution_log_path:
@@ -635,7 +682,7 @@ else:
         repo_name = str(project.get("repo") or "eng-cc/oasis7")
         matched: list[dict[str, object]] = []
         for uid, record in sorted((mapping.get("tasks") or {}).items()):
-            if str(record.get("worktree_hint") or "") == str(source_worktree):
+            if worktree_hint_matches(record.get("worktree_hint"), source_worktree):
                 record = dict(record)
                 record["task_uid"] = uid
                 matched.append(record)
@@ -654,6 +701,14 @@ else:
         }
         candidates.append((task_uid, Path("/dev/null"), str(record.get("issue_url") or "")))
     else:
+        if os.environ.get("PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK") != "1":
+            emit(
+                "missing",
+                reason=(
+                    ".pm task files and mapping cache absent; live GitHub issue fallback "
+                    "requires PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK=1"
+                ),
+            )
         github_issue = github_issue_for_worktree(source_worktree)
         if not github_issue:
             emit("missing", reason=f".pm task files and mapping cache absent; no GitHub issue matches worktree_hint {source_worktree}")
@@ -683,8 +738,17 @@ if github_issue:
             text=True,
         )
     except subprocess.CalledProcessError as exc:
-        emit("missing", task_uid=task_uid, log_path=log_path_rel, reason=f"failed to read GitHub issue comments: {exc}")
-    comments = json.loads(issue_payload).get("comments") or []
+        try:
+            comments = issue_comments_via_rest(str(github_issue["repo"]), int(github_issue["number"]))
+        except (subprocess.CalledProcessError, json.JSONDecodeError) as rest_exc:
+            emit(
+                "missing",
+                task_uid=task_uid,
+                log_path=log_path_rel,
+                reason=f"failed to read GitHub issue comments: {exc}; REST fallback failed: {rest_exc}",
+            )
+    else:
+        comments = json.loads(issue_payload).get("comments") or []
     text = "\n\n".join(str(comment.get("body") or "") for comment in comments)
 else:
     if not log_path.is_file():

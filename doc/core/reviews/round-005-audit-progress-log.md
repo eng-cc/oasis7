@@ -44,7 +44,7 @@
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-web-build-pruning-phase2-2026-03-02.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:58:03 +0800 | cc | `historical removed viewer live tick-driven doc archive: project` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-llm-event-driven-trigger-2026-02-26.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-disable-seek-p2p-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
@@ -53,9 +53,9 @@
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-node-hard-decouple-2026-02-28.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:58:03 +0800 | cc | retired viewer-control-feedback-iteration-checklist-2026-02-27 project | pass | I5-001 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:58:03 +0800 | cc | retired viewer-control-feedback-step-recovery-p0-2026-02-27 project | pass | I5-001 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-web-build-pruning-2026-03-02.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-web-semantic-test-api.prd.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
@@ -96,7 +96,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/card_2026_03_01_00_20_13.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/game-test.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/prd.index.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/playability_test_manual.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/project.md`（retired former `playability_test_manual.md` trace） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/game-test.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/card_2026_02_28_23_27_06.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/playability_test_card.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -284,7 +284,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-production-runtime-gap1234568-closure.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-runtime.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | viewer live release-locked launch PRD (deleted obsolete doc) | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -304,7 +304,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/blockchain/blockchain-p2pfs-hardening-phase5.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/consensus/builtin-wasm-identity-consensus.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distfs/distfs-builtin-wasm-storage.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | viewer live release-locked launch project plan (deleted obsolete doc) | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-pos-consensus.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distfs/distfs-production-hardening-phase6.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -463,7 +463,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-observability-visual-optimization.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `historical removed viewer live tick-driven doc archive: prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -482,11 +482,11 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-agent-quick-locate.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-i18n.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired viewer-control-feedback-iteration-checklist-2026-02-27 PRD | pass | A5-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-chat-dedicated-right-panel.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-bevy-web-runtime.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired viewer-control-predictability-tasklist-2026-02-28 project | pass | A5-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase6-material-variant-preview.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -512,7 +512,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-webgl-deferred-compat-2026-02-24.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-web-usability-hardening-2026-02-22.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired viewer-control-predictability-tasklist-2026-02-28 PRD | pass | A5-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-overview-map-zoom.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-web-playability-unblock-2026-02-26.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -525,6 +525,6 @@
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-auto-select-capture.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-player-ui-declutter-2026-02-24.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-release-full-coverage-gate.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired viewer-control-feedback-step-recovery-p0-2026-02-27 PRD | pass | A5-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase2-visual-quality-gate.prd` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-overview-map-zoom.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

@@ -6,7 +6,7 @@
 
 审计轮次: 1
 
-> 当前 PR 的 `.pm` canonical trace 已收口为单个 aggregate task `task_de7dbd97ffdb485eb4a869cc8ac0673a`。
+> Historical note: 该 2026-05 rollout 当时的本地 `.pm` trace 已收口为单个 aggregate task `task_de7dbd97ffdb485eb4a869cc8ac0673a`。当前工程 workflow 的 canonical task truth 已迁移为 GitHub-backed task issue + Project fields；本地 `.pm` trace 在本文只作为历史追溯/脚本桥接语义。
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] borrowing-governance-baseline (PRD-ENGINEERING-031/PRD-ENGINEERING-AWB-002) [test_tier_required]: 冻结 `superpowers` adopted / rejected / deferred 矩阵，补齐 `claim-ready.sh` 完成前 fresh verification gate，本地化四个已裁定可借鉴 skill，并补一份 conflict / reopen reference。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
@@ -22,8 +22,8 @@
 
 ## Planned Follow-ups
 - `workflow-enforcement-audit-followup` (`PRD-ENGINEERING-AWB-002`, target `test_tier_required`): 已完成并由 `task_8b863d2d58e240398e9f2f723944ef2d` 追踪；`.pm/tasks/*.yaml` 已持久化 verification evidence，底层 `move-task --to-status done` 已拒绝无 `task_complete` claim evidence 的 closeout 绕过路径。
-- `default-workflow-bootstrap` (`PRD-ENGINEERING-021/031/PRD-ENGINEERING-AWB-009A`, target `test_tier_required`): 将 repo-owned bootstrap 从 root workflow 说明提升为独立 skill 与 eval surface，统一新 non-trivial task 的 trivial/non-trivial 判定、task worktree / `.pm` truth 前置与 router handoff。当前已启动独立 `.pm` task 与 worktree。
-- `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，必须先产出 IA / wireframe / layout compare artifact、明确推荐方向与不选路径，再切实现 task；artifact 与结论至少回写到 `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`、新的 task execution log 或 handoff 之一，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 `.pm` task 与 worktree。
+- `default-workflow-bootstrap` (`PRD-ENGINEERING-021/031/PRD-ENGINEERING-AWB-009A`, target `test_tier_required`): 将 repo-owned bootstrap 从 root workflow 说明提升为独立 skill 与 eval surface，统一新 non-trivial task 的 trivial/non-trivial 判定、task worktree / GitHub-backed task truth 前置与 router handoff。历史 rollout 当时启动了独立本地 `.pm` task 与 worktree；当前同类工作以 GitHub task issue evidence comments 为正式 sink。
+- `viewer-visual-companion-pilot-followup` (`PRD-ENGINEERING-AWB-003/PRD-WORLD_SIMULATOR-046`, target `test_tier_required`): 在 Viewer Web 下一轮结构/视觉专题中试点 browser-based visual companion，必须先产出 IA / wireframe / layout compare artifact、明确推荐方向与不选路径，再切实现 task；artifact 与结论至少回写到 `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`、GitHub task issue evidence comments 或 handoff 之一，同时保持 `agent-browser` / repo-owned UI regression 仍是正式验证面。启动时需创建独立 GitHub-backed task 与 worktree。
 - `repo-owned-review-request-followup` (`PRD-ENGINEERING-AWB-010`, target `test_tier_required`): 为 high-risk local diff 引入 bounded repo-owned review-request surface，要求 review packet 固定写明 trigger/scope/question/return contract/formal sink，并把 `findings / no_findings / residual_risk` 与 GitHub PR readiness 明确分开。
 - `multi-harness-workflow-packaging-deferred` (`PRD-ENGINEERING-AWB-004`, target `test_tier_required`): 在 repo-owned workflow helpers 与 evals 稳定后，再评估是否需要为 Codex/OpenCode 等 harness 做 workflow packaging；未到该阶段前保持 deferred。若重开，必须先新建专题 task。
 

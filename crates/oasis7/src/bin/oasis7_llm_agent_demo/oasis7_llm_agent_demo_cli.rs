@@ -6,9 +6,10 @@ use std::process;
 use std::time::Instant;
 
 use oasis7::simulator::{
-    initialize_kernel, Action as SimulatorAction, ActionResult, AgentDecision, AgentDecisionTrace,
-    AgentRunner, LlmAgentBehavior, RejectReason, RuntimePerfSnapshot, WorldConfig, WorldInitConfig,
-    WorldScenario,
+    initialize_kernel, Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentBehavior,
+    AgentDecision, AgentDecisionTrace, AgentRunner, LlmAgentBehavior, OpenAiChatCompletionClient,
+    ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter, RejectReason,
+    RuntimePerfSnapshot, WorldConfig, WorldEvent, WorldInitConfig, WorldScenario,
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,6 +67,12 @@ struct CliOptions {
     switch_llm_long_term_goal: Option<String>,
     prompt_switches_json: Option<String>,
     prompt_switches: Vec<PromptSwitchSpec>,
+    decision_source: DecisionSource,
+    agent_provider_url: Option<String>,
+    agent_provider_auth_token: Option<String>,
+    agent_provider_connect_timeout_ms: u64,
+    agent_provider_decision_timeout_ms: u64,
+    agent_provider_profile: String,
 }
 
 impl Default for CliOptions {
@@ -90,6 +97,12 @@ impl Default for CliOptions {
             switch_llm_long_term_goal: None,
             prompt_switches_json: None,
             prompt_switches: Vec::new(),
+            decision_source: DecisionSource::LlmResponses,
+            agent_provider_url: None,
+            agent_provider_auth_token: None,
+            agent_provider_connect_timeout_ms: 60_000,
+            agent_provider_decision_timeout_ms: 60_000,
+            agent_provider_profile: "oasis7_p0_low_freq_npc".to_string(),
         }
     }
 }
@@ -114,6 +127,174 @@ enum CoverageBootstrapProfile {
     Industrial,
     Gameplay,
     Hybrid,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DecisionSource {
+    LlmResponses,
+    ProviderLoopbackHttp,
+}
+
+impl DecisionSource {
+    fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().replace('-', "_").as_str() {
+            "" | "llm" | "llm_responses" | "responses" | "builtin" => Some(Self::LlmResponses),
+            "provider_loopback_http" | "provider_local_bridge" | "provider_backed" => {
+                Some(Self::ProviderLoopbackHttp)
+            }
+            _ => None,
+        }
+    }
+
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::LlmResponses => "llm_responses",
+            Self::ProviderLoopbackHttp => "provider_loopback_http",
+        }
+    }
+}
+
+enum DemoAgentBehavior {
+    Llm(LlmAgentBehavior<OpenAiChatCompletionClient>),
+    ProviderBacked {
+        behavior: ProviderBackedAgentBehavior<ProviderLoopbackAdapter>,
+        prompt_context: ProviderPromptContext,
+    },
+}
+
+#[derive(Debug, Clone, Default)]
+struct ProviderPromptContext {
+    system_prompt: Option<String>,
+    short_term_goal: Option<String>,
+    long_term_goal: Option<String>,
+}
+
+impl ProviderPromptContext {
+    fn from_options(options: &CliOptions) -> Self {
+        Self {
+            system_prompt: options.llm_system_prompt.clone(),
+            short_term_goal: options.llm_short_term_goal.clone(),
+            long_term_goal: options.llm_long_term_goal.clone(),
+        }
+    }
+
+    fn apply_switch(&mut self, switch: &PromptSwitchSpec) {
+        if switch.llm_system_prompt.is_some() {
+            self.system_prompt = switch.llm_system_prompt.clone();
+        }
+        if switch.llm_short_term_goal.is_some() {
+            self.short_term_goal = switch.llm_short_term_goal.clone();
+        }
+        if switch.llm_long_term_goal.is_some() {
+            self.long_term_goal = switch.llm_long_term_goal.clone();
+        }
+    }
+
+    fn memory_summary(&self) -> Option<String> {
+        provider_memory_summary_from_parts(
+            self.system_prompt.as_deref(),
+            self.short_term_goal.as_deref(),
+            self.long_term_goal.as_deref(),
+        )
+    }
+}
+
+impl DemoAgentBehavior {
+    fn apply_prompt_switch(&mut self, switch: &PromptSwitchSpec) {
+        match self {
+            Self::Llm(behavior) => {
+                let current = behavior.prompt_overrides();
+                behavior.apply_prompt_overrides(
+                    switch.llm_system_prompt.clone().or(current.system_prompt),
+                    switch.llm_short_term_goal.clone().or(current.short_term_goal),
+                    switch.llm_long_term_goal.clone().or(current.long_term_goal),
+                );
+            }
+            Self::ProviderBacked {
+                behavior,
+                prompt_context,
+            } => {
+                prompt_context.apply_switch(switch);
+                behavior.replace_memory_summary(prompt_context.memory_summary());
+            }
+        }
+    }
+}
+
+impl AgentBehavior for DemoAgentBehavior {
+    fn agent_id(&self) -> &str {
+        match self {
+            Self::Llm(behavior) => behavior.agent_id(),
+            Self::ProviderBacked { behavior, .. } => behavior.agent_id(),
+        }
+    }
+
+    fn decide(&mut self, observation: &oasis7::simulator::Observation) -> AgentDecision {
+        match self {
+            Self::Llm(behavior) => behavior.decide(observation),
+            Self::ProviderBacked { behavior, .. } => behavior.decide(observation),
+        }
+    }
+
+    fn on_action_result(&mut self, result: &ActionResult) {
+        match self {
+            Self::Llm(behavior) => behavior.on_action_result(result),
+            Self::ProviderBacked { behavior, .. } => behavior.on_action_result(result),
+        }
+    }
+
+    fn on_event(&mut self, event: &WorldEvent) {
+        match self {
+            Self::Llm(behavior) => behavior.on_event(event),
+            Self::ProviderBacked { behavior, .. } => behavior.on_event(event),
+        }
+    }
+
+    fn take_decision_trace(&mut self) -> Option<AgentDecisionTrace> {
+        match self {
+            Self::Llm(behavior) => behavior.take_decision_trace(),
+            Self::ProviderBacked { behavior, .. } => behavior.take_decision_trace(),
+        }
+    }
+}
+
+fn provider_phase1_action_catalog() -> Vec<ActionCatalogEntry> {
+    vec![
+        ActionCatalogEntry::new("wait", "yield current turn without acting"),
+        ActionCatalogEntry::new("wait_ticks", "sleep for a bounded number of ticks"),
+        ActionCatalogEntry::new("move_agent", "move to a neighboring location"),
+        ActionCatalogEntry::new("speak_to_nearby", "emit a lightweight nearby speech event"),
+        ActionCatalogEntry::new(
+            "inspect_target",
+            "emit a lightweight target inspection event",
+        ),
+        ActionCatalogEntry::new(
+            "simple_interact",
+            "emit a lightweight single-step interaction event",
+        ),
+    ]
+}
+
+fn provider_memory_summary_from_parts(
+    system_prompt: Option<&str>,
+    short_term_goal: Option<&str>,
+    long_term_goal: Option<&str>,
+) -> Option<String> {
+    let mut parts = Vec::new();
+    if let Some(goal) = short_term_goal {
+        parts.push(format!("short_term_goal={goal}"));
+    }
+    if let Some(goal) = long_term_goal {
+        parts.push(format!("long_term_goal={goal}"));
+    }
+    if let Some(system) = system_prompt {
+        parts.push(format!("system_hint={system}"));
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join("\n"))
+    }
 }
 
 impl CoverageBootstrapProfile {

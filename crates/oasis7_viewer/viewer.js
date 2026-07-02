@@ -7613,6 +7613,7 @@ function PixelWorldFocusCommandSurface(props) {
   const binding = () => selectedAgentBindingInfo();
   const chatFeedback = () => snapshotSemanticFeedback(state.lastChatFeedback);
   const chatFeedbackDisplay = () => describeSemanticFeedback(chatFeedback(), locale());
+  const chatControlsEnabled = () => chatCapability().enabled && !isAgentChatInFlight();
   const gameplaySummary = () => buildGameplaySummary(locale());
   const blockerLabel = () => gameplaySummary()?.blockerLabel || gameplaySummary()?.blockerKind || tr$1(locale(), "无阻塞", "No blocker");
   const receiptLabel = () => gameplaySummary()?.executionStateLabel || gameplaySummary()?.recentFeedback?.stage || tr$1(locale(), "等待回执", "Waiting");
@@ -7662,7 +7663,7 @@ function PixelWorldFocusCommandSurface(props) {
           _el$138.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
           insert(_el$138, () => tr$1(locale(), "发送聊天", "Send Chat"));
           createRenderEffect((_p$) => {
-            var _v$44 = chatCapability().enabled ? "true" : "false", _v$45 = blockerLabel() !== tr$1(locale(), "无阻塞", "No blocker") ? "true" : "false", _v$46 = !chatCapability().enabled;
+            var _v$44 = chatControlsEnabled() ? "true" : "false", _v$45 = blockerLabel() !== tr$1(locale(), "无阻塞", "No blocker") ? "true" : "false", _v$46 = !chatControlsEnabled();
             _v$44 !== _p$.e && setAttribute(_el$128, "data-chat-ready", _p$.e = _v$44);
             _v$45 !== _p$.t && setAttribute(_el$132, "data-blocker-present", _p$.t = _v$45);
             _v$46 !== _p$.a && (_el$138.disabled = _p$.a = _v$46);
@@ -7769,7 +7770,7 @@ function PixelWorldFocusCommandSurface(props) {
             }
           }));
           createRenderEffect((_p$) => {
-            var _v$47 = tr$1(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$48 = !chatCapability().enabled, _v$49 = !chatCapability().enabled;
+            var _v$47 = tr$1(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$48 = !chatControlsEnabled(), _v$49 = !chatControlsEnabled();
             _v$47 !== _p$.e && setAttribute(_el$149, "placeholder", _p$.e = _v$47);
             _v$48 !== _p$.t && (_el$149.disabled = _p$.t = _v$48);
             _v$49 !== _p$.a && (_el$151.disabled = _p$.a = _v$49);

@@ -78,7 +78,7 @@ source_root = Path(sys.argv[2])
 def rewrite_missing_absolute_source_refs() -> None:
     replacement_dir = root / ".pm/evidence/portable-source-refs"
     absolute_ref_pattern = re.compile(r"/(?:home|Users)/[^\s\"']+")
-    for path in list((root / ".pm").rglob("*.yaml")) + list((root / ".pm").rglob("*.jsonl")):
+    for path in (root / ".pm").rglob("*.yaml"):
         text = path.read_text(encoding="utf-8")
         replacements: dict[str, str] = {}
         for match in absolute_ref_pattern.finditer(text):
@@ -102,7 +102,7 @@ def rewrite_missing_absolute_source_refs() -> None:
 rewrite_missing_absolute_source_refs()
 
 
-def parse_inline_list(value: str) -> list[str] | None:
+def parse_inline_list(value: str):
     value = value.strip()
     if not (value.startswith("[") and value.endswith("]")):
         return None
@@ -114,7 +114,7 @@ def parse_inline_list(value: str) -> list[str] | None:
 
 def parse_simple_yaml(path: Path) -> dict[str, object]:
     parsed: dict[str, object] = {}
-    current_list_key: str | None = None
+    current_list_key = None
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip()
         if not line or line.lstrip().startswith("#"):
@@ -141,7 +141,7 @@ def parse_simple_yaml(path: Path) -> dict[str, object]:
 
 
 def iter_source_refs(path: Path):
-    current_list_key: str | None = None
+    current_list_key = None
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         stripped = raw_line.strip()
         if not stripped or stripped.startswith("#"):
@@ -210,11 +210,12 @@ for stage_path in (root / ".pm/stage").glob("*.yaml"):
         mirror_source_ref(str(source_ref))
 
 signals_path = root / ".pm/inbox/signals.jsonl"
-for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
-    raw_line = raw_line.strip()
-    if not raw_line:
-        continue
-    mirror_source_ref(str(json.loads(raw_line).get("source_ref") or ""))
+if signals_path.exists():
+    for raw_line in signals_path.read_text(encoding="utf-8").splitlines():
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+        mirror_source_ref(str(json.loads(raw_line).get("source_ref") or ""))
 PY
 
 python3 - "$TMPDIR" <<'PY'
@@ -249,6 +250,7 @@ for superseded_path in (root / ".pm/roles").glob("*/memory/superseded.yaml"):
 )
 
 (root / ".pm/evidence/bootstrap.md").write_text("# bootstrap evidence\n", encoding="utf-8")
+(root / ".pm/tasks").mkdir(parents=True, exist_ok=True)
 
 (root / ".pm/roles/qa_engineer/memory/active.yaml").write_text(
     """version: 1
@@ -388,7 +390,7 @@ registry_path.write_text(text.replace("shared_memory:\n", entry + "shared_memory
 PY
 
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/scaffold.sh" report_smoke_engineer >/dev/null
-TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
+TASK_JSON="$(python3 "$ROOT_DIR/scripts/pm/pm_store.py" new-task "$TMPDIR" \
   --owner-role qa_engineer \
   --title "investigate stale viewer blocker" \
   --priority P1 \
@@ -413,9 +415,9 @@ cat > "$TMPDIR/$TASK_LOG_PATH" <<EOF
 - Actual Result: smoke fixture task 已写入 execution log 并在后续转入 committed -> blocked，供 memory/report lint 复用。
 - Blocker / Next Action: stale blocker still needs review.
 EOF
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status committed >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role qa_engineer --phase start --task-uid "$TASK_UID" --json >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/move-task.sh" --task-uid "$TASK_UID" --to-status blocked >/dev/null
+python3 "$ROOT_DIR/scripts/pm/pm_store.py" move-task "$TMPDIR" --task-uid "$TASK_UID" --to-status committed >/dev/null
+python3 "$ROOT_DIR/scripts/pm/pm_store.py" workflow-report "$TMPDIR" --role qa_engineer --phase start --task-uid "$TASK_UID" --json >/dev/null
+python3 "$ROOT_DIR/scripts/pm/pm_store.py" move-task "$TMPDIR" --task-uid "$TASK_UID" --to-status blocked >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --current-stage internal_playable_alpha_late \
   --claim-envelope internal_only \
@@ -426,7 +428,8 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/set-stage.sh" \
   --blocking-task "$TASK_UID" \
   --source-ref "$TASK_LOG_PATH" >/dev/null
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-lint.sh" >/dev/null
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/lint.sh" >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-execution-log-lint.sh" >/dev/null
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-lint.sh" >/dev/null
 
 REPORT_JSON_PATH="$TMPDIR/report.json"
 QA_REPORT_JSON_PATH="$TMPDIR/qa-report.json"
@@ -438,7 +441,7 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --json > "$REPORT_
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/memory-report.sh" --role qa_engineer --no-shared --json > "$QA_REPORT_JSON_PATH"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --json > "$ROLE_REPORT_JSON_PATH"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report.sh" --role qa_engineer --json > "$QA_ROLE_REPORT_JSON_PATH"
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/workflow-report.sh" --role report_smoke_engineer --phase start --json > "$EXPANDED_WORKFLOW_JSON_PATH"
+python3 "$ROOT_DIR/scripts/pm/pm_store.py" workflow-report "$TMPDIR" --role report_smoke_engineer --phase start --json > "$EXPANDED_WORKFLOW_JSON_PATH"
 
 python3 - "$REPORT_JSON_PATH" "$QA_REPORT_JSON_PATH" "$ROLE_REPORT_JSON_PATH" "$QA_ROLE_REPORT_JSON_PATH" "$EXPANDED_WORKFLOW_JSON_PATH" "$TASK_UID" <<'PY'
 from __future__ import annotations
@@ -464,9 +467,10 @@ if qa_report["counts"] != {"active": 1, "needs_review": 1, "superseded": 1}:
     raise SystemExit(f"unexpected qa_report counts: {qa_report['counts']}")
 if list(qa_report["roles"].keys()) != ["qa_engineer"]:
     raise SystemExit("qa_report should only contain qa_engineer role summary")
-if role_report["roles"]["report_smoke_engineer"]["backlog_counts"] != {"candidate": 0, "committed": 0, "blocked": 0, "done": 0, "deferred": 0}:
+zero_backlog_counts = {"candidate": 0, "committed": 0, "blocked": 0, "ready": 0, "pr_watch": 0, "done": 0, "deferred": 0}
+if role_report["roles"]["report_smoke_engineer"]["backlog_counts"] != zero_backlog_counts:
     raise SystemExit("role_report missing zero-count expanded role backlog summary")
-if expanded_workflow["role_report"]["backlog_counts"] != {"candidate": 0, "committed": 0, "blocked": 0, "done": 0, "deferred": 0}:
+if expanded_workflow["role_report"]["backlog_counts"] != zero_backlog_counts:
     raise SystemExit("workflow_report missing zero-count expanded role backlog summary")
 if expanded_workflow["signal_summary"]["pending_count"] != 0:
     raise SystemExit("workflow_report pending signal count mismatch for expanded role")

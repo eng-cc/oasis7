@@ -257,6 +257,11 @@ record = (mapping.get("tasks") or {}).get(task_uid)
 if not record:
     raise SystemExit(0)
 record.setdefault("claim_verifications", []).append(claim)
+record["last_claim_type"] = claim["claim_type"]
+record["last_verify_command"] = claim["verify_command"]
+record["last_verified_at"] = claim["verified_at"]
+record["last_verification_exit_code"] = claim["verification_exit_code"]
+record["last_verification_status"] = claim["status"]
 record["last_claim_verification_at"] = claim["verified_at"]
 record["updated_at"] = claim["verified_at"]
 mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -299,18 +304,20 @@ PY
       --verified-at "$VERIFIED_AT" \
       --verification-exit-code "$VERIFY_EXIT_CODE" \
       --verification-status "$STATUS" >/dev/null
-  else
-    python3 - "$TASK_UID" "$RESULT_JSON" <<'PY'
+else
+    python3 - "$ROOT_DIR" "$TASK_UID" "$RESULT_JSON" <<'PY'
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-task_uid = sys.argv[1]
-claim = json.loads(sys.argv[2])
+root = Path(sys.argv[1])
+task_uid = sys.argv[2]
+claim = json.loads(sys.argv[3])
 repo = "eng-cc/oasis7"
 try:
     payload = subprocess.check_output(
@@ -335,6 +342,95 @@ try:
 except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
     hits = []
 if isinstance(hits, list) and len(hits) == 1 and hits[0].get("number"):
+    issue_number = int(hits[0]["number"])
+    try:
+        issue_payload = subprocess.check_output(
+            [
+                "gh",
+                "issue",
+                "view",
+                str(issue_number),
+                "-R",
+                repo,
+                "--json",
+                "body,number,title,url",
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=180,
+        )
+        issue = json.loads(issue_payload)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
+        issue = None
+
+    if issue is not None:
+        body_text = str(issue.get("body") or "")
+        if re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body_text, re.MULTILINE):
+            fields: dict[str, object] = {}
+            for key in ("owner_role", "module", "status", "priority", "worktree_hint", "pr_url", "pr_number"):
+                match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body_text, re.MULTILINE)
+                if match:
+                    fields[key] = match.group(1)
+            source_refs = re.findall(r"^- `([^`]+)`$", body_text, re.MULTILINE)
+            if source_refs:
+                fields["source_refs"] = source_refs
+            acceptance_match = re.search(r"^Acceptance:\n(?P<body>(?:^- .+\n?)+)", body_text, re.MULTILINE)
+            if acceptance_match:
+                fields["acceptance"] = [
+                    line[2:].strip()
+                    for line in acceptance_match.group("body").splitlines()
+                    if line.startswith("- ")
+                ]
+            title = str(issue.get("title") or "")
+            if title.startswith("[PM] "):
+                title = title[5:]
+            record = {
+                "task_uid": task_uid,
+                "title": title,
+                "issue_number": int(issue.get("number") or issue_number),
+                "issue_url": str(issue.get("url") or f"https://github.com/{repo}/issues/{issue_number}"),
+                "_github_source": "issue_search",
+                **fields,
+            }
+            try:
+                project_payload = subprocess.check_output(
+                    [
+                        "gh",
+                        "project",
+                        "item-list",
+                        "1",
+                        "--owner",
+                        "eng-cc",
+                        "--limit",
+                        "1000",
+                        "--format",
+                        "json",
+                    ],
+                    text=True,
+                    stderr=subprocess.PIPE,
+                    timeout=180,
+                )
+                project = json.loads(project_payload)
+                for item in project.get("items", []) or []:
+                    content = item.get("content") or {}
+                    if task_uid in str(content.get("body") or "") or str(content.get("url") or "") == record["issue_url"]:
+                        if item.get("id"):
+                            record["project_item_id"] = str(item["id"])
+                        break
+            except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
+                pass
+            record.setdefault("claim_verifications", []).append(claim)
+            record["last_claim_verification_at"] = claim["verified_at"]
+            record["updated_at"] = claim["verified_at"]
+            mapping_path = root / ".pm/github-project-sync/tasks.json"
+            mapping = {
+                "project": {"owner": "eng-cc", "number": 1, "repo": repo},
+                "version": 1,
+                "tasks": {task_uid: record},
+            }
+            mapping_path.parent.mkdir(parents=True, exist_ok=True)
+            mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
     body = "\n".join(
         [
             "<!-- oasis7-pm-claim-verification -->",
@@ -353,7 +449,7 @@ if isinstance(hits, list) and len(hits) == 1 and hits[0].get("number"):
         body_path = Path(handle.name)
     try:
         subprocess.run(
-            ["gh", "issue", "comment", str(hits[0]["number"]), "-R", repo, "--body-file", str(body_path)],
+            ["gh", "issue", "comment", str(issue_number), "-R", repo, "--body-file", str(body_path)],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

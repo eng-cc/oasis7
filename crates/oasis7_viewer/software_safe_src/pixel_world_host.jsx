@@ -1223,6 +1223,7 @@ function PixelWorldFocusCommandSurface(props) {
   const binding = () => core.selectedAgentBindingInfo();
   const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
+  const chatControlsEnabled = () => chatCapability().enabled && !core.isAgentChatInFlight();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const blockerLabel = () =>
     gameplaySummary()?.blockerLabel || gameplaySummary()?.blockerKind || tr(locale(), "无阻塞", "No blocker");
@@ -1251,7 +1252,7 @@ function PixelWorldFocusCommandSurface(props) {
             {chatCapability().enabled ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited")}
           </span>
         </div>
-        <div class="pixel-world-focus-command-tray" data-chat-ready={chatCapability().enabled ? "true" : "false"}>
+        <div class="pixel-world-focus-command-tray" data-chat-ready={chatControlsEnabled() ? "true" : "false"}>
           <div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target">
             <span>{tr(locale(), "目标", "Target")}</span>
             <strong>{`agent=${agentId()}`}</strong>
@@ -1268,7 +1269,7 @@ function PixelWorldFocusCommandSurface(props) {
             type="button"
             class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"
             data-chat-send="1"
-            disabled={!chatCapability().enabled}
+            disabled={!chatControlsEnabled()}
             onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
           >
             {tr(locale(), "发送聊天", "Send Chat")}
@@ -1298,7 +1299,7 @@ function PixelWorldFocusCommandSurface(props) {
                 id="agent-chat-message"
                 rows="2"
                 placeholder={tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent")}
-                disabled={!chatCapability().enabled}
+                disabled={!chatControlsEnabled()}
                 value={core.state.chatDraft.message}
                 onInput={(event) => {
                   core.state.chatDraft.message = String(event.currentTarget.value || "");
@@ -1310,7 +1311,7 @@ function PixelWorldFocusCommandSurface(props) {
               <button
                 type="button"
                 data-chat-send="1"
-                disabled={!chatCapability().enabled}
+                disabled={!chatControlsEnabled()}
                 onClick={() => core.sendAgentChat(agentId(), core.state.chatDraft.message)}
               >
                 {tr(locale(), "发送聊天", "Send Chat")}

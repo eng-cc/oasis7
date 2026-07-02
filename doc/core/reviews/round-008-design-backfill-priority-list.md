@@ -108,7 +108,7 @@
 - `doc/p2p/token/mainchain-token-allocation-mechanism-phase2-governance-bridge-distribution-2026-02-26`
 - `doc/p2p/viewer-live/oasis7-viewer-live-llm-default-on-2026-02-23`
 - `doc/p2p/viewer-live/oasis7-viewer-live-no-llm-flag-2026-02-23`
-- `doc/p2p/viewer-live/oasis7-viewer-live-release-locked-launch-2026-02-23`
+- viewer live release-locked launch obsolete doc triplet
 
 ## 新增已补齐（2026-03-10 / world-runtime + world-simulator 收口）
 - `doc/world-runtime/module/module-subscription-filters`
@@ -183,10 +183,10 @@
 - `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview`
 - `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2`
 - `doc/world-simulator/viewer/viewer-control-advanced-debug-folding`
-- `doc/world-simulator/viewer/viewer-control-feedback-iteration-checklist-2026-02-27`
-- `doc/world-simulator/viewer/viewer-control-feedback-step-recovery-p0-2026-02-27`
+- retired viewer-control-feedback-iteration-checklist-2026-02-27 topic (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
+- retired viewer-control-feedback-step-recovery-p0-2026-02-27 topic (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27`
-- `doc/world-simulator/viewer/viewer-control-predictability-tasklist-2026-02-28`
+- retired viewer-control-predictability-tasklist-2026-02-28 topic (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - `doc/world-simulator/viewer/viewer-copyable-text`
 - `doc/world-simulator/viewer/viewer-dual-view-2d-3d`
 - `doc/world-simulator/viewer/viewer-egui-right-panel`
@@ -214,7 +214,7 @@
 - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05`
 - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28`
-- `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27`
+- `historical removed viewer live tick-driven doc archive`
 - `doc/world-simulator/viewer/viewer-location-depletion-visualization`
 - `doc/world-simulator/viewer/viewer-location-fine-grained-rendering`
 - `doc/world-simulator/viewer/viewer-minimal-system`

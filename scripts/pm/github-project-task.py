@@ -75,7 +75,7 @@ def pr_number_from_url(pr_url: str) -> int | None:
 
 def issue_task_fields(body: str) -> dict[str, Any]:
     fields: dict[str, Any] = {}
-    for key in ("owner_role", "module", "status", "priority", "worktree_hint"):
+    for key in ("owner_role", "module", "status", "priority", "worktree_hint", "source_signal", "source_type", "severity"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -149,6 +149,9 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("worktree_hint", record.get("worktree_hint") or ""),
             ("status", record.get("status") or "candidate"),
             ("priority", record.get("priority") or "P2"),
+            ("source_signal", record.get("source_signal") or ""),
+            ("source_type", record.get("source_type") or ""),
+            ("severity", record.get("severity") or ""),
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
             ("source_refs", record.get("source_refs") or []),
@@ -172,6 +175,14 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
+    if task.get("source_signal") or task.get("source_type") or task.get("severity"):
+        lines.extend(
+            [
+                f"- source_signal: `{task.get('source_signal') or ''}`",
+                f"- source_type: `{task.get('source_type') or ''}`",
+                f"- severity: `{task.get('severity') or ''}`",
+            ]
+        )
     if task.get("pr_url"):
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
@@ -246,6 +257,39 @@ def update_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any],
     return int(updated)
 
 
+def update_done_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
+    sync = load_sync_module()
+    project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    required_fields = {"Status", "PM Status", "Workflow Phase"}
+    values = sync.project_field_values(task)
+    missing: list[str] = []
+    for field_name in sorted(required_fields):
+        value = str(values.get(field_name) or "")
+        field = fields.get(field_name)
+        if not field:
+            missing.append(f"{field_name}:missing_field")
+            continue
+        if not value:
+            missing.append(f"{field_name}:empty_value")
+            continue
+        if field_name in sync.SINGLE_SELECT_FIELDS and value not in (field.get("options_by_name") or {}):
+            missing.append(f"{field_name}:missing_option:{value}")
+    if missing:
+        die(
+            "move-task: refusing done because required GitHub Project fields are unavailable: "
+            + ", ".join(missing)
+        )
+    updated, skipped = sync.update_fields(project_id, project_item_id, task, fields, only_fields=required_fields)
+    if skipped:
+        print(f"github-project-task: skipped done fields: {', '.join(skipped)}", file=sys.stderr)
+    if int(updated) != len(required_fields):
+        die(
+            "move-task: refusing done because required GitHub Project fields were not updated: "
+            f"updated={updated}/{len(required_fields)}"
+        )
+    return int(updated)
+
+
 def add_project_item(args: argparse.Namespace, issue_url: str) -> str:
     payload = json.loads(
         run_text(
@@ -284,6 +328,9 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("worktree_hint", args.worktree_hint or ""),
             ("status", "candidate"),
             ("priority", args.priority),
+            ("source_signal", args.source_signal or ""),
+            ("source_type", args.source_type or ""),
+            ("severity", args.severity or ""),
             ("source_refs", args.source_ref or []),
             ("doc_refs", args.doc_ref or []),
             ("related_prd", args.related_prd or []),
@@ -304,6 +351,9 @@ def command_new_task(args: argparse.Namespace) -> int:
         "worktree_hint": args.worktree_hint or "",
         "status": "candidate",
         "priority": args.priority,
+        "source_signal": args.source_signal or "",
+        "source_type": args.source_type or "",
+        "severity": args.severity or "",
         "source_refs": args.source_ref or [],
         "doc_refs": args.doc_ref or [],
         "related_prd": args.related_prd or [],
@@ -351,6 +401,16 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
             die(f"task_uid not found in mapping or GitHub issue body: {args.task_uid}")
         mapping.setdefault("tasks", {})[args.task_uid] = record
     return mapping_path, mapping, record
+
+
+def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
+    if record.get("project_item_id"):
+        return
+    try:
+        recovered = load_sync_module().recover_project_mapping(args.project_owner, args.project_number)
+    except Exception:
+        return
+    record.update(recovered.get(args.task_uid) or {})
 
 
 def has_verified_task_complete(record: dict[str, Any]) -> bool:
@@ -440,13 +500,24 @@ def command_move_task(args: argparse.Namespace) -> int:
             "run ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid "
             f"{args.task_uid} --verify-command '<cmd>'"
         )
+    if args.to_status == "done":
+        recover_missing_project_item(args, record)
+    if args.to_status == "done" and not record.get("project_item_id"):
+        die(
+            "move-task: refusing done because GitHub Project item mapping could not be recovered; "
+            f"task_uid={args.task_uid}"
+        )
     record["status"] = args.to_status
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
-    if record.get("project_item_id"):
+    if args.to_status == "done":
+        updated_fields = update_done_project_fields(args, task, str(record["project_item_id"]))
+    elif record.get("project_item_id"):
         updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
+    if args.to_status == "done":
+        run_text(["gh", "issue", "close", str(record["issue_number"]), "-R", args.repo, "--reason", "completed"])
     if record.get("_github_source") != "issue_search" or mapping_path.exists():
         save_mapping(mapping_path, mapping)
     payload = {
@@ -529,6 +600,8 @@ def build_parser() -> argparse.ArgumentParser:
     new_task.add_argument("--module")
     new_task.add_argument("--priority", choices=("P0", "P1", "P2", "P3"), default="P2")
     new_task.add_argument("--source-signal")
+    new_task.add_argument("--source-type")
+    new_task.add_argument("--severity", choices=("low", "medium", "high", "critical"))
     new_task.add_argument("--source-ref", action="append", default=[], required=True)
     new_task.add_argument("--doc-ref", action="append", default=[])
     new_task.add_argument("--related-prd", action="append", default=[])

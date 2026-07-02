@@ -55,6 +55,68 @@ SOURCE_STATUS_BEFORE="$(git -C "$ROOT_DIR" status --short)"
 CANONICAL_REPO_ROOT="$(cd "$(git -C "$ROOT_DIR" rev-parse --git-common-dir)/.." && pwd -P)"
 CANONICAL_CONFIG_PATH="$CANONICAL_REPO_ROOT/config.toml"
 CREATED_CANONICAL_CONFIG_FIXTURE=0
+mkdir -p "$TMPDIR/bin"
+
+cat > "$TMPDIR/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%q ' "$@" >> "$GH_CALL_LOG"
+printf '\n' >> "$GH_CALL_LOG"
+case "$*" in
+  "issue create -R eng-cc/oasis7 --title "*)
+    printf 'https://github.com/eng-cc/oasis7/issues/2401\n'
+    ;;
+  "issue edit 2401 -R eng-cc/oasis7 --body-file "*)
+    printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
+    cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
+    printf '\n' >> "$GH_EDIT_BODY_LOG"
+    printf 'edited\n'
+    ;;
+  "issue comment 2401 -R eng-cc/oasis7 --body-file "*)
+    n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
+    printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
+    printf 'https://github.com/eng-cc/oasis7/issues/2401#issuecomment-%s\n' "$n"
+    ;;
+  "project item-add 1 --owner eng-cc --url https://github.com/eng-cc/oasis7/issues/2401 --format json")
+    printf '{"id":"ITEM_ID","content":{"url":"https://github.com/eng-cc/oasis7/issues/2401"}}\n'
+    ;;
+  "project view 1 --owner eng-cc --format json")
+    printf '{"id":"PROJECT_ID","number":1,"title":"oasis7 Engineering PM","url":"https://github.com/users/eng-cc/projects/1"}\n'
+    ;;
+  "project field-list 1 --owner eng-cc --format json")
+    cat <<'JSON'
+{"fields":[
+{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TODO","name":"Todo"},{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_BLOCKED_STATUS","name":"Blocked"},{"id":"OPT_READY","name":"Ready / PR"},{"id":"OPT_PR_WATCH","name":"PR Watch"},{"id":"OPT_DONE_STATUS","name":"Done"}]},
+{"id":"FIELD_TASK_UID","name":"Task UID","type":"ProjectV2Field"},
+{"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"},{"id":"OPT_PRODUCER","name":"producer_system_designer"}]},
+{"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
+{"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_CLOSEOUT","name":"closeout"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
+{"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
+{"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
+{"id":"FIELD_PR","name":"PR","type":"ProjectV2Field"},
+{"id":"FIELD_TIER","name":"Test Tier Required","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_NA","name":"n/a"}]},
+{"id":"FIELD_UPDATED","name":"Last PM Update","type":"ProjectV2Field"}]}
+JSON
+    ;;
+  project\ item-edit*)
+    printf '{}\n'
+    ;;
+  *)
+    echo "unexpected gh invocation: $*" >&2
+    exit 9
+    ;;
+esac
+SH
+chmod +x "$TMPDIR/bin/gh"
+export PATH="$TMPDIR/bin:$PATH"
+export GH_CALL_LOG="$TMPDIR/gh-calls.log"
+export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
+export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
+: > "$GH_CALL_LOG"
+: > "$GH_COMMENT_LOG"
+: > "$GH_EDIT_BODY_LOG"
 
 if [[ ! -f "$CANONICAL_CONFIG_PATH" ]]; then
   cat >"$CANONICAL_CONFIG_PATH" <<'EOF'

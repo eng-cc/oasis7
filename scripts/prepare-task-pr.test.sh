@@ -324,10 +324,10 @@ EOF
 
 commit_fixture_evidence() {
   local add_paths=(".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md")
-  if [[ -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" ]]; then
-    add_paths+=(".pm/github-project-sync/tasks.json")
-  fi
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add "${add_paths[@]}"
+  if [[ -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" ]]; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
+  fi
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
     -c user.email="smoke@example.invalid" \
@@ -344,6 +344,7 @@ run_prepare() {
   PATH="$TMPDIR/bin:$PATH" \
     PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
     PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
+    PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK="${PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK:-0}" \
     PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
     TEST_GH_LOG="$gh_log" \
     TEST_GIT_LOG="$git_log" \
@@ -360,7 +361,11 @@ reset_smoke_branch_to_base() {
 }
 
 reset_project_mapping_after_record_pr() {
-  "$REAL_GIT" -C "$SMOKE_WORKTREE" checkout -- .pm/github-project-sync/tasks.json
+  if "$REAL_GIT" -C "$SMOKE_WORKTREE" ls-files --error-unmatch .pm/github-project-sync/tasks.json >/dev/null 2>&1; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" checkout -- .pm/github-project-sync/tasks.json
+  else
+    rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
+  fi
 }
 
 write_changed_path_fixture() {
@@ -556,8 +561,9 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
-if gh_lines:
-    raise SystemExit(f"expected no gh calls before missing-review failure, got: {gh_lines}")
+unexpected_gh = [line for line in gh_lines if not line.startswith("issue list ")]
+if unexpected_gh:
+    raise SystemExit(f"expected only read-only issue lookup before missing-review failure, got: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before missing-review failure, got: {git_lines}")
 if "missing passed pre-PR local role review evidence" not in stderr:
@@ -679,8 +685,9 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
-if gh_lines:
-    raise SystemExit(f"expected no gh calls before stale-review failure, got: {gh_lines}")
+unexpected_gh = [line for line in gh_lines if not line.startswith("issue list ")]
+if unexpected_gh:
+    raise SystemExit(f"expected only read-only issue lookup before stale-review failure, got: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push before stale-review failure, got: {git_lines}")
 if "Source Head ancestor" not in stderr:
@@ -719,12 +726,16 @@ PY
 
 reset_smoke_branch_to_base
 rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
-"$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/github-project-sync/tasks.json
+if "$REAL_GIT" -C "$SMOKE_WORKTREE" ls-files --error-unmatch .pm/github-project-sync/tasks.json >/dev/null 2>&1; then
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/github-project-sync/tasks.json
+fi
+printf '\n# no-cache GitHub-backed PM fixture\n' >> "$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh
 "$REAL_GIT" -C "$SMOKE_WORKTREE" \
   -c user.name="oasis7 smoke" \
   -c user.email="smoke@example.invalid" \
   -c commit.gpgsign=false \
-  commit --no-verify -m "test: no-cache GitHub-backed PM fixture" >/dev/null
+  commit --allow-empty --no-verify -m "test: no-cache GitHub-backed PM fixture" >/dev/null
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 NO_CACHE_ISSUE_LIST="$TMPDIR/no-cache-issue-list.json"
 NO_CACHE_ISSUE_BODY="$TMPDIR/no-cache-issue-body.json"
@@ -786,6 +797,7 @@ if ! TEST_GH_ISSUE_LIST_JSON="$NO_CACHE_ISSUE_LIST" \
   TEST_GH_ISSUE_BODY_JSON="$NO_CACHE_ISSUE_BODY" \
   TEST_GH_ISSUE_FULL_JSON="$NO_CACHE_ISSUE_FULL" \
   TEST_GH_ISSUE_VIEW_JSON="$NO_CACHE_ISSUE_COMMENTS" \
+  PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK=1 \
   run_prepare "$no_cache_log" "$no_cache_git_log" --create >"$no_cache_out" 2>"$no_cache_err"; then
   cat "$no_cache_err" >&2
   cat "$no_cache_log" >&2

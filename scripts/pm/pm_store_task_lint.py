@@ -17,6 +17,7 @@ def run_task_backlog_lint(
     sync_task_views,
     load_roles,
     collect_signals,
+    load_signal_entries,
     is_devlog_archive_reference,
     resolve_source_ref_path,
     parse_reference_path,
@@ -43,11 +44,10 @@ def run_task_backlog_lint(
 
     signal_ids, promoted_signal_ids = collect_signals(root)
 
-    for line_no, raw_line in enumerate((root / ".pm/inbox/signals.jsonl").read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        payload = json.loads(line)
+    def is_external_source_ref(value: str) -> bool:
+        return value.startswith(("http://", "https://"))
+
+    for payload in load_signal_entries(root):
         missing = sorted(
             {
                 "signal_id",
@@ -61,7 +61,7 @@ def run_task_backlog_lint(
             - payload.keys()
         )
         if missing:
-            fail(f"signal missing keys at .pm/inbox/signals.jsonl:{line_no}: {', '.join(missing)}")
+            fail(f"GitHub intake signal missing keys: {payload.get('signal_id') or '<unknown>'}: {', '.join(missing)}")
             continue
         if payload["role_hint"] not in roles:
             fail(f"signal role_hint not registered: {payload['signal_id']} -> {payload['role_hint']}")
@@ -73,16 +73,19 @@ def run_task_backlog_lint(
         else:
             if is_devlog_archive_reference(source_ref):
                 fail(f"signal source_ref must not use doc/devlog archive: {payload['signal_id']} -> {source_ref}")
-            try:
-                resolved_signal_source = resolve_source_ref_path(root, source_ref)
-            except ValueError as exc:
-                fail(f"signal source_ref invalid: {payload['signal_id']} -> {exc}")
+            elif is_external_source_ref(source_ref):
+                pass
             else:
-                if not resolved_signal_source.exists():
-                    fail(
-                        f"signal source_ref missing: {payload['signal_id']} -> "
-                        f"{parse_reference_path(source_ref)}"
-                    )
+                try:
+                    resolved_signal_source = resolve_source_ref_path(root, source_ref)
+                except ValueError as exc:
+                    fail(f"signal source_ref invalid: {payload['signal_id']} -> {exc}")
+                else:
+                    if not resolved_signal_source.exists():
+                        fail(
+                            f"signal source_ref missing: {payload['signal_id']} -> "
+                            f"{parse_reference_path(source_ref)}"
+                        )
         if payload["promotion_state"] not in allowed_signal_states:
             fail(f"signal promotion_state invalid: {payload['signal_id']} -> {payload['promotion_state']}")
         memory_state = str(payload.get("memory_promotion_state", "pending"))
@@ -151,17 +154,16 @@ def run_task_backlog_lint(
         if status not in task_statuses:
             fail(f"registry task status invalid: {task_uid} -> {status}")
         task_path = entry.get("task_path")
-        if not task_path or not (root / str(task_path)).is_file():
+        if not task_path:
+            fail(f"registry task path missing: {task_uid} -> {task_path}")
+        elif not is_external_source_ref(str(task_path)) and not (root / str(task_path)).is_file():
             fail(f"registry task path missing: {task_uid} -> {task_path}")
         source_signal = entry.get("source_signal")
         if source_signal and str(source_signal) not in signal_ids:
-            fail(f"registry task source_signal missing from inbox: {task_uid} -> {source_signal}")
+            fail(f"registry task source_signal missing from GitHub intake mapping: {task_uid} -> {source_signal}")
 
     task_source_signals: set[str] = set()
     task_files = sorted(path for path in (root / ".pm/tasks").glob("*.yaml") if path.is_file())
-    if len(task_files) != len(registry_entries):
-        fail(f"task file count mismatch: files={len(task_files)} registry={len(registry_entries)}")
-
     task_fields_by_id: dict[str, OrderedDict[str, object]] = {}
     for path in task_files:
         fields = load_mapping_document(path)
@@ -194,7 +196,7 @@ def run_task_backlog_lint(
         if source_signal:
             task_source_signals.add(str(source_signal))
             if str(source_signal) not in signal_ids:
-                fail(f"task source_signal missing from inbox: {task_uid} -> {source_signal}")
+                fail(f"task source_signal missing from GitHub intake mapping: {task_uid} -> {source_signal}")
         source_refs = fields.get("source_refs")
         if not isinstance(source_refs, list) or not source_refs:
             fail(f"task file source_refs must be a non-empty list: {task_uid}")
@@ -202,6 +204,8 @@ def run_task_backlog_lint(
             for source_ref in source_refs:
                 if is_devlog_archive_reference(str(source_ref)):
                     fail(f"task file source_ref must not use doc/devlog archive: {task_uid} -> {source_ref}")
+                elif is_external_source_ref(str(source_ref)):
+                    continue
                 try:
                     resolved_source = resolve_source_ref_path(root, str(source_ref))
                 except ValueError as exc:
@@ -416,13 +420,65 @@ def run_task_backlog_lint(
         if require_entry and entry_count == 0:
             fail(f"task execution log requires at least one entry: {task_uid}")
 
-    for signal_id in promoted_signal_ids:
-        if signal_id not in task_source_signals:
-            fail(f"promoted signal has no task file: {signal_id}")
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    if mapping_path.is_file():
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        for task_uid, record in sorted((mapping.get("tasks") or {}).items()):
+            if task_uid in task_fields_by_id:
+                continue
+            if not isinstance(record, dict):
+                fail(f"GitHub task mapping record invalid: {task_uid}")
+                continue
+            fields = OrderedDict(record)
+            fields["task_uid"] = task_uid
+            task_fields_by_id[task_uid] = fields
+            owner_role = fields.get("owner_role")
+            status = fields.get("status")
+            if owner_role not in roles:
+                fail(f"GitHub task owner_role not registered: {task_uid} -> {owner_role}")
+            if status not in task_statuses:
+                fail(f"GitHub task status invalid: {task_uid} -> {status}")
+            registry_entry = registry_by_id.get(task_uid)
+            if registry_entry is None:
+                fail(f"GitHub task missing from registry: {task_uid}")
+            else:
+                if registry_entry.get("owner_role") != owner_role:
+                    fail(f"registry owner_role mismatch: {task_uid}")
+                if registry_entry.get("status") != status:
+                    fail(f"registry status mismatch: {task_uid}")
+                if registry_entry.get("priority") != fields.get("priority"):
+                    fail(f"registry priority mismatch: {task_uid}")
+            source_signal = fields.get("source_signal")
+            if source_signal:
+                task_source_signals.add(str(source_signal))
+                if str(source_signal) not in signal_ids:
+                    fail(f"GitHub task source_signal missing from GitHub intake mapping: {task_uid} -> {source_signal}")
+            source_refs = fields.get("source_refs")
+            if not isinstance(source_refs, list) or not source_refs:
+                fail(f"GitHub task source_refs must be a non-empty list: {task_uid}")
+            else:
+                for source_ref in source_refs:
+                    if is_devlog_archive_reference(str(source_ref)):
+                        fail(f"GitHub task source_ref must not use doc/devlog archive: {task_uid} -> {source_ref}")
+                    elif is_external_source_ref(str(source_ref)):
+                        continue
+                    try:
+                        resolved_source = resolve_source_ref_path(root, str(source_ref))
+                    except ValueError as exc:
+                        fail(f"GitHub task source_ref invalid: {task_uid} -> {exc}")
+                    else:
+                        if not resolved_source.exists():
+                            fail(
+                                f"GitHub task source_ref missing: {task_uid} -> "
+                                f"{parse_reference_path(str(source_ref))}"
+                            )
+
+    if len(task_fields_by_id) != len(registry_entries):
+        fail(f"task record count mismatch: canonical={len(task_fields_by_id)} registry={len(registry_entries)}")
 
     backlog_membership: dict[str, list[tuple[str, str, OrderedDict[str, object]]]] = {}
     for role in sorted(roles):
-        for file_status in ("candidate", "committed", "blocked", "done"):
+        for file_status in ("candidate", "committed", "blocked", "ready", "pr_watch", "done"):
             path = role_backlog_path(root, role, file_status)
             header, entries = load_list_document(path, "tasks")
             if header.get("role") != role:

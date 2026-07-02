@@ -9,7 +9,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - historical task archive
 - task-scoped working_memory
 - shared memory
-- signal inbox
+- GitHub-backed reflection intake
 - stage / gate
 - 模板与脚本输入输出契约
 
@@ -50,8 +50,9 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - `./scripts/pm/github-project-workflow.sh`：GitHub Project-backed PM adapter；`sync` 将 `.pm` mirror 或 Step 3 archive 推到 GitHub Issue/Project，`audit` 以 selected-task / mapping-targeted 低成本路径校验 Project/mapping/archive 漂移，`step3-gate` 是全历史硬 gate。
 - `./scripts/pm/github-project-sync.sh`：底层 `.pm/archive -> GitHub Issues/Project` 幂等同步器，由 `github-project-workflow sync` 调用。
 - `./scripts/pm/github-project-retire-tasks.sh`：Step 3 归档/删除工具；先导出 `.pm/github-project-sync/task-archive.jsonl`，再删除 `.pm/tasks/*`。
-- `./scripts/pm/capture-todo.sh`：把还没决定创建 `.pm` task 的顺手 TODO / discovery 记录为 `source_type=reflection` signal；默认只写 `.pm/inbox/signals.jsonl`，显式 `--create-task` 时才提升成 candidate task。
-- `./scripts/pm/promote-signal.sh`：把高价值信号写入 `.pm/inbox/signals.jsonl`。
+- `./scripts/pm/capture-todo.sh`：把还没决定创建 task 的顺手 TODO / discovery 记录为 GitHub-backed `source_type=reflection` intake issue；显式 `--create-task` 时才提升成 candidate task。
+- `./scripts/pm/promote-signal.sh`：创建 GitHub-backed reflection intake issue，并刷新 ignored generated mirror `.pm/github-project-sync/intake-signals.json` 供 `reflection-report` / `workflow-report` 本地查看；带 `--create-task` 时再创建 GitHub-backed candidate task 并保留 `source_signal` / intake issue 回链。
+- `.pm/github-project-sync/signal-archive.jsonl`：`.pm/inbox/signals.jsonl` 退休时的只读历史归档；active runtime 不再读写 `.pm/inbox/signals.jsonl`。
 - `./scripts/pm/new-task.sh`：创建 GitHub Issue + GitHub Project item，可刷新本地 `.pm/github-project-sync/tasks.json` mapping cache，不创建 `.pm/tasks` 文件。
 - `./scripts/new-task-worktree.sh --pm-owner-role ... --pm-title ... --pm-source-ref ...`：在创建 task worktree 的同时，切到目标 worktree 内原子完成 `new-task -> move-task committed -> workflow-report start`，证据写入 GitHub issue comment。
 - `./scripts/pm/move-task.sh`：在 `candidate/committed/blocked/ready/pr_watch/done/deferred` 之间同步更新 GitHub Project Status / PM Status / Workflow Phase 与 mapping。
@@ -68,17 +69,17 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - `./scripts/pm/working-memory-report.sh`：按 task/role 输出 task-scoped `working_memory` 报表。
 - `./scripts/pm/codex-transcript-report.sh`：优先从 `~/.codex/session_index.jsonl` / `history.jsonl` 读取单个 `session_id`；若 `history.jsonl` 无该会话消息，则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，只做排序与脱敏预处理。
 - `./scripts/pm/codex-working-memory.sh`：先跑 `codex-transcript-report`，再调用 `codex exec --ephemeral` 把脱敏 transcript 提炼成 `working_memory` 条目；默认要求显式 `--session-id`，避免隐式读取当前 live Codex session。
-- `./scripts/pm/working-memory-to-signal.sh`：把选中的 `working_memory` 条目提升成 `source_type=reflection` signal，并回写 `promoted_to`。
-- `./scripts/pm/working-memory-autoflow.sh`：按安全默认值把 `working_memory` 自动提升成 reflection signal，并将 `next_step/open_question` 自动落成 candidate task。
+- `./scripts/pm/working-memory-to-signal.sh`：旧本地 apply 路径已禁用；先用 `working-memory-autoflow.sh --dry-run` 规划，再用 `promote-signal.sh` 创建 GitHub-backed intake。
+- `./scripts/pm/working-memory-autoflow.sh`：当前只保留 `--dry-run` 规划；apply 模式已禁用，避免复活 retired local signal/task 写入路径。
 - `./scripts/pm/reflection-report.sh`：按角色查看 reflection signal 队列，以及每条 signal 已挂出的 candidate task。
 - `./scripts/pm/role-report.sh`：按角色汇总本地生成视图、active / needs_review / superseded memory；带 `--task-uid` 时追加 task-centric collaboration view，辅助 owner 合流 GitHub issue evidence 与收口缺口。
 - `./scripts/pm/set-stage.sh`：统一更新 `.pm/stage/current.yaml` 与 `.pm/stage/gate.yaml`，作为 producer 修改阶段当前态的 canonical 入口。
 - `./scripts/pm/stage-lint.sh`：校验 stage/gate 文件完整性、blocking task 可达性，以及 active memory 与 stage 当前态是否漂移。
 - `./scripts/pm/stage-report.sh`：汇总 `.pm/stage/*.yaml`、blocked tasks、role backlog 计数，以及 producer/shared active memory，供阶段评审读取。
-- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、signal inbox 与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写入 GitHub issue comment，并在 mapping 中更新 phase 时间戳。
+- `./scripts/pm/workflow-report.sh`：按 `start / close / review` 三种 phase 汇总 role backlog、memory、GitHub-backed intake signal 视图与 stage/gate 摘要，并给出固定 checklist；`start/close + --task-uid` 会把执行证据写入 GitHub issue comment，并在 mapping 中更新 phase 时间戳。
 - `./scripts/pm/sync-views.sh`：legacy/local-view helper；Step 3 后不再从 `.pm/tasks/*.yaml` 生成 active truth。
 - `./scripts/pm/compact-task-group.sh`：legacy/local task-file consolidation helper；Step 3 后不得作为 active task 合并入口。
-- `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径，并把 `.pm/inbox/signals.jsonl` 的安全自动修复边界收口为“保留 upstream signal id、仅重编号 branch-local 冲突项”；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
+- `./scripts/pm/rebase-conflict-helper.sh`：在 active rebase 期间只读盘点 `.pm/**` 未合并路径；`.pm/inbox/signals.jsonl` 已退休，历史冲突只提示删除/人工归档，不再自动修复；若冲突命中 `.pm/registry/tasks.yaml` 或 `.pm/roles/*/backlog/*.yaml` 这类本地生成视图，helper 只提示“保留 `main` 删除，再执行 `./scripts/pm/sync-views.sh`”，不自动替用户覆盖 canonical task/memory/stage 真值。
 - `./scripts/pm/migrate-task-identity.sh`：legacy migration helper；用于旧 `TASK-PM-xxxx` 数据迁移，不是 active task 创建入口。
 - `./scripts/pm/required-tier-smoke.sh`：在临时 PM 根目录里跑一条 PM governance required-tier 验证链；fixture 中的 task-file 片段只验证 legacy compatibility，不代表 active evidence sink。
 - `./scripts/pm/memory-regression-smoke.sh`：在临时 PM 根目录里跑 `needs_review` / active 冲突 / superseded 链 / 新角色扩容的 full-tier 回归。
@@ -88,7 +89,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - GitHub Project 漂移审计（普通任务默认低成本 selected-task 路径）：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 audit --json`
 - Step 3 全历史 gate（迁移/人工/定时全量审计，不进普通 PR 热路径）：`./scripts/pm/github-project-workflow.sh --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 step3-gate --json`
 - Step 3 task 文件退休：`./scripts/pm/github-project-retire-tasks.sh --mapping .pm/github-project-sync/tasks.json --delete --json`
-- 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只写 reflection signal。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
+- 记录 pre-task TODO：`./scripts/pm/capture-todo.sh --source-ref <path> --summary "发现的问题/想法"`；默认 `role_hint=tpm`、`severity=low`、只创建 GitHub-backed reflection intake issue。若已经决定推进，再加 `--create-task --title ... --owner-role <role> --acceptance ...`。
 - 创建任务：`./scripts/pm/new-task.sh --owner-role <owner_role> --title "<title>" --module <module> --source-ref <path> --json`
 - 开始任务：`./scripts/pm/workflow-report.sh --phase start --role <owner_role> --task-uid <TASK-UID>`
 - 收口任务：优先 `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`，默认进入 `ready`；若需要手工拆步，再执行“fresh verification” + `./scripts/pm/workflow-report.sh --phase close --role <owner_role> --task-uid <TASK-UID>` + `./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status ready|done|deferred`
@@ -108,7 +109,7 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - 若 owner / title / source refs 已明确，优先直接用 `./scripts/new-task-worktree.sh <module> <task> --pm-owner-role <owner_role> --pm-title <title> --pm-source-ref <ref>` 一次性进入目标 worktree 并留下 `last_started_at`；只有在需要手工拆步时，才分开执行 `new-task.sh` / `workflow-report.sh` / `move-task.sh`，或显式跳过 `task-closeout.sh`。
 - 默认最终合流路径是 GitHub PR；本地 `land-task-worktree.sh` 仅保留给显式 local-only / fallback 场景，不再是 `.pm` 默认收口路径。
 - `.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 已降级为本地生成视图；它们会被 PM 命令自动刷新，但不应再作为 Git 冲突解决对象或人工真值手改。
-- 若 rebase 命中 `.pm/**` 冲突，先运行 `./scripts/pm/rebase-conflict-helper.sh` 盘点类别；只有 `.pm/inbox/signals.jsonl` 允许在 active rebase 中通过 `--resolve-signals` 自动修复，其余 canonical task/memory/stage 冲突仍需人工判断。
+- 若 rebase 命中 `.pm/**` 冲突，先运行 `./scripts/pm/rebase-conflict-helper.sh` 盘点类别；`.pm/inbox/signals.jsonl` 已退休，不再有 `.pm/**` 自动修复路径，canonical task/memory/stage 冲突仍需人工判断。
 
 QA / liveops 基础用法：
 - `./scripts/pm/promote-signal.sh --source-type issue_comment --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in GitHub Project"`
@@ -118,9 +119,9 @@ QA / liveops 基础用法：
 - `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status committed`
 - `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status deferred`
 - `./scripts/pm/set-stage.sh --current-stage internal_playable_alpha_late --claim-envelope internal_only --decision-date 2026-03-31 --gate-status blocked --lane-status qa=blocked --blocking-task task_<32hex> --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID>`
-- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0002 --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
-- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0003 --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
-- `./scripts/pm/promote-memory.sh --signal-id SIG-PM-0004 --role qa_engineer --reject-reason one_off_operation`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-GH-<id> --role producer_system_designer --topic stage.current --promotion-reason stage_decision --tag stage --tag claim_envelope`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-GH-<id> --scope shared --role producer_system_designer --topic gate.claim_envelope --promotion-reason stage_decision`
+- `./scripts/pm/promote-memory.sh --signal-id SIG-GH-<id> --role qa_engineer --reject-reason one_off_operation`
 - `./scripts/pm/supersede-memory.sh --role qa_engineer --memory-id MEM-QA-0001 --superseded-by MEM-QA-0002 --supersede-reason signature_refined`
 
 长期 memory promotion 约束：
@@ -142,17 +143,15 @@ working_memory 基础用法：
 - `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --allow-auto-session --worktree-hint <hint>`
 - `./scripts/pm/codex-transcript-report.sh --task-uid task_<32hex> --json`
 - `./scripts/pm/codex-working-memory.sh --task-uid task_<32hex> --role producer_system_designer --session-id <session_id> --full-scan`
-- `./scripts/pm/working-memory-to-signal.sh --task-uid task_<32hex> --entry-id WM-0001 --severity medium`
-- `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --severity medium --priority P2`
-- `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --dry-run --json`
+- `./scripts/pm/working-memory-autoflow.sh --task-uid task_<32hex> --severity medium --priority P2 --dry-run --json`
 - `./scripts/pm/reflection-report.sh --role producer_system_designer --json`
 - phase 1 的 transcript 预处理只负责排序与脱敏；结构化提炼统一交给 `codex exec --ephemeral`。
 - `codex-working-memory.sh` 默认不会仅凭 task/worktree 自动解析 `.codex` session；若确实要走 registry / worktree pattern 自动解析，必须显式传 `--allow-auto-session`。
 - `codex-working-memory.sh` 首次成功导入后会把 `task_uid -> session_id` 记到 `.pm/registry/codex-sessions.yaml`；后续若要继续复用该 registry 映射，也必须显式传 `--allow-auto-session`，或直接给出新的 `--session-id`。
 - 同一 `task_uid + session_id` 默认按 `working_memory` header 里的 `last_extracted_ts` 做增量抽取；这只在 owner 显式选择该 session 后生效，避免把当前 live session 的隐式自读当作默认收口路径。需要重扫整段 transcript 时显式传 `--full-scan`。
 - `working_memory` header 会记录 `source_session_id`、`source_thread_name`、`transcript_source`、`last_extracted_ts` 与 `captured_until_ts`，用于回放抽取来源与当前水位。
-- `working-memory-autoflow.sh` 只自动做安全动作：reflection signal + candidate task；不会自动升长期 memory，也不会自动改 stage / 正式文档。
-- `working-memory-autoflow.sh --dry-run` 是严格只读的 plan 模式：它只返回“会创建/复用哪些 reflection signal 与 candidate task”，不会改 `.pm/inbox/signals.jsonl`、`.pm/working_memory/*.yaml`、task registry 或 task files。
+- `working-memory-autoflow.sh` 的 apply 模式已禁用，避免复活 retired local signal/task 写入路径；先用 `--dry-run` 规划，再用 `promote-signal.sh` 创建 GitHub-backed intake / candidate task。
+- `working-memory-autoflow.sh --dry-run` 是严格只读的 plan 模式：它只返回“会创建/复用哪些 reflection signal 与 candidate task”，不会改 `.pm/working_memory/*.yaml`、task registry 或 task files。
 - dry-run 结果里只有已存在对象才会带真实 `signal_id` / `task_uid`；若对象尚未创建，apply 之前不会预留 ID，也不会留下任何半完成状态。
 
 role report 基础用法：

@@ -7,8 +7,9 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/pm/capture-todo.sh --source-ref <path> (--summary <text> | --text <text>) [options]
 
-Capture a lightweight pre-task TODO as a reflection signal. By default this only
-appends to .pm/inbox/signals.jsonl and does not create a GitHub-backed task.
+Capture a lightweight pre-task TODO as a GitHub-backed reflection intake issue.
+By default this only
+creates a GitHub-backed reflection intake issue and does not create a candidate task unless --create-task is selected.
 
 Required:
   --source-ref <path>         Primary source reference for the discovery
@@ -20,7 +21,7 @@ Required, choose one:
 Optional:
   --role-hint <role>          Canonical role owner hint; default: tpm
   --severity <level>          low | medium | high | critical; default: low
-  --signal-id <id>            Override auto-generated SIG-PM-XXXX id
+  --signal-id <id>            Override auto-generated SIG-GH-* id
   --create-task               Also create a candidate task
   --title <title>             Task title; defaults to summary
   --owner-role <role>         Task owner; defaults to role_hint
@@ -35,7 +36,7 @@ Optional:
 
 Notes:
   - This is an intake wrapper around ./scripts/pm/promote-signal.sh.
-  - Pre-task TODOs are recorded as source_type=reflection signals.
+  - Pre-task TODOs are recorded with --source-type reflection.
   - Use --create-task only when the TODO is ready to become a candidate task.
 USAGE
 }

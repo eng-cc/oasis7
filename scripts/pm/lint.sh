@@ -27,7 +27,6 @@ require_file ".pm/README.md"
 require_file ".pm/registry/roles.yaml"
 require_file ".pm/registry/codex-sessions.yaml"
 require_dir ".pm/inbox"
-require_file ".pm/inbox/signals.jsonl"
 require_dir ".pm/github-project-sync"
 require_file ".pm/github-project-sync/task-archive.jsonl"
 require_dir ".pm/working_memory"
@@ -115,12 +114,8 @@ if mapping_path.is_file():
         for uid, record in tasks.items()
         if not record.get("issue_url") or not record.get("issue_number") or not record.get("project_item_id")
     ]
-    archive_uids = {record.get("task_uid") for record in archive_records}
     if missing:
         print(f"pm-lint: FAIL: {len(missing)} mapping records missing issue/project handles")
-        sys.exit(1)
-    if archive_records and not archive_uids.issubset(set(tasks)):
-        print("pm-lint: FAIL: archive contains task_uid not present in mapping")
         sys.exit(1)
 PY
 

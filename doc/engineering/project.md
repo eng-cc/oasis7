@@ -10,6 +10,8 @@
 
 - [x] wasm-build-path-sort-dedup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm build source-hash path ordering to reuse a private `PathBuf` sort/dedup helper instead of repeated lossy-string comparator conversion in package-dir and source-file collection, preserving deterministic source-hash traversal for normal repo paths. Trace: .pm/tasks/task_f7a74ed95c704c09899a494237e500d7.yaml
 
+- [x] wasm-router-bounded-cache-entry-efficiency (PRD-ENGINEERING-021) [test_tier_required]: Optimize wasm router bounded cache insertion to use `HashMap::entry` for existing-key updates and vacant under-capacity inserts while preserving FIFO eviction order and zero-capacity behavior. Trace: #1775 (task_b4e8be63f59048229996d98587abab98)
+
 - [x] libp2p-peer-id-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize libp2p replication peer-id sort/dedup normalization in a private helper for connected and known peer-id lists, preserving sorted unique diagnostic/network-bridge output while reducing duplicate ordering logic. Trace: .pm/tasks/task_97177b0362184061ad7b4a244926abd8.yaml
 
 - [x] chain-runtime-replication-allowlist-normalization-helper (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Centralize chain runtime replication allowlist sort/dedup normalization in a private helper reused by remote-writer and fetch-requester allowlist builders, preserving sorted unique signer-key output while reducing duplicate ordering logic. Trace: .pm/tasks/task_b2883927f22e4dd19236f4c3cd77ff2e.yaml
@@ -442,6 +444,7 @@
 - [x] world-runtime-root-legacy-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 root world-runtime PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/world-runtime/prd.md` / `doc/world-runtime/project.md`，并同步收紧 root allowlist 与 doc governance 豁免。 Trace: .pm/tasks/task_c0ad4ca7b8ee40dbb5a45598bd634cd9.yaml
 - [x] world-simulator-root-legacy-redirect-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除 root world-simulator PRD/project legacy redirect 壳，将当前入口唯一收敛到 `doc/world-simulator/prd.md` / `doc/world-simulator/project.md`，并同步收紧 root allowlist 与 doc governance 豁免。 Trace: .pm/tasks/task_afc61923b1404b20815ec81ce1c60a7e.yaml
 - [x] viewer-project-legacy-entry-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除孤立 Viewer project 旧入口壳，将当前 task metadata 引用收敛到 canonical `doc/world-simulator/viewer/README.md` Viewer 子域 landing page，并同步收紧 module-root markdown allowlist。 Trace: .pm/tasks/task_71a578da05dd454b821b43299eda45ca.yaml
+- [x] engineering-doc-legacy-governance (PRD-ENGINEERING-021/025) [test_tier_required]: 收口工程治理入口和文档存量治理专题中仍把当前治理追溯导向 `.pm` execution log / `.pm Trace` 的旧语义，将 active evidence sink 重新对齐到 GitHub task issue evidence comments，并保留历史 `.pm/tasks/...` trace 只作归档追溯。 Trace: #1779 (task_0e63f13de6084483b844e62fc47b6fc4)
 - [x] manifest-diff-ordered-key-merge-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: 优化 runtime manifest diff 的 JSON object key 合并路径，用有序双迭代替代每层 collect/sort/dedup，并用 ops-order regression 固定 base-only、target-only 与 nested both-present patch 顺序。 Trace: .pm/tasks/task_24271b58c442494cba84b80a8b9f0332.yaml
 
 ## File Structure / Affected Paths
@@ -462,7 +465,7 @@
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
 - `scripts/check-rust-file-size.sh`
-- historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 `.pm/tasks/task_<32hex>.execution.md`）
+- historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments；退役前 `.pm/tasks/task_<32hex>.execution.md` 仅作历史追溯）
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
@@ -506,12 +509,12 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-06-27
+- 更新日期: 2026-07-02
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `world-simulator-historical-review-checklist-snapshot-deletion`（已删除 world-simulator 历史审读快照留痕路径，当前 world-simulator 阅读/状态语义收敛到模块 README、`prd.index.md`、`project.md` 与 `prd.md`。）
+- 最新完成: `engineering-doc-legacy-governance`（已将 engineering 入口和文档存量治理专题中的 active evidence / trace 口径从 `.pm` execution log 旧语义收敛到 GitHub task issue evidence comments；历史 `.pm/tasks/...` trace 继续只作为归档追溯保留。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
-- 已完成的治理专题、季度复核与流程迁移不再在本页逐条滚动播报；统一回看对应 topic `*.project.md`、`.pm/tasks/task_<32hex>.yaml` 与 execution log。
+- 已完成的治理专题、季度复核与流程迁移不再在本页逐条滚动播报；统一回看对应 topic `*.project.md`、GitHub task issue evidence comments、GitHub Project mapping 与历史 task archive。
 - 说明: 本文档只保留当前执行窗口、下一步与判断口径；历史完成态继续以本页任务清单和专题 project 真值为准。

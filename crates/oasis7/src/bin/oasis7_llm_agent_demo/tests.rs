@@ -82,6 +82,11 @@ fn parse_options_defaults() {
     assert_eq!(options.switch_llm_long_term_goal, None);
     assert_eq!(options.prompt_switches_json, None);
     assert!(options.prompt_switches.is_empty());
+    assert_eq!(options.decision_source, DecisionSource::LlmResponses);
+    assert_eq!(options.agent_provider_url, None);
+    assert_eq!(options.agent_provider_connect_timeout_ms, 60_000);
+    assert_eq!(options.agent_provider_decision_timeout_ms, 60_000);
+    assert_eq!(options.agent_provider_profile, "oasis7_p0_low_freq_npc");
 }
 
 #[test]
@@ -101,6 +106,91 @@ fn parse_options_accepts_report_json_path() {
     let options =
         parse_options(["--report-json", ".tmp/report.json"].into_iter()).expect("report json path");
     assert_eq!(options.report_json.as_deref(), Some(".tmp/report.json"));
+}
+
+#[test]
+fn parse_options_accepts_provider_loopback_http() {
+    let options = parse_options(
+        [
+            "--decision-source",
+            "provider_loopback_http",
+            "--agent-provider-url",
+            "http://127.0.0.1:5841",
+            "--agent-provider-connect-timeout-ms",
+            "1234",
+            "--agent-provider-decision-timeout-ms",
+            "2345",
+            "--agent-provider-profile",
+            "oasis7_p0_low_freq_npc",
+        ]
+        .into_iter(),
+    )
+    .expect("provider loopback options");
+
+    assert_eq!(options.decision_source, DecisionSource::ProviderLoopbackHttp);
+    assert_eq!(
+        options.agent_provider_url.as_deref(),
+        Some("http://127.0.0.1:5841")
+    );
+    assert_eq!(options.agent_provider_connect_timeout_ms, 1234);
+    assert_eq!(options.agent_provider_decision_timeout_ms, 2345);
+    assert_eq!(options.agent_provider_profile, "oasis7_p0_low_freq_npc");
+}
+
+#[test]
+fn provider_loopback_transport_timeout_preserves_decision_budget() {
+    let options = parse_options(
+        [
+            "--decision-source",
+            "provider_loopback_http",
+            "--agent-provider-url",
+            "http://127.0.0.1:5841",
+            "--agent-provider-connect-timeout-ms",
+            "1000",
+            "--agent-provider-decision-timeout-ms",
+            "60000",
+        ]
+        .into_iter(),
+    )
+    .expect("provider loopback options");
+
+    assert_eq!(resolve_provider_loopback_transport_timeout_ms(&options), 60_000);
+}
+
+#[test]
+fn provider_prompt_context_partial_switch_preserves_existing_parts() {
+    let options = parse_options(
+        [
+            "--llm-system-prompt",
+            "sys",
+            "--llm-short-term-goal",
+            "short",
+            "--llm-long-term-goal",
+            "long",
+        ]
+        .into_iter(),
+    )
+    .expect("initial provider prompt context");
+    let mut context = ProviderPromptContext::from_options(&options);
+
+    context.apply_switch(&PromptSwitchSpec {
+        tick: 2,
+        llm_system_prompt: None,
+        llm_short_term_goal: Some("short2".to_string()),
+        llm_long_term_goal: None,
+    });
+
+    let summary = context.memory_summary().expect("summary");
+    assert!(summary.contains("system_hint=sys"));
+    assert!(summary.contains("short_term_goal=short2"));
+    assert!(summary.contains("long_term_goal=long"));
+}
+
+#[test]
+fn parse_options_rejects_provider_loopback_http_without_url() {
+    let err = parse_options(["--decision-source", "provider_loopback_http"].into_iter())
+        .expect_err("provider loopback requires url");
+    assert!(err.contains("--agent-provider-url"));
 }
 
 #[test]

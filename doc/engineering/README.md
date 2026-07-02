@@ -8,7 +8,7 @@
 
 ## 从这里开始
 - 想看工程治理边界、验收条件与长期规则：`doc/engineering/prd.md`
-- 想看当前治理窗口、活跃 follow-up 与 `.pm` Trace：`doc/engineering/project.md`
+- 想看当前治理窗口、活跃 follow-up 与 GitHub task issue / `task_uid` 追溯：`doc/engineering/project.md`
 - 想按专题进入具体治理文档：`doc/engineering/prd.index.md`
 
 ## 模块职责
@@ -22,7 +22,7 @@
 - 环境分层、测试/正式云上清单、testnet/mainnet 口径：先看 `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 仓库健康手动巡检：先看 `doc/engineering/governance/repository-health-manual-inspection.runbook.md`
 - Rust 体量治理：先看 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
-- `.pm` / self-evolution：先看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- `.pm` / self-evolution：当前 task truth 与 evidence sink 先看 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`；2026-03 file-based 设计背景再看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - 趋势 / 季度复核 / 迁移 / 审读：统一从 `doc/engineering/prd.index.md` 下钻对应专题
 
 ## 共享约定

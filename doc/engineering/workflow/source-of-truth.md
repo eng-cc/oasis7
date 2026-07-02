@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.3**
-Last Updated: **2026-06-30**
+Version: **v1.5.4**
+Last Updated: **2026-07-01**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -115,8 +115,10 @@ or reusable failure signature:
    workflow friction, possible debt, or cross-task learning that is not yet
    ready to become committed task truth. Use
    `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`.
-   By default this creates `source_type=reflection` only and must not create a
-   candidate task unless `--create-task` is explicitly selected.
+   By default this creates a GitHub-backed `source_type=reflection` intake issue
+   only and must not create a candidate task unless `--create-task` is
+   explicitly selected. Local reports may use the ignored generated mirror
+   `.pm/github-project-sync/intake-signals.json`; it is not PR truth.
 4. **Task-scoped `working_memory`**: choose this when the current task needs a
    structured temporary memory or transcript-derived summary before closeout.
    `working_memory` supplements GitHub task issue evidence comments; it never
@@ -196,6 +198,10 @@ Deterministic script contract:
   path must be selected-task / mapping-targeted and must not list the full
   Project during ordinary task closeout or PR readiness checks. It loads task
   truth from archive + mapping and fails if local task-file artifacts reappear.
+  For a single task, use
+  `./scripts/pm/github-project-workflow.sh audit --task-uid <TASK-UID> --json`;
+  the helper reads `repo`, `project-owner`, and `project-number` defaults from
+  `.pm/github-project-sync/tasks.json` when they are present.
 - `./scripts/pm/github-project-workflow.sh ... step3-gate` is the full
   historical coverage audit for the GitHub Project/mapping/archive set.
 - `./scripts/pm/github-project-retire-tasks.sh --delete` maintains
@@ -204,10 +210,12 @@ Deterministic script contract:
   the current input set.
 - `./scripts/pm/github-project-task.py` is the active task lifecycle adapter:
   create issue/project task, append evidence comments, move Project status, and
-  close tasks after fresh verification.
+  close task issues after fresh verification-backed `done` moves.
 - `./scripts/pm/task-closeout.sh` defaults to `ready` / `ready_for_pr`
   closeout. Final `done` is reserved for post-PR merge/cleanup closeout or an
-  explicitly non-PR task and still requires verified `task_complete` evidence.
+  explicitly non-PR task and still requires verified `task_complete` evidence;
+  `done` closeout must update issue metadata, set GitHub Project task fields to
+  `Done` / `done` / `done`, and close the GitHub task issue.
 - `./scripts/prepare-task-pr.sh --create` records the created PR URL and moves
   the task to `pr_watch` when GitHub-backed mapping exists.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
@@ -323,7 +331,7 @@ Deterministic script contract:
 - Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments, but they do not replace them for task execution truth.
 - If GitHub task issue comments are temporarily unavailable, TPM may write a temporary fallback packet under `.pm/scratch/<TASK-UID>/fallback-evidence/<timestamp>.md` and must record the intended GitHub issue target, reason for fallback, attribution boundary, and replay command. Fallback packets unblock evidence capture only; they do not satisfy task truth, pre-PR review, closeout, or completion claims until replayed to the GitHub task issue comments.
 - If the plan changes during execution, TPM must append a GitHub issue evidence comment before continuing the changed work.
-- Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a GitHub-backed task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a `source_type=reflection` signal by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path.
+- Pre-task discoveries, loose TODOs, and follow-up ideas found before an owner decides to create a GitHub-backed task should be captured with `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`. This records a GitHub-backed `source_type=reflection` intake issue by default and must not be treated as committed task truth until explicitly promoted with `--create-task` or another task-creation path. The retired `.pm/inbox/signals.jsonl` file must not be recreated; its last committed contents are preserved in `.pm/github-project-sync/signal-archive.jsonl` for migration/audit only.
 - After task truth exists, use the section 1.2.2 learning-intake ladder for
   discoveries and follow-ups: no-op, short GitHub issue evidence note, reflection
   signal, task-scoped `working_memory`, or owner-reviewed candidate task/memory
@@ -366,7 +374,7 @@ Deterministic script contract:
   may be background context only.
 - Do not move the task to final closeout / `done` before pre-PR local role review has passed when the task is on a PR path. The order is: fresh verification -> pre-PR local role review -> address findings -> final closeout/status packet -> commit -> PR preflight/create.
 - Closeout should run `./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> --verify-command "<fresh cmd>"` (or equivalent manual chain) after valid local role-review findings are resolved. If a helper must be run earlier for a readiness packet, the GitHub issue evidence comment must label that packet as readiness evidence rather than final done state.
-- For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence.
+- For `done` closeout, fresh verification must be from the current round and post-review findings must be addressed or explicitly rejected with evidence. The final status move must preserve or recover the task mapping, update GitHub Project `Status` / `PM Status` / `Workflow Phase`, update the GitHub issue task body to `status: done`, and close the GitHub issue as completed.
 
 ### 5.5 PR and review chain
 - Standard path is local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability.
@@ -417,13 +425,17 @@ Deterministic script contract:
 - Execution: atomic evidence records per risky step.
 - Verification: claim-ready command + output evidence.
 - Pre-PR local role review: involved-role subagent review packet, review package path or explicit `n/a`, required-role coverage, per-role dual verdicts, finding disposition, verification matrix, visual/WASM/ops evidence or explicit exemptions, residual risk, and slice ledger path or explicit `n/a`.
-- Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, and cleanup evidence.
+- Closeout: closeout command output, task status update, pre-PR local role review evidence, PR linkage, PR purpose decision, CI/review watch evidence, merge evidence, cleanup evidence, and final GitHub task issue closure for `done`.
 - Learning intake / loop closeout: only when reusable learning exists, record
   the chosen ladder step and evidence. Reflection signals, working memory, and
   promoted candidate tasks/memory supplement GitHub task issue evidence comments but do not
   replace it.
 
 ## 7. Change Log
+- **v1.5.4 (2026-07-01)**
+  - Made task-scoped GitHub Project audit copy-pasteable with
+    `github-project-workflow.sh audit --task-uid <TASK-UID> --json`, backed by
+    mapping-derived Project defaults.
 - **v1.5.3 (2026-06-30)**
   - Added Project field taxonomy, same-thread continuation reuse, temporary
     fallback evidence replay rules, and current verification epoch semantics.
@@ -513,7 +525,7 @@ Deterministic script contract:
 - **v1.4.10 (2026-06-03)**
   - Updated the default subagent runtime policy.
   - Consolidated synced guidance, templates, and workflow eval checks to reference the section 5.2 `Default subagent runtime` policy instead of duplicating the concrete model string.
-  - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before explicit task promotion.
+  - Added the `capture-todo.sh` pre-task discovery intake path for loose TODOs and follow-up ideas that should become `reflection` signals before explicit task promotion. Current runtime stores those signals as GitHub-backed intake issues, not `.pm/inbox/signals.jsonl`.
   - 2026-06-08 amendment: moved the concrete default subagent runtime value into the repo-tracked `.codex/config.toml` `[workflow.subagent_runtime]` block so the model configuration has one canonical source.
   - 2026-06-08 amendment: updated the workflow source-of-truth and workflow eval contract to reference the config-backed policy instead of carrying the concrete runtime value in prose.
 - **v1.4.9 (2026-06-02)**

@@ -104,11 +104,9 @@ pub fn observe_wasm_router_regex_compile(regex_compile_ms: u64) {
     locked.regex_compile_calls_total = locked.regex_compile_calls_total.saturating_add(1);
 }
 
-fn global_wasm_router_metrics() -> SharedWasmRouterMetrics {
+fn global_wasm_router_metrics() -> &'static SharedWasmRouterMetrics {
     static GLOBAL: OnceLock<SharedWasmRouterMetrics> = OnceLock::new();
-    GLOBAL
-        .get_or_init(|| Arc::new(Mutex::new(WasmRouterMetricsSnapshot::empty())))
-        .clone()
+    GLOBAL.get_or_init(|| Arc::new(Mutex::new(WasmRouterMetricsSnapshot::empty())))
 }
 
 fn empty_bucket_map() -> BTreeMap<String, u64> {
