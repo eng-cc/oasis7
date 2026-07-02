@@ -1,16 +1,23 @@
 use super::*;
 
 impl World {
-    pub(super) fn normalize_module_release_required_roles(
-        required_roles: &[String],
-    ) -> Vec<String> {
-        let mut normalized: Vec<String> = required_roles
+    fn normalize_module_release_roles(roles: &[String]) -> Vec<String> {
+        let mut normalized: Vec<String> = roles
             .iter()
-            .map(|role| role.trim().to_ascii_lowercase())
-            .filter(|role| !role.is_empty())
+            .filter_map(|role| {
+                let role = role.trim();
+                (!role.is_empty()).then(|| role.to_ascii_lowercase())
+            })
             .collect();
         normalized.sort();
         normalized.dedup();
+        normalized
+    }
+
+    pub(super) fn normalize_module_release_required_roles(
+        required_roles: &[String],
+    ) -> Vec<String> {
+        let mut normalized = Self::normalize_module_release_roles(required_roles);
         if normalized.is_empty() {
             normalized = MODULE_RELEASE_DEFAULT_REQUIRED_ROLES
                 .iter()
@@ -21,14 +28,7 @@ impl World {
     }
 
     pub(super) fn normalize_module_release_role_set(roles: &[String]) -> Vec<String> {
-        let mut normalized: Vec<String> = roles
-            .iter()
-            .map(|role| role.trim().to_ascii_lowercase())
-            .filter(|role| !role.is_empty())
-            .collect();
-        normalized.sort();
-        normalized.dedup();
-        normalized
+        Self::normalize_module_release_roles(roles)
     }
 
     pub(super) fn normalize_module_release_role(role: &str) -> Option<String> {
