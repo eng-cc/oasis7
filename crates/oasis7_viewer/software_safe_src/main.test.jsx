@@ -596,6 +596,13 @@ describe("viewer web ui automation baseline", () => {
       );
     });
     expect(core.state.auth.pendingForceRebind).toBe(true);
+    expect(core.expirePendingSessionRegisterWaiterForTest()).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(core.state.auth.syncInFlight).toBe(false);
+    expect(core.state.auth.pendingForceRebind).toBe(false);
+    expect(core.state.auth.recoveryErrorCode).toBe("session_register_timeout");
+    expect(core.state.auth.error).toMatch(/timed out waiting for ack\/error/i);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("retries force-rebind when runtime reports the starter agent is bound to an old local player", async () => {

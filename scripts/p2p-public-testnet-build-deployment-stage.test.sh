@@ -44,7 +44,7 @@ jq -e '
 	  and .validators[1].finality_signer_public_key == "858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6"
 	  and .validators[2].node_id == "triad-testnet-fourth-local"
 	  and .validators[2].finality_signer_public_key == "f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af"
-	  and .threshold == 3
+	  and .threshold == 2
 	' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" >/dev/null
 
 jq -e '.runtime_build.sha256 != null and .governance_manifest.sha256 != null' \

@@ -4249,13 +4249,15 @@ function maybeRecoverLocalTestStarterBindingFromSnapshot(snapshot) {
   state.auth.pendingRequestedAgentId = STARTER_AGENT_ID;
   state.auth.pendingForceRebind = true;
   state.auth.rebindNotice = `Local test player is taking over ${STARTER_AGENT_ID} from an earlier local test session.`;
-  void dispatchSessionRegisterRequest(STARTER_AGENT_ID, true).catch((error) => {
+  void ensureRegisteredPlayerSession(STARTER_AGENT_ID, { forceRebind: true }).catch((error) => {
     localTestStarterRebindAttemptKey = null;
     state.auth.syncInFlight = false;
     state.auth.pendingForceRebind = false;
     state.auth.runtimeStatus = "error";
-    state.auth.recoveryErrorCode = "local_test_starter_rebind_failed";
-    state.auth.recoveryErrorMessage = String(error);
+    if (state.auth.recoveryErrorCode !== "session_register_timeout") {
+      state.auth.recoveryErrorCode = "local_test_starter_rebind_failed";
+      state.auth.recoveryErrorMessage = String(error);
+    }
     state.auth.error = String(error);
     render();
   });
@@ -4864,6 +4866,24 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   if (error != null && options.reject !== false) {
     waiter.reject(error instanceof Error ? error : new Error(String(error)));
   }
+}
+function expirePendingSessionRegisterWaiterForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingSessionRegisterWaiterForTest requires test_api=1");
+  }
+  if (!pendingSessionRegisterWaiter) {
+    return false;
+  }
+  const message = "player session registration timed out waiting for ack/error from live server";
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = state.auth.available ? "issued" : "guest";
+  state.auth.runtimeStatus = "error";
+  state.auth.error = message;
+  state.auth.recoveryErrorCode = "session_register_timeout";
+  state.auth.recoveryErrorMessage = message;
+  clearPendingSessionRegisterWaiter(message);
+  render();
+  return true;
 }
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   const auth = state.auth.source === "legacy_viewer_auth_bootstrap" ? state.auth : await ensureHostedAuthSigningKey(state.auth);
@@ -6082,6 +6102,7 @@ function installTestApi() {
     completeHostedAccountLogin,
     retryHostedPlayerIdentityIssue,
     registerPlayerSessionForTest,
+    expirePendingSessionRegisterWaiterForTest,
     reportFatalError
   };
 }

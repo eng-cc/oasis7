@@ -4,7 +4,7 @@ use std::net::TcpStream;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use ed25519_dalek::SigningKey;
-use oasis7::simulator::WorldSnapshot;
+use oasis7::simulator::{WorldEventKind, WorldSnapshot};
 use oasis7::viewer::{
     AgentChatRequest, AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryCommand,
     AuthoritativeSessionRevokeRequest, AuthoritativeSessionRotateRequest, GameplayActionRequest,
@@ -146,6 +146,7 @@ fn run() -> Result<(), String> {
             with_snapshot,
         } => {
             let mut conn = ViewerConnection::connect(addr.as_str(), client.as_str(), timeout)?;
+            subscribe_for_control(&mut conn, true, false)?;
             let signed = build_signed_agent_chat_request(
                 agent_id.as_str(),
                 player_id.as_str(),

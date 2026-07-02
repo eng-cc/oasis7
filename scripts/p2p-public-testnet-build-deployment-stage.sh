@@ -257,7 +257,7 @@ for spec in specs:
         "stake": stake,
     })
 
-threshold = (len(validators) * 2 // 3) + 1
+threshold = max(2, (len(validators) * 2 + 2) // 3)
 payload = {
     "slot_id": "governance.finality.v1",
     "threshold": threshold,

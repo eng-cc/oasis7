@@ -84,6 +84,46 @@ fn build_signed_gameplay_action_request_attaches_auth() {
 }
 
 #[test]
+fn terminal_agent_chat_waits_past_ack_for_reply_or_error() {
+    let ack = ViewerResponse::AgentChatAck {
+        ack: oasis7::viewer::AgentChatAck {
+            agent_id: "agent-0".to_string(),
+            accepted_at_tick: 7,
+            message_len: 5,
+            player_id: Some("player-1".to_string()),
+            intent_tick: Some(7),
+            intent_seq: Some(9),
+            idempotent_replay: false,
+        },
+    };
+    assert!(!terminal_agent_chat(&ack));
+
+    let spoke = ViewerResponse::Event {
+        event: oasis7::simulator::WorldEvent {
+            id: 1,
+            time: 8,
+            kind: oasis7::simulator::WorldEventKind::AgentSpoke {
+                agent_id: "agent-0".to_string(),
+                location_id: "loc-1".to_string(),
+                message: "reply".to_string(),
+                target_agent_id: Some("agent-0".to_string()),
+            },
+            runtime_event: None,
+        },
+    };
+    assert!(terminal_agent_chat(&spoke));
+
+    let error = ViewerResponse::AgentChatError {
+        error: oasis7::viewer::AgentChatError {
+            code: "provider_unreachable".to_string(),
+            message: "provider failed".to_string(),
+            agent_id: Some("agent-0".to_string()),
+        },
+    };
+    assert!(terminal_agent_chat(&error));
+}
+
+#[test]
 fn collect_until_reports_timeout_when_peer_stays_open() {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
     let addr = listener.local_addr().expect("listener addr");
