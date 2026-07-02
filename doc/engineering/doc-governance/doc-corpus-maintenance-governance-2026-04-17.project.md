@@ -36,10 +36,10 @@
   - 当时下一条正式 follow-up 应优先拆分 near-limit active project docs，先处理 `doc/world-simulator/project.md` 与 `doc/readme/project.md`；`core/reviews` 的 ROUND-006/007 长表已由后续 compact snapshot follow-up 收口。
 
 说明:
-`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 `.pm` task；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
+`doc/devlog` 历史压缩、`world-simulator/viewer`、`p2p/node`、`testing/evidence` 与 `readme/governance` 路径级治理都已完成首批入口收口。季度复核也已完成当前快照重算；后续若要继续扩 `core/reviews`、`world-simulator/launcher`、`ci/longrun/templates`、`gap` 或 `production` 等 follow-up，仍需至少各自独立创建 GitHub-backed task issue / task truth；默认仍建议独立 worktree，除非用户明确要求复用当前 PR/工作树。
 2026-05-18 补充：已对 `world-simulator` 已治理路径执行一轮重复入口 aftercare，清掉 `viewer-manual.md` 的 legacy 正文残留，并将 `prd.index.md` 收回 index-first 角色；该动作不改变季度复核已冻结的“near-limit active project docs 拆分优先”下一步顺序。
 2026-05-26 补充：已执行首批 near-limit active project docs aftercare，压缩 `readme/scripts/site/world-runtime/world-simulator` 主项目状态区；后续若继续处理 `core/reviews`、`world-simulator/launcher` 或把 `prd.index.md` 改为生成式索引，仍需新开独立 task。
-2026-05-27 补充：`doc/devlog` 已从“README 导航 57 个日文件”推进到“README 摘要替代 + 日文件退役”；后续不再新增 daily devlog，当前执行证据继续写入 `.pm/tasks/*.execution.md`。
+2026-05-27 补充：`doc/devlog` 已从“README 导航 57 个日文件”推进到“README 摘要替代 + 日文件退役”；后续不再新增 daily devlog。2026-07-02 追认：GitHub Project-backed workflow 迁移后，当前执行证据 canonical sink 为 GitHub task issue evidence comments；历史 `.pm/tasks/*.execution.md` 只作为退役前追溯层。
 2026-06-19 补充：stale-file 抽样后的后续治理先按低风险 skill-surface aftercare 落地；历史 project/handoff/evidence 的批量压缩仍应保留索引 backlink、归档位置、保留例外和验证命令，不做随机单删。
 2026-06-25 补充：最新 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none，首批 project 状态区 aftercare 已收口；当前下一步不再回到 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列，而应先按 module density / hotspot `action_required` 做 bounded 分类判断，再为 `doc/world-simulator/viewer`、`doc/world-simulator/launcher`、`doc/game/gameplay` 或其他热点单独创建 focused follow-up。Trace: .pm/tasks/task_7f7faa364b6c44d2b5e9448beaf87ccb.yaml
 
