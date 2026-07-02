@@ -670,8 +670,8 @@
 - `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project.md`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.prd.md`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md`
-- `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.prd.md`
-- `doc/world-simulator/viewer/viewer-live-tick-driven-doc-archive-2026-02-27.project.md`
+- `historical removed viewer live tick-driven doc archive: prd`
+- `historical removed viewer live tick-driven doc archive: project`
 - historical removed standard_3d viewer doc set: location visualization and fine-grained rendering topics
 - `doc/world-simulator/viewer/viewer-manual.manual.md`
 - `doc/world-simulator/viewer/viewer-minimal-system.prd.md`
