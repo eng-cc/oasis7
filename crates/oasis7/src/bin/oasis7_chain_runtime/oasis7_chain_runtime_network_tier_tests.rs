@@ -388,6 +388,7 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
     let payload = build_chain_status_payload(
         snapshot,
         execution_world_dir.as_path(),
+        None,
         Some(&loaded),
         &recommendation,
         None,

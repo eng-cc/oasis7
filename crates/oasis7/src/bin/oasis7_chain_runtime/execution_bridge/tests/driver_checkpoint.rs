@@ -1,9 +1,11 @@
 use super::super::checkpoint::{
-    execution_bridge_record_path, execution_checkpoint_manifest_rel_path,
-    load_execution_bridge_record,
+    execution_bridge_record_path, execution_checkpoint_manifest_path,
+    execution_checkpoint_manifest_rel_path, load_execution_bridge_record,
+    load_execution_checkpoint_manifest,
 };
 use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_bridge_state};
 use super::*;
+use oasis7::runtime::LocalCasStore;
 use oasis7_node::{
     NodeExecutionCheckpointInstallContext, NodeExecutionCommitContext, NodeExecutionHook,
     compute_consensus_action_root,
@@ -61,6 +63,86 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
         .export_checkpoint_bundle(2)
         .expect("export checkpoint")
         .expect("checkpoint bundle");
+    let source_store = LocalCasStore::new(source_root.join("storage"));
+    let source_record = load_execution_bridge_record(
+        execution_bridge_record_path(source_root.join("records").as_path(), 2).as_path(),
+    )
+    .expect("source record");
+    let source_manifest = load_execution_checkpoint_manifest(
+        execution_checkpoint_manifest_path(source_root.join("records").as_path(), 2).as_path(),
+    )
+    .expect("source checkpoint manifest");
+    let source_proof = load_world_head_proof(&source_store, &source_record);
+    let source_checkpoint = source_proof
+        .checkpoint
+        .as_ref()
+        .expect("checkpoint proof evidence");
+    assert_eq!(source_checkpoint.checkpoint_height, 2);
+    assert_eq!(
+        source_checkpoint.execution_block_hash,
+        source_record.execution_block_hash
+    );
+    assert_eq!(
+        source_checkpoint.execution_state_root,
+        source_record.execution_state_root
+    );
+    assert_eq!(
+        source_checkpoint.manifest_ref,
+        source_record
+            .checkpoint_ref
+            .clone()
+            .expect("checkpoint ref")
+    );
+    assert_eq!(
+        source_checkpoint.manifest_hash,
+        source_manifest.manifest_hash
+    );
+    assert!(
+        source_checkpoint
+            .pinned_refs
+            .contains(&source_record.snapshot_ref.clone().expect("snapshot ref"))
+    );
+    assert!(
+        source_checkpoint
+            .pinned_refs
+            .contains(&source_record.journal_ref.clone().expect("journal ref"))
+    );
+    let mut tampered_checkpoint = source_proof.clone();
+    tampered_checkpoint
+        .checkpoint
+        .as_mut()
+        .expect("checkpoint")
+        .execution_state_root = "tampered-checkpoint-state".to_string();
+    assert!(
+        tampered_checkpoint
+            .validate_contract()
+            .expect_err("tampered checkpoint state should fail")
+            .contains("checkpoint execution state mismatch")
+    );
+    let mut tampered_checkpoint_height = source_proof.clone();
+    tampered_checkpoint_height
+        .checkpoint
+        .as_mut()
+        .expect("checkpoint")
+        .checkpoint_height += 1;
+    assert!(
+        tampered_checkpoint_height
+            .validate_contract()
+            .expect_err("tampered checkpoint height should fail")
+            .contains("checkpoint height mismatch")
+    );
+    let mut tampered_checkpoint_execution_block = source_proof.clone();
+    tampered_checkpoint_execution_block
+        .checkpoint
+        .as_mut()
+        .expect("checkpoint")
+        .execution_block_hash = "tampered-execution-block".to_string();
+    assert!(
+        tampered_checkpoint_execution_block
+            .validate_contract()
+            .expect_err("tampered checkpoint execution block should fail")
+            .contains("checkpoint execution block mismatch")
+    );
 
     let mut target = NodeRuntimeExecutionDriver::new_with_storage_profile(
         target_root.join("bridge-state.json"),
@@ -105,6 +187,10 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
         target_record.execution_state_root,
         second.execution_state_root
     );
+    let target_store = LocalCasStore::new(target_root.join("storage"));
+    let target_proof = load_world_head_proof(&target_store, &target_record);
+    assert_eq!(target_proof.execution.node_block_hash, "block-2");
+    assert!(target_proof.checkpoint.is_some());
 
     let _ = fs::remove_dir_all(dir);
 }

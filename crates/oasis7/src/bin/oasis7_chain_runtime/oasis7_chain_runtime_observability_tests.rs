@@ -306,6 +306,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         snapshot,
         Path::new("/tmp/execution-world"),
         None,
+        None,
         &NodeNetworkPolicy::recommend_for_user_mode(
             NodeRole::Storage,
             NodeUserMode::AutoJoin,
@@ -1094,6 +1095,7 @@ fn build_chain_status_payload_clamps_future_ages_to_zero() {
     let payload = build_chain_status_payload(
         snapshot,
         Path::new("/tmp/execution-world"),
+        None,
         None,
         &recommendation,
         None,

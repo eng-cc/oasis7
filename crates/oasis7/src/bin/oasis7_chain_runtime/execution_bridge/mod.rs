@@ -1,6 +1,12 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
+use oasis7_proto::distributed::{
+    BlobRef, CheckpointClosureEvidenceV1, ExecutionBindingEvidenceV1, HeadConsensusEvidenceV1,
+    WIRE_ENCODING_CBOR, WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_V1_SCHEMA,
+    WorldBlock, WorldHeadAnnounce, WorldHeadProofV1,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,10 +19,10 @@ pub(super) struct ExecutionBridgeState {
 
 pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V1: u32 = 1;
 pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V2: u32 = 2;
+pub(super) const EXECUTION_BRIDGE_RECORD_SCHEMA_V3: u32 = 3;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS: u64 = 32;
 pub(super) const EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST: usize = 4;
-
 fn execution_bridge_record_schema_v1() -> u32 {
     EXECUTION_BRIDGE_RECORD_SCHEMA_V1
 }
@@ -28,6 +34,12 @@ pub(super) struct ExecutionBridgeRecord {
     pub world_id: String,
     pub height: u64,
     pub node_block_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_node_block_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposer_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_root: Option<String>,
     pub execution_block_hash: String,
     pub execution_state_root: String,
     pub journal_len: usize,
@@ -43,6 +55,10 @@ pub(super) struct ExecutionBridgeRecord {
     pub checkpoint_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_effect_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_head_proof_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_head_proof_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
     pub timestamp_ms: i64,
@@ -56,6 +72,12 @@ struct ExecutionBridgeRecordWire {
     pub height: u64,
     #[serde(default)]
     pub node_block_hash: Option<String>,
+    #[serde(default)]
+    pub prev_node_block_hash: Option<String>,
+    #[serde(default)]
+    pub proposer_id: Option<String>,
+    #[serde(default)]
+    pub action_root: Option<String>,
     pub execution_block_hash: String,
     pub execution_state_root: String,
     pub journal_len: usize,
@@ -71,6 +93,10 @@ struct ExecutionBridgeRecordWire {
     pub checkpoint_ref: Option<String>,
     #[serde(default)]
     pub external_effect_ref: Option<String>,
+    #[serde(default)]
+    pub world_head_proof_ref: Option<String>,
+    #[serde(default)]
+    pub world_head_proof_hash: Option<String>,
     #[serde(default)]
     pub simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
     pub timestamp_ms: i64,
@@ -85,6 +111,9 @@ impl From<ExecutionBridgeRecordWire> for ExecutionBridgeRecord {
             world_id: record.world_id,
             height: record.height,
             node_block_hash: record.node_block_hash,
+            prev_node_block_hash: record.prev_node_block_hash,
+            proposer_id: record.proposer_id,
+            action_root: record.action_root,
             execution_block_hash: record.execution_block_hash,
             execution_state_root: record.execution_state_root,
             journal_len: record.journal_len,
@@ -94,6 +123,8 @@ impl From<ExecutionBridgeRecordWire> for ExecutionBridgeRecord {
             commit_log_ref: record.commit_log_ref,
             checkpoint_ref: record.checkpoint_ref,
             external_effect_ref: record.external_effect_ref,
+            world_head_proof_ref: record.world_head_proof_ref,
+            world_head_proof_hash: record.world_head_proof_hash,
             simulator_mirror: record.simulator_mirror,
             timestamp_ms: record.timestamp_ms,
         }
@@ -135,6 +166,9 @@ impl ExecutionBridgeRecord {
             world_id,
             height,
             node_block_hash,
+            prev_node_block_hash: None,
+            proposer_id: None,
+            action_root: None,
             execution_block_hash,
             execution_state_root,
             journal_len,
@@ -144,10 +178,214 @@ impl ExecutionBridgeRecord {
             commit_log_ref: None,
             checkpoint_ref: None,
             external_effect_ref,
+            world_head_proof_ref: None,
+            world_head_proof_hash: None,
             simulator_mirror,
             timestamp_ms,
         }
     }
+
+    pub(super) fn new_v3(
+        world_id: String,
+        height: u64,
+        node_block_hash: Option<String>,
+        prev_node_block_hash: Option<String>,
+        proposer_id: String,
+        action_root: String,
+        execution_block_hash: String,
+        execution_state_root: String,
+        journal_len: usize,
+        snapshot_ref: String,
+        journal_ref: String,
+        external_effect_ref: Option<String>,
+        simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
+        timestamp_ms: i64,
+    ) -> Self {
+        Self {
+            schema_version: EXECUTION_BRIDGE_RECORD_SCHEMA_V3,
+            world_id,
+            height,
+            node_block_hash,
+            prev_node_block_hash,
+            proposer_id: Some(proposer_id),
+            action_root: Some(action_root),
+            execution_block_hash,
+            execution_state_root,
+            journal_len,
+            latest_state_ref: Some(snapshot_ref.clone()),
+            snapshot_ref: Some(snapshot_ref),
+            journal_ref: Some(journal_ref),
+            commit_log_ref: None,
+            checkpoint_ref: None,
+            external_effect_ref,
+            world_head_proof_ref: None,
+            world_head_proof_hash: None,
+            simulator_mirror,
+            timestamp_ms,
+        }
+    }
+
+    pub(super) fn world_head_proof_v1(
+        &self,
+        checkpoint: Option<&ExecutionCheckpointManifest>,
+    ) -> Result<WorldHeadProofV1, String> {
+        let node_block_hash = self
+            .node_block_hash
+            .as_deref()
+            .filter(|hash| !hash.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "execution bridge record height {} missing node_block_hash for world head proof",
+                    self.height
+                )
+            })?;
+        let proposer_id = self
+            .proposer_id
+            .as_deref()
+            .filter(|proposer_id| !proposer_id.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "execution bridge record height {} missing proposer_id for world head proof",
+                    self.height
+                )
+            })?;
+        let action_root = self
+            .action_root
+            .as_deref()
+            .filter(|action_root| !action_root.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "execution bridge record height {} missing action_root for world head proof",
+                    self.height
+                )
+            })?;
+        let prev_block_hash = self
+            .prev_node_block_hash
+            .as_deref()
+            .filter(|prev_node_block_hash| !prev_node_block_hash.trim().is_empty())
+            .unwrap_or("genesis");
+        let snapshot_ref = self
+            .snapshot_ref
+            .as_deref()
+            .or(self.latest_state_ref.as_deref())
+            .filter(|reference| !reference.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "execution bridge record height {} missing snapshot ref for world head proof",
+                    self.height
+                )
+            })?;
+        let journal_ref = self
+            .journal_ref
+            .as_deref()
+            .filter(|reference| !reference.trim().is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "execution bridge record height {} missing journal ref for world head proof",
+                    self.height
+                )
+            })?;
+
+        let block = WorldBlock {
+            world_id: self.world_id.clone(),
+            height: self.height,
+            prev_block_hash: prev_block_hash.to_string(),
+            action_root: action_root.to_string(),
+            event_root: self.external_effect_ref.clone().unwrap_or_default(),
+            state_root: self.execution_state_root.clone(),
+            journal_ref: journal_ref.to_string(),
+            snapshot_ref: snapshot_ref.to_string(),
+            receipts_root: self.execution_block_hash.clone(),
+            proposer_id: proposer_id.to_string(),
+            timestamp_ms: self.timestamp_ms,
+            signature: "runtime_bridge_evidence_only_v1".to_string(),
+        };
+        let block_hash = blake3_hex(to_cbor(&block)?.as_slice());
+        let checkpoint = checkpoint
+            .map(|manifest| {
+                if manifest.height != self.height
+                    || manifest.execution_block_hash != self.execution_block_hash
+                    || manifest.execution_state_root != self.execution_state_root
+                {
+                    return Err(format!(
+                        "execution checkpoint manifest does not match bridge record height={}",
+                        self.height
+                    ));
+                }
+                Ok(CheckpointClosureEvidenceV1 {
+                    checkpoint_height: manifest.height,
+                    execution_block_hash: manifest.execution_block_hash.clone(),
+                    execution_state_root: manifest.execution_state_root.clone(),
+                    manifest_ref: self.checkpoint_ref.clone().unwrap_or_default(),
+                    manifest_hash: manifest.manifest_hash.clone(),
+                    pinned_refs: manifest.pinned_refs.clone(),
+                })
+            })
+            .transpose()?;
+        let proof = WorldHeadProofV1 {
+            schema_version: WORLD_HEAD_PROOF_V1_SCHEMA,
+            world_id: self.world_id.clone(),
+            height: self.height,
+            timestamp_ms: self.timestamp_ms,
+            head: WorldHeadAnnounce {
+                world_id: self.world_id.clone(),
+                height: self.height,
+                block_hash,
+                state_root: self.execution_state_root.clone(),
+                timestamp_ms: self.timestamp_ms,
+                signature: "runtime_bridge_evidence_only_v1".to_string(),
+            },
+            block,
+            snapshot_manifest_ref: BlobRef {
+                content_hash: snapshot_ref.to_string(),
+                size_bytes: 0,
+                codec: WIRE_ENCODING_CBOR.to_string(),
+                links: Vec::new(),
+            },
+            journal_segments_ref: BlobRef {
+                content_hash: journal_ref.to_string(),
+                size_bytes: 0,
+                codec: WIRE_ENCODING_CBOR.to_string(),
+                links: Vec::new(),
+            },
+            consensus: HeadConsensusEvidenceV1 {
+                consensus_status: "committed".to_string(),
+                proposer_id: proposer_id.to_string(),
+                quorum_threshold: 0,
+                validator_count: 0,
+                vote_count: 0,
+                approver_ids: Vec::new(),
+                evidence_hash: node_block_hash.to_string(),
+            },
+            execution: ExecutionBindingEvidenceV1 {
+                execution_height: self.height,
+                node_block_hash: node_block_hash.to_string(),
+                execution_block_hash: self.execution_block_hash.clone(),
+                execution_state_root: self.execution_state_root.clone(),
+                action_root: action_root.to_string(),
+            },
+            checkpoint,
+            claim_boundary: WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1.to_string(),
+        };
+        proof.validate_contract()?;
+        Ok(proof)
+    }
+}
+
+pub(super) fn persist_world_head_proof_for_record(
+    execution_store: &LocalCasStore,
+    record: &mut ExecutionBridgeRecord,
+    checkpoint: Option<&ExecutionCheckpointManifest>,
+) -> Result<(), String> {
+    let proof = record.world_head_proof_v1(checkpoint)?;
+    let proof_hash = proof.proof_hash()?;
+    let proof_bytes = to_cbor(&proof)?;
+    let proof_ref = execution_store
+        .put_bytes(proof_bytes.as_slice())
+        .map_err(|err| format!("persist world head proof failed: {:?}", err))?;
+    record.world_head_proof_ref = Some(proof_ref);
+    record.world_head_proof_hash = Some(proof_hash);
+    Ok(())
 }
 
 pub(super) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1: u32 = 1;

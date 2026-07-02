@@ -233,6 +233,84 @@ def validate_api_viewer_projection_pass_evidence(raw: str, evidence: pathlib.Pat
     return blockers
 
 
+def validate_chain_proof_evidence_pass_evidence(raw: str, evidence: pathlib.Path) -> list[str]:
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"chain_proof_evidence_ready evidence must be JSON: {raw} ({exc})"]
+
+    if data.get("evidence_schema") != "oasis7.chain_proof_evidence.v1":
+        blockers.append(f"chain_proof_evidence_ready evidence_schema mismatch: {raw}")
+    if data.get("proof_contract") != "WorldHeadProofV1":
+        blockers.append(f"chain_proof_evidence_ready proof_contract must be WorldHeadProofV1: {raw}")
+    if data.get("proof_closure_status") != "proof_complete":
+        blockers.append(f"chain_proof_evidence_ready proof_closure_status must be proof_complete for pass lane: {raw}")
+
+    network_tier = data.get("network_tier")
+    if not isinstance(network_tier, dict):
+        blockers.append(f"chain_proof_evidence_ready network_tier object missing: {raw}")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            blockers.append(f"chain_proof_evidence_ready network_tier.tier must be public_testnet: {raw}")
+        for key in ("status", "chain_id", "network_id"):
+            if not str(network_tier.get(key) or "").strip():
+                blockers.append(f"chain_proof_evidence_ready network_tier.{key} missing: {raw}")
+
+    proof = data.get("world_head_proof_v1")
+    if not isinstance(proof, dict):
+        blockers.append(f"chain_proof_evidence_ready world_head_proof_v1 object missing: {raw}")
+    else:
+        if proof.get("schema_version") != 1:
+            blockers.append(f"chain_proof_evidence_ready world_head_proof_v1.schema_version must be 1: {raw}")
+        if proof.get("claim_boundary") != "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness":
+            blockers.append(f"chain_proof_evidence_ready claim_boundary mismatch: {raw}")
+        try:
+            proof_height = int(proof.get("height") or 0)
+        except (TypeError, ValueError):
+            proof_height = 0
+        if proof_height <= 0:
+            blockers.append(f"chain_proof_evidence_ready proof height must be positive: {raw}")
+        for key in ("world_id", "proof_hash", "world_head_proof_ref"):
+            if not str(proof.get(key) or "").strip():
+                blockers.append(f"chain_proof_evidence_ready world_head_proof_v1.{key} missing: {raw}")
+
+    linkage = data.get("readiness_linkage")
+    if not isinstance(linkage, dict):
+        blockers.append(f"chain_proof_evidence_ready readiness_linkage object missing: {raw}")
+    else:
+        if not str(linkage.get("readiness_status") or "").strip():
+            blockers.append(f"chain_proof_evidence_ready readiness_linkage.readiness_status missing: {raw}")
+        failed_gates = linkage.get("failed_gates")
+        if not isinstance(failed_gates, list):
+            blockers.append(f"chain_proof_evidence_ready readiness_linkage.failed_gates must be an array: {raw}")
+
+    does_not_claim = data.get("does_not_claim")
+    if not isinstance(does_not_claim, list):
+        blockers.append(f"chain_proof_evidence_ready does_not_claim must be an array: {raw}")
+    else:
+        required_denials = {
+            "module_full",
+            "integration_required",
+            "release_full",
+            "public_testnet ready",
+            "ready_for_live_candidate",
+            "mainnet-grade",
+        }
+        missing_denials = sorted(required_denials.difference(set(does_not_claim)))
+        if missing_denials:
+            blockers.append(
+                "chain_proof_evidence_ready does_not_claim missing: "
+                + ",".join(missing_denials)
+                + f": {raw}"
+            )
+
+    residual_risk = data.get("residual_risk")
+    if not isinstance(residual_risk, list) or not residual_risk:
+        blockers.append(f"chain_proof_evidence_ready residual_risk must be a non-empty array: {raw}")
+    return blockers
+
+
 def escape_markdown_cell(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -320,6 +398,12 @@ if lanes_tsv_arg:
                 )
                 if projection_blockers:
                     raise SystemExit("; ".join(projection_blockers))
+            if lane_id == "chain_proof_evidence_ready" and status == "pass":
+                chain_proof_blockers = validate_chain_proof_evidence_pass_evidence(
+                    evidence_path, evidence
+                )
+                if chain_proof_blockers:
+                    raise SystemExit("; ".join(chain_proof_blockers))
             seen_lane_ids.add(lane_id)
             lanes.append(
                 {

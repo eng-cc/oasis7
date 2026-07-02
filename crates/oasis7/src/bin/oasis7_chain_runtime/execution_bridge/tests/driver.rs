@@ -524,6 +524,56 @@ fn node_runtime_execution_driver_persists_chain_records() {
     );
     assert!(external_effect.committed_actions.is_empty());
     assert!(external_effect.unresolved_inputs.is_empty());
+    let proof = load_world_head_proof(&store, &record);
+    assert_eq!(proof.world_id, "w1");
+    assert_eq!(proof.height, 2);
+    assert_eq!(proof.timestamp_ms, 2_000);
+    assert_eq!(proof.execution.node_block_hash, "node-h2");
+    assert_eq!(
+        proof.execution.execution_block_hash,
+        record.execution_block_hash
+    );
+    assert_eq!(
+        proof.execution.execution_state_root,
+        record.execution_state_root
+    );
+    assert_eq!(
+        proof.execution.action_root,
+        compute_consensus_action_root(&[]).expect("empty root")
+    );
+    assert_eq!(
+        proof.snapshot_manifest_ref.content_hash,
+        record.snapshot_ref.expect("snapshot ref")
+    );
+    assert_eq!(
+        proof.journal_segments_ref.content_hash,
+        record.journal_ref.expect("journal ref")
+    );
+    assert!(proof.checkpoint.is_none());
+    let mut tampered_action = proof.clone();
+    tampered_action.execution.action_root = "tampered-action-root".to_string();
+    assert!(
+        tampered_action
+            .validate_contract()
+            .expect_err("tampered action root should fail")
+            .contains("execution action_root mismatch")
+    );
+    let mut tampered_timestamp = proof.clone();
+    tampered_timestamp.block.timestamp_ms += 1;
+    assert!(
+        tampered_timestamp
+            .validate_contract()
+            .expect_err("tampered timestamp should fail")
+            .contains("timestamp mismatch")
+    );
+    let mut tampered_snapshot = proof;
+    tampered_snapshot.snapshot_manifest_ref.content_hash = "tampered-snapshot".to_string();
+    assert!(
+        tampered_snapshot
+            .validate_contract()
+            .expect_err("tampered snapshot should fail")
+            .contains("snapshot_ref mismatch")
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

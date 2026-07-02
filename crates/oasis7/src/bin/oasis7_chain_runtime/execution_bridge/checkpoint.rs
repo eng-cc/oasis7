@@ -5,9 +5,10 @@ use std::path::Path;
 use oasis7::runtime::{BlobStore, LocalCasStore};
 
 use super::{
-    EXECUTION_BRIDGE_RECORD_SCHEMA_V2, EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1,
-    ExecutionBridgePinSet, ExecutionBridgeRecord, ExecutionCheckpointLatestPointer,
-    ExecutionCheckpointManifest, ExecutionCheckpointManifestHashPayload, write_bytes_atomic,
+    EXECUTION_BRIDGE_RECORD_SCHEMA_V2, EXECUTION_BRIDGE_RECORD_SCHEMA_V3,
+    EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1, ExecutionBridgePinSet, ExecutionBridgeRecord,
+    ExecutionCheckpointLatestPointer, ExecutionCheckpointManifest,
+    ExecutionCheckpointManifestHashPayload, write_bytes_atomic,
 };
 
 impl ExecutionCheckpointManifest {
@@ -383,6 +384,10 @@ fn collect_execution_bridge_record_retained_refs(
         best_effort_pinned_refs,
         record.external_effect_ref.as_deref(),
     );
+    maybe_insert_pin_ref(
+        best_effort_pinned_refs,
+        record.world_head_proof_ref.as_deref(),
+    );
 
     if retain_latest_head {
         maybe_insert_pin_ref(pinned_refs, record.latest_state_ref.as_deref());
@@ -707,7 +712,7 @@ fn normalize_execution_bridge_record_for_persist(
     record: &ExecutionBridgeRecord,
 ) -> ExecutionBridgeRecord {
     let mut normalized = record.clone();
-    normalized.schema_version = EXECUTION_BRIDGE_RECORD_SCHEMA_V2;
+    normalized.schema_version = EXECUTION_BRIDGE_RECORD_SCHEMA_V3;
     if normalized.latest_state_ref.is_none() {
         normalized.latest_state_ref = normalized.snapshot_ref.clone();
     }

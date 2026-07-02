@@ -49,6 +49,7 @@ use super::{
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_INTERVAL_HEIGHTS,
     EXECUTION_BRIDGE_DEFAULT_CHECKPOINT_KEEP_LATEST, EXECUTION_BRIDGE_DEFAULT_HOT_WINDOW_HEIGHTS,
     ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
+    persist_world_head_proof_for_record,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -709,12 +710,16 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             &self.execution_store,
             &external_effect,
         )?;
+        let prev_node_block_hash = self.state.last_node_block_hash.clone();
         let node_block_hash = Some(context.node_block_hash.clone());
 
-        let mut record = ExecutionBridgeRecord::new_v2(
+        let mut record = ExecutionBridgeRecord::new_v3(
             context.world_id.clone(),
             context.height,
             node_block_hash.clone(),
+            prev_node_block_hash,
+            context.node_id.clone(),
+            context.action_root.clone(),
             execution_block_hash.clone(),
             execution_state_root.clone(),
             self.execution_world.journal().len(),
@@ -729,6 +734,22 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             &record,
             self.checkpoint_interval_heights,
             self.checkpoint_keep_latest,
+        )?;
+        let checkpoint_manifest = record
+            .checkpoint_ref
+            .as_deref()
+            .map(|checkpoint_ref| {
+                load_execution_checkpoint_manifest(
+                    execution_checkpoint_root_dir(self.records_dir.as_path())
+                        .join(checkpoint_ref)
+                        .as_path(),
+                )
+            })
+            .transpose()?;
+        persist_world_head_proof_for_record(
+            &self.execution_store,
+            &mut record,
+            checkpoint_manifest.as_ref(),
         )?;
         persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
 
@@ -989,10 +1010,13 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         persist_execution_checkpoint_manifest(self.records_dir.as_path(), &manifest)?;
 
         let record = ExecutionBridgeRecord {
-            schema_version: super::EXECUTION_BRIDGE_RECORD_SCHEMA_V2,
+            schema_version: super::EXECUTION_BRIDGE_RECORD_SCHEMA_V3,
             world_id: context.world_id.clone(),
             height: context.height,
             node_block_hash: Some(context.node_block_hash.clone()),
+            prev_node_block_hash: None,
+            proposer_id: Some(context.node_id.clone()),
+            action_root: Some("checkpoint_install".to_string()),
             execution_block_hash: context.execution_block_hash.clone(),
             execution_state_root: context.execution_state_root.clone(),
             journal_len: snapshot.journal_len,
@@ -1002,9 +1026,13 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             commit_log_ref: None,
             checkpoint_ref: Some(execution_checkpoint_manifest_rel_path(context.height)),
             external_effect_ref: None,
+            world_head_proof_ref: None,
+            world_head_proof_hash: None,
             simulator_mirror: None,
             timestamp_ms: context.committed_at_unix_ms,
         };
+        let mut record = record;
+        persist_world_head_proof_for_record(&self.execution_store, &mut record, Some(&manifest))?;
         persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
 
         self.state.last_applied_committed_height = context.height;
@@ -1085,6 +1113,7 @@ fn bridge_committed_heights_with_policy(
                 )
             })?;
 
+        let prev_node_block_hash = state.last_node_block_hash.clone();
         let node_block_hash = if height == target_height {
             snapshot.consensus.last_block_hash.clone()
         } else {
@@ -1131,10 +1160,13 @@ fn bridge_committed_heights_with_policy(
             journal_len: execution_world.journal().len(),
         };
         let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
-        let mut record = ExecutionBridgeRecord::new_v2(
+        let mut record = ExecutionBridgeRecord::new_v3(
             snapshot.world_id.clone(),
             height,
             node_block_hash.clone(),
+            prev_node_block_hash,
+            "snapshot-bridge".to_string(),
+            "snapshot-bridge".to_string(),
             execution_block_hash.clone(),
             execution_state_root.clone(),
             execution_world.journal().len(),
@@ -1150,6 +1182,24 @@ fn bridge_committed_heights_with_policy(
             checkpoint_interval_heights,
             checkpoint_keep_latest,
         )?;
+        if record.node_block_hash.is_some() {
+            let checkpoint_manifest = record
+                .checkpoint_ref
+                .as_deref()
+                .map(|checkpoint_ref| {
+                    load_execution_checkpoint_manifest(
+                        execution_checkpoint_root_dir(execution_records_dir)
+                            .join(checkpoint_ref)
+                            .as_path(),
+                    )
+                })
+                .transpose()?;
+            persist_world_head_proof_for_record(
+                execution_store,
+                &mut record,
+                checkpoint_manifest.as_ref(),
+            )?;
+        }
         persist_execution_bridge_record(execution_records_dir, &record)?;
 
         state.last_applied_committed_height = height;

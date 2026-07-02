@@ -74,7 +74,7 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         .expect("read execution bridge record");
     let record: ExecutionBridgeRecord =
         serde_json::from_slice(record_bytes.as_slice()).expect("parse execution bridge record");
-    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V2);
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V3);
     assert_eq!(
         record.latest_state_ref.as_deref(),
         record.snapshot_ref.as_deref()

@@ -522,6 +522,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.node_id.clone(),
         options.world_id.clone(),
         paths.execution_world_dir.clone(),
+        paths.execution_records_dir.clone(),
         options.loaded_network_tier_manifest.clone(),
         release_security_policy,
         effective_p2p_policy,
