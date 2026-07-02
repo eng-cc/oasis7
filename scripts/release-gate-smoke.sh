@@ -60,6 +60,22 @@ ensure_file_contains "$pass_summary" "- web_strict: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "- s9: passed \\(dry_run\\)"
 ensure_file_contains "$pass_summary" "--node-auto-attest-all"
 ensure_file_contains "$pass_summary" "- s10: passed \\(dry_run\\)"
+ensure_file_contains "$pass_summary" "./scripts/release-gate-web-strict.sh --out-dir"
+if rg -q -- "--scenario llm_bootstrap" "$pass_summary"; then
+  echo "error: main release gate dry-run must not default to llm_bootstrap" >&2
+  echo "  file=$pass_summary" >&2
+  exit 1
+fi
+
+diagnostic_root="$smoke_root/diagnostic"
+run ./scripts/release-gate.sh --dry-run --web-scenario llm_bootstrap --skip-ci-full --skip-ci-full-reason diagnostic-smoke --skip-sync --skip-sync-reason diagnostic-smoke --skip-s9 --skip-s9-reason diagnostic-smoke --skip-s10 --skip-s10-reason diagnostic-smoke --out-dir "$diagnostic_root"
+diagnostic_summary=$(latest_summary "$diagnostic_root")
+if [[ -z "$diagnostic_summary" ]]; then
+  echo "error: diagnostic summary not found under $diagnostic_root" >&2
+  exit 1
+fi
+ensure_file_contains "$diagnostic_summary" "--scenario llm_bootstrap"
+ensure_file_contains "$diagnostic_summary" "--allow-debug-scenario"
 
 p2p_dry_root="$smoke_root/p2p-auto-attest"
 run ./scripts/p2p-longrun-soak.sh \

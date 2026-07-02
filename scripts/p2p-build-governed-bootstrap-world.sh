@@ -323,14 +323,13 @@ case "$mode" in
 
     rm -rf "$out_dir"
     mkdir -p "$out_dir"
+    canonicalize_world "$tmp_world_dir" "$out_dir/world"
     if [[ -n "$world_scenario" ]]; then
       ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_generate_world_artifact -- \
         --scenario "$world_scenario" \
-        --world-dir "$out_dir/world" \
+        --world-dir "$out_dir/generated-scenario-world" \
         --provenance-out "$out_dir/world-generation-provenance.json" \
         --public-manifest "$tmp_merged_manifest"
-    else
-      canonicalize_world "$tmp_world_dir" "$out_dir/world"
     fi
     cp "$tmp_merged_manifest" "$merged_manifest_out"
 
@@ -345,11 +344,6 @@ case "$mode" in
     require_path "--merged-public-manifest" "$merged_public_manifest"
     [[ ! -e "$world_dir/.distfs-state" ]] || die "world artifact must not include .distfs-state: $world_dir/.distfs-state"
     [[ ! -e "$world_dir/distfs.recovery.audit.json" ]] || die "world artifact must not include distfs.recovery.audit.json"
-    generated_provenance="$(dirname "$world_dir")/world-generation-provenance.json"
-    if [[ -f "$generated_provenance" ]]; then
-      validate_generated_world_artifact "$world_dir" "$generated_provenance" "$merged_public_manifest"
-      exit 0
-    fi
     python3 - "$world_dir/module_registry.json" <<'PY'
 import json
 import pathlib
@@ -366,6 +360,12 @@ PY
       --world-dir "$world_dir" \
       --public-manifest "$merged_public_manifest" \
       --strict-manifest-match
+    generated_root="$(dirname "$world_dir")"
+    generated_provenance="$generated_root/world-generation-provenance.json"
+    generated_world_dir="$generated_root/generated-scenario-world"
+    if [[ -f "$generated_provenance" ]]; then
+      validate_generated_world_artifact "$generated_world_dir" "$generated_provenance" "$merged_public_manifest"
+    fi
     ;;
   *)
     usage >&2

@@ -76,14 +76,20 @@ run ./scripts/p2p-build-governed-bootstrap-world.sh validate \
   --merged-public-manifest "$generated_out/merged-public-manifest-entries.json"
 
 assert_file_exists "$generated_out/world-generation-provenance.json"
+assert_file_exists "$generated_out/world/module_registry.json"
+assert_file_exists "$generated_out/generated-scenario-world/snapshot.json"
+assert_file_exists "$generated_out/generated-scenario-world/journal.json"
 
-generated_locations=$(jq '.model.locations | length' "$generated_out/world/snapshot.json")
+generated_module_registry_updated_at=$(jq '.updated_at' "$generated_out/world/module_registry.json")
+assert_eq "$generated_module_registry_updated_at" "0"
+
+generated_locations=$(jq '.model.locations | length' "$generated_out/generated-scenario-world/snapshot.json")
 if [[ "$generated_locations" -le 0 ]]; then
   echo "error: generated world should include scenario-generated locations" >&2
   exit 1
 fi
 
-generated_chunk_events=$(jq '[.events[] | select(.kind.type == "ChunkGenerated")] | length' "$generated_out/world/journal.json")
+generated_chunk_events=$(jq '[.events[] | select(.kind.type == "ChunkGenerated")] | length' "$generated_out/generated-scenario-world/journal.json")
 if [[ "$generated_chunk_events" -le 0 ]]; then
   echo "error: generated world should persist chunk generation events" >&2
   exit 1
@@ -129,9 +135,13 @@ run ./scripts/p2p-build-governed-bootstrap-world.sh validate \
   --world-dir "$generated_second_out/world" \
   --merged-public-manifest "$generated_second_out/merged-public-manifest-entries.json"
 
-generated_first_tree=$(hash_tree "$generated_out/world")
-generated_second_tree=$(hash_tree "$generated_second_out/world")
-assert_eq "$generated_first_tree" "$generated_second_tree"
+generated_governed_first_tree=$(hash_tree "$generated_out/world")
+generated_governed_second_tree=$(hash_tree "$generated_second_out/world")
+assert_eq "$generated_governed_first_tree" "$generated_governed_second_tree"
+
+generated_scenario_first_tree=$(hash_tree "$generated_out/generated-scenario-world")
+generated_scenario_second_tree=$(hash_tree "$generated_second_out/generated-scenario-world")
+assert_eq "$generated_scenario_first_tree" "$generated_scenario_second_tree"
 
 cmp -s "$generated_out/world-generation-provenance.json" "$generated_second_out/world-generation-provenance.json" || {
   echo "error: generated world provenance differs across rebuilds" >&2

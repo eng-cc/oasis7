@@ -6,6 +6,7 @@
   "rationale": "Ratchet direct Cargo manifest declarations for crates that remain in the RustSec ignore baseline, so non-workspace builtin WASM modules and standalone tools cannot add ignored advisory dependencies silently.",
   "ignored_direct_manifests": {
     "paste": [],
+    "quick-xml": [],
     "ttf-parser": [],
     "serde_cbor": [
       "crates/oasis7/Cargo.toml",
