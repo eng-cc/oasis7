@@ -27,6 +27,7 @@ fn build_storage_challenge_blob_cache_fixture(
         height: 1,
         slot: 0,
         epoch: 0,
+        proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Committed,
         block_hash: "block-1".to_string(),
         action_root: empty_action_root(),

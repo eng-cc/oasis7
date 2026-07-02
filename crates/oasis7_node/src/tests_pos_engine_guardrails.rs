@@ -373,6 +373,7 @@ fn pos_engine_apply_decision_rejects_height_overflow_without_state_mutation() {
         height: u64::MAX,
         slot: 8,
         epoch: 0,
+        proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Committed,
         block_hash: "overflow-block".to_string(),
         action_root: empty_action_root(),
@@ -600,6 +601,7 @@ fn synced_non_sequencer_commit_does_not_create_binding_without_local_execution()
     let payload = super::replication_state_reconcile::ReplicationCommitPayload {
         world_id: config.world_id.clone(),
         node_id: "node-a".to_string(),
+            proposer_id: None,
         height: 8,
         slot: 8,
         epoch: 0,
@@ -630,6 +632,7 @@ fn synced_replication_commit_executes_with_payload_node_id() {
     let payload = super::replication_state_reconcile::ReplicationCommitPayload {
         world_id: config.world_id.clone(),
         node_id: "node-a".to_string(),
+            proposer_id: None,
         height: 1,
         slot: 1,
         epoch: 0,
@@ -668,6 +671,7 @@ fn synced_replication_commit_rolls_back_execution_on_peer_hash_mismatch() {
     let payload = super::replication_state_reconcile::ReplicationCommitPayload {
         world_id: config.world_id.clone(),
         node_id: "node-a".to_string(),
+            proposer_id: None,
         height: 8,
         slot: 8,
         epoch: 0,
@@ -724,6 +728,7 @@ fn synced_replication_commit_rolls_back_execution_when_peer_hashes_missing_after
     let payload = super::replication_state_reconcile::ReplicationCommitPayload {
         world_id: config.world_id.clone(),
         node_id: "node-a".to_string(),
+            proposer_id: None,
         height: 8,
         slot: 8,
         epoch: 0,

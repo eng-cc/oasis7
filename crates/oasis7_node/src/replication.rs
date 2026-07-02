@@ -445,6 +445,8 @@ impl Default for LocalWriterState {
 struct ReplicatedCommitPayload {
     world_id: String,
     node_id: String,
+    #[serde(default)]
+    proposer_id: Option<String>,
     height: u64,
     slot: u64,
     epoch: u64,
@@ -600,6 +602,7 @@ impl ReplicationRuntime {
         let payload = ReplicatedCommitPayload {
             world_id: world_id.to_string(),
             node_id: node_id.to_string(),
+            proposer_id: Some(decision.proposer_id.clone()),
             height: decision.height,
             slot: decision.slot,
             epoch: decision.epoch,

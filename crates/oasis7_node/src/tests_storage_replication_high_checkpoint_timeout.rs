@@ -264,6 +264,7 @@ fn committed_decision(height: u64, approved_stake: u64, required_stake: u64) -> 
         height,
         slot: height,
         epoch: 0,
+            proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Committed,
         block_hash: format!("block-{height}"),
         action_root: empty_action_root(),

@@ -13,12 +13,18 @@ use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
 use super::traffic_status::ChainTrafficStatus;
 use super::wasm_status::ChainWasmStatus;
+#[path = "status_payload_chain_proof.rs"]
+mod status_payload_chain_proof;
 #[path = "status_payload_network_head.rs"]
 mod status_payload_network_head;
+#[path = "status_payload_network_tier.rs"]
+mod status_payload_network_tier;
+use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
 pub(super) use status_payload_network_head::{
     ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus, applied_slashing_receipt_hashes,
     build_network_head_status, pending_slashing_intent_count, readiness_policy,
 };
+use status_payload_network_tier::ChainNetworkTierStatus;
 #[path = "status_payload_observability.rs"]
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
@@ -101,6 +107,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) tick_count: u64,
     pub(super) last_tick_unix_ms: Option<i64>,
     pub(super) consensus: ChainConsensusStatus,
+    pub(super) chain_proof: ChainProofStatus,
     pub(super) last_error: Option<String>,
     pub(super) execution_world_dir: String,
     pub(super) network_tier: Option<ChainNetworkTierStatus>,
@@ -139,31 +146,6 @@ pub(super) struct ChainSyncStatus {
     pub(super) fresh_peer_count: usize,
     pub(super) stale_peer_count: usize,
     pub(super) conflicting_peer_count: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainNetworkTierStatus {
-    pub(super) source_path: String,
-    pub(super) schema_version: String,
-    pub(super) tier: String,
-    pub(super) status: String,
-    pub(super) network_id: String,
-    pub(super) chain_id: String,
-    pub(super) bootstrap_peer_count: usize,
-    pub(super) governance_mode: String,
-    pub(super) validator_admission: String,
-    pub(super) target_validator_count: u64,
-    pub(super) allow_observer_nodes: bool,
-    pub(super) token_symbol: String,
-    pub(super) faucet_mode: String,
-    pub(super) reset_policy: String,
-    pub(super) value_semantics: String,
-    pub(super) rpc_ref: String,
-    pub(super) explorer_ref: String,
-    pub(super) faucet_ref: Option<String>,
-    pub(super) required_gates: Vec<String>,
-    pub(super) allowed_claims: Vec<String>,
-    pub(super) denied_claims: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -912,6 +894,7 @@ pub(super) fn build_chain_node_observability_status(
 pub(super) fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
     live_p2p_recommendation: &NodeUserModeRecommendation,
     applied_effective_user_mode: Option<String>,
@@ -1001,6 +984,7 @@ pub(super) fn build_chain_status_payload(
     let applied_slashing_receipt_count = applied_slashing_receipt_hashes(&snapshot).len();
     let world_resource =
         build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
+    let chain_proof = build_chain_proof_status(execution_records_dir);
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -1180,6 +1164,7 @@ pub(super) fn build_chain_status_payload(
             slashable_stake_total,
             network_head,
         },
+        chain_proof,
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
         p2p,

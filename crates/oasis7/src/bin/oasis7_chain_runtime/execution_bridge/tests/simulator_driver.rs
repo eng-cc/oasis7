@@ -58,6 +58,7 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
             height: 1,
             slot: 0,
             epoch: 0,
@@ -74,7 +75,7 @@ fn node_runtime_execution_driver_processes_simulator_payload_envelope() {
         .expect("read execution bridge record");
     let record: ExecutionBridgeRecord =
         serde_json::from_slice(record_bytes.as_slice()).expect("parse execution bridge record");
-    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V2);
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V3);
     assert_eq!(
         record.latest_state_ref.as_deref(),
         record.snapshot_ref.as_deref()

@@ -9,9 +9,7 @@ use super::checkpoint::{
     persist_execution_bridge_record, persist_execution_bridge_record_only,
     persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
 };
-use super::driver::{
-    bridge_committed_heights, load_execution_bridge_state, persist_execution_bridge_state,
-};
+use super::driver::{load_execution_bridge_state, persist_execution_bridge_state};
 use super::external_effect::{
     execution_committed_actions_hash, execution_module_anchor_hash,
     persist_execution_external_effect_materialization,
@@ -56,6 +54,25 @@ fn signed_test_artifact_identity(wasm_hash: &str) -> ModuleArtifactIdentity {
             hex::encode(signature.to_bytes())
         ),
     }
+}
+
+fn load_world_head_proof(
+    store: &LocalCasStore,
+    record: &ExecutionBridgeRecord,
+) -> WorldHeadProofV1 {
+    let proof_ref = record
+        .world_head_proof_ref
+        .as_deref()
+        .expect("record should include world head proof ref");
+    let bytes = store.get_verified(proof_ref).expect("load proof blob");
+    let proof: WorldHeadProofV1 = serde_cbor::from_slice(bytes.as_slice()).expect("decode proof");
+    proof.validate_contract().expect("validate proof");
+    let proof_hash = proof.proof_hash().expect("proof hash");
+    assert_eq!(
+        record.world_head_proof_hash.as_deref(),
+        Some(proof_hash.as_str())
+    );
+    proof
 }
 
 fn test_module_artifact_signing_key() -> SigningKey {
@@ -139,7 +156,7 @@ fn bridge_committed_heights_persists_records_and_state() {
         serde_json::from_slice(latest_bytes.as_slice()).expect("parse latest record");
     assert_eq!(
         latest_record.schema_version,
-        EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+        EXECUTION_BRIDGE_RECORD_SCHEMA_V3
     );
     assert_eq!(
         latest_record.latest_state_ref.as_deref(),
@@ -263,7 +280,7 @@ fn execution_bridge_record_recovery_snapshot_ref_falls_back_to_execution_state_r
 }
 
 #[test]
-fn persist_execution_bridge_record_only_migrates_legacy_record_to_v2() {
+fn persist_execution_bridge_record_only_migrates_legacy_record_to_v3() {
     let dir = temp_dir("execution-bridge-legacy-migrate");
     let records_dir = dir.join("records");
     fs::create_dir_all(records_dir.as_path()).expect("create records dir");
@@ -291,13 +308,13 @@ fn persist_execution_bridge_record_only_migrates_legacy_record_to_v2() {
     .expect("load legacy record");
     assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
     persist_execution_bridge_record_only(records_dir.as_path(), &record)
-        .expect("rewrite legacy record as v2");
+        .expect("rewrite legacy record as v3");
 
     let migrated = load_execution_bridge_record(
         execution_bridge_record_path(records_dir.as_path(), 7).as_path(),
     )
     .expect("load migrated record");
-    assert_eq!(migrated.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V2);
+    assert_eq!(migrated.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V3);
     assert_eq!(migrated.latest_state_ref.as_deref(), Some("cas:snapshot-7"));
     assert_eq!(migrated.snapshot_ref.as_deref(), Some("cas:snapshot-7"));
     assert_eq!(migrated.journal_ref.as_deref(), Some("cas:journal-7"));

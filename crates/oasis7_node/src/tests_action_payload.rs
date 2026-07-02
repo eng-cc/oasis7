@@ -640,6 +640,7 @@ fn pos_engine_apply_rejected_decision_surfaces_requeue_overflow_instead_of_dropp
         height: 7,
         slot: 6,
         epoch: 0,
+        proposer_id: "node-a".to_string(),
         status: PosConsensusStatus::Rejected,
         block_hash: "rejected-block".to_string(),
         action_root,

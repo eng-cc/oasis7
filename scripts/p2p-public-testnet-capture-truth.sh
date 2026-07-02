@@ -313,7 +313,17 @@ json_output=$(jq -n \
         node_id: ($sequencer_status.node_id // null),
         local_peer_id: ($sequencer_status.replication.local_peer_id // null),
         committed_height: ($sequencer_status.consensus.committed_height // null),
+        last_block_hash: ($sequencer_status.consensus.last_block_hash // null),
         last_execution_height: ($sequencer_status.consensus.last_execution_height // null),
+        last_execution_block_hash: ($sequencer_status.consensus.last_execution_block_hash // null),
+        last_execution_state_root: ($sequencer_status.consensus.last_execution_state_root // null),
+        network_head: ($sequencer_status.consensus.network_head // null),
+        readiness: {
+          status: ($sequencer_status.readiness.status // null),
+          failed_gates: ($sequencer_status.readiness.failed_gates // [])
+        },
+        network_tier: ($sequencer_status.network_tier // null),
+        chain_proof: ($sequencer_status.chain_proof // null),
         status_url: ($sequencer_status.status_url // null)
       },
       storage: {
@@ -322,7 +332,17 @@ json_output=$(jq -n \
         node_id: ($storage_status.node_id // null),
         local_peer_id: ($storage_status.replication.local_peer_id // null),
         committed_height: ($storage_status.consensus.committed_height // null),
+        last_block_hash: ($storage_status.consensus.last_block_hash // null),
         last_execution_height: ($storage_status.consensus.last_execution_height // null),
+        last_execution_block_hash: ($storage_status.consensus.last_execution_block_hash // null),
+        last_execution_state_root: ($storage_status.consensus.last_execution_state_root // null),
+        network_head: ($storage_status.consensus.network_head // null),
+        readiness: {
+          status: ($storage_status.readiness.status // null),
+          failed_gates: ($storage_status.readiness.failed_gates // [])
+        },
+        network_tier: ($storage_status.network_tier // null),
+        chain_proof: ($storage_status.chain_proof // null),
         status_url: ($storage_status.status_url // null)
       }
     }

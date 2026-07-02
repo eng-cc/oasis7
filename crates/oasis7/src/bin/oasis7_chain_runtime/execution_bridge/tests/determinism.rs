@@ -13,6 +13,7 @@ fn commit_context(
     NodeExecutionCommitContext {
         world_id: "w1".to_string(),
         node_id: node_id.to_string(),
+        proposer_id: node_id.to_string(),
         height: 1,
         slot: 0,
         epoch: 0,

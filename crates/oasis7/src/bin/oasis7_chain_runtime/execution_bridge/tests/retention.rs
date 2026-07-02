@@ -5,8 +5,8 @@ use super::super::checkpoint::{
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
     run_execution_bridge_retention_maintenance, sync_execution_bridge_pin_set,
 };
-use super::super::driver::{NodeRuntimeExecutionDriver, bridge_committed_heights};
 use super::super::external_effect::build_execution_replay_plan;
+use super::super::{bridge_committed_heights, driver::NodeRuntimeExecutionDriver};
 use super::*;
 use std::collections::BTreeSet;
 
@@ -445,6 +445,7 @@ fn node_runtime_execution_driver_uses_storage_profile_hot_window_budget() {
             .on_commit(NodeExecutionCommitContext {
                 world_id: "w1".to_string(),
                 node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
                 height,
                 slot: height.saturating_sub(1),
                 epoch: 0,

@@ -286,6 +286,9 @@ impl PosNodeEngine {
             height: self.committed_height,
             slot: self.next_slot,
             epoch: self.slot_epoch(self.next_slot),
+            proposer_id: self
+                .expected_proposer(self.next_slot)
+                .unwrap_or_else(|| self.local_validator_id.clone()),
             status: PosConsensusStatus::Pending,
             block_hash: self
                 .last_committed_block_hash
@@ -540,6 +543,7 @@ impl PosNodeEngine {
             NodeExecutionCommitContext {
                 world_id: world_id.to_string(),
                 node_id: node_id.to_string(),
+                proposer_id: decision.proposer_id.clone(),
                 height: decision.height,
                 slot: decision.slot,
                 epoch: decision.epoch,

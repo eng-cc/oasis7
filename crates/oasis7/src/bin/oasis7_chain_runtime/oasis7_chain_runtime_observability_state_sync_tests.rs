@@ -44,6 +44,7 @@ fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
         snapshot,
         Path::new("/tmp/execution-world"),
         None,
+        None,
         &recommendation,
         None,
         NodeNetworkPolicy {
