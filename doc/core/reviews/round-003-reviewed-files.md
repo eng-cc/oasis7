@@ -234,7 +234,7 @@
 - `doc/playability_test_result/game-test.prd.md`
 - `doc/playability_test_result/game-test.project.md`
 - `doc/playability_test_result/playability_test_card.md`
-- `doc/playability_test_result/playability_test_manual.md`
+- `doc/playability_test_result/project.md`（retired former `playability_test_manual.md` trace）
 - `doc/playability_test_result/prd.index.md`
 - `doc/playability_test_result/prd.md`
 - `doc/playability_test_result/project.md`

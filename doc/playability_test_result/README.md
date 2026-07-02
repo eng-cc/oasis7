@@ -11,7 +11,7 @@
 ## 从这里开始
 - 想先确认可玩性证据的字段、评分口径与发布引用边界：先读 `doc/playability_test_result/prd.md`。
 - 想看这个模块当前是否还有活跃任务、最近收口了什么：先读 `doc/playability_test_result/project.md`。
-- 想直接复用单次结果卡或人工执行说明：先读 `doc/playability_test_result/playability_test_card.md` 与 `doc/playability_test_result/playability_test_manual.md`。
+- 想直接复用单次结果卡或人工执行说明：先读 `doc/playability_test_result/playability_test_card.md`；专题回归执行从 `doc/playability_test_result/topics/` 进入。
 - 想找专题回归卡组，而不是单次样本：进入 `doc/playability_test_result/topics/`，当前高频入口是 `industrial-onboarding-required-tier-cards-2026-03-15.md`。
 - 想追溯正式发布证据或跨模块引用样例：进入 `doc/playability_test_result/evidence/`。
 
@@ -24,7 +24,6 @@
 - `doc/playability_test_result/game-test.prd.md`
 - `doc/playability_test_result/game-test.project.md`
 - `doc/playability_test_result/playability_test_card.md`
-- `doc/playability_test_result/playability_test_manual.md`
 - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
 - `doc/playability_test_result/templates/`
 - `doc/playability_test_result/evidence/`

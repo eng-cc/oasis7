@@ -445,7 +445,7 @@
 | 2026-03-06 12:02:31 +0800 | codex | `doc/playability_test_result/prd.md` | pass | - | 模块主 PRD 的证据流程与追踪口径完整，未发现 D4 即时问题。 |
 | 2026-03-06 12:02:56 +0800 | codex | `doc/playability_test_result/project.md` | pass | - | 任务拆解含 PRD-ID 映射且状态链路清晰，未发现 D4 新问题。 |
 | 2026-03-06 12:03:28 +0800 | codex | `doc/playability_test_result/playability_test_card.md` | pass | - | 反馈模板字段完整且可直接用于人工采集，未涉及不可执行命令口径。 |
-| 2026-03-06 12:03:55 +0800 | codex | `doc/playability_test_result/playability_test_manual.md` | pass | - | 归档提示与当前主入口引用一致，未发现 D4 问题。 |
+| 2026-03-06 12:03:55 +0800 | codex | `doc/playability_test_result/project.md`（retired former `playability_test_manual.md` trace） | pass | - | 归档提示与当时主入口引用一致，未发现 D4 问题。 |
 | 2026-03-06 12:04:22 +0800 | codex | `doc/playability_test_result/card_2026_02_28_19_22_20.md` | pass | - | 实测卡片证据链（访问地址/日志/录屏/指标）完整，未涉及命令可执行性缺陷。 |
 | 2026-03-06 12:04:48 +0800 | codex | `doc/playability_test_result/card_2026_02_28_21_22_51.md` | pass | - | 长玩卡片给出完整量化指标与证据路径，未发现 D4 命令可执行性问题。 |
 | 2026-03-06 12:05:09 +0800 | codex | `doc/playability_test_result/card_2026_02_28_22_47_14.md` | pass | - | 卡片包含完整采样与结论字段，未发现 D4-001~D4-008 命令问题。 |
