@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
 use crate::runtime::{
@@ -14,6 +14,7 @@ use crate::simulator::{
     ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
     ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION, WorldConfig, WorldEvent,
     WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot, evaluate_provider_compatibility,
+    provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -670,9 +671,10 @@ impl RuntimeLlmSidecar {
     pub(super) fn drain_provider_agent_chat_replies(
         &mut self,
         world: &RuntimeWorld,
-    ) -> Vec<(String, String)> {
+    ) -> (Vec<(String, String)>, Vec<AgentChatError>) {
         let pending: Vec<_> = self.pending_provider_agent_chats.drain(..).collect();
         let mut replies = Vec::new();
+        let mut errors = Vec::new();
         for request in pending {
             match self.request_provider_agent_chat(
                 world,
@@ -689,10 +691,11 @@ impl RuntimeLlmSidecar {
                         error_message = error.message.as_str(),
                         "provider-backed agent chat reply failed after ack"
                     );
+                    errors.push(error);
                 }
             }
         }
-        replies
+        (replies, errors)
     }
 
     fn request_provider_agent_chat(
@@ -739,21 +742,51 @@ impl RuntimeLlmSidecar {
         let agent = world.state().agents.get(agent_id);
         let location_id = agent.map(|agent| location_id_for_pos(agent.state.pos));
         let resources = agent.and_then(|agent| serde_json::to_value(&agent.state.resources).ok());
-        let response = client
-            .request_agent_chat(&ProviderAgentChatRequest {
-                agent_id: agent_id.to_string(),
-                player_id: player_id.to_string(),
-                message: message.to_string(),
-                world_time: world.state().time,
-                location_id,
-                resources,
-                recent_feedback: Vec::new(),
-            })
-            .map_err(|error| AgentChatError {
-                code: "provider_unreachable".to_string(),
-                message: error.to_string(),
-                agent_id: Some(agent_id.to_string()),
-            })?;
+        let provider_request = ProviderAgentChatRequest {
+            agent_id: agent_id.to_string(),
+            player_id: player_id.to_string(),
+            message: message.to_string(),
+            world_time: world.state().time,
+            location_id,
+            resources,
+            recent_feedback: Vec::new(),
+        };
+        let chat_request_key = provider_agent_chat_log_key(&provider_request);
+        let started = Instant::now();
+        tracing::info!(
+            chat_request_key = chat_request_key.as_str(),
+            agent_id,
+            player_id,
+            world_time = provider_request.world_time,
+            "provider-backed agent chat request started"
+        );
+        let response = match client.request_agent_chat(&provider_request) {
+            Ok(response) => {
+                tracing::info!(
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "provider-backed agent chat request succeeded"
+                );
+                response
+            }
+            Err(error) => {
+                tracing::warn!(
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    error = error.to_string().as_str(),
+                    "provider-backed agent chat request failed"
+                );
+                return Err(AgentChatError {
+                    code: "provider_unreachable".to_string(),
+                    message: error.to_string(),
+                    agent_id: Some(agent_id.to_string()),
+                });
+            }
+        };
         let reply = response.message.trim();
         if reply.is_empty() {
             return Err(AgentChatError {

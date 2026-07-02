@@ -882,13 +882,14 @@ impl ViewerRuntimeLiveServer {
         });
     }
 
-    pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) {
-        let replies = self
+    pub(super) fn enqueue_pending_provider_agent_chat_replies(&mut self) -> Vec<AgentChatError> {
+        let (replies, errors) = self
             .llm_sidecar
             .drain_provider_agent_chat_replies(&self.world);
         for (agent_id, message) in replies {
             self.enqueue_agent_chat_reply_event(agent_id.as_str(), message.as_str());
         }
+        errors
     }
 
     fn next_virtual_event_id(&mut self) -> u64 {

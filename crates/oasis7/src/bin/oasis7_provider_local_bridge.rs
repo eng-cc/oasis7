@@ -16,13 +16,13 @@ use oasis7::simulator::{
     DecisionRequest, DecisionResponse, FeedbackEnvelope, ProviderAgentChatRequest,
     ProviderAgentChatResponse, ProviderDecision, ProviderDiagnostics, ProviderErrorEnvelope,
     ProviderHealth, ProviderInfo, ProviderTokenUsage, ProviderTraceEnvelope,
-    ProviderTranscriptEntry,
+    ProviderTranscriptEntry, provider_agent_chat_log_key,
 };
 use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;
-use tracing::{Level, error, info};
+use tracing::{Level, error, info, warn};
 
 const DEFAULT_BIND_ADDR: &str = "127.0.0.1:5841";
 const DEFAULT_PROVIDER_AGENT_ID: &str = "main";
@@ -43,6 +43,9 @@ fn default_provider_cli_bin() -> String {
         .unwrap_or_else(|| ["open", "claw"].concat())
 }
 
+#[cfg(test)]
+#[path = "oasis7_provider_local_bridge/api_test_support.rs"]
+mod api;
 #[path = "oasis7_provider_local_bridge/auth_support.rs"]
 mod auth_support;
 #[allow(dead_code)]
@@ -54,46 +57,6 @@ mod http_bridge_support;
 mod letai_direct;
 #[path = "oasis7_provider_local_bridge/support.rs"]
 mod support;
-#[cfg(test)]
-mod api {
-    use std::io::Write;
-
-    pub(super) fn write_http_response<W: Write>(
-        stream: &mut W,
-        status_code: u16,
-        content_type: &str,
-        body: &[u8],
-        head_only: bool,
-    ) -> Result<(), String> {
-        let status_text = match status_code {
-            200 => "OK",
-            201 => "Created",
-            400 => "Bad Request",
-            404 => "Not Found",
-            405 => "Method Not Allowed",
-            409 => "Conflict",
-            500 => "Internal Server Error",
-            502 => "Bad Gateway",
-            503 => "Service Unavailable",
-            _ => "Error",
-        };
-        let headers = format!(
-            "HTTP/1.1 {status_code} {status_text}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            body.len()
-        );
-        stream
-            .write_all(headers.as_bytes())
-            .map_err(|err| format!("write response header failed: {err}"))?;
-        if !head_only {
-            stream
-                .write_all(body)
-                .map_err(|err| format!("write response body failed: {err}"))?;
-        }
-        stream
-            .flush()
-            .map_err(|err| format!("flush response failed: {err}"))
-    }
-}
 #[cfg(test)]
 #[path = "oasis7_provider_local_bridge/tests.rs"]
 mod tests;
@@ -333,7 +296,27 @@ impl ProviderState {
         if message.is_empty() {
             return Err("agent_chat requires non-empty message".to_string());
         }
+        let chat_request_key = provider_agent_chat_log_key(&request);
+        let started = Instant::now();
+        info!(
+            target: "oasis7_provider_local_bridge",
+            chat_request_key = chat_request_key.as_str(),
+            agent_id,
+            player_id,
+            world_time = request.world_time,
+            route_label_present = route_label.is_some(),
+            backend = ?self.options.provider_backend,
+            "provider agent chat request started"
+        );
         if self.options.mode == ProviderMode::Mock {
+            info!(
+                target: "oasis7_provider_local_bridge",
+                chat_request_key = chat_request_key.as_str(),
+                agent_id,
+                player_id,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "provider agent chat request succeeded"
+            );
             return Ok(ProviderAgentChatResponse {
                 agent_id: agent_id.to_string(),
                 message: format!("[local-mock-chat] {agent_id} 收到：{message}"),
@@ -355,6 +338,7 @@ impl ProviderState {
             timeout_seconds: timeout_seconds_from_budget(60_000),
             prompt,
             idempotency_key: agent_chat_idempotency_key(&session_key, &request),
+            chat_request_key: Some(chat_request_key.clone()),
             route_label: route_label.map(ToOwned::to_owned),
         });
         self.active_requests.fetch_sub(1, Ordering::SeqCst);
@@ -362,6 +346,15 @@ impl ProviderState {
         match invoke_result {
             Ok(output) => {
                 self.set_last_error(None);
+                info!(
+                    target: "oasis7_provider_local_bridge",
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    provider_version = output.provider_version.as_deref().unwrap_or("unknown"),
+                    "provider agent chat request succeeded"
+                );
                 Ok(ProviderAgentChatResponse {
                     agent_id: agent_id.to_string(),
                     message: summarize_text(output.text.as_str(), 700),
@@ -371,6 +364,15 @@ impl ProviderState {
             Err(err) => {
                 let detail = format!("provider_agent_chat_unreachable: {err}");
                 self.set_last_error(Some(detail.clone()));
+                warn!(
+                    target: "oasis7_provider_local_bridge",
+                    chat_request_key = chat_request_key.as_str(),
+                    agent_id,
+                    player_id,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    error = detail.as_str(),
+                    "provider agent chat request failed"
+                );
                 Err(detail)
             }
         }
@@ -467,6 +469,7 @@ impl ProviderState {
             timeout_seconds,
             prompt,
             idempotency_key: format!("{session_key}-{timeout_seconds}"),
+            chat_request_key: None,
             route_label: route_label.map(ToOwned::to_owned),
         });
         self.active_requests.fetch_sub(1, Ordering::SeqCst);
@@ -742,6 +745,7 @@ struct AgentInvocation {
     timeout_seconds: u64,
     prompt: String,
     idempotency_key: String,
+    chat_request_key: Option<String>,
     route_label: Option<String>,
 }
 

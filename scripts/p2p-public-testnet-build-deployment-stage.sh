@@ -9,6 +9,7 @@ Usage:
     --bootstrap-peers-file <path> \
     --sequencer-node-keypair <path> \
     --storage-node-keypair <path> \
+    [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
     [--track public_testnet_rehearsal|staging|canary]
 
@@ -17,6 +18,7 @@ Usage:
     --bootstrap-peers-file <path> \
     --sequencer-public-key <hex> \
     --storage-public-key <hex> \
+    [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
     [--track public_testnet_rehearsal|staging|canary]
 
@@ -66,6 +68,7 @@ sequencer_node_keypair=""
 storage_node_keypair=""
 sequencer_public_key=""
 storage_public_key=""
+extra_validators=()
 out_dir=""
 
 base_genesis="doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
@@ -100,6 +103,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --storage-public-key)
       storage_public_key=${2:-}
+      shift 2
+      ;;
+    --extra-validator)
+      extra_validators+=("${2:-}")
       shift 2
       ;;
     --out-dir)
@@ -192,6 +199,15 @@ require_non_empty "--storage-node-keypair or --storage-public-key" "$storage_pub
 is_hex_32 "$sequencer_public_key" || die "sequencer public key must be 32-byte hex"
 is_hex_32 "$storage_public_key" || die "storage public key must be 32-byte hex"
 
+validator_specs=(
+  "$sequencer_node_id:$sequencer_public_key:$stake"
+  "$storage_node_id:$storage_public_key:$stake"
+)
+for extra_validator in "${extra_validators[@]}"; do
+  require_non_empty "--extra-validator" "$extra_validator"
+  validator_specs+=("$extra_validator")
+done
+
 out_dir=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$out_dir")
 rm -rf "$out_dir"
 mkdir -p "$out_dir/config/doc/testing/evidence" "$out_dir/generated-world"
@@ -207,36 +223,46 @@ temp_genesis="$out_dir/.tmp-genesis.json"
 cp "$bootstrap_peers_file" "$bootstrap_out"
 cp "$bootstrap_out" "$out_dir/config/doc/testing/evidence/"
 
-python3 - "$registry_path" "$sequencer_node_id" "$sequencer_public_key" "$storage_node_id" "$storage_public_key" "$stake" <<'PY'
+python3 - "$registry_path" "${validator_specs[@]}" <<'PY'
 import json
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
-sequencer_node_id = sys.argv[2]
-sequencer_public_key = sys.argv[3]
-storage_node_id = sys.argv[4]
-storage_public_key = sys.argv[5]
-stake = int(sys.argv[6])
+specs = sys.argv[2:]
+if len(specs) < 2:
+    raise SystemExit("at least two validators are required")
 
+validators = []
+seen_node_ids = set()
+for spec in specs:
+    parts = spec.split(":")
+    if len(parts) not in (2, 3):
+        raise SystemExit(f"invalid validator spec `{spec}`; expected node_id:public_key[:stake]")
+    node_id, public_key = parts[0].strip(), parts[1].strip()
+    stake = int(parts[2]) if len(parts) == 3 and parts[2].strip() else 100
+    if not node_id:
+        raise SystemExit("validator node_id cannot be empty")
+    if node_id in seen_node_ids:
+        raise SystemExit(f"duplicate validator node_id `{node_id}`")
+    if len(public_key) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in public_key):
+        raise SystemExit(f"validator public key must be 32-byte hex for node_id={node_id}")
+    if stake <= 0:
+        raise SystemExit(f"validator stake must be > 0 for node_id={node_id}")
+    seen_node_ids.add(node_id)
+    validators.append({
+        "node_id": node_id,
+        "scheme": "ed25519",
+        "finality_signer_public_key": public_key,
+        "stake": stake,
+    })
+
+threshold = max(2, (len(validators) * 2 + 2) // 3)
 payload = {
     "slot_id": "governance.finality.v1",
-    "threshold": 2,
+    "threshold": threshold,
     "threshold_bps": 0,
-    "validators": [
-        {
-            "node_id": sequencer_node_id,
-            "scheme": "ed25519",
-            "finality_signer_public_key": sequencer_public_key,
-            "stake": stake,
-        },
-        {
-            "node_id": storage_node_id,
-            "scheme": "ed25519",
-            "finality_signer_public_key": storage_public_key,
-            "stake": stake,
-        },
-    ],
+    "validators": validators,
 }
 path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 PY
@@ -285,25 +311,26 @@ cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
   --out-dir "$out_dir/generated-world" \
   --allow-overwrite >/dev/null
 
-python3 - "$deployment_truth_md" "$runtime_build_ref" "$bootstrap_out" "$sequencer_node_id" "$sequencer_public_key" "$storage_node_id" "$storage_public_key" <<'PY'
+python3 - "$deployment_truth_md" "$runtime_build_ref" "$bootstrap_out" "${validator_specs[@]}" <<'PY'
 import pathlib
 import sys
 
 path = pathlib.Path(sys.argv[1])
 runtime_build_ref = sys.argv[2]
 bootstrap_peers_file = pathlib.Path(sys.argv[3])
-sequencer_node_id = sys.argv[4]
-sequencer_public_key = sys.argv[5]
-storage_node_id = sys.argv[6]
-storage_public_key = sys.argv[7]
+specs = sys.argv[4:]
+validator_lines = []
+for spec in specs:
+    node_id, public_key, *rest = spec.split(":")
+    stake = rest[0] if rest else "100"
+    validator_lines.append(f"  - `{node_id}` -> `{public_key}` (stake `{stake}`)")
 
 content = f"""# Deployment Truth
 
 - Runtime build: `{runtime_build_ref}`
 - Bootstrap peers file: `{bootstrap_peers_file}`
 - Validator signer truth:
-  - `{sequencer_node_id}` -> `{sequencer_public_key}`
-  - `{storage_node_id}` -> `{storage_public_key}`
+{chr(10).join(validator_lines)}
 """
 path.write_text(content, encoding="utf-8")
 PY
@@ -325,7 +352,7 @@ cp "$bundle_path" "$out_dir/config/doc/testing/evidence/"
   --world-dir "$out_dir/generated-world/world" \
   --merged-public-manifest "$out_dir/generated-world/merged-public-manifest-entries.json" >/dev/null
 
-python3 - "$base_manifest" "$manifest_path" "$bundle_path" "$genesis_path" "$bootstrap_out" <<'PY'
+python3 - "$base_manifest" "$manifest_path" "$bundle_path" "$genesis_path" "$bootstrap_out" "$registry_path" <<'PY'
 import json
 import pathlib
 import sys
@@ -335,12 +362,16 @@ manifest_path = pathlib.Path(sys.argv[2])
 bundle_path = pathlib.Path(sys.argv[3])
 genesis_path = pathlib.Path(sys.argv[4])
 bootstrap_path = pathlib.Path(sys.argv[5])
+registry_path = pathlib.Path(sys.argv[6])
 
 payload = json.loads(base_manifest.read_text(encoding="utf-8"))
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
 payload.setdefault("runtime_refs", {})
 payload["runtime_refs"]["release_candidate_bundle_ref"] = bundle_path.name
 payload["runtime_refs"]["genesis_ref"] = genesis_path.name
 payload["runtime_refs"]["bootstrap_peer_ref"] = bootstrap_path.name
+payload.setdefault("validator_policy", {})
+payload["validator_policy"]["target_validator_count"] = len(registry.get("validators", []))
 manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 PY
 cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"

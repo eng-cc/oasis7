@@ -40,9 +40,66 @@ function EmptyState(props) {
   return <div class={`empty ${props.class ?? ""}`} style={props.style}>{props.children}</div>;
 }
 
+function targetSyncProgressLines(progress, locale) {
+  if (!progress) {
+    return [];
+  }
+  const connected = progress.connectionStatus === "connected";
+  const connectionText = connected
+    ? tr(locale, "已连接", "connected")
+    : progress.connectionStatus === "error"
+      ? tr(locale, "连接错误", "connection error")
+      : tr(locale, "正在连接", "connecting");
+  const handshakeText = progress.serverReady
+    ? tr(locale, "已完成", "server ready")
+    : tr(locale, "等待服务器 hello", "waiting for server hello");
+  const snapshotText = progress.snapshotReceived
+    ? tr(
+      locale,
+      `已收到：行动体 ${progress.totalAgentCount}，地点 ${progress.totalLocationCount}`,
+      `received: ${progress.totalAgentCount} agents, ${progress.totalLocationCount} locations`,
+    )
+    : progress.snapshotRequested
+      ? tr(
+        locale,
+        progress.snapshotRetryCount > 0
+          ? `已请求首个世界快照，重试 ${progress.snapshotRetryCount} 次`
+          : "已请求首个世界快照",
+        progress.snapshotRetryCount > 0
+          ? `first world snapshot requested, ${progress.snapshotRetryCount} retries`
+          : "first world snapshot requested",
+      )
+      : tr(locale, "等待首个世界快照", "waiting for first world snapshot");
+  const sessionText = progress.authSyncInFlight
+    ? tr(locale, "正在同步玩家会话", "syncing player session")
+    : tr(
+      locale,
+      `状态 ${progress.authRuntimeStatus || progress.authRegistrationStatus || "pending"}`,
+      `status ${progress.authRuntimeStatus || progress.authRegistrationStatus || "pending"}`,
+    );
+  const visibilityText = tr(
+    locale,
+    `快照行动体 ${progress.totalAgentCount}，当前可控 ${progress.visibleAgentCount}`,
+    `snapshot agents ${progress.totalAgentCount}, visible ${progress.visibleAgentCount}`,
+  );
+  const lines = [
+    tr(locale, `连接：${connectionText}`, `Connection: ${connectionText}`),
+    tr(locale, `握手：${handshakeText}`, `Handshake: ${handshakeText}`),
+    tr(locale, `快照：${snapshotText}`, `Snapshot: ${snapshotText}`),
+    tr(locale, `玩家会话：${sessionText}`, `Player session: ${sessionText}`),
+    tr(locale, `可见性：${visibilityText}`, `Visibility: ${visibilityText}`),
+  ];
+  if (progress.lastError) {
+    lines.push(tr(locale, `错误：${progress.lastError}`, `Error: ${progress.lastError}`));
+  }
+  return lines;
+}
+
 function EntityListPendingState(props) {
   const locale = () => props.locale ?? uiLocale();
   const label = () => props.label ?? tr(locale(), "目标", "targets");
+  const progress = () => props.progress ?? core.buildTargetSyncProgress();
+  const progressLines = () => targetSyncProgressLines(progress(), locale());
   return (
     <div class="entity-list-pending" aria-live="polite" aria-busy="true">
       <div class="entity-list-pending__row">
@@ -55,6 +112,13 @@ function EntityListPendingState(props) {
           )}
         </span>
       </div>
+      <Show when={progressLines().length > 0}>
+        <div class="entity-list-pending__progress">
+          <For each={progressLines()}>
+            {(line) => <div>{line}</div>}
+          </For>
+        </div>
+      </Show>
       <div class="entity-list-pending__skeleton" aria-hidden="true">
         <span />
         <span />
@@ -1691,6 +1755,9 @@ function gameplayProgressLabel(progressPercent, locale) {
 
 function chatEntryTitle(entry, locale) {
   const target = entry.targetAgentId || entry.agentId || "agent";
+  if (entry.source === "error") {
+    return `${target} ${tr(locale, "回复失败", "reply failed")}`;
+  }
   if (entry.source === "player") {
     return `${tr(locale, "玩家", "Player")} -> ${target}`;
   }
@@ -1698,6 +1765,10 @@ function chatEntryTitle(entry, locale) {
 }
 
 function chatEntryMeta(entry, locale) {
+  if (entry.source === "error") {
+    const code = entry.code ? ` · code=${entry.code}` : "";
+    return `${entry.speaker || "runtime"}${code} · tick=${Number(entry.tick || 0)}`;
+  }
   const speaker = entry.source === "player"
     ? entry.playerId || entry.speaker || tr(locale, "玩家", "Player")
     : entry.speaker || entry.agentId || "agent";
@@ -1707,6 +1778,10 @@ function chatEntryMeta(entry, locale) {
 
 function chatEntryMessage(entry, locale) {
   const message = String(entry.message || "").trim();
+  if (entry.source === "error") {
+    const prefix = tr(locale, "Agent 回复没有完成", "Agent reply did not complete");
+    return message ? `${prefix}: ${message}` : prefix;
+  }
   return message || tr(locale, "这条消息没有可读正文。", "This message has no readable text.");
 }
 
@@ -2977,7 +3052,7 @@ function InteractionPanel() {
       .slice(0, 12);
   const interactionEnabled = () => promptCapability().enabled;
   const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
-  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent();
+  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent() && !core.isAgentChatInFlight();
   const commandStarterOcAction = () => starterOcAction(gameplaySummary());
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
   const promptOverridesVisible = () => !!core.state.promptOverridesVisible;

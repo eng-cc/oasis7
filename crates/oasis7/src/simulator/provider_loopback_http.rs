@@ -8,6 +8,7 @@ use reqwest::{Method, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use super::{DecisionRequest, DecisionResponse, FeedbackEnvelope};
 
@@ -272,6 +273,19 @@ pub struct ProviderAgentChatResponse {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location_id: Option<String>,
+}
+
+pub fn provider_agent_chat_log_key(request: &ProviderAgentChatRequest) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(request.world_time.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(request.agent_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(request.player_id.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(request.message.as_bytes());
+    let digest = hasher.finalize();
+    format!("chat-{}", hex::encode(&digest[..8]))
 }
 
 #[derive(Debug)]

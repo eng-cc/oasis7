@@ -55,6 +55,59 @@ function createTestCrypto() {
   };
 }
 
+function installMockWebSocket() {
+  const sentMessages = [];
+  const sockets = [];
+  class MockWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSING = 2;
+    static CLOSED = 3;
+
+    constructor(url) {
+      this.url = url;
+      this.readyState = MockWebSocket.CONNECTING;
+      this.listeners = new Map();
+      sockets.push(this);
+    }
+
+    addEventListener(type, listener) {
+      const listeners = this.listeners.get(type) || [];
+      listeners.push(listener);
+      this.listeners.set(type, listeners);
+    }
+
+    send(payload) {
+      sentMessages.push(JSON.parse(payload));
+    }
+
+    close() {
+      this.readyState = MockWebSocket.CLOSED;
+      this.emit("close", {});
+    }
+
+    open() {
+      this.readyState = MockWebSocket.OPEN;
+      this.emit("open", {});
+    }
+
+    receive(message) {
+      this.emit("message", { data: JSON.stringify(message) });
+    }
+
+    emit(type, event) {
+      for (const listener of this.listeners.get(type) || []) {
+        listener(event);
+      }
+    }
+  }
+  Object.defineProperty(window, "WebSocket", {
+    configurable: true,
+    value: MockWebSocket,
+  });
+  return { MockWebSocket, sockets, sentMessages };
+}
+
 function elementPrecedes(first, second) {
   return Boolean(first?.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
@@ -373,6 +426,9 @@ describe("viewer web ui automation baseline", () => {
     expect(targetsPanel).toBeTruthy();
     expect(within(targetsPanel).getByText("Syncing agents…")).toBeInTheDocument();
     expect(within(targetsPanel).getByText("Syncing locations…")).toBeInTheDocument();
+    expect(within(targetsPanel).getAllByText("Connection: connecting").length).toBeGreaterThan(0);
+    expect(within(targetsPanel).getAllByText("Handshake: waiting for server hello").length).toBeGreaterThan(0);
+    expect(within(targetsPanel).getAllByText("Snapshot: waiting for first world snapshot").length).toBeGreaterThan(0);
     expect(within(targetsPanel).queryByText("No agents in current snapshot.")).not.toBeInTheDocument();
     expect(within(targetsPanel).queryByText("No locations in current snapshot.")).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -423,6 +479,209 @@ describe("viewer web ui automation baseline", () => {
     expect(core.state.auth.source).toBe("local_test_api_ephemeral");
     expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
     expect(core.state.lastGameplayActionFeedback?.reason).toMatch(/viewer websocket is not connected/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("reuses the loopback local test player identity across module reloads", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    let core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    core.sendGameplayAction({
+      actionId: "claim_first_agent",
+      protocolAction: "gameplay_action.submit",
+      targetAgentId: "starter-agent-0",
+      executeKind: "claim_first_agent",
+    });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    const firstPlayerId = core.state.auth.playerId;
+    const firstPublicKey = core.state.auth.publicKey;
+
+    vi.resetModules();
+    document.body.innerHTML = "";
+    core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    core.sendGameplayAction({
+      actionId: "claim_first_agent",
+      protocolAction: "gameplay_action.submit",
+      targetAgentId: "starter-agent-0",
+      executeKind: "claim_first_agent",
+    });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toBe(firstPlayerId);
+      expect(core.state.auth.publicKey).toBe(firstPublicKey);
+    });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("force-rebinds the starter agent when local test auth finds a stale local binding", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    expect(sockets.length).toBe(1);
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    const base = sampleSnapshot();
+    core.injectSnapshot(sampleSnapshot({
+      model: {
+        ...base.model,
+        agents: {
+          "starter-agent-0": {
+            ...base.model.agents["agent-0"],
+            id: "starter-agent-0",
+            name: "Starter Agent",
+          },
+        },
+        agent_player_bindings: {
+          "starter-agent-0": "local-test-player-old",
+        },
+        agent_player_public_key_bindings: {
+          "starter-agent-0": "old-public-key",
+        },
+      },
+    }));
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                player_id: core.state.auth.playerId,
+                requested_agent_id: "starter-agent-0",
+                force_rebind: true,
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+    expect(core.state.auth.pendingForceRebind).toBe(true);
+    expect(core.expirePendingSessionRegisterWaiterForTest()).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(core.state.auth.syncInFlight).toBe(false);
+    expect(core.state.auth.pendingForceRebind).toBe(false);
+    expect(core.state.auth.recoveryErrorCode).toBe("session_register_timeout");
+    expect(core.state.auth.error).toMatch(/timed out waiting for ack\/error/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("retries force-rebind when runtime reports the starter agent is bound to an old local player", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+    core.registerPlayerSessionForTest("starter-agent-0").catch(() => {});
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                player_id: core.state.auth.playerId,
+                requested_agent_id: "starter-agent-0",
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+    const registerCountBeforeError = sentMessages.filter((message) => (
+      message.type === "authoritative_recovery"
+      && message.command?.mode === "register_session"
+    )).length;
+
+    sockets[0].receive({
+      type: "authoritative_recovery_error",
+      error: {
+        code: "player_bind_failed",
+        message: `agent starter-agent-0 is bound to player local-test-player-old, not ${core.state.auth.playerId}`,
+        agent_id: "starter-agent-0",
+      },
+    });
+
+    await waitFor(() => {
+      const registerMessages = sentMessages.filter((message) => (
+        message.type === "authoritative_recovery"
+        && message.command?.mode === "register_session"
+      ));
+      expect(registerMessages.length).toBeGreaterThan(registerCountBeforeError);
+      expect(registerMessages.at(-1)?.command?.request).toEqual(
+        expect.objectContaining({
+          player_id: core.state.auth.playerId,
+          requested_agent_id: "starter-agent-0",
+          force_rebind: true,
+        }),
+      );
+    });
+    expect(core.state.auth.pendingForceRebind).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-issues loopback local player auth without test_api before claiming the first agent", async () => {
@@ -1060,6 +1319,93 @@ describe("viewer web ui automation baseline", () => {
       .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("times out queued chat commands that never reach ack or error", async () => {
+    const { core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-bound",
+          publicKey: "09".repeat(32),
+          privateKey: "07".repeat(32),
+          source: "legacy_viewer_auth_bootstrap",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+          boundAgentId: "agent-0",
+          syncInFlight: false,
+        };
+      },
+    });
+    Object.defineProperty(window, "crypto", {
+      configurable: true,
+      value: {
+        subtle: {
+          async importKey() {
+            return { kind: "test-key" };
+          },
+          sign() {
+            return new Promise(() => {});
+          },
+        },
+      },
+    });
+
+    expect(core.sendAgentChat("agent-0", "hello while signer hangs")).toEqual(
+      expect.objectContaining({ ok: true }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+	    expect(core.state.lastChatFeedback.stage).toMatch(/queued|signing|registering|sent/);
+	    expect(core.sendAgentChat("agent-0", "second click while first hangs")).toEqual(
+	      expect.objectContaining({
+	        ok: false,
+	        reason: expect.stringContaining("already in flight"),
+	      }),
+	    );
+	    expect(core.expirePendingAgentChatOverallTimeoutForTest()).toBe(true);
+
+	    expect(core.state.lastChatFeedback).toEqual(
+      expect.objectContaining({
+        stage: "error",
+        ok: false,
+        accepted: false,
+        effect: "agent_chat overall timeout",
+        reason: "agent_chat timed out before live server ack/error completed",
+      }),
+    );
+	    expect(screen.getAllByText("Chat failed").length).toBeGreaterThan(0);
+	    expect(screen.getAllByText(/agent_chat timed out before live server ack\/error completed/i).length)
+	      .toBeGreaterThan(0);
+
+	    Object.defineProperty(window, "crypto", {
+	      configurable: true,
+	      value: {
+	        subtle: {
+	          async importKey() {
+	            return { kind: "test-key" };
+	          },
+	          async sign() {
+	            return new Uint8Array(64).fill(12).buffer;
+	          },
+	        },
+	      },
+	    });
+
+	    expect(core.sendAgentChat("agent-0", "second message after timeout")).toEqual(
+	      expect.objectContaining({ ok: true }),
+	    );
+	    await Promise.resolve();
+	    await Promise.resolve();
+	    expect(core.state.lastChatFeedback).toEqual(
+	      expect.objectContaining({
+	        pendingMessage: "second message after timeout",
+	      }),
+	    );
+	    expect(core.state.lastChatFeedback.effect).not.toBe("agent_chat overall timeout");
+	  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("persists acknowledged chat messages for the current world", async () => {
     const { core } = await renderViewerApp({
       snapshot: null,
@@ -1150,6 +1496,34 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByText("Please restore the smelter line before expanding.")).toBeInTheDocument();
     expect(screen.getByText("Raw diagnostics")).toBeInTheDocument();
     expect(screen.queryByText(/"message": "Please restore the smelter line before expanding."/)).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("renders provider chat failures in message flow", async () => {
+    await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.pushChatHistory({
+          id: "chat-error-test",
+          source: "error",
+          agentId: "agent-0",
+          targetAgentId: "agent-0",
+          speaker: "runtime",
+          code: "provider_unreachable",
+          message: "provider request /v1/world-simulator/agent-chat failed",
+          tick: 849,
+          response: {
+            code: "provider_unreachable",
+            message: "provider request /v1/world-simulator/agent-chat failed",
+            agent_id: "agent-0",
+          },
+        });
+      },
+    });
+
+    expect(screen.getByText("agent-0 reply failed")).toBeInTheDocument();
+    expect(screen.getByText("runtime · code=provider_unreachable · tick=849")).toBeInTheDocument();
+    expect(screen.getByText("Agent reply did not complete: provider request /v1/world-simulator/agent-chat failed"))
+      .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("keeps mounted dom stable across requestRender", async () => {

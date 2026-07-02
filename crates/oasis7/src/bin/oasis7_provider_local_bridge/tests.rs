@@ -10,8 +10,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
+
+#[path = "tests_agent_chat.rs"]
+mod tests_agent_chat;
 
 #[derive(Debug, Clone)]
 struct FakeInvoker {
@@ -265,6 +268,7 @@ fn build_gateway_agent_params_uses_session_key_and_timeout() {
         timeout_seconds: 15,
         prompt: "{\"action\":\"wait\"}".to_string(),
         idempotency_key: "idem-1".to_string(),
+        chat_request_key: None,
         route_label: None,
     };
     let params = build_gateway_agent_params(&invocation).expect("params");
