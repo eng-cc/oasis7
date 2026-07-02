@@ -27,6 +27,8 @@ approved = [
     "RUSTSEC-2021-0127",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2026-0192",
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
 ]
 required_keys = ("owner", "crate", "scope", "reason", "expiry", "validation", "local_crates")
 required_direct_baseline_keys = (

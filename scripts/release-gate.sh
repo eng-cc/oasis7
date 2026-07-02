@@ -34,7 +34,7 @@ Options:
                                   Reason recorded when --skip-web-strict is used
   --skip-s9-reason <text>        Reason recorded when --skip-s9 is used
   --skip-s10-reason <text>       Reason recorded when --skip-s10 is used
-  --web-scenario <name>          Scenario for web strict loop (default: llm_bootstrap)
+  --web-scenario <name>          Explicit diagnostic scenario for web strict loop (default: formal launcher world)
   --web-headed                   Run web loop in headed mode
   --s9-duration-secs <n>         S9 release gate duration (default: 300)
   --s9-out-dir <path>            S9 output root (default: .tmp/release_gate_p2p)
@@ -166,7 +166,7 @@ skip_web_strict_reason=""
 skip_s9_reason=""
 skip_s10_reason=""
 
-web_scenario="llm_bootstrap"
+web_scenario=""
 web_headed=0
 
 s9_duration_secs=300
@@ -519,7 +519,10 @@ for step in "${selected_steps[@]}"; do
       cmd=(./scripts/sync-m5-builtin-wasm-artifacts.sh --check)
       ;;
     web_strict)
-      cmd=(./scripts/release-gate-web-strict.sh --scenario "$web_scenario" --out-dir "$run_dir/web_strict")
+      cmd=(./scripts/release-gate-web-strict.sh --out-dir "$run_dir/web_strict")
+      if [[ -n "$web_scenario" ]]; then
+        cmd+=(--scenario "$web_scenario" --allow-debug-scenario)
+      fi
       if [[ "$web_headed" -eq 1 ]]; then
         cmd+=(--headed)
       fi
