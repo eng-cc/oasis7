@@ -95,9 +95,10 @@
    - `guarded_testnet_faucet`
    - `non-mainnet value semantics`
 4. 跑 runtime bootstrap rehearsal，留下 bundle/genesis/bootstrap peer 对账证据。
-5. 若要暴露本机 hosted-login 形态入口，先确认本机节点已健康接入 testnet 网络，再确认 hosted-login / launcher / viewer / pure API 读取的是该节点的 testnet world state；节点健康是必要条件，但不是充分条件。
-6. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
-7. 把全部 required lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
+5. 可选执行 external verifier / light-client-lite audit：用 `network-tier-external-verifier-light-client-lite.sh` 从节点进程外验证 sampled `WorldHeadProofV1` artifact，并把 `external_verifier_light_client_lite_ready` 作为 non-promotional optional lane 写入 TSV。该 lane 只能进入 `ignored_lanes`，不能替代 required lanes，也不能单独升级 `ready_for_live_candidate`。
+6. 若要暴露本机 hosted-login 形态入口，先确认本机节点已健康接入 testnet 网络，再确认 hosted-login / launcher / viewer / pure API 读取的是该节点的 testnet world state；节点健康是必要条件，但不是充分条件。
+7. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
+8. 把全部 required lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
 
 ## 6. Canonical Commands
 ```bash
@@ -107,6 +108,19 @@
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest <public-testnet-manifest.json> \
   --lanes-tsv <public-testnet-lanes.tsv>
+
+./scripts/network-tier-external-verifier-light-client-lite.sh \
+  --manifest <public-testnet-manifest.json> \
+  --proof <world-head-proof.cbor> \
+  --proof-ref <world-head-proof-ref> \
+  --world-id <world-id> \
+  --expect-height <height> \
+  --observed-head-hash <head-hash> \
+  --observed-state-root <state-root> \
+  --from-height <from-height> \
+  --sample-started-at <iso8601> \
+  --sample-ended-at <iso8601> \
+  --out <external-verifier-evidence.json>
 
 ./scripts/network-tier-exit-review.sh \
   --manifest <public-testnet-manifest.json>
@@ -153,6 +167,7 @@
 - 当前仍不能宣称 `ready_for_live_candidate`：
   - governed bootstrap manifest 仍是 `status=rehearsal`
   - required-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
+  - `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes
   - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
 - 当前 example manifest 仍只能作为 skeleton/template 使用：
   - `network_id=oasis7-public-testnet-example`
@@ -164,11 +179,13 @@
   - `formal public_testnet mechanism is documented`
   - `current governed bootstrap evidence is rehearsal / not ready_for_live_candidate`
   - `legacy shared_devnet evidence is not a target test environment`
+  - `WorldHeadProofV1 can be externally verified as light-client-lite sampled evidence when the optional verifier lane passes`
 - 现在不允许说：
   - `live public testnet is already online`
   - `public faucet is open`
   - `public validator admission is open`
   - `mainnet-like OC settlement is available`
+  - `full light client security or multi-client consensus equivalence is proven`
 
 ## 9. 回写要求
 每次正式推进 live candidate checklist，至少回写：

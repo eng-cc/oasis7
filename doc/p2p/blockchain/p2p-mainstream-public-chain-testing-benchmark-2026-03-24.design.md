@@ -8,6 +8,11 @@
 > Current canonical source: this design is benchmark background only. Current
 > network-tier status and next blockers live in
 > `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.project.md`.
+> 2026-07-03 update: the external verifier / light-client-lite operator path is
+> now represented by `oasis7_world_head_proof_verify` plus the optional
+> `external_verifier_light_client_lite_ready` lane. This closes the bounded
+> verifier audit path only; it does not claim full light-client security or
+> multi-client consensus equivalence.
 
 ## 设计目标
 - 把“主流公链怎么测”从泛泛经验，收成 oasis7 可执行的对标矩阵。

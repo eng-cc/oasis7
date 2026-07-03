@@ -12,3 +12,5 @@ same_world_hosted_entry_ready	viewer_engineer	partial	doc/testing/templates/publ
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	replace with claims boundary review and denylist confirmation
 # Optional non-promotional lane: when present with status=pass, evidence must be JSON matching doc/testing/templates/chain-proof-evidence-v1-template.md; it is reported as ignored_lanes and is not sufficient for ready_for_live_candidate.
 # chain_proof_evidence_ready	blockchain_ops_engineer	partial	doc/testing/templates/chain-proof-evidence-v1-template.md	optional proof evidence lane; replace with sampled WorldHeadProofV1 evidence
+# Optional non-promotional lane: when present with status=pass, evidence must be JSON matching doc/testing/templates/external-verifier-light-client-lite-v1-template.md; it is reported as ignored_lanes and is not sufficient for ready_for_live_candidate.
+# external_verifier_light_client_lite_ready	blockchain_ops_engineer	partial	doc/testing/templates/external-verifier-light-client-lite-v1-template.md	optional external verifier audit; replace with verifier-generated evidence
