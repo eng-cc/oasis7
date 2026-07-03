@@ -341,4 +341,4 @@
   - B（step/seek）：
 
 ---
-感谢你的测试 🙏,可以把你的测试表放在/doc/playability_test_result/card_{yyyy_mm_dd_hh_mm_ss}.md
+感谢你的测试 🙏,请把正式测试表沉淀到对应 GitHub task issue evidence comments；需要长期保留的发布/回归证据可放入 `doc/playability_test_result/evidence/`。
