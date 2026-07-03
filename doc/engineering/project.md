@@ -8,6 +8,8 @@
 
 - [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、quarterly review cycle 专题和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
 
+- [x] doc-semantics-governance (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 已完成历史行中的旧 `.pm` evidence sink 读法，明确历史 `.pm/tasks/...` trace 仅作退役前追溯，当前执行证据以 GitHub task issue evidence comments 和 mapping-backed task trace 为准。 Trace: #1836 (task_8aa8a48148a94c9e956f0b9bb7ead99d)
+
 - [x] doc-legacy-task-reference-convergence (PRD-ENGINEERING-025/030) [test_tier_required]: 收敛 2026-06-19 site 页面设计覆盖文档中的退役 `.pm/tasks/*.yaml` 直接引用，把活跃设计证据元信息改为 GitHub issue + `task_uid` + Step 3 archive 追溯口径；同时退役删除已由 core review 归档承接的 Viewer EGUI 高级调试折叠旧三件套，并同步 `world-simulator` / `viewer` 索引入口，避免旧 task-file 路径和旧专题继续扩散为当前真值。 Trace: #1810 (task_213a397f0eb143da803a97d844d9f74c)
 
 - [x] task-worktree-bootstrap-legacy-semantics-convergence (PRD-ENGINEERING-021/025) [test_tier_required]: 收敛 task worktree bootstrap 专题设计/项目页残留的 `doc/devlog/YYYY-MM-DD.md` evidence sink 与 `worktree-harness.sh up --no-llm` 旧语义，将当前 `--init-docs` / `--with-harness` 口径对齐到模块 PRD/project、GitHub task issue evidence comments / mapping 与 formal gameplay active LLM preflight。 Trace: #1822 (task_611a38cd102245cd9b092036a534bc8d)
