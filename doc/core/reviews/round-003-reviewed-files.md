@@ -606,8 +606,8 @@
 - `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md`
 - `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md`
 - historical removed standard_3d viewer doc set: commercial release asset, material, texture, theme-pack topics
-- `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md`
-- `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md`
+- retired viewer-control-advanced-debug-folding PRD (archive: `doc/world-simulator/prd.index.md`)
+- retired viewer-control-advanced-debug-folding project (archive: `doc/world-simulator/prd.index.md`)
 - retired viewer-control-feedback-iteration-checklist-2026-02-27 PRD (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - retired viewer-control-feedback-iteration-checklist-2026-02-27 project (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - retired viewer-control-feedback-step-recovery-p0-2026-02-27 PRD (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)

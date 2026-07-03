@@ -38,7 +38,7 @@
     - `./scripts/site-link-check.sh`
     - `rg -n "Deck|路演|roadshow|pitch" site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html site/deck/index.html site/deck/en/index.html`
     - `git diff --check`
-- [x] site-missing-page-image2-designs (PRD-SITE-001/003/004) [test_tier_required]: 补齐 story reader、HTML roadshow deck 与 GitHub Pages 首页的 Image2 页面级设计稿，更新页面设计覆盖索引，并按设计稿完成对应前端还原与尺寸适应收口。 Trace: .pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.yaml
+- [x] site-missing-page-image2-designs (PRD-SITE-001/003/004) [test_tier_required]: 补齐 story reader、HTML roadshow deck 与 GitHub Pages 首页的 Image2 页面级设计稿，更新页面设计覆盖索引，并按设计稿完成对应前端还原与尺寸适应收口。 Trace: #1484 (task_e02c8fe08ebb4f51887b116675f676c1)
   - 产物文件:
     - `doc/site/story/story-reader-page-2026-06-19.design.md`
     - `doc/site/story/assets/story-reader-page-*-image2-2026-06-19.png`

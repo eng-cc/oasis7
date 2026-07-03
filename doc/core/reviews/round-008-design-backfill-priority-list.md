@@ -182,7 +182,7 @@
 - `doc/world-simulator/viewer/viewer-commercial-release-phase6-material-variant-preview`
 - `doc/world-simulator/viewer/viewer-commercial-release-phase7-theme-pack-batch-preview`
 - `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2`
-- `doc/world-simulator/viewer/viewer-control-advanced-debug-folding`
+- retired viewer-control-advanced-debug-folding topic (archive: `doc/world-simulator/prd.index.md`)
 - retired viewer-control-feedback-iteration-checklist-2026-02-27 topic (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - retired viewer-control-feedback-step-recovery-p0-2026-02-27 topic (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
 - `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27`

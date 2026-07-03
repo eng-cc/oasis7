@@ -6,7 +6,9 @@
 - Owner module: `site`
 - Image2 desktop target: `doc/site/deck/assets/html-roadshow-deck-desktop-image2-2026-06-19.png`
 - Image2 mobile target: `doc/site/deck/assets/html-roadshow-deck-mobile-image2-2026-06-19.png`
-- Related task: `.pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.yaml`
+- Related task: GitHub issue #1484
+  (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
+  live in `.pm/github-project-sync/task-archive.jsonl`)
 
 ## Purpose
 

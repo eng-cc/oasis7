@@ -40,8 +40,8 @@
 - 汇总 Web 闭环、启动器可用性、场景初始化与规则执行相关专题。
 - 承接 world-simulator 与 runtime / viewer / testing 的跨模块体验收口。
 
-## 热点子域导航（2026-06-23 复算）
-- `viewer/`（213）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
+## 热点子域导航（2026-07-03 复算）
+- `viewer/`（199）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
 - `launcher/`（87）：启动器、控制面、转账、explorer 与自引导体验；先看 `launcher/README.md`，再按簇进入 release/distribution、control plane、explorer、runtime 边界或 self-guided 专题。
 - `llm/`（54）：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
 - `kernel/`（36）：规则桥接、WASM 执行、资源与 runtime 约束。
