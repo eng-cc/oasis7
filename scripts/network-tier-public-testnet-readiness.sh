@@ -115,6 +115,7 @@ active_required_lanes = [
     "provider_resource_provenance_ready",
     "resource_delta_replay_ready",
     "api_viewer_projection_ready",
+    "same_world_hosted_entry_ready",
 ]
 required_lanes = list(active_required_lanes)
 status_rank = {"pass": 0, "partial": 1, "block": 2}
@@ -230,6 +231,118 @@ def validate_api_viewer_projection_pass_evidence(raw: str, evidence: pathlib.Pat
         blockers.append(f"api_viewer_projection_ready viewer_projection_ref missing: {raw}")
     if projection.get("world_state_projection_match") is not True:
         blockers.append(f"api_viewer_projection_ready world_state_projection_match must be true: {raw}")
+    return blockers
+
+
+def ref_matches(actual: str, expected_raw: str, expected_resolved: pathlib.Path) -> bool:
+    if actual == expected_raw or actual == str(expected_resolved):
+        return True
+    try:
+        return resolve_ref(actual) == expected_resolved
+    except Exception:
+        return False
+
+
+def validate_same_world_hosted_entry_pass_evidence(
+    raw: str,
+    evidence: pathlib.Path,
+    manifest_path: pathlib.Path,
+    manifest_ref: str,
+    manifest_data: dict,
+) -> list[str]:
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"same_world_hosted_entry_ready evidence must be JSON: {raw} ({exc})"]
+
+    if data.get("evidence_schema") != "oasis7.same_world_hosted_entry.v1":
+        blockers.append(f"same_world_hosted_entry_ready evidence_schema mismatch: {raw}")
+    if data.get("status") != "pass":
+        blockers.append(f"same_world_hosted_entry_ready status must be pass: {raw}")
+    if data.get("same_window_required") is not True:
+        blockers.append(f"same_world_hosted_entry_ready same_window_required must be true: {raw}")
+
+    network_tier = data.get("network_tier")
+    if not isinstance(network_tier, dict):
+        blockers.append(f"same_world_hosted_entry_ready network_tier object missing: {raw}")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            blockers.append(f"same_world_hosted_entry_ready network_tier.tier must be public_testnet: {raw}")
+        if network_tier.get("network_id") != manifest_data.get("network_id"):
+            blockers.append(f"same_world_hosted_entry_ready network_tier.network_id must match manifest: {raw}")
+        if network_tier.get("chain_id") != manifest_data.get("chain_id"):
+            blockers.append(f"same_world_hosted_entry_ready network_tier.chain_id must match manifest: {raw}")
+        for key in ("network_id", "chain_id", "world_id"):
+            if not str(network_tier.get(key) or "").strip():
+                blockers.append(f"same_world_hosted_entry_ready network_tier.{key} missing: {raw}")
+
+    expected_refs = [
+        (
+            ("manifest_ref",),
+            manifest_ref,
+            manifest_path,
+        ),
+        (
+            ("genesis_ref",),
+            manifest_data["runtime_refs"]["genesis_ref"],
+            resolve_ref(manifest_data["runtime_refs"]["genesis_ref"]),
+        ),
+        (
+            ("bootstrap_peer_ref", "bootstrap_peers_ref"),
+            manifest_data["runtime_refs"]["bootstrap_peer_ref"],
+            resolve_ref(manifest_data["runtime_refs"]["bootstrap_peer_ref"]),
+        ),
+    ]
+    for keys, expected_raw, expected_resolved in expected_refs:
+        key_label = "/".join(keys)
+        actual = ""
+        for key in keys:
+            actual = str(data.get(key) or "").strip()
+            if actual:
+                break
+        if not actual:
+            blockers.append(f"same_world_hosted_entry_ready {key_label} missing: {raw}")
+        elif not ref_matches(actual, expected_raw, expected_resolved):
+            blockers.append(f"same_world_hosted_entry_ready {key_label} must match manifest: {raw}")
+
+    required_refs = [
+        "chain_status_samples_ref",
+        "hosted_entry_ref",
+        "launcher_config_ref",
+        "viewer_config_ref",
+        "pure_api_config_ref",
+    ]
+    for key in required_refs:
+        if not str(data.get(key) or "").strip():
+            blockers.append(f"same_world_hosted_entry_ready {key} missing: {raw}")
+
+    if data.get("node_joined_public_testnet") is not True:
+        blockers.append(f"same_world_hosted_entry_ready node_joined_public_testnet must be true: {raw}")
+    if data.get("height_progressing") is not True:
+        blockers.append(f"same_world_hosted_entry_ready height_progressing must be true: {raw}")
+    if data.get("hosted_entry_reads_same_world_state") is not True:
+        blockers.append(f"same_world_hosted_entry_ready hosted_entry_reads_same_world_state must be true: {raw}")
+    if data.get("manual_checkpoint_or_data_copy_used") is not False:
+        blockers.append(f"same_world_hosted_entry_ready manual_checkpoint_or_data_copy_used must be false: {raw}")
+
+    does_not_claim = data.get("does_not_claim")
+    if not isinstance(does_not_claim, list):
+        blockers.append(f"same_world_hosted_entry_ready does_not_claim must be an array: {raw}")
+    else:
+        required_denials = {
+            "mainnet-grade",
+            "production OC settlement",
+            "public validator onboarding open",
+        }
+        missing_denials = sorted(required_denials.difference(set(does_not_claim)))
+        if missing_denials:
+            blockers.append(
+                "same_world_hosted_entry_ready does_not_claim missing: "
+                + ",".join(missing_denials)
+                + f": {raw}"
+            )
+
     return blockers
 
 
@@ -398,6 +511,12 @@ if lanes_tsv_arg:
                 )
                 if projection_blockers:
                     raise SystemExit("; ".join(projection_blockers))
+            if lane_id == "same_world_hosted_entry_ready" and status == "pass":
+                hosted_entry_blockers = validate_same_world_hosted_entry_pass_evidence(
+                    evidence_path, evidence, manifest_path, sys.argv[1], data
+                )
+                if hosted_entry_blockers:
+                    raise SystemExit("; ".join(hosted_entry_blockers))
             if lane_id == "chain_proof_evidence_ready" and status == "pass":
                 chain_proof_blockers = validate_chain_proof_evidence_pass_evidence(
                     evidence_path, evidence

@@ -13,7 +13,7 @@
   - SC-3: `mainnet` 必须明确绑定 `no faucet + no reset + frozen genesis + governance registry + MAINNET readiness gates`，不得与 `public_testnet` 共用“可随时重置”的语义。
   - SC-4: 仓库内必须落地 repo-owned skeleton：network-tier manifest create/validate 脚本、smoke、example manifests 与 `testing-manual` 入口。
   - SC-5: 本专题必须明确 current verdict 由 companion project/runbook 与 readiness 脚本汇总；早期 `specified_skeleton_only` 只能作为 skeleton 阶段历史状态，任何 governed-bootstrap rehearsal、lane evidence 或脚本骨架都不等于已存在 live `public_testnet` 或 live `mainnet`。
-  - SC-6: 本专题必须补一份 repo-owned `public_testnet` live-candidate companion checklist/runbook，把 six-lane readiness gate、owner、最小 evidence、canonical 命令与 claim boundary 冻结成可执行入口，避免“还差什么”只停留在聊天结论。
+  - SC-6: 本专题必须补一份 repo-owned `public_testnet` live-candidate companion checklist/runbook，把 required-lane readiness gate、owner、最小 evidence、canonical 命令与 claim boundary 冻结成可执行入口，避免“还差什么”只停留在聊天结论。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -53,7 +53,7 @@
   - AC-6: `testing-manual.md` 必须新增正式 network-tier skeleton 入口，并明确当前仍无 live `public_testnet` / `mainnet`。
   - AC-7: 本专题必须明确 `public_testnet` 的资产与 faucet 只用于 rehearsal/test surface，不得被写成 `OC` 的 mainnet 价值承诺。
   - AC-8: 本专题必须明确 current verdict 以后续 companion project/runbook 为准；在 formal all-pass lane TSV / readiness verdict 出现前，不提升 public claims，不宣称 live `public_testnet` 或 mainnet ready。
-  - AC-9: 必须新增 companion runbook，至少列出 `public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/claims_boundary_review` 六条 lane 的 owner、最小 evidence、阻断条件、建议执行顺序与 canonical 命令，并明确在真实证据补齐前仍只能维持 rehearsal/skeleton 口径。
+  - AC-9: 必须新增 companion runbook，至少列出 `public_rpc_ready/explorer_public_ready/faucet_guard_ready/reset_policy_announced/runtime_bootstrap/world_resource_provenance_ready/provider_resource_provenance_ready/resource_delta_replay_ready/api_viewer_projection_ready/same_world_hosted_entry_ready/claims_boundary_review` required lanes 的 owner、最小 evidence、阻断条件、建议执行顺序与 canonical 命令，并明确在真实证据补齐前仍只能维持 rehearsal/skeleton 口径。
 - Non-Goals:
   - 不在本专题内直接部署 live `public_testnet` 或 live `mainnet`。
   - 不在本专题内落 runtime 的多 network profile 切换实现。

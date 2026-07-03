@@ -55,6 +55,7 @@
       "provider_resource_provenance_ready",
       "resource_delta_replay_ready",
       "api_viewer_projection_ready",
+      "same_world_hosted_entry_ready",
       "claims_boundary_review"
     ]
   },
