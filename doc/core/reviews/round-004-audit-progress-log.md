@@ -671,8 +671,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase7-theme-pack-batch-preview.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired viewer-control-advanced-debug-folding PRD | pass | - | 原审计目标已退役，归档说明见 `doc/world-simulator/prd.index.md`。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired viewer-control-advanced-debug-folding project | pass | - | 原审计目标已退役，归档说明见 `doc/world-simulator/prd.index.md`。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired viewer-control-feedback-iteration-checklist-2026-02-27 PRD | pass | - | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired viewer-control-feedback-iteration-checklist-2026-02-27 project | pass | - | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired viewer-control-feedback-step-recovery-p0-2026-02-27 PRD | pass | - | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |

@@ -4,7 +4,9 @@
 - Covered pages: `site/index.html`, `site/en/index.html`
 - Related PRD: `doc/site/prd.md`
 - Historical design context: `doc/site/design.md`, `doc/site/github-pages/*.design.md`
-- Related task: `.pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.yaml`
+- Related task: GitHub issue #1484
+  (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
+  live in `.pm/github-project-sync/task-archive.jsonl`)
 - Image2 desktop target: `doc/site/github-pages/assets/github-pages-homepage-desktop-image2-2026-06-19.png`
 - Image2 mobile target: `doc/site/github-pages/assets/github-pages-homepage-mobile-image2-2026-06-19.png`
 

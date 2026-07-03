@@ -3,7 +3,9 @@
 - Owner role: `game_visual_interaction_designer`
 - Scope: current page-level public/player-facing HTML surfaces and explicit
   fixture/debug/evidence classifications.
-- Related task: `.pm/tasks/task_e02c8fe08ebb4f51887b116675f676c1.yaml`
+- Related task: GitHub issue #1484
+  (`task_e02c8fe08ebb4f51887b116675f676c1`; archived pre-migration task files
+  live in `.pm/github-project-sync/task-archive.jsonl`)
 
 ## Coverage Rules
 

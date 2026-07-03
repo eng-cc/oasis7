@@ -134,7 +134,7 @@
 | 2026-03-10 06:50:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 85 个专题、剩余 280 个缺口 |
 
 | 2026-03-10 07:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2` | `backfill` | pass | I8-001/I8-002 | 已补齐 `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.design` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 07:05:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 07:05:00 +0800 | `producer_system_designer` | retired viewer-control-advanced-debug-folding topic | `backfill` | pass | I8-001/I8-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/prd.index.md`。 |
 | 2026-03-10 07:05:00 +0800 | `producer_system_designer` | retired viewer-control-feedback-iteration-checklist-2026-02-27 topic | `backfill` | pass | I8-001/I8-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-10 07:05:00 +0800 | `producer_system_designer` | retired viewer-control-feedback-step-recovery-p0-2026-02-27 topic | `backfill` | pass | I8-001/I8-002 | 原审计目标已退役，归档说明见 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`。 |
 | 2026-03-10 07:05:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 89 个专题、剩余 276 个缺口 |

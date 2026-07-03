@@ -1,6 +1,6 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-06-18
+更新时间: 2026-07-03
 
 ## 从这里开始
 - 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及本轮 image2 视觉目标、首屏总体设计与分模块落地时继续读 `viewer-page-module-design-2026-06-18.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
@@ -26,10 +26,10 @@
 - 治理前快照（`scripts/doc-inventory-report.sh`，2026-04-17）:
   - `doc/world-simulator/viewer/`: 296 份 Markdown
   - `doc/world-simulator/`: 549 份 Markdown
-- 当前复算（`scripts/doc-inventory-report.sh`，2026-06-29）:
-  - `doc/world-simulator/viewer/`: 213 份 Markdown
-  - `doc/world-simulator/`: 472 份 Markdown
-- 当前子域属于仓库最高密度热点路径；本页的目标是压缩首读路径，而不是在本批直接减少文件数。
+- 当前复算（`scripts/doc-inventory-report.sh`，2026-07-03）:
+  - `doc/world-simulator/viewer/`: 199 份 Markdown
+  - `doc/world-simulator/`: 457 份 Markdown
+- 当前子域属于仓库最高密度热点路径；治理目标是持续压缩首读路径，并在证据链完整时删除不再承载当前入口语义的旧专题。
 
 ## 首读主题簇
 

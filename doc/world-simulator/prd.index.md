@@ -2,7 +2,7 @@
 
 审计轮次: 8
 
-更新时间：2026-06-25
+更新时间：2026-07-03
 
 ## 用途
 - 本页是 `world-simulator` 的文件级索引，优先用于按文件名精确检索、确认配对关系与维持互链可达性。
@@ -16,7 +16,7 @@
 ## 快速分流
 - 想先回答模块在做什么、能力边界是什么：先读 `doc/world-simulator/prd.md`
 - 想先回答当前在推进什么、谁在负责、哪里被阻断：先读 `doc/world-simulator/project.md`
-- 想先进入 Viewer 热点子域，而不是直接面对 213 份 Viewer Markdown：先读 `doc/world-simulator/viewer/README.md`
+- 想先进入 Viewer 热点子域，而不是直接面对 199 份 Viewer Markdown：先读 `doc/world-simulator/viewer/README.md`
 - 想先进入 Launcher 热点子域，而不是直接面对 80+ 份启动器文档：先读 `doc/world-simulator/launcher/README.md`
 - 想直接执行 Viewer / Web 闭环 / 操作步骤：先读 `doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想继续按文件名或子域精确下钻：直接使用下方完整清单
@@ -51,6 +51,7 @@
 - `doc/core/reviews/round-005-reviewed-files.md`
 - `doc/core/reviews/round-008-reviewed-files.md`
 - Viewer 旧控制反馈三件套已删除并压缩为历史归档说明 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
+- Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
@@ -153,7 +154,6 @@
 | `doc/world-simulator/viewer/viewer-chat-prompt-presets.prd.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets.design.md` | `doc/world-simulator/viewer/viewer-chat-prompt-presets.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.prd.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.design.md` | `doc/world-simulator/viewer/viewer-chat-right-panel-polish.project.md` |
 | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.project.md` |
-| `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.prd.md` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.design.md` | `doc/world-simulator/viewer/viewer-control-advanced-debug-folding.project.md` |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md` |
 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.design.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` |

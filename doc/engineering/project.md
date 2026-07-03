@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
+- [x] doc-legacy-task-reference-convergence (PRD-ENGINEERING-025/030) [test_tier_required]: 收敛 2026-06-19 site 页面设计覆盖文档中的退役 `.pm/tasks/*.yaml` 直接引用，把活跃设计证据元信息改为 GitHub issue + `task_uid` + Step 3 archive 追溯口径；同时退役删除已由 core review 归档承接的 Viewer EGUI 高级调试折叠旧三件套，并同步 `world-simulator` / `viewer` 索引入口，避免旧 task-file 路径和旧专题继续扩散为当前真值。 Trace: #1810 (task_213a397f0eb143da803a97d844d9f74c)
+
 - [x] legacy-doc-migration-collaboration-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且仍占据 active doc surface 的 2026-03-03 legacy migration collaboration PRD/design/project triplet，将旧迁移协作语义收敛到 closure evidence、doc structure standard 与 workflow source-of-truth。 Trace: .pm/tasks/task_7c106fd04be24599878a480b810627ba.yaml
 
 - [x] engineering-doc-governance-legacy-doc-cleanup (PRD-ENGINEERING-015/PRD-ENGINEERING-021/PRD-ENGINEERING-025) [test_tier_required]: 将已完成且继续暴露旧执行语义的 2026-02-27 documentation-governance-engineering closure 三件套收敛为 retired historical pointer，把当前结构检查、入口职责与持续门禁语义指回 doc-structure-standard、workflow source-of-truth、`scripts/doc-governance-check.sh` 与 GitHub task issue evidence comments。 Trace: #1783 (task_5164d10c39bc4bec926251de02bf68fb)
