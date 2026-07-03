@@ -39,6 +39,23 @@ testnet readiness verdict, or mainnet-grade finality claim.
     "world_head_proof_ref": "",
     "claim_boundary": "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness"
   },
+  "external_verifier": {
+    "schema_version": "oasis7.world_head_proof_verifier.v1",
+    "status": "pass",
+    "proof_contract": "WorldHeadProofV1",
+    "proof_ref": "",
+    "proof_hash": "",
+    "claim_boundary": "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness",
+    "verifier_command": "cargo run -p oasis7_proto --bin oasis7_world_head_proof_verify -- --proof <proof> --proof-ref <ref> --expect-hash <hash> --json",
+    "verified_at_unix_ms": 0,
+    "does_not_claim": [
+      "mainnet-grade finality",
+      "state proof",
+      "receipt proof",
+      "DA sampling",
+      "full light client"
+    ]
+  },
   "readiness_linkage": {
     "readiness_status": "",
     "failed_gates": [],
@@ -62,7 +79,11 @@ testnet readiness verdict, or mainnet-grade finality claim.
 - `world_head_proof_v1.proof_hash` must be produced from canonical CBOR with
   the `oasis7.world_head_proof.v1` hash domain.
 - `WorldHeadProofV1::validate_contract()` must pass before this packet may use
-  `proof_complete`.
+  `proof_complete`; attach the `oasis7_world_head_proof_verify --json` summary
+  under `external_verifier`.
+- `external_verifier.proof_hash` and `external_verifier.proof_ref` must match
+  `world_head_proof_v1.proof_hash` and
+  `world_head_proof_v1.world_head_proof_ref`.
 - If checkpoint evidence is present, it must pin both the snapshot manifest ref
   and journal segments ref.
 - A passing packet only proves sampled evidence consistency. Public network
