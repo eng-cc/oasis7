@@ -115,7 +115,7 @@
 | PRD-SCRIPTS-WTB-001 | WTB-BOOT-1/2 | `test_tier_required` | `--help` + 默认 branch/path 命名 smoke | 新需求初始化一致性 |
 | PRD-SCRIPTS-WTB-002 | WTB-BOOT-1/2 | `test_tier_required` | dirty/branch/path 围栏与 create/remove smoke | 并行任务隔离与 source truth 清晰度 |
 | PRD-SCRIPTS-WTB-003 | WTB-BOOT-1/3 | `test_tier_required` | `--json` 字段核验 | agent 自动进入新 worktree 的稳定性 |
-| PRD-SCRIPTS-WTB-004 | WTB-BOOT-4 | `test_tier_required` | `--init-docs` / `--with-harness` create/remove smoke + JSON 纯度检查 | 新任务从创建到文档/验证闭环的一跳成本 |
+| PRD-SCRIPTS-WTB-004 | task-worktree-bootstrap-init-docs-harness | `test_tier_required` | `--init-docs` / `--with-harness` create/remove smoke + JSON 纯度检查 | 新任务从创建到文档/验证闭环的一跳成本 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

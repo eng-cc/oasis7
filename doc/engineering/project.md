@@ -8,6 +8,8 @@
 
 - [x] doc-legacy-task-reference-convergence (PRD-ENGINEERING-025/030) [test_tier_required]: 收敛 2026-06-19 site 页面设计覆盖文档中的退役 `.pm/tasks/*.yaml` 直接引用，把活跃设计证据元信息改为 GitHub issue + `task_uid` + Step 3 archive 追溯口径；同时退役删除已由 core review 归档承接的 Viewer EGUI 高级调试折叠旧三件套，并同步 `world-simulator` / `viewer` 索引入口，避免旧 task-file 路径和旧专题继续扩散为当前真值。 Trace: #1810 (task_213a397f0eb143da803a97d844d9f74c)
 
+- [x] task-worktree-bootstrap-legacy-semantics-convergence (PRD-ENGINEERING-021/025) [test_tier_required]: 收敛 task worktree bootstrap 专题设计/项目页残留的 `doc/devlog/YYYY-MM-DD.md` evidence sink 与 `worktree-harness.sh up --no-llm` 旧语义，将当前 `--init-docs` / `--with-harness` 口径对齐到模块 PRD/project、GitHub task issue evidence comments / mapping 与 formal gameplay active LLM preflight。 Trace: #1822 (task_611a38cd102245cd9b092036a534bc8d)
+
 - [x] legacy-doc-migration-collaboration-triplet-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已完成且仍占据 active doc surface 的 2026-03-03 legacy migration collaboration PRD/design/project triplet，将旧迁移协作语义收敛到 closure evidence、doc structure standard 与 workflow source-of-truth。 Trace: .pm/tasks/task_7c106fd04be24599878a480b810627ba.yaml
 
 - [x] engineering-doc-governance-legacy-doc-cleanup (PRD-ENGINEERING-015/PRD-ENGINEERING-021/PRD-ENGINEERING-025) [test_tier_required]: 将已完成且继续暴露旧执行语义的 2026-02-27 documentation-governance-engineering closure 三件套收敛为 retired historical pointer，把当前结构检查、入口职责与持续门禁语义指回 doc-structure-standard、workflow source-of-truth、`scripts/doc-governance-check.sh` 与 GitHub task issue evidence comments。 Trace: #1783 (task_5164d10c39bc4bec926251de02bf68fb)
@@ -518,7 +520,7 @@
 - 更新日期: 2026-07-02
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `engineering-doc-legacy-governance`（已将 engineering 入口和文档存量治理专题中的 active evidence / trace 口径从 `.pm` execution log 旧语义收敛到 GitHub task issue evidence comments；历史 `.pm/tasks/...` trace 继续只作为归档追溯保留。）
+- 最新完成: `task-worktree-bootstrap-legacy-semantics-convergence`（已将 task worktree bootstrap 专题中的 `--init-docs` / `--with-harness` active 口径从 `doc/devlog` evidence sink 与 `--no-llm` 旧预热语义收敛到 GitHub task issue evidence comments / mapping 与 formal gameplay active LLM preflight。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
