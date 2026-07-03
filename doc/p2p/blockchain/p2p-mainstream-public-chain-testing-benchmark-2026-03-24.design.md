@@ -13,6 +13,12 @@
 > `external_verifier_light_client_lite_ready` lane. This closes the bounded
 > verifier audit path only; it does not claim full light-client security or
 > multi-client consensus equivalence.
+> 2026-07-03 current-state refresh: see
+> `doc/p2p/blockchain/p2p-current-mainstream-public-chain-gap-benchmark-2026-07-03.md`.
+> The integrated role conclusion is that Oasis7 is now an auditability-enhanced
+> crypto preview with external sampled world-head verification, while formal
+> `public_testnet` remains blocked until the current 11 required lanes are
+> represented by a non-template all-pass readiness packet.
 
 ## 设计目标
 - 把“主流公链怎么测”从泛泛经验，收成 oasis7 可执行的对标矩阵。
