@@ -227,12 +227,25 @@ struct BevyRuntimeState {
     hotspot_entities: HashMap<String, Entity>,
 }
 
+enum RenderSnapshot {
+    Unchanged,
+    Changed {
+        version: u64,
+        state: Option<RenderState>,
+    },
+}
+
 #[derive(Default)]
 struct SharedSnapshot {
     mounted: bool,
-    render_state: Option<RenderState>,
-    render_version: u64,
+    render: RenderSnapshot,
     input_events: Vec<InputEvent>,
+}
+
+impl Default for RenderSnapshot {
+    fn default() -> Self {
+        Self::Unchanged
+    }
 }
 
 #[wasm_bindgen]
@@ -426,13 +439,20 @@ fn emit_fatal_payload(message: &str) -> JsValue {
         .unwrap_or_else(|_| status_value("unavailable"))
 }
 
-fn shared_snapshot() -> SharedSnapshot {
+fn shared_snapshot(current_render_version: u64) -> SharedSnapshot {
     BRIDGE_SHARED.with(|shared| {
         let mut shared = shared.borrow_mut();
+        let render = if shared.render_version == current_render_version {
+            RenderSnapshot::Unchanged
+        } else {
+            RenderSnapshot::Changed {
+                version: shared.render_version,
+                state: shared.render_state.clone(),
+            }
+        };
         SharedSnapshot {
             mounted: shared.mounted,
-            render_state: shared.render_state.clone(),
-            render_version: shared.render_version,
+            render,
             input_events: mem::take(&mut shared.input_events),
         }
     })
@@ -520,15 +540,23 @@ fn focus_target_from_render_state(render_state: Option<&RenderState>) -> Option<
     })
 }
 
-fn apply_external_render_snapshot(runtime: &mut BevyRuntimeState, snapshot: SharedSnapshot) {
-    runtime.mounted = snapshot.mounted;
-    if snapshot.render_version == runtime.render_version {
+fn apply_external_render_snapshot(
+    runtime: &mut BevyRuntimeState,
+    mounted: bool,
+    render: RenderSnapshot,
+) {
+    runtime.mounted = mounted;
+    let RenderSnapshot::Changed {
+        version: render_version,
+        state: render_state,
+    } = render
+    else {
         return;
-    }
+    };
 
     let previous_focus_target = focus_target_from_render_state(runtime.render_state.as_ref());
-    let next_focus_target = focus_target_from_render_state(snapshot.render_state.as_ref());
-    let next_signature = render_content_signature(snapshot.render_state.as_ref());
+    let next_focus_target = focus_target_from_render_state(render_state.as_ref());
+    let next_signature = render_content_signature(render_state.as_ref());
     let content_changed = next_signature != runtime.render_content_signature;
     if next_signature != runtime.render_content_signature {
         runtime.camera_fit_version = 0;
@@ -544,8 +572,8 @@ fn apply_external_render_snapshot(runtime: &mut BevyRuntimeState, snapshot: Shar
     } else if content_changed && let Some(follow_target) = runtime.active_follow_target.clone() {
         runtime.pending_focus_target = Some(follow_target);
     }
-    runtime.render_version = snapshot.render_version;
-    runtime.render_state = snapshot.render_state;
+    runtime.render_version = render_version;
+    runtime.render_state = render_state;
 }
 
 fn push_input_event(event: InputEvent) {
@@ -587,98 +615,105 @@ fn hit_test(hit_regions: &[HitRegion], x: f64, y: f64) -> Option<(String, String
     None
 }
 
-fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
-    let snapshot = shared_snapshot();
-    let input_events = snapshot.input_events.clone();
-    apply_external_render_snapshot(&mut runtime, snapshot);
-
-    for event in input_events {
-        match event {
-            InputEvent::PointerDown { x, y, pointer_id } => {
-                runtime.drag_state = Some(DragState {
-                    pointer_id,
-                    start_x: x,
-                    start_y: y,
-                    start_pan_x: runtime.camera.pan_x_px,
-                    start_pan_y: runtime.camera.pan_y_px,
-                });
-            }
-            InputEvent::PointerMove {
-                x,
-                y,
-                is_leave,
+fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
+    match event {
+        InputEvent::PointerDown { x, y, pointer_id } => {
+            runtime.drag_state = Some(DragState {
                 pointer_id,
-            } => {
-                if let Some((start_pan_x, start_pan_y, start_x, start_y)) = runtime
-                    .drag_state
-                    .as_ref()
-                    .filter(|drag_state| drag_state.pointer_id == pointer_id)
-                    .map(|drag_state| {
-                        (
-                            drag_state.start_pan_x,
-                            drag_state.start_pan_y,
-                            drag_state.start_x,
-                            drag_state.start_y,
-                        )
-                    })
-                {
-                    runtime.camera.pan_x_px = start_pan_x + (x - start_x);
-                    runtime.camera.pan_y_px = start_pan_y + (y - start_y);
-                    runtime.camera_user_override = true;
-                    runtime.active_follow_target = None;
-                    runtime.pending_focus_target = None;
-                    let _ = emit_camera_state(&runtime.camera);
-                    continue;
-                }
-
-                if is_leave {
-                    if runtime.hover_key.take().is_some() {
-                        let _ = emit_event_value(
-                            &json!({ "type": "hover_entity", "selection": Value::Null }),
-                        );
-                    }
-                    continue;
-                }
-
-                let hit = hit_test(&runtime.hit_regions, x, y);
-                let hover_key = hit.as_ref().map(|(kind, id)| format!("{kind}/{id}"));
-                if hover_key == runtime.hover_key {
-                    continue;
-                }
-                runtime.hover_key = hover_key;
-                let selection = hit
-                    .map(|(kind, id)| json!({ "kind": kind, "id": id }))
-                    .unwrap_or(Value::Null);
-                let _ =
-                    emit_event_value(&json!({ "type": "hover_entity", "selection": selection }));
-            }
-            InputEvent::PointerUp { pointer_id } => {
-                if runtime
-                    .drag_state
-                    .as_ref()
-                    .map(|drag_state| drag_state.pointer_id == pointer_id)
-                    .unwrap_or(false)
-                {
-                    runtime.drag_state = None;
-                }
-            }
-            InputEvent::Wheel { delta_y } => {
-                let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
-                runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, 3.5);
+                start_x: x,
+                start_y: y,
+                start_pan_x: runtime.camera.pan_x_px,
+                start_pan_y: runtime.camera.pan_y_px,
+            });
+        }
+        InputEvent::PointerMove {
+            x,
+            y,
+            is_leave,
+            pointer_id,
+        } => {
+            if let Some((start_pan_x, start_pan_y, start_x, start_y)) = runtime
+                .drag_state
+                .as_ref()
+                .filter(|drag_state| drag_state.pointer_id == pointer_id)
+                .map(|drag_state| {
+                    (
+                        drag_state.start_pan_x,
+                        drag_state.start_pan_y,
+                        drag_state.start_x,
+                        drag_state.start_y,
+                    )
+                })
+            {
+                runtime.camera.pan_x_px = start_pan_x + (x - start_x);
+                runtime.camera.pan_y_px = start_pan_y + (y - start_y);
                 runtime.camera_user_override = true;
                 runtime.active_follow_target = None;
                 runtime.pending_focus_target = None;
                 let _ = emit_camera_state(&runtime.camera);
+                return;
             }
-            InputEvent::Click { x, y } => {
-                if let Some((kind, id)) = hit_test(&runtime.hit_regions, x, y) {
-                    let _ = emit_event_value(&json!({
-                        "type": "select_entity",
-                        "selection": { "kind": kind, "id": id }
-                    }));
+
+            if is_leave {
+                if runtime.hover_key.take().is_some() {
+                    let _ = emit_event_value(
+                        &json!({ "type": "hover_entity", "selection": Value::Null }),
+                    );
                 }
+                return;
+            }
+
+            let hit = hit_test(&runtime.hit_regions, x, y);
+            let hover_key = hit.as_ref().map(|(kind, id)| format!("{kind}/{id}"));
+            if hover_key == runtime.hover_key {
+                return;
+            }
+            runtime.hover_key = hover_key;
+            let selection = hit
+                .map(|(kind, id)| json!({ "kind": kind, "id": id }))
+                .unwrap_or(Value::Null);
+            let _ = emit_event_value(&json!({ "type": "hover_entity", "selection": selection }));
+        }
+        InputEvent::PointerUp { pointer_id } => {
+            if runtime
+                .drag_state
+                .as_ref()
+                .map(|drag_state| drag_state.pointer_id == pointer_id)
+                .unwrap_or(false)
+            {
+                runtime.drag_state = None;
             }
         }
+        InputEvent::Wheel { delta_y } => {
+            let factor = if delta_y < 0.0 { 1.12 } else { 0.89 };
+            runtime.camera.zoom = clamp(runtime.camera.zoom * factor, 0.6, 3.5);
+            runtime.camera_user_override = true;
+            runtime.active_follow_target = None;
+            runtime.pending_focus_target = None;
+            let _ = emit_camera_state(&runtime.camera);
+        }
+        InputEvent::Click { x, y } => {
+            if let Some((kind, id)) = hit_test(&runtime.hit_regions, x, y) {
+                let _ = emit_event_value(&json!({
+                    "type": "select_entity",
+                    "selection": { "kind": kind, "id": id }
+                }));
+            }
+        }
+    }
+}
+
+fn sync_external_state(mut runtime: ResMut<BevyRuntimeState>) {
+    let snapshot = shared_snapshot(runtime.render_version);
+    let SharedSnapshot {
+        mounted,
+        render,
+        input_events,
+    } = snapshot;
+    apply_external_render_snapshot(&mut runtime, mounted, render);
+
+    for event in input_events {
+        process_input_event(&mut runtime, event);
     }
 }
 
