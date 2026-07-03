@@ -28,7 +28,7 @@
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接平铺 runtime 高频专题长名单。
 - 高频 active 入口保留在 `prd.md`、`project.md`、`prd.index.md` 与少量仍承担当前跨阶段判断职责的正式专题。
-- `evidence/`、`templates/`、`checklists/` 与 handoff 文档继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径按需进入。
+- `evidence/`、`templates/` 与 `checklists/` 继续保留可检索性，但默认从 `prd.index.md` 或具体专题路径按需进入；旧 2026-03 runtime handoff root 文档已退役删除，当前追溯改从正式 evidence 与专题 project 进入。
 
 ## 模块职责
 - 维护运行时主链路、存储治理、WASM 执行与模块发布口径。
@@ -40,16 +40,17 @@
 - `runtime/`（57）：运行时主链路、数值正确性、存储治理、retention 与 replay contract。
 - `wasm/`（25）：Docker canonical build、执行器、观测指标、模块级 observe runner、SDK、sandbox 与 ABI 治理。
 - `module/`（16）：模块生命周期、线上发布合法性、模块存储与订阅过滤专题。
-- 根目录入口与 handoff（9）：模块主入口与 runtime 候选/验证交接留痕。
+- 根目录入口（5）：模块主入口与当前高频导航。
 - `evidence/`（7）：候选级指标、soak、storage gate 与 profile consistency 采证。
 - `governance/`（5）：治理事件与收据安全专题。
 
 ## 高密度提示
-- `doc/world-runtime/` 当前共有 124 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
-- 需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要 evidence / template / checklist / handoff 时，再按子域定向进入。
+- `doc/world-runtime/` 当前共有 120 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
+- 需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要 evidence / template / checklist 时，再按子域定向进入。
 
 ## 历史根入口
 - root world-runtime PRD/project legacy redirect shells 已删除。
+- 旧 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档已退役删除；当前 runtime candidate、storage cadence、GC fail-safe 与 profile consistency 证据以 `evidence/`、runtime storage topic project 与 GitHub task issue evidence comments 为准。
 - 当前主入口以本目录 `prd.md` / `project.md` 为准。
 
 ## 共享约定

@@ -21,11 +21,11 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/world-runtime/`：124 份文件
+- `doc/world-runtime/`：120 份文件
 - `doc/world-runtime/runtime/`：57 份文件
 - `doc/world-runtime/wasm/`：25 份文件
 - `doc/world-runtime/module/`：16 份文件
-- 根目录入口与 handoff：9 份文件
+- 根目录入口：5 份文件
 - `doc/world-runtime/evidence/`：7 份文件
 - `doc/world-runtime/governance/`：5 份文件
 - `doc/world-runtime/templates/`：2 份文件
@@ -37,7 +37,7 @@
 | `runtime/` | 57 | 确定性运行时主链路、数值正确性、retention / GC、replay contract 与存储预算 |
 | `wasm/` | 25 | Docker canonical build、执行器、模块级 observe runner、SDK、sandbox、ABI 与发布工件治理 |
 | `module/` | 16 | 模块生命周期、线上发布合法性、模块存储与订阅过滤边界 |
-| 根目录入口与 handoff | 9 | 模块主入口、候选收口交接与当前高频导航 |
+| 根目录入口 | 5 | 模块主入口与当前高频导航 |
 | `evidence/` | 7 | 候选级指标、storage gate、profile consistency 与 soak 采证 |
 | `governance/` | 5 | 治理事件、收据安全与运行时审计边界 |
 
@@ -59,15 +59,15 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 runtime / wasm / module 专题表。
-- `evidence/`、模板、checklist 与 handoff 文档继续保留可检索性，但默认不和活跃专题三件套同屏平铺。
+- `evidence/`、模板与 checklist 文档继续保留可检索性，但默认不和活跃专题三件套同屏平铺；旧 2026-03 runtime handoff root 文档已退役删除，追溯从正式 evidence、runtime storage topic project 与 GitHub task issue evidence comments 进入。
 - 完整活跃专题清单继续保留在下方，用于精确文件名检索和互链可达性。
 - WASM 相关的跨目录历史文档只保留在“相邻历史入口”或对应模块索引中；除非 owner 明确恢复为当前任务入口，不再作为 world-runtime 默认首读面。
 
 ## 覆盖规则
 - 纳入规则：纳入 `doc/world-runtime/{runtime,wasm,module,governance}/*.prd.md` 与同名 `*.design.md` / `*.project.md` 的活跃专题三件套。
 - 活跃补充：仍被模块 PRD / 项目态直接引用的高频专题，可在“活跃补充文档”区定向列出，但不并入 evidence / template / checklist / handoff 清单。
-- 排除规则：不纳入 `doc/world-runtime/evidence/**`、`doc/world-runtime/templates/**`、`doc/world-runtime/checklists/**` 与 handoff / legacy redirect 的非三件套材料。
-- 按需进入：evidence、候选级采证、模板、checklist 与 handoff 继续保留可检索性；除非重新成为当前 owner 的直接入口，否则不进入默认首屏。
+- 排除规则：不纳入 `doc/world-runtime/evidence/**`、`doc/world-runtime/templates/**`、`doc/world-runtime/checklists/**` 与 legacy redirect 的非三件套材料。
+- 按需进入：evidence、候选级采证、模板与 checklist 继续保留可检索性；除非重新成为当前 owner 的直接入口，否则不进入默认首屏。
 
 ## 完整活跃专题清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
@@ -114,7 +114,8 @@
 | `doc/world-runtime/templates/runtime-release-gate-metrics-template.md` | `template` | release gate 指标模板 |
 | `doc/world-runtime/templates/runtime-security-numeric-regression-template.md` | `template` | 安全与数值语义回归模板 |
 | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` | `checklist` | runtime 核心边界验收清单 |
-| `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md` | `handoff` | runtime 候选证据交接入口 |
+
+已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.project.md` 与 GitHub task issue evidence comments 追溯。
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

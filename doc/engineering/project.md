@@ -8,6 +8,8 @@
 
 - [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、quarterly review cycle 专题和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
 
+- [x] world-runtime-root-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/world-runtime` 根目录 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 一次性 role handoff 文档，将当前 runtime candidate、storage cadence、GC fail-safe 与 profile consistency 追溯入口收敛到正式 evidence、runtime storage topic project、core review 记录与 GitHub task issue evidence comments，并同步收紧 module-root markdown allowlist。 Trace: #1839 (task_442a8b6b37004d6fa6e07720e8d9341b)
+
 - [x] doc-semantics-governance (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 已完成历史行中的旧 `.pm` evidence sink 读法，明确历史 `.pm/tasks/...` trace 仅作退役前追溯，当前执行证据以 GitHub task issue evidence comments 和 mapping-backed task trace 为准。 Trace: #1836 (task_8aa8a48148a94c9e956f0b9bb7ead99d)
 
 - [x] doc-legacy-task-reference-convergence (PRD-ENGINEERING-025/030) [test_tier_required]: 收敛 2026-06-19 site 页面设计覆盖文档中的退役 `.pm/tasks/*.yaml` 直接引用，把活跃设计证据元信息改为 GitHub issue + `task_uid` + Step 3 archive 追溯口径；同时退役删除已由 core review 归档承接的 Viewer EGUI 高级调试折叠旧三件套，并同步 `world-simulator` / `viewer` 索引入口，避免旧 task-file 路径和旧专题继续扩散为当前真值。 Trace: #1810 (task_213a397f0eb143da803a97d844d9f74c)
@@ -524,7 +526,7 @@
 - 更新日期: 2026-07-02
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `task-worktree-bootstrap-legacy-semantics-convergence`（已将 task worktree bootstrap 专题中的 `--init-docs` / `--with-harness` active 口径从 `doc/devlog` evidence sink 与 `--no-llm` 旧预热语义收敛到 GitHub task issue evidence comments / mapping 与 formal gameplay active LLM preflight。）
+- 最新完成: `world-runtime-root-handoff-retire`（已删除 `doc/world-runtime` 根目录 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 一次性 role handoff 文档，并将追溯入口收敛到正式 evidence、runtime storage topic project、core review 记录与 GitHub task issue evidence comments。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

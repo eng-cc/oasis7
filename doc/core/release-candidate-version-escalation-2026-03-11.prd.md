@@ -56,7 +56,6 @@
 - Integration Points:
   - `doc/core/reviews/release-candidate-readiness-board-task-game-018-2026-03-11.md`
   - `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`
-  - `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`
   - `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
   - `doc/testing/longrun/s10-five-node-real-game-soak.prd.md`
 - Edge Cases & Error Handling:
