@@ -14,7 +14,7 @@
 - 冲突层：检查目标路径是否存在、目标 branch 是否已在其他 worktree 检出。
 - 授权层：只接受用户显式授权“复用当前 worktree / 就在这里改 / 不要切新 worktree”这类明确指令；其余模糊表述一律按“仍需新开 worktree”处理。
 - 执行层：调用 `git worktree add` 创建新 branch 或附着已有 branch。
-- 文档层：`--init-docs` 时检查 `doc/<module>/prd.md`、`doc/<module>/project.md` 与当日 `doc/devlog/YYYY-MM-DD.md`。
+- 文档层：`--init-docs` 时检查 `doc/<module>/prd.md` 与 `doc/<module>/project.md`；启用 PM bootstrap 时返回 GitHub task issue evidence comments 入口与 mapping 记录。
 - harness 层：`--with-harness` 时在新 worktree 中后台触发 `./scripts/worktree-harness.sh up`，并把 bootstrap 日志与状态文件路径回传给上层；该路径继承 formal gameplay 的 active LLM preflight。
 - 输出层：打印下一步命令；需要自动化时输出 JSON 摘要，并保证 JSON 模式下 stdout 纯净。
 
