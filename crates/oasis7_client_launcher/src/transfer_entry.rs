@@ -9,6 +9,10 @@ use std::time::Duration;
 
 #[cfg(test)]
 use super::WebTransferSubmitRequest;
+#[cfg(test)]
+use crate::http_helpers::{
+    bracket_ipv6_authority_host, normalize_connect_host, parse_host_port, parse_http_status_code,
+};
 
 #[cfg(test)]
 const CHAIN_TRANSFER_SUBMIT_PATH: &str = "/v1/chain/transfer/submit";
@@ -126,14 +130,14 @@ fn post_json_request(
 ) -> Result<TransferSubmitResponse, String> {
     let (host, port) = parse_host_port(bind, "chain status bind")?;
     let host = normalize_connect_host(host.as_str());
-    let socket_host = host_for_socket(host.as_str());
+    let socket_host = bracket_ipv6_authority_host(host.as_str());
     let mut stream = TcpStream::connect(format!("{socket_host}:{port}"))
         .map_err(|err| format!("connect chain status server failed: {err}"))?;
     let timeout = Some(Duration::from_millis(HTTP_TIMEOUT_MS));
     let _ = stream.set_read_timeout(timeout);
     let _ = stream.set_write_timeout(timeout);
 
-    let host_header = host_for_http(host.as_str());
+    let host_header = bracket_ipv6_authority_host(host.as_str());
     let mut request_head = String::new();
     request_head.push_str(&format!("POST {path} HTTP/1.1\r\n"));
     request_head.push_str(&format!("Host: {host_header}:{port}\r\n"));
@@ -181,82 +185,6 @@ fn parse_http_json_response(bytes: &[u8]) -> Result<TransferSubmitResponse, Stri
         ));
     }
     Ok(response)
-}
-
-#[cfg(test)]
-fn parse_http_status_code(header: &str) -> Result<u16, String> {
-    let Some(status_line) = header.lines().next() else {
-        return Err("invalid HTTP response: missing status line".to_string());
-    };
-    let Some(code) = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|token| token.parse::<u16>().ok())
-    else {
-        return Err(format!("invalid HTTP response status line: {status_line}"));
-    };
-    Ok(code)
-}
-
-#[cfg(test)]
-fn parse_host_port(raw: &str, label: &str) -> Result<(String, u16), String> {
-    let value = raw.trim();
-    let (host_raw, port_raw) = if let Some(rest) = value.strip_prefix('[') {
-        let (host, remainder) = rest
-            .split_once(']')
-            .ok_or_else(|| format!("{label} IPv6 host must be in [addr]:port format"))?;
-        let port_raw = remainder
-            .strip_prefix(':')
-            .ok_or_else(|| format!("{label} must be in <host:port> format"))?;
-        (host, port_raw)
-    } else {
-        let (host, port_raw) = value
-            .rsplit_once(':')
-            .ok_or_else(|| format!("{label} must be in <host:port> format"))?;
-        if host.contains(':') {
-            return Err(format!("{label} IPv6 host must be wrapped in []"));
-        }
-        (host, port_raw)
-    };
-    let host = host_raw.trim();
-    if host.is_empty() {
-        return Err(format!("{label} host cannot be empty"));
-    }
-    let port = port_raw
-        .trim()
-        .parse::<u16>()
-        .map_err(|_| format!("{label} port must be in 1..=65535"))?;
-    if port == 0 {
-        return Err(format!("{label} port must be in 1..=65535"));
-    }
-    Ok((host.to_string(), port))
-}
-
-#[cfg(test)]
-fn host_for_socket(host: &str) -> String {
-    if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
-    }
-}
-
-#[cfg(test)]
-fn host_for_http(host: &str) -> String {
-    if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
-    }
-}
-
-#[cfg(test)]
-fn normalize_connect_host(host: &str) -> String {
-    match host.trim() {
-        "0.0.0.0" => "127.0.0.1".to_string(),
-        "::" | "[::]" => "::1".to_string(),
-        value => value.to_string(),
-    }
 }
 
 #[cfg(test)]

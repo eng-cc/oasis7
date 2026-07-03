@@ -990,30 +990,9 @@ pub(super) fn parse_optional_i64(raw: &str, label: &str) -> Result<Option<i64>, 
 }
 
 pub(super) fn parse_host_port(raw: &str, label: &str) -> Result<(String, u16), String> {
-    let value = raw.trim();
-    let (host_raw, port_raw) = if let Some(rest) = value.strip_prefix('[') {
-        let (host, remainder) = rest
-            .split_once(']')
-            .ok_or_else(|| format!("{label} IPv6 host must be in [addr]:port format"))?;
-        let port_raw = remainder
-            .strip_prefix(':')
-            .ok_or_else(|| format!("{label} must be in <host:port> format"))?;
-        (host, port_raw)
-    } else {
-        let (host, port_raw) = value
-            .rsplit_once(':')
-            .ok_or_else(|| format!("{label} must be in <host:port> format"))?;
-        if host.contains(':') {
-            return Err(format!("{label} IPv6 host must be wrapped in []"));
-        }
-        (host, port_raw)
-    };
-    let host = host_raw.trim();
-    if host.trim().is_empty() {
-        return Err(format!("{label} host cannot be empty"));
-    }
+    let (host, port_raw) = crate::http_helpers::parse_host_port_parts(raw, label)?;
     let port = parse_port(port_raw, label)?;
-    Ok((host.trim().to_string(), port))
+    Ok((host.to_string(), port))
 }
 
 pub(super) fn parse_chain_role(raw: &str) -> Result<String, String> {
