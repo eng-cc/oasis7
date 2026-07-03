@@ -387,9 +387,7 @@ impl TransferTracker {
             timeout_count: counters.timeout,
             inflight_count,
             oldest_inflight_age_ms,
-            recent_confirmation_latency: summarize_transfer_latency_samples(
-                confirmed_latencies.as_slice(),
-            ),
+            recent_confirmation_latency: summarize_transfer_latency_samples(confirmed_latencies),
         }
     }
 
@@ -965,13 +963,9 @@ pub(super) fn build_chain_transfer_metrics_status(
     Ok(tracker.metrics_status(now_ms))
 }
 
-fn summarize_transfer_latency_samples(samples: &[i64]) -> ChainTransferLatencySummaryStatus {
-    let mut sorted = samples
-        .iter()
-        .copied()
-        .filter(|value| *value >= 0)
-        .collect::<Vec<_>>();
-    if sorted.is_empty() {
+fn summarize_transfer_latency_samples(mut samples: Vec<i64>) -> ChainTransferLatencySummaryStatus {
+    samples.retain(|value| *value >= 0);
+    if samples.is_empty() {
         return ChainTransferLatencySummaryStatus {
             sample_count: 0,
             avg_latency_ms: None,
@@ -980,18 +974,18 @@ fn summarize_transfer_latency_samples(samples: &[i64]) -> ChainTransferLatencySu
             p95_latency_ms: None,
         };
     }
-    sorted.sort_unstable();
-    let total = sorted
+    samples.sort_unstable();
+    let total = samples
         .iter()
         .fold(0_i128, |acc, value| acc.saturating_add(*value as i128));
     let percentile = |pct: usize| -> Option<i64> {
-        let idx = rounded_percentile_index(sorted.len(), pct);
-        sorted.get(idx).copied()
+        let idx = rounded_percentile_index(samples.len(), pct);
+        samples.get(idx).copied()
     };
     ChainTransferLatencySummaryStatus {
-        sample_count: sorted.len(),
-        avg_latency_ms: Some((total / sorted.len() as i128) as i64),
-        max_latency_ms: sorted.last().copied(),
+        sample_count: samples.len(),
+        avg_latency_ms: Some((total / samples.len() as i128) as i64),
+        max_latency_ms: samples.last().copied(),
         p50_latency_ms: percentile(50),
         p95_latency_ms: percentile(95),
     }
