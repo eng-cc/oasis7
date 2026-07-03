@@ -17,7 +17,7 @@
 ## 依赖
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+- `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md`
@@ -25,7 +25,7 @@
 - `doc/engineering/README.md`
 - `doc/engineering/project.md`
 - `.pm/roles/*/memory/{active,superseded}.yaml`
-- `.pm/inbox/signals.jsonl`
+- GitHub-backed reflection intake / `.pm/github-project-sync/intake-signals.json`
 - `scripts/pm/promote-signal.sh`
 - `scripts/pm/promote-memory.sh`
 - `scripts/pm/memory-report.sh`

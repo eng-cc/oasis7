@@ -14,14 +14,15 @@
 
 ## 依赖
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
+- `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/prd.index.md`
 - `doc/engineering/README.md`
 - `AGENTS.md`
 - `.agents/roles/*.md`
 - `.pm/templates/role-memory-policy.yaml`
 - `scripts/pm/pm_store.py`
-- `.pm/inbox/signals.jsonl`
+- GitHub-backed reflection intake / `.pm/github-project-sync/intake-signals.json`
 - `.pm/roles/*/memory/*.yaml`
 
 ## 状态
@@ -36,7 +37,7 @@
   - `TASK-ENGINEERING-082`：已落地 `scripts/pm/promote-memory.sh` 与 `pm_store.py promote-memory` 子命令，冻结 `promotion_reason` / `reject_reason` 白名单、shared memory 写权限，以及 signal 的 `memory_promotion_state` 决策回写；`required-tier-smoke.sh` 现覆盖 accepted/rejected promotion case。
   - `TASK-ENGINEERING-081`：已为 `producer_system_designer`、`qa_engineer`、`liveops_community` 与 `shared` 落地首批 active/superseded 样例，覆盖 stage current、QA failure signature、community messaging boundary 与 shared claim envelope 场景。
   - `TASK-ENGINEERING-077`：已在 `self-evolution` 主专题先行落地 `supersede-memory.sh`、`memory-lint.sh` 与 role/shared memory 基础 lint 规则，后续长期 memory 子专题可在此基础上继续补样例、promotion 和 report。
-  - `TASK-ENGINEERING-076`：已落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路，后续 memory promotion 可直接复用 signal inbox 作为输入层。
+  - `TASK-ENGINEERING-076`：历史上曾落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路；当前 reflection intake 已收敛到 GitHub-backed intake 与 `.pm/github-project-sync/intake-signals.json` 镜像，memory promotion 不得恢复 retired inbox 作为当前真值。
   - `TASK-ENGINEERING-075`：已建立 `.pm` 基础骨架，并为 7 个标准角色生成 `memory/{active,superseded}.yaml` 容器，长期 memory 后续任务可直接在仓库内演进。
   - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与 task execution log 规则。
 - 下一步:
