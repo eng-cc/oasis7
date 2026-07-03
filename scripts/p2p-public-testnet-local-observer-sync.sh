@@ -924,6 +924,21 @@ import sys
 manifest_source, manifest_dest, repo_root = sys.argv[1:4]
 manifest_dest = os.path.abspath(manifest_dest)
 manifest_dir = os.path.dirname(manifest_dest)
+manifest_source = os.path.abspath(manifest_source)
+manifest_source_dir = os.path.dirname(manifest_source)
+
+def resolve_ref(raw_ref):
+    if os.path.isabs(raw_ref):
+        return raw_ref
+    candidates = [
+        os.path.join(manifest_source_dir, raw_ref),
+        os.path.join(os.path.dirname(manifest_source_dir), raw_ref),
+        os.path.join(repo_root, raw_ref),
+    ]
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return candidates[0]
 
 with open(manifest_source, "r", encoding="utf-8") as fh:
     data = json.load(fh)
@@ -933,7 +948,7 @@ for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref")
     ref = runtime_refs.get(key)
     if not ref:
         continue
-    source = ref if os.path.isabs(ref) else os.path.join(repo_root, ref)
+    source = resolve_ref(ref)
     if not os.path.isfile(source):
         raise SystemExit(f"missing manifest runtime ref source: {source}")
     target_name = os.path.basename(ref)
@@ -941,6 +956,47 @@ for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref")
     os.makedirs(os.path.dirname(target), exist_ok=True)
     shutil.copy2(source, target)
     runtime_refs[key] = target_name
+
+for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
+    ref = runtime_refs.get(key)
+    if not ref:
+        continue
+    source = resolve_ref(ref)
+    target_ref = os.path.basename(os.path.normpath(ref)) if os.path.isabs(ref) else ref
+    target = os.path.join(manifest_dir, target_ref)
+    if os.path.abspath(source) == os.path.abspath(target):
+        raise SystemExit(f"ref source and localized target must differ: {source}")
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    if key == "generated_world_sidecar_ref":
+        if not os.path.isdir(source):
+            raise SystemExit(f"missing manifest runtime ref source: {source}")
+        if os.path.exists(target):
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+    else:
+        if not os.path.isfile(source):
+            raise SystemExit(f"missing manifest runtime ref source: {source}")
+        shutil.copy2(source, target)
+    runtime_refs[key] = target_ref
+
+bundle_ref = runtime_refs.get("release_candidate_bundle_ref")
+if bundle_ref:
+    bundle_path = os.path.join(manifest_dir, bundle_ref)
+    with open(bundle_path, "r", encoding="utf-8") as fh:
+        bundle = json.load(fh)
+    sidecar_ref = runtime_refs.get("generated_world_sidecar_ref")
+    if sidecar_ref and isinstance(bundle.get("generated_world_sidecar"), dict):
+        bundle["generated_world_sidecar"]["ref"] = sidecar_ref
+        bundle["generated_world_sidecar"]["resolved_path"] = os.path.join(manifest_dir, sidecar_ref)
+    provenance_ref = runtime_refs.get("world_generation_provenance_ref")
+    if provenance_ref and isinstance(bundle.get("world_generation_provenance"), dict):
+        bundle["world_generation_provenance"]["ref"] = provenance_ref
+        bundle["world_generation_provenance"]["resolved_path"] = os.path.join(
+            manifest_dir, provenance_ref
+        )
+    with open(bundle_path, "w", encoding="utf-8") as fh:
+        json.dump(bundle, fh, ensure_ascii=True, indent=2)
+        fh.write("\n")
 
 with open(manifest_dest, "w", encoding="utf-8") as fh:
     json.dump(data, fh, ensure_ascii=True, indent=2)

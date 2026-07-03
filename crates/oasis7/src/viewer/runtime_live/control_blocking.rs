@@ -132,7 +132,11 @@ impl ViewerRuntimeLiveServer {
         let first_agent_claim_target_available = snapshot_player_id.is_some()
             && snapshot_bound_agent_id.is_none()
             && !first_agent_claim_target_bound;
-        let model = runtime_state_to_simulator_model(self.world.state(), &self.llm_sidecar);
+        let model = runtime_state_to_simulator_model(
+            self.world.state(),
+            &self.llm_sidecar,
+            self.seed_model.as_ref(),
+        );
         let mut player_gameplay = build_player_gameplay_snapshot(
             self.world.state(),
             snapshot_bound_agent_id,

@@ -17,6 +17,11 @@ pub(super) fn build_oasis7_viewer_live_command(
         .arg(options.web_bind.as_str())
         .arg("--deployment-mode")
         .arg(options.deployment_mode.as_str());
+    if !options.generated_world_dir.trim().is_empty() {
+        command
+            .arg("--generated-world-dir")
+            .arg(options.generated_world_dir.as_str());
+    }
     if options.chain_enabled {
         command
             .arg("--chain-status-bind")

@@ -17,6 +17,10 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--scenario" => {
                 options.scenario = parse_required_value(&mut iter, "--scenario")?;
             }
+            "--generated-world-dir" => {
+                options.generated_world_dir =
+                    parse_required_value(&mut iter, "--generated-world-dir")?;
+            }
             "--live-bind" => {
                 options.live_bind = parse_required_value(&mut iter, "--live-bind")?;
             }
@@ -243,6 +247,7 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 
     let _ = parse_host_port(options.live_bind.as_str(), "--live-bind")?;
     let _ = parse_host_port(options.web_bind.as_str(), "--web-bind")?;
+    validate_generated_world_options(&options)?;
     validate_debug_scenario_guardrail(&options)?;
     let deployment_mode = if options.allow_trusted_local_playtest {
         DeploymentMode::parse(options.deployment_mode.as_str(), "--deployment-mode")?
@@ -320,6 +325,33 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     }
 
     Ok(options)
+}
+
+fn validate_generated_world_options(options: &CliOptions) -> Result<(), String> {
+    let generated_world_dir = options.generated_world_dir.trim();
+    if generated_world_dir.is_empty() {
+        return Ok(());
+    }
+    if !options.scenario.trim().is_empty() {
+        return Err(
+            "`--generated-world-dir` cannot be combined with `--scenario`; generated map sidecar is the viewer world source"
+                .to_string(),
+        );
+    }
+    let root = Path::new(generated_world_dir);
+    for required in [
+        root.join("generated-scenario-world").join("snapshot.json"),
+        root.join("generated-scenario-world").join("journal.json"),
+        root.join("world-generation-provenance.json"),
+    ] {
+        if !required.is_file() {
+            return Err(format!(
+                "`--generated-world-dir` is missing required file {}",
+                required.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_debug_scenario_guardrail(options: &CliOptions) -> Result<(), String> {
@@ -473,6 +505,7 @@ Options:\n\
   --allow-trusted-local-playtest
                               Internal-only: allow --deployment-mode trusted_local_only for local playtest stacks\n\
   --scenario <name>            optional debug scenario; default uses formal release fixed world\n\
+  --generated-world-dir <dir>  generated-world root with generated-scenario-world sidecar\n\
   --live-bind <host:port>      oasis7_viewer_live bind (default: {DEFAULT_LIVE_BIND})\n\
   --web-bind <host:port>       oasis7_viewer_live web bridge bind (default: {DEFAULT_WEB_BIND})\n\
   --viewer-host <host>         web viewer host (default: {DEFAULT_VIEWER_HOST})\n\

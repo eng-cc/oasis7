@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 
-use crate::simulator::Location;
+use crate::simulator::{Location, WorldKernel, WorldModel};
 use crate::viewer::gameplay_actions::formal_release_default_seed_model;
 
 use super::*;
@@ -24,6 +25,7 @@ impl ViewerRuntimeLiveServerConfig {
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
+            generated_world_dir: None,
         }
     }
 
@@ -41,6 +43,7 @@ impl ViewerRuntimeLiveServerConfig {
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
             agent_chat_echo_enabled: control_plane::runtime_agent_chat_echo_enabled_from_env(),
+            generated_world_dir: None,
         }
     }
 
@@ -115,6 +118,11 @@ impl ViewerRuntimeLiveServerConfig {
 
     pub fn with_agent_chat_echo_enabled(mut self, enabled: bool) -> Self {
         self.agent_chat_echo_enabled = enabled;
+        self
+    }
+
+    pub fn with_generated_world_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.generated_world_dir = Some(dir.into());
         self
     }
 }
@@ -284,7 +292,39 @@ pub(super) fn bootstrap_runtime_world(
     let init = WorldInitConfig::from_scenario(scenario, &config);
     let (model, _) = build_world_model(&config, &init)
         .map_err(|err| format!("runtime live bootstrap build_world_model failed: {err:?}"))?;
+    bootstrap_runtime_world_from_model(config, &model, "runtime live bootstrap")
+}
 
+pub(super) fn bootstrap_generated_sidecar_runtime_world(
+    generated_world_dir: &Path,
+) -> Result<(RuntimeWorld, WorldConfig, WorldModel), String> {
+    let sidecar_dir = generated_world_dir.join("generated-scenario-world");
+    let provenance_path = generated_world_dir.join("world-generation-provenance.json");
+    if !provenance_path.is_file() {
+        return Err(format!(
+            "generated world provenance missing: {}",
+            provenance_path.display()
+        ));
+    }
+    let kernel = WorldKernel::load_from_dir(&sidecar_dir).map_err(|err| {
+        format!(
+            "runtime live generated sidecar load failed dir={} err={err:?}",
+            sidecar_dir.display()
+        )
+    })?;
+    let snapshot = kernel.snapshot();
+    let config = snapshot.config;
+    let model = snapshot.model;
+    let (world, config) =
+        bootstrap_runtime_world_from_model(config, &model, "runtime live generated sidecar")?;
+    Ok((world, config, model))
+}
+
+fn bootstrap_runtime_world_from_model(
+    config: WorldConfig,
+    model: &WorldModel,
+    label: &str,
+) -> Result<(RuntimeWorld, WorldConfig), String> {
     let mut world = RuntimeWorld::new_production_hardened();
     world.set_resource_balance(ResourceKind::Electricity, 400);
     for (material, amount) in [
@@ -303,7 +343,7 @@ pub(super) fn bootstrap_runtime_world(
             .set_material_balance(material, amount)
             .map_err(|err| {
                 format!(
-                    "runtime live bootstrap set material balance failed material={} err={err:?}",
+                    "{label} set material balance failed material={} err={err:?}",
                     material
                 )
             })?;
@@ -337,7 +377,7 @@ pub(super) fn bootstrap_runtime_world(
     if world.pending_actions_len() > 0 {
         world
             .step()
-            .map_err(|err| format!("runtime live bootstrap register step failed: {err:?}"))?;
+            .map_err(|err| format!("{label} register step failed: {err:?}"))?;
     }
 
     for (agent_id, electricity, data) in world
@@ -361,18 +401,13 @@ pub(super) fn bootstrap_runtime_world(
             .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Electricity, electricity)
             .map_err(|err| {
                 format!(
-                    "runtime live bootstrap set electricity failed agent={} err={err:?}",
+                    "{label} set electricity failed agent={} err={err:?}",
                     agent_id
                 )
             })?;
         world
             .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, data)
-            .map_err(|err| {
-                format!(
-                    "runtime live bootstrap set data failed agent={} err={err:?}",
-                    agent_id
-                )
-            })?;
+            .map_err(|err| format!("{label} set data failed agent={} err={err:?}", agent_id))?;
     }
 
     Ok((world, config))

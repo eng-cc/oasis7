@@ -38,6 +38,9 @@ assert_fails_containing() {
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/stage/generated-world/world/snapshot.json"
+test -f "$TMP_DIR/stage/generated-world/generated-scenario-world/snapshot.json"
+test -f "$TMP_DIR/stage/generated-world/generated-scenario-world/journal.json"
+test -f "$TMP_DIR/stage/generated-world/world-generation-provenance.json"
 
 jq -e '
   .validators[0].finality_signer_public_key == "65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16"
@@ -47,8 +50,18 @@ jq -e '
 	  and .threshold == 2
 	' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" >/dev/null
 
-jq -e '.runtime_build.sha256 != null and .governance_manifest.sha256 != null' \
+jq -e '
+  .runtime_build.sha256 != null
+  and .governance_manifest.sha256 != null
+  and .generated_world_sidecar.sha256_tree != null
+  and (.generated_world_sidecar.ref | endswith("generated-world/generated-scenario-world"))
+  and .world_generation_provenance.sha256 != null
+  and (.world_generation_provenance.ref | endswith("generated-world/world-generation-provenance.json"))
+' \
   "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
+
+jq -e '.scenario_id == "asteroid_fragment_bootstrap"' \
+  "$TMP_DIR/stage/generated-world/world-generation-provenance.json" >/dev/null
 
 jq -e '.track == "public_testnet_rehearsal"' \
   "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
@@ -57,10 +70,14 @@ jq -e '
   .runtime_refs.release_candidate_bundle_ref == "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
   and .runtime_refs.genesis_ref == "public-testnet-governed-bootstrap-genesis-2026-06-06.json"
   and .runtime_refs.bootstrap_peer_ref == "public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
+  and .runtime_refs.generated_world_sidecar_ref == "generated-world/generated-scenario-world"
+  and .runtime_refs.world_generation_provenance_ref == "generated-world/world-generation-provenance.json"
   and .validator_policy.target_validator_count == 3
 ' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null
 
 grep -q 'triad-testnet-fourth-local' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Generated map sidecar: `generated-world/generated-scenario-world`' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Generated map provenance: `generated-world/world-generation-provenance.json`' "$TMP_DIR/stage/deployment-truth.md"
 
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \

@@ -29,8 +29,8 @@ use crate::runtime::{
 use crate::simulator::{
     AgentDecisionTrace, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
     PlayerGameplayRecentFeedback, RejectReason as SimulatorRejectReason, ResourceKind,
-    RunnerMetrics, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldInitConfig, WorldScenario,
-    WorldSnapshot, build_world_model,
+    RunnerMetrics, SNAPSHOT_VERSION, WorldConfig, WorldEvent, WorldInitConfig, WorldModel,
+    WorldScenario, WorldSnapshot, build_world_model,
 };
 use tracing::Level;
 mod authoritative;
@@ -80,8 +80,9 @@ use session_policy::{
 };
 use support::{
     FORMAL_RELEASE_DEFAULT_WORLD_ID, RuntimeLiveScript, RuntimeLiveSession,
-    bootstrap_formal_release_runtime_world, bootstrap_runtime_world, is_expected_disconnect_error,
-    is_timeout_error, latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
+    bootstrap_formal_release_runtime_world, bootstrap_generated_sidecar_runtime_world,
+    bootstrap_runtime_world, is_expected_disconnect_error, is_timeout_error,
+    latest_runtime_event_seq, lock_shared_server, runtime_metrics, send_response,
 };
 
 pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
@@ -109,6 +110,7 @@ pub struct ViewerRuntimeLiveServer {
     last_chain_committed_height: u64,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
+    seed_model: Option<WorldModel>,
     script: RuntimeLiveScript,
     llm_sidecar: RuntimeLlmSidecar,
     pending_virtual_events: VecDeque<WorldEvent>,
@@ -145,19 +147,38 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
-        let (world, snapshot_config) = match config.scenario {
-            Some(scenario) => {
-                bootstrap_runtime_world(scenario).map_err(ViewerRuntimeLiveServerError::Init)?
-            }
-            None if config.chain_status_bind.is_some() => (
-                RuntimeWorld::new_production_hardened(),
-                WorldConfig::default(),
-            ),
-            None => bootstrap_formal_release_runtime_world()
-                .map_err(ViewerRuntimeLiveServerError::Init)?,
-        };
+        let (world, snapshot_config, seed_model) =
+            if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
+                let (world, snapshot_config, seed_model) =
+                    bootstrap_generated_sidecar_runtime_world(generated_world_dir)
+                        .map_err(ViewerRuntimeLiveServerError::Init)?;
+                (world, snapshot_config, Some(seed_model))
+            } else {
+                match config.scenario {
+                    Some(scenario) => {
+                        let (world, snapshot_config) = bootstrap_runtime_world(scenario)
+                            .map_err(ViewerRuntimeLiveServerError::Init)?;
+                        (world, snapshot_config, None)
+                    }
+                    None if config.chain_status_bind.is_some() => (
+                        RuntimeWorld::new_production_hardened(),
+                        WorldConfig::default(),
+                        None,
+                    ),
+                    None => {
+                        let (world, snapshot_config) = bootstrap_formal_release_runtime_world()
+                            .map_err(ViewerRuntimeLiveServerError::Init)?;
+                        (world, snapshot_config, None)
+                    }
+                }
+            };
         let initial_world_time = world.state().time;
-        let llm_sidecar = RuntimeLlmSidecar::new(config.decision_mode);
+        let llm_sidecar = match seed_model.as_ref() {
+            Some(model) => {
+                RuntimeLlmSidecar::new(config.decision_mode).with_runtime_seed_model(model)
+            }
+            None => RuntimeLlmSidecar::new(config.decision_mode),
+        };
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
         Ok(Self {
             config,
@@ -168,6 +189,7 @@ impl ViewerRuntimeLiveServer {
             last_chain_committed_height: 0,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
+            seed_model,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
             pending_virtual_events: VecDeque::new(),
@@ -781,7 +803,11 @@ impl ViewerRuntimeLiveServer {
             runtime_events_for_feedback.extend(new_events.iter().cloned());
             let mut mapped_events = Vec::new();
             for runtime_event in &new_events {
-                let event = map_runtime_event(runtime_event, &self.snapshot_config);
+                let event = map_runtime_event(
+                    runtime_event,
+                    &self.snapshot_config,
+                    self.seed_model.as_ref(),
+                );
                 if matches!(runtime_event.body, RuntimeWorldEventBody::Domain(_)) {
                     self.llm_sidecar
                         .notify_action_result_if_needed(runtime_event, event.clone());

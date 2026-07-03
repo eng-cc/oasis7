@@ -1,5 +1,6 @@
 use std::env;
 use std::net::ToSocketAddrs;
+use std::path::PathBuf;
 use std::process;
 use std::thread;
 
@@ -31,6 +32,7 @@ struct CliOptions {
     auto_play: bool,
     allow_debug_scenario: bool,
     agent_chat_echo: bool,
+    generated_world_dir: Option<PathBuf>,
 }
 
 impl Default for CliOptions {
@@ -47,6 +49,7 @@ impl Default for CliOptions {
             auto_play: false,
             allow_debug_scenario: false,
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
+            generated_world_dir: None,
         }
     }
 }
@@ -88,6 +91,7 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         auto_play = options.auto_play,
         allow_debug_scenario = options.allow_debug_scenario,
         agent_chat_echo = options.agent_chat_echo,
+        generated_world_dir = ?options.generated_world_dir,
         scenario = %options
             .scenario
             .map(|value| value.as_str().to_string())
@@ -122,6 +126,11 @@ fn run_viewer(options: CliOptions) -> Result<(), String> {
         } else {
             ViewerLiveDecisionMode::Script
         });
+    let config = if let Some(generated_world_dir) = options.generated_world_dir {
+        config.with_generated_world_dir(generated_world_dir)
+    } else {
+        config
+    };
     let config = if let Some(chain_status_bind) = options.chain_status_bind {
         config.with_chain_status_bind(chain_status_bind)
     } else {
@@ -195,6 +204,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             "--agent-chat-echo" => {
                 options.agent_chat_echo = true;
             }
+            "--generated-world-dir" => {
+                options.generated_world_dir = Some(PathBuf::from(parse_required_value(
+                    &mut iter,
+                    "--generated-world-dir",
+                )?));
+            }
             "--runtime-world" => {
                 return Err(RUNTIME_ALIAS_REMOVAL_HINT.to_string());
             }
@@ -236,9 +251,38 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
         }
     }
     let _ = parse_deployment_mode(options.deployment_mode.as_str())?;
+    validate_generated_world_options(&options)?;
     validate_debug_scenario_guardrail(&options)?;
 
     Ok(options)
+}
+
+fn validate_generated_world_options(options: &CliOptions) -> Result<(), String> {
+    let Some(generated_world_dir) = options.generated_world_dir.as_ref() else {
+        return Ok(());
+    };
+    if options.scenario.is_some() {
+        return Err(
+            "`--generated-world-dir` cannot be combined with a positional scenario; generated map sidecar is the viewer world source"
+                .to_string(),
+        );
+    }
+    let sidecar_snapshot = generated_world_dir
+        .join("generated-scenario-world")
+        .join("snapshot.json");
+    let sidecar_journal = generated_world_dir
+        .join("generated-scenario-world")
+        .join("journal.json");
+    let provenance = generated_world_dir.join("world-generation-provenance.json");
+    for required in [&sidecar_snapshot, &sidecar_journal, &provenance] {
+        if !required.is_file() {
+            return Err(format!(
+                "`--generated-world-dir` is missing required file {}",
+                required.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_debug_scenario_guardrail(options: &CliOptions) -> Result<(), String> {
@@ -340,6 +384,7 @@ Options:\n\
   --auto-play               advance gameplay/world on each connected session without pressing Play\n\
   --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
+  --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
   -h, --help                show help\n\n\
 Removed:\n\
   --release-config, --runtime-world, all --node-*, --topology, --triad-*, --reward-runtime-*, --no-node, --viewer-no-consensus-gate\n\
@@ -350,6 +395,16 @@ Removed:\n\
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "oasis7-{label}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
 
     #[test]
     fn parse_options_defaults() {
@@ -364,6 +419,7 @@ mod tests {
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
         assert!(!options.auto_play);
         assert!(!options.allow_debug_scenario);
+        assert_eq!(options.generated_world_dir, None);
     }
 
     #[test]
@@ -405,12 +461,95 @@ mod tests {
         assert!(options.auto_play);
         assert!(options.allow_debug_scenario);
         assert!(options.agent_chat_echo);
+        assert_eq!(options.generated_world_dir, None);
     }
 
     #[test]
     fn parse_options_supports_no_web_bind() {
         let options = parse_options(["--no-web-bind"].into_iter()).expect("no web bind");
         assert_eq!(options.web_bind_addr, None);
+    }
+
+    #[test]
+    fn parse_options_accepts_generated_world_dir_with_required_files() {
+        let root = unique_test_dir("viewer-live-generated-world");
+        std::fs::create_dir_all(root.join("generated-scenario-world")).expect("create sidecar dir");
+        std::fs::write(
+            root.join("generated-scenario-world").join("snapshot.json"),
+            "{}",
+        )
+        .expect("write snapshot");
+        std::fs::write(
+            root.join("generated-scenario-world").join("journal.json"),
+            "{}",
+        )
+        .expect("write journal");
+        std::fs::write(root.join("world-generation-provenance.json"), "{}")
+            .expect("write provenance");
+
+        let options = parse_options(
+            [
+                "--generated-world-dir",
+                root.to_str().expect("utf8 temp path"),
+                "--no-web-bind",
+            ]
+            .into_iter(),
+        )
+        .expect("generated world dir");
+        assert_eq!(options.generated_world_dir.as_deref(), Some(root.as_path()));
+        assert_eq!(options.scenario, None);
+
+        std::fs::remove_dir_all(root).expect("cleanup generated world fixture");
+    }
+
+    #[test]
+    fn parse_options_rejects_generated_world_dir_with_scenario() {
+        let root = unique_test_dir("viewer-live-generated-world-scenario");
+        std::fs::create_dir_all(root.join("generated-scenario-world")).expect("create sidecar dir");
+        std::fs::write(
+            root.join("generated-scenario-world").join("snapshot.json"),
+            "{}",
+        )
+        .expect("write snapshot");
+        std::fs::write(
+            root.join("generated-scenario-world").join("journal.json"),
+            "{}",
+        )
+        .expect("write journal");
+        std::fs::write(root.join("world-generation-provenance.json"), "{}")
+            .expect("write provenance");
+
+        let err = parse_options(
+            [
+                "minimal",
+                "--generated-world-dir",
+                root.to_str().expect("utf8 temp path"),
+            ]
+            .into_iter(),
+        )
+        .expect_err("generated world dir conflicts with scenario");
+        assert!(err.contains("cannot be combined"));
+
+        std::fs::remove_dir_all(root).expect("cleanup generated world fixture");
+    }
+
+    #[test]
+    fn parse_options_rejects_generated_world_dir_missing_sidecar_files() {
+        let root = unique_test_dir("viewer-live-generated-world-missing");
+        std::fs::create_dir_all(&root).expect("create generated world dir");
+
+        let err = parse_options(
+            [
+                "--generated-world-dir",
+                root.to_str().expect("utf8 temp path"),
+            ]
+            .into_iter(),
+        )
+        .expect_err("missing sidecar files");
+        assert!(err.contains("generated-scenario-world"));
+        assert!(err.contains("snapshot.json"));
+
+        std::fs::remove_dir_all(root).expect("cleanup generated world fixture");
     }
 
     #[test]

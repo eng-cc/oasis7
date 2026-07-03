@@ -175,7 +175,13 @@ impl ViewerRuntimeLiveServer {
             .events
             .iter()
             .filter(|event| event.id > baseline_event_seq)
-            .map(|runtime_event| map_runtime_event(runtime_event, &self.snapshot_config))
+            .map(|runtime_event| {
+                map_runtime_event(
+                    runtime_event,
+                    &self.snapshot_config,
+                    self.seed_model.as_ref(),
+                )
+            })
             .collect();
         let pending_batch = self.register_authoritative_batch(mapped_events.as_slice())?;
         let batch_finality_updates =

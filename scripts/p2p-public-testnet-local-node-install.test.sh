@@ -10,6 +10,7 @@ source_stack="$TMP_DIR/source-stack"
 node_root="$TMP_DIR/dedicated-node"
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 mkdir -p "$source_stack/config"
+mkdir -p "$source_stack/generated-world/generated-scenario-world"
 mkdir -p "$REPO_TMP_FIXTURE"
 
 printf 'runtime-v1\n' >"$TMP_DIR/oasis7_chain_runtime"
@@ -24,9 +25,22 @@ cat >"$source_stack/runtime-bundle.json" <<'EOF'
   "schema_version": "oasis7.release_candidate_bundle.v1",
   "runtime_build": {
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "generated_world_sidecar": {
+    "kind": "directory",
+    "ref": "generated-world/generated-scenario-world",
+    "resolved_path": "/tmp/source/generated-world/generated-scenario-world"
+  },
+  "world_generation_provenance": {
+    "kind": "file",
+    "ref": "generated-world/world-generation-provenance.json",
+    "resolved_path": "/tmp/source/generated-world/world-generation-provenance.json"
   }
 }
 EOF
+printf '{"snapshot":"generated"}\n' >"$source_stack/generated-world/generated-scenario-world/snapshot.json"
+printf '{"journal":"generated"}\n' >"$source_stack/generated-world/generated-scenario-world/journal.json"
+printf '{"scenario_id":"asteroid_fragment_bootstrap"}\n' >"$source_stack/generated-world/world-generation-provenance.json"
 cat >"$REPO_TMP_FIXTURE/governance-public-signers.json" <<'EOF'
 {"signers":[]}
 EOF
@@ -41,13 +55,15 @@ EOF
 cat >"$source_stack/bootstrap-peers.txt" <<'EOF'
 /ip4/127.0.0.1/tcp/6831/p2p/test
 EOF
-cat >"$source_stack/manifest.json" <<'EOF'
+cat >"$source_stack/config/manifest.json" <<'EOF'
 {
   "schema_version": "oasis7.network_tier_manifest.v1",
   "runtime_refs": {
     "release_candidate_bundle_ref": "runtime-bundle.json",
     "genesis_ref": "genesis.json",
-    "bootstrap_peer_ref": "bootstrap-peers.txt"
+    "bootstrap_peer_ref": "bootstrap-peers.txt",
+    "generated_world_sidecar_ref": "generated-world/generated-scenario-world",
+    "world_generation_provenance_ref": "generated-world/world-generation-provenance.json"
   }
 }
 EOF
@@ -61,14 +77,14 @@ EXECUTION_RECORDS_DIR=\${STACK_ROOT}/execution-records
 STORAGE_ROOT=\$STACK_ROOT/store
 RUNTIME_ROOT=\$STACK_ROOT/runtime-root
 REPLICATION_ROOT=\$STACK_ROOT/replication-root
-NETWORK_TIER_MANIFEST_PATH=\$STACK_ROOT/manifest.json
+NETWORK_TIER_MANIFEST_PATH=\$STACK_ROOT/config/manifest.json
 GENESIS_VALIDATOR_REGISTRY_PATH=\${STACK_ROOT}/config/genesis-validator-registry.json
 TRAFFIC_MONITOR_OUTPUT_DIR=\$STACK_ROOT/output/traffic-monitor
 EOF
 
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
-  --source-manifest "$source_stack/manifest.json" \
+  --source-manifest "$source_stack/config/manifest.json" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --node-root "$node_root" \
   --launchd-label oasis7.testnet.smoke >/dev/null
@@ -78,6 +94,9 @@ test -x "$node_root_abs/bin/start-node.sh"
 test -f "$node_root_abs/node.env"
 test -f "$node_root_abs/manifest.json"
 test -f "$node_root_abs/runtime-bundle.json"
+test -f "$node_root_abs/generated-world/generated-scenario-world/snapshot.json"
+test -f "$node_root_abs/generated-world/generated-scenario-world/journal.json"
+test -f "$node_root_abs/generated-world/world-generation-provenance.json"
 test -f "$node_root_abs/.tmp/local-node-install-test/governance-public-signers.json"
 test -f "$node_root_abs/config.toml"
 test -f "$node_root_abs/config/genesis-validator-registry.json"
@@ -88,6 +107,16 @@ jq -e --arg expected "$expected_sha" '.runtime_build.sha256 == $expected' \
   "$node_root_abs/runtime-bundle.json" >/dev/null
 jq -e '.runtime_refs.release_candidate_bundle_ref == "runtime-bundle.json"' \
   "$node_root_abs/manifest.json" >/dev/null
+jq -e \
+  '.runtime_refs.generated_world_sidecar_ref == "generated-world/generated-scenario-world"
+    and .runtime_refs.world_generation_provenance_ref == "generated-world/world-generation-provenance.json"' \
+  "$node_root_abs/manifest.json" >/dev/null
+jq -e \
+  --arg sidecar "$node_root_abs/generated-world/generated-scenario-world" \
+  --arg provenance "$node_root_abs/generated-world/world-generation-provenance.json" \
+  '.generated_world_sidecar.resolved_path == $sidecar
+    and .world_generation_provenance.resolved_path == $provenance' \
+  "$node_root_abs/runtime-bundle.json" >/dev/null
 
 grep -q "^STACK_ROOT=$node_root_abs$" "$node_root_abs/node.env"
 grep -q "^BIN=$node_root_abs/bin/oasis7_chain_runtime$" "$node_root_abs/node.env"
@@ -105,7 +134,7 @@ printf '{"mirror":"old"}\n' >"$node_root_abs/world-simulator-mirror/snapshot.jso
 set +e
 install_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
-  --source-manifest "$source_stack/manifest.json" \
+  --source-manifest "$source_stack/config/manifest.json" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --node-root "$node_root" 2>&1)
 install_status=$?
@@ -121,7 +150,7 @@ grep -q -- '--reset-state' <<<"$install_output"
 set +e
 conflicting_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
-  --source-manifest "$source_stack/manifest.json" \
+  --source-manifest "$source_stack/config/manifest.json" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --node-root "$node_root" \
   --preserve-state \
@@ -136,7 +165,7 @@ grep -q 'conflicts with --preserve-state' <<<"$conflicting_output"
 
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
-  --source-manifest "$source_stack/manifest.json" \
+  --source-manifest "$source_stack/config/manifest.json" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --node-root "$node_root" \
   --preserve-state >/dev/null
@@ -149,7 +178,7 @@ test -f "$node_root_abs/world-simulator-mirror/snapshot.json"
 reset_backup="$TMP_DIR/reset-backup"
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
-  --source-manifest "$source_stack/manifest.json" \
+  --source-manifest "$source_stack/config/manifest.json" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --node-root "$node_root" \
   --reset-state \

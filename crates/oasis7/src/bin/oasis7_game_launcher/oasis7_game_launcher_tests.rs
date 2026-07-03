@@ -47,6 +47,23 @@ fn command_env_value(command: &Command, key: &str) -> Option<Option<String>> {
         .map(|(_, value)| value.map(|value| value.to_string_lossy().into_owned()))
 }
 
+fn make_generated_world_fixture(label: &str) -> std::path::PathBuf {
+    let root = make_temp_dir(label);
+    fs::create_dir_all(root.join("generated-scenario-world")).expect("create sidecar dir");
+    fs::write(
+        root.join("generated-scenario-world").join("snapshot.json"),
+        "{}",
+    )
+    .expect("write sidecar snapshot");
+    fs::write(
+        root.join("generated-scenario-world").join("journal.json"),
+        "{}",
+    )
+    .expect("write sidecar journal");
+    fs::write(root.join("world-generation-provenance.json"), "{}").expect("write provenance");
+    root
+}
+
 #[test]
 fn parse_options_defaults() {
     let options = parse_options(std::iter::empty()).expect("parse should succeed");
@@ -55,6 +72,7 @@ fn parse_options_defaults() {
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
     assert!(!options.allow_debug_scenario);
+    assert_eq!(options.generated_world_dir, "");
     assert_eq!(
         options.agent_decision_source,
         PROVIDER_BACKED_DECISION_SOURCE
@@ -125,6 +143,40 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_world_id, None);
     assert!(!options.chain_local_standalone_test);
     assert!(!options.chain_node_auto_attest_all_validators);
+}
+
+#[test]
+fn parse_options_accepts_generated_world_dir() {
+    let root = make_generated_world_fixture("launcher_generated_world");
+    let options = parse_options(
+        [
+            "--generated-world-dir",
+            root.to_str().expect("utf8 temp path"),
+            "--no-open-browser",
+        ]
+        .into_iter(),
+    )
+    .expect("generated world dir");
+    assert_eq!(options.generated_world_dir, root.to_string_lossy());
+    assert_eq!(options.scenario, "");
+    fs::remove_dir_all(root).expect("cleanup generated world fixture");
+}
+
+#[test]
+fn parse_options_rejects_generated_world_dir_with_scenario() {
+    let root = make_generated_world_fixture("launcher_generated_world_scenario");
+    let err = parse_options(
+        [
+            "--scenario",
+            "minimal",
+            "--generated-world-dir",
+            root.to_str().expect("utf8 temp path"),
+        ]
+        .into_iter(),
+    )
+    .expect_err("generated world dir conflicts with scenario");
+    assert!(err.contains("cannot be combined"));
+    fs::remove_dir_all(root).expect("cleanup generated world fixture");
 }
 
 #[test]
@@ -585,6 +637,23 @@ fn build_viewer_live_command_wires_debug_scenario_opt_in() {
         .collect();
     assert!(args.iter().any(|arg| arg == "llm_bootstrap"));
     assert!(args.iter().any(|arg| arg == "--allow-debug-scenario"));
+}
+
+#[test]
+fn build_viewer_live_command_wires_generated_world_dir() {
+    let mut options = CliOptions::default();
+    options.generated_world_dir = "output/public-testnet/generated-world".to_string();
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let args: Vec<String> = command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    assert!(args.iter().any(|arg| arg == "--generated-world-dir"));
+    assert!(
+        args.iter()
+            .any(|arg| arg == "output/public-testnet/generated-world")
+    );
+    assert!(!args.iter().any(|arg| arg == DEFAULT_SCENARIO));
 }
 
 #[test]

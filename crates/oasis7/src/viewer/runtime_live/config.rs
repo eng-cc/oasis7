@@ -1,4 +1,5 @@
 use std::io;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{RuntimeWorldError, ViewerLiveDecisionMode, WorldScenario};
@@ -44,6 +45,7 @@ pub struct ViewerRuntimeLiveServerConfig {
     pub chain_submit_bind: Option<String>,
     pub chain_link_policy: ChainLinkPolicy,
     pub agent_chat_echo_enabled: bool,
+    pub generated_world_dir: Option<PathBuf>,
 }
 
 #[derive(Debug)]
