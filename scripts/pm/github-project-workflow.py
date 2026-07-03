@@ -228,15 +228,24 @@ def load_sync_module() -> Any:
 
 
 def field_value(item: dict[str, Any], field_name: str) -> str:
-    normalized = normalize_key(field_name)
+    return field_value_from_lookup(normalized_field_values(item), field_name)
+
+
+def normalized_field_values(item: dict[str, Any]) -> dict[str, str]:
+    values: dict[str, str] = {}
     for key, value in item.items():
-        if normalize_key(str(key)) == normalized:
-            return "" if value is None else str(value)
-    return ""
+        normalized = normalize_key(str(key))
+        if normalized not in values:
+            values[normalized] = "" if value is None else str(value)
+    return values
+
+
+def field_value_from_lookup(field_values: dict[str, str], field_name: str) -> str:
+    return field_values.get(normalize_key(field_name), "")
 
 
 def item_task_uid(item: dict[str, Any]) -> str:
-    direct = field_value(item, "Task UID")
+    direct = field_value_from_lookup(normalized_field_values(item), "Task UID")
     if TASK_UID_RE.fullmatch(direct):
         return direct
     body = str((item.get("content") or {}).get("body") or "")
@@ -519,10 +528,11 @@ def command_audit(args: argparse.Namespace) -> int:
             errors.append(f"{uid}: mapping issue_url does not match live item content")
         if record.get("issue_number") and str(record.get("issue_number")) != str(content.get("number") or ""):
             errors.append(f"{uid}: mapping issue_number does not match live item content")
+        item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:
                 continue
-            actual = field_value(item, field_name)
+            actual = field_value_from_lookup(item_fields, field_name)
             if actual != expected:
                 errors.append(f"{uid}: field {field_name} expected {expected!r} got {actual!r}")
 
