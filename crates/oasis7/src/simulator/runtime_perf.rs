@@ -146,11 +146,12 @@ impl RuntimePerfCollector {
     }
 
     pub(crate) fn snapshot(&self) -> RuntimePerfSnapshot {
-        let tick = self.tick.snapshot();
-        let decision = self.decision.snapshot();
-        let action_execution = self.action_execution.snapshot();
-        let callback = self.callback.snapshot();
-        let llm_api = self.llm_api.snapshot();
+        let mut percentile_scratch = Vec::new();
+        let tick = self.tick.snapshot(&mut percentile_scratch);
+        let decision = self.decision.snapshot(&mut percentile_scratch);
+        let action_execution = self.action_execution.snapshot(&mut percentile_scratch);
+        let callback = self.callback.snapshot(&mut percentile_scratch);
+        let llm_api = self.llm_api.snapshot(&mut percentile_scratch);
         let health = derive_health([&tick, &decision, &action_execution, &callback]);
         let bottleneck = derive_bottleneck(&tick, &decision, &action_execution, &callback);
         RuntimePerfSnapshot {
@@ -224,8 +225,8 @@ impl PerfSeriesState {
         }
     }
 
-    fn snapshot(&self) -> RuntimePerfSeriesSnapshot {
-        let window = WindowSampleStats::from_samples(&self.window_samples);
+    fn snapshot(&self, percentile_scratch: &mut Vec<f64>) -> RuntimePerfSeriesSnapshot {
+        let window = WindowSampleStats::from_samples(&self.window_samples, percentile_scratch);
         let avg_ms = if self.samples_total > 0 {
             self.total_ms / self.samples_total as f64
         } else {
@@ -277,7 +278,7 @@ struct WindowSampleStats {
 }
 
 impl WindowSampleStats {
-    fn from_samples(samples: &VecDeque<f64>) -> Self {
+    fn from_samples(samples: &VecDeque<f64>, values: &mut Vec<f64>) -> Self {
         let len = samples.len();
         if len == 0 {
             return Self {
@@ -288,16 +289,17 @@ impl WindowSampleStats {
             };
         }
 
-        let mut values: Vec<f64> = samples.iter().copied().collect();
+        values.clear();
+        values.extend(samples.iter().copied());
         let p50_index = percentile_index(len, 0.50);
         let p95_index = percentile_index(len, 0.95);
         let p99_index = percentile_index(len, 0.99);
 
         Self {
             len,
-            p50_ms: select_percentile_value(&mut values, p50_index),
-            p95_ms: select_percentile_value(&mut values, p95_index),
-            p99_ms: select_percentile_value(&mut values, p99_index),
+            p50_ms: select_percentile_value(values, p50_index),
+            p95_ms: select_percentile_value(values, p95_index),
+            p99_ms: select_percentile_value(values, p99_index),
         }
     }
 }
