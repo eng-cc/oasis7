@@ -342,6 +342,24 @@ if ./scripts/network-tier-external-verifier-light-client-lite.sh \
 fi
 grep -q "observed state root mismatch" "$stderr"
 
+if ./scripts/network-tier-external-verifier-light-client-lite.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json \
+  --proof "$generated_proof" \
+  --proof-format json \
+  --proof-ref proof-ref-42 \
+  --world-id world-a \
+  --expect-height 42 \
+  --observed-head-hash "$generated_head_hash" \
+  --observed-state-root "$generated_state_root" \
+  --from-height 100 \
+  --sample-started-at 2026-07-03T00:00:00Z \
+  --sample-ended-at 2026-07-03T00:01:00Z \
+  --out "$TMPDIR/should-not-write-inverted-range.json" >"$TMPDIR/inverted-range.stdout" 2>"$stderr"; then
+  echo "expected wrapper to reject inverted verified range" >&2
+  exit 1
+fi
+grep -q "verified range is inverted" "$stderr"
+
 run_invalid_external_case() {
   local case_name=$1
   local expected_error=$2
@@ -362,6 +380,12 @@ elif case_name == "db_access":
     data["node_db_access_used"] = True
 elif case_name == "range_too_short":
     data["verified_range"]["to_height"] = 41
+elif case_name == "missing_proof_ref":
+    data["proof_ref"] = ""
+    data["external_verifier"]["proof_ref"] = ""
+elif case_name == "missing_proof_hash":
+    data["proof_hash"] = ""
+    data["external_verifier"]["proof_hash"] = ""
 elif case_name == "missing_verifier":
     data.pop("external_verifier", None)
 elif case_name == "verifier_head_hash_mismatch":
@@ -401,6 +425,8 @@ run_invalid_external_case "network_mismatch" "external_verifier_light_client_lit
 run_invalid_external_case "manifest_mismatch" "external_verifier_light_client_lite_ready manifest_ref must match manifest"
 run_invalid_external_case "db_access" "external_verifier_light_client_lite_ready node_db_access_used must be false"
 run_invalid_external_case "range_too_short" "external_verifier_light_client_lite_ready verified_range.to_height must be >= observed_head.height"
+run_invalid_external_case "missing_proof_ref" "external_verifier_light_client_lite_ready proof_ref missing"
+run_invalid_external_case "missing_proof_hash" "external_verifier_light_client_lite_ready proof_hash missing"
 run_invalid_external_case "missing_verifier" "external_verifier_light_client_lite_ready external_verifier object missing"
 run_invalid_external_case "verifier_head_hash_mismatch" "external_verifier_light_client_lite_ready external_verifier.head.block_hash must match observed_head.hash"
 run_invalid_external_case "verifier_state_root_mismatch" "external_verifier_light_client_lite_ready external_verifier.head.state_root must match observed_head.state_root"

@@ -187,6 +187,11 @@ verifier = json.loads(verifier_summary_path.read_text(encoding="utf-8"))
 runtime_refs = manifest.get("runtime_refs") or {}
 endpoint_policy = manifest.get("endpoint_policy") or {}
 
+if from_height > expect_height:
+    raise SystemExit(
+        "verified range is inverted: "
+        f"from_height={from_height} to_height={expect_height}"
+    )
 if manifest.get("tier") != "public_testnet":
     raise SystemExit("manifest tier must be public_testnet")
 if verifier.get("status") != "pass":

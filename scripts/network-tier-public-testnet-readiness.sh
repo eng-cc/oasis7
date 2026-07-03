@@ -568,6 +568,12 @@ def validate_external_verifier_light_client_lite_pass_evidence(
 
     if data.get("verification_result") != "accepted":
         blockers.append(f"{lane} verification_result must be accepted: {raw}")
+    proof_ref = str(data.get("proof_ref") or "").strip()
+    proof_hash = str(data.get("proof_hash") or "").strip()
+    if not proof_ref:
+        blockers.append(f"{lane} proof_ref missing: {raw}")
+    if not proof_hash:
+        blockers.append(f"{lane} proof_hash missing: {raw}")
     verifier = data.get("external_verifier")
     if not isinstance(verifier, dict):
         blockers.append(f"{lane} external_verifier object missing: {raw}")
@@ -580,9 +586,9 @@ def validate_external_verifier_light_client_lite_pass_evidence(
             blockers.append(f"{lane} external_verifier.proof_contract must be WorldHeadProofV1: {raw}")
         if verifier.get("claim_boundary") != "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness":
             blockers.append(f"{lane} external_verifier.claim_boundary mismatch: {raw}")
-        if str(verifier.get("proof_ref") or "").strip() != str(data.get("proof_ref") or "").strip():
+        if str(verifier.get("proof_ref") or "").strip() != proof_ref:
             blockers.append(f"{lane} external_verifier.proof_ref must match evidence proof_ref: {raw}")
-        if str(verifier.get("proof_hash") or "").strip() != str(data.get("proof_hash") or "").strip():
+        if str(verifier.get("proof_hash") or "").strip() != proof_hash:
             blockers.append(f"{lane} external_verifier.proof_hash must match evidence proof_hash: {raw}")
         if str(verifier.get("world_id") or "").strip() != str(network_tier.get("world_id") if isinstance(network_tier, dict) else "").strip():
             blockers.append(f"{lane} external_verifier.world_id must match network_tier.world_id: {raw}")
