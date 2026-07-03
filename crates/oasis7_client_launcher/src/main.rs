@@ -51,6 +51,7 @@ mod feedback_entry;
 mod feedback_window;
 #[cfg(target_arch = "wasm32")]
 mod feedback_window_web;
+mod http_helpers;
 mod launcher_core;
 #[cfg(target_arch = "wasm32")]
 mod launcher_test_hook_web;
