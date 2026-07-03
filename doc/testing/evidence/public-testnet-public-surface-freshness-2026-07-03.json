@@ -1,0 +1,75 @@
+{
+  "schema_version": "oasis7.public_testnet_public_surface_freshness.v1",
+  "sample_window": {
+    "started_at": "2026-07-03T15:44:03Z",
+    "ended_at": "2026-07-03T15:44:43Z",
+    "sample_count": 2
+  },
+  "network_tier": {
+    "tier": "public_testnet",
+    "manifest_status": "rehearsal",
+    "network_id": "oasis7-public-testnet-governed-20260606",
+    "chain_id": "oasis7-public-testnet-governed-20260606"
+  },
+  "rpc": {
+    "url": "http://39.104.204.172:6631/v1/chain/status",
+    "http_codes": [
+      200,
+      200
+    ],
+    "ok": true,
+    "node_id": "triad-testnet-sequencer",
+    "world_id": "oasis7-public-testnet-governed-20260606",
+    "liveness_status": "ok",
+    "readiness_status": "ready",
+    "sync_status": "synced",
+    "committed_height_start": 1082,
+    "committed_height_end": 1083,
+    "network_committed_height_start": 1082,
+    "network_committed_height_end": 1083,
+    "last_error": null,
+    "start_block_hash": "1aa0eedfb7a5844331fd509bf595ebf4503e0bf0682db189f237c1d30b01b7e8",
+    "end_block_hash": "2f92add7c6c2a91994e47c280c5f21e4c56911b12660b6bbbba1f55401e554c7",
+    "start_execution_state_root": "82418fd99df8dc2ad4792f2a0a34d15ccbefc33cd5f3c37efa7dc4a543a848e0",
+    "end_execution_state_root": "d94eb6f8de886c36dd6a1f987fca9d45a0e7e152b52cec76ec3cab0c5a7063b0"
+  },
+  "explorer": {
+    "url": "http://39.104.205.67:6632/v1/chain/explorer/overview",
+    "http_codes": [
+      200,
+      200
+    ],
+    "ok": true,
+    "node_id": "triad-testnet-storage",
+    "world_id": "oasis7-public-testnet-governed-20260606",
+    "latest_height_start": 1082,
+    "latest_height_end": 1083,
+    "committed_height_start": 1082,
+    "committed_height_end": 1083,
+    "network_committed_height_start": 1082,
+    "network_committed_height_end": 1083,
+    "start_block_hash": "1aa0eedfb7a5844331fd509bf595ebf4503e0bf0682db189f237c1d30b01b7e8",
+    "end_block_hash": "2f92add7c6c2a91994e47c280c5f21e4c56911b12660b6bbbba1f55401e554c7"
+  },
+  "faucet": {
+    "url": "http://39.104.204.172:6681/",
+    "http_codes": [
+      0,
+      0
+    ],
+    "reachable": false,
+    "error": "connection_failed"
+  },
+  "deployment_caveats": [
+    "Live node network_tier.status remains rehearsal.",
+    "Live node network_tier.required_gates still exposes the older 7-lane set including shared_devnet_pass, while repo current readiness uses the 11 active required lanes.",
+    "Faucet endpoint is not reachable in the fresh public sample window."
+  ],
+  "does_not_claim": [
+    "ready_for_live_candidate",
+    "public faucet is open",
+    "public validator onboarding open",
+    "mainnet-grade",
+    "production OC settlement"
+  ]
+}

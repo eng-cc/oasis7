@@ -48,11 +48,12 @@
   - 已把 local observer remediation 收口成 repo-owned sync 脚本与 operator evidence，避免继续依赖 `/opt` 手改。
   - 已补 `public_testnet` fresh governed bootstrap artifact set，可作为“四节点 testnet 从 0 重建”的起始真值，而不再依赖旧 live-candidate 恢复链路。
   - 已补当前 formal `public_testnet` 11 条 required-lane packet：`doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv` 与 `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`。该 packet 是完整 blocker matrix，不是 live promotion evidence。
+  - 已补 fresh public surface sample 与 governed reset-policy evidence：`public_rpc_ready`、`explorer_public_ready`、`reset_policy_announced` 现在可以按当前 evidence 记为 `pass`；`faucet_guard_ready` 因 fresh endpoint connection failed 收紧为 `block`。
   - 已明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不等于目标 test 环境；aggregate readiness 不再要求 `shared_devnet_pass`。
 - 当前缺口:
-  - formal `public_testnet` 仍不能进入 `ready_for_live_candidate`，因为当前 governed bootstrap manifest 仍是 rehearsal，且 2026-07-03 11 条 required-lane readiness 汇总仍为 `block`；新增 `same_world_hosted_entry_ready` 要求 hosted-login / launcher / viewer / pure API 指向同一个 formal `public_testnet` world state。
+  - formal `public_testnet` 仍不能进入 `ready_for_live_candidate`，因为当前 governed bootstrap manifest 仍是 rehearsal，且 2026-07-03 11 条 required-lane readiness 汇总仍为 `block`；当前 blocker 是 `faucet_guard_ready`、`runtime_bootstrap`、`world_resource_provenance_ready`、`provider_resource_provenance_ready`、`resource_delta_replay_ready`、`api_viewer_projection_ready`、`same_world_hosted_entry_ready`。
   - legacy shared-devnet triad 的历史恢复证据只作 provenance，不能作为当前目标 test 环境或 `public_testnet` readiness gate。
-  - mirrored candidate bundle/runtime drift guard、public endpoint/faucet/claims evidence 仍然有价值，但在 governed bootstrap 仍为 rehearsal、lanes 未形成正式全 pass 汇总前，只能证明“具备公开测试入口与边界控制”，不能把 formal `public_testnet` 提升到 `ready_for_live_candidate`。
+  - mirrored candidate bundle/runtime drift guard、fresh public RPC/explorer evidence、reset-policy/claims evidence 仍然有价值，但在 governed bootstrap 仍为 rehearsal、faucet 当前不可达、runtime/provenance/replay/viewer/hosted-entry lanes 未 pass 前，只能证明“部分公开测试入口与边界控制”，不能把 formal `public_testnet` 提升到 `ready_for_live_candidate`。
   - `mainnet` 仍停留在 `MAINNET-1~4` readiness planning / partial execution 前阶段，仓库当前只有 formal manifest + gate skeleton。
 
 ## 依赖
@@ -110,6 +111,9 @@
 - `doc/testing/evidence/public-testnet-governed-bootstrap-topology-2026-06-06.md`
 - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
 - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`
+- `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.json`
+- `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.md`
+- `doc/testing/evidence/public-testnet-governed-reset-policy-announcement-2026-07-03.md`
 - `doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
@@ -149,5 +153,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前第一阻断已经收敛到 formal `public_testnet` 自身的 11 条 required-lane readiness 的 pass evidence 补齐；2026-07-03 packet 已完整列出所有 required lanes，但当前汇总仍为 `block`。shared-devnet triad 运行态已在 2026-05-23 冷重建后恢复健康，但只作为 legacy/rehearsal evidence 追溯，不再作为目标 test 环境或必需 promotion gate。
+- 下一步: 当前 11 条 required-lane packet 已推进到 `4 pass / 0 partial / 7 block`；优先恢复 guarded faucet endpoint，并 realign live network-tier manifest surface 的 required gates 到当前 11-lane contract，然后继续补 runtime bootstrap、world/provider provenance、resource-delta replay、API/viewer projection 与 same-world hosted entry pass evidence。shared-devnet triad 运行态已在 2026-05-23 冷重建后恢复健康，但只作为 legacy/rehearsal evidence 追溯，不再作为目标 test 环境或必需 promotion gate。
 - 最近更新: 2026-07-03

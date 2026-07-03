@@ -2,7 +2,8 @@
 
 ## Meta
 - owner_role: `tpm` integration
-- task: GitHub issue #1846 / `task_c345e90f2bf24cfd9ae60b4d1f2756dd`
+- original_packet_task: GitHub issue #1846 / `task_c345e90f2bf24cfd9ae60b4d1f2756dd`
+- current_refresh_task: GitHub issue #1855 / `task_bb618bcf2fbe4a889bfa18f9927af90b`
 - scope: current formal `public_testnet` 11 required-lane packet
 - manifest: `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
 - lanes_tsv: `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
@@ -17,10 +18,10 @@ It does not promote `public_testnet` to `ready_for_live_candidate`. The packet i
 ## Current Lane Matrix
 | Lane | Status | Boundary |
 | --- | --- | --- |
-| `public_rpc_ready` | `partial` | Historical public RPC reachability exists, but no fresh July 2026 same-window pass after runtime drift. |
-| `explorer_public_ready` | `partial` | Historical explorer reachability exists, but freshness/world-state alignment is not current pass evidence. |
-| `faucet_guard_ready` | `partial` | Guard contract exists, but no fresh external claim after runtime drift/governed-bootstrap rehearsal status. |
-| `reset_policy_announced` | `partial` | Resettable/non-mainnet testnet boundary exists at tier/older-network level, but current governed 20260606 network needs a fresh announcement ref. |
+| `public_rpc_ready` | `pass` | Fresh governed public RPC samples returned `200` twice with `ok`, liveness/readiness/sync, and height `1082 -> 1083`. |
+| `explorer_public_ready` | `pass` | Fresh governed explorer samples returned `200` twice with matching world id and height `1082 -> 1083`. |
+| `faucet_guard_ready` | `block` | Fresh faucet samples failed to connect twice; no public-faucet-open claim is allowed. |
+| `reset_policy_announced` | `pass` | Current governed 20260606 resettable/non-mainnet policy is explicitly recorded. |
 | `runtime_bootstrap` | `block` | Local observer sync path exists, but remaining live-head catch-up and release/runtime drift prevent pass. |
 | `world_resource_provenance_ready` | `block` | Only cold-start placeholder/rehearsal world evidence exists; no current manifest/world/chain-bound pass. |
 | `provider_resource_provenance_ready` | `block` | No current provider resource manifest/delta compatibility evidence exists for governed `public_testnet`. |
@@ -31,10 +32,11 @@ It does not promote `public_testnet` to `ready_for_live_candidate`. The packet i
 
 ## Blocker Summary
 1. The governed-bootstrap manifest is still `status=rehearsal`.
-2. Current public endpoint/faucet evidence is historical and constrained by the 2026-05-22 freshness/runtime drift audit.
-3. The runtime lane remains blocked by live bootstrap/recovery drift rather than documentation absence.
-4. World/provider/resource-delta lanes do not have current pass evidence tied to the governed `public_testnet` manifest/world/chain identity.
-5. API/viewer and same-world hosted entry lanes do not have the required same-window JSON evidence.
+2. The fresh public surface sample shows RPC/explorer progress, but the faucet endpoint is unreachable.
+3. The live node still exposes the older 7-lane `network_tier.required_gates`, while repo readiness uses the current 11-lane contract.
+4. The runtime lane remains blocked by bootstrap/recovery and deployment-contract drift rather than public RPC reachability.
+5. World/provider/resource-delta lanes do not have current pass evidence tied to the governed `public_testnet` manifest/world/chain identity.
+6. API/viewer and same-world hosted entry lanes do not have the required same-window JSON evidence.
 
 ## Claim Boundary
 Allowed:
@@ -53,8 +55,8 @@ Denied:
 ## Next Pass Requirements
 To move this packet out of `block`, the next execution round must produce fresh evidence rather than reinterpret older artifacts:
 
-1. Fresh same-window public RPC / explorer / guarded faucet samples.
-2. Fresh governed-network reset-policy announcement ref for `oasis7-public-testnet-governed-20260606`.
+1. Restore and revalidate the guarded faucet endpoint for governed `public_testnet`.
+2. Redeploy or realign the live network-tier manifest surface so live `required_gates` matches the repo current 11-lane contract.
 3. Healthy governed runtime bootstrap from the current manifest/bundle/genesis/bootstrap peer set.
 4. Manifest/world/chain-bound world resource provenance evidence.
 5. Provider resource provenance and committed resource-delta replay evidence.
