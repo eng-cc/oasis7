@@ -19,7 +19,7 @@
 - 当前仓库已经具备：
   - `network_tier_manifest` schema / validate / smoke
   - `public_testnet` readiness review 脚本
-  - six-lane scaffold
+  - live-candidate lane scaffold
   - governed-bootstrap rehearsal evidence
 - 当前仓库还不具备：
   - live `public_testnet` public RPC/explorer/faucet/reset evidence
@@ -59,7 +59,7 @@
 ## 3. 硬阻断条件
 - manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或 governed-bootstrap evidence 尚未升级出 rehearsal 状态。
 - `release_candidate_bundle_ref` 不存在或不是当前候选版本真值。
-- 六条 lane 任一没有 owner 或 evidence ref。
+- live-candidate required lane 任一没有 owner 或 evidence ref。
 - 公开 RPC/explorer/faucet 仍是私网、单机 localhost 或 placeholder。
 - 本机 hosted-login 形态入口没有证明背后 chain/world state 已接入 formal `public_testnet`，或仍指向本地新建 execution world。
 - 任一 validator / observer 的同步证据来自手工复制 checkpoint、手工覆盖 `data/`、或 validator-to-validator 数据目录拷贝，而不是 runtime 自动 replication/head exchange 追平或 governed bootstrap runbook 的从零重建。
@@ -71,7 +71,7 @@
   - `public validator onboarding is open`
   - `production OC settlement`
 
-## 4. Six-Lane Checklist
+## 4. Live-Candidate Lane Checklist
 | Lane | Owner | 必须证明什么 | 最小 evidence |
 | --- | --- | --- | --- |
 | `public_rpc_ready` | `runtime_engineer` | 公网 RPC 已可访问，且不是 placeholder/private-only endpoint | public URL + runtime status / health snapshot |
@@ -79,6 +79,11 @@
 | `faucet_guard_ready` | `liveops_community` | faucet 存在且带 guard，不是无限制开放发放 | faucet policy / rate-limit / operator guard evidence |
 | `reset_policy_announced` | `producer_system_designer` | 对外已明确这是 resettable `public_testnet`，不承诺 mainnet 价值稳定性 | public reset-policy announcement ref |
 | `runtime_bootstrap` | `runtime_engineer` | 候选 bundle、genesis、bootstrap peers 与 runtime bootstrap 路径都可真实启动 | bootstrap rehearsal evidence / startup summary |
+| `world_resource_provenance_ready` | `blockchain_ops_engineer` | world resource provenance 与 manifest/world/chain identity 绑定，且不是临时口头说明 | world resource provenance evidence |
+| `provider_resource_provenance_ready` | `agent_engineer` | provider resource manifest / delta schema 与当前 world resource contract 兼容 | provider resource provenance evidence |
+| `resource_delta_replay_ready` | `runtime_engineer` | resource delta 可从 committed runtime evidence replay，且 provisional resource 不会被当成 live truth | resource delta replay evidence |
+| `api_viewer_projection_ready` | `viewer_engineer` | API 与 viewer 在同一时间窗看到同一 world-state projection | JSON evidence with same-window API/viewer projection refs |
+| `same_world_hosted_entry_ready` | `viewer_engineer` | hosted-login / launcher / viewer / pure API 指向同一个 formal `public_testnet` world state，且未依赖手工 checkpoint/data copy | JSON evidence with `oasis7.same_world_hosted_entry.v1` |
 | `claims_boundary_review` | `qa_engineer` | 对外 claims 已过审，不会把 preview/testnet 说成 production/mainnet | claims review note / QA verdict / denied-claims evidence |
 
 ## 5. 推荐执行顺序
@@ -92,7 +97,7 @@
 4. 跑 runtime bootstrap rehearsal，留下 bundle/genesis/bootstrap peer 对账证据。
 5. 若要暴露本机 hosted-login 形态入口，先确认本机节点已健康接入 testnet 网络，再确认 hosted-login / launcher / viewer / pure API 读取的是该节点的 testnet world state；节点健康是必要条件，但不是充分条件。
 6. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
-7. 把六条 lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
+7. 把全部 required lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
 
 ## 6. Canonical Commands
 ```bash
@@ -147,7 +152,7 @@
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
 - 当前仍不能宣称 `ready_for_live_candidate`：
   - governed bootstrap manifest 仍是 `status=rehearsal`
-  - six-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
+  - required-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
   - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
 - 当前 example manifest 仍只能作为 skeleton/template 使用：
   - `network_id=oasis7-public-testnet-example`
@@ -173,7 +178,7 @@
 - lane evidence 文档与 TSV
 
 ## 10. 收口标准
-- 只有当 six-lane TSV 全部为 `pass`，且 evidence 都不是 template / placeholder / private-only ref，`public_testnet` readiness review 才允许输出 `ready_for_live_candidate`。
+- 只有当 required-lane TSV 全部为 `pass`，且 evidence 都不是 template / placeholder / private-only ref，`public_testnet` readiness review 才允许输出 `ready_for_live_candidate`。
 - 在此之前，producer / QA / liveops 必须继续维持：
   - `not_ready_for_live_candidate`
   - `rehearsal_or_skeleton_only`

@@ -73,6 +73,11 @@ if tier == "public_testnet":
         "faucet_guard_ready",
         "reset_policy_announced",
         "runtime_bootstrap",
+        "world_resource_provenance_ready",
+        "provider_resource_provenance_ready",
+        "resource_delta_replay_ready",
+        "api_viewer_projection_ready",
+        "same_world_hosted_entry_ready",
         "claims_boundary_review",
     }
     summary["exit_review_readiness"] = "ready_for_rehearsal_review" if required.issubset(set(gates)) else "missing_required_public_testnet_gates"

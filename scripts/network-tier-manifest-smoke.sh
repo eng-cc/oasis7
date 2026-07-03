@@ -28,6 +28,9 @@ provider_resource_provenance_evidence="$tmpdir/provider-resource-provenance-read
 resource_delta_replay_evidence="$tmpdir/resource-delta-replay-ready.md"
 api_viewer_projection_evidence="$tmpdir/api-viewer-projection-ready.md"
 api_viewer_projection_vacuous_evidence="$tmpdir/api-viewer-projection-vacuous.json"
+same_world_hosted_entry_evidence="$tmpdir/same-world-hosted-entry-ready.json"
+same_world_hosted_entry_invalid_evidence="$tmpdir/same-world-hosted-entry-invalid.json"
+same_world_hosted_entry_mismatch_evidence="$tmpdir/same-world-hosted-entry-mismatch.json"
 old_skeleton_evidence="$tmpdir/public-testnet-skeleton-example.md"
 legacy_coarse_gate_evidence="$tmpdir/public-testnet-rehearsal-coarse-gate.md"
 
@@ -146,6 +149,99 @@ cat >"$api_viewer_projection_vacuous_evidence" <<'EOF'
 }
 EOF
 
+cat >"$same_world_hosted_entry_evidence" <<'EOF'
+{
+  "evidence_schema": "oasis7.same_world_hosted_entry.v1",
+  "status": "pass",
+  "same_window_required": true,
+  "network_tier": {
+    "tier": "public_testnet",
+    "network_id": "oasis7-public-testnet-smoke",
+    "chain_id": "oasis7-public-testnet-smoke",
+    "world_id": "oasis7-public-testnet-smoke-world"
+  },
+  "manifest_ref": "MANIFEST_PATH",
+  "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+  "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt",
+  "chain_status_samples_ref": "output/public-testnet/chain-status.json",
+  "hosted_entry_ref": "output/hosted-public-join/url.txt",
+  "launcher_config_ref": "output/launcher/public-testnet-config.json",
+  "viewer_config_ref": "output/viewer/public-testnet-config.json",
+  "pure_api_config_ref": "output/api/public-testnet-config.json",
+  "node_joined_public_testnet": true,
+  "height_progressing": true,
+  "hosted_entry_reads_same_world_state": true,
+  "manual_checkpoint_or_data_copy_used": false,
+  "does_not_claim": [
+    "mainnet-grade",
+    "production OC settlement",
+    "public validator onboarding open"
+  ]
+}
+EOF
+
+cat >"$same_world_hosted_entry_invalid_evidence" <<'EOF'
+{
+  "evidence_schema": "oasis7.same_world_hosted_entry.v1",
+  "status": "pass",
+  "same_window_required": true,
+  "network_tier": {
+    "tier": "public_testnet",
+    "network_id": "oasis7-public-testnet-smoke",
+    "chain_id": "oasis7-public-testnet-smoke",
+    "world_id": "oasis7-public-testnet-smoke-world"
+  },
+  "manifest_ref": "MANIFEST_PATH",
+  "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+  "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt",
+  "chain_status_samples_ref": "output/public-testnet/chain-status.json",
+  "hosted_entry_ref": "output/hosted-public-join/url.txt",
+  "launcher_config_ref": "output/launcher/public-testnet-config.json",
+  "viewer_config_ref": "output/viewer/public-testnet-config.json",
+  "pure_api_config_ref": "output/api/public-testnet-config.json",
+  "node_joined_public_testnet": true,
+  "height_progressing": true,
+  "hosted_entry_reads_same_world_state": false,
+  "manual_checkpoint_or_data_copy_used": false,
+  "does_not_claim": [
+    "mainnet-grade",
+    "production OC settlement",
+    "public validator onboarding open"
+  ]
+}
+EOF
+
+cat >"$same_world_hosted_entry_mismatch_evidence" <<'EOF'
+{
+  "evidence_schema": "oasis7.same_world_hosted_entry.v1",
+  "status": "pass",
+  "same_window_required": true,
+  "network_tier": {
+    "tier": "public_testnet",
+    "network_id": "oasis7-other-public-testnet",
+    "chain_id": "oasis7-public-testnet-smoke",
+    "world_id": "oasis7-public-testnet-smoke-world"
+  },
+  "manifest_ref": "MANIFEST_PATH",
+  "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+  "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt",
+  "chain_status_samples_ref": "output/public-testnet/chain-status.json",
+  "hosted_entry_ref": "output/hosted-public-join/url.txt",
+  "launcher_config_ref": "output/launcher/public-testnet-config.json",
+  "viewer_config_ref": "output/viewer/public-testnet-config.json",
+  "pure_api_config_ref": "output/api/public-testnet-config.json",
+  "node_joined_public_testnet": true,
+  "height_progressing": true,
+  "hosted_entry_reads_same_world_state": true,
+  "manual_checkpoint_or_data_copy_used": false,
+  "does_not_claim": [
+    "mainnet-grade",
+    "production OC settlement",
+    "public validator onboarding open"
+  ]
+}
+EOF
+
 cat >"$legacy_coarse_gate_evidence" <<'EOF'
 # public testnet rehearsal coarse gate evidence
 
@@ -188,6 +284,7 @@ EOF
   --require-gate provider_resource_provenance_ready \
   --require-gate resource_delta_replay_ready \
   --require-gate api_viewer_projection_ready \
+  --require-gate same_world_hosted_entry_ready \
   --require-gate claims_boundary_review \
   --allowed-claim public_testnet \
   --denied-claim mainnet_live \
@@ -204,6 +301,7 @@ world_resource_provenance_ready	blockchain_ops_engineer	partial	doc/testing/temp
 provider_resource_provenance_ready	agent_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder provider resource provenance evidence
 resource_delta_replay_ready	runtime_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder resource delta replay evidence
 api_viewer_projection_ready	viewer_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder api/viewer projection evidence
+same_world_hosted_entry_ready	viewer_engineer	partial	doc/testing/templates/public-testnet-skeleton-evidence.example.md	placeholder same-world hosted entry evidence
 claims_boundary_review	qa_engineer	partial	doc/testing/templates/public-testnet-exit-review-template.md	template claims evidence
 EOF
 
@@ -217,6 +315,7 @@ world_resource_provenance_ready	blockchain_ops_engineer	pass	WORLD_RESOURCE_PROV
 provider_resource_provenance_ready	agent_engineer	pass	PROVIDER_RESOURCE_PROVENANCE_EVIDENCE	provider resource provenance ready
 resource_delta_replay_ready	runtime_engineer	pass	RESOURCE_DELTA_REPLAY_EVIDENCE	resource delta replay ready
 api_viewer_projection_ready	viewer_engineer	pass	API_VIEWER_PROJECTION_EVIDENCE	api/viewer projection ready
+same_world_hosted_entry_ready	viewer_engineer	pass	SAME_WORLD_HOSTED_ENTRY_EVIDENCE	same-world hosted entry ready
 claims_boundary_review	qa_engineer	pass	CLAIMS_BOUNDARY_EVIDENCE	claims boundary reviewed
 EOF
 
@@ -229,6 +328,7 @@ replace_literal "$ready_lanes_tsv" "WORLD_RESOURCE_PROVENANCE_EVIDENCE" "$world_
 replace_literal "$ready_lanes_tsv" "PROVIDER_RESOURCE_PROVENANCE_EVIDENCE" "$provider_resource_provenance_evidence"
 replace_literal "$ready_lanes_tsv" "RESOURCE_DELTA_REPLAY_EVIDENCE" "$resource_delta_replay_evidence"
 replace_literal "$ready_lanes_tsv" "API_VIEWER_PROJECTION_EVIDENCE" "$api_viewer_projection_evidence"
+replace_literal "$ready_lanes_tsv" "SAME_WORLD_HOSTED_ENTRY_EVIDENCE" "$same_world_hosted_entry_evidence"
 replace_literal "$ready_lanes_tsv" "CLAIMS_BOUNDARY_EVIDENCE" "$claims_boundary_evidence"
 cp "$ready_lanes_tsv" "$runtime_block_lanes_tsv"
 replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer\tpass\t' $'runtime_bootstrap\truntime_engineer\tblock\t'
@@ -239,16 +339,19 @@ replace_literal "$runtime_block_lanes_tsv" $'runtime_bootstrap\truntime_engineer
 ./scripts/network-tier-manifest.sh validate --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
 ./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-public-testnet.example.json >/dev/null
 ./scripts/network-tier-exit-review.sh --manifest doc/testing/templates/network-tier-mainnet.example.json >/dev/null
+./scripts/network-tier-exit-review.sh --manifest "$manifest_path" >"$tmpdir/exit-review-public-testnet.json"
+jq -e '.exit_review_readiness == "ready_for_rehearsal_review" and (.required_gates | index("same_world_hosted_entry_ready"))' \
+  "$tmpdir/exit-review-public-testnet.json" >/dev/null
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json \
   --out-dir "$out_dir/example-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 10' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 11' \
   "$(latest_summary "$out_dir/example-skeleton")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/smoke-skeleton" >/dev/null
-jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 10' \
+jq -e '.readiness_verdict == "specified_skeleton_only" and (.missing_required_lanes | length) == 11' \
   "$(latest_summary "$out_dir/smoke-skeleton")/summary.json" >/dev/null
 
 python3 - <<'PY' "$manifest_path"
@@ -264,10 +367,14 @@ data["endpoint_policy"]["faucet_ref"] = "https://public-testnet-live-candidate.o
 path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 PY
 
+replace_literal "$same_world_hosted_entry_evidence" "MANIFEST_PATH" "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$manifest_path")"
+replace_literal "$same_world_hosted_entry_invalid_evidence" "MANIFEST_PATH" "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$manifest_path")"
+replace_literal "$same_world_hosted_entry_mismatch_evidence" "MANIFEST_PATH" "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$manifest_path")"
+
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --out-dir "$out_dir/no-lanes-block" >/dev/null
-jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 10' \
+jq -e '.readiness_verdict == "block" and (.missing_required_lanes | length) == 11' \
   "$(latest_summary "$out_dir/no-lanes-block")/summary.json" >/dev/null
 
 ./scripts/network-tier-public-testnet-readiness.sh \
@@ -344,6 +451,28 @@ if ./scripts/network-tier-public-testnet-readiness.sh \
 fi
 grep -q "api_viewer_projection_ready" "$tmpdir/api-viewer-vacuous-pass.stderr"
 
+cp "$ready_lanes_tsv" "$old_skeleton_pass_lanes_tsv"
+replace_literal "$old_skeleton_pass_lanes_tsv" "$same_world_hosted_entry_evidence" "$same_world_hosted_entry_invalid_evidence"
+if ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$old_skeleton_pass_lanes_tsv" \
+  --out-dir "$out_dir/same-world-hosted-entry-invalid-pass-rejected" >"$tmpdir/same-world-hosted-entry-invalid-pass.stdout" 2>"$tmpdir/same-world-hosted-entry-invalid-pass.stderr"; then
+  echo "expected same-world hosted entry invalid pass evidence to be rejected" >&2
+  exit 1
+fi
+grep -q "same_world_hosted_entry_ready hosted_entry_reads_same_world_state must be true" "$tmpdir/same-world-hosted-entry-invalid-pass.stderr"
+
+cp "$ready_lanes_tsv" "$old_skeleton_pass_lanes_tsv"
+replace_literal "$old_skeleton_pass_lanes_tsv" "$same_world_hosted_entry_evidence" "$same_world_hosted_entry_mismatch_evidence"
+if ./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest "$manifest_path" \
+  --lanes-tsv "$old_skeleton_pass_lanes_tsv" \
+  --out-dir "$out_dir/same-world-hosted-entry-mismatch-pass-rejected" >"$tmpdir/same-world-hosted-entry-mismatch-pass.stdout" 2>"$tmpdir/same-world-hosted-entry-mismatch-pass.stderr"; then
+  echo "expected same-world hosted entry manifest mismatch pass evidence to be rejected" >&2
+  exit 1
+fi
+grep -q "same_world_hosted_entry_ready network_tier.network_id must match manifest" "$tmpdir/same-world-hosted-entry-mismatch-pass.stderr"
+
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest "$manifest_path" \
   --lanes-tsv "$ready_lanes_tsv" \
@@ -364,6 +493,7 @@ jq -e '.readiness_verdict == "ready_for_live_candidate" and .live_candidate_allo
   "$(latest_summary "$out_dir/legacy-extra-lane-ignored")/summary.json" >/dev/null
 
 cp "$manifest_path" "$legacy_gate_manifest_path"
+replace_literal "$same_world_hosted_entry_evidence" "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$manifest_path")" "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$legacy_gate_manifest_path")"
 python3 - <<'PY' "$legacy_gate_manifest_path"
 import json
 import pathlib
