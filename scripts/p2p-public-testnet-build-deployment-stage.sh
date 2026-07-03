@@ -309,6 +309,7 @@ cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
 ./scripts/p2p-build-governed-bootstrap-world.sh create \
   --genesis "$genesis_path" \
   --out-dir "$out_dir/generated-world" \
+  --world-scenario asteroid_fragment_bootstrap \
   --allow-overwrite >/dev/null
 
 python3 - "$deployment_truth_md" "$runtime_build_ref" "$bootstrap_out" "${validator_specs[@]}" <<'PY'
@@ -329,6 +330,8 @@ content = f"""# Deployment Truth
 
 - Runtime build: `{runtime_build_ref}`
 - Bootstrap peers file: `{bootstrap_peers_file}`
+- Generated map sidecar: `generated-world/generated-scenario-world`
+- Generated map provenance: `generated-world/world-generation-provenance.json`
 - Validator signer truth:
 {chr(10).join(validator_lines)}
 """
@@ -341,6 +344,8 @@ PY
   --track "$track" \
   --runtime-build-ref "$runtime_build_ref" \
   --world-snapshot-ref "$out_dir/generated-world/world" \
+  --generated-world-sidecar-ref "$out_dir/generated-world/generated-scenario-world" \
+  --world-generation-provenance-ref "$out_dir/generated-world/world-generation-provenance.json" \
   --governance-manifest-ref "$registry_path" \
   --evidence-ref "$deployment_truth_md" \
   --note "Deployment-only bundle derived from current validator signer truth." \
@@ -370,6 +375,8 @@ payload.setdefault("runtime_refs", {})
 payload["runtime_refs"]["release_candidate_bundle_ref"] = bundle_path.name
 payload["runtime_refs"]["genesis_ref"] = genesis_path.name
 payload["runtime_refs"]["bootstrap_peer_ref"] = bootstrap_path.name
+payload["runtime_refs"]["generated_world_sidecar_ref"] = "generated-world/generated-scenario-world"
+payload["runtime_refs"]["world_generation_provenance_ref"] = "generated-world/world-generation-provenance.json"
 payload.setdefault("validator_policy", {})
 payload["validator_policy"]["target_validator_count"] = len(registry.get("validators", []))
 manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")

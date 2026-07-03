@@ -10,7 +10,11 @@ fn commit_single_authoritative_batch(
 
     let mut mapped_events = Vec::new();
     for runtime_event in &server.world.journal().events[journal_start..] {
-        mapped_events.push(map_runtime_event(runtime_event, &server.snapshot_config));
+        mapped_events.push(map_runtime_event(
+            runtime_event,
+            &server.snapshot_config,
+            server.seed_model.as_ref(),
+        ));
     }
     mapped_events.extend(server.pending_virtual_events.drain(..));
 

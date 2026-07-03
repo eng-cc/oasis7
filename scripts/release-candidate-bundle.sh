@@ -20,6 +20,10 @@ Create options:
   --track <name>                     Intended track: public_testnet_rehearsal|staging|canary
   --runtime-build-ref <path>         Runtime build artifact path/ref (required)
   --world-snapshot-ref <path>        World snapshot path/ref (required)
+  --generated-world-sidecar-ref <path>
+                                      Generated simulator map sidecar path/ref
+  --world-generation-provenance-ref <path>
+                                      Generated map provenance path/ref
   --governance-manifest-ref <path>   Governance manifest path/ref (required)
   --evidence-ref <path>              Evidence path/ref; repeatable
   --note <text>                      Free-form note; repeatable
@@ -58,6 +62,8 @@ track="public_testnet_rehearsal"
 bundle_path=""
 runtime_build_ref=""
 world_snapshot_ref=""
+generated_world_sidecar_ref=""
+world_generation_provenance_ref=""
 governance_manifest_ref=""
 allow_dirty_worktree=0
 check_git_head=0
@@ -85,6 +91,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --world-snapshot-ref)
       world_snapshot_ref=${2:-}
+      shift 2
+      ;;
+    --generated-world-sidecar-ref)
+      generated_world_sidecar_ref=${2:-}
+      shift 2
+      ;;
+    --world-generation-provenance-ref)
+      world_generation_provenance_ref=${2:-}
       shift 2
       ;;
     --governance-manifest-ref)
@@ -361,8 +375,20 @@ def check_ref(label: str, payload: dict) -> None:
     else:
         raise SystemExit(f"{label} unsupported kind: {payload['kind']}")
 
-for label in ("runtime_build", "world_snapshot", "governance_manifest"):
+for label in (
+    "runtime_build",
+    "world_snapshot",
+    "governance_manifest",
+):
     check_ref(label, bundle[label])
+
+if ("generated_world_sidecar" in bundle) != ("world_generation_provenance" in bundle):
+    raise SystemExit(
+        "bundle generated sidecar metadata must include both generated_world_sidecar and world_generation_provenance"
+    )
+for label in ("generated_world_sidecar", "world_generation_provenance"):
+    if label in bundle:
+        check_ref(label, bundle[label])
 
 for index, item in enumerate(bundle.get("evidence_refs", []), start=1):
     if "ref" not in item or "resolved_path" not in item:
@@ -397,6 +423,12 @@ case "$mode" in
     require_non_empty "--governance-manifest-ref" "$governance_manifest_ref"
     ensure_existing_path "--runtime-build-ref" "$runtime_build_ref"
     ensure_existing_path "--world-snapshot-ref" "$world_snapshot_ref"
+    if [[ -n "$generated_world_sidecar_ref" || -n "$world_generation_provenance_ref" ]]; then
+      require_non_empty "--generated-world-sidecar-ref" "$generated_world_sidecar_ref"
+      require_non_empty "--world-generation-provenance-ref" "$world_generation_provenance_ref"
+      ensure_existing_path "--generated-world-sidecar-ref" "$generated_world_sidecar_ref"
+      ensure_existing_path "--world-generation-provenance-ref" "$world_generation_provenance_ref"
+    fi
     ensure_existing_path "--governance-manifest-ref" "$governance_manifest_ref"
 
     if [[ "$allow_dirty_worktree" -eq 0 ]]; then
@@ -412,6 +444,14 @@ case "$mode" in
 
     runtime_build_meta=$(path_metadata_json "$runtime_build_ref")
     world_snapshot_meta=$(path_metadata_json "$world_snapshot_ref")
+    generated_world_sidecar_meta="null"
+    world_generation_provenance_meta="null"
+    if [[ -n "$generated_world_sidecar_ref" ]]; then
+      generated_world_sidecar_meta=$(path_metadata_json "$generated_world_sidecar_ref")
+    fi
+    if [[ -n "$world_generation_provenance_ref" ]]; then
+      world_generation_provenance_meta=$(path_metadata_json "$world_generation_provenance_ref")
+    fi
     governance_manifest_meta=$(path_metadata_json "$governance_manifest_ref")
 
     evidence_json="[]"
@@ -439,6 +479,8 @@ case "$mode" in
       --arg repo_root "$repo_root" \
       --argjson runtime_build "$runtime_build_meta" \
       --argjson world_snapshot "$world_snapshot_meta" \
+      --argjson generated_world_sidecar "$generated_world_sidecar_meta" \
+      --argjson world_generation_provenance "$world_generation_provenance_meta" \
       --argjson governance_manifest "$governance_manifest_meta" \
       --argjson evidence_refs "$evidence_json" \
       --argjson notes "$notes_json" \
@@ -452,10 +494,12 @@ case "$mode" in
         git_worktree_dirty: $git_worktree_dirty,
         runtime_build: $runtime_build,
         world_snapshot: $world_snapshot,
+        generated_world_sidecar: $generated_world_sidecar,
+        world_generation_provenance: $world_generation_provenance,
         governance_manifest: $governance_manifest,
         evidence_refs: $evidence_refs,
         notes: $notes
-      }' >"$bundle_path"
+      } | with_entries(select(.value != null))' >"$bundle_path"
     echo "release candidate bundle: $bundle_path"
     ;;
   validate)

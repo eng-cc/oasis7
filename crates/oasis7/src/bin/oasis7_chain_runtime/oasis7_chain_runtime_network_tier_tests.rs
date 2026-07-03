@@ -13,14 +13,21 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+static TEST_TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(label: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("oasis7-chain-runtime-{label}-{nonce}"));
+    let count = TEST_TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!(
+        "oasis7-chain-runtime-{label}-{}-{nonce}-{count}",
+        std::process::id()
+    ));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }
@@ -37,6 +44,57 @@ fn current_test_binary_sha256() -> String {
     sha256_hex(current_bytes.as_slice())
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TestDirTreeMeta {
+    sha256_tree: String,
+    file_count: u64,
+    total_bytes: u64,
+}
+
+fn test_dir_tree_meta(path: &std::path::Path) -> TestDirTreeMeta {
+    let mut files = Vec::new();
+    collect_test_files(path, &mut files);
+    files.sort();
+
+    let mut combined = Sha256::new();
+    let mut total_bytes = 0_u64;
+    for file in files.iter() {
+        let rel = file
+            .strip_prefix(path)
+            .expect("file under tree")
+            .to_string_lossy()
+            .replace('\\', "/");
+        let bytes = fs::read(file).expect("read tree file");
+        let digest = sha256_hex(bytes.as_slice());
+        let size = bytes.len() as u64;
+        combined.update(rel.as_bytes());
+        combined.update(b"\0");
+        combined.update(digest.as_bytes());
+        combined.update(b"\0");
+        combined.update(size.to_string().as_bytes());
+        combined.update(b"\n");
+        total_bytes += size;
+    }
+
+    TestDirTreeMeta {
+        sha256_tree: hex::encode(combined.finalize()),
+        file_count: files.len() as u64,
+        total_bytes,
+    }
+}
+
+fn collect_test_files(path: &std::path::Path, files: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(path).expect("read tree dir") {
+        let entry = entry.expect("read tree entry");
+        let child = entry.path();
+        if child.is_dir() {
+            collect_test_files(child.as_path(), files);
+        } else if child.is_file() {
+            files.push(child);
+        }
+    }
+}
+
 fn write_test_network_tier_manifest(runtime_sha256: &str) -> (PathBuf, PathBuf) {
     write_test_network_tier_manifest_for_tier(runtime_sha256, "public_testnet")
 }
@@ -49,6 +107,22 @@ fn write_test_network_tier_manifest_for_tier(
     let peers_path = dir.join("bootstrap.txt");
     let genesis_path = dir.join("genesis.json");
     let bundle_path = dir.join("public-testnet.bundle.json");
+    let sidecar_dir = dir.join("generated-scenario-world");
+    let provenance_path = dir.join("world-generation-provenance.json");
+    fs::create_dir_all(&sidecar_dir).expect("create generated sidecar dir");
+    fs::write(sidecar_dir.join("snapshot.json"), "{}\n").expect("write sidecar snapshot");
+    fs::write(sidecar_dir.join("journal.json"), "{}\n").expect("write sidecar journal");
+    fs::write(
+        &provenance_path,
+        r#"{"scenario_id":"asteroid_fragment_bootstrap"}"#,
+    )
+    .expect("write sidecar provenance");
+    let sidecar_meta = test_dir_tree_meta(sidecar_dir.as_path());
+    let provenance_sha256 = sha256_hex(
+        fs::read(&provenance_path)
+            .expect("read provenance")
+            .as_slice(),
+    );
     fs::write(
         &peers_path,
         "/ip4/127.0.0.1/tcp/4100\n/dns4/bootstrap.example/tcp/4101\n",
@@ -61,8 +135,26 @@ fn write_test_network_tier_manifest_for_tier(
             r#"{{
   "runtime_build": {{
     "sha256": "{runtime_sha256}"
+  }},
+  "generated_world_sidecar": {{
+    "kind": "directory",
+    "resolved_path": "{}",
+    "sha256_tree": "{}",
+    "file_count": {},
+    "total_bytes": {}
+  }},
+  "world_generation_provenance": {{
+    "kind": "file",
+    "resolved_path": "{}",
+    "sha256": "{}"
   }}
-}}"#
+}}"#,
+            sidecar_dir.display(),
+            sidecar_meta.sha256_tree,
+            sidecar_meta.file_count,
+            sidecar_meta.total_bytes,
+            provenance_path.display(),
+            provenance_sha256,
         ),
     )
     .expect("write bundle");
@@ -1080,121 +1172,7 @@ fn mainnet_sync_lag_stalls_after_policy_window() {
     let _ = fs::remove_dir_all(dir);
 }
 
-#[test]
-fn mainnet_validator_relay_policy_requires_governed_redundancy_and_surfaces_slashing_boundary() {
-    let runtime_sha256 = current_test_binary_sha256();
-    let (dir, manifest_path) =
-        write_test_network_tier_manifest_for_tier(runtime_sha256.as_str(), "mainnet");
-    let loaded = LoadedNetworkTierManifest::load(manifest_path.as_path()).expect("load manifest");
-    let mut consensus = NodeConsensusSnapshot::default();
-    consensus.committed_height = 10;
-    consensus.network_committed_height = 10;
-    consensus.replication_persisted_height = 10;
-    consensus.known_peer_heads = 2;
-    consensus.validator_stakes = BTreeMap::from([
-        ("validator-b".to_string(), 40),
-        ("validator-c".to_string(), 34),
-    ]);
-    consensus.required_stake = 67;
-    consensus.total_stake = 100;
-    add_test_stake_proof_chain(&mut consensus);
-    consensus.peer_heads = vec![
-        peer_head("node-b", Some("validator-b"), 10, i64::MAX),
-        peer_head("node-c", Some("validator-c"), 10, i64::MAX),
-    ];
-    let snapshot = NodeSnapshot {
-        node_id: "validator-a".to_string(),
-        player_id: "player-a".to_string(),
-        world_id: "mainnet-a".to_string(),
-        role: NodeRole::Sequencer,
-        replication_enabled: true,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: Some(1_700_000_000_000),
-        consensus,
-        last_error: None,
-    };
-    let mut p2p = public_p2p_status();
-    p2p.detected_reachability = None;
-    p2p.autonat_status = "unknown".to_string();
-    p2p.public_port_reachability = "unknown".to_string();
-    p2p.observed_public_addr = None;
-    p2p.confirmed_external_direct_addrs = Vec::new();
-    p2p.relay_available = true;
-    let policy = super::status_payload::readiness_policy(&snapshot, Some(&loaded));
-    let network_head = super::status_payload::build_network_head_status(
-        &snapshot,
-        1_700_000_000_000,
-        Some(&loaded),
-    );
-    let status = super::status_payload::build_chain_node_observability_status(
-        &snapshot,
-        &minimal_storage_metrics(),
-        &minimal_reward_metrics(),
-        &replication_with_active_peers(1),
-        &network_head,
-        &p2p,
-        &policy,
-        1_700_000_000_000,
-    );
-
-    assert_eq!(policy.relay_policy, "public_direct_or_governed_relay");
-    assert_eq!(policy.slashing_policy, "evidence_only_readiness_gate");
-    assert!(!policy.slashing_enforced);
-    assert!(!status.reachability_policy_ok);
-    assert!(
-        status
-            .alerts
-            .iter()
-            .any(|alert| alert.code == "p2p_reachability_degraded")
-    );
-    assert!(
-        status
-            .alerts
-            .iter()
-            .any(|alert| alert.code == "mainnet_slashing_evidence_only")
-    );
-
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_mismatches_current_binary()
-{
-    let (dir, manifest_path) = write_test_network_tier_manifest(
-        "0000000000000000000000000000000000000000000000000000000000000000",
-    );
-    let err = parse_options(
-        [
-            "--network-tier-manifest",
-            manifest_path.to_string_lossy().as_ref(),
-        ]
-        .into_iter(),
-    )
-    .expect_err("parse should fail on runtime bundle drift");
-    assert!(
-        err.contains("network tier runtime bundle hash mismatch"),
-        "unexpected mismatch error: {err}"
-    );
-
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
-fn parse_options_rejects_network_tier_manifest_when_runtime_bundle_hash_is_malformed() {
-    let (dir, manifest_path) = write_test_network_tier_manifest("not-a-sha256");
-    let err = parse_options(
-        [
-            "--network-tier-manifest",
-            manifest_path.to_string_lossy().as_ref(),
-        ]
-        .into_iter(),
-    )
-    .expect_err("parse should fail on malformed runtime bundle hash");
-    assert!(
-        err.contains("invalid runtime_build.sha256"),
-        "unexpected malformed hash error: {err}"
-    );
-
-    let _ = fs::remove_dir_all(dir);
-}
+#[path = "oasis7_chain_runtime_network_tier_generated_world_tests.rs"]
+mod generated_world_tests;
+#[path = "oasis7_chain_runtime_network_tier_mainnet_policy_tests.rs"]
+mod mainnet_policy_tests;

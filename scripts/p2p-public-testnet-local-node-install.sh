@@ -234,11 +234,28 @@ def copy_if_file(source: Path, target: Path) -> None:
         shutil.copy2(source, target)
 
 
+def copy_tree(source: Path, target: Path) -> None:
+    if source.resolve() == target.resolve():
+        return
+    if target.exists():
+        shutil.rmtree(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, target)
+
+
 def resolve_ref(manifest_path: Path, raw_ref: str) -> Path:
     candidate = Path(raw_ref).expanduser()
     if candidate.is_absolute():
         return candidate
-    return manifest_path.parent / candidate
+    candidates = [
+        manifest_path.parent / candidate,
+        manifest_path.parent.parent / candidate,
+        Path.cwd() / candidate,
+    ]
+    for item in candidates:
+        if item.exists():
+            return item
+    return candidates[0]
 
 
 env_values = parse_env(source_env)
@@ -263,6 +280,23 @@ for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref")
     target = node_root / source.name
     copy_if_file(source, target)
     runtime_refs[key] = target.name
+
+for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
+    raw_ref = runtime_refs.get(key)
+    if not raw_ref:
+        continue
+    source = resolve_ref(source_manifest, str(raw_ref)).resolve()
+    if key == "generated_world_sidecar_ref":
+        if not source.is_dir():
+            raise SystemExit(f"manifest runtime ref source missing: {source}")
+        target = node_root / str(raw_ref)
+        copy_tree(source, target)
+    else:
+        if not source.is_file():
+            raise SystemExit(f"manifest runtime ref source missing: {source}")
+        target = node_root / str(raw_ref)
+        copy_if_file(source, target)
+    runtime_refs[key] = str(raw_ref)
 
 genesis_ref = runtime_refs.get("genesis_ref")
 if genesis_ref:
@@ -292,6 +326,18 @@ runtime_build["resolved_path"] = str(runtime_bin)
 runtime_build["sha256"] = runtime_sha
 runtime_build["size_bytes"] = runtime_bin.stat().st_size
 runtime_build["updated_by"] = "p2p-public-testnet-local-node-install dedicated local node artifact"
+
+sidecar_ref = runtime_refs.get("generated_world_sidecar_ref")
+if sidecar_ref and isinstance(bundle.get("generated_world_sidecar"), dict):
+    sidecar_path = node_root / str(sidecar_ref)
+    bundle["generated_world_sidecar"]["ref"] = str(sidecar_ref)
+    bundle["generated_world_sidecar"]["resolved_path"] = str(sidecar_path)
+provenance_ref = runtime_refs.get("world_generation_provenance_ref")
+if provenance_ref and isinstance(bundle.get("world_generation_provenance"), dict):
+    provenance_path = node_root / str(provenance_ref)
+    bundle["world_generation_provenance"]["ref"] = str(provenance_ref)
+    bundle["world_generation_provenance"]["resolved_path"] = str(provenance_path)
+
 bundle_path.write_text(json.dumps(bundle, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 
 (node_root / "manifest.json").write_text(

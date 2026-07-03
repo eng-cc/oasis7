@@ -107,6 +107,11 @@ grep -q 'remote_optional_resolved_env_value.*REPLICATION_ROOT' scripts/p2p-publi
 grep -q 'remote_replication_root="$remote_stack_root/output/node-distfs/$remote_node_id"' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root"' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'generated_world_sidecar_ref' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'world_generation_provenance_ref' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'target_ref = os.path.basename(os.path.normpath(ref)) if os.path.isabs(ref) else ref' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'ref source and localized target must differ' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'bundle\["generated_world_sidecar"\]\["resolved_path"\]' scripts/p2p-public-testnet-local-observer-sync.sh
 
 local_stack="$tmp_dir/local-stack"
 mkdir -p \

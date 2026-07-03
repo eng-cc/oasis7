@@ -510,11 +510,29 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
 #[derive(Debug, Deserialize)]
 struct NetworkTierReleaseCandidateBundle {
     runtime_build: NetworkTierRuntimeBuildRef,
+    generated_world_sidecar: Option<NetworkTierArtifactRef>,
+    world_generation_provenance: Option<NetworkTierArtifactRef>,
 }
 
 #[derive(Debug, Deserialize)]
 struct NetworkTierRuntimeBuildRef {
     sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NetworkTierArtifactRef {
+    #[serde(default)]
+    resolved_path: String,
+    #[serde(default)]
+    kind: String,
+    #[serde(default)]
+    sha256: Option<String>,
+    #[serde(default)]
+    sha256_tree: Option<String>,
+    #[serde(default)]
+    file_count: Option<u64>,
+    #[serde(default)]
+    total_bytes: Option<u64>,
 }
 
 fn validate_current_runtime_hash_against_network_tier_bundle(
@@ -542,6 +560,30 @@ fn validate_current_runtime_hash_against_network_tier_bundle(
                 bundle_path.display()
             )
         })?;
+    if loaded.manifest.tier == "public_testnet" {
+        validate_network_tier_bundle_artifact(
+            bundle_path.as_path(),
+            "generated_world_sidecar",
+            bundle.generated_world_sidecar.as_ref().ok_or_else(|| {
+                format!(
+                    "network tier release_candidate_bundle_ref {} missing generated_world_sidecar",
+                    bundle_path.display()
+                )
+            })?,
+            "directory",
+        )?;
+        validate_network_tier_bundle_artifact(
+            bundle_path.as_path(),
+            "world_generation_provenance",
+            bundle.world_generation_provenance.as_ref().ok_or_else(|| {
+                format!(
+                    "network tier release_candidate_bundle_ref {} missing world_generation_provenance",
+                    bundle_path.display()
+                )
+            })?,
+            "file",
+        )?;
+    }
     let expected_sha256 = bundle.runtime_build.sha256.trim().to_ascii_lowercase();
     if expected_sha256.is_empty() {
         return Err(format!(
@@ -576,6 +618,128 @@ fn validate_current_runtime_hash_against_network_tier_bundle(
     Ok(())
 }
 
+fn validate_network_tier_bundle_artifact(
+    bundle_path: &Path,
+    label: &str,
+    artifact: &NetworkTierArtifactRef,
+    expected_kind: &str,
+) -> Result<(), String> {
+    if artifact.resolved_path.trim().is_empty() {
+        return Err(format!(
+            "network tier release_candidate_bundle_ref {} missing {label}.resolved_path",
+            bundle_path.display()
+        ));
+    }
+    if artifact.kind.trim() != expected_kind {
+        return Err(format!(
+            "network tier release_candidate_bundle_ref {} has invalid {label}.kind: expected {expected_kind}, got {}",
+            bundle_path.display(),
+            artifact.kind.trim()
+        ));
+    }
+    let artifact_path = Path::new(artifact.resolved_path.as_str());
+    if !artifact_path.exists() {
+        return Err(format!(
+            "network tier release_candidate_bundle_ref {} {label} path missing: {}",
+            bundle_path.display(),
+            artifact_path.display()
+        ));
+    }
+    if expected_kind == "directory" {
+        for required in ["snapshot.json", "journal.json"] {
+            if !artifact_path.join(required).is_file() {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} missing {required}: {}",
+                    bundle_path.display(),
+                    artifact_path.display()
+                ));
+            }
+        }
+    }
+    match expected_kind {
+        "file" => {
+            let expected_sha256 = artifact.sha256.as_deref().ok_or_else(|| {
+                format!(
+                    "network tier release_candidate_bundle_ref {} missing {label}.sha256",
+                    bundle_path.display()
+                )
+            })?;
+            if !is_sha256_hex(expected_sha256) {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} has invalid {label}.sha256",
+                    bundle_path.display()
+                ));
+            }
+            let actual_sha256 = sha256_file_hex(artifact_path).map_err(|err| {
+                format!(
+                    "hash network tier release_candidate_bundle_ref {} {label} {} failed: {err}",
+                    bundle_path.display(),
+                    artifact_path.display()
+                )
+            })?;
+            if actual_sha256 != expected_sha256 {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} drift detected: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_sha256,
+                    actual_sha256
+                ));
+            }
+        }
+        "directory" => {
+            let expected_sha256_tree = artifact.sha256_tree.as_deref().ok_or_else(|| {
+                format!(
+                    "network tier release_candidate_bundle_ref {} missing {label}.sha256_tree",
+                    bundle_path.display()
+                )
+            })?;
+            if !is_sha256_hex(expected_sha256_tree) {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} has invalid {label}.sha256_tree",
+                    bundle_path.display()
+                ));
+            }
+            let actual_tree = sha256_dir_tree_hex(artifact_path).map_err(|err| {
+                format!(
+                    "hash network tier release_candidate_bundle_ref {} {label} {} failed: {err}",
+                    bundle_path.display(),
+                    artifact_path.display()
+                )
+            })?;
+            if actual_tree.sha256_tree != expected_sha256_tree {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} drift detected: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_sha256_tree,
+                    actual_tree.sha256_tree
+                ));
+            }
+            if let Some(expected_file_count) = artifact.file_count {
+                if expected_file_count != actual_tree.file_count {
+                    return Err(format!(
+                        "network tier release_candidate_bundle_ref {} {label} file_count drift: bundle={} current={}",
+                        bundle_path.display(),
+                        expected_file_count,
+                        actual_tree.file_count
+                    ));
+                }
+            }
+            if let Some(expected_total_bytes) = artifact.total_bytes {
+                if expected_total_bytes != actual_tree.total_bytes {
+                    return Err(format!(
+                        "network tier release_candidate_bundle_ref {} {label} total_bytes drift: bundle={} current={}",
+                        bundle_path.display(),
+                        expected_total_bytes,
+                        actual_tree.total_bytes
+                    ));
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 fn resolve_network_tier_runtime_ref_path(manifest_path: &Path, raw_ref: &str) -> PathBuf {
     let candidate = PathBuf::from(raw_ref);
     if candidate.is_absolute() {
@@ -604,6 +768,53 @@ fn sha256_file_hex(path: &Path) -> io::Result<String> {
         hasher.update(&buffer[..read]);
     }
     Ok(hex::encode(hasher.finalize()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Sha256DirTree {
+    sha256_tree: String,
+    file_count: u64,
+    total_bytes: u64,
+}
+
+fn sha256_dir_tree_hex(path: &Path) -> io::Result<Sha256DirTree> {
+    let mut files = Vec::new();
+    collect_files(path, &mut files)?;
+    files.sort();
+
+    let mut combined = Sha256::new();
+    let mut total_bytes = 0_u64;
+    for file in files.iter() {
+        let rel = file.strip_prefix(path).map_err(io::Error::other)?;
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        let digest = sha256_file_hex(file.as_path())?;
+        let size = fs::metadata(file.as_path())?.len();
+        combined.update(rel.as_bytes());
+        combined.update(b"\0");
+        combined.update(digest.as_bytes());
+        combined.update(b"\0");
+        combined.update(size.to_string().as_bytes());
+        combined.update(b"\n");
+        total_bytes += size;
+    }
+    Ok(Sha256DirTree {
+        sha256_tree: hex::encode(combined.finalize()),
+        file_count: files.len() as u64,
+        total_bytes,
+    })
+}
+
+fn collect_files(path: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let child = entry.path();
+        if child.is_dir() {
+            collect_files(child.as_path(), files)?;
+        } else if child.is_file() {
+            files.push(child);
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn p2p_auto_detection_from_options(

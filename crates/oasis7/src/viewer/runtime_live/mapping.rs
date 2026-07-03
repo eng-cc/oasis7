@@ -23,11 +23,18 @@ use super::support::{
 pub(super) fn runtime_state_to_simulator_model(
     state: &crate::runtime::WorldState,
     sidecar: &RuntimeLlmSidecar,
+    seed_model: Option<&WorldModel>,
 ) -> WorldModel {
-    let mut model = WorldModel::default();
+    let mut model = seed_model.cloned().unwrap_or_default();
+    model.agents.clear();
 
     for (agent_id, cell) in &state.agents {
-        let seeded_location = seed_location_for_runtime_agent(agent_id, cell.state.pos);
+        let seeded_agent = seed_model.and_then(|seed| seed.agents.get(agent_id));
+        let seeded_location = seeded_agent
+            .and_then(|agent| model.locations.get(&agent.location_id))
+            .filter(|location| location.pos == cell.state.pos)
+            .cloned()
+            .or_else(|| seed_location_for_runtime_agent(sidecar, agent_id, cell.state.pos));
         let location_id = seeded_location
             .as_ref()
             .map(|location| location.id.clone())
@@ -65,9 +72,13 @@ pub(super) fn runtime_state_to_simulator_model(
 }
 
 fn seed_location_for_runtime_agent(
+    sidecar: &RuntimeLlmSidecar,
     agent_id: &str,
     pos: crate::geometry::GeoPos,
 ) -> Option<Location> {
+    if let Some(location) = sidecar.seed_location_for_pos(pos) {
+        return Some(location);
+    }
     if agent_id != FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID {
         return None;
     }
@@ -150,12 +161,15 @@ fn collect_agent_execution_debug_contexts(
 pub(super) fn map_runtime_event(
     runtime_event: &RuntimeWorldEvent,
     config: &WorldConfig,
+    seed_model: Option<&WorldModel>,
 ) -> WorldEvent {
     // Runtime-live compat keeps unmapped runtime events visible to the viewer
     // while preserving the canonical runtime payload for later inspection.
     let kind = match &runtime_event.body {
-        RuntimeWorldEventBody::Domain(domain) => map_runtime_domain_event(domain, config)
-            .unwrap_or_else(|| runtime_fallback_event_kind(runtime_event)),
+        RuntimeWorldEventBody::Domain(domain) => {
+            map_runtime_domain_event(domain, config, seed_model)
+                .unwrap_or_else(|| runtime_fallback_event_kind(runtime_event))
+        }
         _ => runtime_fallback_event_kind(runtime_event),
     };
 
@@ -170,12 +184,14 @@ pub(super) fn map_runtime_event(
 pub(super) fn map_runtime_domain_event(
     event: &RuntimeDomainEvent,
     config: &WorldConfig,
+    seed_model: Option<&WorldModel>,
 ) -> Option<WorldEventKind> {
     match event {
         RuntimeDomainEvent::AgentRegistered { agent_id, pos } => {
             Some(WorldEventKind::AgentRegistered {
                 agent_id: agent_id.clone(),
-                location_id: location_id_for_pos(*pos),
+                location_id: seed_location_id_for_agent_or_pos(seed_model, agent_id, *pos)
+                    .unwrap_or_else(|| location_id_for_pos(*pos)),
                 pos: *pos,
             })
         }
@@ -183,8 +199,10 @@ pub(super) fn map_runtime_domain_event(
             let distance_cm = space_distance_cm(*from, *to);
             Some(WorldEventKind::AgentMoved {
                 agent_id: agent_id.clone(),
-                from: location_id_for_pos(*from),
-                to: location_id_for_pos(*to),
+                from: seed_location_id_for_pos(seed_model, *from)
+                    .unwrap_or_else(|| location_id_for_pos(*from)),
+                to: seed_location_id_for_pos(seed_model, *to)
+                    .unwrap_or_else(|| location_id_for_pos(*to)),
                 distance_cm,
                 electricity_cost: config.movement_cost(distance_cm),
             })
@@ -479,6 +497,31 @@ pub(super) fn map_runtime_domain_event(
     }
 }
 
+fn seed_location_id_for_agent_or_pos(
+    seed_model: Option<&WorldModel>,
+    agent_id: &str,
+    pos: crate::geometry::GeoPos,
+) -> Option<String> {
+    let seed = seed_model?;
+    seed.agents
+        .get(agent_id)
+        .and_then(|agent| seed.locations.get(&agent.location_id))
+        .filter(|location| location.pos == pos)
+        .map(|location| location.id.clone())
+        .or_else(|| seed_location_id_for_pos(Some(seed), pos))
+}
+
+fn seed_location_id_for_pos(
+    seed_model: Option<&WorldModel>,
+    pos: crate::geometry::GeoPos,
+) -> Option<String> {
+    seed_model?
+        .locations
+        .values()
+        .find(|location| location.pos == pos)
+        .map(|location| location.id.clone())
+}
+
 pub(super) fn runtime_reject_reason_to_simulator(
     reason: &RuntimeRejectReason,
 ) -> SimulatorRejectReason {
@@ -594,7 +637,9 @@ fn runtime_event_kind_label(body: &RuntimeWorldEventBody) -> (String, Option<Str
 mod tests {
     use super::*;
     use crate::geometry::GeoPos;
-    use crate::runtime::{FactoryModuleSpec, MaterialLedgerId, MaterialStack, SnapshotMeta};
+    use crate::runtime::{
+        Action, FactoryModuleSpec, MaterialLedgerId, MaterialStack, SnapshotMeta,
+    };
     use crate::simulator::WorldScenario;
     use crate::viewer::runtime_live::support::FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID;
     use crate::viewer::runtime_live::{ViewerRuntimeLiveServer, ViewerRuntimeLiveServerConfig};
@@ -604,7 +649,7 @@ mod tests {
         let (world, _) = super::super::support::bootstrap_formal_release_runtime_world()
             .expect("formal release runtime world");
         let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Script);
-        let model = runtime_state_to_simulator_model(world.state(), &sidecar);
+        let model = runtime_state_to_simulator_model(world.state(), &sidecar, None);
         let agent = model
             .agents
             .get(FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID)
@@ -621,13 +666,51 @@ mod tests {
     }
 
     #[test]
+    fn runtime_state_to_simulator_model_recomputes_seeded_location_after_agent_moves() {
+        let mut world = crate::runtime::World::default();
+        let from_pos = GeoPos::new(10, 0, 0);
+        let to_pos = GeoPos::new(20, 0, 0);
+        world.submit_action(Action::RegisterAgent {
+            agent_id: "a1".to_string(),
+            pos: from_pos,
+        });
+        world.step().expect("register runtime agent");
+        world.submit_action(Action::MoveAgent {
+            agent_id: "a1".to_string(),
+            to: to_pos,
+        });
+        world.step().expect("move runtime agent");
+
+        let mut seed_model = WorldModel::default();
+        seed_model.locations.insert(
+            "frag-from".to_string(),
+            Location::new("frag-from", "from fragment", from_pos),
+        );
+        seed_model.locations.insert(
+            "frag-to".to_string(),
+            Location::new("frag-to", "to fragment", to_pos),
+        );
+        seed_model.agents.insert(
+            "a1".to_string(),
+            Agent::new("a1", "frag-from".to_string(), from_pos),
+        );
+        let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Script)
+            .with_runtime_seed_model(&seed_model);
+
+        let model = runtime_state_to_simulator_model(world.state(), &sidecar, Some(&seed_model));
+        let agent = model.agents.get("a1").expect("mapped agent");
+        assert_eq!(agent.location_id, "frag-to");
+        assert_eq!(agent.pos, to_pos);
+    }
+
+    #[test]
     fn map_runtime_domain_event_agent_registered_uses_runtime_location_id() {
         let event = RuntimeDomainEvent::AgentRegistered {
             agent_id: "a1".to_string(),
             pos: GeoPos::new(12, 34, 56),
         };
         let mapped =
-            map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            map_runtime_domain_event(&event, &WorldConfig::default(), None).expect("mapped event");
         match mapped {
             WorldEventKind::AgentRegistered {
                 agent_id,
@@ -650,7 +733,7 @@ mod tests {
             from: GeoPos::new(0, 0, 0),
             to: GeoPos::new(100_000, 0, 0),
         };
-        let mapped = map_runtime_domain_event(&event, &config).expect("mapped event");
+        let mapped = map_runtime_domain_event(&event, &config, None).expect("mapped event");
         match mapped {
             WorldEventKind::AgentMoved {
                 distance_cm,
@@ -665,6 +748,59 @@ mod tests {
     }
 
     #[test]
+    fn map_runtime_domain_event_uses_generated_seed_location_ids() {
+        let mut seed_model = WorldModel::default();
+        let from_pos = GeoPos::new(10, 0, 0);
+        let to_pos = GeoPos::new(20, 0, 0);
+        seed_model.locations.insert(
+            "frag-from".to_string(),
+            Location::new("frag-from", "from fragment", from_pos),
+        );
+        seed_model.locations.insert(
+            "frag-to".to_string(),
+            Location::new("frag-to", "to fragment", to_pos),
+        );
+        seed_model.agents.insert(
+            "a1".to_string(),
+            Agent::new("a1", "frag-from".to_string(), from_pos),
+        );
+
+        let registered = map_runtime_domain_event(
+            &RuntimeDomainEvent::AgentRegistered {
+                agent_id: "a1".to_string(),
+                pos: from_pos,
+            },
+            &WorldConfig::default(),
+            Some(&seed_model),
+        )
+        .expect("registered event mapped");
+        match registered {
+            WorldEventKind::AgentRegistered { location_id, .. } => {
+                assert_eq!(location_id, "frag-from");
+            }
+            other => panic!("unexpected registered event: {other:?}"),
+        }
+
+        let moved = map_runtime_domain_event(
+            &RuntimeDomainEvent::AgentMoved {
+                agent_id: "a1".to_string(),
+                from: from_pos,
+                to: to_pos,
+            },
+            &WorldConfig::default(),
+            Some(&seed_model),
+        )
+        .expect("moved event mapped");
+        match moved {
+            WorldEventKind::AgentMoved { from, to, .. } => {
+                assert_eq!(from, "frag-from");
+                assert_eq!(to, "frag-to");
+            }
+            other => panic!("unexpected moved event: {other:?}"),
+        }
+    }
+
+    #[test]
     fn map_runtime_domain_event_action_accepted_emits_structured_runtime_event() {
         let event = RuntimeDomainEvent::ActionAccepted {
             action_id: 7,
@@ -674,7 +810,7 @@ mod tests {
             notes: vec!["accepted".to_string()],
         };
         let mapped =
-            map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            map_runtime_domain_event(&event, &WorldConfig::default(), None).expect("mapped event");
         match mapped {
             WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                 assert_eq!(kind, "runtime.action_accepted");
@@ -708,7 +844,7 @@ mod tests {
             },
         };
         let mapped =
-            map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            map_runtime_domain_event(&event, &WorldConfig::default(), None).expect("mapped event");
         match mapped {
             WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                 assert_eq!(kind, "runtime.economy.factory_built");
@@ -756,8 +892,8 @@ mod tests {
             (started, "runtime.economy.recipe_started"),
             (completed, "runtime.economy.recipe_completed"),
         ] {
-            let mapped =
-                map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            let mapped = map_runtime_domain_event(&event, &WorldConfig::default(), None)
+                .expect("mapped event");
             match mapped {
                 WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                     assert_eq!(kind, expected_kind);
@@ -804,8 +940,8 @@ mod tests {
                 "previous_reason=material_shortage",
             ),
         ] {
-            let mapped =
-                map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            let mapped = map_runtime_domain_event(&event, &WorldConfig::default(), None)
+                .expect("mapped event");
             match mapped {
                 WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                     assert_eq!(kind, expected_kind);
@@ -829,7 +965,7 @@ mod tests {
             passed: false,
         };
         let mapped =
-            map_runtime_domain_event(&event, &WorldConfig::default()).expect("mapped event");
+            map_runtime_domain_event(&event, &WorldConfig::default(), None).expect("mapped event");
         match mapped {
             WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                 assert_eq!(kind, "runtime.gameplay.governance_proposal_finalized");
@@ -881,7 +1017,7 @@ mod tests {
             caused_by: None,
             body: RuntimeWorldEventBody::SnapshotCreated(SnapshotMeta { journal_len: 1 }),
         };
-        let mapped = map_runtime_event(&event, &WorldConfig::default());
+        let mapped = map_runtime_event(&event, &WorldConfig::default(), None);
         assert!(matches!(mapped.kind, WorldEventKind::RuntimeEvent { .. }));
         assert!(mapped.runtime_event.is_some());
         assert_eq!(mapped.id, 9);
@@ -900,7 +1036,7 @@ mod tests {
                 data_amount: 5,
             }),
         };
-        let mapped = map_runtime_event(&event, &WorldConfig::default());
+        let mapped = map_runtime_event(&event, &WorldConfig::default(), None);
         match mapped.kind {
             WorldEventKind::RuntimeEvent { kind, domain_kind } => {
                 assert_eq!(kind, "domain");

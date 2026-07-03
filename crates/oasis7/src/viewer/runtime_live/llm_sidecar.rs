@@ -10,11 +10,11 @@ use crate::runtime::{
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
     AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, OpenAiChatCompletionClient, ProviderAgentChatRequest,
-    ProviderBackedAgentBehavior, ProviderExecutionMode, ProviderLoopbackAdapter,
-    ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION, WorldConfig, WorldEvent,
-    WorldEventKind, WorldJournal, WorldKernel, WorldSnapshot, evaluate_provider_compatibility,
-    provider_agent_chat_log_key,
+    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
+    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
+    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION,
+    WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldModel, WorldSnapshot,
+    evaluate_provider_compatibility, provider_agent_chat_log_key,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -195,6 +195,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pending_actions: BTreeMap<u64, RuntimePendingAction>,
     pending_provider_agent_chats: VecDeque<RuntimePendingProviderAgentChat>,
     provider_check_snapshot: Option<RuntimeProviderCheckSnapshot>,
+    runtime_seed_locations: Vec<Location>,
+    runtime_seed_model: Option<WorldModel>,
 }
 
 impl RuntimeLlmSidecar {
@@ -214,7 +216,28 @@ impl RuntimeLlmSidecar {
             pending_actions: BTreeMap::new(),
             pending_provider_agent_chats: VecDeque::new(),
             provider_check_snapshot: None,
+            runtime_seed_locations: Vec::new(),
+            runtime_seed_model: None,
         }
+    }
+
+    pub(in crate::viewer::runtime_live) fn with_runtime_seed_model(
+        mut self,
+        model: &WorldModel,
+    ) -> Self {
+        self.runtime_seed_locations = model.locations.values().cloned().collect();
+        self.runtime_seed_model = Some(model.clone());
+        self
+    }
+
+    pub(in crate::viewer::runtime_live) fn seed_location_for_pos(
+        &self,
+        pos: GeoPos,
+    ) -> Option<Location> {
+        self.runtime_seed_locations
+            .iter()
+            .find(|location| location.pos == pos)
+            .cloned()
     }
 
     pub(in crate::viewer::runtime_live) fn is_llm_mode(&self) -> bool {
@@ -911,7 +934,8 @@ impl RuntimeLlmSidecar {
         let runtime_snapshot = world.snapshot();
         let next_event_id = 0;
         let next_action_id = runtime_snapshot.next_action_id.max(1);
-        let model = runtime_state_to_simulator_model(world.state(), self);
+        let model =
+            runtime_state_to_simulator_model(world.state(), self, self.runtime_seed_model.as_ref());
         let snapshot = WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
@@ -1118,6 +1142,32 @@ mod tests {
 
         let shadow = sidecar.shadow_kernel.as_ref().expect("shadow kernel");
         assert!(shadow.journal().is_empty());
+    }
+
+    #[test]
+    fn sync_shadow_kernel_preserves_generated_seed_locations() {
+        let seed_pos = GeoPos::new(7, 8, 9);
+        let mut seed_model = WorldModel::default();
+        seed_model.locations.insert(
+            "frag-shadow".to_string(),
+            Location::new("frag-shadow", "shadow fragment", seed_pos),
+        );
+        let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm)
+            .with_runtime_seed_model(&seed_model);
+        let world = RuntimeWorld::default();
+
+        sidecar
+            .sync_shadow_kernel(&world, &WorldConfig::default())
+            .expect("runtime seed shadow sync");
+
+        let shadow = sidecar.shadow_kernel.as_ref().expect("shadow kernel");
+        assert!(
+            shadow
+                .snapshot()
+                .model
+                .locations
+                .contains_key("frag-shadow")
+        );
     }
 
     #[test]
