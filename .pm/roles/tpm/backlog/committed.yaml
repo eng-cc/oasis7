@@ -1,4 +1,17 @@
 version: 1
 role: tpm
 status: committed
-tasks: []
+tasks:
+  - task_uid: task_c65cb8aa0a36422ebf6cfaa4f13cebbe
+    title: "Converge legacy doc semantics"
+    module: engineering
+    priority: P2
+    source_signal: ""
+    related_prd: []
+    acceptance:
+      - "Find one high-value legacy documentation or semantic drift point in doc/ and converge it to current source-of-truth."
+      - "Delete obsolete documentation where safe and update live references."
+      - "Record repository_health_engineer findings and verification evidence in task truth."
+    handoff_to: []
+    status: committed
+    task_path: https://github.com/eng-cc/oasis7/issues/1859

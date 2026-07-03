@@ -153,7 +153,7 @@
 - 现有真值:
   - `.pm/roles/<role>/memory/{active,superseded}.yaml`
   - `.pm/shared/memory/{active,superseded}.yaml`
-  - `.pm/inbox/signals.jsonl`
+  - GitHub-backed reflection intake / `.pm/github-project-sync/intake-signals.json`
 - phase 1 会话输入:
   - `~/.codex/session_index.jsonl`
   - `~/.codex/history.jsonl`

@@ -223,9 +223,7 @@
   - `doc/engineering/workflow/source-of-truth.md`
   - historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
   - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator truth 见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md`、`doc/world-simulator/project.md` 与 `doc/world-simulator/prd.md`）
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+  - historical self-evolution file-based PM background: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md` and `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`; current task truth / evidence rules live in `doc/engineering/workflow/source-of-truth.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`

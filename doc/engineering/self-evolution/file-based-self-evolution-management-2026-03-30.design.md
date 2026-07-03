@@ -1,7 +1,7 @@
 # oasis7：自我进化文件化项目管理设计（2026-03-30）
 
 - 对应需求文档: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
-- 对应项目管理文档: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+- 当前 workflow 真值: `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`
 
 审计轮次: 7
 
@@ -139,10 +139,10 @@
 ### 3.4 Workflow Report Hookup
 
 1. `workflow-report.sh --phase start --role <owner> --task-uid <task_uid>`
-   - 先聚合 backlog、memory stale、pending signals 与 stage/gate 摘要
-   - 成功构建报告后再写 `last_started_at`
+   - 先聚合 GitHub-backed task state、memory stale、reflection intake 与 stage/gate 摘要
+   - workflow start evidence 写入 GitHub task issue evidence comments；旧 `last_started_at` task-file 写法只作迁移前背景
 2. `workflow-report.sh --phase close --role <owner> --task-uid <task_uid>`
-   - 回写 task execution log、signal、memory 与 backlog
+   - 回写 GitHub task issue evidence comments，并按需更新 memory、GitHub-backed reflection intake 与 generated views
    - working memory 为空时暴露 bootstrap 入口，而不是静默跳过
 3. commit 后通过 `./scripts/prepare-task-pr.sh` 进入 GitHub PR watch/fix/merge
 4. `workflow-report.sh --phase review --role <owner>`
@@ -169,6 +169,6 @@
 
 ## 6. 使用方式
 
-- 看正式规格与验收: `file-based-self-evolution-management-2026-03-30.prd.md`
-- 看 rollout / follow-up: `file-based-self-evolution-management-2026-03-30.project.md`
+- 看当前 task truth / evidence / PR readiness 规则: `doc/engineering/workflow/source-of-truth.md`
+- 看历史背景与 PRD-ENGINEERING-021 追溯锚点: `file-based-self-evolution-management-2026-03-30.prd.md`
 - 看 `.pm/` 仍然需要遵守的对象与流程约束: 本文档

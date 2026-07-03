@@ -84,7 +84,7 @@
 - Non-Goals:
   - 不在首期实现 embedding、向量检索、图数据库或复杂语义搜索 UI。
   - 不把长期 memory 作为正式 PRD/project 的自动覆盖源。
-  - 不让长期 memory 直接承担任务状态管理；任务真值仍在 backlog/task registry。
+  - 不让长期 memory 直接承担任务状态管理；任务真值仍在 GitHub Issue + GitHub Project + `task_uid` mapping，backlog/task registry 仅保留为 generated/local view 或历史背景。
 
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements:
@@ -106,9 +106,10 @@
   - `scripts/pm/promote-memory.sh`、`scripts/pm/supersede-memory.sh`、`scripts/pm/memory-report.sh`、`scripts/pm/memory-lint.sh`：memory 相关脚本层。
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.project.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
+  - `doc/engineering/workflow/source-of-truth.md`
   - GitHub task issue evidence comments
-  - `.pm/inbox/signals.jsonl`
+  - GitHub-backed reflection intake / `.pm/github-project-sync/intake-signals.json`
   - `.pm/templates/role-memory-policy.yaml`
   - `.pm/roles/*/backlog/*.yaml`
   - `.pm/stage/*.yaml`
@@ -122,7 +123,7 @@
   - shared memory 越权：非 producer/治理维护者试图写 shared 正式 memory 时阻断。
   - stale memory：active memory 长时间未 review 时，report 标记 `needs_review`，但不自动删除。
   - `topic` 漫灌：若某 role 持续写入 allowlist 外的 topic，应先更新角色 memory policy，而不是直接把长期 memory 当自由文本池。
-  - close-phase 漏抽：若 owner 未执行记忆抽取三问，就把可复用结论只留在 task execution log，应视为 workflow 缺口而不是“没有记忆价值”。
+  - close-phase 漏抽：若 owner 未执行记忆抽取三问，就把可复用结论只留在 GitHub task issue evidence comments 或 task-scoped working memory 中，应视为 workflow 缺口而不是“没有记忆价值”。
   - 角色退役：退役角色的 active memory 转为只读历史，不自动并入其他角色。
 - Non-Functional Requirements:
   - NFR-MEM-1: `memory-lint` 单次执行时间 <= 10 秒。
