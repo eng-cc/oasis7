@@ -50,6 +50,8 @@
 
 - [x] social-evidence-journal-lookup-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize simulator social fact evidence validation to use the existing gapless event-id invariant instead of scanning the full journal for each evidence id, preserving first-missing-id rejection semantics and replay persistence behavior. Trace: .pm/tasks/task_972545edcaac4a9e8d5f01d6b877fc3d.yaml
 
+- [x] pixel-world-bridge-unchanged-render-snapshot-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize Pixel World bridge update snapshots to avoid cloning unchanged render state on every Bevy frame while still draining input events and syncing mounted state, preserving camera, focus, hover, drag, wheel, and click behavior. Trace: #1848 (task_719dcc52a9174ee9a2fce97e24916d9c)
+
 - [x] distfs-feedback-rate-limit-audit-window-skip-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize DistFS feedback mutation rate-limit checks to skip stale audit files by parseable audit-path timestamp before disk read / JSON parse, preserving conservative fallback for nonstandard paths and existing accepted/rejected semantics. Trace: .pm/tasks/task_3261fc6f08024571968673d03abf6515.yaml
 
 - [x] runtime-factory-depreciation-active-job-count-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize runtime factory depreciation to pre-aggregate active recipe-job counts by factory once per tick instead of scanning every pending recipe job for each factory, preserving sorted factory event order and load-based durability semantics. Trace: .pm/tasks/task_40053ec2060d4a3ba13220e657eee034.yaml

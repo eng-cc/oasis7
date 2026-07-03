@@ -56,6 +56,21 @@ fn sample_render_state_for_camera(selection_kind: &str) -> RenderState {
     }
 }
 
+fn changed_snapshot(
+    mounted: bool,
+    render_state: Option<RenderState>,
+    render_version: u64,
+) -> SharedSnapshot {
+    SharedSnapshot {
+        mounted,
+        render: RenderSnapshot::Changed {
+            version: render_version,
+            state: render_state,
+        },
+        input_events: Vec::new(),
+    }
+}
+
 fn assert_grid_layout_is_stable_for_same_camera_and_size() {
     let camera = CameraState::default();
     let left = build_grid_layout(&camera, 960.0, 540.0);
@@ -200,13 +215,8 @@ fn assert_selection_only_render_update_preserves_manual_camera_override() {
     runtime.render_content_signature = initial_signature;
 
     let next_state = sample_render_state_for_camera("location");
-    let snapshot = SharedSnapshot {
-        mounted: true,
-        render_state: Some(next_state),
-        render_version: 2,
-        input_events: Vec::new(),
-    };
-    apply_external_render_snapshot(&mut runtime, snapshot);
+    let snapshot = changed_snapshot(true, Some(next_state), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
 
     assert_eq!(runtime.render_version, 2);
     assert_eq!(runtime.render_content_signature, initial_signature);
@@ -251,13 +261,8 @@ fn assert_content_render_update_clears_manual_camera_override() {
     let next_signature = render_content_signature(Some(&next_state));
     assert_ne!(next_signature, initial_signature);
 
-    let snapshot = SharedSnapshot {
-        mounted: true,
-        render_state: Some(next_state),
-        render_version: 2,
-        input_events: Vec::new(),
-    };
-    apply_external_render_snapshot(&mut runtime, snapshot);
+    let snapshot = changed_snapshot(true, Some(next_state), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
 
     assert_eq!(runtime.render_version, 2);
     assert_eq!(runtime.render_content_signature, next_signature);
@@ -285,13 +290,8 @@ fn assert_selection_change_sets_pending_focus_target() {
     runtime.render_content_signature = initial_signature;
 
     let next_state = sample_render_state_for_camera("location");
-    let snapshot = SharedSnapshot {
-        mounted: true,
-        render_state: Some(next_state),
-        render_version: 2,
-        input_events: Vec::new(),
-    };
-    apply_external_render_snapshot(&mut runtime, snapshot);
+    let snapshot = changed_snapshot(true, Some(next_state), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
 
     assert_eq!(
         runtime.pending_focus_target,
@@ -323,13 +323,8 @@ fn assert_followed_agent_content_update_reissues_pending_focus() {
         y_cm: 1_400_000.0,
         z_cm: 0.0,
     });
-    let snapshot = SharedSnapshot {
-        mounted: true,
-        render_state: Some(next_state),
-        render_version: 2,
-        input_events: Vec::new(),
-    };
-    apply_external_render_snapshot(&mut runtime, snapshot);
+    let snapshot = changed_snapshot(true, Some(next_state), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
 
     assert_eq!(
         runtime.pending_focus_target,
@@ -362,13 +357,8 @@ fn assert_selection_change_to_location_clears_follow_target() {
     let initial_signature = render_content_signature(runtime.render_state.as_ref());
     runtime.render_content_signature = initial_signature;
 
-    let snapshot = SharedSnapshot {
-        mounted: true,
-        render_state: Some(sample_render_state_for_camera("location")),
-        render_version: 2,
-        input_events: Vec::new(),
-    };
-    apply_external_render_snapshot(&mut runtime, snapshot);
+    let snapshot = changed_snapshot(true, Some(sample_render_state_for_camera("location")), 2);
+    apply_external_render_snapshot(&mut runtime, snapshot.mounted, snapshot.render);
 
     assert_eq!(runtime.active_follow_target, None);
     assert_eq!(
@@ -378,6 +368,58 @@ fn assert_selection_change_to_location_clears_follow_target() {
             id: "loc-0".to_string(),
         })
     );
+}
+
+fn assert_unchanged_render_snapshot_preserves_render_state_and_processes_input() {
+    let original_state = sample_render_state_for_camera("agent");
+    let mut runtime = BevyRuntimeState {
+        mounted: true,
+        render_state: Some(original_state),
+        render_version: 7,
+        camera: CameraState {
+            pan_x_px: 12.0,
+            pan_y_px: -8.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let original_signature = render_content_signature(runtime.render_state.as_ref());
+    runtime.render_content_signature = original_signature;
+
+    let snapshot = SharedSnapshot {
+        mounted: false,
+        render: RenderSnapshot::Unchanged,
+        input_events: vec![InputEvent::PointerDown {
+            x: 100.0,
+            y: 200.0,
+            pointer_id: 3,
+        }],
+    };
+    let SharedSnapshot {
+        mounted,
+        render,
+        input_events,
+    } = snapshot;
+    apply_external_render_snapshot(&mut runtime, mounted, render);
+    for event in input_events {
+        process_input_event(&mut runtime, event);
+    }
+
+    assert!(!runtime.mounted);
+    assert_eq!(runtime.render_version, 7);
+    let selection = runtime
+        .render_state
+        .as_ref()
+        .unwrap()
+        .selection
+        .as_ref()
+        .unwrap();
+    assert_eq!(selection.kind, "agent");
+    assert_eq!(selection.id, "agent-0");
+    assert_eq!(runtime.render_content_signature, original_signature);
+    assert_eq!(runtime.drag_state.as_ref().unwrap().pointer_id, 3);
+    assert_eq!(runtime.drag_state.as_ref().unwrap().start_pan_x, 12.0);
+    assert_eq!(runtime.drag_state.as_ref().unwrap().start_pan_y, -8.0);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -446,6 +488,12 @@ fn selection_change_to_location_clears_follow_target() {
     assert_selection_change_to_location_clears_follow_target();
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn unchanged_render_snapshot_preserves_render_state_and_processes_input() {
+    assert_unchanged_render_snapshot_preserves_render_state_and_processes_input();
+}
+
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen_test]
 fn wasm_grid_layout_is_stable_for_same_camera_and_size() {
@@ -510,4 +558,10 @@ fn wasm_followed_agent_content_update_reissues_pending_focus() {
 #[wasm_bindgen_test]
 fn wasm_selection_change_to_location_clears_follow_target() {
     assert_selection_change_to_location_clears_follow_target();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn wasm_unchanged_render_snapshot_preserves_render_state_and_processes_input() {
+    assert_unchanged_render_snapshot_preserves_render_state_and_processes_input();
 }
