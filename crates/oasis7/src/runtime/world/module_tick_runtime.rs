@@ -52,12 +52,11 @@ impl World {
         sandbox: &mut dyn ModuleSandbox,
     ) -> Result<usize, WorldError> {
         let now = self.state.time;
-        let mut invocation_ids: Vec<String> = self
+        let invocation_ids: Vec<String> = self
             .module_tick_schedule
             .iter()
             .filter_map(|(instance_id, wake_at)| (*wake_at <= now).then_some(instance_id.clone()))
             .collect();
-        invocation_ids.sort();
         if invocation_ids.is_empty() {
             return Ok(0);
         }

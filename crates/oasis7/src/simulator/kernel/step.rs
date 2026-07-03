@@ -293,11 +293,11 @@ fn resolve_tick_intent_conflicts(
     let mut conflicts = Vec::new();
     for (conflict_key, mut group) in grouped {
         group.sort_by(intent_tie_break_cmp);
-        let winner = group.remove(0);
-        accepted.push(winner.clone());
-        if group.is_empty() {
+        let mut group = group.into_iter();
+        let Some(winner) = group.next() else {
             continue;
-        }
+        };
+        accepted.push(winner.clone());
         let winner_submitter = submitter_label(&winner.submitter);
         let mut loser_action_ids = Vec::new();
         for loser in group {
@@ -311,6 +311,9 @@ fn resolve_tick_intent_conflicts(
                     )],
                 },
             });
+        }
+        if loser_action_ids.is_empty() {
+            continue;
         }
         conflicts.push(IntentConflictResolution {
             conflict_key,
@@ -352,11 +355,11 @@ fn intent_tie_break_cmp(left: &ActionEnvelope, right: &ActionEnvelope) -> std::c
         .then_with(|| left.id.cmp(&right.id))
 }
 
-fn submitter_sort_key(submitter: &ActionSubmitter) -> (u8, String) {
+fn submitter_sort_key(submitter: &ActionSubmitter) -> (u8, &str) {
     match submitter {
-        ActionSubmitter::System => (0, "system".to_string()),
-        ActionSubmitter::Agent { agent_id } => (1, agent_id.clone()),
-        ActionSubmitter::Player { player_id } => (2, player_id.clone()),
+        ActionSubmitter::System => (0, "system"),
+        ActionSubmitter::Agent { agent_id } => (1, agent_id.as_str()),
+        ActionSubmitter::Player { player_id } => (2, player_id.as_str()),
     }
 }
 

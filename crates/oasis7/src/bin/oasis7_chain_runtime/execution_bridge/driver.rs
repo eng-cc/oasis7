@@ -597,8 +597,12 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         })?;
 
-        let previous_execution_world = self.execution_world.clone();
-        let previous_simulator_mirror = self.simulator_mirror.clone();
+        let rollback_state = match (expected_execution_block_hash, expected_execution_state_root) {
+            (Some(_), Some(_)) => {
+                Some((self.execution_world.clone(), self.simulator_mirror.clone()))
+            }
+            _ => None,
+        };
         for action in decoded_runtime_actions {
             self.execution_world.submit_action(action);
         }
@@ -675,8 +679,11 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             if execution_block_hash != expected_block_hash
                 || execution_state_root != expected_state_root
             {
-                self.execution_world = previous_execution_world;
-                self.simulator_mirror = previous_simulator_mirror;
+                if let Some((previous_execution_world, previous_simulator_mirror)) = rollback_state
+                {
+                    self.execution_world = previous_execution_world;
+                    self.simulator_mirror = previous_simulator_mirror;
+                }
                 return Err(format!(
                     "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
                     context.height,
