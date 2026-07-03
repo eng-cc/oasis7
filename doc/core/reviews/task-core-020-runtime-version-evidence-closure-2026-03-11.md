@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | `runtime_footprint` | `ready` | `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md` |
 | `runtime_gc` | `ready` | `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` |
-| `runtime_soak` | `blocked` | `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`、`doc/testing/longrun/s10-five-node-real-game-soak.prd.md` |
+| `runtime_soak` | `blocked` | `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`、`doc/testing/longrun/s10-five-node-real-game-soak.prd.md` |
 
 ## 收口结论
 - `TASK-CORE-020` 已完成“绑定版本级 runtime 联合证据并刷新结论”的任务目标。

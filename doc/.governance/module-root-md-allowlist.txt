@@ -98,10 +98,6 @@ doc/world-runtime/design.md
 doc/world-runtime/prd.index.md
 doc/world-runtime/prd.md
 doc/world-runtime/project.md
-doc/world-runtime/qa-to-runtime-task-world_runtime-033-t7.3-orphan-gc-failsafe-2026-03-11.md
-doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md
-doc/world-runtime/runtime-to-qa-task-world_runtime-033-t72.2-storage-profile-checkpoint-2026-03-10.md
-doc/world-runtime/runtime-to-viewer-task-world_runtime-033-t7.4-profile-consistency-2026-03-11.md
 doc/world-simulator/README.md
 doc/world-simulator/design.md
 doc/world-simulator/prd.index.md

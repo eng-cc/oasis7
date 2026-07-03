@@ -801,7 +801,7 @@
 - 预期结果：runtime 规则边界、回归模板、门禁指标可直接用于发布评审。
 - 回归影响范围：world-runtime / testing / launcher-chain-runtime 接口。
 
-- 模块进展补充（2026-03-10）: 已新增 `doc/world-runtime/runtime-p0-candidate-evidence-handoff-2026-03-10.md`，明确当前 core `blocked` 的剩余缺口是 runtime 候选级实测证据绑定，而非模板缺失。
+- 模块进展补充（2026-03-10）: 当轮曾发起 runtime P0 candidate evidence role handoff，明确当前 core `blocked` 的剩余缺口是 runtime 候选级实测证据绑定，而非模板缺失；该一次性 handoff root 文档后续已退役删除，当前追溯入口为 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`、core review 记录与 GitHub task issue evidence comments。
 
 - 模块进展补充（2026-03-10 / candidate）: 已新增 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`，将 `TASK-GAME-018` 所需 runtime P0 候选级实测证据实例化，并绑定到 core go/no-go 记录。
 
@@ -810,7 +810,7 @@
 - 模块进展补充（2026-03-10 / T7.2 实测）: 已用真实 `oasis7_chain_runtime --storage-profile release_default` 样本跑通 `scripts/oasis7-runtime-storage-gate.sh`，且在扩展 probe 中确认 `checkpoint_count` 会在 `height=32` 左右出现，而不是 status budget 声明的 `64`。详见 `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`。
 - 模块进展补充（2026-03-10 / T7.2 根因）: 已定位 `oasis7_chain_runtime` 的 execution bridge 仍使用硬编码 `32/4` retention 默认值，尚未绑定 `StorageProfileConfig`；当前真实 gate 的 `qa_engineer` 复跑已完成：真实 `release_default` 样本在 `47` 仍为 `full_log_only`，在 `65` 切到 `checkpoint_plus_log`，T7.2 已完成闭环。
 - 模块进展补充（2026-03-11 / T7.2 QA 复验）: `qa_engineer` 已基于真实 `oasis7_chain_runtime` 样本完成修复后复验，`doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md` 已确认 `<64` 无 checkpoint、`>=64` 生成首个 checkpoint，下一步转入 T7.3 的 GC fail-safe / orphan 证据补齐。
-- 模块进展补充（2026-03-11 / T7.3 handoff）: `qa_engineer` 已新增 `doc/world-runtime/qa-to-runtime-task-world_runtime-033-t7.3-orphan-gc-failsafe-2026-03-11.md`，将 pre-checkpoint 窗口瞬时 `orphan_blob_count=1` 交接给 `runtime_engineer` 作为下一步闭环目标。
+- 模块进展补充（2026-03-11 / T7.3 handoff）: `qa_engineer` 当轮曾将 pre-checkpoint 窗口瞬时 `orphan_blob_count=1` 交接给 `runtime_engineer` 作为下一步闭环目标；一次性 handoff root 文档后续已退役删除，当前追溯入口为 `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` 与 runtime storage topic project。
 - 模块进展补充（2026-03-11 / T7.3 收口）: `runtime_engineer` 已新增 `doc/world-runtime/evidence/runtime-sidecar-orphan-gc-failsafe-2026-03-11.md` 与定向回归 `collect_storage_metrics_sidecar_orphan_recovers_after_successful_save`，将该 orphan 信号收敛为“可被下一次成功 save/GC 清零的窗口态”。
 - 模块进展补充（2026-05-15 / release-default budget）: 基于本地三节点真实样本复盘，默认磁盘增量主要来自 `execution_store_root` 热窗口 snapshots，而不是 checkpoint 或 journal。本轮已把 `release_default.execution_hot_head_heights` 从 `128` 收紧到 `64`，与 `execution_checkpoint_interval=64` 对齐，在不改动当前 exact-height restore 合同的前提下先削减默认档位的重复 snapshot 驻留预算。Trace: `.pm/tasks/task_dfb9d8eedfe14f218c2f6e77151dad25.yaml`。
 - 模块进展补充（2026-05-15 / transparent blob compression）: 已为 `LocalCasStore` 增加大 blob 的磁盘透明压缩：`content_hash` 仍然基于原始 payload，读路径仍返回原始 bytes，但 `.blob` 文件在压缩后更小的情况下会以压缩格式落盘。该策略无需上层 schema 迁移，直接覆盖 execution bridge snapshots/journals 与 runtime sidecar blobs。
@@ -823,7 +823,7 @@
 - 接收方确认 ETA：`TASK-WORLD_RUNTIME-002/003/004 已完成；本轮已补齐 task 级 runtime P0 证据，下一步继续推进 TASK-WORLD_RUNTIME-033 的 T7.2~T7.5`
 - 接收方新增风险：`当前模板统一了字段与门禁规则，但部分指标仍依赖后续真实样本与 soak 结果填值`
 
-- 模块进展补充（2026-03-11 / T7.4 启动）: 已为 `oasis7_game_launcher` 与 `oasis7_web_launcher` 新增三档 storage profile 参数透传回归，并发起 `runtime_engineer -> viewer_engineer` handoff `doc/world-runtime/runtime-to-viewer-task-world_runtime-033-t7.4-profile-consistency-2026-03-11.md`，下一步补 bundle/launcher 实测证据。
+- 模块进展补充（2026-03-11 / T7.4 启动）: 已为 `oasis7_game_launcher` 与 `oasis7_web_launcher` 新增三档 storage profile 参数透传回归，并发起 `runtime_engineer -> viewer_engineer` T7.4 profile consistency handoff；一次性 handoff root 文档后续已退役删除，当前追溯入口为 `doc/world-runtime/evidence/runtime-launcher-profile-consistency-2026-03-11.md` 与 runtime storage topic project。
 
 - 模块进展补充（2026-03-11 / T7.4 收口）: `viewer_engineer` 已通过 bundle 产物与 `bash -x` trace 确认 `OASIS7_CHAIN_STORAGE_PROFILE` 在 `run-game.sh` / `run-web-launcher.sh` / `run-chain-runtime.sh` 中分别映射到 `--chain-storage-profile` / `--storage-profile`，T7.4 已完成。
 
