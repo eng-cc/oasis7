@@ -158,17 +158,21 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
-## 7. 当前缺口（2026-06-06）
+## 7. 当前缺口（2026-07-03）
 - 历史 `specified_skeleton_only` 只能说明早期 skeleton 状态；当前还必须同时参考候选输入与 governed-bootstrap 证据集：
   - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
   - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
   - `doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json`
+  - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
+  - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`
 - 当前仍不能宣称 `ready_for_live_candidate`：
   - governed bootstrap manifest 仍是 `status=rehearsal`
-  - required-lane readiness 仍必须以正式 lanes TSV + `network-tier-public-testnet-readiness.sh` 汇总为准
+  - required-lane readiness 现在已有正式 11-lane TSV，但汇总结果仍为 `block`
+  - 当前 11 条 required lanes 中只有 `claims_boundary_review` 是 `pass`；`public_rpc_ready`、`explorer_public_ready`、`faucet_guard_ready`、`reset_policy_announced` 仍是 `partial`；`runtime_bootstrap`、`world_resource_provenance_ready`、`provider_resource_provenance_ready`、`resource_delta_replay_ready`、`api_viewer_projection_ready`、`same_world_hosted_entry_ready` 仍是 `block`
   - `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes
   - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
+- 当前 governed-bootstrap manifest 的 `promotion_policy.required_gates` 已同步到 11 条 active required lanes；`shared_devnet_pass` 只保留为 legacy/rehearsal provenance，不再作为目标 `public_testnet` 的 active required gate。
 - 当前 example manifest 仍只能作为 skeleton/template 使用：
   - `network_id=oasis7-public-testnet-example`
   - `chain_id=oasis7-public-testnet-example`
