@@ -15,11 +15,11 @@
 - `scripts/doc-governance-check.sh`
 - `doc/engineering/governance/engineering-quarterly-review-template-2026-03-11.md`
 - `doc/engineering/governance/engineering-governance-remediation-log-template-2026-03-11.md`
-- `.pm/tasks/task_<32hex>.execution.md`
+- GitHub task issue evidence comments
 - pre-PR local role review evidence
 
 ## 状态
 - 更新日期：2026-03-11
 - 当前阶段：已完成
 - 阻塞项：无
-- 下一步：复用模板继续推进 `TASK-ENGINEERING-009` 与后续 engineering 治理收口。
+- 下一步：复用季度审查模板与 GitHub task issue evidence comments 继续推进后续 engineering 治理收口。
