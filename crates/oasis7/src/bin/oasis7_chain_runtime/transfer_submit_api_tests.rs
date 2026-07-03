@@ -985,7 +985,7 @@ fn transfer_metrics_status_ignores_future_inflight_timestamps() {
 
 #[test]
 fn summarize_transfer_latency_samples_sorts_and_rounds_percentiles() {
-    let summary = super::summarize_transfer_latency_samples(&[900, 100, 400]);
+    let summary = super::summarize_transfer_latency_samples(vec![900, 100, 400]);
     assert_eq!(summary.sample_count, 3);
     assert_eq!(summary.avg_latency_ms, Some(466));
     assert_eq!(summary.max_latency_ms, Some(900));
