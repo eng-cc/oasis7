@@ -21,16 +21,22 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_records(path: Path) -> list[dict]:
-    records: list[dict] = []
+def load_grouped_records(path: Path) -> tuple[dict[str, list[dict]], int]:
+    grouped: dict[str, list[dict]] = {label: [] for label in NODE_LABELS}
+    record_count = 0
     if not path.is_file():
-        return records
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        records.append(json.loads(line))
-    return records
+        return grouped, record_count
+    with path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            record_count += 1
+            record = json.loads(line)
+            label = record.get("label")
+            if label in grouped:
+                grouped[label].append(record)
+    return grouped, record_count
 
 
 def fmt_num(value):
@@ -271,13 +277,7 @@ def render_markdown(summary: dict, history_path: str) -> list[str]:
 def main():
     args = parse_args()
     history_path = Path(args.history_path)
-    records = load_records(history_path)
-
-    grouped: dict[str, list[dict]] = {label: [] for label in NODE_LABELS}
-    for record in records:
-        label = record.get("label")
-        if label in grouped:
-            grouped[label].append(record)
+    grouped, record_count = load_grouped_records(history_path)
 
     node_summaries = {label: summarize_node(grouped[label]) for label in NODE_LABELS}
     alerted_nodes = [label for label, node in node_summaries.items() if node.get("alerts")]
@@ -297,7 +297,7 @@ def main():
         "run_id": args.run_id,
         "run_dir": args.run_dir,
         "history_path": str(history_path),
-        "history_record_count": len(records),
+        "history_record_count": record_count,
         "nodes": node_summaries,
         "aggregate": {
             "node_count": len([node for node in node_summaries.values() if node.get("available") is True]),
