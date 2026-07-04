@@ -29,7 +29,12 @@ cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" 
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<'EOF'
-{"manifest":true}
+{
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "public_testnet",
+  "network_id": "oasis7-public-testnet-governed-20260606",
+  "chain_id": "oasis7-public-testnet-governed-20260606"
+}
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json" <<'EOF'
@@ -568,6 +573,8 @@ grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signe
   "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
   "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/node.env"
+grep -q -- "--world-id 'oasis7-public-testnet-governed-20260606' --chain-id 'oasis7-public-testnet-governed-20260606' --resource-commit-height 0 --resource-commit-hash genesis" \
+  "$TEST_EVENT_LOG"
 expected_runtime_sha=$(printf 'runtime-v2' | shasum -a 256 | awk '{print $1}')
 expected_provenance_sha=$(printf '{"provenance":true}\n' | shasum -a 256 | awk '{print $1}')
 for host in root@sequencer root@storage; do

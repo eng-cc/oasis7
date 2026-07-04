@@ -443,12 +443,14 @@ network = payload.get("network_tier") or {}
 readiness = payload.get("readiness") or {}
 consensus = payload.get("consensus") or {}
 observability = payload.get("observability") or {}
+world_resource = payload.get("world_resource")
 role = (payload.get("role") or payload.get("node_role") or "").strip()
 node_id = (payload.get("node_id") or "").strip()
 world_id = payload.get("world_id")
 chain_id = network.get("chain_id")
 network_id = network.get("network_id")
 failed = readiness.get("failed_gates") or []
+world_resource_failed = []
 
 errors = []
 if network.get("tier") != "public_testnet":
@@ -459,6 +461,12 @@ if readiness.get("status") != "ready":
     errors.append(f"readiness={readiness.get('status')!r}")
 if failed:
     errors.append(f"failed_gates={failed!r}")
+if isinstance(world_resource, dict):
+    world_resource_failed = world_resource.get("failed_gates") or []
+    if world_resource.get("readiness_status") != "ready":
+        errors.append(f"world_resource_readiness={world_resource.get('readiness_status')!r}")
+    if world_resource_failed:
+        errors.append(f"world_resource_failed_gates={world_resource_failed!r}")
 if role and role != "sequencer":
     errors.append(f"role={role!r} is not sequencer")
 if not role and "sequencer" not in node_id:
@@ -473,6 +481,8 @@ print(json.dumps({
     "network_id": network_id,
     "readiness": readiness.get("status"),
     "failed_gates": failed,
+    "world_resource_readiness": world_resource.get("readiness_status") if isinstance(world_resource, dict) else None,
+    "world_resource_failed_gates": world_resource_failed,
     "committed_height": consensus.get("committed_height"),
     "network_committed_height": consensus.get("network_committed_height"),
     "lag": observability.get("network_height_lag"),
@@ -587,10 +597,12 @@ network = payload.get("network_tier") or {}
 readiness = payload.get("readiness") or {}
 consensus = payload.get("consensus") or {}
 observability = payload.get("observability") or {}
+world_resource = payload.get("world_resource")
 world_id = payload.get("world_id")
 chain_id = network.get("chain_id")
 network_id = network.get("network_id")
 failed = readiness.get("failed_gates") or []
+world_resource_failed = []
 
 errors = []
 if network.get("tier") != "public_testnet":
@@ -601,6 +613,12 @@ if readiness.get("status") != "ready":
     errors.append(f"readiness={readiness.get('status')!r}")
 if failed:
     errors.append(f"failed_gates={failed!r}")
+if isinstance(world_resource, dict):
+    world_resource_failed = world_resource.get("failed_gates") or []
+    if world_resource.get("readiness_status") != "ready":
+        errors.append(f"world_resource_readiness={world_resource.get('readiness_status')!r}")
+    if world_resource_failed:
+        errors.append(f"world_resource_failed_gates={world_resource_failed!r}")
 if consensus.get("committed_height") != consensus.get("network_committed_height"):
     errors.append("committed height does not match network height")
 if observability.get("network_height_lag") not in (0, None):
@@ -613,6 +631,8 @@ print(json.dumps({
     "network_id": network_id,
     "readiness": readiness.get("status"),
     "failed_gates": failed,
+    "world_resource_readiness": world_resource.get("readiness_status") if isinstance(world_resource, dict) else None,
+    "world_resource_failed_gates": world_resource_failed,
     "committed_height": consensus.get("committed_height"),
     "network_committed_height": consensus.get("network_committed_height"),
     "lag": observability.get("network_height_lag"),

@@ -188,6 +188,19 @@ if [[ -d "$CONFIG_DIR/doc/testing/evidence" ]]; then
   done < <(find "$CONFIG_DIR/doc/testing/evidence" -maxdepth 1 -type f | sort)
 fi
 
+network_manifest_path=""
+for file in "${config_files[@]}"; do
+  if jq -e '(.schema_version // "") == "oasis7.network_tier_manifest.v1"' "$file" >/dev/null 2>&1; then
+    network_manifest_path=$file
+    break
+  fi
+done
+[[ -n "$network_manifest_path" ]] || die "missing oasis7.network_tier_manifest.v1 config"
+WORLD_RESOURCE_WORLD_ID=$(jq -r '.network_id // empty' "$network_manifest_path")
+WORLD_RESOURCE_CHAIN_ID=$(jq -r '.chain_id // .network_id // empty' "$network_manifest_path")
+[[ -n "$WORLD_RESOURCE_WORLD_ID" ]] || die "network tier manifest missing network_id"
+[[ -n "$WORLD_RESOURCE_CHAIN_ID" ]] || die "network tier manifest missing chain_id"
+
 control_path_for() {
   local host=$1
   local label
@@ -342,7 +355,7 @@ stage_host() {
   ssh_run "$host" "$control_path" \
     "find '$STACK_ROOT/staged-world' \\( -name '._*' -o -name '.DS_Store' \\) -delete"
   ssh_run "$host" "$control_path" \
-    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world'"
+    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis"
   ssh_run "$host" "$control_path" \
     "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
