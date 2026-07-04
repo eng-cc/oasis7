@@ -30,9 +30,9 @@
 - `doc/playability_test_result/topics/`
 
 ## 根目录收口
-- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`；不再新增 `card_*.md` 单次结果卡到模块根目录。
-- 专题回归卡组与专题执行资产放入子目录（如 `topics/`），避免继续把根目录当作专题方案堆放区。
-- 历史卡片不再保留在仓库（`archive/` 目录已移除）。
+- 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`；`playability_test_card.md` 是当前模板入口。
+- 根目录中仍被 release/evidence 文档直接引用的 `card_*.md` 仅作为 evidence-linked legacy samples 保留，不作为当前入口；未被当前文档引用的单次样本卡不再保留在仓库。
+- 新增单次结果卡不得进入模块根目录；需要保留的专题回归卡组与专题执行资产放入子目录（如 `topics/` 或 `evidence/`）。
 - 2026-03-11 模块状态 closure / QA-to-producer handoff root 文档已退役删除；当前状态与下一任务入口以 `doc/playability_test_result/project.md` 为准。
 
 ## 维护约定
