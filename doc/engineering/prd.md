@@ -236,9 +236,7 @@
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
-  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.prd.md`
-  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.design.md`
-  - `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.project.md`
+  - historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md`
@@ -342,7 +340,7 @@
 | PRD-ENGINEERING-023 | TASK-ENGINEERING-099 | `test_tier_required` + `test_tier_full` | `task_uid` 迁移、registry/backlog 重建、旧 TASK-PM 数据升级与多 worktree rebase 回归验证 | `.pm` task identity、working_memory/session 追踪、stage blocker 引用 |
 | PRD-ENGINEERING-024 | TASK-ENGINEERING-106/107/108/109/110/111/112/114 | `test_tier_required` | 文档体量治理专题三件套、engineering 根入口/主项目/索引回写、`world-simulator` / `p2p` / `testing` / `readme` / `core` / `world-runtime` / `game` / `site` 模块 `README.md` / `prd.index.md` 的默认阅读面收紧、module-root allowlist 更新与 `doc-governance-check` 通过；人工核对默认阅读面不再把 `doc/devlog` / round reviews / evidence 直接提升为主入口，也不再把高密度模块近期专题长名单平铺在模块 README 首屏 | 仓库文档消费层、项目经理视角导航效率与后续减重批次规划 |
 | PRD-ENGINEERING-025 | `doc-corpus-maintenance-governance` | `test_tier_required` | 存量维护成本专题三件套、`scripts/doc-inventory-report.sh` 输出当前仓库体量快照、engineering 根入口/主项目/索引与 `doc-surface-area-governance` handoff 回写、`doc-governance-check` 通过 | 文档治理阶段判断、路径级治理优先级、`doc/devlog` backlog 处理与季度治理输入 |
-| PRD-ENGINEERING-026 | `devlog-history-compaction` | `test_tier_required` | `devlog-history-compaction` 专题三件套、`doc/devlog/README.md` 月份导航与高体量热点表、engineering 根入口/主项目/索引与 `doc-corpus-maintenance-governance` 项目页回写、`doc-governance-check` 通过 | `doc/devlog` 历史入口、`PRD-ENGINEERING-025` 第一条 follow-up 收口与后续月度摘要拆项 |
+| PRD-ENGINEERING-026 | `devlog-history-compaction` | historical-only | 一次性专题三件套已退役删除；当前验证入口为 `doc/devlog/README.md` compact archive summary、engineering 根入口/主项目/索引回写与 `doc-governance-check` | `doc/devlog` 历史入口、`PRD-ENGINEERING-025` 第一条 follow-up 收口 |
 | PRD-ENGINEERING-027 | `world-simulator-viewer-path-governance` | `test_tier_required` | `world-simulator-viewer-path-governance` 专题三件套、`doc/world-simulator/viewer/README.md` 首读分流、`doc/world-simulator/README.md` / `doc/world-simulator/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `world-simulator/viewer` 热点子域入口、`PRD-ENGINEERING-025` 第二条 follow-up 收口与后续 `p2p` 路径级治理 |
 | PRD-ENGINEERING-028 | `p2p-node-path-governance` | `test_tier_required` | `p2p-node-path-governance` 专题三件套、`doc/p2p/node/README.md` 首读分流、`doc/p2p/README.md` / `doc/p2p/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `p2p/node` 热点子域入口、`PRD-ENGINEERING-025` 第三条 follow-up 收口与后续 `testing` 路径级治理 |
 | PRD-ENGINEERING-029 | `testing-evidence-path-governance` | `test_tier_required` | `testing-evidence-path-governance` 专题三件套、`doc/testing/evidence/README.md` 首读分流、`doc/testing/README.md` / `doc/testing/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `testing/evidence` 热点子域入口、`PRD-ENGINEERING-025` 第四条 follow-up 收口与后续季度复核 |

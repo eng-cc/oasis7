@@ -8,6 +8,8 @@
 
 - [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、quarterly review cycle 专题和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
 
+- [x] engineering-doc-governance-legacy-semantics (PRD-ENGINEERING-021/025/026) [test_tier_required]: 删除已完成且继续暴露旧证据语义的 `devlog-history-compaction` 一次性专题三件套，将 `doc/devlog` 当前入口收敛到 `doc/devlog/README.md` compact archive summary、GitHub task issue evidence comments 与 workflow source-of-truth。 Trace: #1879 (task_b2d9ecebdfa241e389069ddf2da9f843)
+
 - [x] world-runtime-root-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/world-runtime` 根目录 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 一次性 role handoff 文档，将当前 runtime candidate、storage cadence、GC fail-safe 与 profile consistency 追溯入口收敛到正式 evidence、runtime storage topic project、core review 记录与 GitHub task issue evidence comments，并同步收紧 module-root markdown allowlist。 Trace: #1839 (task_442a8b6b37004d6fa6e07720e8d9341b)
 
 - [x] doc-semantics-governance (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 engineering project 已完成历史行中的旧 `.pm` evidence sink 读法，明确历史 `.pm/tasks/...` trace 仅作退役前追溯，当前执行证据以 GitHub task issue evidence comments 和 mapping-backed task trace 为准。 Trace: #1836 (task_8aa8a48148a94c9e956f0b9bb7ead99d)
@@ -497,9 +499,7 @@
 - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
 - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
 - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
-- `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.prd.md`
-- `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.design.md`
-- `doc/engineering/doc-governance/devlog-history-compaction-2026-04-17.project.md`
+- historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md`
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md`
 - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md`
