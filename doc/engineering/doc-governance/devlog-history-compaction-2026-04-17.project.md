@@ -27,4 +27,4 @@
 - 阶段说明: canonical compact archive summary + retired daily files
 - 阻塞项: 无
 - 最近更新: 2026-05-27
-- 后续动作: `doc/devlog` 只保留 compact archive summary，不再新增日文件；当前执行证据继续写入 `.pm/tasks/*.execution.md`。
+- 后续动作: `doc/devlog` 只保留 compact archive summary，不再新增日文件；GitHub Project migration 后，当前执行证据写入 GitHub task issue evidence comments，退役前 `.pm/tasks/*.execution.md` 仅作历史追溯。
