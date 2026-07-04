@@ -1,6 +1,6 @@
 # oasis7：自我进化文件化项目管理设计（2026-03-30）
 
-- 对应需求文档: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- 历史需求锚点: `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`（仅保留 `PRD-ENGINEERING-021` 追溯，不定义当前 task truth / evidence sink）
 - 当前 workflow 真值: `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`
 
 审计轮次: 7
@@ -170,5 +170,5 @@
 ## 6. 使用方式
 
 - 看当前 task truth / evidence / PR readiness 规则: `doc/engineering/workflow/source-of-truth.md`
-- 看历史背景与 PRD-ENGINEERING-021 追溯锚点: `file-based-self-evolution-management-2026-03-30.prd.md`
 - 看 `.pm/` 仍然需要遵守的对象与流程约束: 本文档
+- 看历史背景与 PRD-ENGINEERING-021 追溯锚点: `file-based-self-evolution-management-2026-03-30.prd.md`
