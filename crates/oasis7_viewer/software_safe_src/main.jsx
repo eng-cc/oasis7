@@ -1135,7 +1135,7 @@ function starterOcAction(gameplay) {
   if (starterOcOnboardingState.pending && pendingTargetAgentId) {
     return null;
   }
-  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc");
+  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc" && !action.disabledReason);
   if (existing) {
     return existing;
   }

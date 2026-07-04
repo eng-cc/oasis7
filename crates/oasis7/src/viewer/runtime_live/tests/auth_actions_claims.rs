@@ -210,6 +210,87 @@ fn runtime_gameplay_action_claim_starter_oc_grants_first_llm_budget() {
 }
 
 #[test]
+fn compat_snapshot_waits_for_claimed_first_agent_before_starter_oc_action() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.world = crate::runtime::World::new_production_hardened();
+    let (public_key, private_key) = test_signer(107);
+    register_runtime_session(
+        &mut server,
+        "player-starter-oc-gated",
+        None,
+        107,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let first_agent_request = signed_gameplay_action_request(
+        crate::viewer::GameplayActionRequest {
+            action_id: crate::viewer::ACTION_CLAIM_FIRST_AGENT.to_string(),
+            target_agent_id: crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID.to_string(),
+            actor_agent_id: None,
+            player_id: "player-starter-oc-gated".to_string(),
+            public_key: None,
+            auth: None,
+        },
+        108,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .handle_gameplay_action(first_agent_request)
+        .expect("first-agent claim accepted");
+
+    let pending_snapshot = server.compat_snapshot(Some("player-starter-oc-gated"));
+    let pending_gameplay = pending_snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(
+        !pending_snapshot
+            .model
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(
+        !pending_gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC),
+        "starter OC claim must wait until the first-agent runtime action creates the Agent"
+    );
+    assert!(
+        pending_gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == "advance_step")
+    );
+
+    server.world.step().expect("apply first-agent claim");
+    let ready_snapshot = server.compat_snapshot(Some("player-starter-oc-gated"));
+    let ready_gameplay = ready_snapshot
+        .player_gameplay
+        .as_ref()
+        .expect("player gameplay snapshot");
+    assert!(
+        ready_snapshot
+            .model
+            .agents
+            .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
+    );
+    assert!(
+        ready_gameplay
+            .available_actions
+            .iter()
+            .any(|action| action.action_id == crate::viewer::ACTION_CLAIM_STARTER_OC)
+    );
+}
+
+#[test]
 fn runtime_gameplay_action_claim_first_agent_rejects_non_starter_target() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

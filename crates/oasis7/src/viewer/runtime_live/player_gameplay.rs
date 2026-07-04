@@ -47,6 +47,7 @@ pub(super) fn extend_available_actions(
         }
         return;
     };
+    let agent_exists = state.agents.contains_key(agent_id);
     let starter_oc_required = state
         .main_token_balances
         .get(agent_id)
@@ -60,6 +61,9 @@ pub(super) fn extend_available_actions(
             if action.action_id == "chat_first_agent" {
                 action.disabled_reason = Some(disabled_reason.clone());
             }
+        }
+        if !agent_exists {
+            return;
         }
         actions.push(PlayerGameplayAction {
             action_id: ACTION_CLAIM_STARTER_OC.to_string(),

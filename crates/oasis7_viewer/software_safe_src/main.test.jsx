@@ -1134,6 +1134,68 @@ describe("viewer web ui automation baseline", () => {
       .toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("keeps published live-control recovery actions clickable while first-agent sync is pending", async () => {
+    await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {
+            origin: {
+              id: "origin",
+              name: "Origin",
+              radius_cm: 1,
+              resources: {},
+            },
+          },
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          blocker_kind: "runtime_snapshot_empty_entities",
+          blocker_detail: "runtime exposed an empty new-user world",
+          available_actions: [
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+              disabled_reason: null,
+            },
+            {
+              action_id: "advance_step",
+              label: "Advance 1 step to create the first world feedback",
+              protocol_action: "live_control.step",
+              disabled_reason: null,
+            },
+            {
+              action_id: "resume_play",
+              label: "Resume live play",
+              protocol_action: "live_control.play",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+      setupCore(core) {
+        core.state.lastGameplayActionFeedback = {
+          kind: "gameplay_action",
+          action: "claim_first_agent",
+          stage: "ack",
+          accepted: true,
+          ok: true,
+          effect: "submitted gameplay action claim_first_agent for starter-agent-0",
+          reason: null,
+          response: null,
+        };
+      },
+    });
+
+    const stepButtons = screen.getAllByTestId("viewer-available-action-step");
+    expect(stepButtons.some((button) => !button.disabled)).toBe(true);
+    const playButtons = screen.getAllByTestId("viewer-available-action-play");
+    expect(playButtons.some((button) => !button.disabled)).toBe(true);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("moves presentation notes into the stage help tip instead of the right details rail", async () => {
     const { container } = await renderViewerApp();
 
@@ -2376,6 +2438,60 @@ describe("viewer web ui automation baseline", () => {
     expect(core.buildGameplaySummary().recommendedAction?.actionId).not.toBe("claim_starter_oc");
     expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Claim Starter OC" })).not.toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not open starter OC gate before the claimed Agent exists in the snapshot", async () => {
+    const base = sampleSnapshot();
+    const snapshot = sampleSnapshot({
+      model: {
+        ...base.model,
+        agent_player_bindings: {
+          ...base.model.agent_player_bindings,
+          "starter-agent-0": "local-test-player-bound",
+        },
+        agent_player_public_key_bindings: {
+          ...base.model.agent_player_public_key_bindings,
+          "starter-agent-0": "abcdef0123456789abcdef0123456789",
+        },
+      },
+      player_gameplay: {
+        ...base.player_gameplay,
+        available_actions: [
+          {
+            action_id: "advance_step",
+            label: "Advance 1 step",
+            protocol_action: "live_control.step",
+            disabled_reason: null,
+          },
+          {
+            action_id: "claim_starter_oc",
+            label: "Claim starter OC",
+            protocol_action: "gameplay_action.submit",
+            target_agent_id: "starter-agent-0",
+            disabled_reason: null,
+          },
+          {
+            action_id: "chat_first_agent",
+            label: "Send one chat/command to the first available agent",
+            protocol_action: "agent_chat",
+            target_agent_id: "starter-agent-0",
+            disabled_reason: "claim starter OC before using LLM/agent chat for this Agent",
+          },
+        ],
+      },
+    });
+    const { core } = await renderViewerApp({
+      snapshot,
+      setupAfterMount(core) {
+        bindLocalTestAgent(core, "starter-agent-0");
+      },
+      starterOcOnboardingComplete: false,
+    });
+
+    const starterOcAction = core.buildGameplaySummary().availableActions.find((action) => action.actionId === "claim_starter_oc");
+    expect(starterOcAction?.disabledReason).toMatch(/waiting for the committed snapshot/i);
+    expect(core.buildGameplaySummary().recommendedAction?.actionId).not.toBe("claim_starter_oc");
+    expect(screen.queryByRole("dialog", { name: "Claim Your First OC" })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("closes starter OC confirmation when committed snapshot exposes runtime state credit", async () => {

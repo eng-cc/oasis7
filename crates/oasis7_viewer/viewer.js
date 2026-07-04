@@ -1547,7 +1547,8 @@ function createViewerFeedbackModule({
     if (!gameplay || typeof gameplay !== "object") {
       return null;
     }
-    const agents = Object.keys(state2.snapshot?.model?.agents || {}).filter((agentId) => isAgentVisibleToCurrentSession2?.(agentId) !== false);
+    const modelAgents = state2.snapshot?.model?.agents || {};
+    const agents = Object.keys(modelAgents).filter((agentId) => isAgentVisibleToCurrentSession2?.(agentId) !== false);
     const locations = Object.keys(state2.snapshot?.model?.locations || {});
     const missingAgents = agents.length === 0;
     const missingLocations = locations.length === 0;
@@ -1582,14 +1583,22 @@ function createViewerFeedbackModule({
     const lastWorldChange = gameplay.last_world_change || null;
     const resumeAnchor = gameplay.resume_anchor || null;
     const resumeNextStep = gameplay.resume_next_step || null;
-    let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => ({
-      actionId: action?.action_id || null,
-      label: action?.label || null,
-      protocolAction: action?.protocol_action || null,
-      targetAgentId: action?.target_agent_id || null,
-      disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
-      executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
-    })) : [];
+    const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
+    let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => {
+      const starterOcMissingAgentReason = action?.action_id === "claim_starter_oc" && !agentExists(action?.target_agent_id) ? localeText2(
+        locale,
+        "第一个 Agent 认领已提交，正在等待 committed 快照创建 Agent；请先推进或刷新一次。",
+        "First Agent claim submitted; waiting for the committed snapshot to create the Agent. Advance or refresh once first."
+      ) : null;
+      return {
+        actionId: action?.action_id || null,
+        label: action?.label || null,
+        protocolAction: action?.protocol_action || null,
+        targetAgentId: action?.target_agent_id || null,
+        disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || action?.protocol_action === "live_control.step" || action?.protocol_action === "live_control.play" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || starterOcMissingAgentReason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
+        executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
+      };
+    }) : [];
     const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object" ? {
       source: "runtime",
       action: gameplay.recent_feedback.action || null,
@@ -9816,7 +9825,7 @@ function starterOcAction(gameplay) {
   if (starterOcOnboardingState.pending && pendingTargetAgentId) {
     return null;
   }
-  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc");
+  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc" && !action.disabledReason);
   if (existing) {
     return existing;
   }
