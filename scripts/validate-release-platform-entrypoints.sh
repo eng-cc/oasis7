@@ -129,6 +129,7 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     ;;
@@ -142,6 +143,7 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher" executable
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live" executable
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime" executable
+    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild" executable
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist" file
@@ -153,6 +155,7 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_web_launcher.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_viewer_live.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_chain_runtime.exe" file
+    require_path "$BUNDLE_DIR/bin/oasis7_world_repair_rebuild.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import.exe" file
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit.exe" file
     require_path "$BUNDLE_DIR/run-client.cmd" file

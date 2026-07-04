@@ -331,19 +331,52 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
   };
 }
 
+async function setupConnectedSemanticCore({ snapshot = sampleSnapshot(), agentId = "agent-0" } = {}) {
+  activeCleanup?.();
+  activeCleanup = null;
+  vi.resetModules();
+  window.history.replaceState(
+    {},
+    "",
+    "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+  );
+  window.localStorage.clear();
+  document.body.innerHTML = "";
+  const { sockets, sentMessages } = installMockWebSocket();
+  const core = await import("./legacy_core.js");
+
+  core.initializeSoftwareSafeCore();
+  sockets[0].open();
+  sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+  core.injectSnapshot(snapshot);
+  core.applySelection({ kind: "agent", id: agentId });
+  bindLocalTestAgent(core, agentId);
+
+  activeCleanup = () => {
+    for (const socket of sockets) {
+      if (socket.readyState !== socket.CLOSED) {
+        socket.close();
+      }
+    }
+    activeCleanup = null;
+  };
+  return { core, sockets, sentMessages };
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
   window.history.replaceState({}, "", viewerUrl());
   window.localStorage.clear();
   Object.defineProperty(window, "crypto", {
     configurable: true,
-    value: globalThis.crypto?.subtle ? globalThis.crypto : createTestCrypto(),
+    value: createTestCrypto(),
   });
   document.body.innerHTML = "";
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
   activeCleanup?.();
   activeCleanup = null;
   document.body.innerHTML = "";
@@ -577,7 +610,6 @@ describe("viewer web ui automation baseline", () => {
         session_pubkey: core.state.auth.publicKey,
       },
     });
-
     await waitFor(() => {
       expect(sentMessages).toEqual(
         expect.arrayContaining([
@@ -603,6 +635,97 @@ describe("viewer web ui automation baseline", () => {
     expect(core.state.auth.pendingForceRebind).toBe(false);
     expect(core.state.auth.recoveryErrorCode).toBe("session_register_timeout");
     expect(core.state.auth.error).toMatch(/timed out waiting for ack\/error/i);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("times out a stuck reconnect sync and resumes local starter force-rebind", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    const base = sampleSnapshot();
+    core.injectSnapshot(sampleSnapshot({
+      model: {
+        ...base.model,
+        agents: {
+          "starter-agent-0": {
+            ...base.model.agents["agent-0"],
+            id: "starter-agent-0",
+            name: "Starter Agent",
+          },
+        },
+        agent_player_bindings: {
+          "starter-agent-0": "local-test-player-old",
+        },
+        agent_player_public_key_bindings: {
+          "starter-agent-0": "old-public-key",
+        },
+      },
+    }));
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({ mode: "reconnect_sync" }),
+          }),
+        ]),
+      );
+    });
+    core.state.auth.syncInFlight = true;
+    core.state.auth.registrationStatus = "registering";
+    core.state.auth.runtimeStatus = "probing";
+
+    core.expireHostedRuntimeSyncTimeoutForTest();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                player_id: core.state.auth.playerId,
+                requested_agent_id: "starter-agent-0",
+                force_rebind: true,
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+    expect(core.state.auth.syncInFlight).toBe(true);
+    expect(core.state.auth.pendingForceRebind).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("retries force-rebind when runtime reports the starter agent is bound to an old local player", async () => {
@@ -681,6 +804,79 @@ describe("viewer web ui automation baseline", () => {
         }),
       );
     });
+    expect(core.state.auth.pendingForceRebind).toBe(true);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("recovers force-rebind target from a reconnect bind error", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "reconnect_sync",
+            }),
+          }),
+        ]),
+      );
+    });
+    const registerCountBeforeError = sentMessages.filter((message) => (
+      message.type === "authoritative_recovery"
+      && message.command?.mode === "register_session"
+    )).length;
+
+    sockets[0].receive({
+      type: "authoritative_recovery_error",
+      error: {
+        code: "player_bind_failed",
+        message: `agent starter-agent-0 is bound to player local-test-player-old, not ${core.state.auth.playerId}`,
+      },
+    });
+
+    await waitFor(() => {
+      const registerMessages = sentMessages.filter((message) => (
+        message.type === "authoritative_recovery"
+        && message.command?.mode === "register_session"
+      ));
+      expect(registerMessages.length).toBeGreaterThan(registerCountBeforeError);
+      expect(registerMessages.at(-1)?.command?.request).toEqual(
+        expect.objectContaining({
+          player_id: core.state.auth.playerId,
+          requested_agent_id: "starter-agent-0",
+          force_rebind: true,
+        }),
+      );
+    });
+    expect(core.state.auth.pendingRequestedAgentId).toBe("starter-agent-0");
     expect(core.state.auth.pendingForceRebind).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
@@ -919,6 +1115,104 @@ describe("viewer web ui automation baseline", () => {
     );
     expect(screen.getByTestId("viewer-playthrough-action-request-snapshot")).toHaveAccessibleName(/Refresh Snapshot to verify: Request snapshot/);
     expect(within(recommendedCard).getByText(/Refresh the snapshot to confirm whether the blocker is still present/i)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("auto-refreshes empty-entity recovery snapshots until first-agent claim appears", async () => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    const { sockets, sentMessages } = installMockWebSocket();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+
+    const core = await import("./legacy_core.js");
+    core.initializeSoftwareSafeCore();
+    expect(sockets.length).toBe(1);
+    sockets[0].open();
+    sockets[0].receive({
+      type: "hello_ack",
+      server: { name: "mock-runtime" },
+      world_id: "test-world",
+      control_profile: "interactive",
+    });
+
+    const blockedSnapshot = sampleSnapshot({
+      model: {
+        agents: {},
+        locations: {
+          "frag-0-0-0-2": {
+            id: "frag-0-0-0-2",
+            name: "Starter Fragment",
+            radius_cm: 26900,
+            resources: {},
+          },
+        },
+        agent_prompt_profiles: {},
+        agent_execution_debug_contexts: {},
+        agent_player_bindings: {},
+        agent_player_public_key_bindings: {},
+      },
+      player_gameplay: {
+        ...sampleSnapshot().player_gameplay,
+        blocker_kind: "runtime_snapshot_empty_entities",
+        blocker_detail: "runtime exposed an empty new-user world",
+        available_actions: [
+          {
+            action_id: "request_snapshot",
+            label: "Refresh gameplay snapshot",
+            protocol_action: "world.request_snapshot",
+            disabled_reason: null,
+          },
+        ],
+      },
+    });
+    core.injectSnapshot(blockedSnapshot);
+    expect(core.needsEmptyEntitySnapshotRefreshForTest()).toBe(true);
+    expect(core.isEmptyEntitySnapshotRefreshPendingForTest()).toBe(true);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    const sentBeforeRefresh = sentMessages.length;
+    vi.advanceTimersByTime(2499);
+    expect(sentMessages).toHaveLength(sentBeforeRefresh);
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+    expect(core.needsEmptyEntitySnapshotRefreshForTest()).toBe(true);
+    expect(core.state.connectionStatus).toBe("connected");
+    expect(core.isEmptyEntitySnapshotRefreshPendingForTest()).toBe(true);
+    expect(sentMessages.slice(sentBeforeRefresh)).toContainEqual({ type: "request_snapshot" });
+
+    const claimSnapshot = sampleSnapshot({
+      model: blockedSnapshot.model,
+      player_gameplay: {
+        ...blockedSnapshot.player_gameplay,
+        available_actions: [
+          {
+            action_id: "claim_first_agent",
+            label: "Claim first Agent",
+            protocol_action: "gameplay_action.submit",
+            target_agent_id: "starter-agent-0",
+            disabled_reason: null,
+          },
+          {
+            action_id: "request_snapshot",
+            label: "Refresh gameplay snapshot",
+            protocol_action: "world.request_snapshot",
+            disabled_reason: null,
+          },
+        ],
+      },
+    });
+    core.injectSnapshot(claimSnapshot);
+    expect(core.needsEmptyEntitySnapshotRefreshForTest()).toBe(false);
+    expect(core.isEmptyEntitySnapshotRefreshPendingForTest()).toBe(false);
+    const sentAfterClaimAppears = sentMessages.length;
+    vi.advanceTimersByTime(7500);
+    await Promise.resolve();
+    expect(sentMessages).toHaveLength(sentAfterClaimAppears);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("publishes stable player-visible locators for actual-click attraction playthrough", async () => {
@@ -1405,6 +1699,170 @@ describe("viewer web ui automation baseline", () => {
 	    );
 	    expect(core.state.lastChatFeedback.effect).not.toBe("agent_chat overall timeout");
 	  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("times out prompt_control requests that were sent but never acked", async () => {
+    const { core, sentMessages } = await setupConnectedSemanticCore();
+
+    expect(core.sendPromptControl("preview", {
+      agentId: "agent-0",
+      shortTermGoal: "keep the forge queue moving",
+    })).toEqual(expect.objectContaining({ ok: true }));
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "prompt_control",
+            command: expect.objectContaining({ mode: "preview" }),
+          }),
+        ]),
+      );
+    });
+    expect(core.state.lastPromptFeedback).toEqual(
+      expect.objectContaining({
+        stage: "sent",
+        effect: "prompt preview request sent; waiting for ack",
+      }),
+    );
+
+    expect(core.expirePendingPromptControlAckTimeoutForTest()).toBe(true);
+
+    expect(core.state.lastPromptFeedback).toEqual(
+      expect.objectContaining({
+        stage: "error",
+        ok: false,
+        accepted: false,
+        effect: "prompt_control ack timeout",
+        reason: "prompt_control timed out waiting for ack/error from live server",
+      }),
+    );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("times out gameplay_action requests that were sent but never acked", async () => {
+    const { core, sentMessages } = await setupConnectedSemanticCore();
+
+    expect(core.sendGameplayAction({
+      protocol_action: "gameplay_action.submit",
+      action_id: "inspect_target",
+      target_agent_id: "agent-0",
+    })).toEqual(expect.objectContaining({ ok: true }));
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "gameplay_action",
+            request: expect.objectContaining({
+              action_id: "inspect_target",
+              target_agent_id: "agent-0",
+            }),
+          }),
+        ]),
+      );
+    });
+    expect(core.state.lastGameplayActionFeedback).toEqual(
+      expect.objectContaining({
+        stage: "sent",
+        effect: "gameplay action sent; waiting for ack",
+      }),
+    );
+
+    expect(core.expirePendingGameplayActionAckTimeoutForTest()).toBe(true);
+
+    expect(core.state.lastGameplayActionFeedback).toEqual(
+      expect.objectContaining({
+        stage: "error",
+        ok: false,
+        accepted: false,
+        effect: "gameplay_action ack timeout",
+        reason: "gameplay_action timed out waiting for ack/error from live server",
+      }),
+    );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("resolves pending session registration when runtime returns catch_up_ready", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({ mode: "reconnect_sync" }),
+          }),
+        ]),
+      );
+    });
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+    core.injectSnapshot(sampleSnapshot());
+    core.applySelection({ kind: "agent", id: "agent-0" });
+    core.state.auth = {
+      ...core.state.auth,
+      available: true,
+      playerId: "local-test-player-bound",
+      publicKey: "abcdef0123456789abcdef0123456789",
+      privateKey: "07".repeat(32),
+      source: "local_test_api_ephemeral",
+      registrationStatus: "registered",
+      runtimeStatus: "issued",
+      boundAgentId: "agent-0",
+      syncInFlight: false,
+    };
+
+    const registerPromise = core.registerPlayerSessionForTest("agent-0");
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                player_id: "local-test-player-bound",
+                requested_agent_id: "agent-0",
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: "local-test-player-bound",
+        session_pubkey: "abcdef0123456789abcdef0123456789",
+        agent_id: "agent-0",
+      },
+    });
+    await expect(registerPromise).resolves.toEqual(
+      expect.objectContaining({ status: "catch_up_ready" }),
+    );
+
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("persists acknowledged chat messages for the current world", async () => {
     const { core } = await renderViewerApp({

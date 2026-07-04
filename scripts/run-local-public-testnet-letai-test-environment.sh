@@ -33,6 +33,7 @@ SOCKS_PROXY_URL="${OASIS7_LOCAL_TEST_SOCKS_PROXY_URL:-socks5://127.0.0.1:7897}"
 USE_DEFAULT_PROXY="1"
 VIEWER_API_BIND="${OASIS7_VIEWER_LIVE_API_BIND:-127.0.0.1:5023}"
 VIEWER_WS_BIND="${OASIS7_VIEWER_LIVE_WS_BIND:-127.0.0.1:5011}"
+VIEWER_GENERATED_WORLD_DIR="${OASIS7_VIEWER_GENERATED_WORLD_DIR:-}"
 STATIC_BIND="${OASIS7_VIEWER_STATIC_BIND:-127.0.0.1}"
 STATIC_PORT="${OASIS7_VIEWER_STATIC_PORT:-4173}"
 BUILD="1"
@@ -42,6 +43,7 @@ SKIP_NEWAPI="0"
 SKIP_PROVIDER="0"
 SKIP_VIEWER_LIVE="0"
 SKIP_STATIC_VIEWER="0"
+RUN_VIEWER_FIRST_USER_SMOKE="${OASIS7_VIEWER_FIRST_USER_SMOKE:-1}"
 PRINT_OPERATOR_COMMANDS="1"
 STARTED_PIDS=()
 STARTED_LABELS=()
@@ -80,6 +82,8 @@ Options:
   --max-output-tokens <n>        Provider max output tokens (default: 64)
   --viewer-api-bind <host:port>  Viewer live API bind (default: 127.0.0.1:5023)
   --viewer-ws-bind <host:port>   Viewer live websocket bind (default: 127.0.0.1:5011)
+  --viewer-generated-world-dir <dir>
+                                  Generated-world root for viewer live sidecar map bootstrap
   --static-bind <host>           Static viewer bind host (default: 127.0.0.1)
   --static-port <port>           Static viewer port (default: 4173)
   --proxy <url>                  HTTP/HTTPS proxy exported for provider calls
@@ -92,6 +96,7 @@ Options:
   --skip-provider-bridge         Do not start 127.0.0.1:5841 LetAI provider bridge
   --skip-viewer-live             Do not start oasis7_viewer_live
   --skip-static-viewer           Do not start static viewer HTTP server
+  --skip-viewer-first-user-smoke Do not run the viewer first-user smoke gate
   --no-operator-commands         Do not print bind/deposit/transfer/reconcile command templates
   -h, --help                     Show this help
 
@@ -750,6 +755,15 @@ start_viewer_live() {
   fi
   mkdir -p "$OUTPUT_DIR"
   local log_path="$OUTPUT_DIR/viewer-live.log"
+  local generated_world_args=()
+  if [[ -n "$VIEWER_GENERATED_WORLD_DIR" ]]; then
+    VIEWER_GENERATED_WORLD_DIR="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$VIEWER_GENERATED_WORLD_DIR")"
+    require_file "$VIEWER_GENERATED_WORLD_DIR/generated-scenario-world/snapshot.json" "viewer generated world sidecar snapshot"
+    require_file "$VIEWER_GENERATED_WORLD_DIR/generated-scenario-world/journal.json" "viewer generated world sidecar journal"
+    require_file "$VIEWER_GENERATED_WORLD_DIR/world-generation-provenance.json" "viewer generated world provenance"
+    generated_world_args=(--generated-world-dir "$VIEWER_GENERATED_WORLD_DIR")
+    log "viewer live generated world dir: $VIEWER_GENERATED_WORLD_DIR"
+  fi
   log "starting viewer live api=$VIEWER_API_BIND ws=$VIEWER_WS_BIND; log=$log_path"
   submit_service "oasis7.local-public-testnet.viewer-live" "$log_path" \
     env \
@@ -770,6 +784,7 @@ start_viewer_live() {
       --chain-submit-bind "$chain_submit_bind_value" \
       --chain-link-policy enforcing \
       --llm \
+      "${generated_world_args[@]}" \
     >"$OUTPUT_DIR/viewer-live.pid"
   wait_for_port "$VIEWER_API_BIND" "viewer live API"
   wait_for_port "$VIEWER_WS_BIND" "viewer live websocket"
@@ -799,6 +814,46 @@ start_static_viewer() {
   wait_for_http "http://$STATIC_BIND:$STATIC_PORT/software_safe.html" "static viewer"
 }
 
+viewer_first_user_smoke_url() {
+  printf 'http://%s:%s/software_safe.html?ws=ws://%s&test_api=1&locale=zh\n' \
+    "$STATIC_BIND" \
+    "$STATIC_PORT" \
+    "$VIEWER_WS_BIND"
+}
+
+run_viewer_first_user_smoke() {
+  if [[ "$RUN_VIEWER_FIRST_USER_SMOKE" != "1" ]]; then
+    log "skipping viewer first-user smoke"
+    return 0
+  fi
+  if [[ "$SKIP_VIEWER_LIVE" == "1" || "$SKIP_STATIC_VIEWER" == "1" ]]; then
+    log "skipping viewer first-user smoke because viewer live/static viewer is disabled"
+    return 0
+  fi
+  local node_bin
+  node_bin="${OASIS7_NODE_BIN:-}"
+  if [[ -z "$node_bin" ]]; then
+    node_bin="$(command -v node || true)"
+  fi
+  [[ -n "$node_bin" ]] || die "node is required for viewer first-user smoke; install node, set OASIS7_NODE_BIN, or pass --skip-viewer-first-user-smoke"
+
+  local smoke_dir
+  smoke_dir="$OUTPUT_DIR/viewer-first-user-smoke"
+  mkdir -p "$smoke_dir"
+  local smoke_url
+  smoke_url="$(viewer_first_user_smoke_url)"
+  log "running viewer first-user smoke: $smoke_url"
+  "$node_bin" "$ROOT_DIR/crates/oasis7_viewer/scripts/viewer-first-user-smoke.mjs" \
+    --url "$smoke_url" \
+    --out-dir "$smoke_dir" \
+    --timeout-ms 60000 \
+    >"$OUTPUT_DIR/viewer-first-user-smoke.log" 2>&1 || {
+      tail -n 120 "$OUTPUT_DIR/viewer-first-user-smoke.log" >&2 || true
+      die "viewer first-user smoke failed; artifacts: $smoke_dir"
+    }
+  cat "$OUTPUT_DIR/viewer-first-user-smoke.log" >&2
+}
+
 print_summary() {
   local pricing
   pricing="$(load_pricing_rules || true)"
@@ -820,6 +875,7 @@ Local public_testnet test environment plan:
   newapi_state_path: $NEWAPI_STATE_PATH
   provider_bridge: http://$PROVIDER_BIND
   viewer_live_api: http://$VIEWER_API_BIND
+  viewer_generated_world_dir: ${VIEWER_GENERATED_WORLD_DIR:-none}
   viewer_url: $viewer_url
   logs: $OUTPUT_DIR
 
@@ -884,6 +940,7 @@ while [[ $# -gt 0 ]]; do
     --max-output-tokens) PROVIDER_MAX_OUTPUT_TOKENS="${2:-}"; shift 2 ;;
     --viewer-api-bind) VIEWER_API_BIND="${2:-}"; shift 2 ;;
     --viewer-ws-bind) VIEWER_WS_BIND="${2:-}"; shift 2 ;;
+    --viewer-generated-world-dir) VIEWER_GENERATED_WORLD_DIR="${2:-}"; shift 2 ;;
     --static-bind) STATIC_BIND="${2:-}"; shift 2 ;;
     --static-port) STATIC_PORT="${2:-}"; shift 2 ;;
     --proxy) PROXY_URL="${2:-}"; shift 2 ;;
@@ -896,6 +953,7 @@ while [[ $# -gt 0 ]]; do
     --skip-provider-bridge) SKIP_PROVIDER="1"; shift ;;
     --skip-viewer-live) SKIP_VIEWER_LIVE="1"; shift ;;
     --skip-static-viewer) SKIP_STATIC_VIEWER="1"; shift ;;
+    --skip-viewer-first-user-smoke) RUN_VIEWER_FIRST_USER_SMOKE="0"; shift ;;
     --no-operator-commands) PRINT_OPERATOR_COMMANDS="0"; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
@@ -969,5 +1027,6 @@ start_newapi_bridge
 start_provider_bridge
 start_viewer_live
 start_static_viewer
+run_viewer_first_user_smoke
 SERVICES_READY="1"
 print_summary

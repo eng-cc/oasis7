@@ -13,12 +13,31 @@ cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" 
   "runtime_build": {
     "sha256": "old-runtime-sha",
     "size_bytes": 1
+  },
+  "generated_world_sidecar": {
+    "kind": "directory",
+    "resolved_path": "/old/local/generated-scenario-world",
+    "sha256_tree": "old-sidecar-sha"
+  },
+  "world_generation_provenance": {
+    "kind": "file",
+    "resolved_path": "/old/local/world-generation-provenance.json",
+    "sha256": "old-provenance-sha",
+    "size_bytes": 1
   }
 }
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<'EOF'
 {"manifest":true}
+EOF
+
+cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json" <<'EOF'
+{
+  "governance_bootstrap_refs": {
+    "governance_public_manifest_ref": "/tmp/governance-public.json"
+  }
+}
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'EOF'
@@ -61,6 +80,17 @@ EOF
 
 cat >"$TMP_DIR/world/journal.json" <<'EOF'
 []
+EOF
+
+mkdir -p "$TMP_DIR/world/generated-scenario-world"
+cat >"$TMP_DIR/world/generated-scenario-world/manifest.json" <<'EOF'
+{"sidecar":true}
+EOF
+cat >"$TMP_DIR/world/world-generation-provenance.json" <<'EOF'
+{"provenance":true}
+EOF
+cat >"$TMP_DIR/world/.DS_Store" <<'EOF'
+finder
 EOF
 
 cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
@@ -277,9 +307,28 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/tar -C '\([^']*\)\/staged-world'.*/\1/p")
     tar -C "$root$stack_root/staged-world" -xf -
     ;;
-  cp\ -R*)
-    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)\/staged-world\/.' '\([^']*\)\/data\/execution-world\/'.*/\1/p")
-    cp -R "$root$stack_root/staged-world/." "$root$stack_root/data/execution-world/"
+  find\ *\ -delete)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/find '\([^']*\)\/staged-world'.*/\1/p")
+    find "$root$stack_root/staged-world" \( -name '._*' -o -name '.DS_Store' \) -delete
+    ;;
+  *oasis7_world_repair_rebuild*)
+    stack_root=$(printf '%s\n' "$cmd" | sed -n "s/'\([^']*\)\/current\/bin\/oasis7_world_repair_rebuild'.*/\1/p")
+    output_dir=$(printf '%s\n' "$cmd" | sed -n "s/.*--output-world-dir '\([^']*\)'.*/\1/p")
+    mkdir -p "$root$output_dir"
+    printf '{"state":{"agents":{"starter-agent-0":{}}}}\n' >"$root$output_dir/snapshot.json"
+    printf '[]\n' >"$root$output_dir/journal.json"
+    printf 'repair\t%s\t%s\n' "$host" "$cmd" >>"$TEST_EVENT_LOG"
+    test -n "$stack_root"
+    ;;
+  cp\ -R\ *generated-scenario-world*\ \&\&\ cp\ *world-generation-provenance*)
+    src_sidecar=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)' '\([^']*\)' && cp '\([^']*\)' '\([^']*\)'/\1/p")
+    dest_sidecar=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)' '\([^']*\)' && cp '\([^']*\)' '\([^']*\)'/\2/p")
+    src_provenance=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)' '\([^']*\)' && cp '\([^']*\)' '\([^']*\)'/\3/p")
+    dest_provenance=$(printf '%s\n' "$cmd" | sed -n "s/cp -R '\([^']*\)' '\([^']*\)' && cp '\([^']*\)' '\([^']*\)'/\4/p")
+    rm -rf "$root$dest_sidecar"
+    mkdir -p "$(dirname "$root$dest_sidecar")" "$(dirname "$root$dest_provenance")"
+    cp -R "$root$src_sidecar" "$root$dest_sidecar"
+    cp "$root$src_provenance" "$root$dest_provenance"
     ;;
   SERVICE_NAME=*STACK_ROOT=*python3*|systemctl\ stop*\;*\ STACK_ROOT=*python3*|STACK_ROOT=*python3*)
     if [[ "${TEST_FAIL_CLEANUP_AFTER_START_HOST:-}" == "$host" ]] \
@@ -451,21 +500,36 @@ jq -e '
 test -f "$TMP_DIR/out/rebuild-summary.json"
 test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json"
+test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/.DS_Store"
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
   "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
   "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/node.env"
 expected_runtime_sha=$(printf 'runtime-v2' | shasum -a 256 | awk '{print $1}')
+expected_provenance_sha=$(printf '{"provenance":true}\n' | shasum -a 256 | awk '{print $1}')
 for host in root@sequencer root@storage; do
+  expected_sidecar=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).absolute())' \
+    "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/data/execution-world/generated-scenario-world")
+  expected_provenance=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).absolute())' \
+    "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/data/execution-world/world-generation-provenance.json")
   for bundle in \
     "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
     "$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"; do
-    jq -e --arg expected "$expected_runtime_sha" '
+    jq -e \
+      --arg expected "$expected_runtime_sha" \
+      --arg sidecar "$expected_sidecar" \
+      --arg provenance "$expected_provenance" \
+      --arg provenance_sha "$expected_provenance_sha" '
       .runtime_build.sha256 == $expected
       and .runtime_build.size_bytes == 10
       and .runtime_build.git_commit == "test-commit"
       and .runtime_build.package_version == "0.0.0+testnet.test"
       and .runtime_build.run_id == "test-run"
+      and .generated_world_sidecar.resolved_path == $sidecar
+      and .generated_world_sidecar.path == $sidecar
+      and .world_generation_provenance.resolved_path == $provenance
+      and .world_generation_provenance.path == $provenance
+      and .world_generation_provenance.sha256 == $provenance_sha
     ' "$bundle" >/dev/null
   done
 done

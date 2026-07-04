@@ -313,7 +313,7 @@ pub(super) fn bootstrap_runtime_world(
     bootstrap_runtime_world_from_model(config, &model, "runtime live bootstrap")
 }
 
-pub(super) fn bootstrap_generated_sidecar_runtime_world(
+pub fn bootstrap_generated_sidecar_runtime_world(
     generated_world_dir: &Path,
 ) -> Result<(RuntimeWorld, WorldConfig, WorldModel), String> {
     let sidecar_dir = generated_world_dir.join("generated-scenario-world");
@@ -427,6 +427,9 @@ fn bootstrap_runtime_world_from_model(
             .set_agent_resource_balance(agent_id.as_str(), ResourceKind::Data, data)
             .map_err(|err| format!("{label} set data failed agent={} err={err:?}", agent_id))?;
     }
+    world
+        .step()
+        .map_err(|err| format!("{label} resource seed consensus step failed: {err:?}"))?;
 
     Ok((world, config))
 }
@@ -499,6 +502,9 @@ pub fn bootstrap_formal_release_runtime_world() -> Result<(RuntimeWorld, WorldCo
                 FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID
             )
         })?;
+    world.step().map_err(|err| {
+        format!("formal release bootstrap resource consensus step failed: {err:?}")
+    })?;
     Ok((world, config))
 }
 
