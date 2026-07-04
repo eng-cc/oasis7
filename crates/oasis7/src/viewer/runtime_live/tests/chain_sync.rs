@@ -315,7 +315,7 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
 }
 
 #[test]
-fn chain_linked_runtime_committed_height_zero_skips_bootstrap_execution_world_validation() {
+fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_committed_height");
     let mut execution_world = crate::runtime::World::new_production_hardened();
     execution_world.submit_action(RuntimeAction::RegisterAgent {
@@ -360,11 +360,17 @@ fn chain_linked_runtime_committed_height_zero_skips_bootstrap_execution_world_va
 
     let progressed = server
         .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should ignore zero-height bootstrap state");
+        .expect("chain sync should consume persisted zero-height execution world");
 
-    assert!(!progressed);
-    assert_eq!(server.world.state().time, initial_time);
-    assert_eq!(server.last_chain_committed_height, 0);
+    assert!(progressed);
+    assert_eq!(server.world.state().time, execution_world.state().time);
+    assert_ne!(server.world.state().time, initial_time);
+    assert_eq!(
+        server.last_chain_committed_height,
+        execution_world.state().time.max(1)
+    );
     assert!(server.latest_player_gameplay_feedback.is_none());
-    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+    let line = read_response_line(&peer, Duration::from_millis(200))
+        .expect("expected zero-height execution-world sync response");
+    assert!(!line.trim().is_empty());
 }

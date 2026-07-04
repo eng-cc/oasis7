@@ -1,3 +1,4 @@
+use super::authoritative::compute_runtime_snapshot_hash;
 use super::*;
 
 use super::super::protocol::{GameplayActionError, GameplayActionRequest};
@@ -151,6 +152,8 @@ impl ViewerRuntimeLiveServer {
 
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
+        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&self.world.snapshot())?;
+        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared.world.snapshot())?;
         let delta_logical_time = prepared
             .world
             .state()
@@ -159,6 +162,19 @@ impl ViewerRuntimeLiveServer {
         let delta_event_seq =
             latest_runtime_event_seq(&prepared.world).saturating_sub(baseline_event_seq);
         if delta_logical_time == 0 && delta_event_seq == 0 {
+            let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
+                && chain_linked_runtime_has_playable_state(&prepared.world);
+            if !materially_different_world {
+                return Ok(ChainLinkedRuntimeDispatch {
+                    advanced: false,
+                    responses: Vec::new(),
+                });
+            }
+        }
+
+        if prepared.committed_height == 0
+            && !chain_linked_runtime_has_playable_state(&prepared.world)
+        {
             return Ok(ChainLinkedRuntimeDispatch {
                 advanced: false,
                 responses: Vec::new(),
@@ -267,20 +283,34 @@ fn prepare_chain_linked_runtime_update(
     chain_status_bind: &str,
 ) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
     let chain_status = fetch_chain_status_snapshot(chain_status_bind)?;
-    if chain_status.consensus.committed_height == 0 {
-        return Ok(PreparedChainLinkedRuntimeUpdate {
-            committed_height: 0,
-            world: RuntimeWorld::new_production_hardened(),
-        });
-    }
-    let world = load_chain_execution_world(
+    let world = match load_chain_execution_world(
         chain_status.execution_world_dir.as_path(),
         chain_status.release_security_policy,
-    )?;
+    ) {
+        Ok(world) => world,
+        Err(err) if chain_status.consensus.committed_height == 0 => {
+            let _ = err;
+            RuntimeWorld::new_production_hardened()
+        }
+        Err(err) => return Err(err),
+    };
+    let sync_watermark =
+        chain_linked_runtime_sync_watermark(chain_status.consensus.committed_height, &world);
     Ok(PreparedChainLinkedRuntimeUpdate {
-        committed_height: chain_status.consensus.committed_height,
+        committed_height: sync_watermark,
         world,
     })
+}
+
+fn chain_linked_runtime_sync_watermark(committed_height: u64, world: &RuntimeWorld) -> u64 {
+    committed_height
+        .max(world.state().time)
+        .max(latest_runtime_event_seq(world))
+}
+
+fn chain_linked_runtime_has_playable_state(world: &RuntimeWorld) -> bool {
+    let state = world.state();
+    !state.agents.is_empty() || !state.resources.is_empty() || !state.factories.is_empty()
 }
 
 fn fetch_chain_status_snapshot(
