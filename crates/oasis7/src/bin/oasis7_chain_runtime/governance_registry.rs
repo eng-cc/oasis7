@@ -254,12 +254,6 @@ fn import_genesis_validator_registry(
     manifest_path: &Path,
 ) -> Result<(), String> {
     let registry = load_genesis_finality_registry(manifest_path)?;
-    if execution_world_has_persisted_state(execution_world_dir) {
-        return Err(format!(
-            "refusing to import genesis validator registry into existing execution world {} without reconciliation; use the dedicated governance registry import/migration path for non-empty worlds",
-            execution_world_dir.display()
-        ));
-    }
     let mut world = super::execution_bridge::load_execution_world(execution_world_dir)?;
     if world
         .resolve_governance_effective_finality_signer_registry()
@@ -269,6 +263,12 @@ fn import_genesis_validator_registry(
         .is_some()
     {
         return Ok(());
+    }
+    if execution_world_has_persisted_state(execution_world_dir) {
+        return Err(format!(
+            "refusing to import genesis validator registry into existing execution world {} without reconciliation; use the dedicated governance registry import/migration path for non-empty worlds",
+            execution_world_dir.display()
+        ));
     }
     world
         .set_governance_finality_signer_registry(registry)

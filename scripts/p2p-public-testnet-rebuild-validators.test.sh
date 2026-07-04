@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-rebuild-validators-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-mkdir -p "$TMP_DIR/bin" "$TMP_DIR/config" "$TMP_DIR/world" "$TMP_DIR/remote" "$TMP_DIR/status"
+mkdir -p "$TMP_DIR/bin" "$TMP_DIR/config/doc/testing/evidence" "$TMP_DIR/world" "$TMP_DIR/remote" "$TMP_DIR/status"
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<'EOF'
 {
@@ -35,9 +35,29 @@ EOF
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json" <<'EOF'
 {
   "governance_bootstrap_refs": {
-    "governance_public_manifest_ref": "/tmp/governance-public.json"
+    "governance_public_manifest_ref": "/tmp/public-testnet-governance-public-signers-2026-06-05.json"
   }
 }
+EOF
+
+cat >"$TMP_DIR/config/doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json" <<'EOF'
+[
+  {
+    "slot_id": "governance.finality.v1",
+    "node_id": "triad-testnet-sequencer",
+    "scheme": "ed25519",
+    "public_key_hex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "stake": 100,
+    "threshold": 1
+  },
+  {
+    "slot_id": "governance.controller.v1",
+    "signer_id": "controller-a",
+    "scheme": "ed25519",
+    "public_key_hex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "threshold": 1
+  }
+]
 EOF
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'EOF'
@@ -446,6 +466,45 @@ NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:old-sequencer-signer,triad-te
 GENESIS_VALIDATOR_REGISTRY_PATH=${STACK_ROOT}/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
 EOF
   printf 'runtime-v2' >"$host_root/current/bin/oasis7_chain_runtime"
+  cat >"$host_root/current/bin/oasis7_governance_registry_import" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+world_dir=""
+public_manifest=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --world-dir)
+      world_dir=$2
+      shift 2
+      ;;
+    --public-manifest)
+      public_manifest=$2
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+test -n "$world_dir"
+test -f "$public_manifest"
+python3 - "$world_dir" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+snapshot_path = Path(sys.argv[1]) / "snapshot.json"
+data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+data.setdefault("state", {})["governance_finality_registry"] = {
+    "slot_id": "governance.finality.v1",
+    "signer_bindings": {"governance.finality.v1.triad-testnet-sequencer": "new-sequencer-signer"},
+}
+snapshot_path.write_text(json.dumps(data, sort_keys=True) + "\n", encoding="utf-8")
+PY
+EOF
+  chmod +x "$host_root/current/bin/oasis7_governance_registry_import"
   cat >"$host_root/DEPLOYED_BUILDINFO" <<'EOF'
 commit=test-commit
 package_version=0.0.0+testnet.test
@@ -500,6 +559,10 @@ jq -e '
 test -f "$TMP_DIR/out/rebuild-summary.json"
 test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json"
+jq -e '.state.governance_finality_registry.slot_id == "governance.finality.v1"' \
+  "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json" >/dev/null
+jq -e '.state.governance_finality_registry.slot_id == "governance.finality.v1"' \
+  "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json" >/dev/null
 test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/.DS_Store"
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
   "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"

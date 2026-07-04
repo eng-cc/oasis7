@@ -347,6 +347,7 @@ stage_host() {
     "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
   sync_staged_deployment_truth "$host" "$control_path" >&2
+  import_staged_governance_registry "$host" "$control_path" >&2
 }
 
 sync_staged_deployment_truth() {
@@ -533,6 +534,62 @@ print(f'synced_generated_world_sidecar={generated_world_sidecar_path}')
 print(f'synced_world_generation_provenance_sha256={world_generation_provenance_sha}')
 print(f'synced_bundle_count={len(bundle_paths)}')
 print(f'synced_genesis_count={len(genesis_paths)}')
+PY"
+}
+
+import_staged_governance_registry() {
+  local host=$1
+  local control_path=$2
+  ssh_run "$host" "$control_path" \
+    "STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+stack_root = Path(os.environ['STACK_ROOT'])
+config_dir = stack_root / 'config'
+world_dir = stack_root / 'data' / 'execution-world'
+import_bin = stack_root / 'current' / 'bin' / 'oasis7_governance_registry_import'
+
+if not import_bin.is_file():
+    raise SystemExit(f'missing governance registry import binary: {import_bin}')
+if not world_dir.is_dir():
+    raise SystemExit(f'missing execution world dir before governance import: {world_dir}')
+
+genesis_paths = sorted(config_dir.rglob('public-testnet-governed-bootstrap-genesis-2026-06-06.json'))
+if not genesis_paths:
+    raise SystemExit(f'no governed bootstrap genesis found under {config_dir}')
+
+governance_public_manifest = None
+for genesis_path in genesis_paths:
+    data = json.loads(genesis_path.read_text(encoding='utf-8'))
+    refs = data.get('governance_bootstrap_refs')
+    if not isinstance(refs, dict):
+        continue
+    raw = refs.get('governance_public_manifest_ref')
+    if isinstance(raw, str) and raw.strip():
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = genesis_path.parent / candidate
+        if candidate.is_file():
+            governance_public_manifest = candidate
+            break
+
+if governance_public_manifest is None:
+    raise SystemExit(f'no readable governance_public_manifest_ref found under {config_dir}')
+
+command = [
+    str(import_bin),
+    '--world-dir',
+    str(world_dir),
+    '--public-manifest',
+    str(governance_public_manifest),
+]
+subprocess.run(command, check=True)
+print(f'imported_governance_public_manifest={governance_public_manifest}')
 PY"
 }
 
