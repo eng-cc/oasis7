@@ -68,7 +68,7 @@ impl MembershipSyncClient {
             MembershipDirectoryAnnounce::from_membership_change(world_id, request, result);
         let mut snapshot = announce.clone().into_snapshot();
         if let Some(key_id) = signature_key_id {
-            let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+            let key_id = membership_logic::normalized_key_id(key_id)?;
             announce.signature_key_id = Some(key_id.clone());
             snapshot.signature_key_id = Some(key_id);
         }
@@ -161,7 +161,7 @@ impl MembershipSyncClient {
         )?;
         if let Some(key_id) = signature_key_id {
             announce.signature_key_id =
-                Some(membership_logic::normalized_key_id(key_id.to_string())?);
+                Some(membership_logic::normalized_key_id(key_id)?);
         }
         let signature = signer.sign_revocation(&announce)?;
         announce.signature = Some(signature);
@@ -199,7 +199,7 @@ impl MembershipSyncClient {
         key_id: &str,
         reason: Option<String>,
     ) -> Result<MembershipKeyRevocationAnnounce, WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+        let key_id = membership_logic::normalized_key_id(key_id)?;
         Ok(MembershipKeyRevocationAnnounce {
             world_id: world_id.to_string(),
             requester_id: requester_id.to_string(),
