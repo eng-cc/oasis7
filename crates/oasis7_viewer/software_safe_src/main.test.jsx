@@ -1952,6 +1952,92 @@ describe("viewer web ui automation baseline", () => {
     );
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("auto-advances local test runtime after first-agent claim ack", async () => {
+    vi.useFakeTimers();
+    const { core, sockets, sentMessages } = await setupConnectedSemanticCore({
+      snapshot: sampleSnapshot({
+        model: {
+          agents: {},
+          locations: {
+            origin: {
+              id: "origin",
+              name: "Origin",
+              radius_cm: 1,
+              resources: {},
+            },
+          },
+          agent_prompt_profiles: {},
+          agent_execution_debug_contexts: {},
+          agent_player_bindings: {},
+          agent_player_public_key_bindings: {},
+        },
+        player_gameplay: {
+          ...sampleSnapshot().player_gameplay,
+          blocker_kind: "runtime_snapshot_empty_entities",
+          available_actions: [
+            {
+              action_id: "request_snapshot",
+              label: "Refresh gameplay snapshot",
+              protocol_action: "request_snapshot",
+              disabled_reason: null,
+            },
+            {
+              action_id: "advance_step",
+              label: "Advance 1 step",
+              protocol_action: "live_control.step",
+              disabled_reason: null,
+            },
+          ],
+        },
+      }),
+      agentId: "starter-agent-0",
+    });
+    sentMessages.length = 0;
+
+    sockets[0].receive({
+      type: "gameplay_action_ack",
+      ack: {
+        action_id: "claim_first_agent",
+        target_agent_id: "starter-agent-0",
+        player_id: "local-test-player-bound",
+        accepted_at_tick: 1,
+        message: "queued gameplay action claim_first_agent for starter-agent-0",
+      },
+    });
+
+    expect(core.state.auth.boundAgentId).toBe("starter-agent-0");
+    expect(sentMessages).toContainEqual({ type: "request_snapshot" });
+    expect(sentMessages.some((message) => message.type === "live_control")).toBe(false);
+
+    vi.advanceTimersByTime(450);
+    const snapshotRequestsBeforeControlAck = sentMessages.filter((message) => message.type === "request_snapshot").length;
+    expect(sentMessages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "live_control",
+          mode: { mode: "step", count: 1 },
+        }),
+      ]),
+    );
+    const autoAdvanceMessage = sentMessages.find((message) => message.type === "live_control");
+    sockets[0].receive({
+      type: "control_completion_ack",
+      ack: {
+        request_id: autoAdvanceMessage.request_id,
+        status: "advanced",
+        delta_logical_time: 1,
+        delta_event_seq: 1,
+      },
+    });
+    expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
+      .toBeGreaterThan(snapshotRequestsBeforeControlAck);
+
+    const snapshotRequestsBeforeAutoRefresh = sentMessages.filter((message) => message.type === "request_snapshot").length;
+    vi.advanceTimersByTime(1200);
+    expect(sentMessages.filter((message) => message.type === "request_snapshot").length)
+      .toBeGreaterThan(snapshotRequestsBeforeAutoRefresh);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("resolves pending session registration when runtime returns catch_up_ready", async () => {
     activeCleanup?.();
     activeCleanup = null;

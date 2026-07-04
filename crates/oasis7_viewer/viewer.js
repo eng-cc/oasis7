@@ -3122,6 +3122,8 @@ let pendingAgentChatAckTimer = null;
 let pendingAgentChatOverallTimer = null;
 let pendingPromptControlAckTimer = null;
 let pendingGameplayActionAckTimer = null;
+let firstAgentClaimAutoAdvanceTimer = null;
+let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
 let semanticSendLoop = null;
@@ -3136,6 +3138,8 @@ const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1e3;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5e3;
 const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
+const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
+const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15e3;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 3e4;
 const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 3e4;
@@ -4164,6 +4168,57 @@ function sendViewerControl(action, payload) {
 function sendControl(action, payload = null) {
   return sendViewerControl(action, payload);
 }
+function clearFirstAgentClaimAutoAdvanceTimers() {
+  if (firstAgentClaimAutoAdvanceTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoAdvanceTimer);
+    firstAgentClaimAutoAdvanceTimer = null;
+  }
+  if (firstAgentClaimAutoRefreshTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoRefreshTimer);
+    firstAgentClaimAutoRefreshTimer = null;
+  }
+}
+function scheduleFirstAgentClaimAutoAdvance() {
+  if (!isTestApiEnabled()) {
+    return;
+  }
+  clearFirstAgentClaimAutoAdvanceTimers();
+  firstAgentClaimAutoAdvanceTimer = window.setTimeout(() => {
+    firstAgentClaimAutoAdvanceTimer = null;
+    const currentRequestId = nextRequestId();
+    const feedback = {
+      id: currentRequestId,
+      action: "step",
+      accepted: true,
+      stage: "queued",
+      reason: null,
+      hint: "auto-advancing after first-agent claim ack",
+      effect: "queued first-agent claim auto-advance",
+      baselineLogicalTime: state.logicalTime,
+      baselineEventSeq: state.eventSeq,
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+      deltaTraceCount: 0,
+      requestId: currentRequestId
+    };
+    try {
+      sendJson({
+        type: "live_control",
+        mode: { mode: "step", count: 1 },
+        request_id: currentRequestId
+      });
+      pendingControlFeedback.set(currentRequestId, feedback);
+      state.lastControlFeedback = feedback;
+      render();
+    } catch (_) {
+      requestSnapshotSafe();
+    }
+    firstAgentClaimAutoRefreshTimer = window.setTimeout(() => {
+      firstAgentClaimAutoRefreshTimer = null;
+      requestSnapshotSafe();
+    }, FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS);
+  }, FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS);
+}
 function runSteps(payload) {
   const count = parseStepCount(payload);
   if (!count) {
@@ -4386,6 +4441,9 @@ function handleSnapshot(snapshot) {
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
   syncEmptyEntitySnapshotRefreshLoop();
+  if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
+    clearFirstAgentClaimAutoAdvanceTimers();
+  }
 }
 function normalizedGameplayActions(snapshot = state.snapshot) {
   const actions = snapshot?.player_gameplay?.available_actions || snapshot?.player_gameplay?.availableActions || [];
@@ -4575,6 +4633,10 @@ function handleControlCompletionAck(ack) {
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
+  if (feedback.stage === "completed_advanced") {
+    requestSnapshotSafe();
+  }
+  render();
 }
 async function buildAgentChatAuthProof(request, auth) {
   const nonce = nextAuthNonce();
@@ -5800,6 +5862,7 @@ function handleGameplayActionAck(ack) {
     state.auth.registrationStatus = "registered";
     state.auth.runtimeStatus = "registered";
     state.auth.error = null;
+    scheduleFirstAgentClaimAutoAdvance();
   }
   requestSnapshotSafe();
 }
