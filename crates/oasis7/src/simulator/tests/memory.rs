@@ -124,6 +124,21 @@ fn long_term_memory_top_by_importance_preserves_tie_order() {
 }
 
 #[test]
+fn long_term_memory_recently_accessed_limits_and_preserves_tie_order() {
+    let mut memory = LongTermMemory::new();
+    let id_a = memory.store("a", 10);
+    let id_b = memory.store("b", 11);
+    let id_c = memory.store("c", 12);
+    memory.entries.get_mut(&id_a).unwrap().last_accessed = 30;
+    memory.entries.get_mut(&id_b).unwrap().last_accessed = 40;
+    memory.entries.get_mut(&id_c).unwrap().last_accessed = 40;
+
+    let recent = memory.recently_accessed(2);
+    let contents: Vec<_> = recent.iter().map(|entry| entry.content.as_str()).collect();
+    assert_eq!(contents, vec!["b", "c"]);
+}
+
+#[test]
 fn long_term_memory_export_restore_roundtrip_preserves_entries_and_next_id() {
     let mut source = LongTermMemory::new();
     source.store_with_tags("first", 10, vec!["tag-a".to_string()]);
