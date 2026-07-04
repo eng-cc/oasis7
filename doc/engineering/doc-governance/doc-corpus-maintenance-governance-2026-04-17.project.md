@@ -21,6 +21,8 @@
 - [x] simulation-cleanup-governance-aftercare (PRD-ENGINEERING-021/025) [test_tier_required]: 将 world-simulator 旧全量审读清单从 active reading truth 降格为 historical snapshot，并把仿真模拟 demo/bin 退役候选转成 replacement-evidence follow-up signals；当前不直接删除 active simulator code/docs。 Trace: .pm/tasks/task_41b18b1a7fef4d7b95e5d51aac64974f.yaml
 - [x] historical-doc-skill-surface-governance (PRD-ENGINEERING-025/032) [test_tier_required]: 收口 stale-file 抽样后的治理落地，把历史 project/handoff/evidence 与 skill placeholder 表面纳入 batch compaction/retirement 口径，并先退役一个未被入口承接的 `gameplay-mechanics` placeholder helper。 Trace: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml
 
+2026-07-04 aftercare：`devlog-history-compaction` 一次性专题三件套已退役删除；当前 `doc/devlog` 入口收敛到 `doc/devlog/README.md` compact archive summary，任务执行证据以 GitHub task issue evidence comments、GitHub Project fields 与 workflow source-of-truth 为准。
+
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
   - `doc/` Markdown 总量 `1764`
