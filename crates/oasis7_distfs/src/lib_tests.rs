@@ -244,6 +244,102 @@ fn file_store_delete_removes_mapping() {
 }
 
 #[test]
+fn file_store_delete_preserves_blob_referenced_by_another_file() {
+    let dir = temp_dir("file-delete-shared-blob");
+    let store = LocalCasStore::new(&dir);
+
+    let first = store
+        .write_file("workspace/a.log", b"shared")
+        .expect("write a");
+    let second = store
+        .write_file("workspace/b.log", b"shared")
+        .expect("write b");
+    assert_eq!(first.content_hash, second.content_hash);
+
+    let blob_path = store
+        .blob_path(first.content_hash.as_str())
+        .expect("blob path");
+    assert!(blob_path.exists(), "shared blob should exist before delete");
+
+    let removed = store.delete_file("workspace/a.log").expect("delete a");
+    assert!(removed);
+    assert!(
+        store
+            .stat_file("workspace/a.log")
+            .expect("stat a")
+            .is_none()
+    );
+    assert!(blob_path.exists(), "delete should keep the shared blob");
+    assert_eq!(
+        store.read_file("workspace/b.log").expect("read b"),
+        b"shared"
+    );
+
+    let removed = store.delete_file("workspace/b.log").expect("delete b");
+    assert!(removed);
+    assert!(
+        !blob_path.exists(),
+        "last reference deletion should prune the blob"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn file_store_delete_repairs_legacy_index_without_ref_counts() {
+    let dir = temp_dir("file-delete-legacy-index");
+    let store = LocalCasStore::new(&dir);
+
+    let first = store
+        .write_file("workspace/a.log", b"shared")
+        .expect("write a");
+    let second = store
+        .write_file("workspace/b.log", b"shared")
+        .expect("write b");
+    assert_eq!(first.content_hash, second.content_hash);
+
+    let mut legacy_index: serde_json::Value =
+        serde_json::from_slice(&fs::read(store.files_index_path()).expect("read index"))
+            .expect("parse index");
+    legacy_index
+        .as_object_mut()
+        .expect("index object")
+        .remove("content_hash_ref_counts");
+    fs::write(
+        store.files_index_path(),
+        serde_json::to_vec(&legacy_index).expect("serialize legacy index"),
+    )
+    .expect("write legacy index");
+
+    let blob_path = store
+        .blob_path(first.content_hash.as_str())
+        .expect("blob path");
+    assert!(store.delete_file("workspace/a.log").expect("delete a"));
+    assert!(
+        blob_path.exists(),
+        "legacy index migration should keep the shared blob"
+    );
+    assert_eq!(
+        store.read_file("workspace/b.log").expect("read b"),
+        b"shared"
+    );
+
+    let repaired_index: serde_json::Value =
+        serde_json::from_slice(&fs::read(store.files_index_path()).expect("read repaired index"))
+            .expect("parse repaired index");
+    assert!(
+        repaired_index
+            .get("content_hash_ref_counts")
+            .and_then(|value| value.get(first.content_hash.as_str()))
+            .and_then(|value| value.as_u64())
+            .is_some(),
+        "mutating a legacy index should persist repaired ref counts"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn file_store_compacts_files_index_json() {
     let dir = temp_dir("file-index-compact");
     let store = LocalCasStore::new(&dir);
