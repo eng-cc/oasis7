@@ -277,6 +277,25 @@ check_or_reuse_port() {
   return 0
 }
 
+remove_launchd_label_if_present() {
+  local label="$1"
+  if ! command -v launchctl >/dev/null 2>&1; then
+    return 0
+  fi
+  if launchctl list "$label" >/dev/null 2>&1; then
+    log "stopping stale launchd service: $label"
+    launchctl remove "$label" >/dev/null 2>&1 || true
+  fi
+}
+
+stop_stale_viewer_live_services() {
+  if [[ "$REUSE_EXISTING" == "1" ]]; then
+    return 0
+  fi
+  remove_launchd_label_if_present "oasis7.local-public-testnet.viewer-live"
+  remove_launchd_label_if_present "oasis7.local-public-testnet.viewer-live-clean"
+}
+
 load_pricing_rules() {
   if [[ -n "$PRICING_RULES" ]]; then
     printf '%s' "$PRICING_RULES"
@@ -755,6 +774,7 @@ start_viewer_live() {
     log "skipping viewer live"
     return 0
   fi
+  stop_stale_viewer_live_services
   if ! check_or_reuse_port "viewer live API" "$VIEWER_API_BIND"; then
     return 0
   fi

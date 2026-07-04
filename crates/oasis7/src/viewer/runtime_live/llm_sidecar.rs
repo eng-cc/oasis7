@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::geometry::GeoPos;
@@ -8,13 +8,13 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody,
 };
 use crate::simulator::{
-    Action as SimulatorAction, ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, CHUNK_GENERATION_SCHEMA_VERSION, ChunkRuntimeConfig,
-    LlmAgentBehavior, LlmAgentConfig, Location, OpenAiChatCompletionClient,
-    ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
-    ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner, SNAPSHOT_VERSION,
+    evaluate_provider_compatibility, provider_agent_chat_log_key, Action as SimulatorAction,
+    ActionCatalogEntry, ActionResult, AgentDecision, AgentDecisionTrace, AgentPromptProfile,
+    AgentRunner, ChunkRuntimeConfig, LlmAgentBehavior, LlmAgentConfig, Location,
+    OpenAiChatCompletionClient, ProviderAgentChatRequest, ProviderBackedAgentBehavior,
+    ProviderExecutionMode, ProviderLoopbackAdapter, ProviderLoopbackHttpClient, ResourceOwner,
     WorldConfig, WorldEvent, WorldEventKind, WorldJournal, WorldKernel, WorldModel, WorldSnapshot,
-    evaluate_provider_compatibility, provider_agent_chat_log_key,
+    CHUNK_GENERATION_SCHEMA_VERSION, SNAPSHOT_VERSION,
 };
 use crate::viewer::live::ViewerLiveDecisionMode;
 use crate::viewer::protocol::{AgentChatAck, AgentChatError};
@@ -63,6 +63,7 @@ const RUNTIME_PROVIDER_CHECK_CACHE_MS: u64 = 2_000;
 const PROVIDER_AGENT_CHAT_CAPABILITY: &str = "agent_chat";
 const ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
 const DEFAULT_RUNTIME_LIVE_LLM_TIMEOUT_MS: u64 = 30_000;
+const LOCAL_TEST_PLAYER_ID_PREFIX: &str = "local-test-player-";
 
 #[path = "llm_sidecar_provider.rs"]
 mod provider_support;
@@ -457,6 +458,31 @@ impl RuntimeLlmSidecar {
             player_id: player_id.to_string(),
             public_key,
         })
+    }
+
+    pub(in crate::viewer::runtime_live) fn clear_stale_local_test_bindings_for_world(
+        &mut self,
+        world: &RuntimeWorld,
+    ) -> usize {
+        let world_agent_ids: BTreeSet<&str> =
+            world.state().agents.keys().map(String::as_str).collect();
+        let stale_agent_ids: Vec<String> = self
+            .agent_player_bindings
+            .iter()
+            .filter(|(agent_id, player_id)| {
+                player_id.starts_with(LOCAL_TEST_PLAYER_ID_PREFIX)
+                    && !world_agent_ids.contains(agent_id.as_str())
+            })
+            .map(|(agent_id, _)| agent_id.clone())
+            .collect();
+        let stale_count = stale_agent_ids.len();
+        for agent_id in stale_agent_ids {
+            if let Some(player_id) = self.agent_player_bindings.remove(agent_id.as_str()) {
+                self.player_agent_bindings.remove(player_id.as_str());
+            }
+            self.agent_public_key_bindings.remove(agent_id.as_str());
+        }
+        stale_count
     }
 
     pub(in crate::viewer::runtime_live) fn bind_agent_player(
@@ -1161,13 +1187,11 @@ mod tests {
             .expect("runtime seed shadow sync");
 
         let shadow = sidecar.shadow_kernel.as_ref().expect("shadow kernel");
-        assert!(
-            shadow
-                .snapshot()
-                .model
-                .locations
-                .contains_key("frag-shadow")
-        );
+        assert!(shadow
+            .snapshot()
+            .model
+            .locations
+            .contains_key("frag-shadow"));
     }
 
     #[test]

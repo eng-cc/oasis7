@@ -205,4 +205,8 @@ fi
 assert_contains "$world_resource_fail_out" "world_resource_readiness='not_ready'"
 assert_contains "$world_resource_fail_out" "world_resource_failed_gates=['world_resource_world_id_mismatch']"
 
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "stop_stale_viewer_live_services"
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "oasis7.local-public-testnet.viewer-live-clean"
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh '[[ "$REUSE_EXISTING" == "1" ]]'
+
 echo "run-local-public-testnet-letai-test-environment checks passed"

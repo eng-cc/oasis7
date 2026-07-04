@@ -132,6 +132,24 @@ async function writeJson(path, payload) {
   await writeFile(path, JSON.stringify(payload, null, 2), "utf8");
 }
 
+async function writeBestEffortScreenshot(page, path) {
+  try {
+    await page.screenshot({ path, fullPage: true, timeout: 10000 });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error?.message || String(error) };
+  }
+}
+
+function gameplayEntityCount(state, key) {
+  return Number(
+    state?.gameplaySummary?.entityCounts?.[key]
+      ?? state?.gameplaySummary?.[`${key.slice(0, -1)}Count`]
+      ?? state?.gameplaySummary?.[`${key}Count`]
+      ?? 0,
+  );
+}
+
 function summarizeState(state) {
   const agents = state?.snapshot?.model?.agents ?? {};
   const locations = state?.snapshot?.model?.locations ?? {};
@@ -156,13 +174,44 @@ function summarizeState(state) {
     connectionStatus: state?.connectionStatus ?? null,
     lastError: state?.lastError ?? null,
     auth,
-    agentCount: Object.keys(agents).length || Number(state?.gameplaySummary?.agentCount ?? 0),
-    locationCount: Object.keys(locations).length || Number(state?.gameplaySummary?.locationCount ?? 0),
+    agentCount: Object.keys(agents).length || gameplayEntityCount(state, "agents"),
+    locationCount: Object.keys(locations).length || gameplayEntityCount(state, "locations"),
     blockerKind: state?.snapshot?.player_gameplay?.blocker_kind ?? null,
     blockerDetail: state?.snapshot?.player_gameplay?.blocker_detail ?? null,
     starterOcClaimed: Object.keys(starterOcClaims).length > 0,
     lastChatFeedback: state?.lastChatFeedback ?? null,
   };
+}
+
+async function selectBoundAgent(page) {
+  const result = await page.evaluate(() => {
+    const api = window.__AW_TEST__;
+    const state = api?.getState?.();
+    const boundAgentId = state?.auth?.boundAgentId ?? state?.authBoundAgentId;
+    if (!boundAgentId) {
+      return { ok: false, reason: "bound agent missing" };
+    }
+    const selectedId = state?.selectedId;
+    const selectedKind = state?.selectedKind;
+    if (selectedKind === "agent" && selectedId === boundAgentId) {
+      return { ok: true, kind: "agent", id: boundAgentId, alreadySelected: true };
+    }
+    return api?.select?.({ kind: "agent", id: boundAgentId }) ?? { ok: false, reason: "select api missing" };
+  });
+  if (!result?.ok) {
+    throw new Error(`failed to select bound agent: ${result?.reason || JSON.stringify(result)}`);
+  }
+  await page.evaluate(() => {
+    const details = document.querySelector("#viewer-details-panel");
+    details?.scrollIntoView?.({ block: "start", inline: "nearest" });
+    window.location.hash = "viewer-details-panel";
+  });
+  await page.waitForFunction(() => {
+    const state = window.__AW_TEST__?.getState?.();
+    const boundAgentId = state?.auth?.boundAgentId ?? state?.authBoundAgentId;
+    return state?.selectedKind === "agent" && state?.selectedId === boundAgentId;
+  }, null, { timeout: 5000 });
+  return result;
 }
 
 function chromeExecutablePath(requestedPath) {
@@ -202,9 +251,14 @@ async function main() {
 
     await page.waitForFunction(() => {
       const bodyText = document.body?.innerText ?? "";
+      const state = window.__AW_TEST__?.getState?.();
+      const agents = state?.snapshot?.model?.agents ?? {};
+      const agentCount = Object.keys(agents).length
+        || Number(state?.gameplaySummary?.entityCounts?.agents ?? state?.gameplaySummary?.agentCount ?? 0);
       return bodyText.includes("认领第一个 Agent")
         || bodyText.includes("Claim First Agent")
-        || Object.keys(window.__AW_TEST__?.getState?.()?.snapshot?.model?.agents ?? {}).length >= 1;
+        || agentCount >= 1
+        || Boolean(state?.auth?.boundAgentId ?? state?.authBoundAgentId);
     }, null, { timeout: options.timeoutMs });
     const claimFirstAgentButton = page.getByTestId("viewer-playthrough-action-claim-first-agent").first();
     if (await claimFirstAgentButton.count()) {
@@ -217,7 +271,8 @@ async function main() {
     await page.waitForFunction(() => {
       const state = window.__AW_TEST__?.getState?.();
       const agents = state?.snapshot?.model?.agents ?? {};
-      const agentCount = Object.keys(agents).length || Number(state?.gameplaySummary?.agentCount ?? 0);
+      const agentCount = Object.keys(agents).length
+        || Number(state?.gameplaySummary?.entityCounts?.agents ?? state?.gameplaySummary?.agentCount ?? 0);
       const registrationStatus = state?.auth?.registrationStatus ?? state?.authRegistrationStatus;
       const boundAgentId = state?.auth?.boundAgentId ?? state?.authBoundAgentId;
       const bodyText = document.body?.innerText ?? "";
@@ -229,6 +284,9 @@ async function main() {
     }, null, { timeout: options.timeoutMs });
 
     await writeJson(join(options.outDir, "ready_state.json"), await getState(page));
+
+    const selectResult = await selectBoundAgent(page);
+    await writeJson(join(options.outDir, "select_result.json"), selectResult);
 
     await page.waitForFunction(() => !/pixel_world_render_state_unavailable/.test(document.body?.innerText ?? ""), null, {
       timeout: options.timeoutMs,
@@ -305,7 +363,10 @@ async function main() {
     websocketTraffic = await getRecordedWebSocketTraffic(page);
     await writeJson(join(options.outDir, "websocket_traffic.json"), websocketTraffic);
     await writeJson(join(options.outDir, "final_state.json"), finalState);
-    await page.screenshot({ path: join(options.outDir, "viewer-first-user-smoke.png"), fullPage: true });
+    const screenshotResult = await writeBestEffortScreenshot(page, join(options.outDir, "viewer-first-user-smoke.png"));
+    if (!screenshotResult.ok) {
+      await writeJson(join(options.outDir, "screenshot_warning.json"), screenshotResult);
+    }
   } catch (error) {
     finalState = await getState(page).catch(() => null);
     await writeJson(join(options.outDir, "failure_state.json"), {
@@ -314,7 +375,7 @@ async function main() {
       state: finalState,
       websocketTraffic: await getRecordedWebSocketTraffic(page).catch(() => null),
     });
-    await page.screenshot({ path: join(options.outDir, "failure.png"), fullPage: true }).catch(() => {});
+    await writeBestEffortScreenshot(page, join(options.outDir, "failure.png"));
     throw error;
   } finally {
     await writeFile(join(options.outDir, "browser-console.log"), consoleLines.join("\n") + "\n", "utf8");

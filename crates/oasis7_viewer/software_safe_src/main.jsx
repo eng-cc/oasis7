@@ -9,6 +9,11 @@ import {
 } from "./software_safe_constants.js";
 
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
+const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
+
+function observeViewerStateRevision() {
+  viewerStateRevision();
+}
 
 function uiLocale() {
   return core.state.uiLocale;
@@ -658,6 +663,7 @@ function focusableElements(root) {
 }
 
 function HostedLoginGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   let dialogRef;
   let previousFocus = null;
@@ -1401,6 +1407,7 @@ function StarterOcOnboardingPanel(props) {
 }
 
 function StarterOcRequiredGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const [autoConfirmAttempts, setAutoConfirmAttempts] = createSignal(0);
   const [manualConfirmAttempts, setManualConfirmAttempts] = createSignal(0);
@@ -2024,6 +2031,7 @@ function renderResourceSummary(resources) {
 }
 
 function WorldStageHero() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const authSurface = () => core.buildAuthSurfaceModel();
@@ -2262,6 +2270,7 @@ function MobileJumpRail() {
 }
 
 function TargetsPanel() {
+  observeViewerStateRevision();
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
@@ -2424,6 +2433,7 @@ function TargetsPanel() {
 }
 
 function WorldSummaryPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const state = core.state;
   const gameplaySummary = () => core.buildGameplaySummary(locale());
@@ -3254,8 +3264,12 @@ function WorldSummaryPanel() {
 }
 
 function InteractionPanel() {
+  const revision = () => observeViewerStateRevision();
   const locale = () => uiLocale();
-  const selectedAgentId = () => core.selectedAgentId();
+  const selectedAgentId = () => {
+    revision();
+    return core.selectedAgentId();
+  };
   const agentId = () => {
     const id = normalizedId(selectedAgentId());
     if (!id || !core.isAgentVisibleToCurrentSession(id)) {
@@ -3263,31 +3277,55 @@ function InteractionPanel() {
     }
     return id;
   };
-  const gameplaySummary = () => core.buildGameplaySummary(locale());
-  const authSurface = () => core.buildAuthSurfaceModel();
+  const gameplaySummary = () => {
+    revision();
+    return core.buildGameplaySummary(locale());
+  };
+  const authSurface = () => {
+    revision();
+    return core.buildAuthSurfaceModel();
+  };
   const promptCapability = () => authSurface().capabilities.prompt_control;
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const mainTokenTransferCapability = () => authSurface().capabilities.main_token_transfer;
   const mainTokenTransferPolicy = () => core.hostedActionPolicy("main_token_transfer");
-  const binding = () => core.selectedAgentBindingInfo();
+  const binding = () => {
+    revision();
+    return core.selectedAgentBindingInfo();
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
-  const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
-  const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  const promptFeedback = () => {
+    revision();
+    return core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
+  };
+  const chatFeedback = () => {
+    revision();
+    return core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  };
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () =>
-    core.state.chatHistory
-      .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
-      .slice(0, 12);
+    {
+      revision();
+      return core.state.chatHistory
+        .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
+        .slice(0, 12);
+    };
   const interactionEnabled = () => promptCapability().enabled;
   const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
-  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent() && !core.isAgentChatInFlight();
+  const chatControlsEnabled = () => {
+    revision();
+    return chatCapability().enabled && canControlSelectedAgent() && !core.isAgentChatInFlight();
+  };
   const commandStarterOcAction = () => starterOcAction(gameplaySummary());
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
-  const promptOverridesVisible = () => !!core.state.promptOverridesVisible;
+  const promptOverridesVisible = () => {
+    revision();
+    return !!core.state.promptOverridesVisible;
+  };
   const assetLaneStatusText = () =>
     mainTokenTransferCapability().enabled
       ? tr(locale(), "仅预览", "preview_only")
@@ -3327,27 +3365,32 @@ function InteractionPanel() {
       ? playerSessionReadyCopy()
       : selectedAgentControlReason();
 
-  if (selectedAgentId() && !agentId()) {
-    return (
-      <EmptyState>
-        {tr(
-          locale(),
-          "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
-          "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
-        )}
-      </EmptyState>
-    );
-  }
-
-  if (!agentId()) {
-    if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
-      return <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />;
-    }
-    return <EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
-  }
-
   return (
-    <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
+    <Show
+      when={agentId()}
+      fallback={
+        <Show
+          when={selectedAgentId()}
+          fallback={
+            <Show
+              when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
+              fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+            >
+              <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+            </Show>
+          }
+        >
+          <EmptyState>
+            {tr(
+              locale(),
+              "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
+              "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
+            )}
+          </EmptyState>
+        </Show>
+      }
+    >
+      <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
       <div class="badge-row command-surface__target-row">
         <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
@@ -3625,11 +3668,13 @@ function InteractionPanel() {
           <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
         </div>
       </PanelSection>
-    </div>
+      </div>
+    </Show>
   );
 }
 
 function DetailsPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const worldScaleSurface = () => core.buildWorldScaleSurface(locale());
@@ -3759,6 +3804,7 @@ function DetailsPanel() {
 }
 
 function AppShell() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
@@ -4245,7 +4291,7 @@ export function mountViewerApp(root = document.getElementById("app")) {
     root.removeAttribute("data-viewer-visual-fixture");
   }
   let dispose = mount(() => <AppShell />, root);
-  core.setRenderHook(() => {});
+  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
 
   return () => {
     core.setRenderHook(null);

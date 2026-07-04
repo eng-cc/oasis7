@@ -35,107 +35,104 @@ impl TestChainStatusServer {
         let stop_for_thread = Arc::clone(&stop);
         let execution_world_dir_for_thread = execution_world_dir.clone();
         let release_security_policy_for_thread = release_security_policy.clone();
-        let join_handle = thread::spawn(move || {
-            loop {
-                if stop_for_thread.load(Ordering::SeqCst) {
-                    break;
-                }
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        if stop_for_thread.load(Ordering::SeqCst) {
-                            break;
-                        }
-                        let request = read_test_http_request(&mut stream);
-                        let request_bytes = request.as_slice();
-                        let request_text = String::from_utf8_lossy(request_bytes);
-                        let mut parts = request_text
-                            .lines()
-                            .next()
-                            .unwrap_or_default()
-                            .split_whitespace();
-                        let method = parts.next().unwrap_or_default();
-                        let path = parts
-                            .next()
-                            .unwrap_or_default()
-                            .split('?')
-                            .next()
-                            .unwrap_or_default();
+        let join_handle = thread::spawn(move || loop {
+            if stop_for_thread.load(Ordering::SeqCst) {
+                break;
+            }
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    if stop_for_thread.load(Ordering::SeqCst) {
+                        break;
+                    }
+                    let request = read_test_http_request(&mut stream);
+                    let request_bytes = request.as_slice();
+                    let request_text = String::from_utf8_lossy(request_bytes);
+                    let mut parts = request_text
+                        .lines()
+                        .next()
+                        .unwrap_or_default()
+                        .split_whitespace();
+                    let method = parts.next().unwrap_or_default();
+                    let path = parts
+                        .next()
+                        .unwrap_or_default()
+                        .split('?')
+                        .next()
+                        .unwrap_or_default();
 
-                        match (method, path) {
-                            ("GET", "/v1/chain/status") => {
-                                let body = serde_json::json!({
-                                    "consensus": {
-                                        "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
-                                    },
-                                    "execution_world_dir": execution_world_dir_for_thread,
-                                    "release_security_policy": release_security_policy_for_thread,
-                                });
-                                let body =
-                                    serde_json::to_vec(&body).expect("encode chain status body");
-                                let response = format!(
+                    match (method, path) {
+                        ("GET", "/v1/chain/status") => {
+                            let body = serde_json::json!({
+                                "consensus": {
+                                    "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
+                                },
+                                "execution_world_dir": execution_world_dir_for_thread,
+                                "release_security_policy": release_security_policy_for_thread,
+                            });
+                            let body = serde_json::to_vec(&body).expect("encode chain status body");
+                            let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                                     body.len()
                                 );
-                                stream
-                                    .write_all(response.as_bytes())
-                                    .expect("write chain status header");
-                                stream
-                                    .write_all(body.as_slice())
-                                    .expect("write chain status body");
-                                stream.flush().expect("flush chain status response");
-                            }
-                            ("POST", "/v1/chain/gameplay/submit") => {
-                                let boundary = request_bytes
-                                    .windows(4)
-                                    .position(|window| window == b"\r\n\r\n")
-                                    .expect("gameplay submit body boundary");
-                                let body = &request_bytes[(boundary + 4)..];
-                                let gameplay_request = serde_json::from_slice::<
-                                    crate::viewer::GameplayActionRequest,
-                                >(body)
-                                .expect("decode gameplay submit request");
-                                submitted_requests_for_thread
-                                    .lock()
-                                    .expect("lock submitted requests")
-                                    .push(gameplay_request);
-                                let action_id = next_gameplay_action_id_for_thread
-                                    .fetch_add(1, Ordering::SeqCst);
-                                let body = serde_json::json!({
-                                    "ok": true,
-                                    "action_id": action_id,
-                                    "submitted_at_unix_ms": test_now_unix_ms(),
-                                });
-                                let body =
-                                    serde_json::to_vec(&body).expect("encode gameplay submit body");
-                                let response = format!(
+                            stream
+                                .write_all(response.as_bytes())
+                                .expect("write chain status header");
+                            stream
+                                .write_all(body.as_slice())
+                                .expect("write chain status body");
+                            stream.flush().expect("flush chain status response");
+                        }
+                        ("POST", "/v1/chain/gameplay/submit") => {
+                            let boundary = request_bytes
+                                .windows(4)
+                                .position(|window| window == b"\r\n\r\n")
+                                .expect("gameplay submit body boundary");
+                            let body = &request_bytes[(boundary + 4)..];
+                            let gameplay_request = serde_json::from_slice::<
+                                crate::viewer::GameplayActionRequest,
+                            >(body)
+                            .expect("decode gameplay submit request");
+                            submitted_requests_for_thread
+                                .lock()
+                                .expect("lock submitted requests")
+                                .push(gameplay_request);
+                            let action_id =
+                                next_gameplay_action_id_for_thread.fetch_add(1, Ordering::SeqCst);
+                            let body = serde_json::json!({
+                                "ok": true,
+                                "action_id": action_id,
+                                "submitted_at_unix_ms": test_now_unix_ms(),
+                            });
+                            let body =
+                                serde_json::to_vec(&body).expect("encode gameplay submit body");
+                            let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                                     body.len()
                                 );
-                                stream
-                                    .write_all(response.as_bytes())
-                                    .expect("write gameplay submit header");
-                                stream
-                                    .write_all(body.as_slice())
-                                    .expect("write gameplay submit body");
-                                stream.flush().expect("flush gameplay submit response");
-                            }
-                            _ => {
-                                stream
+                            stream
+                                .write_all(response.as_bytes())
+                                .expect("write gameplay submit header");
+                            stream
+                                .write_all(body.as_slice())
+                                .expect("write gameplay submit body");
+                            stream.flush().expect("flush gameplay submit response");
+                        }
+                        _ => {
+                            stream
                                 .write_all(
                                     b"HTTP/1.1 404 Not Found\r\nContent-Length: 21\r\nConnection: close\r\n\r\n{\"error\":\"not found\"}",
                                 )
                                 .expect("write 404 response");
-                                stream.flush().expect("flush 404 response");
-                            }
+                            stream.flush().expect("flush 404 response");
                         }
                     }
-                    Err(err) => {
-                        if err.kind() == std::io::ErrorKind::WouldBlock {
-                            thread::sleep(Duration::from_millis(10));
-                            continue;
-                        }
-                        panic!("accept chain status connection failed: {err}");
+                }
+                Err(err) => {
+                    if err.kind() == std::io::ErrorKind::WouldBlock {
+                        thread::sleep(Duration::from_millis(10));
+                        continue;
                     }
+                    panic!("accept chain status connection failed: {err}");
                 }
             }
         });
@@ -225,6 +222,86 @@ fn chain_linked_runtime_sync_advances_without_play() {
     let line =
         read_response_line(&peer, Duration::from_millis(200)).expect("expected sync response");
     assert!(!line.trim().is_empty());
+}
+
+#[test]
+fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_stale_local_test_binding");
+    let execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist empty execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    server.llm_sidecar.agent_player_bindings.insert(
+        "starter-agent-0".to_string(),
+        "local-test-player-old".to_string(),
+    );
+    server.llm_sidecar.player_agent_bindings.insert(
+        "local-test-player-old".to_string(),
+        "starter-agent-0".to_string(),
+    );
+    server
+        .llm_sidecar
+        .agent_public_key_bindings
+        .insert("starter-agent-0".to_string(), "old-key".to_string());
+    server
+        .llm_sidecar
+        .agent_player_bindings
+        .insert("agent-real".to_string(), "player-real".to_string());
+    server
+        .llm_sidecar
+        .player_agent_bindings
+        .insert("player-real".to_string(), "agent-real".to_string());
+
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, _peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(
+        !progressed,
+        "empty chain world may not advance viewer state, but stale local binding should be pruned"
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get("starter-agent-0"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_agent_bindings
+            .get("local-test-player-old"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .get("starter-agent-0"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get("agent-real")
+            .map(String::as_str),
+        Some("player-real")
+    );
 }
 
 #[test]

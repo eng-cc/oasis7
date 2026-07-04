@@ -125,11 +125,13 @@ grep -q "^GENESIS_VALIDATOR_REGISTRY_PATH=$node_root_abs/config/genesis-validato
 
 plutil -lint "$node_root_abs/oasis7.testnet.smoke.plist" >/dev/null
 
-mkdir -p "$node_root_abs/replication-root" "$node_root_abs/execution-records" "$node_root_abs/store/blobs" "$node_root_abs/world-simulator-mirror"
+mkdir -p "$node_root_abs/replication-root" "$node_root_abs/execution-records" "$node_root_abs/store/blobs" "$node_root_abs/world-simulator-mirror" "$node_root_abs/world" "$node_root_abs/runtime-root"
 printf '{"committed_height":1233}\n' >"$node_root_abs/replication-root/node_pos_state.json"
 printf '{"height":1233}\n' >"$node_root_abs/execution-records/latest.json"
 printf 'old blob\n' >"$node_root_abs/store/blobs/old"
 printf '{"mirror":"old"}\n' >"$node_root_abs/world-simulator-mirror/snapshot.json"
+printf '{"world":"old"}\n' >"$node_root_abs/world/snapshot.json"
+printf '{"runtime":"old"}\n' >"$node_root_abs/runtime-root/reward-runtime-execution-bridge-state.json"
 
 set +e
 install_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
@@ -174,6 +176,8 @@ test -f "$node_root_abs/replication-root/node_pos_state.json"
 test -f "$node_root_abs/execution-records/latest.json"
 test -f "$node_root_abs/store/blobs/old"
 test -f "$node_root_abs/world-simulator-mirror/snapshot.json"
+test -f "$node_root_abs/world/snapshot.json"
+test -f "$node_root_abs/runtime-root/reward-runtime-execution-bridge-state.json"
 
 reset_backup="$TMP_DIR/reset-backup"
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
@@ -188,9 +192,13 @@ test -f "$reset_backup/replication-root/node_pos_state.json"
 test -f "$reset_backup/execution-records/latest.json"
 test -f "$reset_backup/store/blobs/old"
 test -f "$reset_backup/world-simulator-mirror/snapshot.json"
+test -f "$reset_backup/world/snapshot.json"
+test -f "$reset_backup/runtime-root/reward-runtime-execution-bridge-state.json"
 test ! -e "$node_root_abs/replication-root/node_pos_state.json"
 test ! -e "$node_root_abs/execution-records/latest.json"
 test ! -e "$node_root_abs/store/blobs/old"
 test ! -e "$node_root_abs/world-simulator-mirror/snapshot.json"
+test ! -e "$node_root_abs/world/snapshot.json"
+test ! -e "$node_root_abs/runtime-root/reward-runtime-execution-bridge-state.json"
 
 echo "ok: local testnet node install pins runtime artifact under dedicated root"

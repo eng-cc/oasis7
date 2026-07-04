@@ -3,7 +3,7 @@ use super::*;
 
 use super::super::protocol::{GameplayActionError, GameplayActionRequest};
 use crate::runtime::{
-    MainTokenConfig, MainTokenSupplyState, production_hardened_main_token_config,
+    production_hardened_main_token_config, MainTokenConfig, MainTokenSupplyState,
 };
 use std::net::ToSocketAddrs;
 
@@ -143,6 +143,8 @@ impl ViewerRuntimeLiveServer {
         prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
+        self.llm_sidecar
+            .clear_stale_local_test_bindings_for_world(&prepared.world);
         if prepared.committed_height <= self.last_chain_committed_height {
             return Ok(ChainLinkedRuntimeDispatch {
                 advanced: false,
@@ -431,9 +433,23 @@ fn read_chain_link_http_response(
 ) -> Result<Vec<u8>, ViewerRuntimeLiveServerError> {
     let mut response = Vec::with_capacity(4096);
     let mut chunk = [0_u8; 4096];
+    let started_at = Instant::now();
+    let timeout = Duration::from_millis(CHAIN_LINK_TIMEOUT_MS);
 
     loop {
-        let bytes = stream.read(&mut chunk)?;
+        let bytes = match stream.read(&mut chunk) {
+            Ok(bytes) => bytes,
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) && started_at.elapsed() < timeout =>
+            {
+                thread::sleep(Duration::from_millis(10));
+                continue;
+            }
+            Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
+        };
         if bytes == 0 {
             return Ok(response);
         }
