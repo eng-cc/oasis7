@@ -2141,7 +2141,7 @@ describe("viewer web ui automation baseline", () => {
               action_id: "advance_step",
               label: "Advance 1 step",
               protocol_action: "live_control.step",
-              disabled_reason: "waiting for starter OC credit confirmation",
+              disabled_reason: null,
             },
             {
               action_id: "request_snapshot",
@@ -2168,7 +2168,18 @@ describe("viewer web ui automation baseline", () => {
       }),
       setupAfterMount(core) {
         bindLocalTestAgent(core, "agent-0");
-        sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockReturnValue({ ok: true });
+        sendGameplayAction = vi.spyOn(core, "sendGameplayAction").mockImplementation((action) => {
+          if (action?.actionId === "claim_starter_oc") {
+            core.state.lastGameplayActionFeedback = {
+              kind: "gameplay_action",
+              action: "claim_starter_oc",
+              stage: "ack",
+              accepted: true,
+              effect: "queued gameplay action claim_starter_oc for agent-0",
+            };
+          }
+          return { ok: true };
+        });
       },
       starterOcOnboardingComplete: false,
     });
@@ -2206,15 +2217,15 @@ describe("viewer web ui automation baseline", () => {
     const retryButton = within(confirmingDialog).getByRole("button", { name: "Retry Confirmation" });
     expect(retryButton).toBeEnabled();
     fireEvent.click(retryButton);
-    const busyRetryButton = within(confirmingDialog).getByRole("button", { name: "Refreshing..." });
+    const busyRetryButton = within(confirmingDialog).getByRole("button", { name: "Advancing..." });
     expect(busyRetryButton).toBeDisabled();
     expect(busyRetryButton).toHaveAttribute("aria-busy", "true");
-    expect(within(confirmingDialog).getByText("Manual confirmation")).toBeInTheDocument();
+    expect(within(confirmingDialog).getByText("Waiting for manual confirmation")).toBeInTheDocument();
     expect(within(confirmingDialog).getByText("Manual check 1")).toBeInTheDocument();
     expect(sendGameplayAction).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        actionId: "request_snapshot",
-        executeKind: "request_snapshot",
+        actionId: "advance_step",
+        executeKind: "step",
       }),
     );
     expect(screen.queryByRole("dialog", { name: "OC Credited" })).not.toBeInTheDocument();

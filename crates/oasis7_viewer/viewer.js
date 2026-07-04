@@ -9901,6 +9901,17 @@ function starterOcSubmittedFeedback() {
   }
   return null;
 }
+function starterOcFeedbackNeedsLocalAdvance(feedback = starterOcSubmittedFeedback()) {
+  if (!feedback) {
+    return false;
+  }
+  const stage = String(feedback.stage || "").toLowerCase();
+  if (stage === "submitted") {
+    return false;
+  }
+  const effect = String(feedback.effect || "").toLowerCase();
+  return ["accepted", "ack", "queued", "sent"].includes(stage) || effect.includes("queued gameplay action") || effect.includes("advance");
+}
 function shouldShowStarterOcRequiredGate(gameplay = buildGameplaySummary(uiLocale())) {
   return Boolean(starterOcAction(gameplay) || starterOcSubmittedFeedback() || starterOcClaimPendingForCurrentAgent());
 }
@@ -10013,6 +10024,11 @@ function StarterOcRequiredGate() {
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action2) => action2.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
   const chatAction = () => firstAgentChatAction(gameplay());
+  const confirmationAction = () => {
+    const refreshAction = snapshotRefreshAction();
+    const advanceAction = progressionAction();
+    return starterOcFeedbackNeedsLocalAdvance(submittedFeedback()) ? advanceAction || refreshAction : refreshAction || advanceAction;
+  };
   const visibleConfirmAttempt = () => lastConfirmMode() === "manual" ? Math.max(manualConfirmAttempts(), 1) : Math.min(autoConfirmAttempts() + 1, 3);
   const confirmStatusLabel = () => {
     if (creditConfirmed()) {
@@ -10045,7 +10061,7 @@ function StarterOcRequiredGate() {
     if (creditConfirmed()) {
       return chatAction();
     }
-    return pendingCredit() ? snapshotRefreshAction() || progressionAction() : action();
+    return pendingCredit() ? confirmationAction() : action();
   };
   let primaryButtonRef;
   let scheduledAutoConfirmAttempt = -1;
@@ -10083,7 +10099,7 @@ function StarterOcRequiredGate() {
       }
       return;
     }
-    const nextAction = snapshotRefreshAction();
+    const nextAction = confirmationAction();
     const attempt = autoConfirmAttempts();
     if (!nextAction || attempt >= 3 || scheduledAutoConfirmAttempt === attempt) {
       return;
@@ -10185,7 +10201,7 @@ function StarterOcRequiredGate() {
               setManualConfirmAttempts(0);
               setLastConfirmMode("auto");
             }
-            if (pendingCredit() && nextAction()?.executeKind === "request_snapshot") {
+            if (pendingCredit()) {
               setLastConfirmMode("manual");
               setManualConfirmAttempts((value) => value + 1);
             }
@@ -10246,7 +10262,7 @@ function renderGameplayAction(action) {
   const result = sendGameplayAction(action);
   if (result && result.ok === false) {
     clearGameplayActionPending(action);
-  } else if (result && result.ok === true && !result.feedback && action.executeKind !== "request_snapshot") {
+  } else if (result && result.ok === true && !result.feedback && action.executeKind !== "request_snapshot" && !(starterOcClaimPendingForCurrentAgent() && ["step", "play"].includes(action.executeKind))) {
     clearGameplayActionPending(action);
   }
   if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
