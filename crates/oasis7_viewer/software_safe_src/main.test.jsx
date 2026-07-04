@@ -2206,6 +2206,9 @@ describe("viewer web ui automation baseline", () => {
     const retryButton = within(confirmingDialog).getByRole("button", { name: "Retry Confirmation" });
     expect(retryButton).toBeEnabled();
     fireEvent.click(retryButton);
+    const busyRetryButton = within(confirmingDialog).getByRole("button", { name: "Refreshing..." });
+    expect(busyRetryButton).toBeDisabled();
+    expect(busyRetryButton).toHaveAttribute("aria-busy", "true");
     expect(sendGameplayAction).toHaveBeenLastCalledWith(
       expect.objectContaining({
         actionId: "request_snapshot",

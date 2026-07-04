@@ -786,10 +786,12 @@ function EmptyEntityRecoveryCard(props) {
         {(action) => (
           <div class="toolbar">
             <button
-              disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
+              class={gameplayActionButtonClass(action())}
+              aria-busy={gameplayActionButtonBusyAttrs(action())}
+              disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
               onClick={() => renderGameplayAction(action())}
             >
-              {gameplayActionButtonLabel(action(), locale())}
+              {gameplayActionDisplayLabel(action(), locale())}
             </button>
           </div>
         )}
@@ -897,6 +899,77 @@ function goalExecutionBadgeClass(state) {
 }
 
 const PENDING_GAMEPLAY_FEEDBACK_STAGES = new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_BUSY_STAGES = new Set(["queued", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_PENDING_MIN_MS = 900;
+let gameplayActionPendingClearTimer = null;
+
+function gameplayActionKey(action) {
+  if (!action) {
+    return "";
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  return `${actionId}::${targetAgentId}`;
+}
+
+function gameplayActionFeedbackMatches(action, feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback)) {
+  if (!action || !feedback || feedback.kind !== "gameplay_action") {
+    return false;
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const feedbackAction = normalizedId(feedback.action);
+  if (!actionId || !feedbackAction || !feedbackAction.includes(actionId)) {
+    return false;
+  }
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  const feedbackAgentId = normalizedId(feedback.agentId || feedback.targetAgentId);
+  return !targetAgentId || !feedbackAgentId || targetAgentId === feedbackAgentId;
+}
+
+function clearGameplayActionPending(action = null) {
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+    gameplayActionPendingClearTimer = null;
+  }
+  if (action && core.state.gameplayActionPending.actionKey !== gameplayActionKey(action)) {
+    return;
+  }
+  core.state.gameplayActionPending.actionKey = null;
+  core.state.gameplayActionPending.label = null;
+  core.state.gameplayActionPending.startedAtUnixMs = null;
+  core.requestRender();
+}
+
+function markGameplayActionPending(action, label) {
+  const key = gameplayActionKey(action);
+  if (!key) {
+    return;
+  }
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+  }
+  core.state.gameplayActionPending.actionKey = key;
+  core.state.gameplayActionPending.label = label || normalizedId(action.label || action.actionId || action.executeKind);
+  core.state.gameplayActionPending.startedAtUnixMs = Date.now();
+  gameplayActionPendingClearTimer = window.setTimeout(() => {
+    gameplayActionPendingClearTimer = null;
+    if (!gameplayActionFeedbackMatches(action) || !GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(core.state.lastGameplayActionFeedback?.stage).toLowerCase())) {
+      clearGameplayActionPending(action);
+    }
+  }, GAMEPLAY_ACTION_PENDING_MIN_MS);
+  core.requestRender();
+}
+
+function gameplayActionFeedbackInFlight(action) {
+  const feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback);
+  return gameplayActionFeedbackMatches(action, feedback)
+    && GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(feedback.stage).toLowerCase());
+}
+
+function gameplayActionPendingFor(action) {
+  const key = gameplayActionKey(action);
+  return Boolean(key && core.state.gameplayActionPending.actionKey === key) || gameplayActionFeedbackInFlight(action);
+}
 
 function isPendingFirstAgentClaimSync(action, gameplay) {
   if (action?.actionId !== "claim_first_agent") {
@@ -980,6 +1053,44 @@ function gameplayActionButtonLabel(action, locale) {
     return tr(locale, "切到聊天面板", "Use Chat Panel");
   }
   return tr(locale, "提交玩法动作", "Submit Gameplay Action");
+}
+
+function gameplayActionBusyLabel(action, locale) {
+  if (action?.executeKind === "request_snapshot") {
+    return tr(locale, "刷新中...", "Refreshing...");
+  }
+  if (action?.executeKind === "step") {
+    return tr(locale, "推进中...", "Advancing...");
+  }
+  if (action?.executeKind === "play") {
+    return tr(locale, "恢复中...", "Resuming...");
+  }
+  if (action?.actionId === "claim_starter_oc") {
+    return tr(locale, "确认中...", "Confirming...");
+  }
+  if (action?.actionId === "claim_first_agent" || action?.executeKind === "claim_agent") {
+    return tr(locale, "提交中...", "Submitting...");
+  }
+  return tr(locale, "处理中...", "Working...");
+}
+
+function gameplayActionDisplayLabel(action, locale, fallback = null) {
+  if (gameplayActionPendingFor(action)) {
+    return gameplayActionBusyLabel(action, locale);
+  }
+  return fallback ?? gameplayActionButtonLabel(action, locale);
+}
+
+function gameplayActionButtonClass(action) {
+  return gameplayActionPendingFor(action) ? "is-loading" : "";
+}
+
+function gameplayActionButtonBusyAttrs(action) {
+  return gameplayActionPendingFor(action) ? "true" : "false";
+}
+
+function gameplayActionButtonDisabled(action, gameplay, locale) {
+  return Boolean(gameplayActionDisabledReason(action, gameplay, locale) || gameplayActionPendingFor(action));
 }
 
 function gameplayActionTestId(action, role = "available") {
@@ -1245,10 +1356,12 @@ function StarterOcOnboardingPanel(props) {
           {(starterAction) => (
             <div class="toolbar">
               <button
-                disabled={Boolean(gameplayActionDisabledReason(starterAction(), gameplay(), locale()))}
+                class={gameplayActionButtonClass(starterAction())}
+                aria-busy={gameplayActionButtonBusyAttrs(starterAction())}
+                disabled={gameplayActionButtonDisabled(starterAction(), gameplay(), locale())}
                 onClick={() => renderGameplayAction(starterAction())}
               >
-                {gameplayActionButtonLabel(starterAction(), locale())}
+                {gameplayActionDisplayLabel(starterAction(), locale())}
               </button>
             </div>
           )}
@@ -1332,7 +1445,7 @@ function StarterOcRequiredGate() {
     if (!nextAction || attempt >= 3 || scheduledAutoConfirmAttempt === attempt) {
       return;
     }
-    if (gameplayActionDisabledReason(nextAction, gameplay(), locale())) {
+    if (gameplayActionButtonDisabled(nextAction, gameplay(), locale())) {
       return;
     }
     scheduledAutoConfirmAttempt = attempt;
@@ -1450,7 +1563,9 @@ function StarterOcRequiredGate() {
                 {(nextAction) => (
                   <button
                     ref={primaryButtonRef}
-                    disabled={Boolean(gameplayActionDisabledReason(nextAction(), gameplay(), locale()))}
+                    class={gameplayActionButtonClass(nextAction())}
+                    aria-busy={gameplayActionButtonBusyAttrs(nextAction())}
+                    disabled={gameplayActionButtonDisabled(nextAction(), gameplay(), locale())}
                     onClick={() => {
                       if (creditConfirmed()) {
                         completeStarterOcOnboarding();
@@ -1459,11 +1574,15 @@ function StarterOcRequiredGate() {
                       renderGameplayAction(nextAction());
                     }}
                   >
-                    {creditConfirmed()
-                      ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat")
-                      : pendingCredit()
-                      ? tr(locale(), "手动再确认一次", "Retry Confirmation")
-                      : gameplayActionButtonLabel(nextAction(), locale())}
+                    {gameplayActionDisplayLabel(
+                      nextAction(),
+                      locale(),
+                      creditConfirmed()
+                        ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat")
+                        : pendingCredit()
+                        ? tr(locale(), "手动再确认一次", "Retry Confirmation")
+                        : gameplayActionButtonLabel(nextAction(), locale()),
+                    )}
                   </button>
                 )}
               </Show>
@@ -1492,10 +1611,16 @@ function renderGameplayAction(action) {
     core.applySelection({ kind: "agent", id: action.targetAgentId });
     return;
   }
+  markGameplayActionPending(action, gameplayActionButtonLabel(action, uiLocale()));
   if (action.actionId === "claim_starter_oc") {
     markStarterOcClaimPending(action);
   }
   const result = core.sendGameplayAction(action);
+  if (result && result.ok === false) {
+    clearGameplayActionPending(action);
+  } else if (result && result.ok === true && !result.feedback && action.executeKind !== "request_snapshot") {
+    clearGameplayActionPending(action);
+  }
   if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
     clearStarterOcClaimPending();
   } else if (action.actionId === "claim_starter_oc") {
@@ -1732,7 +1857,9 @@ function AgentClaimPanel(props) {
       </div>
       <div class="toolbar">
         <button
-          disabled={Boolean(disabledReason())}
+          class={gameplayActionButtonClass(claimAction())}
+          aria-busy={gameplayActionButtonBusyAttrs(claimAction())}
+          disabled={Boolean(disabledReason()) || gameplayActionPendingFor(claimAction())}
           onClick={() => {
             const action = claimAction();
             if (action) {
@@ -1740,7 +1867,7 @@ function AgentClaimPanel(props) {
             }
           }}
         >
-          {tr(locale(), "认领 Agent", "Claim Agent")}
+          {gameplayActionDisplayLabel(claimAction(), locale(), tr(locale(), "认领 Agent", "Claim Agent"))}
         </button>
       </div>
     </CalloutCard>
@@ -1974,9 +2101,12 @@ function WorldStageHero() {
           type="button"
           data-testid="viewer-playthrough-action-request-snapshot"
           aria-label={primaryRefreshLabel()}
+          class={gameplayActionButtonClass(refreshSnapshotAction())}
+          aria-busy={gameplayActionButtonBusyAttrs(refreshSnapshotAction())}
+          disabled={gameplayActionPendingFor(refreshSnapshotAction())}
           onClick={() => renderGameplayAction(refreshSnapshotAction())}
         >
-          {tr(locale(), "刷新快照", "Refresh Snapshot")}
+          {gameplayActionDisplayLabel(refreshSnapshotAction(), locale(), tr(locale(), "刷新快照", "Refresh Snapshot"))}
         </button>
         <button
           type="button"
@@ -2097,10 +2227,12 @@ function TargetsPanel() {
             </Show>
             <div class="toolbar">
               <button
-                disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+                class={gameplayActionButtonClass(action())}
+                aria-busy={gameplayActionButtonBusyAttrs(action())}
+                disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
                 onClick={() => renderGameplayAction(action())}
               >
-                {gameplayActionButtonLabel(action(), locale())}
+                {gameplayActionDisplayLabel(action(), locale())}
               </button>
             </div>
           </CalloutCard>
@@ -2605,10 +2737,12 @@ function WorldSummaryPanel() {
                     <div class="toolbar">
                       <button
                         data-testid={gameplayActionTestId(action(), "recommended")}
-                        disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
+                        class={gameplayActionButtonClass(action())}
+                        aria-busy={gameplayActionButtonBusyAttrs(action())}
+                        disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
                         onClick={() => renderGameplayAction(action())}
                       >
-                        {gameplayActionButtonLabel(action(), locale())}
+                        {gameplayActionDisplayLabel(action(), locale())}
                       </button>
                     </div>
                   </CalloutCard>
@@ -2663,10 +2797,12 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
-                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
+                                class={gameplayActionButtonClass(action)}
+                                aria-busy={gameplayActionButtonBusyAttrs(action)}
+                                disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
                                 onClick={() => renderGameplayAction(action)}
                               >
-                                {gameplayActionButtonLabel(action, locale())}
+                                {gameplayActionDisplayLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
@@ -2674,10 +2810,12 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
-                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
+                                class={gameplayActionButtonClass(action)}
+                                aria-busy={gameplayActionButtonBusyAttrs(action)}
+                                disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
                                 onClick={() => renderGameplayAction(action)}
                               >
-                                {gameplayActionButtonLabel(action, locale())}
+                                {gameplayActionDisplayLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
@@ -3157,10 +3295,12 @@ function InteractionPanel() {
         {(action) => (
           <div class="toolbar">
             <button
-              disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+              class={gameplayActionButtonClass(action())}
+              aria-busy={gameplayActionButtonBusyAttrs(action())}
+              disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
               onClick={() => renderGameplayAction(action())}
             >
-              {gameplayActionButtonLabel(action(), locale())}
+              {gameplayActionDisplayLabel(action(), locale())}
             </button>
           </div>
         )}

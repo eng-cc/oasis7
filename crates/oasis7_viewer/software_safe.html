@@ -415,6 +415,22 @@
         cursor: not-allowed;
         transform: none;
       }
+      button.is-loading {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      button.is-loading::before {
+        content: "";
+        width: 13px;
+        height: 13px;
+        border-radius: 999px;
+        border: 2px solid rgba(247, 242, 230, 0.18);
+        border-top-color: currentColor;
+        flex: 0 0 auto;
+        animation: entity-list-pending-spin 820ms linear infinite;
+      }
       :where(a, button, canvas, summary, input, textarea, select):focus-visible {
         outline: 2px solid var(--color-focus-ring);
         outline-offset: 3px;
@@ -496,6 +512,7 @@
       }
       @media (prefers-reduced-motion: reduce) {
         .entity-list-pending__spinner,
+        button.is-loading::before,
         .entity-list-pending__skeleton span {
           animation: none;
         }
