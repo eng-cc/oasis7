@@ -49,6 +49,7 @@
   - 已补 `public_testnet` fresh governed bootstrap artifact set，可作为“四节点 testnet 从 0 重建”的起始真值，而不再依赖旧 live-candidate 恢复链路。
   - 已补当前 formal `public_testnet` 11 条 required-lane packet：`doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv` 与 `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`。该 packet 是完整 blocker matrix，不是 live promotion evidence。
   - 已补 fresh public surface sample 与 governed reset-policy evidence：`public_rpc_ready`、`explorer_public_ready`、`reset_policy_announced` 现在可以按当前 evidence 记为 `pass`；`faucet_guard_ready` 因 fresh endpoint connection failed 收紧为 `block`。
+  - 已补 `public_testnet` guarded faucet 的 repo-owned recovery package/runbook/evidence：`scripts/public-testnet-faucet/`、`doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md` 与 `doc/testing/evidence/public-testnet-faucet-recovery-blocker-2026-07-04.md`；这只补齐恢复路径，`faucet_guard_ready` 仍需 fresh live endpoint、guarded claim 与 cooldown evidence 才能转 `pass`。
   - 已明确 `shared_devnet` 只作为 legacy/rehearsal evidence，不等于目标 test 环境；aggregate readiness 不再要求 `shared_devnet_pass`。
 - 当前缺口:
   - formal `public_testnet` 仍不能进入 `ready_for_live_candidate`，因为当前 governed bootstrap manifest 仍是 rehearsal，且 2026-07-03 11 条 required-lane readiness 汇总仍为 `block`；当前 blocker 是 `faucet_guard_ready`、`runtime_bootstrap`、`world_resource_provenance_ready`、`provider_resource_provenance_ready`、`resource_delta_replay_ready`、`api_viewer_projection_ready`、`same_world_hosted_entry_ready`。
@@ -113,11 +114,17 @@
 - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`
 - `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.json`
 - `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.md`
-- `doc/testing/evidence/public-testnet-governed-reset-policy-announcement-2026-07-03.md`
+  - `doc/testing/evidence/public-testnet-governed-reset-policy-announcement-2026-07-03.md`
+  - `doc/testing/evidence/public-testnet-faucet-recovery-blocker-2026-07-04.md`
 - `doc/testing/evidence/public-testnet-ecs-freshness-audit-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-local-observer-contract-sync-2026-05-22.md`
 - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
-- `scripts/p2p-public-testnet-local-observer-sync.sh`
+  - `scripts/p2p-public-testnet-local-observer-sync.sh`
+  - `scripts/public-testnet-faucet/start-public-testnet-faucet.sh`
+  - `scripts/public-testnet-faucet/package-public-testnet-faucet.sh`
+  - `scripts/public-testnet-faucet/oasis7-public-testnet-faucet.service`
+  - `scripts/public-testnet-faucet/public-testnet-faucet.env.example`
+  - `doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md`
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `doc/p2p/prd.index.md`
@@ -138,6 +145,10 @@
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --lanes-tsv doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
 - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json --lanes-tsv doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
 - `bash -n scripts/p2p-public-testnet-local-observer-sync.sh`
+- `bash -n scripts/public-testnet-faucet/start-public-testnet-faucet.sh scripts/public-testnet-faucet/package-public-testnet-faucet.sh`
+- `./scripts/public-testnet-faucet/package-public-testnet-faucet.sh --help`
+- `./scripts/public-testnet-faucet/package-public-testnet-faucet.sh --profile dev --out-dir .tmp/public-testnet-faucet-package --archive .tmp/public-testnet-faucet-package.tar.gz`
+- `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json --lanes-tsv doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
 - `./scripts/p2p-public-testnet-local-observer-sync.sh render --local-env .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json`
 - `tmpdir="$(mktemp -d)" && mkdir -p "$tmpdir/app/config" "$tmpdir/app/bin" && cp .tmp/p2p_testnet_reality/20260522-100229/nodes/local_node/node.env "$tmpdir/app/config/node.env" && ./scripts/p2p-public-testnet-local-observer-sync.sh apply --local-env "$tmpdir/app/config/node.env" --sequencer-env .tmp/p2p_testnet_reality/20260522-100229/nodes/sequencer_ecs/node.env --storage-env .tmp/p2p_testnet_reality/20260522-100229/nodes/storage_ecs/node.env --manifest-path /opt/oasis7/p2p-testnet-local/config/network-tier-public-testnet-live-candidate.json --manifest-source doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json --manifest-dest "$tmpdir/app/config/network-tier-public-testnet-live-candidate.json" --start-script-dest "$tmpdir/app/bin/start-node.sh" --backup-dir "$tmpdir/backups"`
 - `P2PARCH6_SEQ_SSH_PASSWORD='***' P2PARCH6_STORAGE_SSH_PASSWORD='***' ./scripts/p2p-real-env-triad-snapshot.sh --samples 2 --interval-secs 3 --out-dir .tmp/p2p_testnet_reality --world-id oasis7-public-testnet-parallel-20260518 --local-service oasis7-testnet-observer.service --local-status-url http://127.0.0.1:6633/v1/chain/status --local-health-url http://127.0.0.1:6633/healthz --local-env-file /opt/oasis7/p2p-testnet-local/config/node.env --sequencer-target root@39.104.204.172 --sequencer-service oasis7-testnet-sequencer.service --sequencer-status-url http://127.0.0.1:6631/v1/chain/status --sequencer-health-url http://127.0.0.1:6631/healthz --sequencer-env-file /opt/oasis7/p2p-testnet/config/node.env --storage-target root@39.104.205.67 --storage-service oasis7-testnet-storage.service --storage-status-url http://127.0.0.1:6632/v1/chain/status --storage-health-url http://127.0.0.1:6632/healthz --storage-env-file /opt/oasis7/p2p-testnet/config/node.env`
@@ -153,5 +164,5 @@
 
 ## 状态
 - 当前阶段: completed
-- 下一步: 当前 11 条 required-lane packet 已推进到 `4 pass / 0 partial / 7 block`；优先恢复 guarded faucet endpoint，并 realign live network-tier manifest surface 的 required gates 到当前 11-lane contract，然后继续补 runtime bootstrap、world/provider provenance、resource-delta replay、API/viewer projection 与 same-world hosted entry pass evidence。shared-devnet triad 运行态已在 2026-05-23 冷重建后恢复健康，但只作为 legacy/rehearsal evidence 追溯，不再作为目标 test 环境或必需 promotion gate。
-- 最近更新: 2026-07-03
+- 下一步: 当前 11 条 required-lane packet 保持 `4 pass / 0 partial / 7 block`；先用新增 faucet recovery package/runbook 恢复并重新验证 guarded faucet endpoint，再 realign live network-tier manifest surface 的 required gates 到当前 11-lane contract，然后继续补 runtime bootstrap、world/provider provenance、resource-delta replay、API/viewer projection 与 same-world hosted entry pass evidence。shared-devnet triad 运行态已在 2026-05-23 冷重建后恢复健康，但只作为 legacy/rehearsal evidence 追溯，不再作为目标 test 环境或必需 promotion gate。
+- 最近更新: 2026-07-04

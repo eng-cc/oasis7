@@ -168,11 +168,13 @@
   - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`
   - `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.md`
   - `doc/testing/evidence/public-testnet-governed-reset-policy-announcement-2026-07-03.md`
+  - `doc/testing/evidence/public-testnet-faucet-recovery-blocker-2026-07-04.md`
 - 当前仍不能宣称 `ready_for_live_candidate`：
   - governed bootstrap manifest 仍是 `status=rehearsal`
   - required-lane readiness 现在已有正式 11-lane TSV，但汇总结果仍为 `block`
   - 当前 11 条 required lanes 中 `public_rpc_ready`、`explorer_public_ready`、`reset_policy_announced`、`claims_boundary_review` 是 `pass`；`faucet_guard_ready`、`runtime_bootstrap`、`world_resource_provenance_ready`、`provider_resource_provenance_ready`、`resource_delta_replay_ready`、`api_viewer_projection_ready`、`same_world_hosted_entry_ready` 仍是 `block`
   - fresh public sample 证明 RPC / explorer 正在推进到 governed `public_testnet` 高度 `1083`，但 faucet endpoint 连续连接失败，所以 `public faucet is open` 仍是禁止口径
+  - 2026-07-04 已新增 repo-owned faucet recovery package/runbook（`scripts/public-testnet-faucet/` 与 `doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md`），但这只补齐 operator 恢复路径；在 fresh `/`、`/healthz`、guarded `/claim` 与 cooldown 证据通过前，`faucet_guard_ready` 仍是 `block`
   - live status 暴露的 `network_tier.required_gates` 仍是旧 7-lane set；repo manifest/readiness contract 已是 11-lane set，后续部署面仍需 realign
   - `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes
   - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
