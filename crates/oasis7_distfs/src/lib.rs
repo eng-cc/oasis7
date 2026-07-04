@@ -1,7 +1,7 @@
 use oasis7_proto::distributed::{SnapshotManifest, StateChunkRef};
 use oasis7_proto::distributed_storage::{JournalSegmentRef, SegmentConfig};
 use oasis7_proto::world_error::WorldError;
-use serde::de::DeserializeOwned;
+use serde::de::{DeserializeOwned, Deserializer};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -253,11 +253,7 @@ impl LocalCasStore {
         content_hash: &str,
     ) -> Result<bool, WorldError> {
         validate_hash(content_hash)?;
-        if file_index
-            .files
-            .values()
-            .any(|metadata| metadata.content_hash == content_hash)
-        {
+        if file_index.content_hash_ref_count(content_hash) > 0 {
             return Ok(false);
         }
         if self.is_pinned(content_hash)? {
@@ -382,6 +378,10 @@ impl LocalCasStore {
             .files
             .insert(normalized_path, metadata.clone())
             .map(|previous| previous.content_hash);
+        if let Some(replaced_hash) = replaced_hash.as_deref() {
+            file_index.decrement_content_hash_ref_count(replaced_hash);
+        }
+        file_index.increment_content_hash_ref_count(metadata.content_hash.as_str());
         self.save_file_index(&file_index)?;
         if let Some(replaced_hash) = replaced_hash {
             if replaced_hash != metadata.content_hash {
@@ -409,6 +409,7 @@ impl LocalCasStore {
             .remove(&normalized_path)
             .map(|metadata| metadata.content_hash);
         if let Some(removed_hash) = removed_hash {
+            file_index.decrement_content_hash_ref_count(removed_hash.as_str());
             self.save_file_index(&file_index)?;
             self.remove_blob_if_unreferenced_in_index(&file_index, removed_hash.as_str())?;
             return Ok(true);
@@ -556,6 +557,10 @@ impl FileStore for LocalCasStore {
             .files
             .insert(normalized_path, metadata.clone())
             .map(|previous| previous.content_hash);
+        if let Some(replaced_hash) = replaced_hash.as_deref() {
+            file_index.decrement_content_hash_ref_count(replaced_hash);
+        }
+        file_index.increment_content_hash_ref_count(metadata.content_hash.as_str());
         self.save_file_index(&file_index)?;
         if let Some(replaced_hash) = replaced_hash {
             if replaced_hash != metadata.content_hash {
@@ -584,6 +589,7 @@ impl FileStore for LocalCasStore {
             .remove(&normalized_path)
             .map(|metadata| metadata.content_hash);
         if let Some(removed_hash) = removed_hash {
+            file_index.decrement_content_hash_ref_count(removed_hash.as_str());
             self.save_file_index(&file_index)?;
             self.remove_blob_if_unreferenced_in_index(&file_index, removed_hash.as_str())?;
             return Ok(true);
@@ -862,12 +868,14 @@ struct PinFile {
     pins: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct FileIndexFile {
     #[serde(default = "default_file_index_version")]
     version: u64,
     #[serde(default)]
     files: BTreeMap<String, FileMetadata>,
+    #[serde(default)]
+    content_hash_ref_counts: BTreeMap<String, u64>,
 }
 
 impl Default for FileIndexFile {
@@ -875,12 +883,99 @@ impl Default for FileIndexFile {
         Self {
             version: FILE_INDEX_VERSION,
             files: BTreeMap::new(),
+            content_hash_ref_counts: BTreeMap::new(),
         }
     }
 }
 
 fn default_file_index_version() -> u64 {
     FILE_INDEX_VERSION
+}
+
+impl<'de> Deserialize<'de> for FileIndexFile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawFileIndexFile {
+            #[serde(default = "default_file_index_version")]
+            version: u64,
+            #[serde(default)]
+            files: BTreeMap<String, FileMetadata>,
+            #[serde(default)]
+            content_hash_ref_counts: Option<BTreeMap<String, u64>>,
+        }
+
+        let raw = RawFileIndexFile::deserialize(deserializer)?;
+        Ok(match raw.content_hash_ref_counts {
+            Some(content_hash_ref_counts) => Self {
+                version: raw.version,
+                files: raw.files,
+                content_hash_ref_counts,
+            },
+            None => Self::from_files_with_version(raw.version, raw.files),
+        })
+    }
+}
+
+impl FileIndexFile {
+    fn from_files(files: BTreeMap<String, FileMetadata>) -> Self {
+        Self::from_files_with_version(FILE_INDEX_VERSION, files)
+    }
+
+    fn from_files_with_version(version: u64, files: BTreeMap<String, FileMetadata>) -> Self {
+        let mut file_index = Self {
+            version,
+            files,
+            content_hash_ref_counts: BTreeMap::new(),
+        };
+        file_index.repair_content_hash_ref_counts();
+        file_index
+    }
+
+    fn repair_content_hash_ref_counts(&mut self) {
+        let expected = self.calculated_content_hash_ref_counts();
+        if self.content_hash_ref_counts != expected {
+            self.content_hash_ref_counts = expected;
+        }
+    }
+
+    fn calculated_content_hash_ref_counts(&self) -> BTreeMap<String, u64> {
+        let mut counts = BTreeMap::new();
+        for metadata in self.files.values() {
+            let count = counts.entry(metadata.content_hash.clone()).or_insert(0_u64);
+            *count = count.saturating_add(1);
+        }
+        counts
+    }
+
+    fn content_hash_ref_count(&self, content_hash: &str) -> u64 {
+        self.content_hash_ref_counts
+            .get(content_hash)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn increment_content_hash_ref_count(&mut self, content_hash: &str) {
+        let count = self
+            .content_hash_ref_counts
+            .entry(content_hash.to_string())
+            .or_insert(0_u64);
+        *count = count.saturating_add(1);
+    }
+
+    fn decrement_content_hash_ref_count(&mut self, content_hash: &str) {
+        match self.content_hash_ref_counts.get_mut(content_hash) {
+            Some(count) if *count > 1 => {
+                *count -= 1;
+            }
+            Some(_) => {
+                self.content_hash_ref_counts.remove(content_hash);
+            }
+            None => {}
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

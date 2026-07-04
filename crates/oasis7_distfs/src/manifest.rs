@@ -4,8 +4,8 @@ use oasis7_proto::world_error::WorldError;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    BlobStore, FILE_INDEX_VERSION, FileIndexFile, FileMetadata, LocalCasStore, normalize_file_path,
-    to_canonical_cbor, validate_hash,
+    BlobStore, FileIndexFile, FileMetadata, LocalCasStore, normalize_file_path, to_canonical_cbor,
+    validate_hash,
 };
 
 const FILE_INDEX_MANIFEST_VERSION: u64 = 1;
@@ -97,10 +97,7 @@ impl LocalCasStore {
         }
 
         let file_count = files.len();
-        self.save_file_index(&FileIndexFile {
-            version: FILE_INDEX_VERSION,
-            files,
-        })?;
+        self.save_file_index(&FileIndexFile::from_files(files))?;
         Ok(file_count)
     }
 }
