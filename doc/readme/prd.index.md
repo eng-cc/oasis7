@@ -2,7 +2,7 @@
 
 审计轮次: 14
 
-更新时间：2026-07-03
+更新时间：2026-07-04
 
 ## 入口
 - 模块 PRD：`doc/readme/prd.md`
@@ -16,20 +16,20 @@
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication 模板 / Moltbook / limited preview 贡献奖励 / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-07-03）
-- `doc/readme/`：112 份文件
-- `doc/readme/governance/`：65 份文件
+## 密度快照（2026-07-04）
+- `doc/readme/`：106 份 Markdown 文件
+- `doc/readme/governance/`：59 份 Markdown 文件
 - `doc/readme/gap/`：27 份文件
 - `doc/readme/production/`：15 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
-- 正式专题三件套：30 组
+- 正式专题三件套：28 组
 - 当前默认活跃专题三件套：24 组
-- 历史压缩专题三件套：6 组
+- 历史压缩专题三件套：4 组
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 65 | 根 README 对齐、release communication 模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口 |
+| `governance/` | 59 | release communication 模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口；旧根 README 对齐和顶层链接检查一次性专题已删除 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
 | `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
 
@@ -96,8 +96,6 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
 | --- | --- | --- | --- |
 | `doc/readme/gap/readme-gap3-install-target-infrastructure.prd.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` | 已完成 README gap3 模块安装目标语义增量专题；当前 gap 主入口由 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` 承接，本文只保留历史追溯 |
-| `doc/readme/governance/readme-link-check-automation-2026-03-11.prd.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.design.md` | `doc/readme/governance/readme-link-check-automation-2026-03-11.project.md` | 已完成 README 顶层链接检查微专题；当前执行入口由 `scripts/readme-link-check.sh` 和 `doc/readme/project.md` 承接，治理节奏由一致性 checklist 与季度复核专题继续覆盖 |
-| `doc/readme/governance/readme-root-status-alignment-2026-03-11.prd.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.design.md` | `doc/readme/governance/readme-root-status-alignment-2026-03-11.project.md` | 已完成根 README 公开状态对齐微专题；当前状态真值由根 `README.md` 承接，治理和沟通节奏由白皮书总览、一致性 checklist、季度复核与 release communication surfaces 继续覆盖 |
 | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.design.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md` | 2026-03-11 版本候选实例已不是当前 product-authorized release lane；一次性 brief 输出文件已删除，后续 release communication 从 template 专题与根 `README.md` 当前状态进入 |
 | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.project.md` | 2026-03-11 announcement draft 是一次性候选底稿，不代表当前正式公告；一次性 draft 输出文件已删除，后续 announcement/changelog 从 template 专题进入 |
 | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.design.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.project.md` | closed-beta-candidate 不是当前公开状态；根 `README.md` 明确当前不是 closed beta。本文保留为 claim-control 历史 runbook，等待后续术语替换后再评估删除 |
@@ -136,4 +134,5 @@
 - ROUND-002 口径：`readme-gap-distributed-prod-hardening-gap12345` 为 gap 主专题，其它 gap 专题为增量子专题。
 - `material` 与 `execution_log` 仅是补充入口，不替代 `canonical` 权威口径；当二者与正式 PRD 有冲突时，以 `canonical` 为准。
 - `doc/readme/governance/README.md` 是热点子域 landing page，不替代本页的完整长表索引。
+- 已删除的 README 顶层链接检查与根 README 公开状态对齐一次性专题不再保留原址；当前分别由 `scripts/readme-link-check.sh`、根 `README.md`、`doc/readme/project.md`、一致性 checklist、季度复核专题、release communication surfaces、git history 与 GitHub task issue evidence comments 追溯。
 - 旧 `TASK-README-014/015` Moltbook 一次性 role handoff briefs 已退役删除；当前 Moltbook 追溯以 promotion plan、post drafts、liveops runbook 的 canonical PRD/project/runbook 与 `.pm` evidence 为准。

@@ -1,6 +1,6 @@
 # `readme/governance` 热点子域入口
 
-更新时间: 2026-07-03
+更新时间: 2026-07-04
 
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
@@ -18,9 +18,9 @@
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 快照（2026-07-03）:
-  - `doc/readme/governance/`: 65 份 Markdown
-  - `doc/readme/`: 112 份 Markdown
+- 快照（2026-07-04）:
+  - `doc/readme/governance/`: 59 份 Markdown
+  - `doc/readme/`: 106 份 Markdown
   - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 
@@ -46,18 +46,15 @@
   - 季度复核模板和 remediation 节奏在哪
   - 根 README 当前公开状态和后续状态变更该从哪里确认
 
-### 历史压缩治理专题
-- 追溯入口:
-  - `readme-link-check-automation-2026-03-11.prd.md`
-  - `readme-root-status-alignment-2026-03-11.prd.md`
-- 适合问题:
-  - README 顶层链接检查脚本最初为什么只覆盖 `README.md` 与 `doc/README.md`
-  - `scripts/readme-link-check.sh` 的原始验收标准和边界是什么
-  - `TASK-README-003` 的完成证据在哪里
-  - 2026-03-11 根 README 公开状态对齐最初如何定义技术预览、可玩性和公告准备态
-- 当前边界:
-  - 这些专题已完成且无当前下一步，不再作为默认首读入口。
-  - 当前公开状态以根 `../../../README.md` 为准，治理节奏从一致性 checklist、季度复核、release communication surfaces 和 `../prd.index.md` 的历史压缩清单进入。
+### 已删除治理专题
+- 已删除:
+  - `readme-link-check-automation-2026-03-11.{prd,design,project}.md`
+  - `readme-root-status-alignment-2026-03-11.{prd,design,project}.md`
+- 当前承接:
+  - README 顶层链接检查的可执行入口是 `../../../scripts/readme-link-check.sh`，当前治理节奏由 `readme-consistency-audit-checklist-2026-03-11.prd.md`、`readme-quarterly-review-cycle-2026-03-11.prd.md` 与 `../project.md` 承接。
+  - 根 README 公开状态真值是根 `../../../README.md`；公开状态复核从白皮书总览、一致性 checklist、季度复核与 release communication surfaces 进入。
+- 追溯边界:
+  - 如需查看 2026-03-11 一次性专题原文，使用 git history 与 GitHub task issue evidence comments；不要在当前入口中恢复这些旧专题作为活跃文档。
 
 ### 2. Release communication 与 announcement 模板
 - 首读入口:
