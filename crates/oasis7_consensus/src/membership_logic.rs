@@ -88,7 +88,7 @@ pub(super) fn revocation_signing_bytes(
     to_canonical_cbor(&payload)
 }
 
-pub(super) fn normalized_key_id(raw: String) -> Result<String, WorldError> {
+pub(super) fn normalized_key_id(raw: &str) -> Result<String, WorldError> {
     let normalized = raw.trim();
     if normalized.is_empty() {
         return Err(WorldError::DistributedValidationFailed {
@@ -130,7 +130,7 @@ pub(super) fn validate_key_revocation(
         });
     }
 
-    let _ = normalized_key_id(announce.key_id.clone())?;
+    let _ = normalized_key_id(&announce.key_id)?;
 
     if !policy.trusted_requesters.is_empty()
         && !policy

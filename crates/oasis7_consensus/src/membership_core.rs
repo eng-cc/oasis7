@@ -401,7 +401,8 @@ impl MembershipDirectorySignerKeyring {
         key_id: impl Into<String>,
         key: impl Into<Vec<u8>>,
     ) -> Result<(), WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.into())?;
+        let key_id = key_id.into();
+        let key_id = membership_logic::normalized_key_id(&key_id)?;
         if self.signers.contains_key(&key_id) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!("membership signing key already exists: {key_id}"),
@@ -418,7 +419,8 @@ impl MembershipDirectorySignerKeyring {
         private_key_hex: &str,
         public_key_hex: &str,
     ) -> Result<(), WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.into())?;
+        let key_id = key_id.into();
+        let key_id = membership_logic::normalized_key_id(&key_id)?;
         if self.signers.contains_key(&key_id) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!("membership signing key already exists: {key_id}"),
@@ -430,7 +432,7 @@ impl MembershipDirectorySignerKeyring {
     }
 
     pub fn set_active_key(&mut self, key_id: &str) -> Result<(), WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+        let key_id = membership_logic::normalized_key_id(key_id)?;
         if !self.signers.contains_key(&key_id) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!("membership signing key not found: {key_id}"),
@@ -450,7 +452,7 @@ impl MembershipDirectorySignerKeyring {
     }
 
     pub fn revoke_key(&mut self, key_id: &str) -> Result<bool, WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+        let key_id = membership_logic::normalized_key_id(key_id)?;
         let inserted = self.revoked_key_ids.insert(key_id.clone());
         if self.active_key_id.as_deref() == Some(key_id.as_str()) {
             self.active_key_id = None;
@@ -488,7 +490,7 @@ impl MembershipDirectorySignerKeyring {
         key_id: &str,
         snapshot: &MembershipDirectorySnapshot,
     ) -> Result<String, WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+        let key_id = membership_logic::normalized_key_id(key_id)?;
         if self.revoked_key_ids.contains(&key_id) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!("membership signing key is revoked: {key_id}"),
@@ -524,7 +526,7 @@ impl MembershipDirectorySignerKeyring {
         key_id: &str,
         announce: &MembershipKeyRevocationAnnounce,
     ) -> Result<String, WorldError> {
-        let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+        let key_id = membership_logic::normalized_key_id(key_id)?;
         if self.revoked_key_ids.contains(&key_id) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!("membership signing key is revoked: {key_id}"),
@@ -564,7 +566,7 @@ impl MembershipDirectorySignerKeyring {
         }
 
         if let Some(key_id) = snapshot.signature_key_id.as_deref() {
-            let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+            let key_id = membership_logic::normalized_key_id(key_id)?;
             if self.revoked_key_ids.contains(&key_id) {
                 return Err(WorldError::DistributedValidationFailed {
                     reason: format!("membership signature key_id is revoked: {key_id}"),
@@ -628,7 +630,7 @@ impl MembershipDirectorySignerKeyring {
         }
 
         if let Some(key_id) = announce.signature_key_id.as_deref() {
-            let key_id = membership_logic::normalized_key_id(key_id.to_string())?;
+            let key_id = membership_logic::normalized_key_id(key_id)?;
             if self.revoked_key_ids.contains(&key_id) {
                 return Err(WorldError::DistributedValidationFailed {
                     reason: format!("membership revocation signature key_id is revoked: {key_id}"),

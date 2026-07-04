@@ -34,7 +34,8 @@ impl MembershipRevocationCheckpointAnnounce {
     ) -> Result<Self, WorldError> {
         let world_id = membership_logic::normalized_world_id(world_id)?;
         let node_id = normalized_node_id(node_id)?;
-        let revoked_key_ids = normalize_revoked_key_ids(revoked_key_ids)?;
+        let revoked_key_ids =
+            normalize_revoked_key_ids(revoked_key_ids.iter().map(String::as_str))?;
         let revoked_set_hash = revoked_keys_hash(&revoked_key_ids)?;
         Ok(Self {
             world_id,
@@ -834,7 +835,8 @@ fn validate_revocation_checkpoint(
         });
     }
 
-    let normalized_keys = normalize_revoked_key_ids(checkpoint.revoked_key_ids.clone())?;
+    let normalized_keys =
+        normalize_revoked_key_ids(checkpoint.revoked_key_ids.iter().map(String::as_str))?;
     let expected_hash = revoked_keys_hash(&normalized_keys)?;
     if expected_hash != checkpoint.revoked_set_hash {
         return Err(WorldError::DistributedValidationFailed {
@@ -848,7 +850,9 @@ fn validate_revocation_checkpoint(
     Ok(normalized_keys.into_iter().collect())
 }
 
-fn normalize_revoked_key_ids(raw: Vec<String>) -> Result<Vec<String>, WorldError> {
+fn normalize_revoked_key_ids<'a>(
+    raw: impl IntoIterator<Item = &'a str>,
+) -> Result<Vec<String>, WorldError> {
     let mut normalized = BTreeSet::new();
     for key_id in raw {
         normalized.insert(membership_logic::normalized_key_id(key_id)?);
@@ -990,5 +994,33 @@ mod tests {
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[test]
+    fn validate_revocation_checkpoint_normalizes_borrowed_keys() {
+        let checkpoint = MembershipRevocationCheckpointAnnounce::from_revoked_keys(
+            "world-1",
+            "node-1",
+            42,
+            vec![
+                " key-b ".to_string(),
+                "key-a".to_string(),
+                "key-b".to_string(),
+            ],
+        )
+        .expect("checkpoint");
+        let policy = MembershipRevocationReconcilePolicy::default();
+
+        let validated = validate_revocation_checkpoint("world-1", &checkpoint, &policy)
+            .expect("valid checkpoint");
+
+        assert_eq!(
+            checkpoint.revoked_key_ids,
+            vec!["key-a".to_string(), "key-b".to_string()]
+        );
+        assert_eq!(
+            validated,
+            BTreeSet::from(["key-a".to_string(), "key-b".to_string()])
+        );
     }
 }
