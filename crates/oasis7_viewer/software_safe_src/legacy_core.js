@@ -550,6 +550,14 @@ function isAgentVisibleToCurrentSession(agentId) {
   if (boundPlayerId && currentPlayerId && boundPlayerId === currentPlayerId) {
     return true;
   }
+  if (
+    id === STARTER_AGENT_ID
+    && isTestApiEnabled()
+    && state.auth.source === "local_test_api_ephemeral"
+    && boundPlayerId.startsWith(LOCAL_TEST_PLAYER_ID_PREFIX)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -3314,6 +3322,9 @@ async function recoverHostedSessionFromError(error) {
     return;
   }
   const code = String(error?.code || "").trim();
+  if (code === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    return;
+  }
   if (recoveryErrorRequiresExplicitRebind(error) && state.auth.pendingRequestedAgentId && !state.auth.pendingForceRebind) {
     await ensureRegisteredPlayerSession(state.auth.pendingRequestedAgentId, { forceRebind: true });
     return;
@@ -3351,6 +3362,14 @@ function handleAuthoritativeRecoveryAck(ack) {
 
 function handleAuthoritativeRecoveryError(error) {
   clearHostedRuntimeSyncTimer();
+  if (String(error?.code || "").trim() === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    state.auth.recoveryErrorCode = null;
+    state.auth.recoveryErrorMessage = null;
+    state.auth.runtimeStatus = "rebind_registering";
+    state.auth.error = null;
+    render();
+    return;
+  }
   const rebindAgentId = rebindAgentIdFromRecoveryError(error);
   if (
     pendingSessionRegisterWaiter

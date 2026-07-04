@@ -728,6 +728,116 @@ describe("viewer web ui automation baseline", () => {
     expect(core.state.auth.pendingForceRebind).toBe(true);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("keeps force-rebind registration active when stale reconnect reports session_not_found", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+
+    await waitFor(() => {
+      expect(core.state.auth.source).toBe("local_test_api_ephemeral");
+      expect(core.state.auth.playerId).toMatch(/^local-test-player-/);
+    });
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+    core.registerPlayerSessionForTest("starter-agent-0", { forceRebind: true }).catch(() => {});
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                requested_agent_id: "starter-agent-0",
+                force_rebind: true,
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+    const registerCountBeforeError = sentMessages.filter((message) => (
+      message.type === "authoritative_recovery"
+      && message.command?.mode === "register_session"
+    )).length;
+
+    sockets[0].receive({
+      type: "authoritative_recovery_error",
+      error: {
+        code: "session_not_found",
+        message: `session_not_found: player ${core.state.auth.playerId} has no active session_pubkey`,
+        player_id: core.state.auth.playerId,
+        session_pubkey: core.state.auth.publicKey,
+      },
+    });
+
+    await Promise.resolve();
+    expect(core.state.auth.pendingForceRebind).toBe(true);
+    expect(core.state.auth.runtimeStatus).toBe("rebind_registering");
+    const registerCountAfterError = sentMessages.filter((message) => (
+      message.type === "authoritative_recovery"
+      && message.command?.mode === "register_session"
+    )).length;
+    expect(registerCountAfterError).toBe(registerCountBeforeError);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("keeps starter agent visible while local test force-rebind recovery is available", async () => {
+    const base = sampleSnapshot();
+    const { core } = await renderViewerApp({
+      snapshot: sampleSnapshot({
+        model: {
+          ...base.model,
+          agents: {
+            "starter-agent-0": {
+              ...base.model.agents["agent-0"],
+              id: "starter-agent-0",
+              name: "Starter Agent",
+            },
+          },
+          agent_player_bindings: {
+            "starter-agent-0": "local-test-player-old",
+          },
+        },
+      }),
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-new",
+          publicKey: "abcdef0123456789abcdef0123456789",
+          privateKey: "private-key-must-stay-hidden",
+          source: "local_test_api_ephemeral",
+          registrationStatus: "issued",
+          runtimeStatus: "issued",
+          boundAgentId: null,
+        };
+      },
+    });
+
+    expect(core.isAgentVisibleToCurrentSession("starter-agent-0")).toBe(true);
+    expect(core.modelLists().agents.map((agent) => agent.id)).toContain("starter-agent-0");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("retries force-rebind when runtime reports the starter agent is bound to an old local player", async () => {
     activeCleanup?.();
     activeCleanup = null;
