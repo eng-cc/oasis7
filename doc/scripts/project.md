@@ -494,4 +494,4 @@
 - 模块进展补充（2026-03-11）: 已新增 scripts 分层专题，明确 `ci-tests.sh`、`release-gate.sh`、`run-viewer-web.sh` 等主入口；旧 `capture-viewer-frame.sh` fallback 围栏已随仓库清退移除。
 - 模块进展补充（2026-03-11 / contracts）: 已新增高频脚本参数契约专题，冻结 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`site-link-check.sh` 的最小调用、默认值与失败语义。
 - 模块进展补充（2026-03-11 / trend）: 已新增 scripts 稳定性趋势专题与 baseline，建立主入口覆盖率、参数契约覆盖率、fallback 围栏覆盖率、治理修复时长四项指标。
-- 说明: 本文档仅维护 scripts 模块设计执行状态；过程记录在 `doc/devlog/README.md` 与 `doc/devlog/README.md`。
+- 说明: 本文档仅维护 scripts 模块设计执行状态；历史过程摘要见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。

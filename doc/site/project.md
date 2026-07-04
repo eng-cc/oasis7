@@ -182,4 +182,4 @@
 - 历史追溯: 更早 `TASK-SITE-*` 与 homepage copy iteration 不再在状态区逐条追加；需要追 Pages/manual/release/download/homepage 历史时，先从 `doc/site/prd.index.md`、`doc/site/github-pages/` topic project、站点文件 diff 与 `.pm/tasks/*.execution.md` 进入。
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - ROUND 状态: manual 子簇、github-pages 子簇、技术预览口径、下载 CTA 与 release notes 边界均已完成历史收口；后续只在对应 topic project 中增量维护。
-- 说明: 本文档仅维护 site 模块设计执行状态；过程记录在 `doc/devlog/README.md` 与 `doc/devlog/README.md`。
+- 说明: 本文档仅维护 site 模块设计执行状态；历史过程摘要见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。
