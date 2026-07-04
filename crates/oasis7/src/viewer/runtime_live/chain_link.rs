@@ -46,7 +46,7 @@ struct ChainLinkedRuntimeDispatch {
 }
 
 fn session_requests_runtime_feedback(session: &RuntimeLiveSession) -> bool {
-    !session.subscribed.is_empty()
+    !session.uses_default_subscription()
 }
 
 impl ViewerRuntimeLiveServer {
@@ -188,7 +188,7 @@ impl ViewerRuntimeLiveServer {
             self.advance_authoritative_batch_finality(self.world.state().time)?;
 
         let mut responses = Vec::new();
-        if session.subscribed.contains(&ViewerStream::Events) {
+        if session.explicitly_subscribed_to(ViewerStream::Events) {
             for event in &mapped_events {
                 if session.event_allowed(event) {
                     responses.push(ViewerResponse::Event {
@@ -204,13 +204,13 @@ impl ViewerRuntimeLiveServer {
             }
         }
 
-        if session.subscribed.contains(&ViewerStream::Snapshot) {
+        if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             responses.push(ViewerResponse::Snapshot { snapshot });
         }
 
         session.metrics = runtime_metrics(&self.world);
-        if session.subscribed.contains(&ViewerStream::Metrics) {
+        if session.explicitly_subscribed_to(ViewerStream::Metrics) {
             responses.push(ViewerResponse::Metrics {
                 time: Some(self.world.state().time),
                 metrics: session.metrics.clone(),

@@ -298,14 +298,14 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
-        if session.subscribed.contains(&ViewerStream::Snapshot)
+        if session.explicitly_subscribed_to(ViewerStream::Snapshot)
             && should_emit_runtime_advance_snapshot(session, "play", false)
         {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
         session.metrics = runtime_metrics(&self.world);
-        if session.subscribed.contains(&ViewerStream::Metrics) {
+        if session.explicitly_subscribed_to(ViewerStream::Metrics) {
             send_response(
                 writer,
                 &ViewerResponse::Metrics {
@@ -471,16 +471,11 @@ impl ViewerRuntimeLiveServer {
                 };
             }
             ViewerRequest::RequestSnapshot => {
-                if session.subscribed.is_empty()
-                    || session.subscribed.contains(&ViewerStream::Snapshot)
-                {
+                if session.wants_initial_snapshot() {
                     let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                 }
-                if session.subscribed.is_empty()
-                    || session.subscribed.contains(&ViewerStream::Snapshot)
-                    || session.subscribed.contains(&ViewerStream::Events)
-                {
+                if session.wants_initial_recovery_metadata() {
                     let cursor = self.current_recovery_cursor()?;
                     send_response(
                         writer,
@@ -505,7 +500,7 @@ impl ViewerRuntimeLiveServer {
                         },
                     )?;
                 }
-                if session.subscribed.contains(&ViewerStream::Metrics) {
+                if session.explicitly_subscribed_to(ViewerStream::Metrics) {
                     session.metrics = runtime_metrics(&self.world);
                     send_response(
                         writer,
@@ -515,7 +510,7 @@ impl ViewerRuntimeLiveServer {
                         },
                     )?;
                 }
-                if session.subscribed.contains(&ViewerStream::Events) {
+                if session.explicitly_subscribed_to(ViewerStream::Events) {
                     self.emit_authoritative_batch_snapshot(writer)?;
                     self.emit_authoritative_challenge_snapshot(writer)?;
                 }
@@ -562,7 +557,7 @@ impl ViewerRuntimeLiveServer {
                     if !ack_player_id.trim().is_empty() {
                         session.current_player_id = Some(ack_player_id);
                     }
-                    if session.subscribed.contains(&ViewerStream::Snapshot) {
+                    if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
                         let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                         send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
                     }
@@ -729,7 +724,7 @@ impl ViewerRuntimeLiveServer {
                             decision_trace = trace;
                         }
                         Err(trace) => {
-                            if session.subscribed.contains(&ViewerStream::Events) {
+                            if session.explicitly_subscribed_to(ViewerStream::Events) {
                                 send_response(
                                     writer,
                                     &ViewerResponse::DecisionTrace {
@@ -854,12 +849,12 @@ impl ViewerRuntimeLiveServer {
                 };
 
             if let Some(trace) = decision_trace {
-                if session.subscribed.contains(&ViewerStream::Events) {
+                if session.explicitly_subscribed_to(ViewerStream::Events) {
                     send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
                 }
             }
 
-            if session.subscribed.contains(&ViewerStream::Events)
+            if session.explicitly_subscribed_to(ViewerStream::Events)
                 && (emit_while_paused || session.playing)
             {
                 for event in &mapped_events {
@@ -883,7 +878,7 @@ impl ViewerRuntimeLiveServer {
                 }
             }
 
-            if session.subscribed.contains(&ViewerStream::Snapshot)
+            if session.explicitly_subscribed_to(ViewerStream::Snapshot)
                 && should_emit_runtime_advance_snapshot(session, action, emit_while_paused)
             {
                 let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
@@ -891,7 +886,7 @@ impl ViewerRuntimeLiveServer {
             }
 
             session.metrics = runtime_metrics(&self.world);
-            if session.subscribed.contains(&ViewerStream::Metrics) {
+            if session.explicitly_subscribed_to(ViewerStream::Metrics) {
                 send_response(
                     writer,
                     &ViewerResponse::Metrics {
@@ -930,7 +925,7 @@ impl ViewerRuntimeLiveServer {
             let causality =
                 player_gameplay_causality_from_runtime_events(&runtime_events_for_feedback);
             self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
-            if session.subscribed.contains(&ViewerStream::Snapshot) {
+            if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
                 let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                 send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
             }
