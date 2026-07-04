@@ -24,4 +24,4 @@
 ## Closure
 - 状态: `open` / `fixing` / `closed`
 - 验证命令:
-- 回写证据:
+- 回写证据: GitHub task issue evidence comments
