@@ -96,7 +96,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/card_2026_03_01_00_20_13.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/game-test.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/prd.index.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/project.md`（retired former `playability_test_manual.md` trace） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `playability_test_manual.md` retired/deleted manual trace | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/game-test.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/card_2026_02_28_23_27_06.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/playability_test_result/playability_test_card.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
