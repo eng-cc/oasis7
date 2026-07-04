@@ -4,6 +4,7 @@
 - owner_role: `tpm` integration
 - original_packet_task: GitHub issue #1846 / `task_c345e90f2bf24cfd9ae60b4d1f2756dd`
 - current_refresh_task: GitHub issue #1855 / `task_bb618bcf2fbe4a889bfa18f9927af90b`
+- faucet_recovery_task: GitHub issue #1868 / `task_17e9c8cd02014f938b29689a44cbfb89`
 - scope: current formal `public_testnet` 11 required-lane packet
 - manifest: `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
 - lanes_tsv: `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
@@ -20,7 +21,7 @@ It does not promote `public_testnet` to `ready_for_live_candidate`. The packet i
 | --- | --- | --- |
 | `public_rpc_ready` | `pass` | Fresh governed public RPC samples returned `200` twice with `ok`, liveness/readiness/sync, and height `1082 -> 1083`. |
 | `explorer_public_ready` | `pass` | Fresh governed explorer samples returned `200` twice with matching world id and height `1082 -> 1083`. |
-| `faucet_guard_ready` | `block` | Fresh faucet samples failed to connect twice; no public-faucet-open claim is allowed. |
+| `faucet_guard_ready` | `block` | Fresh faucet endpoint is still unreachable; repo-owned recovery package/runbook exists, but live endpoint and guarded claim proof are still required. |
 | `reset_policy_announced` | `pass` | Current governed 20260606 resettable/non-mainnet policy is explicitly recorded. |
 | `runtime_bootstrap` | `block` | Local observer sync path exists, but remaining live-head catch-up and release/runtime drift prevent pass. |
 | `world_resource_provenance_ready` | `block` | Only cold-start placeholder/rehearsal world evidence exists; no current manifest/world/chain-bound pass. |
@@ -32,7 +33,7 @@ It does not promote `public_testnet` to `ready_for_live_candidate`. The packet i
 
 ## Blocker Summary
 1. The governed-bootstrap manifest is still `status=rehearsal`.
-2. The fresh public surface sample shows RPC/explorer progress, but the faucet endpoint is unreachable.
+2. The fresh public surface sample shows RPC/explorer progress, but the faucet endpoint is unreachable; the 2026-07-04 recovery task adds a repo-owned package/runbook without changing the lane status.
 3. The live node still exposes the older 7-lane `network_tier.required_gates`, while repo readiness uses the current 11-lane contract.
 4. The runtime lane remains blocked by bootstrap/recovery and deployment-contract drift rather than public RPC reachability.
 5. World/provider/resource-delta lanes do not have current pass evidence tied to the governed `public_testnet` manifest/world/chain identity.
@@ -55,7 +56,7 @@ Denied:
 ## Next Pass Requirements
 To move this packet out of `block`, the next execution round must produce fresh evidence rather than reinterpret older artifacts:
 
-1. Restore and revalidate the guarded faucet endpoint for governed `public_testnet`.
+1. Restore and revalidate the guarded faucet endpoint for governed `public_testnet`, using `doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md` as the repo-owned recovery path and recording fresh `/`, `/healthz`, guarded `/claim`, and cooldown evidence.
 2. Redeploy or realign the live network-tier manifest surface so live `required_gates` matches the repo current 11-lane contract.
 3. Healthy governed runtime bootstrap from the current manifest/bundle/genesis/bootstrap peer set.
 4. Manifest/world/chain-bound world resource provenance evidence.
