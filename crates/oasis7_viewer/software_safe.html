@@ -406,11 +406,15 @@
         cursor: pointer;
         transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
       }
-      button:hover {
+      button:not(:disabled):hover {
         border-color: rgba(208, 168, 91, 0.54);
         transform: translateY(-1px);
       }
-      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
       :where(a, button, canvas, summary, input, textarea, select):focus-visible {
         outline: 2px solid var(--color-focus-ring);
         outline-offset: 3px;
