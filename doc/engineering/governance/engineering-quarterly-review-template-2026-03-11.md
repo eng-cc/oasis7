@@ -14,7 +14,7 @@
 - `doc/engineering/evidence/engineering-governance-trend-baseline-2026-03-11.md`
 - `./scripts/doc-governance-check.sh`
 - `doc/engineering/project.md`
-- 相关专题 PRD / Project / `.pm` task evidence
+- 相关专题 PRD / Project / GitHub task issue evidence comments；历史 `.pm` traces 仅在 Step 3 archive 追溯时使用
 
 ## Review Checklist
 - [ ] 复核上个窗口 `违规率 / 修复时长 / 回归率` 是否恶化
@@ -31,4 +31,4 @@
 ## Result
 - 总结论: `pass` / `watchlist` / `fix_required`
 - 阻断项:
-- 回写证据:
+- 回写证据: GitHub task issue evidence comments

@@ -6,7 +6,9 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
-- [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、quarterly review cycle 专题和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
+- [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
+
+- [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template 和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
 
 - [x] engineering-doc-governance-legacy-semantics (PRD-ENGINEERING-021/025/026) [test_tier_required]: 删除已完成且继续暴露旧证据语义的 `devlog-history-compaction` 一次性专题三件套，将 `doc/devlog` 当前入口收敛到 `doc/devlog/README.md` compact archive summary、GitHub task issue evidence comments 与 workflow source-of-truth。 Trace: #1879 (task_b2d9ecebdfa241e389069ddf2da9f843)
 
