@@ -10002,6 +10002,8 @@ function StarterOcOnboardingPanel(props) {
 function StarterOcRequiredGate() {
   const locale = () => uiLocale();
   const [autoConfirmAttempts, setAutoConfirmAttempts] = createSignal(0);
+  const [manualConfirmAttempts, setManualConfirmAttempts] = createSignal(0);
+  const [lastConfirmMode, setLastConfirmMode] = createSignal("auto");
   const gameplay = () => buildGameplaySummary(locale());
   const action = () => starterOcAction(gameplay());
   const submittedFeedback = () => starterOcSubmittedFeedback();
@@ -10011,6 +10013,34 @@ function StarterOcRequiredGate() {
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action2) => action2.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
   const chatAction = () => firstAgentChatAction(gameplay());
+  const visibleConfirmAttempt = () => lastConfirmMode() === "manual" ? Math.max(manualConfirmAttempts(), 1) : Math.min(autoConfirmAttempts() + 1, 3);
+  const confirmStatusLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "已入账", "Credited");
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction()) ? tr(locale(), "手动确认中", "Manual confirmation") : tr(locale(), "等待手动确认回执", "Waiting for manual confirmation");
+    }
+    return autoConfirmAttempts() >= 3 ? tr(locale(), "等待手动确认", "Waiting for manual confirmation") : tr(locale(), "自动确认中", "Auto-confirming");
+  };
+  const confirmProgressLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "完成", "Done");
+    }
+    if (lastConfirmMode() === "manual") {
+      return tr(locale(), `手动第 ${visibleConfirmAttempt()} 次确认`, `Manual check ${visibleConfirmAttempt()}`);
+    }
+    return tr(locale(), `第 ${visibleConfirmAttempt()} 次确认`, `Check ${visibleConfirmAttempt()} of 3`);
+  };
+  const confirmSummaryCopy = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。", "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.");
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction()) ? tr(locale(), "已发起手动确认。本地世界正在刷新快照，确认这笔初始 OC 是否已经写入。", "Manual confirmation started. The local world is refreshing the snapshot to verify whether the starter OC is visible.") : tr(locale(), "自动确认还没有看到入账结果；可以再次手动刷新确认，或等待下一次快照同步。", "Auto-confirmation has not seen the credit yet; retry manual refresh or wait for the next snapshot sync.");
+    }
+    return autoConfirmAttempts() >= 3 ? tr(locale(), "自动确认已经跑完 3 次，仍未看到入账结果。可以手动再确认一次，或等待运行时快照继续同步。", "Auto-confirmation has completed 3 checks without seeing the credit. Retry manual confirmation or wait for the runtime snapshot to keep syncing.") : tr(locale(), "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。", "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.");
+  };
   const primaryAction = () => {
     if (creditConfirmed()) {
       return chatAction();
@@ -10032,6 +10062,8 @@ function StarterOcRequiredGate() {
         autoCompleteTimer = window.setTimeout(() => {
           completeStarterOcOnboarding();
           setAutoConfirmAttempts(0);
+          setManualConfirmAttempts(0);
+          setLastConfirmMode("auto");
           requestRender();
           autoCompleteTimer = null;
         }, 1200);
@@ -10046,6 +10078,8 @@ function StarterOcRequiredGate() {
       scheduledAutoConfirmAttempt = -1;
       if (!pendingCredit()) {
         setAutoConfirmAttempts(0);
+        setManualConfirmAttempts(0);
+        setLastConfirmMode("auto");
       }
       return;
     }
@@ -10059,6 +10093,7 @@ function StarterOcRequiredGate() {
     }
     scheduledAutoConfirmAttempt = attempt;
     autoConfirmTimer = window.setTimeout(() => {
+      setLastConfirmMode("auto");
       renderGameplayAction(nextAction);
       setAutoConfirmAttempts((value) => value + 1);
     }, attempt === 0 ? 450 : 1600);
@@ -10097,24 +10132,21 @@ function StarterOcRequiredGate() {
         get fallback() {
           return (() => {
             var _el$122 = _tmpl$30(), _el$123 = _el$122.firstChild, _el$124 = _el$123.nextSibling, _el$125 = _el$124.firstChild, _el$126 = _el$125.firstChild, _el$127 = _el$126.nextSibling, _el$128 = _el$125.nextSibling, _el$129 = _el$128.firstChild, _el$130 = _el$129.nextSibling, _el$131 = _el$128.nextSibling, _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling;
-            insert(_el$123, (() => {
-              var _c$0 = memo(() => !!creditConfirmed());
-              return () => _c$0() ? tr(locale(), "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。", "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.") : tr(locale(), "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。", "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.");
-            })());
+            insert(_el$123, confirmSummaryCopy);
             insert(_el$126, () => tr(locale(), "状态", "Status"));
             insert(_el$127, (() => {
-              var _c$1 = memo(() => !!creditConfirmed());
-              return () => _c$1() ? tr(locale(), "已入账", "Credited") : tr(locale(), "自动确认中", "Auto-confirming");
+              var _c$0 = memo(() => !!creditConfirmed());
+              return () => _c$0() ? tr(locale(), "已入账", "Credited") : confirmStatusLabel();
             })());
             insert(_el$129, () => tr(locale(), "进度", "Progress"));
             insert(_el$130, (() => {
-              var _c$10 = memo(() => !!creditConfirmed());
-              return () => _c$10() ? tr(locale(), "完成", "Done") : tr(locale(), `第 ${Math.min(autoConfirmAttempts() + 1, 3)} 次确认`, `Check ${Math.min(autoConfirmAttempts() + 1, 3)} of 3`);
+              var _c$1 = memo(() => !!creditConfirmed());
+              return () => _c$1() ? tr(locale(), "完成", "Done") : confirmProgressLabel();
             })());
             insert(_el$132, () => tr(locale(), "你可以做什么", "What To Do"));
             insert(_el$133, (() => {
-              var _c$11 = memo(() => !!creditConfirmed());
-              return () => _c$11() ? tr(locale(), "开始聊天", "Start chat") : tr(locale(), "先看玩法说明", "Read the guide");
+              var _c$10 = memo(() => !!creditConfirmed());
+              return () => _c$10() ? tr(locale(), "开始聊天", "Start chat") : tr(locale(), "先看玩法说明", "Read the guide");
             })());
             insert(_el$122, createComponent(StarterOcGuide, {
               get locale() {
@@ -10150,6 +10182,12 @@ function StarterOcRequiredGate() {
             if (creditConfirmed()) {
               completeStarterOcOnboarding();
               setAutoConfirmAttempts(0);
+              setManualConfirmAttempts(0);
+              setLastConfirmMode("auto");
+            }
+            if (pendingCredit() && nextAction()?.executeKind === "request_snapshot") {
+              setLastConfirmMode("manual");
+              setManualConfirmAttempts((value) => value + 1);
             }
             renderGameplayAction(nextAction());
           };
@@ -10179,6 +10217,8 @@ function StarterOcRequiredGate() {
           _el$121.$$click = () => {
             completeStarterOcOnboarding();
             setAutoConfirmAttempts(0);
+            setManualConfirmAttempts(0);
+            setLastConfirmMode("auto");
             requestRender();
           };
           var _ref$3 = primaryButtonRef;
@@ -10640,8 +10680,8 @@ function WorldStageHero() {
     });
     insert(_el$174, () => tr(locale(), "推进一步", "Advance One Step"));
     insert(_el$175, (() => {
-      var _c$12 = memo(() => !!primaryActionContext());
-      return () => _c$12() ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`) : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.");
+      var _c$11 = memo(() => !!primaryActionContext());
+      return () => _c$11() ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`) : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.");
     })());
     insert(_el$148, createComponent(Show, {
       get when() {
