@@ -262,6 +262,24 @@ impl RuntimeLiveSession {
         }
     }
 
+    pub(super) fn explicitly_subscribed_to(&self, stream: ViewerStream) -> bool {
+        self.subscribed.contains(&stream)
+    }
+
+    pub(super) fn uses_default_subscription(&self) -> bool {
+        self.subscribed.is_empty()
+    }
+
+    pub(super) fn wants_initial_snapshot(&self) -> bool {
+        self.uses_default_subscription() || self.explicitly_subscribed_to(ViewerStream::Snapshot)
+    }
+
+    pub(super) fn wants_initial_recovery_metadata(&self) -> bool {
+        self.uses_default_subscription()
+            || self.explicitly_subscribed_to(ViewerStream::Snapshot)
+            || self.explicitly_subscribed_to(ViewerStream::Events)
+    }
+
     pub(super) fn should_emit_background_snapshot(&mut self, interval: Duration) -> bool {
         let now = Instant::now();
         if let Some(next_snapshot_at) = self.next_background_snapshot_at {
@@ -583,6 +601,37 @@ pub(super) fn is_expected_disconnect_error(err: &io::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_subscription_requests_initial_snapshot_and_recovery_metadata() {
+        let session = RuntimeLiveSession::new();
+
+        assert!(session.uses_default_subscription());
+        assert!(session.wants_initial_snapshot());
+        assert!(session.wants_initial_recovery_metadata());
+        assert!(!session.explicitly_subscribed_to(ViewerStream::Snapshot));
+        assert!(!session.explicitly_subscribed_to(ViewerStream::Events));
+        assert!(!session.explicitly_subscribed_to(ViewerStream::Metrics));
+    }
+
+    #[test]
+    fn explicit_subscriptions_drive_initial_request_semantics() {
+        let mut snapshot_session = RuntimeLiveSession::new();
+        snapshot_session.subscribed.insert(ViewerStream::Snapshot);
+        assert!(!snapshot_session.uses_default_subscription());
+        assert!(snapshot_session.wants_initial_snapshot());
+        assert!(snapshot_session.wants_initial_recovery_metadata());
+
+        let mut event_session = RuntimeLiveSession::new();
+        event_session.subscribed.insert(ViewerStream::Events);
+        assert!(!event_session.wants_initial_snapshot());
+        assert!(event_session.wants_initial_recovery_metadata());
+
+        let mut metrics_session = RuntimeLiveSession::new();
+        metrics_session.subscribed.insert(ViewerStream::Metrics);
+        assert!(!metrics_session.wants_initial_snapshot());
+        assert!(!metrics_session.wants_initial_recovery_metadata());
+    }
 
     #[test]
     fn bootstrap_runtime_world_defaults_to_production_release_policy() {

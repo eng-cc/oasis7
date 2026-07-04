@@ -36,7 +36,7 @@ impl ViewerRuntimeLiveServer {
             delta_logical_time,
             delta_event_seq,
         ));
-        if session.subscribed.contains(&ViewerStream::Snapshot) {
+        if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
@@ -56,7 +56,7 @@ impl ViewerRuntimeLiveServer {
         let batch_finality_updates =
             self.advance_authoritative_batch_finality(self.world.state().time)?;
 
-        if session.subscribed.contains(&ViewerStream::Events) {
+        if session.explicitly_subscribed_to(ViewerStream::Events) {
             for event in &mapped_events {
                 if session.event_allowed(event) {
                     send_response(
@@ -78,13 +78,13 @@ impl ViewerRuntimeLiveServer {
             }
         }
 
-        if session.subscribed.contains(&ViewerStream::Snapshot) {
+        if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
 
         session.metrics = runtime_metrics(&self.world);
-        if session.subscribed.contains(&ViewerStream::Metrics) {
+        if session.explicitly_subscribed_to(ViewerStream::Metrics) {
             send_response(
                 writer,
                 &ViewerResponse::Metrics {
@@ -325,7 +325,7 @@ impl ViewerRuntimeLiveServer {
             };
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
-        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
+        if emit_snapshot && session.explicitly_subscribed_to(ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }
@@ -375,7 +375,7 @@ impl ViewerRuntimeLiveServer {
             };
             send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
         }
-        if emit_snapshot && session.subscribed.contains(&ViewerStream::Snapshot) {
+        if emit_snapshot && session.explicitly_subscribed_to(ViewerStream::Snapshot) {
             let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
             send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
         }

@@ -94,6 +94,40 @@ fn read_response_line(peer: &TcpStream, timeout: Duration) -> Option<String> {
     }
 }
 
+fn read_available_runtime_live_responses(
+    peer: &TcpStream,
+    timeout: Duration,
+) -> Vec<ViewerResponse> {
+    let stream = peer.try_clone().expect("clone test peer");
+    stream
+        .set_read_timeout(Some(timeout))
+        .expect("set read timeout");
+    let mut reader = BufReader::new(stream);
+    let mut responses = Vec::new();
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                let trimmed = line.trim_end();
+                if !trimmed.is_empty() {
+                    responses.push(serde_json::from_str(trimmed).expect("decode response"));
+                }
+            }
+            Err(err) => {
+                if matches!(
+                    err.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) {
+                    break;
+                }
+                panic!("read response line failed: {err}");
+            }
+        }
+    }
+    responses
+}
+
 fn read_control_completion_ack(
     peer: &TcpStream,
     timeout: Duration,
@@ -380,6 +414,80 @@ fn runtime_live_run_accepts_probe_while_viewer_session_is_open() {
         probe_snapshot.model.agents.len(),
         viewer_snapshot.model.agents.len()
     );
+}
+
+#[test]
+fn runtime_live_default_snapshot_request_does_not_enable_ongoing_streams() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(ViewerRequest::RequestSnapshot, &mut session, &mut writer)
+        .expect("handle snapshot request");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+
+    assert_eq!(
+        responses.len(),
+        2,
+        "default request should emit one snapshot and recovery metadata only: {responses:?}"
+    );
+    assert!(matches!(responses[0], ViewerResponse::Snapshot { .. }));
+    assert!(matches!(
+        responses[1],
+        ViewerResponse::AuthoritativeRecoveryAck { .. }
+    ));
+    assert!(session.uses_default_subscription());
+
+    server
+        .emit_background_play_snapshot(&mut session, &mut writer)
+        .expect("emit background snapshot");
+    let follow_up = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+    assert!(
+        follow_up.is_empty(),
+        "default subscription must not become ongoing snapshot/events/metrics streaming: {follow_up:?}"
+    );
+}
+
+#[test]
+fn runtime_live_events_subscription_requests_recovery_metadata_without_initial_snapshot() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(
+            ViewerRequest::Subscribe {
+                streams: vec![ViewerStream::Events],
+                event_kinds: Vec::new(),
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("handle subscribe");
+    server
+        .handle_request(ViewerRequest::RequestSnapshot, &mut session, &mut writer)
+        .expect("handle snapshot request");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+
+    assert!(
+        responses
+            .iter()
+            .any(|response| matches!(response, ViewerResponse::AuthoritativeRecoveryAck { .. })),
+        "events subscription should get recovery metadata: {responses:?}"
+    );
+    assert!(
+        !responses
+            .iter()
+            .any(|response| matches!(response, ViewerResponse::Snapshot { .. })),
+        "events-only subscription must not receive an initial snapshot: {responses:?}"
+    );
+    assert!(session.explicitly_subscribed_to(ViewerStream::Events));
+    assert!(!session.explicitly_subscribed_to(ViewerStream::Snapshot));
 }
 
 #[test]
