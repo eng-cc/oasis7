@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, VecDeque};
 use super::agent::AgentDecision;
 use super::types::{Action, WorldTime};
 
+const MAX_BOUNDED_TOP_N_LIMIT: usize = 1024;
+
 // ============================================================================
 // Memory Entry
 // ============================================================================
@@ -394,9 +396,20 @@ impl LongTermMemory {
 
     /// Get the most recently accessed entries.
     pub fn recently_accessed(&self, n: usize) -> Vec<&LongTermMemoryEntry> {
-        let mut entries: Vec<_> = self.entries.values().collect();
-        entries.sort_by(|a, b| b.last_accessed.cmp(&a.last_accessed));
-        entries.into_iter().take(n).collect()
+        let mut recent = Vec::with_capacity(n.min(self.entries.len()));
+        if n == 0 {
+            return recent;
+        }
+        if !use_bounded_top_n(n, self.entries.len()) {
+            recent.extend(self.entries.values());
+            recent.sort_by(|left, right| compare_last_accessed_desc(left, right));
+            recent.truncate(n);
+            return recent;
+        }
+        for entry in self.entries.values() {
+            insert_top_by_recency(&mut recent, entry, n);
+        }
+        recent
     }
 
     /// Get all entries.
@@ -484,8 +497,30 @@ fn compare_importance_desc(left: &LongTermMemoryEntry, right: &LongTermMemoryEnt
         .unwrap_or(Ordering::Equal)
 }
 
+fn insert_top_by_recency<'a>(
+    top: &mut Vec<&'a LongTermMemoryEntry>,
+    candidate: &'a LongTermMemoryEntry,
+    limit: usize,
+) {
+    let insert_at = top
+        .iter()
+        .position(|entry| compare_last_accessed_desc(candidate, entry) == Ordering::Less);
+    match insert_at {
+        Some(index) => top.insert(index, candidate),
+        None if top.len() < limit => top.push(candidate),
+        None => return,
+    }
+    if top.len() > limit {
+        top.pop();
+    }
+}
+
+fn compare_last_accessed_desc(left: &LongTermMemoryEntry, right: &LongTermMemoryEntry) -> Ordering {
+    right.last_accessed.cmp(&left.last_accessed)
+}
+
 fn use_bounded_top_n(limit: usize, total: usize) -> bool {
-    limit.saturating_mul(2) < total
+    limit <= MAX_BOUNDED_TOP_N_LIMIT && limit.saturating_mul(2) < total
 }
 
 // ============================================================================
