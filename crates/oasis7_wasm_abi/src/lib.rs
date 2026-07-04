@@ -131,6 +131,13 @@ impl ModuleCache {
     }
 
     fn touch(&mut self, wasm_hash: &str) {
+        if self
+            .lru
+            .back()
+            .is_some_and(|recent| recent.as_str() == wasm_hash)
+        {
+            return;
+        }
         self.lru.retain(|entry| entry != wasm_hash);
         self.lru.push_back(wasm_hash.to_string());
     }
@@ -575,6 +582,25 @@ mod tests {
         assert!(cache.get("c").is_some());
         assert!(cache.get("a").is_none());
         assert!(cache.get("b").is_none());
+    }
+
+    #[test]
+    fn module_cache_repeated_hot_hit_keeps_single_recent_lru_entry() {
+        let mut cache = ModuleCache::new(2);
+        cache.insert(artifact("a", 1));
+        cache.insert(artifact("b", 2));
+
+        assert!(cache.get("b").is_some());
+        assert!(cache.get("b").is_some());
+        assert_eq!(
+            cache.lru.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
+
+        cache.insert(artifact("c", 3));
+        assert!(cache.get("a").is_none());
+        assert!(cache.get("b").is_some());
+        assert!(cache.get("c").is_some());
     }
 
     #[test]
