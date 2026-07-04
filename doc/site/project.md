@@ -94,7 +94,7 @@
     - `site/en/index.html`
     - `site/doc/cn/index.html`
     - `site/doc/en/index.html`
-    - `doc/site/github-pages/viewer-to-producer-task-site-009-cta-priority-2026-03-11.md`
+    - 旧 role handoff brief 已退役删除；当前任务真值保留在本 project 行与 GitHub task issue evidence comments。
   - 验收命令 (`test_tier_required`):
     - `rg -n "先看技术预览路径|See Preview Verification Path|优先级：预览体验入口优先|Priority: preview experience first" site/index.html site/en/index.html site/doc/cn/index.html site/doc/en/index.html`
     - `./scripts/doc-governance-check.sh`

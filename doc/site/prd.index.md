@@ -19,8 +19,8 @@
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
 ## 密度快照（2026-06-23）
-- `doc/site/`：71 份文件
-- `doc/site/github-pages/`：58 份文件
+- `doc/site/`：69 份文件
+- `doc/site/github-pages/`：56 份文件
 - `doc/site/manual/`：6 份文件
 - 模块根入口：5 份文件
 - `doc/site/` 正式专题三件套：60 份文件
