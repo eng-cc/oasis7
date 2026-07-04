@@ -135,6 +135,14 @@ async function writeJson(path, payload) {
 function summarizeState(state) {
   const agents = state?.snapshot?.model?.agents ?? {};
   const locations = state?.snapshot?.model?.locations ?? {};
+  const runtimeState = state?.snapshot?.model?.state ?? state?.snapshot?.state ?? {};
+  const starterOcClaims = runtimeState.starter_oc_claims
+    ?? runtimeState.starterOcClaims
+    ?? state?.snapshot?.model?.starter_oc_claims
+    ?? state?.snapshot?.model?.starterOcClaims
+    ?? state?.snapshot?.starter_oc_claims
+    ?? state?.snapshot?.starterOcClaims
+    ?? {};
   const auth = state?.auth ?? {
     available: state?.authReady ?? null,
     playerId: state?.authPlayerId ?? null,
@@ -152,6 +160,7 @@ function summarizeState(state) {
     locationCount: Object.keys(locations).length || Number(state?.gameplaySummary?.locationCount ?? 0),
     blockerKind: state?.snapshot?.player_gameplay?.blocker_kind ?? null,
     blockerDetail: state?.snapshot?.player_gameplay?.blocker_detail ?? null,
+    starterOcClaimed: Object.keys(starterOcClaims).length > 0,
     lastChatFeedback: state?.lastChatFeedback ?? null,
   };
 }
@@ -190,6 +199,21 @@ async function main() {
     await page.goto(options.url, { waitUntil: "domcontentloaded", timeout: options.timeoutMs });
     await page.waitForFunction(() => typeof window.__AW_TEST__ === "object", null, { timeout: options.timeoutMs });
     await page.waitForFunction(() => window.__AW_TEST__?.getState?.()?.connectionStatus === "connected", null, { timeout: options.timeoutMs });
+
+    await page.waitForFunction(() => {
+      const bodyText = document.body?.innerText ?? "";
+      return bodyText.includes("认领第一个 Agent")
+        || bodyText.includes("Claim First Agent")
+        || Object.keys(window.__AW_TEST__?.getState?.()?.snapshot?.model?.agents ?? {}).length >= 1;
+    }, null, { timeout: options.timeoutMs });
+    const claimFirstAgentButton = page.getByTestId("viewer-playthrough-action-claim-first-agent").first();
+    if (await claimFirstAgentButton.count()) {
+      const disabled = await claimFirstAgentButton.evaluate((button) => button.disabled).catch(() => true);
+      if (!disabled) {
+        await claimFirstAgentButton.click();
+      }
+    }
+
     await page.waitForFunction(() => {
       const state = window.__AW_TEST__?.getState?.();
       const agents = state?.snapshot?.model?.agents ?? {};
@@ -205,6 +229,51 @@ async function main() {
     }, null, { timeout: options.timeoutMs });
 
     await writeJson(join(options.outDir, "ready_state.json"), await getState(page));
+
+    await page.waitForFunction(() => !/pixel_world_render_state_unavailable/.test(document.body?.innerText ?? ""), null, {
+      timeout: options.timeoutMs,
+    });
+
+    const claimStarterOcButton = page.getByTestId("viewer-playthrough-action-claim-starter-oc").first();
+    if (await claimStarterOcButton.count()) {
+      await page.waitForFunction(() => {
+        const button = document.querySelector('[data-testid="viewer-playthrough-action-claim-starter-oc"]');
+        return button && !button.disabled;
+      }, null, { timeout: options.timeoutMs });
+      await claimStarterOcButton.click();
+      await page.waitForFunction(() => {
+        const state = window.__AW_TEST__?.getState?.();
+        const boundAgentId = state?.auth?.boundAgentId ?? state?.authBoundAgentId;
+        const snapshot = state?.snapshot ?? {};
+        const model = snapshot.model ?? {};
+        const runtimeState = model.state ?? snapshot.state ?? {};
+        const claims = runtimeState.starter_oc_claims
+          || runtimeState.starterOcClaims
+          || model.starter_oc_claims
+          || model.starterOcClaims
+          || snapshot.starter_oc_claims
+          || snapshot.starterOcClaims
+          || {};
+        const balances = runtimeState.main_token_balances
+          || runtimeState.mainTokenBalances
+          || model.main_token_balances
+          || model.mainTokenBalances
+          || snapshot.main_token_balances
+          || snapshot.mainTokenBalances
+          || {};
+        const balance = balances[boundAgentId] || null;
+        const liquidBalance = Number(
+          balance?.liquid_balance
+            ?? balance?.liquidBalance
+            ?? balance?.liquid
+            ?? balance?.balance
+            ?? 0,
+        );
+        return Boolean(boundAgentId && claims[boundAgentId])
+          || (Number.isFinite(liquidBalance) && liquidBalance > 0)
+          || Boolean(document.querySelector("#agent-chat-message") && !document.querySelector("#agent-chat-message").disabled);
+      }, null, { timeout: options.timeoutMs });
+    }
 
     await page.waitForSelector("#agent-chat-message", { state: "visible", timeout: options.timeoutMs });
     await page.waitForSelector('[data-chat-send="1"]', { state: "visible", timeout: options.timeoutMs });
