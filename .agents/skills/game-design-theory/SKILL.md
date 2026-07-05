@@ -27,6 +27,10 @@ Use this skill when:
   psychology framing for an oasis7 decision
 - a design discussion needs reusable theory language tied to current
   `doc/game/*`, PRD/project truth, task evidence, or playtest observations
+- a `producer_system_designer` or `gameplay_designer` slice is turning the
+  current `doc/game` tree into a design-bible-grade topic map and needs to
+  separate player promise, player verbs, loops, progression pressure, feedback,
+  balance risk, and validation evidence
 - community or agent behavior signals need to be translated into experience
   hypotheses without making product or liveops promises
 
@@ -44,9 +48,12 @@ Do not use this skill when:
    card, and any playtest or community evidence.
 2. Pick the smallest useful theory lens, such as core loop, motivation,
    progression pressure, balance tradeoff, or player feedback timing.
-3. Tie every recommendation to observable oasis7 behavior or a documented
+3. For detailed game design documentation, express the lens as concrete doc
+   slots: player promise, verbs, state/economy rules, failure/recovery,
+   feedback surfaces, balance risks, scenario examples, and validation matrix.
+4. Tie every recommendation to observable oasis7 behavior or a documented
    follow-up validation path.
-4. Attribute professional conclusions to the owning role slice, not to this
+5. Attribute professional conclusions to the owning role slice, not to this
    skill.
 
 ## Supporting Files
@@ -59,6 +66,8 @@ Do not use this skill when:
 - Treating generic theory as product evidence.
 - Letting this skill replace the `gameplay_designer` or
   `producer_system_designer` role boundary.
+- Expanding a root PRD into a giant manual instead of routing details to
+  topic-level PRD/design/project triplets and indexed evidence.
 - Making liveops or player-facing claims from theory without
   `liveops_community` review.
 

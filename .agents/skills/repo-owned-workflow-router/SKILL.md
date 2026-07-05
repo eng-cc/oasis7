@@ -59,6 +59,9 @@ Check the task in this order:
    - Skip professional dispatch only for pure fact lookup or command-output restatement.
 1. `bounded-brainstorming`
    - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
+   - Use for design-bible methodology work when the user wants game design docs
+     to become very detailed or express all game details, but the target topic
+     set, ownership, and validation matrix are not yet scoped.
 2. `tdd-test-writer`
    - Use when the task changes automatable behavior and has a stable automated test surface.
 3. `executing-project-tasks`
@@ -76,6 +79,18 @@ Check the task in this order:
 9. `writing-repo-owned-skills`
    - Use when local repo-owned skill surfaces are created or edited.
 
+Design-bible routing note:
+
+- If the task is about expanding `doc/game` from a clear document tree into a
+  detailed game design bible, first apply
+  `doc/engineering/workflow/source-of-truth.md#1221-detailed-game-design-documentation-method`.
+- Route professional content ownership through `producer_system_designer` and
+  `gameplay_designer` by default, adding visual, runtime, agent, viewer, QA, or
+  liveops roles only when the detailed topic touches those surfaces.
+- Keep root docs as navigation/current-truth surfaces; detailed rules should
+  land in topic PRD/design/project triplets plus indexed evidence/runbook
+  supplements, not in one swollen root PRD.
+
 ## Routing Questions
 
 Ask and answer these in order:
@@ -90,7 +105,10 @@ Ask and answer these in order:
 8. Is the task actually at closeout rather than execution?
 9. Did GitHub review feedback arrive?
 10. Is this task editing local skill surfaces or skill governance?
-11. Did this step produce reusable learning, a follow-up idea, repeated
+11. Is this task asking for a design-bible level game documentation method, and
+    if so, which topics, role owners, and validation matrix rows are required
+    before document edits begin?
+12. Did this step produce reusable learning, a follow-up idea, repeated
     friction, or a failure signature that should use the learning-intake
     ladder: no-op, short GitHub issue evidence note, reflection signal,
     task-scoped `working_memory`, or candidate task/memory promotion?

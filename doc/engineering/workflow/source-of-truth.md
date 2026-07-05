@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.4**
-Last Updated: **2026-07-01**
+Version: **v1.5.5**
+Last Updated: **2026-07-05**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -127,6 +127,37 @@ or reusable failure signature:
    when the signal or working memory is stable enough to become executable
    backlog work or long-term role memory. Promotion must preserve source refs
    and must not bypass owner, role, PRD/project, or GitHub-backed task truth.
+
+### 1.2.2.1 Detailed Game Design Documentation Method
+When a task asks to make game design docs "very detailed", "complete", or able
+to express all game details, route it as a design-bible methodology task rather
+than a simple doc expansion.
+
+- Keep the module root docs as navigation and current-truth surfaces:
+  `doc/game/README.md` routes readers, `doc/game/prd.md` holds the active
+  gameplay baseline and authority boundary, `doc/game/project.md` holds current
+  execution state, and `doc/game/prd.index.md` provides exact lookup.
+- Do not solve detail gaps by moving every rule, matrix, sample, or history
+  into the root PRD. Detailed rules belong in topic PRD/design/project triplets
+  or explicitly labeled evidence/runbook/checklist supplements.
+- A detailed game-design topic is not ready until it can answer:
+  player promise, player verbs, loop timing, state model, resource/economy
+  rules, failure/recovery, feedback surfaces, edge cases, balance risks,
+  implementation authority, QA/playtest validation, and release-claim boundary.
+- Topic additions or promotions must update the reachable tree in the same
+  change set: relevant root baseline row, `gameplay/README.md` topic cluster,
+  `prd.index.md` lookup row, and `project.md` only when current execution or
+  gate status changes.
+- Use professional slices for the design ownership:
+  `producer_system_designer` owns product/system promises and stage boundaries;
+  `gameplay_designer` owns player verbs, loops, progression, economy feel, and
+  balance risks; `game_visual_interaction_designer`, `runtime_engineer`,
+  `agent_engineer`, `viewer_engineer`, `qa_engineer`, and `liveops_community`
+  join when the topic touches their surfaces.
+- The verification expectation for a design-bible task is traceability, not
+  code execution by default: every player-facing claim should link to a
+  PRD-GAME id or topic section, an owning role, a validation path, and the
+  evidence tier needed before it can affect release or public claims.
 
 Learning intake is not a new mandatory gate before every answer. It is a
 closeout habit for moments where the task produced reusable knowledge. When the
