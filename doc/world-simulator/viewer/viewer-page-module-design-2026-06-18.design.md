@@ -2,7 +2,7 @@
 
 - Professional owner: `game_visual_interaction_designer`
 - Integration owner: `tpm`
-- Source task: `.pm/tasks/task_e7760ad76a0046dfa5a17d0a5a89e59c.yaml`
+- Source task uid: `task_e7760ad76a0046dfa5a17d0a5a89e59c` / GitHub issue #1496; execution evidence is in GitHub task issue evidence comments and `.pm/github-project-sync/task-archive.jsonl`.
 - Slice type: `page_overall_and_module_design`
 - Companion specs:
   - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`

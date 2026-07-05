@@ -1,7 +1,7 @@
 # Viewer Pixel World Fragment LOD Terrain Rendering（2026-05-27）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.project.md`
+- 历史任务追溯: `task_428db5366f654c5e892ac300807cb9cc` / GitHub issue #986；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 - 关联专题:
   - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
   - `doc/world-simulator/viewer/viewer-fragment-element-rendering.prd.md`

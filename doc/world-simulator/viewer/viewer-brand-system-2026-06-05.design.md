@@ -2,7 +2,7 @@
 
 - Professional owner: `game_visual_interaction_designer`
 - Integration owner: `tpm`
-- Source task: `.pm/tasks/task_a25bf76359be45719edfcda1759626d1.yaml`
+- Source task uid: `task_a25bf76359be45719edfcda1759626d1` / GitHub issue #1385; execution evidence is in GitHub task issue evidence comments and `.pm/github-project-sync/task-archive.jsonl`.
 - Parent visual spec: `viewer-visual-design-spec-2026-06-05.design.md`
 
 ## 1. Purpose
