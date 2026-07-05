@@ -557,7 +557,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
@@ -681,7 +682,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 
@@ -809,13 +811,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 branch = sys.argv[4]
 
-if f"pr create --base main --head {branch} --fill" not in gh_lines:
+if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create on no-cache path, got: {gh_lines}")
+if "Closes #123" not in gh_text:
+    raise SystemExit(f"expected generated no-cache PR body to close task issue #123, got: {gh_text}")
 if not any(line.startswith("issue list -R eng-cc/oasis7 --search") for line in gh_lines):
     raise SystemExit(f"expected no-cache GitHub issue search, got: {gh_lines}")
 if any(line.startswith("project item-edit") for line in gh_lines):
@@ -884,14 +889,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 branch = sys.argv[5]
 
-if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first, got: {gh_lines}")
+if "Closes #123" not in gh_text:
+    raise SystemExit(f"expected generated PR body to close task issue #123, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls, got: {gh_lines}")
 if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
@@ -934,18 +942,49 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 stderr = Path(sys.argv[2]).read_text(encoding="utf-8")
 branch = sys.argv[3]
 task_uid = sys.argv[4]
 
 expected = f"pr create --base main --head {branch} --title Fixture PR title --body Task: {task_uid}"
-if not gh_lines or not gh_lines[0].startswith(expected):
+if not any(line.startswith(expected) for line in gh_lines):
     raise SystemExit(f"expected titled gh pr create to include generated body, got: {gh_lines}")
+if "Closes #123" not in gh_text:
+    raise SystemExit(f"expected titled generated PR body to close task issue #123, got: {gh_text}")
 if stderr:
     raise SystemExit(f"did not expect stderr on titled create path: {stderr}")
 PY
 reset_project_mapping_after_record_pr
+
+bad_body_file="$TMPDIR/bad-pr-body.md"
+printf 'Task body without GitHub close linkage.\n' > "$bad_body_file"
+bad_body_log="$TMPDIR/gh-bad-body.log"
+bad_body_git_log="$TMPDIR/git-bad-body.log"
+bad_body_err="$TMPDIR/bad-body.err"
+if run_prepare "$bad_body_log" "$bad_body_git_log" --create --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
+  echo "expected --body-file without close linkage to fail" >&2
+  exit 1
+fi
+
+python3 - "$bad_body_log" "$bad_body_git_log" "$bad_body_err" <<'PY'
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+
+if any(line.startswith("pr create ") for line in gh_lines):
+    raise SystemExit(f"expected no PR creation for bad explicit body, got: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"expected no push for bad explicit body, got: {git_lines}")
+if "must include a GitHub auto-close link" not in stderr:
+    raise SystemExit(f"expected close-linkage error for bad explicit body, got: {stderr}")
+PY
 
 behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
@@ -959,14 +998,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stdout = Path(sys.argv[3]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[4]).read_text(encoding="utf-8")
 branch = sys.argv[5]
 
-if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first on behind-but-allowed path, got: {gh_lines}")
+if "Closes #123" not in gh_text:
+    raise SystemExit(f"expected behind path generated PR body to close task issue #123, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls on behind-but-allowed path, got: {gh_lines}")
 if not any(
@@ -1000,13 +1042,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+gh_text = Path(sys.argv[1]).read_text(encoding="utf-8")
+gh_lines = gh_text.splitlines()
 stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 branch = sys.argv[4]
 
-if not gh_lines or gh_lines[0] != f"pr create --base main --head {branch} --fill":
+if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first after addressed findings, got: {gh_lines}")
+if "Closes #123" not in gh_text:
+    raise SystemExit(f"expected addressed path generated PR body to close task issue #123, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls after addressed findings, got: {gh_lines}")
 if "- findings disposition: addressed" not in stdout:

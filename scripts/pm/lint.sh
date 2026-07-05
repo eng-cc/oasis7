@@ -46,6 +46,9 @@ require_file "scripts/pm/github-project-workflow.test.sh"
 require_file "scripts/pm/github-project-retire-tasks.py"
 require_file "scripts/pm/github-project-retire-tasks.sh"
 require_file "scripts/pm/github-project-retire-tasks.test.sh"
+require_file "scripts/pm/audit-pr-watch-issues.py"
+require_file "scripts/pm/audit-pr-watch-issues.sh"
+require_file "scripts/pm/audit-pr-watch-issues.test.sh"
 require_file "scripts/pm/append-execution-log.sh"
 require_file "scripts/pm/claim-ready.sh"
 require_file "scripts/pm/fallback-evidence.sh"
@@ -133,6 +136,7 @@ python3 -m py_compile \
   "$SCRIPT_DIR/github-project-task.py" \
   "$SCRIPT_DIR/github-project-sync.py" \
   "$SCRIPT_DIR/github-project-workflow.py" \
-  "$SCRIPT_DIR/github-project-retire-tasks.py"
+  "$SCRIPT_DIR/github-project-retire-tasks.py" \
+  "$SCRIPT_DIR/audit-pr-watch-issues.py"
 
 echo "pm-lint: OK"
