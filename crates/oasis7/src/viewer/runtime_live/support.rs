@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use crate::simulator::{Location, WorldKernel, WorldModel};
+use crate::simulator::{Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel};
 use crate::viewer::gameplay_actions::formal_release_default_seed_model;
 
 use super::*;
@@ -551,8 +551,14 @@ pub(super) fn runtime_metrics(world: &RuntimeWorld) -> RunnerMetrics {
         } else {
             0.0
         },
-        runtime_perf: Default::default(),
+        runtime_perf: unsupported_runtime_live_perf_snapshot(),
     }
+}
+
+pub(super) fn unsupported_runtime_live_perf_snapshot() -> RuntimePerfSnapshot {
+    let snapshot = RuntimePerfSnapshot::default();
+    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
+    snapshot
 }
 
 pub(super) fn latest_runtime_event_seq(world: &RuntimeWorld) -> u64 {
@@ -644,6 +650,14 @@ mod tests {
         let (world, _) =
             bootstrap_runtime_world(WorldScenario::Minimal).expect("bootstrap runtime live world");
         assert!(world.release_security_policy().is_production_hardened());
+    }
+
+    #[test]
+    fn runtime_live_metrics_mark_runtime_perf_unknown_when_unavailable() {
+        let perf = unsupported_runtime_live_perf_snapshot();
+        assert_eq!(perf.health, RuntimePerfHealth::Unknown);
+        assert_eq!(perf.tick.samples_total, 0);
+        assert_eq!(perf.tick.samples_window, 0);
     }
 
     #[test]

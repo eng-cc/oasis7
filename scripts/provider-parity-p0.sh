@@ -174,16 +174,18 @@ run_sample() {
   "${cmd[@]}" | tee "$sample_dir/run.log"
 }
 
-if (( RUN_BUILTIN )); then
-  for sample_index in $(seq 1 "$SAMPLES"); do
-    run_sample builtin "$sample_index"
-  done
-fi
+if [[ "${PROVIDER_PARITY_P0_AGGREGATE_ONLY:-0}" != "1" ]]; then
+  if (( RUN_BUILTIN )); then
+    for sample_index in $(seq 1 "$SAMPLES"); do
+      run_sample builtin "$sample_index"
+    done
+  fi
 
-if (( RUN_PROVIDER )); then
-  for sample_index in $(seq 1 "$SAMPLES"); do
-    run_sample provider_loopback_http "$sample_index"
-  done
+  if (( RUN_PROVIDER )); then
+    for sample_index in $(seq 1 "$SAMPLES"); do
+      run_sample provider_loopback_http "$sample_index"
+    done
+  fi
 fi
 
 python3 - "$OUT_DIR" "$RUN_ID" "$SCENARIO_ID" "$PARITY_TIER" "$SAMPLES" "$RUN_BUILTIN" "$RUN_PROVIDER" <<'PY'
@@ -212,6 +214,32 @@ summary_dir = out_dir / "summary"
 summary_dir.mkdir(parents=True, exist_ok=True)
 
 aggregate = {}
+def nested_get(payload, path, default=0):
+    current = payload
+    for key in path:
+        if not isinstance(current, dict):
+            return default
+        current = current.get(key)
+        if current is None:
+            return default
+    return current
+
+def runtime_perf_tick_peak(samples, path):
+    values = []
+    for sample in samples:
+        tick = nested_get(sample, ("runtime_perf", "tick"), {})
+        if not isinstance(tick, dict):
+            continue
+        samples_total = tick.get("samples_total", 0)
+        if not isinstance(samples_total, (int, float)) or samples_total <= 0:
+            continue
+        value = nested_get(sample, path, 0)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)) and math.isfinite(value):
+            values.append(value)
+    return max(values) if values else None
+
 for provider in providers:
     sample_files = sorted((out_dir / "samples" / provider).glob("sample_*/summary/*.json"))
     samples = [json.loads(path.read_text()) for path in sample_files]
@@ -226,6 +254,8 @@ for provider in providers:
     p95_wait = 0 if not valid_samples else max(s["p95_latency_ms"] for s in valid_samples)
     trace_completeness = 0.0 if not valid_samples else sum(s["trace_completeness_ratio_ppm"] for s in valid_samples) / len(valid_samples) / 1_000_000.0
     context_drift_count = sum(s.get("context_drift_count", 0) for s in valid_samples)
+    runtime_perf_tick_p95_ms_peak = runtime_perf_tick_peak(valid_samples, ("runtime_perf", "tick", "p95_ms"))
+    runtime_perf_tick_over_budget_ratio_ppm_peak = runtime_perf_tick_peak(valid_samples, ("runtime_perf", "tick", "over_budget_ratio_ppm"))
     error_codes = {}
     for sample in samples:
       for code, count in sample.get("error_counts", {}).items():
@@ -258,6 +288,12 @@ for provider in providers:
       "p95_extra_wait_ms": p95_wait,
       "trace_completeness": trace_completeness,
       "context_drift_count": context_drift_count,
+      "runtime_perf": {
+        "tick": {
+          "p95_ms_peak": runtime_perf_tick_p95_ms_peak,
+          "over_budget_ratio_ppm_peak": runtime_perf_tick_over_budget_ratio_ppm_peak,
+        },
+      },
       "benchmark_status": benchmark_status,
       "error_counts": error_codes,
       "provider_version": valid_samples[0]["provider_version"] if valid_samples else "unknown",
@@ -287,13 +323,15 @@ with combined_csv.open("w", newline="") as handle:
       "trace_completeness",
       "recoverable_error_resolution_rate",
       "context_drift_count",
+      "runtime_perf.tick.p95_ms_peak",
+      "runtime_perf.tick.over_budget_ratio_ppm_peak",
       "benchmark_status",
     ]
     builtin = aggregate.get("builtin", {})
     provider_summary = aggregate.get("provider_loopback_http", {})
     for metric in metrics:
-        left = builtin.get(metric, "")
-        right = provider_summary.get(metric, "")
+        left = nested_get(builtin, metric.split("."), "") if metric.startswith("runtime_perf.") else builtin.get(metric, "")
+        right = nested_get(provider_summary, metric.split("."), "") if metric.startswith("runtime_perf.") else provider_summary.get(metric, "")
         if isinstance(left, (int, float)) and isinstance(right, (int, float)):
             gap = right - left
         else:

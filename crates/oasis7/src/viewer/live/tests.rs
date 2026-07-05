@@ -123,6 +123,14 @@ fn live_loop_disconnect_error_normalizes_to_stop() {
 }
 
 #[test]
+fn live_control_metrics_mark_runtime_perf_unknown_when_unavailable() {
+    let perf = unsupported_live_control_runtime_perf_snapshot();
+    assert_eq!(perf.health, crate::simulator::RuntimePerfHealth::Unknown);
+    assert_eq!(perf.tick.samples_total, 0);
+    assert_eq!(perf.tick.samples_window, 0);
+}
+
+#[test]
 fn live_loop_non_disconnect_error_is_preserved() {
     let result = normalize_live_loop_action_result(Err(ViewerLiveServerError::Io(
         std::io::Error::from(std::io::ErrorKind::PermissionDenied),
