@@ -220,6 +220,7 @@ run_required_gate_checks() {
   run_provider_remote_https_smoke
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
   run_newapi_bridge_service_accounting_tests
+  run ./scripts/check-rust-file-size.test.sh
   run ./scripts/check-rust-file-size.sh
   run env -u RUSTC_WRAPPER cargo fmt --all -- --check
   run_rustsec_advisory_check
