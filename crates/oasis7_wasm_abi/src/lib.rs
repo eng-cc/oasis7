@@ -91,7 +91,7 @@ pub struct BoundedLruCache<V> {
     lru: VecDeque<String>,
 }
 
-impl<V: Clone> BoundedLruCache<V> {
+impl<V> BoundedLruCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
@@ -115,12 +115,6 @@ impl<V: Clone> BoundedLruCache<V> {
     pub fn set_capacity(&mut self, capacity: usize) {
         self.capacity = capacity;
         self.prune();
-    }
-
-    pub fn get_cloned(&mut self, key: &str) -> Option<V> {
-        let value = self.cache.get(key)?.clone();
-        self.touch(key);
-        Some(value)
     }
 
     pub fn insert(&mut self, key: String, value: V) {
@@ -155,6 +149,15 @@ impl<V: Clone> BoundedLruCache<V> {
             }
         }
     }
+
+    pub fn get_cloned(&mut self, key: &str) -> Option<V>
+    where
+        V: Clone,
+    {
+        let value = self.cache.get(key)?.clone();
+        self.touch(key);
+        Some(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -164,7 +167,7 @@ pub struct BoundedFifoCache<V> {
     insertion_order: VecDeque<String>,
 }
 
-impl<V: Clone> BoundedFifoCache<V> {
+impl<V> BoundedFifoCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
@@ -179,10 +182,6 @@ impl<V: Clone> BoundedFifoCache<V> {
 
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
-    }
-
-    pub fn get_cloned(&self, key: &str) -> Option<V> {
-        self.cache.get(key).cloned()
     }
 
     pub fn insert(&mut self, key: String, value: V) {
@@ -207,6 +206,13 @@ impl<V: Clone> BoundedFifoCache<V> {
 
         self.insertion_order.push_back(key.clone());
         self.cache.insert(key, value);
+    }
+
+    pub fn get_cloned(&self, key: &str) -> Option<V>
+    where
+        V: Clone,
+    {
+        self.cache.get(key).cloned()
     }
 }
 
