@@ -11,7 +11,8 @@ use std::time::Duration;
 use super::WebTransferSubmitRequest;
 #[cfg(test)]
 use crate::http_helpers::{
-    bracket_ipv6_authority_host, normalize_connect_host, parse_host_port, parse_http_status_code,
+    bracket_ipv6_authority_host, build_http_request_head, normalize_connect_host, parse_host_port,
+    parse_http_status_code,
 };
 
 #[cfg(test)]
@@ -138,12 +139,13 @@ fn post_json_request(
     let _ = stream.set_write_timeout(timeout);
 
     let host_header = bracket_ipv6_authority_host(host.as_str());
-    let mut request_head = String::new();
-    request_head.push_str(&format!("POST {path} HTTP/1.1\r\n"));
-    request_head.push_str(&format!("Host: {host_header}:{port}\r\n"));
-    request_head.push_str("Content-Type: application/json\r\n");
-    request_head.push_str(&format!("Content-Length: {}\r\n", payload.len()));
-    request_head.push_str("Connection: close\r\n\r\n");
+    let request_head = build_http_request_head(
+        "POST",
+        path,
+        host_header.as_str(),
+        port,
+        Some(payload.len()),
+    );
 
     stream
         .write_all(request_head.as_bytes())

@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 pub(crate) fn parse_host_port_parts<'a>(
     raw: &'a str,
     label: &str,
@@ -54,6 +56,39 @@ pub(crate) fn normalize_connect_host(host: &str) -> String {
     }
 }
 
+pub(crate) fn normalize_url_host(host: &str) -> String {
+    match host.trim() {
+        "" | "0.0.0.0" | "::" | "[::]" => "127.0.0.1".to_string(),
+        value => value.to_string(),
+    }
+}
+
+pub(crate) fn build_http_request_head(
+    method: &str,
+    path: &str,
+    host_header: &str,
+    port: u16,
+    content_length: Option<usize>,
+) -> String {
+    let mut request_head = String::with_capacity(
+        method.len()
+            + path.len()
+            + host_header.len()
+            + content_length.map(|_| 20).unwrap_or(0)
+            + 96,
+    );
+    let _ = write!(
+        request_head,
+        "{method} {path} HTTP/1.1\r\nHost: {host_header}:{port}\r\n"
+    );
+    if let Some(content_length) = content_length {
+        request_head.push_str("Content-Type: application/json\r\n");
+        let _ = write!(request_head, "Content-Length: {content_length}\r\n");
+    }
+    request_head.push_str("Connection: close\r\n\r\n");
+    request_head
+}
+
 pub(crate) fn parse_http_status_code(header: &str) -> Result<u16, String> {
     let Some(status_line) = header.lines().next() else {
         return Err("invalid HTTP response: missing status line".to_string());
@@ -66,4 +101,32 @@ pub(crate) fn parse_http_status_code(header: &str) -> Result<u16, String> {
         return Err(format!("invalid HTTP response status line: {status_line}"));
     };
     Ok(code)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_http_request_head_formats_get_without_body_headers() {
+        let request = build_http_request_head("GET", "/v1/chain/status", "[::1]", 5410, None);
+
+        assert_eq!(
+            request,
+            "GET /v1/chain/status HTTP/1.1\r\nHost: [::1]:5410\r\nConnection: close\r\n\r\n"
+        );
+        assert!(!request.contains("Content-Type:"));
+        assert!(!request.contains("Content-Length:"));
+    }
+
+    #[test]
+    fn build_http_request_head_formats_post_json_body_headers() {
+        let request =
+            build_http_request_head("POST", "/api/public/transfer", "127.0.0.1", 5011, Some(27));
+
+        assert_eq!(
+            request,
+            "POST /api/public/transfer HTTP/1.1\r\nHost: 127.0.0.1:5011\r\nContent-Type: application/json\r\nContent-Length: 27\r\nConnection: close\r\n\r\n"
+        );
+    }
 }

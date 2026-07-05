@@ -138,31 +138,15 @@ fn map_provider_client_error(error: ProviderLoopbackHttpError) -> ProviderCheckE
 }
 
 pub(crate) fn normalize_host_for_connect(host: &str) -> String {
-    let host = host.trim();
-    if host == "0.0.0.0" {
-        "127.0.0.1".to_string()
-    } else if host == "::" || host == "[::]" {
-        "::1".to_string()
-    } else {
-        host.to_string()
-    }
+    crate::http_helpers::normalize_connect_host(host)
 }
 
 pub(crate) fn normalize_host_for_url(host: &str) -> String {
-    let host = host.trim();
-    if host == "0.0.0.0" || host == "::" || host == "[::]" || host.is_empty() {
-        "127.0.0.1".to_string()
-    } else {
-        host.to_string()
-    }
+    crate::http_helpers::normalize_url_host(host)
 }
 
 pub(crate) fn host_for_url(host: &str) -> String {
-    if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
-        format!("[{host}]")
-    } else {
-        host.to_string()
-    }
+    crate::http_helpers::bracket_ipv6_authority_host(host)
 }
 
 pub(crate) fn parse_http_base_url(base_url: &str, label: &str) -> Result<(String, u16), String> {

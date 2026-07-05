@@ -298,6 +298,8 @@ fn viewer_dev_dist_candidates_only_return_current_oasis7_name() {
 #[test]
 fn normalize_host_for_url_maps_empty_and_any() {
     assert_eq!(normalize_host_for_url("0.0.0.0"), "127.0.0.1");
+    assert_eq!(normalize_host_for_url("::"), "127.0.0.1");
+    assert_eq!(normalize_host_for_url("[::]"), "127.0.0.1");
     assert_eq!(normalize_host_for_url(""), "127.0.0.1");
     assert_eq!(normalize_host_for_url("192.168.0.2"), "192.168.0.2");
 }
