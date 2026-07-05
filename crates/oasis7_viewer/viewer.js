@@ -2957,6 +2957,7 @@ const ED25519_PKCS8_PREFIX = new Uint8Array([
 ]);
 const textEncoder = new TextEncoder();
 const authKeyCache = /* @__PURE__ */ new Map();
+const HEX_BYTE_LOOKUP = Array.from({ length: 256 }, (_, value) => value.toString(16).padStart(2, "0"));
 function cborHeader(majorType, length) {
   if (!Number.isInteger(length) || length < 0) {
     throw new Error(`invalid CBOR length: ${length}`);
@@ -3054,7 +3055,11 @@ function hexToBytes(raw) {
   return bytes;
 }
 function bytesToHex(bytes) {
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  let out = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    out += HEX_BYTE_LOOKUP[bytes[index]];
+  }
+  return out;
 }
 function bytesStartWith(bytes, prefix) {
   if (bytes.length < prefix.length) {
