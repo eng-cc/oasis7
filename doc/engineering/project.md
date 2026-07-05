@@ -41,6 +41,8 @@
 
 - [x] wasm-module-observe-btreemap-diff-merge-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm module observe metric bucket diffing to merge ordered `BTreeMap` iterators directly instead of cloning keys into a temporary vector, sorting, deduping, and re-looking up values, preserving saturating counter-delta semantics. Trace: .pm/tasks/task_abeacd11de97477c91668825da4524b5.yaml
 
+- [x] wasm-module-observe-summary-percentile-efficiency (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize wasm module observe summary timing stats to compute min/max/average in one scan and select p50/p95 without fully sorting samples, preserving percentile index semantics and empty-sample output. Trace: #1922 (task_6c650c4b7c5748d0bc8666263152df21)
+
 - [x] main-token-bridge-budget-remainder-sort-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Optimize main-token bridge budget remainder distribution to carry awarded points with local candidates instead of repeatedly scanning settlements during sort comparison, preserving higher-points priority, node-id tie-breaks, and final event distribution order. Trace: .pm/tasks/task_0389769c78cd454cb520a620ea0eadda.yaml
 
 - [x] code-execution-efficiency-governance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: Apply low-risk Rust code execution efficiency improvements across prompt/memory assembly, mempool selection, feedback/provider ordering, DHT progress payloads, and transfer latency summarization while preserving runtime/product semantics. Trace: .pm/tasks/task_c85925c7cfed4946b461883d94aa35be.yaml
