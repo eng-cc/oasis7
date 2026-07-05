@@ -99,19 +99,32 @@ pub struct RouterMetricsDelta {
 
 impl PerfStats {
     pub fn from_samples(samples: &[u64]) -> Self {
-        let mut sorted = samples.to_vec();
-        sorted.sort_unstable();
-        let total_wall_ms = sorted.iter().copied().sum::<u64>();
-        let runs = sorted.len();
-        let min_wall_ms = *sorted.first().unwrap_or(&0);
-        let max_wall_ms = *sorted.last().unwrap_or(&0);
-        let avg_wall_ms = if runs == 0 {
-            0
-        } else {
-            total_wall_ms / u64::try_from(runs).unwrap_or(1)
-        };
-        let p50_wall_ms = percentile(&sorted, 50);
-        let p95_wall_ms = percentile(&sorted, 95);
+        if samples.is_empty() {
+            return Self {
+                runs: 0,
+                total_wall_ms: 0,
+                min_wall_ms: 0,
+                avg_wall_ms: 0,
+                p50_wall_ms: 0,
+                p95_wall_ms: 0,
+                max_wall_ms: 0,
+            };
+        }
+
+        let mut total_wall_ms = 0;
+        let mut min_wall_ms = u64::MAX;
+        let mut max_wall_ms = 0;
+        for sample in samples.iter().copied() {
+            total_wall_ms += sample;
+            min_wall_ms = min_wall_ms.min(sample);
+            max_wall_ms = max_wall_ms.max(sample);
+        }
+        let runs = samples.len();
+        let avg_wall_ms = total_wall_ms / u64::try_from(runs).unwrap_or(1);
+
+        let mut percentile_samples = samples.to_vec();
+        let p50_wall_ms = percentile(&mut percentile_samples, 50);
+        let p95_wall_ms = percentile(&mut percentile_samples, 95);
         Self {
             runs,
             total_wall_ms,
@@ -187,14 +200,14 @@ pub fn render_markdown(summary: &ObserveSummary) -> String {
     lines.join("\n") + "\n"
 }
 
-fn percentile(sorted: &[u64], p: usize) -> u64 {
-    if sorted.is_empty() {
+fn percentile(samples: &mut [u64], p: usize) -> u64 {
+    if samples.is_empty() {
         return 0;
     }
-    let last_index = sorted.len().saturating_sub(1);
+    let last_index = samples.len().saturating_sub(1);
     let scaled = last_index.saturating_mul(p);
     let index = (scaled + 99) / 100;
-    sorted[index.min(last_index)]
+    *samples.select_nth_unstable(index.min(last_index)).1
 }
 
 #[cfg(test)]
@@ -209,5 +222,26 @@ mod tests {
         assert_eq!(stats.avg_wall_ms, 30);
         assert_eq!(stats.p50_wall_ms, 30);
         assert_eq!(stats.p95_wall_ms, 50);
+    }
+
+    #[test]
+    fn perf_stats_handles_empty_samples_without_allocation_work() {
+        let stats = PerfStats::from_samples(&[]);
+        assert_eq!(stats.runs, 0);
+        assert_eq!(stats.total_wall_ms, 0);
+        assert_eq!(stats.min_wall_ms, 0);
+        assert_eq!(stats.avg_wall_ms, 0);
+        assert_eq!(stats.p50_wall_ms, 0);
+        assert_eq!(stats.p95_wall_ms, 0);
+        assert_eq!(stats.max_wall_ms, 0);
+    }
+
+    #[test]
+    fn perf_stats_percentiles_do_not_depend_on_input_order() {
+        let stats = PerfStats::from_samples(&[50, 10, 40, 20, 30]);
+        assert_eq!(stats.min_wall_ms, 10);
+        assert_eq!(stats.p50_wall_ms, 30);
+        assert_eq!(stats.p95_wall_ms, 50);
+        assert_eq!(stats.max_wall_ms, 50);
     }
 }
