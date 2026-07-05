@@ -173,18 +173,14 @@ pub fn load_scenario_file(path: &Path) -> Result<ScenarioFile, ScenarioError> {
         path: path.to_path_buf(),
         source: err,
     })?;
-    let ext = path
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = path.extension().and_then(|value| value.to_str());
 
-    if ext == "yaml" || ext == "yml" {
+    if supported_scenario_extension(ext, "yaml") || supported_scenario_extension(ext, "yml") {
         serde_yaml::from_str(&contents).map_err(|err| ScenarioError::Parse {
             path: path.to_path_buf(),
             message: err.to_string(),
         })
-    } else if ext == "json" {
+    } else if supported_scenario_extension(ext, "json") {
         serde_json::from_str(&contents).map_err(|err| ScenarioError::Parse {
             path: path.to_path_buf(),
             message: err.to_string(),
@@ -197,10 +193,14 @@ pub fn load_scenario_file(path: &Path) -> Result<ScenarioFile, ScenarioError> {
 }
 
 fn is_supported_format(path: &Path) -> bool {
-    matches!(
-        path.extension().and_then(|value| value.to_str()).map(|s| s.to_lowercase()),
-        Some(ext) if ext == "yaml" || ext == "yml" || ext == "json"
-    )
+    let ext = path.extension().and_then(|value| value.to_str());
+    supported_scenario_extension(ext, "yaml")
+        || supported_scenario_extension(ext, "yml")
+        || supported_scenario_extension(ext, "json")
+}
+
+fn supported_scenario_extension(ext: Option<&str>, expected: &str) -> bool {
+    ext.is_some_and(|value| value.eq_ignore_ascii_case(expected))
 }
 
 fn evaluate_expectations(
@@ -371,5 +371,12 @@ expect:
             err.to_string().contains("unknown field `require_agentz`"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn supported_format_accepts_uppercase_extensions_without_allocating() {
+        assert!(is_supported_format(Path::new("scenario.YAML")));
+        assert!(is_supported_format(Path::new("scenario.JSON")));
+        assert!(!is_supported_format(Path::new("scenario.txt")));
     }
 }

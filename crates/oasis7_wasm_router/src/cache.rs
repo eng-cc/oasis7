@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque, hash_map::Entry};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 pub const MAX_CACHE_ENTRIES: usize = 1024;
@@ -28,30 +28,22 @@ impl<V> BoundedCache<V> {
             self.insertion_order.clear();
             return;
         }
-        let needs_eviction = self.entries.len() >= self.capacity;
-        match self.entries.entry(key) {
-            Entry::Occupied(mut entry) => {
-                *entry.get_mut() = value;
-            }
-            Entry::Vacant(entry) => {
-                if needs_eviction {
-                    let key = entry.into_key();
-                    while self.entries.len() >= self.capacity {
-                        if let Some(oldest_key) = self.insertion_order.pop_front() {
-                            self.entries.remove(&oldest_key);
-                        } else {
-                            break;
-                        }
-                    }
-                    self.insertion_order.push_back(key.clone());
-                    self.entries.insert(key, value);
-                } else {
-                    self.insertion_order.push_back(entry.key().clone());
-                    entry.insert(value);
-                }
+
+        if let Some(entry) = self.entries.get_mut(&key) {
+            *entry = value;
+            return;
+        }
+
+        while self.entries.len() >= self.capacity {
+            if let Some(oldest_key) = self.insertion_order.pop_front() {
+                self.entries.remove(&oldest_key);
+            } else {
+                break;
             }
         }
+
+        self.insertion_order.push_back(key.clone());
+        self.entries.insert(key, value);
     }
 }
-
 pub type RegexCache = Mutex<BoundedCache<regex::Regex>>;
