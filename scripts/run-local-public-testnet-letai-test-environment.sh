@@ -1043,6 +1043,9 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 check_public_testnet_node
+if [[ "$SKIP_VIEWER_LIVE" != "1" ]]; then
+  stop_stale_viewer_live_services
+fi
 if [[ "$SKIP_NEWAPI" != "1" ]]; then
   check_or_reuse_port "NewAPI quota bridge" "$NEWAPI_BIND" >/dev/null || true
 fi

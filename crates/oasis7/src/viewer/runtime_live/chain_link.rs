@@ -145,17 +145,22 @@ impl ViewerRuntimeLiveServer {
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
         self.llm_sidecar
             .clear_stale_local_test_bindings_for_world(&prepared.world);
-        if prepared.committed_height <= self.last_chain_committed_height {
+        let baseline_logical_time = self.world.state().time;
+        let baseline_event_seq = latest_runtime_event_seq(&self.world);
+        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&self.world.snapshot())?;
+        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared.world.snapshot())?;
+        let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
+            && chain_linked_runtime_has_playable_state(&prepared.world);
+        if prepared.committed_height < self.last_chain_committed_height
+            || (prepared.committed_height == self.last_chain_committed_height
+                && !materially_different_world)
+        {
             return Ok(ChainLinkedRuntimeDispatch {
                 advanced: false,
                 responses: Vec::new(),
             });
         }
 
-        let baseline_logical_time = self.world.state().time;
-        let baseline_event_seq = latest_runtime_event_seq(&self.world);
-        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&self.world.snapshot())?;
-        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared.world.snapshot())?;
         let delta_logical_time = prepared
             .world
             .state()
@@ -164,8 +169,6 @@ impl ViewerRuntimeLiveServer {
         let delta_event_seq =
             latest_runtime_event_seq(&prepared.world).saturating_sub(baseline_event_seq);
         if delta_logical_time == 0 && delta_event_seq == 0 {
-            let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
-                && chain_linked_runtime_has_playable_state(&prepared.world);
             if !materially_different_world {
                 return Ok(ChainLinkedRuntimeDispatch {
                     advanced: false,

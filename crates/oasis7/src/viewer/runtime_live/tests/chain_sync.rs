@@ -225,6 +225,74 @@ fn chain_linked_runtime_sync_advances_without_play() {
 }
 
 #[test]
+fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_same_watermark_rebuild");
+    let mut first_world = crate::runtime::World::new_production_hardened();
+    first_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "first-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    first_world.step().expect("advance first execution world");
+    first_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist first execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("first chain sync should succeed");
+    assert!(progressed);
+    assert!(server.world.state().agents.contains_key("first-agent"));
+    assert!(read_response_line(&peer, Duration::from_millis(200)).is_some());
+
+    let mut rebuilt_world = crate::runtime::World::new_production_hardened();
+    rebuilt_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "rebuilt-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(9, 2, 0),
+    });
+    rebuilt_world
+        .step()
+        .expect("advance rebuilt execution world");
+    assert_eq!(rebuilt_world.state().time, first_world.state().time);
+    assert_eq!(
+        latest_runtime_event_seq(&rebuilt_world),
+        latest_runtime_event_seq(&first_world)
+    );
+    rebuilt_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("replace execution world with same-watermark rebuilt world");
+
+    let (mut writer, peer) = test_writer_pair();
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("same-watermark rebuilt chain sync should succeed");
+
+    assert!(
+        progressed,
+        "materially different generated-map rebuild should advance despite the same sync watermark"
+    );
+    assert!(!server.world.state().agents.contains_key("first-agent"));
+    assert!(server.world.state().agents.contains_key("rebuilt-agent"));
+    let line = read_response_line(&peer, Duration::from_millis(200))
+        .expect("expected rebuilt execution-world sync response");
+    assert!(!line.trim().is_empty());
+}
+
+#[test]
 fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_stale_local_test_binding");
     let execution_world = crate::runtime::World::new_production_hardened();

@@ -1650,6 +1650,7 @@ function StarterOcRequiredGate() {
                 {(nextAction) => (
                   <button
                     ref={primaryButtonRef}
+                    data-testid="viewer-playthrough-action-claim-starter-oc"
                     class={gameplayActionButtonClass(nextAction())}
                     aria-busy={gameplayActionButtonBusyAttrs(nextAction())}
                     disabled={gameplayActionButtonDisabled(nextAction(), gameplay(), locale())}

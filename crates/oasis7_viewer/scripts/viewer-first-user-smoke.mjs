@@ -361,6 +361,13 @@ async function main() {
 
     finalState = await getState(page);
     websocketTraffic = await getRecordedWebSocketTraffic(page);
+    const chatError = websocketTraffic.received.find((message) => message?.type === "agent_chat_error");
+    if (chatError) {
+      throw new Error(`agent chat failed: ${chatError.error_code || chatError.code || JSON.stringify(chatError)}`);
+    }
+    if (!websocketTraffic.received.some((message) => message?.type === "agent_chat_ack")) {
+      throw new Error("agent chat did not receive ack");
+    }
     await writeJson(join(options.outDir, "websocket_traffic.json"), websocketTraffic);
     await writeJson(join(options.outDir, "final_state.json"), finalState);
     const screenshotResult = await writeBestEffortScreenshot(page, join(options.outDir, "viewer-first-user-smoke.png"));
@@ -388,9 +395,7 @@ async function main() {
     artifactPath: options.outDir,
     chatMessage: options.chatMessage,
     agentChatSent: websocketTraffic.sent.some((message) => message?.type === "agent_chat"),
-    agentChatCompleted: websocketTraffic.received.some((message) => (
-      message?.type === "agent_chat_ack" || message?.type === "agent_chat_error"
-    )),
+    agentChatCompleted: websocketTraffic.received.some((message) => message?.type === "agent_chat_ack"),
     sendResult,
     state: summarizeState(finalState),
   };
