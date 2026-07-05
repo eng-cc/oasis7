@@ -458,6 +458,13 @@ if [[ "$restart_service" -eq 1 ]]; then
           .running == true
           and (.last_error == null or .last_error == "null")
           and (.readiness.status // null) == "ready"
+          and ((.consensus.committed_height // 0) > 0)
+          and ((.consensus.last_execution_height // 0) > 0)
+          and ((.consensus.last_execution_block_hash // "") != "")
+          and ((.consensus.last_execution_state_root // "") != "")
+          and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+          and ((.world_resource.readiness_status // null) == "ready")
+          and (((.world_resource.failed_gates // []) | length) == 0)
           and (.consensus.storage_challenge_network_degraded_height // null) == null
           and ((.observability.storage_challenge_network_degraded // false) | not)
         ' >/dev/null <<<"$status_json"; then
@@ -471,12 +478,19 @@ if [[ "$restart_service" -eq 1 ]]; then
       .running == true
       and (.last_error == null or .last_error == "null")
       and (.readiness.status // null) == "ready"
+      and ((.consensus.committed_height // 0) > 0)
+      and ((.consensus.last_execution_height // 0) > 0)
+      and ((.consensus.last_execution_block_hash // "") != "")
+      and ((.consensus.last_execution_state_root // "") != "")
+      and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+      and ((.world_resource.readiness_status // null) == "ready")
+      and (((.world_resource.failed_gates // []) | length) == 0)
       and (.consensus.storage_challenge_network_degraded_height // null) == null
       and ((.observability.storage_challenge_network_degraded // false) | not)
     ' >/dev/null <<<"$last_status"; then
       echo "error: post-restart status did not become ready before timeout" >&2
       if [[ -n "$last_status" ]]; then
-        jq -S '{running,last_error,readiness,consensus:{committed_height:.consensus.committed_height,storage_challenge_network_degraded_height:.consensus.storage_challenge_network_degraded_height,storage_challenge_network_degraded_reason:.consensus.storage_challenge_network_degraded_reason},observability:{storage_challenge_network_degraded:.observability.storage_challenge_network_degraded}}' <<<"$last_status" >&2 || true
+        jq -S '{running,last_error,readiness,consensus:{committed_height:.consensus.committed_height,network_committed_height:.consensus.network_committed_height,last_block_hash:.consensus.last_block_hash,last_execution_height:.consensus.last_execution_height,last_execution_block_hash:.consensus.last_execution_block_hash,last_execution_state_root:.consensus.last_execution_state_root,network_head:.consensus.network_head,storage_challenge_network_degraded_height:.consensus.storage_challenge_network_degraded_height,storage_challenge_network_degraded_reason:.consensus.storage_challenge_network_degraded_reason},world_resource:{readiness_status:.world_resource.readiness_status,failed_gates:.world_resource.failed_gates,last_delta_commit_height:.world_resource.last_delta_commit_height},observability:{storage_challenge_network_degraded:.observability.storage_challenge_network_degraded}}' <<<"$last_status" >&2 || true
       fi
       exit 1
     fi
