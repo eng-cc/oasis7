@@ -3203,10 +3203,20 @@ describe("viewer web ui automation baseline", () => {
     const state = window.__AW_TEST__.getState();
     expect(state.selectedKind).toBe("agent");
     expect(state.selectedId).toBe("agent-0");
-    expect(within(container.querySelector("#viewer-targets-panel")).getByText("agent-0")).toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-targets-panel")).getByText("Assembly Nexus")).toBeInTheDocument();
-    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
+    const targetsPanel = container.querySelector("#viewer-targets-panel");
+    const agentButton = within(targetsPanel).getByTestId("viewer-playthrough-select-agent");
+    const locationButton = within(targetsPanel).getByTestId("viewer-select-location-loc-1");
+    expect(within(targetsPanel).getByText("agent-0")).toBeInTheDocument();
+    expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
+    expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
+    fireEvent.click(locationButton);
+    await waitFor(() => {
+      expect(locationButton).toHaveAttribute("data-selected", "true");
+    });
+    expect(within(locationButton).getByText("Selected")).toBeInTheDocument();
+    expect(within(agentButton).queryByText("Selected")).not.toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-stage-panel")).getAllByText("Recover sustainable capability").length).toBeGreaterThan(0);
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("renders the agent chat fixture with history and collapsed prompt controls", async () => {

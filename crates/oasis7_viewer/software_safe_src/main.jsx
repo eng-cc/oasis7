@@ -2286,6 +2286,7 @@ function TargetsPanel() {
   const firstAgentClaimWaiting = () => Boolean(gameplayActionDisabledReason(firstAgentClaimAction(), gameplaySummary(), locale()));
   const hasSnapshot = () => Boolean(core.state.snapshot);
   const selectedLabel = () => {
+    observeViewerStateRevision();
     if (!core.state.selectedKind || !core.state.selectedId) {
       return null;
     }
@@ -2293,6 +2294,10 @@ function TargetsPanel() {
       return null;
     }
     return `${core.state.selectedKind}:${core.state.selectedId}`;
+  };
+  const isSelectedTarget = (kind, id) => {
+    observeViewerStateRevision();
+    return core.state.selectedKind === kind && core.state.selectedId === id;
   };
 
   return (
@@ -2379,10 +2384,15 @@ function TargetsPanel() {
                     data-select-kind="agent"
                     data-select-id={agent.id}
                     data-agent-session-status={status().kind}
-                    data-selected={core.state.selectedKind === "agent" && core.state.selectedId === agent.id}
+                    data-selected={isSelectedTarget("agent", agent.id)}
                     onClick={() => core.applySelection({ kind: "agent", id: agent.id })}
                   >
-                    <div class="list-item__title">{agent.id}</div>
+                    <div class="list-item__header">
+                      <div class="list-item__title">{agent.id}</div>
+                      <Show when={isSelectedTarget("agent", agent.id)}>
+                        <span class="list-item__selected-label">{tr(locale(), "已选中", "Selected")}</span>
+                      </Show>
+                    </div>
                     <div class="badge-row">
                       <Badge class={status().badgeClass}>{status().badge}</Badge>
                       <Show when={status().binding.playerId}>
@@ -2418,12 +2428,15 @@ function TargetsPanel() {
                   data-testid={`viewer-select-location-${location.id}`}
                   data-select-kind="location"
                   data-select-id={location.id}
-                  data-selected={
-                    core.state.selectedKind === "location" && core.state.selectedId === location.id
-                  }
+                  data-selected={isSelectedTarget("location", location.id)}
                   onClick={() => core.applySelection({ kind: "location", id: location.id })}
                 >
-                  <div class="list-item__title">{location.name || location.id}</div>
+                  <div class="list-item__header">
+                    <div class="list-item__title">{location.name || location.id}</div>
+                    <Show when={isSelectedTarget("location", location.id)}>
+                      <span class="list-item__selected-label">{tr(locale(), "已选中", "Selected")}</span>
+                    </Show>
+                  </div>
                   <div class="list-item__meta">
                     {`id=${location.id} · ${tr(locale(), "半径", "radius")}=${
                       core.formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"
