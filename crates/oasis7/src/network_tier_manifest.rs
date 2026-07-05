@@ -286,8 +286,6 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
     let endpoint_policy = &manifest.endpoint_policy;
     let claims_policy = &manifest.claims_policy;
     let required_gates = &manifest.promotion_policy.required_gates;
-    let joined_allowed = claims_policy.allowed_claims.join(" ").to_ascii_lowercase();
-    let joined_denied = claims_policy.denied_claims.join(" ").to_ascii_lowercase();
 
     match manifest.tier.as_str() {
         "local_devnet" => {
@@ -350,13 +348,19 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
                     path.display()
                 ));
             }
-            if !joined_allowed.contains("public_testnet") {
+            if !string_list_contains_ascii_case_insensitive(
+                claims_policy.allowed_claims.as_slice(),
+                "public_testnet",
+            ) {
                 return Err(format!(
                     "network tier manifest {} requires public_testnet claims to explicitly allow public_testnet",
                     path.display()
                 ));
             }
-            if !joined_denied.contains("production_oc_settlement") {
+            if !string_list_contains_ascii_case_insensitive(
+                claims_policy.denied_claims.as_slice(),
+                "production_oc_settlement",
+            ) {
                 return Err(format!(
                     "network tier manifest {} requires public_testnet claims to explicitly deny production_oc_settlement",
                     path.display()
@@ -409,7 +413,10 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
                     ));
                 }
             }
-            if joined_allowed.contains("faucet") {
+            if string_list_contains_ascii_case_insensitive(
+                claims_policy.allowed_claims.as_slice(),
+                "faucet",
+            ) {
                 return Err(format!(
                     "network tier manifest {} must not allow faucet claims for mainnet",
                     path.display()
@@ -419,7 +426,12 @@ fn validate_tier_semantics(manifest: &NetworkTierManifest, path: &Path) -> Resul
         _ => {}
     }
 
-    if manifest.tier != "mainnet" && !joined_denied.contains("mainnet") {
+    if manifest.tier != "mainnet"
+        && !string_list_contains_ascii_case_insensitive(
+            claims_policy.denied_claims.as_slice(),
+            "mainnet",
+        )
+    {
         return Err(format!(
             "network tier manifest {} requires non-mainnet tiers to explicitly deny mainnet claims",
             path.display()
@@ -438,6 +450,22 @@ fn resolve_manifest_relative_path(manifest_path: &Path, raw: &str) -> PathBuf {
         return parent.join(&candidate);
     }
     candidate
+}
+
+fn string_list_contains_ascii_case_insensitive(items: &[String], needle: &str) -> bool {
+    items
+        .iter()
+        .any(|item| contains_ascii_case_insensitive(item, needle))
+}
+
+fn contains_ascii_case_insensitive(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    haystack
+        .as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
 }
 
 fn load_bootstrap_peers(path: &Path) -> Result<Vec<String>, String> {
@@ -722,5 +750,26 @@ mod tests {
         assert!(err.contains("production_oc_settlement"));
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn claim_list_contains_ascii_case_insensitive_substrings_without_joining() {
+        let claims = vec![
+            "PUBLIC_TESTNET_READY".to_string(),
+            "production_OC_settlement_denied".to_string(),
+        ];
+
+        assert!(string_list_contains_ascii_case_insensitive(
+            claims.as_slice(),
+            "public_testnet"
+        ));
+        assert!(string_list_contains_ascii_case_insensitive(
+            claims.as_slice(),
+            "production_oc_settlement"
+        ));
+        assert!(!string_list_contains_ascii_case_insensitive(
+            claims.as_slice(),
+            "mainnet"
+        ));
     }
 }
