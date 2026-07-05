@@ -404,14 +404,14 @@
 - `historical removed standard_3d viewer doc set: viewer-commercial-release-phase8-runtime-theme-hot-reload-and-asset-v2.project`
 - retired viewer-control-advanced-debug-folding PRD (archive: `doc/world-simulator/prd.index.md`)
 - retired viewer-control-advanced-debug-folding project (archive: `doc/world-simulator/prd.index.md`)
-- retired viewer-control-feedback-iteration-checklist-2026-02-27 PRD (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
-- retired viewer-control-feedback-iteration-checklist-2026-02-27 project (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
-- retired viewer-control-feedback-step-recovery-p0-2026-02-27 PRD (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
-- retired viewer-control-feedback-step-recovery-p0-2026-02-27 project (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
+- retired viewer-control-feedback-iteration-checklist-2026-02-27 PRD (archive: `Git history / current control-feedback canonical docs`)
+- retired viewer-control-feedback-iteration-checklist-2026-02-27 project (archive: `Git history / current control-feedback canonical docs`)
+- retired viewer-control-feedback-step-recovery-p0-2026-02-27 PRD (archive: `Git history / current control-feedback canonical docs`)
+- retired viewer-control-feedback-step-recovery-p0-2026-02-27 project (archive: `Git history / current control-feedback canonical docs`)
 - `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.prd.md`
 - `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md`
-- retired viewer-control-predictability-tasklist-2026-02-28 PRD (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
-- retired viewer-control-predictability-tasklist-2026-02-28 project (archive: `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`)
+- retired viewer-control-predictability-tasklist-2026-02-28 PRD (archive: `Git history / current control-feedback canonical docs`)
+- retired viewer-control-predictability-tasklist-2026-02-28 project (archive: `Git history / current control-feedback canonical docs`)
 - `doc/world-simulator/viewer/viewer-copyable-text.prd.md`
 - `doc/world-simulator/viewer/viewer-copyable-text.project.md`
 - `historical removed standard_3d viewer doc set: viewer-dual-view-2d-3d.prd`
