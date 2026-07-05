@@ -377,7 +377,7 @@
     - `./scripts/doc-governance-check.sh`
     - `./scripts/pm/lint.sh`
     - `git diff --check`
-- [x] pm-rebase-conflict-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突，并把唯一允许的安全自动修复边界收口为 `.pm/inbox/signals.jsonl` signal-id 碰撞；git-ignored 本地视图仅提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。 Trace: .pm/tasks/task_6e23e1a96ee34d059aa62e4280a367b7.yaml
+- [x] pm-rebase-conflict-helper (PRD-SCRIPTS-007) [test_tier_required]: 新增 `scripts/pm/rebase-conflict-helper.sh`，统一分类 `.pm/**` rebase 冲突；`.pm/inbox/signals.jsonl` 已退休，命中时只提示删除退休文件或人工归档，git-ignored 本地视图仅提示保留 `main` 删除并执行 `./scripts/pm/sync-views.sh`。原始落地追溯为 task_uid task_6e23e1a96ee34d059aa62e4280a367b7，本行当前语义覆盖由本次治理收口。 Trace: #1920 (task_25e251bae8eb4ccb8c375237eede524f)
   - 产物文件:
     - `scripts/pm/rebase-conflict-helper.sh`
     - `scripts/pm/rebase-conflict-helper.test.sh`

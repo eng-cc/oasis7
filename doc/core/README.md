@@ -36,12 +36,12 @@
 
 ## 热点子域导航（2026-06-23 快照）
 - `reviews/`（45）：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；默认按需进入。
-- 根目录活跃专题（19）：下一轮优先级、release candidate readiness / version / go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 一次性 core handoff 文件已全量退役删除，ROUND / TASK-CORE-005 证据从 `reviews/` 与 `project.md` 进入。
+- 根目录保留专题：下一轮优先级、release candidate readiness / version / go-no-go、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 一次性 docs hub 同步专题与 core handoff 文件已退役删除，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
 - `templates/`（2）：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`（1）：跨模块影响检查清单。
 
 ## 高密度提示
-- `doc/core/` 当前共有 72 份文件，其中 `reviews/` 占 45 份；默认入口不再尝试把 review / audit 材料直接摊平展示。
+- `doc/core/` 当前共有 68 份文件，其中 `reviews/` 占 45 份；默认入口不再尝试把 review / audit 材料直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/core/prd.index.md`；需要 round 审查、采证或模板时，再按子域进入。
 
 ## 共享约定

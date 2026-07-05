@@ -20,9 +20,9 @@
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
-- `doc/core/`：72 份文件
+- `doc/core/`：68 份文件
 - `doc/core/reviews/`：45 份文件
-- 根目录活跃专题：19 份文件
+- 根目录保留专题：16 份文件
 - `doc/core/templates/`：2 份文件
 - `doc/core/checklists/`：1 份文件
 
@@ -30,7 +30,7 @@
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `reviews/` | 45 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；默认按需进入 |
-| 根目录活跃专题 | 19 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、docs hub 同步、player access mode contract、统一持久大世界术语迁移；2026-03 一次性 core handoff 文件已全量退役删除 |
+| 根目录保留专题 | 16 | 项目级总览、下一轮优先级、release candidate readiness/version/go-no-go、player access mode contract、统一持久大世界术语迁移；2026-03 一次性 docs hub 同步专题与 core handoff 文件已全量退役删除 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
 
@@ -40,7 +40,6 @@
 - `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`：统一持久大世界默认产品模型、legacy 术语清理、runtime/ops 兼容边界与后续 gate 计划。
 - `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md`：版本候选 readiness 正式入口。
 - `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`：版本候选 go/no-go 正式入口。
-- `doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md`：仓库 docs hub 与公共阅读路径同步入口。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部活跃专题和 review 文件。
@@ -60,7 +59,6 @@
 | `doc/core/release-candidate-readiness-entry-2026-03-11.prd.md` | `doc/core/release-candidate-readiness-entry-2026-03-11.design.md` | `doc/core/release-candidate-readiness-entry-2026-03-11.project.md` |
 | `doc/core/release-candidate-version-escalation-2026-03-11.prd.md` | `doc/core/release-candidate-version-escalation-2026-03-11.design.md` | `doc/core/release-candidate-version-escalation-2026-03-11.project.md` |
 | `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md` | `doc/core/release-candidate-go-no-go-entry-2026-03-11.design.md` | `doc/core/release-candidate-go-no-go-entry-2026-03-11.project.md` |
-| `doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md` | `doc/core/doc-readme-public-entry-sync-2026-03-11.design.md` | `doc/core/doc-readme-public-entry-sync-2026-03-11.project.md` |
 | `doc/core/player-access-mode-contract-2026-03-19.prd.md` | `doc/core/player-access-mode-contract-2026-03-19.design.md` | `doc/core/player-access-mode-contract-2026-03-19.project.md` |
 
 ## 审计 / 模板 / 清单补充入口
@@ -78,6 +76,6 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- readiness / version / go-no-go / docs-hub / player-access-mode-contract 同步专题均属于本轮 `core` 活跃执行链。
+- readiness / version / go-no-go / player-access-mode-contract 同步专题仍属于 `core` 保留执行链；已完成的一次性 docs hub 同步专题不再作为活跃专题入口。
 - 2026-03 core 根目录一次性 producer/QA/LiveOps handoff 文件已全量退役删除；当前追溯以正式专题三件套、`doc/core/reviews/*`、`.pm` execution log 与 role review evidence 为准，其中 TASK-CORE-005 ROUND 收口从 `doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md` 进入。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法分流时，才进入后续路径级治理。

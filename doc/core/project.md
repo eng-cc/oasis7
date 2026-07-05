@@ -173,7 +173,7 @@
     - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/core/release-candidate-*.{prd,design,project}.md`
     - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
-    - `doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`
+    - 历史已删除：`doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`；当前 docs hub / 公共阅读路径追溯从 `doc/README.md`、`doc/core/project.md` 的 `TASK-CORE-023` / `TASK-CORE-035` 与 doc structure standard 进入。
     - `doc/world-simulator/viewer/viewer-manual.manual.md`
     - `crates/oasis7_viewer/software_safe.html`
     - 历史已删除：`crates/oasis7_viewer/src/app_bootstrap.rs`、`crates/oasis7_viewer/index.html`、旧 3D 调试脚本
