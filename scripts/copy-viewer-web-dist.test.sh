@@ -10,7 +10,7 @@ trap cleanup EXIT
 
 viewer_root="$TMPDIR/viewer"
 dist_dir="$TMPDIR/dist"
-mkdir -p "$viewer_root/dist/pixel-world-bridge"
+mkdir -p "$viewer_root/dist/pixel-world-bridge/webgl2"
 
 printf '<!doctype html><script type="module" src="./viewer.js"></script>\n' > "$viewer_root/software_safe.html"
 printf 'console.log("canonical bundle");\n' > "$viewer_root/viewer.js"
@@ -18,6 +18,9 @@ printf '// Generated compat alias; canonical bundle truth lives in ./viewer.js.\
 printf '<!doctype html>claim evidence\n' > "$viewer_root/software_safe_first_agent_claim_evidence.html"
 printf 'icon\n' > "$viewer_root/favicon.ico"
 printf 'export const bridge = true;\n' > "$viewer_root/dist/pixel-world-bridge/pixel_world_bridge.js"
+printf 'export const webgl2Bridge = true;\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js"
+printf 'export function init() {}\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
+printf '\0asm\n' > "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
 "$ROOT_DIR/scripts/copy-viewer-web-dist.sh" --viewer-root "$viewer_root" --dist-dir "$dist_dir"
 
@@ -29,5 +32,8 @@ cmp "$viewer_root/software_safe.html" "$dist_dir/software_safe.html"
 cmp "$viewer_root/software_safe_first_agent_claim_evidence.html" "$dist_dir/software_safe_first_agent_claim_evidence.html"
 cmp "$viewer_root/favicon.ico" "$dist_dir/favicon.ico"
 cmp "$viewer_root/dist/pixel-world-bridge/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/pixel_world_bridge.js"
+cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge.js"
+cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
+cmp "$viewer_root/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" "$dist_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
 echo "copy-viewer-web-dist.test: OK"
