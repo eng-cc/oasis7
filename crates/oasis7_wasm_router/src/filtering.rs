@@ -310,6 +310,20 @@ pub(super) fn validate_ruleset(ruleset: &RuleSet, module_id: &str) -> Result<(),
 }
 
 pub(super) fn validate_rule(rule: &MatchRule, module_id: &str) -> Result<(), String> {
+    validate_rule_shape(rule, module_id)?;
+
+    if let Some(pattern) = &rule.re
+        && regex::Regex::new(pattern).is_err()
+    {
+        return Err(format!(
+            "module {module_id} subscription filter regex invalid"
+        ));
+    }
+
+    Ok(())
+}
+
+pub(super) fn validate_rule_shape(rule: &MatchRule, module_id: &str) -> Result<(), String> {
     if !rule.path.is_empty() && !rule.path.starts_with('/') {
         return Err(format!(
             "module {module_id} subscription filter path must start with '/': {}",
@@ -337,14 +351,6 @@ pub(super) fn validate_rule(rule: &MatchRule, module_id: &str) -> Result<(), Str
                 "module {module_id} subscription filter numeric value must be finite"
             ));
         }
-    }
-
-    if let Some(pattern) = &rule.re
-        && regex::Regex::new(pattern).is_err()
-    {
-        return Err(format!(
-            "module {module_id} subscription filter regex invalid"
-        ));
     }
 
     Ok(())

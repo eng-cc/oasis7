@@ -880,4 +880,45 @@ fn llm_agent_social_state_status_module_respects_include_inactive_flag() {
             .and_then(|value| value.as_u64()),
         Some(10)
     );
+
+    let limited_all_result = behavior.run_prompt_module(
+        &LlmModuleCallRequest {
+            module: "social.state.status".to_string(),
+            args: serde_json::json!({
+                "include_inactive": true,
+                "limit_facts": 1,
+                "limit_edges": 1
+            }),
+        },
+        &observation,
+    );
+    let limited_all_status = limited_all_result
+        .get("result")
+        .expect("limited social state result");
+    assert_eq!(
+        limited_all_status
+            .get("facts_total")
+            .and_then(|value| value.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        limited_all_status
+            .get("facts")
+            .and_then(|value| value.as_array())
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        limited_all_status
+            .get("edges_total")
+            .and_then(|value| value.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        limited_all_status
+            .get("edges")
+            .and_then(|value| value.as_array())
+            .map(Vec::len),
+        Some(1)
+    );
 }
