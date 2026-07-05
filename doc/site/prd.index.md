@@ -15,29 +15,28 @@
 - 想先回答当前站点同步状态、最近完成项和是否还有未收口任务：先读 `doc/site/project.md`
 - 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/site-manual-static-docs.prd.md`
 - 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
-- 想先看“正式公告仍在准备中”的公开口径占位：先读 `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.prd.md`
+- 想先看“正式公告仍在准备中”的当前公开口径：先读 `doc/site/prd.md`、`doc/site/project.md`，再对照 `site/index.html` 与 `site/doc/cn/index.html`
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
 ## 密度快照（2026-06-23）
-- `doc/site/`：69 份文件
-- `doc/site/github-pages/`：56 份文件
+- `doc/site/`：66 份文件
+- `doc/site/github-pages/`：53 份文件
 - `doc/site/manual/`：6 份文件
 - 模块根入口：5 份文件
-- `doc/site/` 正式专题三件套：60 份文件
-- 当前默认活跃专题三件套：57 份文件
+- `doc/site/` 正式专题三件套：57 份文件
+- 当前默认活跃专题三件套：54 份文件
 - 历史压缩专题三件套：3 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `github-pages/` 当前默认活跃专题三件套 | 51 | 公开首页、下载链路、公告占位、内容同步、SEO 与质量门禁 |
+| `github-pages/` 当前默认活跃专题三件套 | 48 | 公开首页、下载链路、内容同步、SEO 与质量门禁 |
 | `github-pages/` 历史压缩专题三件套 | 3 | 已完成且由后续首页主叙事/项目台账覆盖的历史 CTA 微专题 |
 | `manual/` 正式专题三件套 | 6 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
 - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`：GitHub Pages 下载链路、发布资产和公开版本说明主入口。
-- `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.prd.md`：公开公告占位与 technical preview 边界主入口。
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`：站点主叙事、docs hub 与 game-first 入口重定位主入口。
 - `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md`：Pages 质量门禁、同步与 SEO 约束主入口。
 - `doc/site/manual/site-manual-static-docs.prd.md`：静态 docs hub 与手册镜像策略主入口。
@@ -71,7 +70,6 @@
 | `doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.design.md` | `doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md` |
 | `doc/site/github-pages/github-pages-lean-tech-refresh.prd.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.design.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.project.md` |
 | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.design.md` | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.project.md` |
-| `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.prd.md` | `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.design.md` | `doc/site/github-pages/github-pages-release-communication-placeholder-2026-03-11.project.md` |
 | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.design.md` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md` |
 | `doc/site/github-pages/github-pages-showcase.prd.md` | `doc/site/github-pages/github-pages-showcase.design.md` | `doc/site/github-pages/github-pages-showcase.project.md` |
 | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.design.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` |
@@ -93,6 +91,11 @@
 | `site/doc/en/viewer-manual.html` | `public_html` | 英文 Viewer 手册只读镜像 |
 | `site/index.html` | `public_html` | 中文公开首页 |
 | `site/en/index.html` | `public_html` | 英文公开首页 |
+
+## 已退役删除的旧专题
+| 旧专题 | 当前入口 |
+| --- | --- |
+| `github-pages-release-communication-placeholder-2026-03-11` | 该完成态公告占位三件套已删除；当前公开公告准备态与 technical preview 边界以 `doc/site/prd.md`、`doc/site/project.md`、`site/index.html` 与 `site/doc/cn/index.html` 为准，历史细节从 GitHub task issue evidence comments 与 git history 追溯。 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
