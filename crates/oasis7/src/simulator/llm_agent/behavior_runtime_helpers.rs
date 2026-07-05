@@ -876,9 +876,11 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
             }
             "power.order_book.status" => {
                 let limit_orders = parse_limit_arg(request.args.get("limit_orders"), 32, 256);
-                let mut open_orders = observation.power_market.open_orders.clone();
-                let open_orders_total = open_orders.len();
-                open_orders.truncate(limit_orders);
+                let (open_orders_total, open_orders) = limited_filtered_page(
+                    observation.power_market.open_orders.iter(),
+                    limit_orders,
+                    |_| true,
+                );
                 Ok(serde_json::json!({
                     "next_order_id": observation.power_market.next_order_id,
                     "open_orders_total": open_orders_total,
@@ -921,24 +923,16 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     .unwrap_or(true);
                 let limit_facts = parse_limit_arg(request.args.get("limit_facts"), 32, 256);
                 let limit_edges = parse_limit_arg(request.args.get("limit_edges"), 32, 256);
-                let mut facts = observation
-                    .social_state
-                    .facts
-                    .iter()
-                    .filter(|fact| include_inactive || fact.supports_backing())
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let mut edges = observation
-                    .social_state
-                    .edges
-                    .iter()
-                    .filter(|edge| include_inactive || edge.is_active())
-                    .cloned()
-                    .collect::<Vec<_>>();
-                let facts_total = facts.len();
-                let edges_total = edges.len();
-                facts.truncate(limit_facts);
-                edges.truncate(limit_edges);
+                let (facts_total, facts) = limited_filtered_page(
+                    observation.social_state.facts.iter(),
+                    limit_facts,
+                    |fact| include_inactive || fact.supports_backing(),
+                );
+                let (edges_total, edges) = limited_filtered_page(
+                    observation.social_state.edges.iter(),
+                    limit_edges,
+                    |edge| include_inactive || edge.is_active(),
+                );
                 Ok(serde_json::json!({
                     "facts_total": facts_total,
                     "facts": facts,

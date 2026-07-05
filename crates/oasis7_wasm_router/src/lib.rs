@@ -5,7 +5,7 @@ mod metrics;
 use filtering::ruleset_matches;
 use filtering::{
     parsed_subscription_filters_types::*, prepared_subscription_filters_match,
-    subscription_filters_match, subscription_match, validate_rule,
+    subscription_filters_match, subscription_match, validate_rule_shape,
 };
 pub use filtering::{validate_subscription_filters, validate_subscription_stage};
 pub use metrics::WasmRouterMetricsSnapshot;
@@ -170,7 +170,7 @@ fn prepare_ruleset(ruleset: &RuleSet, module_id: &str) -> Result<PreparedRuleSet
 }
 
 fn prepare_rule(rule: &MatchRule, module_id: &str) -> Result<PreparedMatchRule, String> {
-    validate_rule(rule, module_id)?;
+    validate_rule_shape(rule, module_id)?;
     let operator = if let Some(expected) = &rule.eq {
         PreparedMatchOperator::Eq(expected.clone())
     } else if let Some(expected) = &rule.ne {
