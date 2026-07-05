@@ -836,12 +836,14 @@ function PixelWorldActionReceipt(props) {
           </div>
         </Show>
       </div>
-      <div class="pixel-world-action-receipt__meta">
-        <span>{receipt().confidence}</span>
-        <Show when={receipt().target_agent_id}>
-          <span>{`agent=${receipt().target_agent_id}`}</span>
-        </Show>
-      </div>
+      <Show when={receipt().present}>
+        <div class="pixel-world-action-receipt__meta">
+          <span>{receipt().confidence}</span>
+          <Show when={receipt().target_agent_id}>
+            <span>{`agent=${receipt().target_agent_id}`}</span>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }
