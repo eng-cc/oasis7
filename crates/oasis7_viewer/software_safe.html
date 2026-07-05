@@ -367,6 +367,13 @@
         padding: 10px 12px;
         background: rgba(255, 255, 255, 0.025);
       }
+      .metric--claim-primary {
+        border-color: rgba(126, 231, 135, 0.48);
+        background: linear-gradient(180deg, rgba(126, 231, 135, 0.12), rgba(255, 255, 255, 0.035));
+      }
+      .metric--claim-total {
+        grid-column: span 2;
+      }
       .metric__label {
         font-size: 12px;
         color: var(--muted);
@@ -375,6 +382,9 @@
       .metric__value {
         font-size: 18px;
         font-weight: 700;
+      }
+      .metric--claim-primary .metric__value {
+        color: var(--accent);
       }
       .badge-row, .toolbar {
         display: flex;
@@ -2226,6 +2236,7 @@
         .list, .event-list { max-height: none; }
         .action-grid { grid-template-columns: 1fr; }
         .summary-grid { grid-template-columns: 1fr; }
+        .metric--claim-total { grid-column: auto; }
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }
         .stage-hero__title { max-width: none; }
