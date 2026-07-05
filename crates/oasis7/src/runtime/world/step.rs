@@ -74,6 +74,14 @@ impl World {
         let WorldEventBody::Domain(event) = body else {
             return Ok(());
         };
+        if matches!(
+            event,
+            DomainEvent::ActionAccepted { .. }
+                | DomainEvent::ActionRejected { .. }
+                | DomainEvent::Observation { .. }
+        ) {
+            return Ok(());
+        }
         let mut preview_state = self.state.clone();
         preview_state.apply_domain_event(event, self.state.time)
     }
@@ -208,7 +216,6 @@ impl World {
             return Ok(None);
         };
         let body = WorldEventBody::Domain(event);
-        self.preflight_domain_event(&body)?;
         self.append_event(body, Some(CausedBy::Action(envelope.id)))?;
         Ok(self.journal.events.last().cloned())
     }
