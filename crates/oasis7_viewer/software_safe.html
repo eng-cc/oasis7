@@ -537,9 +537,29 @@
       .list-item[data-selected="true"] .list-item__title {
         color: #d5ecdf;
       }
+      .list-item__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
       .list-item__title {
         font-weight: 700;
-        margin-bottom: 4px;
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .list-item__selected-label {
+        flex: 0 0 auto;
+        border: 1px solid rgba(141, 199, 170, 0.42);
+        border-radius: 999px;
+        padding: 2px 6px;
+        background: rgba(141, 199, 170, 0.16);
+        color: #d5ecdf;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
       }
       .list-item__meta {
         color: var(--muted);
