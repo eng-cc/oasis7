@@ -2428,6 +2428,7 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByText("Player -> agent-0")).toBeInTheDocument();
     expect(screen.getByText("player-one · unknown location")).toBeInTheDocument();
     expect(screen.getByText("Please restore the smelter line before expanding.")).toBeInTheDocument();
+    expect(screen.getByText("Please restore the smelter line before expanding.").closest(".event-card")).toHaveClass("event-card--chat-player");
     expect(screen.getByText("Raw diagnostics")).toBeInTheDocument();
     expect(screen.queryByText(/"message": "Please restore the smelter line before expanding."/)).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
@@ -2455,6 +2456,7 @@ describe("viewer web ui automation baseline", () => {
     });
 
     expect(screen.getByText("agent-0 reply failed")).toBeInTheDocument();
+    expect(screen.getByText("agent-0 reply failed").closest(".event-card")).toHaveClass("event-card--chat-error");
     expect(screen.getByText("runtime · code=provider_unreachable · tick=849")).toBeInTheDocument();
     expect(screen.getByText("Agent reply did not complete: provider request /v1/world-simulator/agent-chat failed"))
       .toBeInTheDocument();
@@ -3225,6 +3227,8 @@ describe("viewer web ui automation baseline", () => {
     expect(within(detailsPanel).getByText("Chat Ready")).toBeInTheDocument();
     expect(within(detailsPanel).getByText("Awaiting material recovery before the smelter can proceed.")).toBeInTheDocument();
     expect(within(detailsPanel).getByText("Hold position and confirm the blocker.")).toBeInTheDocument();
+    expect(commandSurface.querySelectorAll(".event-card--chat-player").length).toBeGreaterThan(0);
+    expect(commandSurface.querySelectorAll(".event-card--chat-agent").length).toBeGreaterThan(0);
     expect(within(detailsPanel).getByText("state=hidden_by_default")).toBeInTheDocument();
     expect(within(detailsPanel).queryByLabelText("System Prompt Override")).not.toBeInTheDocument();
     expect(within(detailsPanel).getAllByText(/no transfer form/i).length).toBeGreaterThan(0);

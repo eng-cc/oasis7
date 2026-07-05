@@ -1198,6 +1198,12 @@ function chatEntryTitle(entry, locale) {
   return `${entry.agentId || "agent"} ${tr(locale, "已发言", "spoke")}`;
 }
 
+function chatEntryCardClass(entry) {
+  if (entry.source === "error") return "event-card event-card--chat-error";
+  if (entry.source === "player") return "event-card event-card--chat-player";
+  return "event-card event-card--chat-agent";
+}
+
 function chatEntryMeta(entry, locale) {
   if (entry.source === "error") {
     const code = entry.code ? ` · code=${entry.code}` : "";
@@ -1350,7 +1356,7 @@ function PixelWorldFocusCommandSurface(props) {
                 <Show when={chatHistory().length > 0} fallback={<div class="empty">{tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.")}</div>}>
                   <For each={chatHistory()}>
                     {(entry) => (
-                      <div class="event-card">
+                      <div class={chatEntryCardClass(entry)}>
                         <div class="event-card__title">
                           <span>{chatEntryTitle(entry, locale())}</span>
                         </div>
