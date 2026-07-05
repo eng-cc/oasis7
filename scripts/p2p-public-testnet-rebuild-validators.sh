@@ -18,7 +18,8 @@ Usage:
     [--stack-root <path>] \
     [--out-dir <path>] \
     [--poll-attempts <n>] \
-    [--poll-sleep-seconds <n>]
+    [--poll-sleep-seconds <n>] \
+    [--disable-ssh-multiplex]
 
 Description:
   Stage deployment-truth config/world onto the validator pair, destructively
@@ -68,6 +69,7 @@ STACK_ROOT="/opt/oasis7/p2p-testnet"
 OUT_DIR=""
 POLL_ATTEMPTS=20
 POLL_SLEEP_SECONDS=3
+DISABLE_SSH_MULTIPLEX=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -126,6 +128,10 @@ while [[ $# -gt 0 ]]; do
     --poll-sleep-seconds)
       POLL_SLEEP_SECONDS=${2:-}
       shift 2
+      ;;
+    --disable-ssh-multiplex)
+      DISABLE_SSH_MULTIPLEX=1
+      shift
       ;;
     -h|--help)
       usage
@@ -211,6 +217,10 @@ control_path_for() {
 open_master_connection() {
   local host=$1
   local sshpass_env_name=$2
+  if [[ "$DISABLE_SSH_MULTIPLEX" -eq 1 ]]; then
+    printf '\n'
+    return 0
+  fi
   local control_path
   control_path=$(control_path_for "$host")
   if [[ -S "$control_path" ]]; then
@@ -237,8 +247,42 @@ ssh_run() {
   local host=$1
   local control_path=$2
   shift 2
-  ssh \
-    -S "$control_path" \
+  local ssh_args=()
+  if [[ -n "$control_path" ]]; then
+    ssh_args+=(-S "$control_path")
+  else
+    ssh_args+=(
+      -o ControlMaster=no
+      -o ControlPath=none
+      -o PreferredAuthentications=password
+      -o PubkeyAuthentication=no
+      -o NumberOfPasswordPrompts=1
+      -o ConnectTimeout=10
+      -o ServerAliveInterval=15
+      -o ServerAliveCountMax=2
+    )
+    if [[ "$host" == "$SEQUENCER_SSH_HOST" ]]; then
+      local sequencer_sshpass=${!SEQUENCER_SSHPASS_ENV:-}
+      [[ -n "$sequencer_sshpass" ]] || die "ssh password env is empty: $SEQUENCER_SSHPASS_ENV"
+      SSHPASS="$sequencer_sshpass" sshpass -e ssh "${ssh_args[@]}" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "$host" \
+        "$@"
+      return $?
+    fi
+    if [[ "$host" == "$STORAGE_SSH_HOST" ]]; then
+      local storage_sshpass=${!STORAGE_SSHPASS_ENV:-}
+      [[ -n "$storage_sshpass" ]] || die "ssh password env is empty: $STORAGE_SSHPASS_ENV"
+      SSHPASS="$storage_sshpass" sshpass -e ssh "${ssh_args[@]}" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "$host" \
+        "$@"
+      return $?
+    fi
+  fi
+  ssh "${ssh_args[@]}" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     "$host" \

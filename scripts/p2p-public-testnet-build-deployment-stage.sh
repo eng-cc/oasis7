@@ -215,6 +215,7 @@ rm -rf "$out_dir"
 mkdir -p "$out_dir/config/doc/testing/evidence" "$out_dir/generated-world"
 
 registry_path="$out_dir/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+public_signers_path="$out_dir/config/public-testnet-governance-public-signers-deployment-2026-06-06.json"
 genesis_path="$out_dir/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
 manifest_path="$out_dir/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
 bundle_path="$out_dir/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
@@ -270,7 +271,80 @@ path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encodin
 PY
 cp "$registry_path" "$out_dir/config/doc/testing/evidence/"
 
-python3 - "$base_genesis" "$genesis_path" "$registry_path" <<'PY'
+python3 - "$base_genesis" "$public_signers_path" "$registry_path" <<'PY'
+import json
+import pathlib
+import sys
+
+base_genesis = pathlib.Path(sys.argv[1]).resolve()
+out_path = pathlib.Path(sys.argv[2]).resolve()
+registry_path = pathlib.Path(sys.argv[3]).resolve()
+
+with base_genesis.open("r", encoding="utf-8") as fh:
+    genesis = json.load(fh)
+
+refs = genesis.get("governance_bootstrap_refs")
+if not isinstance(refs, dict):
+    raise SystemExit("base genesis missing governance_bootstrap_refs")
+raw_manifest_ref = refs.get("governance_public_manifest_ref")
+if not isinstance(raw_manifest_ref, str) or not raw_manifest_ref.strip():
+    raise SystemExit("base genesis missing governance_public_manifest_ref")
+
+def resolve_ref(raw: str) -> pathlib.Path:
+    candidate = pathlib.Path(raw).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    for base in (base_genesis.parent, *base_genesis.parents):
+        resolved = (base / candidate).resolve()
+        if resolved.exists():
+            return resolved
+    return (base_genesis.parent / candidate).resolve()
+
+base_manifest_path = resolve_ref(raw_manifest_ref)
+base_manifest = json.loads(base_manifest_path.read_text(encoding="utf-8"))
+entries = base_manifest.get("entries")
+if not isinstance(entries, list):
+    raise SystemExit(f"base governance public manifest has no entries: {base_manifest_path}")
+
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+validators = registry.get("validators")
+if not isinstance(validators, list) or not validators:
+    raise SystemExit(f"validator registry has no validators: {registry_path}")
+
+next_entries = [
+    entry
+    for entry in entries
+    if not (
+        isinstance(entry, dict)
+        and entry.get("slot_id") == "governance.finality.v1"
+    )
+]
+for validator in validators:
+    node_id = validator.get("node_id")
+    public_key = validator.get("finality_signer_public_key")
+    if not node_id or not public_key:
+        raise SystemExit("validator entry missing node_id/finality_signer_public_key")
+    next_entries.append(
+        {
+            "slot_id": "governance.finality.v1",
+            "signer_id": node_id,
+            "scheme": validator.get("scheme") or "ed25519",
+            "public_key_hex": public_key,
+        }
+    )
+
+base_manifest["entries"] = next_entries
+base_manifest["truth_kind"] = "deployment_public_signers"
+base_manifest["source_public_manifest_ref"] = str(base_manifest_path)
+base_manifest["deployment_validator_registry_ref"] = str(registry_path)
+out_path.write_text(
+    json.dumps(base_manifest, ensure_ascii=True, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+cp "$public_signers_path" "$out_dir/config/doc/testing/evidence/"
+
+python3 - "$base_genesis" "$genesis_path" "$registry_path" "$public_signers_path" <<'PY'
 import json
 import pathlib
 import shutil
@@ -279,6 +353,7 @@ import sys
 base_path = pathlib.Path(sys.argv[1]).resolve()
 out_path = pathlib.Path(sys.argv[2]).resolve()
 registry_path = pathlib.Path(sys.argv[3]).resolve()
+public_signers_path = pathlib.Path(sys.argv[4]).resolve()
 
 with base_path.open("r", encoding="utf-8") as fh:
     payload = json.load(fh)
@@ -301,6 +376,7 @@ for key, value in list(refs.items()):
         refs[key] = resolve_ref(value)
 
 refs["genesis_validator_registry_ref"] = str(registry_path)
+refs["governance_public_manifest_ref"] = str(public_signers_path)
 
 out_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 
