@@ -64,7 +64,7 @@
 - `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02`
 - `doc/world-simulator/launcher/game-client-launcher-graceful-stop-2026-03-02`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02`
-- `doc/world-simulator/launcher/game-client-launcher-native-legacy-cleanup-2026-03-06`
+- launcher native legacy cleanup 2026-03-06 (retired/deleted; historical backfill chronology only)
 - `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06`
 - `doc/world-simulator/launcher/game-client-launcher-self-guided-experience-2026-03-08`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-ui-ux-optimization-2026-03-08`
