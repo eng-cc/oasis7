@@ -2328,8 +2328,11 @@ function resetHostedLoginChallenge$1(hostedLogin) {
   hostedLogin.deliveryMode = null;
   hostedLogin.code = "";
   hostedLogin.expiresAtUnixMs = null;
+  hostedLogin.retryAfterSeconds = null;
   hostedLogin.accountExists = false;
+  hostedLogin.startInFlight = false;
   hostedLogin.completeInFlight = false;
+  hostedLogin.error = null;
 }
 function createViewerLocalePreferencesModule({
   documentRef,
@@ -2477,6 +2480,10 @@ function createViewerWorldScaleModule({
   softwareSafeRenderModeAlias,
   viewerRenderMode
 }) {
+  function trimDisplayValue(value, digits) {
+    const label = trimFixed2(value, digits);
+    return /^-0(?:\.0*)?$/.test(label) ? label.slice(1) : label;
+  }
   function formatPhysicalDistanceCm2(value, locale = state2.uiLocale) {
     const numeric = normalizeFiniteNumber2(value);
     if (numeric == null) {
@@ -2490,13 +2497,14 @@ function createViewerWorldScaleModule({
     }
     if (absolute >= 100) {
       const meters = numeric / 100;
-      const label = trimFixed2(
+      const digits = Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2;
+      const label = trimDisplayValue(
         meters,
-        Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2
+        digits
       );
       return `${label} m`;
     }
-    return `${trimFixed2(numeric, 0)} cm`;
+    return `${trimDisplayValue(numeric, 0)} cm`;
   }
   function formatWorldPositionCm(pos, locale = state2.uiLocale) {
     if (!pos || typeof pos !== "object") {
