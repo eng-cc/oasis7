@@ -3901,13 +3901,15 @@ async function executeSemanticCommand(command) {
     if (command.kind === "chat") {
       expireAgentChatOverallTimeout(command.feedback);
     } else if (command.kind === "prompt") {
-      markSemanticFeedbackError(
-        command.feedback,
-        "prompt_control timed out before live server ack/error completed",
-        "prompt_control overall timeout"
-      );
-      state.lastPromptFeedback = command.feedback;
-      render();
+      if (sameSemanticFeedback(state.lastPromptFeedback, command.feedback)) {
+        markSemanticFeedbackError(
+          command.feedback,
+          "prompt_control timed out before live server ack/error completed",
+          "prompt_control overall timeout"
+        );
+        state.lastPromptFeedback = command.feedback;
+        render();
+      }
     }
     return;
   }
@@ -5580,12 +5582,13 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
     pendingPlayerId: state.auth.playerId || null
   });
   state.lastChatFeedback = feedback;
-  scheduleAgentChatOverallTimeout(feedback);
   const command = {
     kind: "chat",
     feedback,
     timeoutMs: AGENT_CHAT_OVERALL_TIMEOUT_MS,
     execute: async () => {
+      assertAgentChatFeedbackActive(feedback);
+      scheduleAgentChatOverallTimeout(feedback);
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();

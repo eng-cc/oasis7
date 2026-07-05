@@ -349,6 +349,8 @@ stage_host() {
   fi
 
   ssh_run "$host" "$control_path" \
+    "test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
+  ssh_run "$host" "$control_path" \
     "rm -rf '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world' && mkdir -p '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
   COPYFILE_DISABLE=1 tar -C "$WORLD_DIR" -cf - . \
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"

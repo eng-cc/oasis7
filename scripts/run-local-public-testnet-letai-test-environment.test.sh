@@ -214,8 +214,11 @@ source = Path("scripts/run-local-public-testnet-letai-test-environment.sh").read
 public_testnet_index = source.index("check_public_testnet_node")
 cleanup_index = source.index("stop_stale_viewer_live_services", public_testnet_index)
 preflight_index = source.index('check_or_reuse_port "viewer live API" "$VIEWER_API_BIND" >/dev/null || true')
-if not public_testnet_index < cleanup_index < preflight_index:
-    raise SystemExit("expected stale viewer live cleanup before viewer port preflight")
+preflight_only_index = source.index('if [[ "$PREFLIGHT_ONLY" == "1" ]]', public_testnet_index)
+if not public_testnet_index < cleanup_index < preflight_index < preflight_only_index:
+    raise SystemExit("expected stale viewer live cleanup before viewer port preflight in normal startup path")
+if '[[ "$PREFLIGHT_ONLY" != "1" && "$SKIP_VIEWER_LIVE" != "1" ]]' not in source:
+    raise SystemExit("expected preflight-only path to avoid launchd viewer-live cleanup")
 PY
 
 echo "run-local-public-testnet-letai-test-environment checks passed"

@@ -1043,7 +1043,7 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 check_public_testnet_node
-if [[ "$SKIP_VIEWER_LIVE" != "1" ]]; then
+if [[ "$PREFLIGHT_ONLY" != "1" && "$SKIP_VIEWER_LIVE" != "1" ]]; then
   stop_stale_viewer_live_services
 fi
 if [[ "$SKIP_NEWAPI" != "1" ]]; then

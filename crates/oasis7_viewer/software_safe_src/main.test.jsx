@@ -331,14 +331,21 @@ async function renderViewerAppThroughAutoMount({ snapshot = sampleSnapshot(), se
   };
 }
 
-async function setupConnectedSemanticCore({ snapshot = sampleSnapshot(), agentId = "agent-0" } = {}) {
+async function setupConnectedSemanticCore({
+  snapshot = sampleSnapshot(),
+  agentId = "agent-0",
+  agentChatOverallTimeoutMs = null,
+} = {}) {
   activeCleanup?.();
   activeCleanup = null;
   vi.resetModules();
+  const agentChatTimeoutParam = agentChatOverallTimeoutMs == null
+    ? ""
+    : `&agent_chat_overall_timeout_ms=${encodeURIComponent(String(agentChatOverallTimeoutMs))}`;
   window.history.replaceState(
     {},
     "",
-    "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    `/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011${agentChatTimeoutParam}`,
   );
   window.localStorage.clear();
   document.body.innerHTML = "";
@@ -1808,9 +1815,7 @@ describe("viewer web ui automation baseline", () => {
       configurable: true,
       value: {
         subtle: {
-          async importKey() {
-            return { kind: "test-key" };
-          },
+          ...createTestCrypto().subtle,
           sign() {
             return new Promise(() => {});
           },
@@ -1873,6 +1878,73 @@ describe("viewer web ui automation baseline", () => {
 	    expect(core.state.lastChatFeedback.effect).not.toBe("agent_chat overall timeout");
 	  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("does not start agent chat overall timeout while queued behind another semantic command", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en&agent_chat_overall_timeout_ms=1000",
+    );
+    const { core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-bound",
+          publicKey: "09".repeat(32),
+          privateKey: "07".repeat(32),
+          source: "legacy_viewer_auth_bootstrap",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+          boundAgentId: "agent-0",
+          syncInFlight: false,
+        };
+      },
+    });
+    const pendingSign = new Promise(() => {});
+    Object.defineProperty(window, "crypto", {
+      configurable: true,
+      value: {
+        subtle: {
+          ...createTestCrypto().subtle,
+          sign() {
+            return pendingSign;
+          },
+        },
+      },
+    });
+
+    expect(core.sendPromptControl("preview", { agentId: "agent-0" })).toEqual(
+      expect.objectContaining({ ok: true }),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const queued = core.sendAgentChat("agent-0", "queued behind prompt signing");
+    expect(queued).toEqual(expect.objectContaining({ ok: true }));
+    const chatId = queued.feedback.id;
+    expect(core.state.lastChatFeedback).toEqual(
+      expect.objectContaining({
+        id: chatId,
+        stage: "queued",
+        effect: "queued for signing and send",
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(core.state.lastChatFeedback).toEqual(
+      expect.objectContaining({
+        id: chatId,
+        stage: "queued",
+        effect: "queued for signing and send",
+      }),
+    );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("times out prompt_control requests that were sent but never acked", async () => {
     const { core, sentMessages } = await setupConnectedSemanticCore();
 
@@ -1909,6 +1981,70 @@ describe("viewer web ui automation baseline", () => {
         reason: "prompt_control timed out waiting for ack/error from live server",
       }),
     );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("does not let stale prompt_control overall timeout overwrite newer prompt feedback", async () => {
+    vi.useFakeTimers();
+    const { core } = await renderViewerApp({
+      selection: { kind: "agent", id: "agent-0" },
+      setupAfterMount(core) {
+        core.state.auth = {
+          ...core.state.auth,
+          available: true,
+          playerId: "local-test-player-bound",
+          publicKey: "09".repeat(32),
+          privateKey: "07".repeat(32),
+          source: "legacy_viewer_auth_bootstrap",
+          registrationStatus: "registered",
+          runtimeStatus: "registered",
+          boundAgentId: "agent-0",
+          syncInFlight: false,
+        };
+      },
+    });
+    const pendingSign = new Promise(() => {});
+    Object.defineProperty(window, "crypto", {
+      configurable: true,
+      value: {
+        subtle: {
+          ...createTestCrypto().subtle,
+          sign() {
+            return pendingSign;
+          },
+        },
+      },
+    });
+
+    const first = core.sendPromptControl("preview", {
+      agentId: "agent-0",
+      shortTermGoal: "first hanging prompt",
+    });
+    expect(first).toEqual(expect.objectContaining({ ok: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const second = core.sendPromptControl("preview", {
+      agentId: "agent-0",
+      shortTermGoal: "newer queued prompt",
+    });
+    expect(second).toEqual(expect.objectContaining({ ok: true }));
+    expect(core.state.lastPromptFeedback).toEqual(
+      expect.objectContaining({
+        id: second.feedback.id,
+        effect: "queued for signing and send",
+      }),
+    );
+
+    await vi.advanceTimersToNextTimerAsync();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(core.state.lastPromptFeedback).toEqual(
+      expect.objectContaining({
+        id: second.feedback.id,
+      }),
+    );
+    expect(core.state.lastPromptFeedback.effect).not.toBe("prompt_control overall timeout");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("times out gameplay_action requests that were sent but never acked", async () => {

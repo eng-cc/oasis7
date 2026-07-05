@@ -296,6 +296,8 @@ case "$cmd" in
     stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*mkdir -p '\([^']*\)\/config\/doc\/testing\/evidence'.*/\1/p")
     mkdir -p "$root$stack_root/config/doc/testing/evidence" "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
     ;;
+  *oasis7_world_repair_rebuild*--help*)
+    ;;
   cat\ \>*)
     target=$(printf '%s\n' "$cmd" | sed -n "s/cat > '\([^']*\)'/\1/p")
     mkdir -p "$(dirname "$root$target")"
@@ -552,6 +554,38 @@ if not sequencer_start_index < first_curl_index:
     raise SystemExit("sequencer was not started before first status poll")
 if not storage_start_index < first_curl_index:
     raise SystemExit("storage was not started before first status poll")
+PY
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+for host in ("root@sequencer", "root@storage"):
+    commands = [line.split("\t", 1)[1] for line in lines if line.startswith(host + "\t")]
+    help_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if "oasis7_world_repair_rebuild' --help" in command
+    ]
+    reset_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if "rm -rf '/opt/oasis7/p2p-testnet/staged-world' '/opt/oasis7/p2p-testnet/data/execution-world'" in command
+    ]
+    repair_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if "oasis7_world_repair_rebuild' --generated-world-dir" in command
+    ]
+    if not help_indexes:
+        raise SystemExit(f"missing remote repair helper preflight for {host}")
+    if not reset_indexes:
+        raise SystemExit(f"missing destructive world reset for {host}")
+    if not repair_indexes:
+        raise SystemExit(f"missing remote repair rebuild for {host}")
+    if not help_indexes[0] < reset_indexes[0] < repair_indexes[0]:
+        raise SystemExit(f"expected repair helper preflight before destructive world reset for {host}")
 PY
 
 jq -e '
