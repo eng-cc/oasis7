@@ -10,9 +10,13 @@
 - [x] triad-observability-merged-summary (PRD-P2P-025-B) [test_tier_required]: 新增 merged summary helper 与 triad observability wrapper，串起 snapshot/host/traffic/wasm。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
 - [x] triad-observability-docs-and-smoke (PRD-P2P-025-C) [test_tier_required]: 回写 `doc/p2p` / `testing-manual.md`，补 fixture 回归与 real-env 小样本验证入口。 Trace: .pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.yaml
 - [x] triad-observability-module-breakdown (PRD-P2P-025) [test_tier_required]: 把 triad observability summary 细分到 runtime 子模块，并输出可执行的 optimization candidates。 Trace: .pm/tasks/task_129613e6a9fd421da0a2c2f79824c51c.yaml
-- [ ] triad-reachability-path-summary (PRD-P2P-024/PRD-P2P-025) [test_tier_required]: 在 triad observability summary 内消费 `/v1/chain/status.observability` 的 bounded reachability/path projection，输出 selected path kind/age、path transition counters、active path mix、recent fallback reason 与 reachability confidence。 Trace: .pm/tasks/task_43a21163092541809de36036403d7c97.yaml
+- [x] triad-reachability-path-summary (PRD-P2P-024/PRD-P2P-025) [test_tier_required]: 在 triad observability summary 内消费 `/v1/chain/status.observability` 的 bounded reachability/path projection，输出 selected path kind/age、path transition counters、active path mix、recent fallback reason 与 reachability confidence。 Trace: #991 (task_43a21163092541809de36036403d7c97)
   - 依赖: `PeerReachabilityContract` 或等价 runtime status projection 已由 `runtime_engineer` 实现；report helper 不重新推导 canonical path truth。
   - 验收: fixture status 缺字段时 summary 输出 `not_reported`；fixture status 有字段时 `nodes.<label>.modules.p2p_reachability` 原样消费 bounded enums/counts/window summary；不得导出 unbounded peer-id labels。
+
+## 证据入口
+- 当前执行证据以 GitHub task issue evidence comments 为准：triad stack baseline `#1444`，module breakdown `#748`，reachability/path summary `#991`。
+- 历史 `.pm/tasks/*.execution.md` 已由 GitHub Project migration Step 3 退役；旧执行日志只通过 `.pm/github-project-sync/task-archive.jsonl` 作为审计桥追溯，不再列为本专题产物文件。
 
 ## 依赖
 - `scripts/p2p-real-env-triad-snapshot.sh`
@@ -30,15 +34,12 @@
 - `scripts/p2p-real-env-observability-monitor.test.sh`
 - `fixtures/p2p_real_env_host_monitor/history.ndjson`
 - `fixtures/p2p_real_env_observability/*`
-- `.pm/tasks/task_129613e6a9fd421da0a2c2f79824c51c.execution.md`
-- `.pm/tasks/task_43a21163092541809de36036403d7c97.execution.md`
 - `doc/p2p/node/node-triad-observability-stack-2026-04-23.*`
 - `doc/p2p/project.md`
 - `doc/p2p/prd.md`
 - `doc/p2p/prd.index.md`
 - `doc/p2p/node/README.md`
 - `testing-manual.md`
-- `.pm/tasks/task_d3cb937a968e4a4187e2f143c9444d6f.execution.md`
 
 ## 验收命令（`test_tier_required`）
 - `bash -n scripts/p2p-real-env-node-host-sample.sh scripts/p2p-real-env-host-monitor.sh scripts/p2p-real-env-observability-monitor.sh scripts/p2p-real-env-host-monitor.test.sh scripts/p2p-real-env-observability-monitor.test.sh`
