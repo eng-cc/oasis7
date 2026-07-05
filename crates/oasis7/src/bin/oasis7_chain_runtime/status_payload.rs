@@ -8,6 +8,9 @@ use oasis7_node::{
 };
 use serde::Serialize;
 
+use super::execution_bridge::{
+    ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
+};
 use super::p2p_status::peer_reachability_as_str;
 use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
@@ -15,11 +18,16 @@ use super::traffic_status::ChainTrafficStatus;
 use super::wasm_status::ChainWasmStatus;
 #[path = "status_payload_chain_proof.rs"]
 mod status_payload_chain_proof;
+#[path = "status_payload_module_tick_routing.rs"]
+mod status_payload_module_tick_routing;
 #[path = "status_payload_network_head.rs"]
 mod status_payload_network_head;
 #[path = "status_payload_network_tier.rs"]
 mod status_payload_network_tier;
 use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
+use status_payload_module_tick_routing::{
+    ChainModuleTickRoutingStatus, build_module_tick_routing_status,
+};
 pub(super) use status_payload_network_head::{
     ChainConsensusNetworkHeadStatus, ChainReadinessPolicyStatus, applied_slashing_receipt_hashes,
     build_network_head_status, pending_slashing_intent_count, readiness_policy,
@@ -121,6 +129,8 @@ pub(super) struct ChainStatusResponse {
     pub(super) traffic: ChainTrafficStatus,
     pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
+    pub(super) execution_bridge_commit_timing: ExecutionBridgeCommitTimingSnapshot,
+    pub(super) module_tick_routing: ChainModuleTickRoutingStatus,
 }
 
 #[derive(Debug, Serialize)]
@@ -985,6 +995,8 @@ pub(super) fn build_chain_status_payload(
     let world_resource =
         build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
     let chain_proof = build_chain_proof_status(execution_records_dir);
+    let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
+    let module_tick_routing = build_module_tick_routing_status(execution_world_dir);
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -1176,5 +1188,7 @@ pub(super) fn build_chain_status_payload(
         traffic,
         transactions,
         replication,
+        execution_bridge_commit_timing,
+        module_tick_routing,
     }
 }

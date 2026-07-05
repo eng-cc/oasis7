@@ -225,6 +225,9 @@ else:
 consensus = status.get("consensus") or {}
 storage = status.get("storage") or {}
 reward_runtime = status.get("reward_runtime") or {}
+execution_bridge_commit_timing = status.get("execution_bridge_commit_timing") or {}
+module_tick_routing_status = status.get("module_tick_routing") or {}
+module_tick_routing = module_tick_routing_status.get("metrics") or {}
 alerts = observability.get("alerts") or []
 
 summary = {
@@ -297,6 +300,8 @@ summary = {
         "latest_epoch_index": reward_runtime.get("latest_epoch_index"),
         "report_count": reward_runtime.get("report_count"),
     },
+    "execution_bridge_commit_timing": execution_bridge_commit_timing,
+    "module_tick_routing": module_tick_routing_status,
     "traffic_window": traffic_summary,
     "traffic_summary_missing": traffic_summary_missing,
 }
@@ -398,6 +403,48 @@ lines.extend(
         f"- reward_runtime_metrics_available: `{fmt_bool(reward_runtime.get('metrics_available'))}`",
         f"- reward_runtime_invariant_ok: `{fmt_bool(reward_runtime.get('invariant_ok'))}`",
         f"- reward_runtime_last_error: `{reward_runtime.get('last_error')}`",
+    ]
+)
+
+lines.extend(
+    [
+        "",
+        "## Execution Bridge Commit Timing",
+        f"- recent_commit_count: `{fmt_num(execution_bridge_commit_timing.get('recent_commit_count'))}`",
+        f"- total_ms: `p50={fmt_num(execution_bridge_commit_timing.get('p50_total_ms'))} p95={fmt_num(execution_bridge_commit_timing.get('p95_total_ms'))} max={fmt_num(execution_bridge_commit_timing.get('max_total_ms'))}`",
+        f"- slow_count: `{fmt_num(execution_bridge_commit_timing.get('slow_count'))}`",
+        f"- last_slow_stage: `{execution_bridge_commit_timing.get('last_slow_stage')}`",
+    ]
+)
+stage_timings = execution_bridge_commit_timing.get("stages") or {}
+if stage_timings:
+    stage_parts = []
+    for stage_name in sorted(stage_timings):
+        stage = stage_timings.get(stage_name) or {}
+        stage_parts.append(
+            f"{stage_name}:count={fmt_num(stage.get('count'))},cumulative_ms={fmt_num(stage.get('cumulative_ms'))}"
+        )
+    lines.append(f"- stage_counters: `{' | '.join(stage_parts)}`")
+else:
+    lines.append("- stage_counters: `not_reported`")
+
+duration_buckets = module_tick_routing.get("duration_buckets") or {}
+lines.extend(
+    [
+        "",
+        "## Module Tick Routing",
+        f"- available: `{fmt_bool(module_tick_routing_status.get('available'))}`",
+        f"- source: `{module_tick_routing_status.get('source')}`",
+        f"- load_error: `{module_tick_routing_status.get('load_error')}`",
+        f"- schedule_len: `{fmt_num(module_tick_routing.get('schedule_len'))}`",
+        f"- last_due_count: `{fmt_num(module_tick_routing.get('last_due_count'))}`",
+        f"- last_invoked_count: `{fmt_num(module_tick_routing.get('last_invoked_count'))}`",
+        f"- missing_invocation_count: `{fmt_num(module_tick_routing.get('missing_invocation_count'))}`",
+        f"- last_missing_invocation_count: `{fmt_num(module_tick_routing.get('last_missing_invocation_count'))}`",
+        f"- oldest_overdue_ticks: `{fmt_num(module_tick_routing.get('oldest_overdue_ticks'))}`",
+        f"- routing_count: `{fmt_num(module_tick_routing.get('routing_count'))}`",
+        f"- route_duration_ms: `last={fmt_num(module_tick_routing.get('last_route_duration_ms'))} max={fmt_num(module_tick_routing.get('max_route_duration_ms'))} cumulative={fmt_num(module_tick_routing.get('cumulative_route_duration_ms'))}`",
+        f"- duration_buckets: `lt_1ms={fmt_num(duration_buckets.get('lt_1ms'))} ms_1_to_5={fmt_num(duration_buckets.get('ms_1_to_5'))} ms_5_to_25={fmt_num(duration_buckets.get('ms_5_to_25'))} ms_25_to_100={fmt_num(duration_buckets.get('ms_25_to_100'))} ge_100ms={fmt_num(duration_buckets.get('ge_100ms'))}`",
     ]
 )
 

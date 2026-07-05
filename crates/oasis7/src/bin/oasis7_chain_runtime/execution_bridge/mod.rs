@@ -753,6 +753,10 @@ mod tests;
 #[allow(unused_imports)]
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
 #[allow(unused_imports)]
+pub(crate) use self::driver::load_execution_world;
+#[allow(unused_imports)]
 pub(super) use self::driver_committed_heights::bridge_committed_heights;
 #[allow(unused_imports)]
-pub(super) use self::driver_persistence::load_execution_world;
+pub(crate) use self::driver_observability::{
+    ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
+};

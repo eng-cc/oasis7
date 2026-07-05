@@ -37,6 +37,11 @@ mod tick_consensus;
 #[cfg(all(test, feature = "wasmtime", feature = "test_tier_full"))]
 pub(crate) use bootstrap_economy::m4_bootstrap_module_ids;
 pub use bootstrap_power::M1ScenarioBootstrapConfig;
+use module_tick_runtime::ModuleTickRoutingMetrics;
+pub use module_tick_runtime::{
+    ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
+    ModuleTickRoutingMetricsSnapshot,
+};
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -268,6 +273,8 @@ pub struct World {
     inflight_effects: BTreeMap<String, EffectIntent>,
     #[serde(default)]
     module_tick_schedule: BTreeMap<String, u64>,
+    #[serde(default)]
+    module_tick_routing_metrics: ModuleTickRoutingMetrics,
     capabilities: BTreeMap<String, CapabilityGrant>,
     policies: PolicySet,
     proposals: BTreeMap<ProposalId, Proposal>,
@@ -388,6 +395,7 @@ impl World {
             pending_effects: VecDeque::new(),
             inflight_effects: BTreeMap::new(),
             module_tick_schedule: BTreeMap::new(),
+            module_tick_routing_metrics: ModuleTickRoutingMetrics::default(),
             capabilities: BTreeMap::new(),
             policies: PolicySet::default(),
             proposals: BTreeMap::new(),

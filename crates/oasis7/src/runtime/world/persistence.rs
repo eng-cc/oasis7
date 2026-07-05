@@ -16,6 +16,7 @@ use super::super::{
     segment_journal, segment_snapshot,
 };
 use super::World;
+use super::module_tick_runtime::ModuleTickRoutingMetrics;
 #[path = "persistence_support.rs"]
 mod persistence_support;
 use self::persistence_support::{
@@ -664,6 +665,7 @@ impl World {
             pending_effects: self.pending_effects.iter().cloned().collect(),
             inflight_effects: self.inflight_effects.clone(),
             module_tick_schedule: self.module_tick_schedule.clone(),
+            module_tick_routing_metrics: self.module_tick_routing_metrics.deterministic_snapshot(),
             capabilities: self.capabilities.clone(),
             policies: self.policies.clone(),
             proposals: self.proposals.clone(),
@@ -920,6 +922,9 @@ impl World {
         world.pending_effects = VecDeque::from(snapshot.pending_effects);
         world.inflight_effects = snapshot.inflight_effects;
         world.module_tick_schedule = snapshot.module_tick_schedule;
+        world.module_tick_routing_metrics = ModuleTickRoutingMetrics::from_deterministic_snapshot(
+            snapshot.module_tick_routing_metrics,
+        );
         world.capabilities = snapshot.capabilities;
         world.policies = snapshot.policies;
         world.proposals = snapshot.proposals;
