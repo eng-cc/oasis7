@@ -24,7 +24,7 @@
 ## 首批已补齐专题
 - legacy doc migration collaboration (retired/deleted; excluded from ROUND-008 PRD/Project/Design backfill totals; history retained in round logs and git history)
 - documentation-governance-engineering closure (retired/deleted)
-- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23`
+- oversized Rust file splitting round3 triplet (retired/deleted; current Rust 1200 governance lives in `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`)
 - engineering full-PRD review triplet (retired; excluded from current PRD/Project/Design backfill totals; historical evidence remains in round review logs)
 
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26`

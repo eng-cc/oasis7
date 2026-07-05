@@ -43,7 +43,6 @@ records:
     topic: stage.current
     summary: "current stage remains internal_playable_alpha_late, but software_safe Step x1 timeout keeps the weakest non-3D control path below the capability floor and blocks gate hardening"
     source_refs:
-      - doc/playability_test_result/card_2026_04_03_14_59_24.md
       - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
     tags:
       - stage

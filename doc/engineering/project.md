@@ -8,6 +8,8 @@
 
 - [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
 
+- [x] engineering-doc-legacy-semantics-governance (PRD-ENGINEERING-021/025/PRD-ENGINEERING-R1200) [test_tier_required]: 删除已被 Rust 1200 根治治理取代且仍暴露 `doc/devlog` / 一次性 round3 / `include!` 分段旧语义的 oversized Rust file splitting 三件套，将当前入口收敛到 `rust-1200-line-root-cause-governance-2026-03-29`、core review logs、git history 与 GitHub task issue evidence comments。 Trace: #1975 (task_1e15b6bcc6154e949c3a3338eb2d8194)
+
 - [x] pm-rebase-conflict-helper-retired-signal-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收敛 scripts PRD/project 与 GHPR 专题三件套中残留的 `.pm/inbox/signals.jsonl` 自动修复旧语义，将当前 `.pm` rebase conflict helper 口径统一为只读分类：retired signal inbox 只提示删除退休文件或人工归档，generated view 只提示保留 main 删除并重建，canonical object 冲突人工处理。 Trace: #1920 (task_25e251bae8eb4ccb8c375237eede524f)
 
 - [x] core-doc-readme-public-entry-sync-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除已完成且继续占据 core 活跃索引的 2026-03 docs hub / 公共阅读路径同步三件套，将当前 docs hub 语义收敛到 `doc/README.md`、`doc/core/project.md`、doc structure standard 与 GitHub task issue evidence comments。 Trace: #1920 (task_25e251bae8eb4ccb8c375237eede524f)
@@ -490,8 +492,7 @@
 - `testing-manual.md`
 - `.agents/skills/prd/check.md`
 - `doc/engineering/*.md`
-- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
-- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
+- historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs 与 git history，当前规则入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`）
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
