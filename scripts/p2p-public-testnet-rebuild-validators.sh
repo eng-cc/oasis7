@@ -358,9 +358,49 @@ poll_status_with_check() {
   return 1
 }
 
+repair_rebuild_log_value() {
+  local log_path=$1
+  local key=$2
+  awk -F= -v key="$key" '$1 == key { value=$2 } END { if (value != "") print value }' "$log_path"
+}
+
+validate_repair_rebuild_log() {
+  local log_path=$1
+  local label=$2
+  local world_time
+  local journal_events
+  local tick_consensus_records
+  world_time=$(repair_rebuild_log_value "$log_path" "world_time")
+  journal_events=$(repair_rebuild_log_value "$log_path" "journal_events")
+  tick_consensus_records=$(repair_rebuild_log_value "$log_path" "tick_consensus_records")
+
+  [[ "$world_time" == "0" ]] || die "$label repair rebuild produced world_time=$world_time, expected 0"
+  [[ "$journal_events" == "0" ]] || die "$label repair rebuild produced journal_events=$journal_events, expected 0"
+  [[ "$tick_consensus_records" == "0" ]] || die "$label repair rebuild produced tick_consensus_records=$tick_consensus_records, expected 0"
+}
+
+run_repair_rebuild_host() {
+  local host=$1
+  local control_path=$2
+  local label=$3
+  local repair_log="$OUT_DIR/$label-repair-rebuild.log"
+  local remote_log="$STACK_ROOT/config/doc/testing/evidence/public-testnet-repair-rebuild-$label.log"
+
+  if ! ssh_run "$host" "$control_path" \
+    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis" \
+    >"$repair_log" 2>&1; then
+    cat "$repair_log" >&2 || true
+    die "$label repair rebuild failed"
+  fi
+  cat "$repair_log" >&2
+  validate_repair_rebuild_log "$repair_log" "$label"
+  ssh_run "$host" "$control_path" "cat > '$remote_log'" <"$repair_log"
+}
+
 stage_host() {
   local host=$1
   local control_path=$2
+  local label=$3
   ssh_run "$host" "$control_path" \
     "mkdir -p '$STACK_ROOT/config/doc/testing/evidence' '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
 
@@ -389,8 +429,7 @@ stage_host() {
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"
   ssh_run "$host" "$control_path" \
     "find '$STACK_ROOT/staged-world' \\( -name '._*' -o -name '.DS_Store' \\) -delete"
-  ssh_run "$host" "$control_path" \
-    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis"
+  run_repair_rebuild_host "$host" "$control_path" "$label"
   ssh_run "$host" "$control_path" \
     "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
@@ -831,8 +870,8 @@ cleanup_started_hosts() {
   return "$ok"
 }
 
-stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
-stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
+stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
+stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
 
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
@@ -862,6 +901,8 @@ jq -n \
   --arg stack_root "$STACK_ROOT" \
   --arg sequencer_status_url "$SEQUENCER_STATUS_URL" \
   --arg storage_status_url "$STORAGE_STATUS_URL" \
+  --arg sequencer_repair_rebuild_log "$OUT_DIR/sequencer-repair-rebuild.log" \
+  --arg storage_repair_rebuild_log "$OUT_DIR/storage-repair-rebuild.log" \
   --slurpfile sequencer "$OUT_DIR/sequencer-status.json" \
   --slurpfile storage "$OUT_DIR/storage-status.json" \
   '
@@ -871,6 +912,8 @@ jq -n \
       stack_root: $stack_root,
       sequencer_status_url: $sequencer_status_url,
       storage_status_url: $storage_status_url,
+      sequencer_repair_rebuild_log: $sequencer_repair_rebuild_log,
+      storage_repair_rebuild_log: $storage_repair_rebuild_log,
       sequencer_status: $sequencer[0],
       storage_status: $storage[0]
     }

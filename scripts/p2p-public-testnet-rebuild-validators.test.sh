@@ -359,6 +359,23 @@ case "$cmd" in
     mkdir -p "$root$output_dir"
     printf '{"state":{"agents":{"starter-agent-0":{}}}}\n' >"$root$output_dir/snapshot.json"
     printf '[]\n' >"$root$output_dir/journal.json"
+    if [[ "${TEST_REPAIR_WORLD_TIME_HOST:-}" == "$host" ]]; then
+      printf 'generated_world_dir=%s/staged-world\n' "$stack_root"
+      printf 'output_world_dir=%s\n' "$output_dir"
+      printf 'journal_events=0\n'
+      printf 'tick_consensus_records=0\n'
+      printf 'world_time=2\n'
+      printf 'agent_count=1\n'
+      printf 'location_count=7\n'
+    else
+      printf 'generated_world_dir=%s/staged-world\n' "$stack_root"
+      printf 'output_world_dir=%s\n' "$output_dir"
+      printf 'journal_events=0\n'
+      printf 'tick_consensus_records=0\n'
+      printf 'world_time=0\n'
+      printf 'agent_count=1\n'
+      printf 'location_count=7\n'
+    fi
     printf 'repair\t%s\t%s\n' "$host" "$cmd" >>"$TEST_EVENT_LOG"
     test -n "$stack_root"
     ;;
@@ -612,8 +629,26 @@ jq -e '
 ' <<<"$json" >/dev/null
 
 test -f "$TMP_DIR/out/rebuild-summary.json"
+test -f "$TMP_DIR/out/sequencer-repair-rebuild.log"
+test -f "$TMP_DIR/out/storage-repair-rebuild.log"
+jq -e '
+  .sequencer_repair_rebuild_log
+  | endswith("sequencer-repair-rebuild.log")
+' "$TMP_DIR/out/rebuild-summary.json" >/dev/null
+jq -e '
+  .storage_repair_rebuild_log
+  | endswith("storage-repair-rebuild.log")
+' "$TMP_DIR/out/rebuild-summary.json" >/dev/null
+grep -Fx 'world_time=0' "$TMP_DIR/out/sequencer-repair-rebuild.log" >/dev/null
+grep -Fx 'journal_events=0' "$TMP_DIR/out/sequencer-repair-rebuild.log" >/dev/null
+grep -Fx 'tick_consensus_records=0' "$TMP_DIR/out/sequencer-repair-rebuild.log" >/dev/null
+grep -Fx 'world_time=0' "$TMP_DIR/out/storage-repair-rebuild.log" >/dev/null
 test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json"
+test -f "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/doc/testing/evidence/public-testnet-repair-rebuild-sequencer.log"
+test -f "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/doc/testing/evidence/public-testnet-repair-rebuild-storage.log"
+grep -Fx 'world_time=0' \
+  "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/doc/testing/evidence/public-testnet-repair-rebuild-sequencer.log" >/dev/null
 jq -e '.state.governance_finality_registry.slot_id == "governance.finality.v1"' \
   "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/execution-world/snapshot.json" >/dev/null
 jq -e '.state.governance_finality_registry.slot_id == "governance.finality.v1"' \
@@ -661,6 +696,35 @@ test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/runtime-root
 test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/replication-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/replication-root"
+
+start_count_before=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
+if TEST_REPAIR_WORLD_TIME_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-repair-time-drift" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 \
+  >"$TMP_DIR/out-repair-time-drift.stdout" 2>"$TMP_DIR/out-repair-time-drift.stderr"; then
+  echo "expected rebuild to fail when repair rebuild reports world_time=2" >&2
+  exit 1
+fi
+grep -Fx 'world_time=2' "$TMP_DIR/out-repair-time-drift/sequencer-repair-rebuild.log" >/dev/null
+grep -q 'sequencer repair rebuild produced world_time=2, expected 0' \
+  "$TMP_DIR/out-repair-time-drift.stderr"
+start_count_after=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
+if [[ "$start_count_before" != "$start_count_after" ]]; then
+  echo "repair time drift failure must stop before starting services" >&2
+  exit 1
+fi
 
 cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
 {
