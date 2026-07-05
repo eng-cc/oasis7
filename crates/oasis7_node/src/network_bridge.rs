@@ -19,7 +19,12 @@ use crate::gossip_udp::{
 };
 use crate::network_bridge_gap_sync_budget::{
     gap_sync_fetch_commit_probe_route_budget, gap_sync_fetch_commit_route_budget,
-    gap_sync_fetch_commit_route_budget_exhausted, short_node_error, summarize_fetch_commit_routes,
+    gap_sync_fetch_commit_route_budget_exhausted, short_node_error,
+};
+use crate::network_bridge_gap_sync_observability::{
+    CachedFetchCommitSuccess, FetchCommitSuccessCacheKey, GapSyncFetchCommitResponse,
+    GapSyncFetchCommitRouteKind, GapSyncFetchCommitRouteObserver, fetch_commit_success_cache_key,
+    split_provider_route_timeout_ms, summarize_gap_sync_fetch_commit_routes,
 };
 pub(crate) use crate::network_error_classification::{
     network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
@@ -35,7 +40,10 @@ use crate::replication::{
     GossipReplicationMessage, REPLICATION_FETCH_COMMIT_PROTOCOL, REPLICATION_GET_HEAD_PROTOCOL,
     load_blob_from_root,
 };
-use crate::{NodeError, NodeExecutionCheckpointDescriptor, NodeNetworkPolicy};
+use crate::{
+    NodeError, NodeExecutionCheckpointDescriptor, NodeNetworkPolicy,
+    NodeReplicationGapSyncRouteSnapshot,
+};
 
 pub(crate) const DEFAULT_REPLICATION_TOPIC_PREFIX: &str = "aw";
 pub(crate) const DEFAULT_CONSENSUS_PROPOSAL_TOPIC_SUFFIX: &str = "consensus.proposal";
@@ -53,25 +61,6 @@ const GAP_SYNC_FETCH_COMMIT_MIN_PROVIDER_ROUTE_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_REQUEST_TIMEOUT_MS: u64 = 1_500;
 const GAP_SYNC_FETCH_HEAD_RETRY_BUDGET_MS: u64 = 3_000;
 const GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL: usize = 2;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct FetchCommitSuccessCacheKey {
-    world_id: String,
-    height: u64,
-    requester_public_key_hex: Option<String>,
-}
-
-#[derive(Debug, Clone)]
-struct CachedFetchCommitSuccess {
-    response: FetchCommitResponse,
-    cached_at: Instant,
-    valid_until: Instant,
-}
-
-pub(crate) struct GapSyncFetchCommitResponse {
-    pub response: FetchCommitResponse,
-    pub repair_summary: String,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GapSyncFetchCommitRetryPolicy {
@@ -559,11 +548,13 @@ impl ReplicationNetworkEndpoint {
             return Ok(GapSyncFetchCommitResponse {
                 response,
                 repair_summary: "cache=hit".to_string(),
+                route_snapshot: NodeReplicationGapSyncRouteSnapshot::default(),
             });
         }
         let mut last_err = None;
         let mut route_events = Vec::new();
         let route_sweep_started_at = Instant::now();
+        let mut route_observer = GapSyncFetchCommitRouteObserver::new(route_sweep_started_at);
         let route_budget = || match retry_policy {
             GapSyncFetchCommitRetryPolicy::FullGapSync => {
                 gap_sync_fetch_commit_route_budget(route_sweep_started_at)
@@ -573,7 +564,9 @@ impl ReplicationNetworkEndpoint {
             }
         };
         let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
-            return Err(gap_sync_fetch_commit_route_budget_exhausted());
+            let err = gap_sync_fetch_commit_route_budget_exhausted();
+            route_observer.observe_budget_exhausted(&err);
+            return Err(err);
         };
         let mut response = match self
             .request_json_budget::<FetchCommitRequest, FetchCommitResponse>(
@@ -583,10 +576,12 @@ impl ReplicationNetworkEndpoint {
                 retry_budget_ms,
             ) {
             Ok(response) => {
+                route_observer.observe_found(GapSyncFetchCommitRouteKind::Generic, response.found);
                 route_events.push(format!("generic:found={}", response.found));
                 response
             }
             Err(err) => {
+                route_observer.observe_error(GapSyncFetchCommitRouteKind::Generic, &err);
                 route_events.push(format!("generic:error={}", short_node_error(&err)));
                 last_err = Some(err);
                 FetchCommitResponse {
@@ -605,8 +600,10 @@ impl ReplicationNetworkEndpoint {
             for (peer_index, peer_id) in peer_ids.into_iter().enumerate() {
                 let provider_route = [peer_id.clone()];
                 let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
+                    let err = gap_sync_fetch_commit_route_budget_exhausted();
+                    route_observer.observe_budget_exhausted(&err);
                     if last_err.is_none() {
-                        last_err = Some(gap_sync_fetch_commit_route_budget_exhausted());
+                        last_err = Some(err);
                     }
                     break;
                 };
@@ -626,6 +623,8 @@ impl ReplicationNetworkEndpoint {
                         retry_budget_ms,
                     ) {
                     Ok(candidate) => {
+                        route_observer
+                            .observe_found(GapSyncFetchCommitRouteKind::Provider, candidate.found);
                         route_events.push(format!("peer:{}:found={}", peer_id, candidate.found));
                         if candidate.found {
                             response = candidate;
@@ -636,6 +635,7 @@ impl ReplicationNetworkEndpoint {
                         last_err = None;
                     }
                     Err(err) => {
+                        route_observer.observe_error(GapSyncFetchCommitRouteKind::Provider, &err);
                         route_events.push(format!(
                             "peer:{}:error={}",
                             peer_id,
@@ -658,8 +658,10 @@ impl ReplicationNetworkEndpoint {
                     break;
                 }
                 let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
+                    let err = gap_sync_fetch_commit_route_budget_exhausted();
+                    route_observer.observe_budget_exhausted(&err);
                     if last_err.is_none() {
-                        last_err = Some(gap_sync_fetch_commit_route_budget_exhausted());
+                        last_err = Some(err);
                     }
                     break;
                 };
@@ -670,11 +672,17 @@ impl ReplicationNetworkEndpoint {
                     retry_budget_ms,
                 ) {
                     Ok(candidate) => {
+                        route_observer.observe_found(
+                            GapSyncFetchCommitRouteKind::GenericRetry,
+                            candidate.found,
+                        );
                         route_events.push(format!("generic_retry:found={}", candidate.found));
                         response = candidate;
                         last_err = None;
                     }
                     Err(err) => {
+                        route_observer
+                            .observe_error(GapSyncFetchCommitRouteKind::GenericRetry, &err);
                         route_events
                             .push(format!("generic_retry:error={}", short_node_error(&err)));
                         last_err = Some(err);
@@ -683,9 +691,14 @@ impl ReplicationNetworkEndpoint {
             }
         }
         if response.found || last_err.is_none() {
+            let route_snapshot = route_observer.finish();
             return Ok(GapSyncFetchCommitResponse {
                 response,
-                repair_summary: summarize_fetch_commit_routes(&route_events),
+                repair_summary: summarize_gap_sync_fetch_commit_routes(
+                    &route_events,
+                    &route_snapshot,
+                ),
+                route_snapshot,
             });
         }
         Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
@@ -915,14 +928,6 @@ impl ReplicationNetworkEndpoint {
         cache
             .get(&fetch_commit_success_cache_key(request))
             .map(|entry| entry.response.clone())
-    }
-}
-
-fn fetch_commit_success_cache_key(request: &FetchCommitRequest) -> FetchCommitSuccessCacheKey {
-    FetchCommitSuccessCacheKey {
-        world_id: request.world_id.clone(),
-        height: request.height,
-        requester_public_key_hex: request.requester_public_key_hex.clone(),
     }
 }
 
@@ -1181,14 +1186,4 @@ fn replication_network_error_detail(err: &WorldError) -> &str {
         WorldError::Io(message) | WorldError::Serde(message) => message.as_str(),
         WorldError::SignatureKeyInvalid => "invalid signature key",
     }
-}
-
-fn split_provider_route_timeout_ms(
-    retry_budget_ms: u64,
-    remaining_provider_routes: usize,
-    min_timeout_ms: u64,
-) -> u64 {
-    let remaining_provider_routes = remaining_provider_routes.max(1) as u64;
-    let divided = retry_budget_ms / remaining_provider_routes;
-    divided.max(min_timeout_ms).min(retry_budget_ms)
 }

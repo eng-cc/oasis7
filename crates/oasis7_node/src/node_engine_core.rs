@@ -127,6 +127,7 @@ impl PosNodeEngine {
             last_replication_gap_sync_blocked_at_ms: None,
             last_replication_gap_sync_repair_attempt_height: None,
             last_replication_gap_sync_repair_attempt_summary: None,
+            last_replication_gap_sync_repair_attempt_route_snapshot: None,
             last_replication_successor_probe_height: None,
             last_replication_successor_probe_at_ms: None,
             last_replication_successor_probe_hold: None,
@@ -723,6 +724,9 @@ impl PosNodeEngine {
                 .last_replication_gap_sync_repair_attempt_height,
             replication_gap_sync_repair_attempt_summary: self
                 .last_replication_gap_sync_repair_attempt_summary
+                .clone(),
+            replication_gap_sync_repair_attempt_route_snapshot: self
+                .last_replication_gap_sync_repair_attempt_route_snapshot
                 .clone(),
             storage_challenge_network_degraded_height: self
                 .storage_challenge_network_degraded_height,

@@ -123,6 +123,31 @@ fn runtime_network_replication_gap_sync_not_found_is_non_fatal() {
             .unwrap_or(false),
         "not found gap sync must expose a recoverability reason"
     );
+    let route_snapshot = snapshot_b
+        .consensus
+        .replication_gap_sync_repair_attempt_route_snapshot
+        .as_ref()
+        .expect("gap-sync not-found should expose route observability snapshot");
+    assert_eq!(route_snapshot.generic_route_count, 1);
+    assert_eq!(route_snapshot.provider_route_count, 0);
+    assert_eq!(route_snapshot.generic_retry_route_count, 3);
+    assert_eq!(route_snapshot.route_attempt_count, 4);
+    assert_eq!(route_snapshot.not_found_route_count, 4);
+    assert_eq!(route_snapshot.synced_route_count, 0);
+    assert_eq!(route_snapshot.error_route_count, 0);
+    assert_eq!(route_snapshot.budget_exhausted_count, 0);
+    assert!(
+        snapshot_b
+            .consensus
+            .replication_gap_sync_repair_attempt_summary
+            .as_deref()
+            .map(|summary| summary.contains("routes_attempted=4"))
+            .unwrap_or(false),
+        "gap-sync repair summary should include route counter fields, got {:?}",
+        snapshot_b
+            .consensus
+            .replication_gap_sync_repair_attempt_summary
+    );
 
     runtime_b.stop().expect("stop b");
     let _ = fs::remove_dir_all(&dir_a);

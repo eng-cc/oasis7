@@ -253,6 +253,31 @@ fn gap_sync_fetch_commit_provider_sweep_preserves_budget_for_next_provider() {
         response.response.found,
         "second provider should recover the missing commit"
     );
+    assert_eq!(response.route_snapshot.generic_route_count, 1);
+    assert_eq!(response.route_snapshot.provider_route_count, 2);
+    assert_eq!(response.route_snapshot.generic_retry_route_count, 0);
+    assert_eq!(response.route_snapshot.route_attempt_count, 3);
+    assert_eq!(response.route_snapshot.synced_route_count, 1);
+    assert_eq!(response.route_snapshot.not_found_route_count, 1);
+    assert_eq!(response.route_snapshot.error_route_count, 1);
+    assert_eq!(response.route_snapshot.budget_exhausted_count, 0);
+    assert!(
+        response
+            .route_snapshot
+            .last_slow_route_reason
+            .as_deref()
+            .map(|reason| reason.contains("timeout"))
+            .unwrap_or(false),
+        "provider timeout should remain visible as last route issue: {:?}",
+        response.route_snapshot
+    );
+    assert!(
+        response
+            .repair_summary
+            .contains("routes_attempted=3;routes_synced=1;routes_not_found=1;routes_error=1"),
+        "repair summary should include structured route counters: {}",
+        response.repair_summary
+    );
 
     let captures = budgets.lock().expect("lock budget captures").clone();
     assert!(

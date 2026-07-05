@@ -313,7 +313,6 @@ def counter_resets(prev: dict, curr: dict) -> list[str]:
 
     pairs = [
         ("wasm.observed_since_unix_ms", prev["wasm"].get("observed_since_unix_ms"), curr["wasm"].get("observed_since_unix_ms")),
-        ("build.observed_since_unix_ms", prev["build"].get("observed_since_unix_ms"), curr["build"].get("observed_since_unix_ms")),
         ("executor.observed_since_unix_ms", prev["executor"].get("observed_since_unix_ms"), curr["executor"].get("observed_since_unix_ms")),
         ("router.observed_since_unix_ms", prev["router"].get("observed_since_unix_ms"), curr["router"].get("observed_since_unix_ms")),
     ]

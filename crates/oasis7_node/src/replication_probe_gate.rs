@@ -1,4 +1,5 @@
 use super::*;
+use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 
 const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
 const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
@@ -48,7 +49,9 @@ impl PosNodeEngine {
             replication_runtime,
             probe_height,
         ) {
-            Ok(GapSyncHeightOutcome::Synced { message, payload }) => {
+            Ok(GapSyncHeightOutcome::Synced {
+                message, payload, ..
+            }) => {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
                 self.last_replication_successor_probe_hold = None;

@@ -56,6 +56,42 @@ assert summary["window"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
 PY
 }
 
+check_build_timestamp_churn_keeps_runtime_window() {
+  local sample_dir="$tmp_root/build-timestamp-churn"
+  local out_dir="$tmp_root/build-timestamp-churn-out"
+  mkdir -p "$sample_dir"
+  cp fixtures/wasm_metrics_monitor/no_reset/001.json "$sample_dir/001.json"
+  python3 - "$sample_dir/002.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path("fixtures/wasm_metrics_monitor/no_reset/002.json").read_text())
+payload["wasm"]["build"]["observed_since_unix_ms"] = 1700000003000
+Path(sys.argv[1]).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+PY
+
+  bash ./scripts/oasis7-node-wasm-metrics-monitor.sh \
+    --status-sample-dir "$sample_dir" \
+    --node-label test-node \
+    --out-dir "$out_dir"
+
+  python3 - "$out_dir/latest_summary.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+summary = json.loads(Path(sys.argv[1]).read_text())
+assert summary["window"]["available"] is True
+assert summary["window"]["window_reset_detected"] is False
+assert summary["sample_overview"]["reset_event_count"] == 0
+assert summary["window"]["window_sample_count"] == 2
+assert summary["window"]["executor"]["calls_total_delta"] == 5
+assert summary["window"]["executor"]["compile_ms_total_delta"] == 40
+assert summary["window"]["router"]["match_calls_total_delta"] == 5
+PY
+}
+
 check_single_sample_compat() {
   local out_dir="$tmp_root/single"
   bash ./scripts/oasis7-node-wasm-metrics-monitor.sh \
@@ -143,6 +179,7 @@ PY
 
 check_no_reset_window
 check_reset_window
+check_build_timestamp_churn_keeps_runtime_window
 check_single_sample_compat
 check_missing_timestamp_is_rejected
 check_unavailable_metrics_disable_window
