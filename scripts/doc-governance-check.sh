@@ -241,45 +241,44 @@ is_topic_project_doc() {
   [[ ! "$project_doc" =~ ^doc/[^/]+/(prd\.project|project)\.md$ ]]
 }
 
-is_reference_exempt_doc() {
-  local doc_file="$1"
-  local exempt
-  for exempt in "${REFERENCE_EXISTENCE_EXEMPT_DOCS[@]}"; do
-    if [[ "$doc_file" == "$exempt" ]]; then
-      return 0
-    fi
-  done
-  return 1
+check_doc_path_references_batch() {
+  local exempt_tmp
+  local status=0
+  exempt_tmp=$(mktemp)
+  printf '%s\n' "${REFERENCE_EXISTENCE_EXEMPT_DOCS[@]}" > "$exempt_tmp"
+
+  python3 - "$exempt_tmp" "${all_doc_files[@]}" <<'PY' || status=$?
+from __future__ import annotations
+
+from pathlib import Path
+import re
+import sys
+
+
+exempt_path = Path(sys.argv[1])
+doc_files = sys.argv[2:]
+exempt_docs = {
+    line.strip()
+    for line in exempt_path.read_text(encoding="utf-8").splitlines()
+    if line.strip()
 }
+reference_re = re.compile(r"doc/[A-Za-z0-9_./-]+\.md")
+skip_markers = ("*", "?", "[", "]", "{", "}", "YYYY-MM-DD")
 
-extract_doc_markdown_references() {
-  local file="$1"
-  if command -v rg >/dev/null 2>&1; then
-    rg -o --no-filename 'doc/[A-Za-z0-9_./-]+\.md' "$file" | sort -u
-    return
-  fi
-  grep -oE 'doc/[A-Za-z0-9_./-]+\.md' "$file" | sort -u
-}
-
-check_doc_path_references() {
-  local file="$1"
-  local ref_path
-
-  if is_reference_exempt_doc "$file"; then
-    return
-  fi
-
-  while IFS= read -r ref_path; do
-    [[ -z "$ref_path" ]] && continue
-    case "$ref_path" in
-      *'*'*|*'?'*|*'['*|*']'*|*'{'*|*'}'*|*'YYYY-MM-DD'*)
+for file in doc_files:
+    if file in exempt_docs:
         continue
-        ;;
-    esac
-    if [[ ! -f "$ref_path" ]]; then
-      fail "$file references missing markdown path: $ref_path"
-    fi
-  done < <(extract_doc_markdown_references "$file")
+    path = Path(file)
+    text = path.read_text(encoding="utf-8")
+    for ref_path in sorted(set(reference_re.findall(text))):
+        if any(marker in ref_path for marker in skip_markers):
+            continue
+        if not Path(ref_path).is_file():
+            print(f"{file}\t{ref_path}")
+PY
+
+  rm -f "$exempt_tmp"
+  return "$status"
 }
 
 is_canonical_role_name() {
@@ -503,9 +502,17 @@ for project_doc in "${project_docs[@]}"; do
 done
 
 # 4) markdown doc path references must exist (except explicit exemptions)
-for file in "${all_doc_files[@]}"; do
-  check_doc_path_references "$file"
-done
+doc_reference_scan_tmp=$(mktemp)
+if ! check_doc_path_references_batch > "$doc_reference_scan_tmp"; then
+  rm -f "$doc_reference_scan_tmp"
+  fail "markdown doc path reference scan failed"
+else
+while IFS=$'\t' read -r file ref_path; do
+  [[ -n "${file:-}" && -n "${ref_path:-}" ]] || continue
+  fail "$file references missing markdown path: $ref_path"
+done < "$doc_reference_scan_tmp"
+  rm -f "$doc_reference_scan_tmp"
+fi
 
 doc_root_actual_tmp=$(mktemp)
 module_root_actual_tmp=$(mktemp)
