@@ -2,6 +2,7 @@ use oasis7::simulator::{
     WorldConfig, WorldInitConfig, WorldInitReport, WorldModel, WorldScenario, build_world_model,
 };
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -112,14 +113,14 @@ pub fn run_loaded_scenario(
         });
     }
 
-    let config = scenario.config.clone().unwrap_or_default();
-    let mut init = if let Some(init) = scenario.init.clone() {
-        init
+    let config = scenario.config.as_ref().cloned().unwrap_or_default();
+    let mut init = if let Some(init) = scenario.init.as_ref() {
+        Cow::Borrowed(init)
     } else if let Some(name) = scenario.scenario.as_ref() {
         let parsed = WorldScenario::parse(name).ok_or_else(|| ScenarioError::InvalidScenario {
             message: format!("unknown scenario: {name}"),
         })?;
-        WorldInitConfig::from_scenario(parsed, &config)
+        Cow::Owned(WorldInitConfig::from_scenario(parsed, &config))
     } else {
         return Err(ScenarioError::InvalidScenario {
             message: "scenario or init must be provided".to_string(),
@@ -127,12 +128,13 @@ pub fn run_loaded_scenario(
     };
 
     if let Some(seed) = scenario.seed {
-        init.seed = seed;
+        init.to_mut().seed = seed;
     }
 
-    let (model, report) = build_world_model(&config, &init).map_err(|err| ScenarioError::Init {
-        message: format!("{err:?}"),
-    })?;
+    let (model, report) =
+        build_world_model(&config, init.as_ref()).map_err(|err| ScenarioError::Init {
+            message: format!("{err:?}"),
+        })?;
 
     let failures = evaluate_expectations(&scenario.expect, &model, &report);
     Ok(ScenarioOutcome {
@@ -332,6 +334,34 @@ mod tests {
         let outcome = run_loaded_scenario(&scenario, "memory").expect("run scenario");
         assert!(!outcome.passed);
         assert_eq!(outcome.failures.len(), 1);
+    }
+
+    #[test]
+    fn explicit_init_passes_without_requiring_seed_override() {
+        let config = WorldConfig::default();
+        let scenario_name = WorldScenario::parse("minimal").expect("minimal scenario");
+        let init = WorldInitConfig::from_scenario(scenario_name, &config);
+        let scenario = ScenarioFile {
+            version: 1,
+            name: "explicit-init".to_string(),
+            scenario: None,
+            seed: None,
+            init: Some(init),
+            config: Some(config),
+            expect: Expectations {
+                agents: Some(1),
+                locations: Some(1),
+                require_locations: vec!["origin".to_string()],
+                require_agents: vec!["agent-0".to_string()],
+                require_power_plants: Vec::new(),
+                require_power_storages: Vec::new(),
+                expect_asteroid_fragment: Some(false),
+                agent_locations: BTreeMap::new(),
+            },
+        };
+
+        let outcome = run_loaded_scenario(&scenario, "memory").expect("run explicit init scenario");
+        assert!(outcome.passed, "{:#?}", outcome.failures);
     }
 
     #[test]
