@@ -89,6 +89,33 @@ You MUST explicitly cover:
 - **Testability**: acceptance criteria, done definition, validation method, regression impact scope, and PRD-ID -> Task -> Test traceability.
 - **Decision Record**: chosen approach, rejected alternatives, and evidence/rationale.
 
+### Game Design Bible Completeness (Oasis7)
+
+When the PRD work targets `doc/game` or gameplay topics and the goal is to
+express all game details, use
+`doc/engineering/workflow/source-of-truth.md#1221-detailed-game-design-documentation-method`.
+
+Do not turn the root PRD into a catch-all manual. Keep root `doc/game/prd.md`
+as the active gameplay baseline and route details into topic triplets.
+
+Each detailed gameplay PRD or promoted topic must cover:
+
+- **Player Promise**: what experience the player is being promised, and which
+  release or preview claim boundary it may affect.
+- **Player Verbs**: what the player can do, what the system may refuse or
+  redirect, and what feedback is required.
+- **Loops and Timing**: micro-loop, first 10/30 minutes, first capability,
+  mid-loop, and long-loop expectations where relevant.
+- **State and Economy Rules**: resources, costs, ownership, cooldowns, upkeep,
+  failure states, recovery paths, and anti-abuse / anti-grind constraints.
+- **Feedback Surfaces**: which viewer/API/agent/runtime surfaces must show
+  acceptance, progress, blockers, consequences, next steps, and replay/resume
+  anchors.
+- **Balance Risks**: exploit paths, dominance risks, forced dependency risks,
+  world-activity-only false positives, and player-leverage checks.
+- **Validation Matrix**: PRD-GAME id, owner role, required/full evidence tier,
+  sample scenario, acceptance signal, and what remains unproven.
+
 ### Document Boundary (PRD vs Project vs Devlog)
 
 Use the following split and avoid duplicate definitions:
@@ -103,6 +130,9 @@ Guardrails:
 - `Critical User Flows` describe system/user/operator runtime behavior, not "rewrite/migrate docs" steps.
 - `Acceptance Criteria` describe verifiable outcomes (behavior/invariants/metrics/tests), not file existence.
 - `Roadmap/Milestones` describe shipped capability phases (MVP/v1.1/v2.0), not daily to-do updates.
+- Detailed game design belongs in topic PRD/design/project triplets and indexed
+  supplements. Root docs should route and summarize current truth, not absorb
+  all topic matrices.
 
 Quick contrast:
 - Bad: `Critical User Flows: read old doc -> rewrite -> update project doc -> verify commit`
