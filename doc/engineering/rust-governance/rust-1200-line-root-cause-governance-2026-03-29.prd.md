@@ -79,8 +79,7 @@
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/README.md`
-  - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
-  - `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
+  - historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs 与 git history，当前规则入口为本专题）
   - `scripts/ci-tests.sh`
   - `scripts/doc-governance-check.sh`
   - `testing-manual.md`

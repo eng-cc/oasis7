@@ -34,8 +34,8 @@
 - legacy doc migration collaboration project (retired/deleted)
 - documentation-governance-engineering closure PRD (retired/deleted)
 - documentation-governance-engineering closure project (retired/deleted)
-- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md`
-- `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md`
+- oversized Rust file splitting round3 PRD (retired/deleted; current Rust 1200 governance lives in `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`)
+- oversized Rust file splitting round3 project (retired/deleted; historical evidence remains in this round log and git history)
 - historical core PRD review checklist snapshot（后续已删除）
 - historical engineering PRD review checklist snapshot（后续已删除）
 - historical game PRD review checklist snapshot（后续已删除）

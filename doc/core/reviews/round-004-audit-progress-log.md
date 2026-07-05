@@ -214,8 +214,8 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | legacy doc migration collaboration project (retired/deleted) | pass | - | 当时审查的旧协作 project 与后续 closure 记录均已退役删除；本行仅保留历史审读证据。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | documentation-governance-engineering closure PRD (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 2026-02 closure 三件套后续已退役删除。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | documentation-governance-engineering closure project (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 2026-02 closure 三件套后续已退役删除。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
-| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/rust-governance/oversized-rust-file-splitting-2026-02-23.project.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | oversized Rust file splitting round3 PRD (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 round3 三件套后续已退役删除，当前 Rust 1200 治理入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`。 |
+| 2026-03-06 11:48:55 +0800 | Codex-G4-001 | oversized Rust file splitting round3 project (retired/deleted) | pass | - | 当时结构与口径未发现需立即整改的 D4 高中风险问题；该 round3 三件套后续已退役删除，本行仅保留历史审读证据。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical core PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical engineering PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | historical game PRD review checklist snapshot（后续已删除） | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |

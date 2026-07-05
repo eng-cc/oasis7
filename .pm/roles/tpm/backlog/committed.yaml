@@ -1,17 +1,4 @@
 version: 1
 role: tpm
 status: committed
-tasks:
-  - task_uid: task_b2d9ecebdfa241e389069ddf2da9f843
-    title: "Converge legacy governance docs"
-    module: engineering
-    priority: P2
-    source_signal: ""
-    related_prd: []
-    acceptance:
-      - "Repository health slice identifies the next governance point focused on legacy document semantics and obsolete documentation."
-      - "Obsolete or stale governance documents are removed or updated with source-of-truth-aligned language."
-      - "Relevant governance checks pass or any unrelated failures are documented."
-    handoff_to: []
-    status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/1879
+tasks: []
