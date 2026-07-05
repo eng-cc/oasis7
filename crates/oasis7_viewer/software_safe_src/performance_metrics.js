@@ -45,20 +45,6 @@ function round(value, digits = 2) {
   return Math.round(value * multiplier) / multiplier;
 }
 
-function percentile(values, quantile) {
-  if (!Array.isArray(values) || values.length === 0) {
-    return null;
-  }
-  const sorted = [...values]
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value))
-    .sort((left, right) => left - right);
-  if (sorted.length === 0) {
-    return null;
-  }
-  return percentileSorted(sorted, quantile);
-}
-
 function percentileSorted(sortedValues, quantile) {
   if (!Array.isArray(sortedValues) || sortedValues.length === 0) {
     return null;
@@ -169,8 +155,16 @@ export function summarizeViewerPerformance({
     ? (frameSamples * 1000) / sampleWindowMs
     : null;
   const fpsFromMean = meanFrameMs && meanFrameMs > 0 ? 1000 / meanFrameMs : null;
-  const slowFrames = frames.filter((value) => value > normalizedThresholds.frameBudgetMs).length;
-  const severeFrames = frames.filter((value) => value > normalizedThresholds.severeFrameBudgetMs).length;
+  let slowFrames = 0;
+  let severeFrames = 0;
+  for (const value of frames) {
+    if (value > normalizedThresholds.frameBudgetMs) {
+      slowFrames += 1;
+    }
+    if (value > normalizedThresholds.severeFrameBudgetMs) {
+      severeFrames += 1;
+    }
+  }
   const longTaskTotalMs = longTaskItems.reduce((total, task) => total + task.duration, 0);
 
   const metrics = {
