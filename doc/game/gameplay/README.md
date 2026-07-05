@@ -1,6 +1,6 @@
 # `game/gameplay` 热点子域入口
 
-更新时间: 2026-06-30
+更新时间: 2026-07-05
 
 ## 从这里开始
 - 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
@@ -20,9 +20,9 @@
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-30）:
-  - `doc/game/gameplay/`: 81 份 Markdown
-  - `doc/game/`: 86 份 Markdown
+- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-07-05）:
+  - `doc/game/gameplay/`: 83 份 Markdown
+  - `doc/game/`: 88 份 Markdown
 - 该子域已经达到热点阈值；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
 
 ## 首读主题簇
@@ -50,7 +50,7 @@
   - `gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
   - `gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
   - `gameplay-small-player-progression-lane-2026-05-17.prd.md`
-  - `gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
+  - `gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感
   - 1cm 物理世界和表现层夸张的边界是什么
