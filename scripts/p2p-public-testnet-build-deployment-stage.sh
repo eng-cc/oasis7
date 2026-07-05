@@ -7,8 +7,8 @@ Usage:
   ./scripts/p2p-public-testnet-build-deployment-stage.sh \
     --runtime-build-ref <path> \
     --bootstrap-peers-file <path> \
-    --sequencer-node-keypair <path> \
-    --storage-node-keypair <path> \
+    --sequencer-finality-public-key <hex> \
+    --storage-finality-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
     [--track public_testnet_rehearsal|staging|canary]
@@ -24,8 +24,9 @@ Usage:
 
 Description:
   Build a deployment-only public_testnet stage from the current validator
-  signer truth. This stage preserves the frozen public testnet chain/world
-  identity but regenerates:
+  signer truth. Public key flags must be consensus/finality signer keys, not
+  libp2p/node identity keys. This stage preserves the frozen public testnet
+  chain/world identity but regenerates:
     - validator registry
     - genesis with deployment-only validator-registry ref
     - governed bootstrap world
@@ -64,8 +65,6 @@ cd "$repo_root"
 
 runtime_build_ref=""
 bootstrap_peers_file=""
-sequencer_node_keypair=""
-storage_node_keypair=""
 sequencer_public_key=""
 storage_public_key=""
 extra_validators=()
@@ -90,18 +89,16 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --sequencer-node-keypair)
-      sequencer_node_keypair=${2:-}
-      shift 2
+      die "--sequencer-node-keypair is not supported for deployment signer truth; pass --sequencer-finality-public-key"
       ;;
     --storage-node-keypair)
-      storage_node_keypair=${2:-}
-      shift 2
+      die "--storage-node-keypair is not supported for deployment signer truth; pass --storage-finality-public-key"
       ;;
-    --sequencer-public-key)
+    --sequencer-public-key|--sequencer-finality-public-key|--sequencer-consensus-signer-public-key)
       sequencer_public_key=${2:-}
       shift 2
       ;;
-    --storage-public-key)
+    --storage-public-key|--storage-finality-public-key|--storage-consensus-signer-public-key)
       storage_public_key=${2:-}
       shift 2
       ;;
@@ -163,41 +160,14 @@ require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
 
-extract_public_key_from_toml() {
-  local path=$1
-  python3 - "$path" <<'PY'
-import sys
-import tomllib
-from pathlib import Path
-
-path = Path(sys.argv[1])
-with path.open("rb") as fh:
-    payload = tomllib.load(fh)
-node = payload.get("node", {})
-value = (node.get("public_key") or "").strip()
-if not value:
-    raise SystemExit(f"missing node.public_key in {path}")
-print(value)
-PY
-}
-
 is_hex_32() {
   [[ "$1" =~ ^[0-9a-fA-F]{64}$ ]]
 }
 
-if [[ -n "$sequencer_node_keypair" ]]; then
-  require_file "$sequencer_node_keypair"
-  sequencer_public_key=$(extract_public_key_from_toml "$sequencer_node_keypair")
-fi
-if [[ -n "$storage_node_keypair" ]]; then
-  require_file "$storage_node_keypair"
-  storage_public_key=$(extract_public_key_from_toml "$storage_node_keypair")
-fi
-
-require_non_empty "--sequencer-node-keypair or --sequencer-public-key" "$sequencer_public_key"
-require_non_empty "--storage-node-keypair or --storage-public-key" "$storage_public_key"
-is_hex_32 "$sequencer_public_key" || die "sequencer public key must be 32-byte hex"
-is_hex_32 "$storage_public_key" || die "storage public key must be 32-byte hex"
+require_non_empty "--sequencer-finality-public-key" "$sequencer_public_key"
+require_non_empty "--storage-finality-public-key" "$storage_public_key"
+is_hex_32 "$sequencer_public_key" || die "sequencer finality public key must be 32-byte hex"
+is_hex_32 "$storage_public_key" || die "storage finality public key must be 32-byte hex"
 
 validator_specs=(
   "$sequencer_node_id:$sequencer_public_key:$stake"
@@ -241,7 +211,7 @@ seen_node_ids = set()
 for spec in specs:
     parts = spec.split(":")
     if len(parts) not in (2, 3):
-        raise SystemExit(f"invalid validator spec `{spec}`; expected node_id:public_key[:stake]")
+        raise SystemExit(f"invalid validator spec `{spec}`; expected node_id:finality_public_key[:stake]")
     node_id, public_key = parts[0].strip(), parts[1].strip()
     stake = int(parts[2]) if len(parts) == 3 and parts[2].strip() else 100
     if not node_id:
@@ -249,7 +219,7 @@ for spec in specs:
     if node_id in seen_node_ids:
         raise SystemExit(f"duplicate validator node_id `{node_id}`")
     if len(public_key) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in public_key):
-        raise SystemExit(f"validator public key must be 32-byte hex for node_id={node_id}")
+        raise SystemExit(f"validator finality public key must be 32-byte hex for node_id={node_id}")
     if stake <= 0:
         raise SystemExit(f"validator stake must be > 0 for node_id={node_id}")
     seen_node_ids.add(node_id)

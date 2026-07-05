@@ -30,8 +30,8 @@ assert_fails_containing() {
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
-  --sequencer-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
-  --storage-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
   --extra-validator triad-testnet-fourth-local:f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af:100 \
   --out-dir "$TMP_DIR/stage" >/dev/null
 
@@ -121,7 +121,7 @@ assert_fails_containing \
     --out-dir "$TMP_DIR/stage-duplicate"
 
 assert_fails_containing \
-  'validator public key must be 32-byte hex for node_id=triad-testnet-bad-key' \
+  'validator finality public key must be 32-byte hex for node_id=triad-testnet-bad-key' \
   "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
     --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
     --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
@@ -129,3 +129,13 @@ assert_fails_containing \
     --storage-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
     --extra-validator triad-testnet-bad-key:not-hex:100 \
     --out-dir "$TMP_DIR/stage-bad-key"
+
+printf '[node]\npublic_key = "e57c3c343887766b09fb247a9373a6db5c77e41b5fe69584573bdbe000ab220e"\n' >"$TMP_DIR/node-keypair.toml"
+assert_fails_containing \
+  '--sequencer-node-keypair is not supported for deployment signer truth; pass --sequencer-finality-public-key' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+    --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+    --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+    --sequencer-node-keypair "$TMP_DIR/node-keypair.toml" \
+    --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+    --out-dir "$TMP_DIR/stage-node-keypair"
