@@ -35,104 +35,107 @@ impl TestChainStatusServer {
         let stop_for_thread = Arc::clone(&stop);
         let execution_world_dir_for_thread = execution_world_dir.clone();
         let release_security_policy_for_thread = release_security_policy.clone();
-        let join_handle = thread::spawn(move || loop {
-            if stop_for_thread.load(Ordering::SeqCst) {
-                break;
-            }
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    if stop_for_thread.load(Ordering::SeqCst) {
-                        break;
-                    }
-                    let request = read_test_http_request(&mut stream);
-                    let request_bytes = request.as_slice();
-                    let request_text = String::from_utf8_lossy(request_bytes);
-                    let mut parts = request_text
-                        .lines()
-                        .next()
-                        .unwrap_or_default()
-                        .split_whitespace();
-                    let method = parts.next().unwrap_or_default();
-                    let path = parts
-                        .next()
-                        .unwrap_or_default()
-                        .split('?')
-                        .next()
-                        .unwrap_or_default();
+        let join_handle = thread::spawn(move || {
+            loop {
+                if stop_for_thread.load(Ordering::SeqCst) {
+                    break;
+                }
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        if stop_for_thread.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let request = read_test_http_request(&mut stream);
+                        let request_bytes = request.as_slice();
+                        let request_text = String::from_utf8_lossy(request_bytes);
+                        let mut parts = request_text
+                            .lines()
+                            .next()
+                            .unwrap_or_default()
+                            .split_whitespace();
+                        let method = parts.next().unwrap_or_default();
+                        let path = parts
+                            .next()
+                            .unwrap_or_default()
+                            .split('?')
+                            .next()
+                            .unwrap_or_default();
 
-                    match (method, path) {
-                        ("GET", "/v1/chain/status") => {
-                            let body = serde_json::json!({
-                                "consensus": {
-                                    "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
-                                },
-                                "execution_world_dir": execution_world_dir_for_thread,
-                                "release_security_policy": release_security_policy_for_thread,
-                            });
-                            let body = serde_json::to_vec(&body).expect("encode chain status body");
-                            let response = format!(
+                        match (method, path) {
+                            ("GET", "/v1/chain/status") => {
+                                let body = serde_json::json!({
+                                    "consensus": {
+                                        "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
+                                    },
+                                    "execution_world_dir": execution_world_dir_for_thread,
+                                    "release_security_policy": release_security_policy_for_thread,
+                                });
+                                let body =
+                                    serde_json::to_vec(&body).expect("encode chain status body");
+                                let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                                     body.len()
                                 );
-                            stream
-                                .write_all(response.as_bytes())
-                                .expect("write chain status header");
-                            stream
-                                .write_all(body.as_slice())
-                                .expect("write chain status body");
-                            stream.flush().expect("flush chain status response");
-                        }
-                        ("POST", "/v1/chain/gameplay/submit") => {
-                            let boundary = request_bytes
-                                .windows(4)
-                                .position(|window| window == b"\r\n\r\n")
-                                .expect("gameplay submit body boundary");
-                            let body = &request_bytes[(boundary + 4)..];
-                            let gameplay_request = serde_json::from_slice::<
-                                crate::viewer::GameplayActionRequest,
-                            >(body)
-                            .expect("decode gameplay submit request");
-                            submitted_requests_for_thread
-                                .lock()
-                                .expect("lock submitted requests")
-                                .push(gameplay_request);
-                            let action_id =
-                                next_gameplay_action_id_for_thread.fetch_add(1, Ordering::SeqCst);
-                            let body = serde_json::json!({
-                                "ok": true,
-                                "action_id": action_id,
-                                "submitted_at_unix_ms": test_now_unix_ms(),
-                            });
-                            let body =
-                                serde_json::to_vec(&body).expect("encode gameplay submit body");
-                            let response = format!(
+                                stream
+                                    .write_all(response.as_bytes())
+                                    .expect("write chain status header");
+                                stream
+                                    .write_all(body.as_slice())
+                                    .expect("write chain status body");
+                                stream.flush().expect("flush chain status response");
+                            }
+                            ("POST", "/v1/chain/gameplay/submit") => {
+                                let boundary = request_bytes
+                                    .windows(4)
+                                    .position(|window| window == b"\r\n\r\n")
+                                    .expect("gameplay submit body boundary");
+                                let body = &request_bytes[(boundary + 4)..];
+                                let gameplay_request = serde_json::from_slice::<
+                                    crate::viewer::GameplayActionRequest,
+                                >(body)
+                                .expect("decode gameplay submit request");
+                                submitted_requests_for_thread
+                                    .lock()
+                                    .expect("lock submitted requests")
+                                    .push(gameplay_request);
+                                let action_id = next_gameplay_action_id_for_thread
+                                    .fetch_add(1, Ordering::SeqCst);
+                                let body = serde_json::json!({
+                                    "ok": true,
+                                    "action_id": action_id,
+                                    "submitted_at_unix_ms": test_now_unix_ms(),
+                                });
+                                let body =
+                                    serde_json::to_vec(&body).expect("encode gameplay submit body");
+                                let response = format!(
                                     "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
                                     body.len()
                                 );
-                            stream
-                                .write_all(response.as_bytes())
-                                .expect("write gameplay submit header");
-                            stream
-                                .write_all(body.as_slice())
-                                .expect("write gameplay submit body");
-                            stream.flush().expect("flush gameplay submit response");
-                        }
-                        _ => {
-                            stream
+                                stream
+                                    .write_all(response.as_bytes())
+                                    .expect("write gameplay submit header");
+                                stream
+                                    .write_all(body.as_slice())
+                                    .expect("write gameplay submit body");
+                                stream.flush().expect("flush gameplay submit response");
+                            }
+                            _ => {
+                                stream
                                 .write_all(
                                     b"HTTP/1.1 404 Not Found\r\nContent-Length: 21\r\nConnection: close\r\n\r\n{\"error\":\"not found\"}",
                                 )
                                 .expect("write 404 response");
-                            stream.flush().expect("flush 404 response");
+                                stream.flush().expect("flush 404 response");
+                            }
                         }
                     }
-                }
-                Err(err) => {
-                    if err.kind() == std::io::ErrorKind::WouldBlock {
-                        thread::sleep(Duration::from_millis(10));
-                        continue;
+                    Err(err) => {
+                        if err.kind() == std::io::ErrorKind::WouldBlock {
+                            thread::sleep(Duration::from_millis(10));
+                            continue;
+                        }
+                        panic!("accept chain status connection failed: {err}");
                     }
-                    panic!("accept chain status connection failed: {err}");
                 }
             }
         });

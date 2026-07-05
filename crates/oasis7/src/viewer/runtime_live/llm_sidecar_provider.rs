@@ -11,8 +11,8 @@ pub(super) fn env_requests_provider_backend() -> bool {
     .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
 }
 
-pub(in crate::viewer::runtime_live) fn provider_settings_from_env(
-) -> Result<Option<ProviderDecisionSettings>, String> {
+pub(in crate::viewer::runtime_live) fn provider_settings_from_env()
+-> Result<Option<ProviderDecisionSettings>, String> {
     let decision_source = named_env_var_any(&[
         VIEWER_AGENT_DECISION_SOURCE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,

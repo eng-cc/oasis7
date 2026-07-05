@@ -118,8 +118,8 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
             options.public_manifest.display()
         )
     })?;
-    let manifest: PublicManifest = serde_json::from_slice(manifest_bytes.as_slice())
-        .map_err(|err| {
+    let manifest: PublicManifest =
+        serde_json::from_slice(manifest_bytes.as_slice()).map_err(|err| {
             format!(
                 "decode public manifest {} failed: {err}",
                 options.public_manifest.display()

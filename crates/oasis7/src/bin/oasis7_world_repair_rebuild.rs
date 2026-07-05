@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use oasis7::geometry::GeoPos;
 use oasis7::runtime::{
-    blake3_hex, Action as RuntimeAction, ChainResourceDerivationContext, Journal, World, WorldError,
+    Action as RuntimeAction, ChainResourceDerivationContext, Journal, World, WorldError, blake3_hex,
 };
 use oasis7::simulator::{ResourceKind, WorldConfig, WorldKernel, WorldModel};
 

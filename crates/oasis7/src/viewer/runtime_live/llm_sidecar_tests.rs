@@ -97,11 +97,13 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
         .expect("runtime seed shadow sync");
 
     let shadow = sidecar.shadow_kernel.as_ref().expect("shadow kernel");
-    assert!(shadow
-        .snapshot()
-        .model
-        .locations
-        .contains_key("frag-shadow"));
+    assert!(
+        shadow
+            .snapshot()
+            .model
+            .locations
+            .contains_key("frag-shadow")
+    );
 }
 
 #[test]
