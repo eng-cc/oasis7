@@ -460,7 +460,7 @@ describe("pixel world host", () => {
     expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toEqual(
       gameplay.availableActions[0],
     );
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("does not directly execute disabled or generic pixel world next moves", async () => {
     const { resolvePixelWorldDirectNextMoveAction } = await import("./pixel_world_host.jsx");
@@ -480,7 +480,7 @@ describe("pixel world host", () => {
 
     expect(resolvePixelWorldDirectNextMoveAction(gameplay, "claim_first_agent")).toBeNull();
     expect(resolvePixelWorldDirectNextMoveAction(gameplay, "gameplay_action")).toBeNull();
-  });
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("shows the explicit unavailable surface when renderer deferral is requested", async () => {
     const { core } = await renderPixelWorldHost(
@@ -710,6 +710,7 @@ describe("pixel world host", () => {
     expect(receipt).toHaveAttribute("data-receipt-present", "false");
     expect(receipt).toHaveAttribute("data-receipt-state", "waiting_for_intent");
     expect(receipt).toHaveAttribute("data-receipt-confidence", "none");
+    expect(receipt.querySelector(".pixel-world-action-receipt__meta")).toBeNull();
     expect(receipt.textContent).not.toContain("agent=agent-0");
   });
 

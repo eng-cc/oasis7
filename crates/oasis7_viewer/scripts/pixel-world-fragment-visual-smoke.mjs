@@ -706,6 +706,7 @@ try {
   assert(summary.rendered.layerOrder.locationBehindAgent, "agent layer is not in front of the location layer", summary.rendered);
   assert(summary.rendered.actionReceipt?.present === "false", "rendered hierarchy fixture should start from an honest no-receipt state", summary.rendered);
   assert(summary.rendered.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.rendered);
+  assert(summary.rendered.actionReceipt?.meta === null, "no-receipt fixture should not show receipt metadata", summary.rendered);
   assert(summary.rendered.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.rendered);
   assert(summary.rendered.maxFragmentWidth < summary.rendered.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.rendered);
 
