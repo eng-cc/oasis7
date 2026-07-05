@@ -26,7 +26,7 @@ fn main() {
 
 fn run() -> Result<(), WorldError> {
     let options = parse_args()?;
-    let (rebuilt, source_label, location_count) =
+    let (rebuilt, source_label, location_count, generated_source) =
         if let Some(generated_world_dir) = options.generated_world_dir.as_ref() {
             let (world, _config, seed_model) =
                 bootstrap_generated_sidecar_runtime_world(generated_world_dir.as_path())
@@ -35,6 +35,7 @@ fn run() -> Result<(), WorldError> {
                 world,
                 format!("generated_world_dir={}", generated_world_dir.display()),
                 seed_model.locations.len(),
+                true,
             )
         } else {
             let source_world_dir = options
@@ -50,8 +51,18 @@ fn run() -> Result<(), WorldError> {
                 World::from_snapshot(seed_snapshot, journal)?,
                 format!("source_world_dir={}", source_world_dir.display()),
                 0,
+                false,
             )
         };
+
+    let rebuilt = if generated_source && options.world_id.is_some() {
+        align_generated_bootstrap_world_to_commit_height(
+            rebuilt,
+            options.resource_commit_height.unwrap_or(0),
+        )?
+    } else {
+        rebuilt
+    };
 
     std::fs::create_dir_all(options.output_world_dir.as_path())?;
     if let Some(world_id) = options.world_id.as_deref() {
@@ -71,7 +82,7 @@ fn run() -> Result<(), WorldError> {
                 created_at_height: commit_height,
                 manifest_height: commit_height,
                 commit_block_hash: Some(commit_hash.as_str()),
-                tick: rebuilt.state().time,
+                tick: commit_height,
             },
             resource_context_hash.as_str(),
             resource_context_hash.as_str(),
@@ -92,6 +103,31 @@ fn run() -> Result<(), WorldError> {
     println!("agent_count={}", verified.state().agents.len());
     println!("location_count={location_count}");
     Ok(())
+}
+
+fn align_generated_bootstrap_world_to_commit_height(
+    world: World,
+    commit_height: u64,
+) -> Result<World, WorldError> {
+    if world.state().time == commit_height
+        && world.journal().is_empty()
+        && world.tick_consensus_records().is_empty()
+    {
+        return Ok(world);
+    }
+
+    let mut snapshot = world.snapshot();
+    snapshot.state.time = commit_height;
+    snapshot.journal_len = 0;
+    snapshot.last_event_id = 0;
+    snapshot.event_id_era = 0;
+    snapshot.tick_consensus_records.clear();
+    snapshot.tick_consensus_total_record_count = 0;
+    snapshot.tick_consensus_archived_record_count = 0;
+    snapshot.tick_consensus_hot_from_tick = None;
+    snapshot.tick_consensus_hot_to_tick = None;
+    snapshot.tick_consensus_rejection_audit_events.clear();
+    World::from_snapshot(snapshot, Journal::new())
 }
 
 fn resource_context_hash(world_id: &str) -> String {
@@ -316,4 +352,32 @@ fn print_usage() {
     println!(
         "Usage: oasis7_world_repair_rebuild (--source-world-dir <path> | --generated-world-dir <path>) --output-world-dir <path> [--world-id <id> [--chain-id <id>] [--resource-commit-height <n>] [--resource-commit-hash <hash>]]"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_bootstrap_alignment_keeps_seed_state_at_chain_commit_height() {
+        let (world, _) = bootstrap_runtime_world_from_model(
+            WorldConfig::default(),
+            &WorldModel::default(),
+            "test generated bootstrap",
+        )
+        .expect("bootstrap generated runtime world");
+        assert_eq!(world.state().time, 2);
+        assert!(!world.journal().is_empty());
+        assert!(!world.tick_consensus_records().is_empty());
+
+        let aligned =
+            align_generated_bootstrap_world_to_commit_height(world, 0).expect("align world");
+
+        assert_eq!(aligned.state().time, 0);
+        assert!(aligned.journal().is_empty());
+        assert!(aligned.tick_consensus_records().is_empty());
+        assert_eq!(aligned.state().agents.len(), 2);
+        assert!(aligned.state().agents.contains_key("runtime-agent-0"));
+        assert!(aligned.state().agents.contains_key("runtime-agent-1"));
+    }
 }
