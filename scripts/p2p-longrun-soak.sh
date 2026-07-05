@@ -996,9 +996,9 @@ wait_for_node_post_chaos_recovery() {
       echo "node exited during recovery wait: $node_name" >&2
       return 1
     fi
-    if curl -fsS --max-time "$curl_timeout_secs" "$healthz_url" >/dev/null 2>&1 \
-      && status_json=$(curl -fsS --max-time "$curl_timeout_secs" "$status_url" 2>/dev/null) \
-      && balances_json=$(curl -fsS --max-time "$curl_timeout_secs" "$balances_url" 2>/dev/null); then
+    if curl_health_with_latency health "$healthz_url" \
+      && curl_get_with_latency status_json status "$status_url" \
+      && curl_get_with_latency balances_json balances "$balances_url"; then
       running=$(jq -r '.running // false' <<< "$status_json")
       last_error=$(jq -r '.last_error // empty' <<< "$status_json")
       rr_last_error=$(jq -r '.reward_runtime.last_error // empty' <<< "$status_json")
@@ -1147,7 +1147,7 @@ wait_for_topology_ready() {
         echo "node exited before startup ready: $node_name" >&2
         return 1
       fi
-      if ! curl -fsS --max-time "$curl_timeout_secs" "${node_status_url_by_name[$node_name]%/v1/chain/status}/healthz" >/dev/null 2>&1; then
+      if ! curl_health_with_latency health "${node_status_url_by_name[$node_name]%/v1/chain/status}/healthz"; then
         all_ready=0
       fi
     done
@@ -1203,9 +1203,11 @@ analysis_consensus_hash_mismatch_count=0
 analysis_consensus_hash_mismatch_heights=""
 analysis_consensus_hash_samples=0
 analysis_consensus_hash_missing_samples=0
+analysis_endpoint_latency_summary_json='{"health":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"status":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"balances":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0}}'
 analysis_lag_values_file=""
 analysis_runtime_errors_file=""
 analysis_consensus_hash_mismatch_file=""
+analysis_endpoint_latency_file=""
 analysis_topology_dir=""
 best_height=-1
 last_progress_epoch_sec=0
@@ -1255,13 +1257,16 @@ reset_topology_analysis() {
   analysis_consensus_hash_mismatch_heights=""
   analysis_consensus_hash_samples=0
   analysis_consensus_hash_missing_samples=0
+  analysis_endpoint_latency_summary_json='{"health":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"status":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"balances":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0}}'
   analysis_lag_values_file="$topology_dir/.lag_values.txt"
   analysis_runtime_errors_file="$topology_dir/.runtime_errors.tsv"
   analysis_consensus_hash_mismatch_file="$topology_dir/.consensus_hash_mismatch.tsv"
+  analysis_endpoint_latency_file="$topology_dir/.endpoint_latency.tsv"
   analysis_topology_dir="$topology_dir"
   : > "$analysis_lag_values_file"
   : > "$analysis_runtime_errors_file"
   : > "$analysis_consensus_hash_mismatch_file"
+  : > "$analysis_endpoint_latency_file"
   best_height=-1
   last_progress_epoch_sec=$(date +%s)
   analysis_node_prev_committed=()
@@ -1275,6 +1280,46 @@ reset_topology_analysis() {
   analysis_committed_height_block_hash=()
   analysis_execution_height_block_hash=()
   analysis_execution_height_state_root=()
+}
+
+record_endpoint_latency_sample() {
+  local endpoint=$1
+  local elapsed_secs=$2
+  if [[ -z "${analysis_endpoint_latency_file:-}" ]]; then
+    return 0
+  fi
+  if [[ "$elapsed_secs" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    printf '%s\t%s\n' "$endpoint" "$elapsed_secs" >> "$analysis_endpoint_latency_file"
+  fi
+}
+
+curl_get_with_latency() {
+  local __body_var=$1
+  local endpoint=$2
+  local url=$3
+  local output rc elapsed body
+
+  if output=$(curl -fsS --max-time "$curl_timeout_secs" -w $'\n%{time_total}' "$url" 2>/dev/null); then
+    rc=0
+  else
+    rc=$?
+  fi
+  elapsed=${output##*$'\n'}
+  record_endpoint_latency_sample "$endpoint" "$elapsed"
+  if (( rc == 0 )); then
+    body=${output%$'\n'*}
+    printf -v "$__body_var" '%s' "$body"
+    return 0
+  fi
+  printf -v "$__body_var" '%s' ""
+  return "$rc"
+}
+
+curl_health_with_latency() {
+  local endpoint=$1
+  local url=$2
+  local ignored_body=""
+  curl_get_with_latency ignored_body "$endpoint" "$url" >/dev/null
 }
 
 record_consensus_hash_sample() {
@@ -1372,10 +1417,10 @@ poll_topology_node_once() {
   local status_ok=0
   local balances_ok=0
 
-  if status_json=$(curl -fsS --max-time "$curl_timeout_secs" "$status_url" 2>/dev/null); then
+  if curl_get_with_latency status_json status "$status_url"; then
     status_ok=1
   fi
-  if balances_json=$(curl -fsS --max-time "$curl_timeout_secs" "$balances_url" 2>/dev/null); then
+  if curl_get_with_latency balances_json balances "$balances_url"; then
     balances_ok=1
   fi
 
@@ -1594,9 +1639,56 @@ compute_topology_lag_p95() {
   analysis_lag_p95=$(safe_int "$analysis_lag_p95")
 }
 
+compute_topology_endpoint_latency_summary() {
+  if [[ -z "${analysis_endpoint_latency_file:-}" || ! -s "$analysis_endpoint_latency_file" ]]; then
+    analysis_endpoint_latency_summary_json='{"health":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"status":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0},"balances":{"sample_count":0,"p50_ms":0,"p95_ms":0,"max_ms":0}}'
+    return 0
+  fi
+
+  analysis_endpoint_latency_summary_json=$(
+    python3 - "$analysis_endpoint_latency_file" <<'PY'
+import json
+import math
+import sys
+from pathlib import Path
+
+values = {"health": [], "status": [], "balances": []}
+for line in Path(sys.argv[1]).read_text().splitlines():
+    parts = line.split("\t")
+    if len(parts) != 2 or parts[0] not in values:
+        continue
+    try:
+        elapsed_ms = float(parts[1]) * 1000.0
+    except ValueError:
+        continue
+    if math.isfinite(elapsed_ms):
+        values[parts[0]].append(elapsed_ms)
+
+def percentile(sorted_values, pct):
+    if not sorted_values:
+        return 0
+    rank = math.ceil(pct * len(sorted_values) / 100.0)
+    rank = max(1, min(rank, len(sorted_values)))
+    return sorted_values[rank - 1]
+
+summary = {}
+for endpoint, samples in values.items():
+    samples.sort()
+    summary[endpoint] = {
+        "sample_count": len(samples),
+        "p50_ms": round(percentile(samples, 50), 3),
+        "p95_ms": round(percentile(samples, 95), 3),
+        "max_ms": round(samples[-1], 3) if samples else 0,
+    }
+print(json.dumps(summary, sort_keys=True))
+PY
+  )
+}
+
 finalize_topology_metric_gate() {
   local chaos_event_count=${1:-0}
   compute_topology_lag_p95
+  compute_topology_endpoint_latency_summary
 
   if (( ${#analysis_node_monotonic_violations[@]} > 0 )); then
     analysis_monotonic_ok=false
@@ -1877,7 +1969,12 @@ run_topology() {
           consensus_hash_missing_samples: 0,
           consensus_hash_mismatch_count: 0,
           consensus_hash_mismatch_heights: [],
-          consensus_hash_mismatch_file: ""
+          consensus_hash_mismatch_file: "",
+          endpoint_latency: {
+            health: {sample_count: 0, p50_ms: 0, p95_ms: 0, max_ms: 0},
+            status: {sample_count: 0, p50_ms: 0, p95_ms: 0, max_ms: 0},
+            balances: {sample_count: 0, p50_ms: 0, p95_ms: 0, max_ms: 0}
+          }
         }
       }' >> "$topology_summary_ndjson"
     return 0
@@ -2025,12 +2122,12 @@ run_topology() {
     feedback_next_at_sec=$feedback_events_start_sec
   fi
 
+  reset_topology_analysis "$topology" "$topology_dir"
+
   if ! wait_for_topology_ready; then
     status="startup_failed"
     notes="failed to reach /healthz across all nodes"
   fi
-
-  reset_topology_analysis "$topology" "$topology_dir"
 
   if [[ "$status" == "ok" ]]; then
     local started_epoch_sec
@@ -2259,6 +2356,7 @@ run_topology() {
     --argjson consensus_hash_mismatch_count "$analysis_consensus_hash_mismatch_count" \
     --arg consensus_hash_mismatch_heights "$analysis_consensus_hash_mismatch_heights" \
     --arg consensus_hash_mismatch_file "$analysis_consensus_hash_mismatch_file" \
+    --argjson endpoint_latency "$analysis_endpoint_latency_summary_json" \
     '{
       topology: $topology,
       status: $status,
@@ -2310,7 +2408,8 @@ run_topology() {
           else ($consensus_hash_mismatch_heights | split(","))
           end
         ),
-        consensus_hash_mismatch_file: $consensus_hash_mismatch_file
+        consensus_hash_mismatch_file: $consensus_hash_mismatch_file,
+        endpoint_latency: $endpoint_latency
       }
     }' >> "$topology_summary_ndjson"
 
@@ -2469,12 +2568,12 @@ append_summary_metrics_section() {
     echo
     echo "## Gate Metrics"
     echo
-    echo "| topology | gate | reports | chaos_plan | chaos_continuous | chaos_events | feedback_events | feedback_success | feedback_failed | chaos_exempt_s | max_stall_s | max_stall_s_effective | lag_p95 | distfs_ratio | settlement_apply_ratio | invariant_all_ok | reward_runtime_samples | minted_samples | consensus_hash_consistent | consensus_hash_mismatch_count | consensus_hash_missing_samples |"
-    echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
+    echo "| topology | gate | reports | chaos_plan | chaos_continuous | chaos_events | feedback_events | feedback_success | feedback_failed | chaos_exempt_s | max_stall_s | max_stall_s_effective | lag_p95 | distfs_ratio | settlement_apply_ratio | invariant_all_ok | reward_runtime_samples | minted_samples | consensus_hash_consistent | consensus_hash_mismatch_count | consensus_hash_missing_samples | health_p95_ms | status_p95_ms | balances_p95_ms | endpoint_max_ms |"
+    echo "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"
     if [[ -f "$summary_json" ]]; then
-      while IFS=$'\t' read -r topology gate reports chaos_plan chaos_continuous chaos_events feedback_events feedback_success feedback_failed chaos_exempt stall stall_effective lag ratio settlement_ratio invariant rr_samples minted consensus_consistent consensus_mismatch consensus_missing; do
-        echo "| $topology | $gate | $reports | $chaos_plan | $chaos_continuous | $chaos_events | $feedback_events | $feedback_success | $feedback_failed | $chaos_exempt | $stall | $stall_effective | $lag | $ratio | $settlement_ratio | $invariant | $rr_samples | $minted | $consensus_consistent | $consensus_mismatch | $consensus_missing |"
-      done < <(jq -r '.topologies[] | [ .topology, .metric_gate.status, .report_samples, .chaos_plan_events, .chaos_continuous_events, .chaos_events, .feedback_events, .feedback_events_success, .feedback_events_failed, .metrics.chaos_exempt_secs, .metrics.max_stall_secs_observed, .metrics.effective_max_stall_secs, .metrics.lag_p95, .metrics.distfs_failure_ratio, .metrics.settlement_apply_failure_ratio, .metrics.invariant_all_ok, .metrics.reward_runtime_available_samples, .metrics.minted_non_empty_samples, .metrics.consensus_hash_consistent, .metrics.consensus_hash_mismatch_count, .metrics.consensus_hash_missing_samples ] | @tsv' "$summary_json")
+      while IFS=$'\t' read -r topology gate reports chaos_plan chaos_continuous chaos_events feedback_events feedback_success feedback_failed chaos_exempt stall stall_effective lag ratio settlement_ratio invariant rr_samples minted consensus_consistent consensus_mismatch consensus_missing health_p95 status_p95 balances_p95 endpoint_max; do
+        echo "| $topology | $gate | $reports | $chaos_plan | $chaos_continuous | $chaos_events | $feedback_events | $feedback_success | $feedback_failed | $chaos_exempt | $stall | $stall_effective | $lag | $ratio | $settlement_ratio | $invariant | $rr_samples | $minted | $consensus_consistent | $consensus_mismatch | $consensus_missing | $health_p95 | $status_p95 | $balances_p95 | $endpoint_max |"
+      done < <(jq -r '.topologies[] | [ .topology, .metric_gate.status, .report_samples, .chaos_plan_events, .chaos_continuous_events, .chaos_events, .feedback_events, .feedback_events_success, .feedback_events_failed, .metrics.chaos_exempt_secs, .metrics.max_stall_secs_observed, .metrics.effective_max_stall_secs, .metrics.lag_p95, .metrics.distfs_failure_ratio, .metrics.settlement_apply_failure_ratio, .metrics.invariant_all_ok, .metrics.reward_runtime_available_samples, .metrics.minted_non_empty_samples, .metrics.consensus_hash_consistent, .metrics.consensus_hash_mismatch_count, .metrics.consensus_hash_missing_samples, .metrics.endpoint_latency.health.p95_ms, .metrics.endpoint_latency.status.p95_ms, .metrics.endpoint_latency.balances.p95_ms, ([.metrics.endpoint_latency.health.max_ms, .metrics.endpoint_latency.status.max_ms, .metrics.endpoint_latency.balances.max_ms] | max) ] | @tsv' "$summary_json")
     fi
   } >> "$summary_md"
 }

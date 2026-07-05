@@ -9,7 +9,8 @@ use tracing::Level;
 
 use crate::observability::emit_stderr_or_event;
 use crate::simulator::{
-    PersistError, RunnerMetrics, WorldEvent, WorldJournal, WorldSnapshot, WorldTime,
+    PersistError, RunnerMetrics, RuntimePerfHealth, RuntimePerfSnapshot, WorldEvent, WorldJournal,
+    WorldSnapshot, WorldTime,
 };
 
 use super::protocol::{
@@ -490,8 +491,14 @@ fn metrics_from_snapshot(snapshot: &WorldSnapshot) -> RunnerMetrics {
         actions_per_tick: 0.0,
         decisions_per_tick: 0.0,
         success_rate: 0.0,
-        runtime_perf: Default::default(),
+        runtime_perf: unsupported_viewer_runtime_perf_snapshot(),
     }
+}
+
+fn unsupported_viewer_runtime_perf_snapshot() -> RuntimePerfSnapshot {
+    let snapshot = RuntimePerfSnapshot::default();
+    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
+    snapshot
 }
 
 #[cfg(test)]
@@ -570,6 +577,14 @@ mod tests {
         assert_eq!(seek_to_tick(&events, 15), 1);
         assert_eq!(seek_to_tick(&events, 25), 2);
         assert_eq!(seek_to_tick(&events, 35), 3);
+    }
+
+    #[test]
+    fn snapshot_metrics_mark_runtime_perf_unknown_when_unavailable() {
+        let perf = unsupported_viewer_runtime_perf_snapshot();
+        assert_eq!(perf.health, RuntimePerfHealth::Unknown);
+        assert_eq!(perf.tick.samples_total, 0);
+        assert_eq!(perf.tick.samples_window, 0);
     }
 
     #[test]

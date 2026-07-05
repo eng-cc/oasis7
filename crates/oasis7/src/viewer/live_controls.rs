@@ -1,3 +1,5 @@
+use crate::simulator::{RuntimePerfHealth, RuntimePerfSnapshot};
+
 impl LiveScript {
     fn new(kernel: &WorldKernel) -> Self {
         let mut agent_ids: Vec<_> = kernel.model().agents.keys().cloned().collect();
@@ -743,8 +745,14 @@ fn metrics_from_kernel(kernel: &WorldKernel) -> RunnerMetrics {
         actions_per_tick,
         decisions_per_tick: 0.0,
         success_rate: 0.0,
-        runtime_perf: Default::default(),
+        runtime_perf: unsupported_live_control_runtime_perf_snapshot(),
     }
+}
+
+fn unsupported_live_control_runtime_perf_snapshot() -> RuntimePerfSnapshot {
+    let snapshot = RuntimePerfSnapshot::default();
+    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
+    snapshot
 }
 
 fn read_requests(
