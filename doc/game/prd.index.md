@@ -13,7 +13,7 @@
 ## 首读分流
 - 想先回答 game 模块当前目标态、阶段判断与完成定义：先读 `doc/game/prd.md`
 - 想先回答当前还在推进什么、阻断在哪里、下一步做什么：先读 `doc/game/project.md`
-- 想先进入 gameplay 热点子域，而不是直接面对 80+ 份 gameplay 文档：先读 `doc/game/gameplay/README.md`
+- 想先进入 gameplay 热点子域，而不是直接面对完整 gameplay 文档长表：先读 `doc/game/gameplay/README.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
@@ -24,17 +24,17 @@
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
 ## 密度快照（2026-07-05）
-- `doc/game/`：88 份文件
-- `doc/game/gameplay/`：83 份文件
+- `doc/game/`：84 份文件
+- `doc/game/gameplay/`：79 份文件
 - `doc/game/gameplay/` 正式专题三件套：66 份文件
-- `doc/game/gameplay/` 补充材料：16 份文件
+- `doc/game/gameplay/` 补充材料：12 份文件
 - 模块根入口：5 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `gameplay/` 正式专题三件套 | 66 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同、mature-world 小玩家承接与可编程区域设施 |
-| `gameplay/` 补充材料 | 16 | runbook、evidence、checklist 与跨角色执行留痕 |
+| `gameplay/` 补充材料 | 12 | runbook、evidence、checklist 与跨角色执行留痕 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
@@ -95,7 +95,6 @@
 | `doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md` | `runbook` | longrun P0 replay rollback 处理 runbook |
 | `doc/game/gameplay/gameplay-micro-loop-readable-world-checklist-2026-03-10.md` | `checklist` | micro-loop readable world 验收清单 |
 | `doc/game/gameplay/gameplay-micro-loop-visual-closure-evidence-2026-03-10-round009.md` | `evidence` | micro-loop visual closure 采证 |
-| `doc/game/gameplay/producer-to-runtime-task-game-029-closed-beta-runtime-evidence-2026-03-21.md` | `handoff` | closed beta runtime evidence 交接 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
