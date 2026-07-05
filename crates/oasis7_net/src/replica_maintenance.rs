@@ -222,6 +222,12 @@ fn plan_repair_tasks(
 
     let all_candidates = collect_global_candidates(providers_by_hash);
     let selector = ProviderSelectionPolicy::default();
+    let full_selector = ProviderSelectionPolicy {
+        max_candidates: 0,
+        ..selector.clone()
+    };
+    let ranked_global_candidates =
+        full_selector.rank_provider_refs(all_candidates.iter(), selection_now_ms(&all_candidates));
 
     for (content_hash, providers) in providers_by_hash {
         if plan.repair_tasks.len() >= policy.max_repairs_per_round {
@@ -246,21 +252,22 @@ fn plan_repair_tasks(
 
         let mut selected_targets: BTreeSet<String> =
             providers.iter().map(|p| p.provider_id.clone()).collect();
-        let target_candidates = selector.rank_provider_refs(
-            all_candidates
-                .iter()
-                .filter(|candidate| !selected_targets.contains(candidate.provider_id.as_str())),
-            selection_now_ms(&all_candidates),
-        );
-
         let needed = policy
             .target_replicas_per_blob
             .saturating_sub(current_replica_count);
         let mut produced = 0usize;
-        for target in target_candidates {
+        let mut considered_candidates = 0usize;
+        for target in &ranked_global_candidates {
             if produced >= needed || plan.repair_tasks.len() >= policy.max_repairs_per_round {
                 break;
             }
+            if selected_targets.contains(target.provider_id.as_str()) {
+                continue;
+            }
+            if selector.max_candidates > 0 && considered_candidates >= selector.max_candidates {
+                break;
+            }
+            considered_candidates = considered_candidates.saturating_add(1);
             if !selected_targets.insert(target.provider_id.clone()) {
                 continue;
             }
@@ -629,6 +636,45 @@ mod tests {
                 .any(|task| task.content_hash == "hash-b")
         );
         assert!(plan.rebalance_tasks.is_empty());
+    }
+
+    #[test]
+    fn plan_replica_maintenance_keeps_global_repair_candidates_after_occupied_prefix() {
+        let occupied = (1..=8)
+            .map(|index| provider(&format!("peer-{index:02}"), Some(300)))
+            .collect::<Vec<_>>();
+        let mut candidate_providers = occupied.clone();
+        candidate_providers.push(provider("peer-09", Some(300)));
+
+        let dht = StaticProvidersDht::with_providers_by_hash(map(&[
+            ("hash-source", candidate_providers),
+            ("hash-needs-repair", occupied),
+        ]));
+        let hashes = vec!["hash-source".to_string(), "hash-needs-repair".to_string()];
+
+        let plan = plan_replica_maintenance(
+            &dht,
+            "w1",
+            &hashes,
+            ReplicaMaintenancePolicy {
+                target_replicas_per_blob: 9,
+                max_repairs_per_round: 8,
+                max_rebalances_per_round: 0,
+                ..ReplicaMaintenancePolicy::default()
+            },
+        )
+        .expect("plan");
+
+        assert_eq!(
+            plan.repair_tasks,
+            vec![ReplicaTransferTask {
+                kind: ReplicaTransferKind::Repair,
+                content_hash: "hash-needs-repair".to_string(),
+                source_provider_id: "peer-01".to_string(),
+                target_provider_id: "peer-09".to_string(),
+            }]
+        );
+        assert!(plan.warnings.is_empty());
     }
 
     #[test]
