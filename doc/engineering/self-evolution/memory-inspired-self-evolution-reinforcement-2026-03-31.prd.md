@@ -63,7 +63,7 @@
   - AC-4: 反思产物必须先走 signal/owner review，再决定是否进入 memory/task；不得自动覆盖正式文档或直接触发高风险代码修改。
   - AC-5: 会话记录与过程日志必须先提炼到 task-scoped `working_memory`，不得整段直接写入长期 memory；Codex/engineering task 的 phase 1 必须优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 无该会话消息则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`，而不是先要求 wrapper 导出独立 transcript artifact。
   - AC-6: project 文档至少拆出“建档、schema 扩展、召回 profile、working memory、reflection 契约、验证回归”六类任务。
-  - AC-7: 专题文档、engineering 根入口、索引、主项目与相关 task execution log 全部完成互链。
+  - AC-7: 专题文档、engineering 根入口、索引、主项目与 GitHub task issue evidence comments 全部完成互链。
   - AC-8: `working_memory` 必须定义过期/清理/提升规则，避免任务结束后残留未治理临时认知。
 - Non-Goals:
   - 不把 `memoryOSS`、向量数据库或外部 SaaS 接入为 oasis7 首期运行态真值。
@@ -91,7 +91,7 @@
   - `memoryOSS` 提供的借鉴点仅限本地优先、显式 mode/namespace、预算化召回与 fail-open 工程习惯；不引入其产品形态作为正式依赖。
   - 《Hindsight》提供的借鉴点仅限 `fact/experience/summary/belief` 记忆分层，以及 `retain/recall/reflect` 闭环；不把论文实验结果直接等同于 oasis7 工程治理结论。
   - 原始会话与过程日志属于 `raw evidence`，先进入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 raw evidence 默认优先直读 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，只有被提炼过的结论才进入 GitHub-backed reflection intake、candidate task 或长期 `memory`。
-  - 反思链路统一为 `.codex/GitHub task issue evidence comments -> working_memory -> GitHub-backed reflection intake -> owner review -> memory/task/rejected`，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_uid>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
+  - 反思链路统一为 `.codex` raw evidence / GitHub task issue evidence comments -> working_memory -> GitHub-backed reflection intake -> owner review -> memory/task/rejected，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_uid>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
 - Integration Points:
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
@@ -240,5 +240,5 @@
   - ✔ 是否引用已有定义，而不是重写：已引用 `self-evolution` 总专题与长期 memory 子专题。
   - ✔ 是否清晰标注跨模块依赖：已列明 `scripts/pm`、`.pm` 与外部参考边界。
   - ✔ 是否混合错误抽象层级：未把实现细节混入模块级 Why/What/Done 范围之外。
-  - ✔ 是否具备依赖可追溯性：已补齐 PRD/project/design/task execution log/engineering 根入口互链。
+  - ✔ 是否具备依赖可追溯性：已补齐 PRD/project/design/GitHub task issue evidence comments/engineering 根入口互链。
 - 总体 Gate 结果: 🟢 Ready

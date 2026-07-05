@@ -29,6 +29,7 @@
 - 更新日期: 2026-04-03
 - 当前阶段: active
 - 当前任务: `TASK-ENGINEERING-092` 已在当前 worktree 起草完成；长期 memory 子专题现已补齐角色级 memory policy draft、扩展 promotion 白名单与 close-phase 抽取口径。
+- 当前 evidence sink 说明: 上方 `TASK-*` 任务拆解行是受 doc-governance 保护的历史顺序号表面，行内旧 `task execution log` 口径仅作当期完成态追溯；新任务证据与可复用结论沉淀必须走 GitHub task issue evidence comments、task-scoped `working_memory` 或 GitHub-backed reflection intake。
 - 阻塞项:
   - 暂无新增阻塞；若要继续推进 `role-report.sh`，需先冻结新的治理任务。
 - 最新完成:
@@ -39,7 +40,7 @@
   - `TASK-ENGINEERING-077`：已在 `self-evolution` 主专题先行落地 `supersede-memory.sh`、`memory-lint.sh` 与 role/shared memory 基础 lint 规则，后续长期 memory 子专题可在此基础上继续补样例、promotion 和 report。
   - `TASK-ENGINEERING-076`：历史上曾落地 `.pm/inbox/signals.jsonl` 与 `signal -> candidate task` 基础链路；当前 reflection intake 已收敛到 GitHub-backed intake 与 `.pm/github-project-sync/intake-signals.json` 镜像，memory promotion 不得恢复 retired inbox 作为当前真值。
   - `TASK-ENGINEERING-075`：已建立 `.pm` 基础骨架，并为 7 个标准角色生成 `memory/{active,superseded}.yaml` 容器，长期 memory 后续任务可直接在仓库内演进。
-  - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与 task execution log 规则。
+  - `TASK-ENGINEERING-080`：已建立长期 memory 专题三件套，并把长期记忆自建方案正式挂入 `self-evolution` 总专题、engineering 索引与当期 task evidence 规则；退役前 `.pm/tasks/*.execution.md` 仅保留为 migration/audit-only 历史追溯。
 - 下一步:
   - 若要把 `topic` allowlist 从草案提升为 lint 强约束，再单列任务把 `.pm/templates/role-memory-policy.yaml` 接入 `promote-memory` / `memory-lint`；
   - 若要把 close-phase 三问进一步结构化到 `working_memory -> reflection signal`，优先与 `TASK-ENGINEERING-089/090` 合并推进；

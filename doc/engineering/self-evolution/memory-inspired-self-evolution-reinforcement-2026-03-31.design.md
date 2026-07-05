@@ -35,7 +35,7 @@
   summary: start phase agents should prefer fact and experience memories first
   source_refs:
     - doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md
-    - .pm/tasks/task_231ca618613d564ca2c9ec758253c7b7.execution.md
+    - github://eng-cc/oasis7/issues/123#issuecomment-456
   status: active
   memory_kind: summary
   confidence: confirmed
@@ -112,9 +112,10 @@
 
 ### 5.1 Retain
 
-- 原始证据来自 task execution log、runbook、QA failure、community feedback、正式评审结论，或 Codex 本地会话存档
+- 原始证据来自 GitHub task issue evidence comments、task-scoped working_memory、runbook、QA failure、community feedback、正式评审结论，或 Codex 本地会话存档
 - transcript 先提炼成 `working_memory`，不直接写长期 memory
 - “反思”先进入 `signal(source_type=reflection)`，由 owner 决定 promotion / rejection / defer
+- 退役前的 `.pm/tasks/task_<32hex>.execution.md` 只允许作为 migration/audit-only 历史 source ref；新任务不得把它作为当前 evidence sink。
 
 ### 5.2 Recall
 

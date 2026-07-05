@@ -9,7 +9,7 @@
 
 这份设计文档只保留长期 memory 的文件结构、schema、promotion 规则与 role-topic 边界，不再重复 PRD 的背景、project 的任务拆解或交付清单。
 
-长期 memory 必须继续区别于 task execution log、task registry 和短期 `working_memory`。
+长期 memory 必须继续区别于 GitHub task issue evidence comments、task registry/generated mirrors 和短期 `working_memory`。
 
 ## 2. Storage Layout
 
@@ -40,7 +40,7 @@
   summary: current stage remains internal_playable_alpha_late
   source_refs:
     - doc/game/project.md
-    - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
+    - github://eng-cc/oasis7/issues/123#issuecomment-456
   tags:
     - stage
     - claim_envelope
@@ -146,7 +146,8 @@ roles:
   - 写 `signal`
   - 写 `working_memory`
   - 提升到长期 `memory`
-- 若三问均为 no，则保留在 task execution log 或 task-scoped `working_memory`
+- 若三问均为 no，则保留在 GitHub task issue evidence comments 或 task-scoped `working_memory`
+- 退役前的 `.pm/tasks/task_<32hex>.execution.md` 可作为 migration/audit-only 历史 source ref 出现在旧记录中；新文档与新 memory 示例不得把它作为当前任务证据 sink。
 - `shared` 只接收跨角色稳定结论，如 `gate.claim_envelope`、`release.policy.*`、`cross_role.workflow.*`
 
 ## 7. Script Surface

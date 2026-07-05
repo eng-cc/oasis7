@@ -41,10 +41,11 @@
 - 更新日期: 2026-04-09
 - 当前阶段: planned
 - 当前任务: `TASK-ENGINEERING-086/091/103` 已完成；后续先推进 schema 补强与 recall profile，再进入 `working_memory/reflection` 契约与质量回归。
+- 当前 evidence sink 说明: 上方 `TASK-*` 任务拆解行是受 doc-governance 保护的历史顺序号表面，行内旧 `task execution log` 口径仅作当期完成态追溯；`TASK-ENGINEERING-089` 的当前解释应为 `.codex` raw evidence / GitHub task issue evidence comments / explicit evidence -> `working_memory` -> GitHub-backed reflection intake，而不是恢复 `.pm/tasks/*.execution.md` 作为新任务证据 sink。
 - 阻塞项:
   - `TASK-ENGINEERING-087~090` 仍需在实现前冻结增量字段命名、`working_memory` / recall profile 的落位方式，以及 `~/.codex` `source_ref` 规范化细节。
 - 最新完成:
-  - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并同步回写 engineering 根入口、主项目、索引与 task execution log 规则。
+  - `TASK-ENGINEERING-086`：已建立“记忆启发式自我进化补强”专题三件套，冻结对 `memoryOSS` / 《Hindsight》 的 adopted / rejected / deferred 边界，并同步回写 engineering 根入口、主项目、索引与当期 task evidence 规则；退役前 `.pm/tasks/*.execution.md` 仅保留为 migration/audit-only 历史追溯。
   - `TASK-ENGINEERING-091`：已将“会话记录只作为 raw evidence，先提炼为 task-scoped `working_memory`”写入本专题，并明确 Codex/engineering task 的 phase 1 优先读取 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若缺失则 fallback 到 `~/.codex/sessions/**/rollout-*.jsonl`；同时通过 `last_extracted_ts/captured_until_ts` 水位冻结 live session 的增量抽取口径，避免提炼过程自污染，补齐 transcript -> working_memory -> reflection signal 的目标态口径。
   - `TASK-ENGINEERING-103`：已将 `codex-working-memory.sh` 默认行为收敛为显式 session 选择：默认不再隐式读取当前/最近 live Codex session；若 owner 确实需要从 `.codex` transcript 提炼 task-scoped `working_memory`，必须显式给出 `--session-id`，或显式传 `--allow-auto-session` 进行 opt-in。对应的 README、engineering 主项目与 smoke 断言也已同步更新。
 - 下一步:
