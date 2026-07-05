@@ -1,8 +1,6 @@
-mod cache;
 mod filtering;
 mod metrics;
 
-use cache::{BoundedCache, MAX_CACHE_ENTRIES, RegexCache};
 #[cfg(test)]
 use filtering::ruleset_matches;
 use filtering::{
@@ -13,11 +11,14 @@ pub use filtering::{validate_subscription_filters, validate_subscription_stage};
 pub use metrics::WasmRouterMetricsSnapshot;
 pub use metrics::snapshot_global_wasm_router_metrics;
 
-use oasis7_wasm_abi::{ModuleSubscription, ModuleSubscriptionStage};
+use oasis7_wasm_abi::{BoundedFifoCache, ModuleSubscription, ModuleSubscriptionStage};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Instant;
+
+const MAX_CACHE_ENTRIES: usize = 1024;
+type RegexCache = Mutex<BoundedFifoCache<Arc<regex::Regex>>>;
 
 fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     match mutex.lock() {
@@ -28,7 +29,7 @@ fn lock_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 fn regex_cache() -> &'static RegexCache {
     static CACHE: OnceLock<RegexCache> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(BoundedCache::new(MAX_CACHE_ENTRIES)))
+    CACHE.get_or_init(|| Mutex::new(BoundedFifoCache::new(MAX_CACHE_ENTRIES)))
 }
 
 fn parsed_subscription_filters(
@@ -568,7 +569,7 @@ mod tests {
 
     #[test]
     fn bounded_cache_evicts_oldest_entries() {
-        let mut cache = BoundedCache::new(2);
+        let mut cache = BoundedFifoCache::new(2);
         cache.insert("a".to_string(), Arc::new(1u32));
         cache.insert("b".to_string(), Arc::new(2u32));
         cache.insert("c".to_string(), Arc::new(3u32));
@@ -580,7 +581,7 @@ mod tests {
 
     #[test]
     fn bounded_cache_updates_existing_entry_without_refreshing_eviction_order() {
-        let mut cache = BoundedCache::new(2);
+        let mut cache = BoundedFifoCache::new(2);
         cache.insert("a".to_string(), Arc::new(1u32));
         cache.insert("b".to_string(), Arc::new(2u32));
         cache.insert("a".to_string(), Arc::new(10u32));

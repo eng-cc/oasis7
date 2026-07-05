@@ -84,24 +84,24 @@ impl ModuleArtifactIdentity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ModuleCache {
-    max_cached_modules: usize,
-    cache: BTreeMap<String, ModuleArtifact>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundedLruCache<V> {
+    capacity: usize,
+    cache: BTreeMap<String, V>,
     lru: VecDeque<String>,
 }
 
-impl ModuleCache {
-    pub fn new(max_cached_modules: usize) -> Self {
+impl<V: Clone> BoundedLruCache<V> {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            max_cached_modules,
+            capacity,
             cache: BTreeMap::new(),
             lru: VecDeque::new(),
         }
     }
 
-    pub fn max_cached_modules(&self) -> usize {
-        self.max_cached_modules
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 
     pub fn len(&self) -> usize {
@@ -112,49 +112,139 @@ impl ModuleCache {
         self.cache.is_empty()
     }
 
-    pub fn set_max_cached_modules(&mut self, max_cached_modules: usize) {
-        self.max_cached_modules = max_cached_modules;
+    pub fn set_capacity(&mut self, capacity: usize) {
+        self.capacity = capacity;
         self.prune();
     }
 
-    pub fn get(&mut self, wasm_hash: &str) -> Option<ModuleArtifact> {
-        let artifact = self.cache.get(wasm_hash)?.clone();
-        self.touch(wasm_hash);
-        Some(artifact)
+    pub fn get_cloned(&mut self, key: &str) -> Option<V> {
+        let value = self.cache.get(key)?.clone();
+        self.touch(key);
+        Some(value)
     }
 
-    pub fn insert(&mut self, artifact: ModuleArtifact) {
-        let key = artifact.wasm_hash.clone();
-        self.cache.insert(key.clone(), artifact);
+    pub fn insert(&mut self, key: String, value: V) {
+        self.cache.insert(key.clone(), value);
         self.touch(&key);
         self.prune();
     }
 
-    fn touch(&mut self, wasm_hash: &str) {
-        if self
-            .lru
-            .back()
-            .is_some_and(|recent| recent.as_str() == wasm_hash)
-        {
+    pub fn lru_keys(&self) -> impl Iterator<Item = &str> {
+        self.lru.iter().map(String::as_str)
+    }
+
+    fn touch(&mut self, key: &str) {
+        if self.lru.back().is_some_and(|recent| recent.as_str() == key) {
             return;
         }
-        self.lru.retain(|entry| entry != wasm_hash);
-        self.lru.push_back(wasm_hash.to_string());
+        self.lru.retain(|entry| entry != key);
+        self.lru.push_back(key.to_string());
     }
 
     fn prune(&mut self) {
-        if self.max_cached_modules == 0 {
+        if self.capacity == 0 {
             self.cache.clear();
             self.lru.clear();
             return;
         }
-        while self.cache.len() > self.max_cached_modules {
+        while self.cache.len() > self.capacity {
             if let Some(evicted) = self.lru.pop_front() {
                 self.cache.remove(&evicted);
             } else {
                 break;
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundedFifoCache<V> {
+    capacity: usize,
+    cache: BTreeMap<String, V>,
+    insertion_order: VecDeque<String>,
+}
+
+impl<V: Clone> BoundedFifoCache<V> {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            capacity,
+            cache: BTreeMap::new(),
+            insertion_order: VecDeque::new(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
+
+    pub fn get_cloned(&self, key: &str) -> Option<V> {
+        self.cache.get(key).cloned()
+    }
+
+    pub fn insert(&mut self, key: String, value: V) {
+        if self.capacity == 0 {
+            self.cache.clear();
+            self.insertion_order.clear();
+            return;
+        }
+
+        if let Some(entry) = self.cache.get_mut(&key) {
+            *entry = value;
+            return;
+        }
+
+        while self.cache.len() >= self.capacity {
+            if let Some(evicted) = self.insertion_order.pop_front() {
+                self.cache.remove(&evicted);
+            } else {
+                break;
+            }
+        }
+
+        self.insertion_order.push_back(key.clone());
+        self.cache.insert(key, value);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleCache {
+    artifacts: BoundedLruCache<ModuleArtifact>,
+}
+
+impl ModuleCache {
+    pub fn new(max_cached_modules: usize) -> Self {
+        Self {
+            artifacts: BoundedLruCache::new(max_cached_modules),
+        }
+    }
+
+    pub fn max_cached_modules(&self) -> usize {
+        self.artifacts.capacity()
+    }
+
+    pub fn len(&self) -> usize {
+        self.artifacts.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.artifacts.is_empty()
+    }
+
+    pub fn set_max_cached_modules(&mut self, max_cached_modules: usize) {
+        self.artifacts.set_capacity(max_cached_modules);
+    }
+
+    pub fn get(&mut self, wasm_hash: &str) -> Option<ModuleArtifact> {
+        self.artifacts.get_cloned(wasm_hash)
+    }
+
+    pub fn insert(&mut self, artifact: ModuleArtifact) {
+        let key = artifact.wasm_hash.clone();
+        self.artifacts.insert(key, artifact);
     }
 }
 
@@ -550,6 +640,52 @@ mod tests {
     }
 
     #[test]
+    fn bounded_lru_cache_refreshes_hits_without_duplicate_keys() {
+        let mut cache = BoundedLruCache::new(2);
+        cache.insert("a".to_string(), 1u8);
+        cache.insert("b".to_string(), 2u8);
+
+        assert_eq!(cache.get_cloned("a"), Some(1));
+        assert_eq!(cache.get_cloned("a"), Some(1));
+        assert_eq!(cache.lru_keys().collect::<Vec<_>>(), vec!["b", "a"]);
+
+        cache.insert("c".to_string(), 3u8);
+        assert_eq!(cache.get_cloned("b"), None);
+        assert_eq!(cache.get_cloned("a"), Some(1));
+        assert_eq!(cache.get_cloned("c"), Some(3));
+    }
+
+    #[test]
+    fn bounded_lru_cache_zero_capacity_stays_empty() {
+        let mut cache = BoundedLruCache::new(0);
+        cache.insert("a".to_string(), 1u8);
+        assert!(cache.is_empty());
+        assert_eq!(cache.get_cloned("a"), None);
+        assert_eq!(cache.lru_keys().collect::<Vec<_>>(), Vec::<&str>::new());
+    }
+
+    #[test]
+    fn bounded_fifo_cache_preserves_insertion_order_on_update() {
+        let mut cache = BoundedFifoCache::new(2);
+        cache.insert("a".to_string(), 1u8);
+        cache.insert("b".to_string(), 2u8);
+        cache.insert("a".to_string(), 10u8);
+        cache.insert("c".to_string(), 3u8);
+
+        assert_eq!(cache.get_cloned("a"), None);
+        assert_eq!(cache.get_cloned("b"), Some(2));
+        assert_eq!(cache.get_cloned("c"), Some(3));
+    }
+
+    #[test]
+    fn bounded_fifo_cache_zero_capacity_stays_empty() {
+        let mut cache = BoundedFifoCache::new(0);
+        cache.insert("a".to_string(), 1u8);
+        assert!(cache.is_empty());
+        assert_eq!(cache.get_cloned("a"), None);
+    }
+
+    #[test]
     fn module_cache_evicts_lru_entry() {
         let mut cache = ModuleCache::new(2);
         cache.insert(artifact("a", 1));
@@ -593,7 +729,7 @@ mod tests {
         assert!(cache.get("b").is_some());
         assert!(cache.get("b").is_some());
         assert_eq!(
-            cache.lru.iter().map(String::as_str).collect::<Vec<_>>(),
+            cache.artifacts.lru_keys().collect::<Vec<_>>(),
             vec!["a", "b"]
         );
 

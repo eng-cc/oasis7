@@ -9,14 +9,14 @@ pub use metrics::{
 };
 
 #[cfg(feature = "wasmtime")]
-use oasis7_wasm_abi::ModuleLimits;
+use oasis7_wasm_abi::{BoundedLruCache, ModuleLimits};
 use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox,
 };
 #[cfg(feature = "wasmtime")]
 use sha2::{Digest, Sha256};
 #[cfg(feature = "wasmtime")]
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::fmt;
 #[cfg(feature = "wasmtime")]
 use std::fs;
@@ -1067,56 +1067,28 @@ impl DiskCompiledModuleCache {
 #[cfg(feature = "wasmtime")]
 #[derive(Debug)]
 struct CompiledModuleCache {
-    max_entries: usize,
-    cache: BTreeMap<String, Arc<wasmtime::Module>>,
-    lru: VecDeque<String>,
+    modules: BoundedLruCache<Arc<wasmtime::Module>>,
 }
 
 #[cfg(feature = "wasmtime")]
 impl CompiledModuleCache {
     fn new(max_entries: usize) -> Self {
         Self {
-            max_entries,
-            cache: BTreeMap::new(),
-            lru: VecDeque::new(),
+            modules: BoundedLruCache::new(max_entries),
         }
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
-        self.cache.len()
+        self.modules.len()
     }
 
     fn get(&mut self, wasm_hash: &str) -> Option<Arc<wasmtime::Module>> {
-        let module = self.cache.get(wasm_hash)?.clone();
-        self.touch(wasm_hash);
-        Some(module)
+        self.modules.get_cloned(wasm_hash)
     }
 
     fn insert(&mut self, wasm_hash: String, module: Arc<wasmtime::Module>) {
-        self.cache.insert(wasm_hash.clone(), module);
-        self.touch(&wasm_hash);
-        self.prune();
-    }
-
-    fn touch(&mut self, wasm_hash: &str) {
-        self.lru.retain(|entry| entry != wasm_hash);
-        self.lru.push_back(wasm_hash.to_string());
-    }
-
-    fn prune(&mut self) {
-        if self.max_entries == 0 {
-            self.cache.clear();
-            self.lru.clear();
-            return;
-        }
-        while self.cache.len() > self.max_entries {
-            if let Some(evicted) = self.lru.pop_front() {
-                self.cache.remove(&evicted);
-            } else {
-                break;
-            }
-        }
+        self.modules.insert(wasm_hash, module);
     }
 }
 
