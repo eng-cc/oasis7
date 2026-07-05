@@ -1993,6 +1993,12 @@ function chatEntryTitle(entry, locale) {
   return `${entry.agentId || target} ${tr(locale, "回应", "Reply")}`;
 }
 
+function chatEntryCardClass(entry) {
+  if (entry.source === "error") return "event-card event-card--chat-error";
+  if (entry.source === "player") return "event-card event-card--chat-player";
+  return "event-card event-card--chat-agent";
+}
+
 function chatEntryMeta(entry, locale) {
   if (entry.source === "error") {
     const code = entry.code ? ` · code=${entry.code}` : "";
@@ -3482,6 +3488,7 @@ function InteractionPanel() {
               <For each={chatHistory()}>
                 {(entry) => (
                   <EventCard
+                    class={chatEntryCardClass(entry)}
                     title={chatEntryTitle(entry, locale())}
                     badge={`tick=${Number(entry.tick || 0)}`}
                     meta={chatEntryMeta(entry, locale())}
