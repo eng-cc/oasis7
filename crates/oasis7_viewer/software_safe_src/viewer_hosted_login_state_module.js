@@ -25,6 +25,9 @@ export function resetHostedLoginChallenge(hostedLogin) {
   hostedLogin.deliveryMode = null;
   hostedLogin.code = "";
   hostedLogin.expiresAtUnixMs = null;
+  hostedLogin.retryAfterSeconds = null;
   hostedLogin.accountExists = false;
+  hostedLogin.startInFlight = false;
   hostedLogin.completeInFlight = false;
+  hostedLogin.error = null;
 }
