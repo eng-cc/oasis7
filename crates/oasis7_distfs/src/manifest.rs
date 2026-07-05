@@ -25,8 +25,7 @@ pub struct FileIndexManifestRef {
 impl LocalCasStore {
     pub fn export_file_index_manifest(&self) -> Result<FileIndexManifestRef, WorldError> {
         let file_index = self.load_file_index()?;
-        let mut files: Vec<FileMetadata> = file_index.files.values().cloned().collect();
-        files.sort_by(|left, right| left.path.cmp(&right.path));
+        let files: Vec<FileMetadata> = file_index.files.values().cloned().collect();
 
         let manifest = FileIndexManifest {
             version: FILE_INDEX_MANIFEST_VERSION,
@@ -124,9 +123,20 @@ mod tests {
         let dir = temp_dir("roundtrip");
         let store = LocalCasStore::new(&dir);
 
-        store.write_file("docs/a.txt", b"alpha").expect("write a");
         store.write_file("docs/b.txt", b"beta").expect("write b");
+        store.write_file("docs/a.txt", b"alpha").expect("write a");
         let manifest_ref = store.export_file_index_manifest().expect("export");
+        let manifest_bytes = store
+            .get_verified(manifest_ref.content_hash.as_str())
+            .expect("manifest bytes");
+        let manifest: FileIndexManifest =
+            serde_cbor::from_slice(manifest_bytes.as_slice()).expect("manifest");
+        let manifest_paths: Vec<_> = manifest
+            .files
+            .iter()
+            .map(|metadata| metadata.path.as_str())
+            .collect();
+        assert_eq!(manifest_paths, vec!["docs/a.txt", "docs/b.txt"]);
 
         let removed = fs::remove_file(store.files_index_path());
         assert!(removed.is_ok());
