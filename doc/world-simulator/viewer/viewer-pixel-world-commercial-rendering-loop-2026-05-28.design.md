@@ -1,7 +1,7 @@
 # Viewer Pixel World Commercial Rendering Loop 详细设计（2026-05-28）
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-commercial-rendering-loop-2026-05-28.project.md`
+- 历史任务追溯: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## Current State
 - `pixel_world_host.jsx` 已从 snapshot 派生 world bounds、locations、fragment terrain、agents、links、hotspots 和 selection。

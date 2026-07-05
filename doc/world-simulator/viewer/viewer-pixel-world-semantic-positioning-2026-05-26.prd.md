@@ -1,7 +1,7 @@
 # Viewer Pixel World Semantic Positioning（2026-05-26）
 
 - 对应设计文档: `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.design.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.project.md`
+- 历史任务追溯: `task_4ade083740bc4d9f9f9bb742a7ce153f` / GitHub issue #1011；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.prd.md`

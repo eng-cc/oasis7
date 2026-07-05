@@ -1,7 +1,7 @@
 # Viewer Pixel World Fragment LOD Terrain Rendering 详细设计（2026-05-27）
 
 - 对应需求文档: `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
-- 对应项目管理文档: `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.project.md`
+- 历史任务追溯: `task_428db5366f654c5e892ac300807cb9cc` / GitHub issue #986；执行证据见 GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl`。
 
 ## Current State
 - `pixel_world_host.jsx` already derives world bounds, locations, agents, links, and hotspots from the snapshot.
