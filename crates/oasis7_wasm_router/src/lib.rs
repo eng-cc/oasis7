@@ -35,7 +35,7 @@ fn regex_cache() -> &'static RegexCache {
 fn parsed_subscription_filters(
     filters_value: &JsonValue,
 ) -> Result<Arc<SubscriptionFilters>, serde_json::Error> {
-    let parsed: SubscriptionFilters = serde_json::from_value(filters_value.clone())?;
+    let parsed = SubscriptionFilters::deserialize(filters_value)?;
     Ok(Arc::new(parsed))
 }
 
@@ -402,14 +402,14 @@ mod tests {
 
         let matched = json!({ "cost": 3.0, "kind": "move.left" });
         assert!(module_subscribes_to_action(
-            &[subscription.clone()],
+            std::slice::from_ref(&subscription),
             ModuleSubscriptionStage::PreAction,
             "action.move.step",
             &matched,
         ));
 
         assert!(!module_subscribes_to_action(
-            &[subscription.clone()],
+            std::slice::from_ref(&subscription),
             ModuleSubscriptionStage::PostAction,
             "action.move.step",
             &matched,
@@ -417,7 +417,7 @@ mod tests {
 
         let low_cost = json!({ "cost": 1.0, "kind": "move.left" });
         assert!(!module_subscribes_to_action(
-            &[subscription.clone()],
+            std::slice::from_ref(&subscription),
             ModuleSubscriptionStage::PreAction,
             "action.move.step",
             &low_cost,
@@ -826,8 +826,8 @@ mod tests {
             })),
         );
         let payload = json!({ "status": "ok" });
-        let prepared =
-            prepare_subscriptions(&[subscription.clone()], "m.metrics").expect("prepare metrics");
+        let prepared = prepare_subscriptions(std::slice::from_ref(&subscription), "m.metrics")
+            .expect("prepare metrics");
         assert!(module_subscribes_to_event(
             &[subscription],
             "world.tick",
@@ -840,10 +840,10 @@ mod tests {
         ));
 
         let latest = snapshot_global_wasm_router_metrics();
-        assert!(latest.prepare_calls_total >= baseline.prepare_calls_total + 1);
+        assert!(latest.prepare_calls_total > baseline.prepare_calls_total);
         assert!(latest.match_calls_total >= baseline.match_calls_total + 2);
-        assert!(latest.parse_fallbacks >= baseline.parse_fallbacks + 1);
-        assert!(latest.prepared_hits >= baseline.prepared_hits + 1);
+        assert!(latest.parse_fallbacks > baseline.parse_fallbacks);
+        assert!(latest.prepared_hits > baseline.prepared_hits);
     }
 
     #[test]
@@ -898,7 +898,7 @@ mod tests {
 
         let latest = snapshot_global_wasm_router_metrics();
         assert!(
-            latest.regex_compile_calls_total >= baseline.regex_compile_calls_total + 1,
+            latest.regex_compile_calls_total > baseline.regex_compile_calls_total,
             "prepared regex compilation should be counted"
         );
     }
