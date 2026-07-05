@@ -114,6 +114,25 @@ then
 fi
 grep -q 'duplicate crate `hashbrown` grew beyond baseline' "$tmp_dir/top-growth.out"
 
+python3 - "$summary" "$tmp_dir/top-summary-mismatch.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["duplicate_dependency_top_crates"] = [
+    {"crate": "hashbrown", "duplicate_entries": 4}
+]
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if OASIS7_DUPLICATE_DEP_BASELINE="$baseline" OASIS7_DUPLICATE_DEP_TODAY=2026-06-25 \
+  ./scripts/check-duplicate-dependency-baseline.sh "$tmp_dir/top-summary-mismatch.json" >"$tmp_dir/top-summary-mismatch.out" 2>&1
+then
+  echo "expected top summary mismatch to fail" >&2
+  exit 1
+fi
+grep -q "duplicate_dependency_top_crates must match the top 20 entries" "$tmp_dir/top-summary-mismatch.out"
+
 python3 - "$summary" "$tmp_dir/new-crate.json" <<'PY'
 from pathlib import Path
 import json

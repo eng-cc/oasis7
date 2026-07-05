@@ -119,22 +119,52 @@ if not isinstance(crate_maxima, dict):
     crate_maxima = {}
 
 duplicate_crates = summary.get("duplicate_dependency_crates", [])
-if not isinstance(duplicate_crates, list):
-    failures.append("summary duplicate_dependency_crates must be a list")
-    duplicate_crates = []
+top_crates = summary.get("duplicate_dependency_top_crates", [])
+
+def parse_crate_entries(raw: object, key: str) -> list[tuple[str, int]]:
+    if not isinstance(raw, list):
+        failures.append(f"summary {key} must be a list")
+        return []
+
+    parsed: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            failures.append(f"summary {key} entries must be objects")
+            continue
+        crate_name = entry.get("crate")
+        if not crate_name:
+            failures.append(f"summary {key} entry missing crate")
+            continue
+        crate_name = str(crate_name)
+        if crate_name in seen:
+            failures.append(f"summary {key} repeats crate `{crate_name}`")
+            continue
+        seen.add(crate_name)
+        try:
+            duplicate_entries = int(entry.get("duplicate_entries", -1))
+        except (TypeError, ValueError):
+            failures.append(f"summary {key} duplicate_entries must be integer for {crate_name}")
+            continue
+        parsed.append((crate_name, duplicate_entries))
+    return parsed
+
+duplicate_crate_entries = parse_crate_entries(duplicate_crates, "duplicate_dependency_crates")
+top_crate_entries = parse_crate_entries(top_crates, "duplicate_dependency_top_crates")
+duplicate_crate_counts = dict(duplicate_crate_entries)
+
+expected_top_crate_entries = sorted(
+    duplicate_crate_entries,
+    key=lambda item: (-item[1], item[0]),
+)[:20]
+if top_crate_entries != expected_top_crate_entries:
+    failures.append(
+        "summary duplicate_dependency_top_crates must match the top 20 entries "
+        "from duplicate_dependency_crates sorted by duplicate_entries desc then crate asc"
+    )
 
 seen_crates: set[str] = set()
-for entry in duplicate_crates:
-    if not isinstance(entry, dict):
-        failures.append("summary duplicate_dependency_crates entries must be objects")
-        continue
-    crate_name = entry.get("crate")
-    if not crate_name:
-        failures.append("summary duplicate crate entry missing crate")
-        continue
-    if crate_name in seen_crates:
-        failures.append(f"summary duplicate_dependency_crates repeats crate `{crate_name}`")
-        continue
+for crate_name, actual in duplicate_crate_counts.items():
     seen_crates.add(crate_name)
     if crate_name not in crate_maxima:
         failures.append(
@@ -143,7 +173,6 @@ for entry in duplicate_crates:
         )
         continue
     try:
-        actual = int(entry.get("duplicate_entries", -1))
         maximum = int(crate_maxima[crate_name])
     except (TypeError, ValueError):
         failures.append(f"duplicate crate value must be integer for {crate_name}")
