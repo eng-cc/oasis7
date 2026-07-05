@@ -20,7 +20,7 @@
 - 历史上的 `scripts/viewer-texture-inspector.sh`
 - 历史上的 `scripts/viewer-texture-inspector-lib.sh`
 - 历史上的 `retired legacy viewer doc set: visual-review-score-card`
-- `doc/ui_review_result/card_2026_03_06_11_50_29.md`
+- 退役 UI 评审样本池入口：`doc/ui_review_result/README.md`
 
 ## 状态
 - 更新日期: 2026-03-06
