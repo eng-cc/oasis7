@@ -10,6 +10,11 @@ export function createViewerWorldScaleModule({
   softwareSafeRenderModeAlias,
   viewerRenderMode,
 }) {
+  function trimDisplayValue(value, digits) {
+    const label = trimFixed(value, digits);
+    return /^-0(?:\.0*)?$/.test(label) ? label.slice(1) : label;
+  }
+
   function formatPhysicalDistanceCm(value, locale = state.uiLocale) {
     const numeric = normalizeFiniteNumber(value);
     if (numeric == null) {
@@ -23,13 +28,14 @@ export function createViewerWorldScaleModule({
     }
     if (absolute >= 100) {
       const meters = numeric / 100;
-      const label = trimFixed(
+      const digits = Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2;
+      const label = trimDisplayValue(
         meters,
-        Math.abs(meters) >= 100 ? 0 : Math.abs(meters) >= 10 ? 1 : 2,
+        digits,
       );
       return `${label} m`;
     }
-    return `${trimFixed(numeric, 0)} cm`;
+    return `${trimDisplayValue(numeric, 0)} cm`;
   }
 
   function formatWorldPositionCm(pos, locale = state.uiLocale) {

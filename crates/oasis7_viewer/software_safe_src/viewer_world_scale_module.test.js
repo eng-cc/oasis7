@@ -28,6 +28,20 @@ function createWorldScaleModule(state) {
 }
 
 describe("viewer world scale module", () => {
+  it("does not expose negative zero in centimeter labels", () => {
+    const state = {
+      snapshot: { model: { locations: {} } },
+      uiLocale: "en",
+    };
+    const module = createWorldScaleModule(state);
+
+    expect(module.formatPhysicalDistanceCm(-0.4)).toBe("0 cm");
+    expect(module.formatPhysicalDistanceCm(-1.5)).toBe("-2 cm");
+    expect(module.formatWorldPositionCm({ x_cm: -0.4, y_cm: 0, z_cm: 0.4 })).toBe(
+      "x=0 cm · y=0 cm · z=0 cm",
+    );
+  });
+
   it("keeps nearest locations stable without full-array sorting", () => {
     const state = {
       selectedId: "origin",
