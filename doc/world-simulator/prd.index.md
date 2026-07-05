@@ -52,6 +52,7 @@
 - `doc/core/reviews/round-008-reviewed-files.md`
 - Viewer 旧控制反馈三件套已删除并压缩为历史归档说明 `doc/world-simulator/viewer/viewer-control-feedback-historical-archive-2026-02.md`；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
+- Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
@@ -83,7 +84,6 @@
 | `doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md` | `doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.design.md` | `doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.prd.md` | `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.design.md` | `doc/world-simulator/launcher/game-client-launcher-web-transfer-closure-2026-03-06.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.prd.md` | `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.design.md` | `doc/world-simulator/launcher/game-client-launcher-web-settings-feedback-parity-2026-03-06.project.md` |
-| `doc/world-simulator/launcher/game-client-launcher-native-legacy-cleanup-2026-03-06.prd.md` | `doc/world-simulator/launcher/game-client-launcher-native-legacy-cleanup-2026-03-06.design.md` | `doc/world-simulator/launcher/game-client-launcher-native-legacy-cleanup-2026-03-06.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.prd.md` | `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.design.md` | `doc/world-simulator/launcher/game-client-launcher-transfer-product-grade-parity-2026-03-06.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-panel-2026-03-07.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-panel-2026-03-07.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-panel-2026-03-07.project.md` |
 | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p0-2026-03-07.prd.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p0-2026-03-07.design.md` | `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-public-chain-p0-2026-03-07.project.md` |

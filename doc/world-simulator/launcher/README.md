@@ -1,11 +1,11 @@
 # `world-simulator/launcher` 热点子域入口
 
-更新时间: 2026-06-23
+更新时间: 2026-07-05
 
 ## 从这里开始
 - 想确认 launcher 当前面向玩家/开发者的整体可用性、分发与 release readiness：先读 `game-client-launcher-broad-user-release-distribution-2026-04-14.prd.md`
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
-- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 `.pm` task trace 进入最新任务证据
+- 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认 Web / native control plane、console、settings、feedback、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
 - 想确认 blockchain explorer、public chain、address / contract / assets / mempool 或 mainnet-grade rebuild：先读 `game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.prd.md`
 - 想确认 launcher 和 chain runtime / execution world dir / stale world recovery 的边界：先读 `game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`，再按需读 `game-client-launcher-chain-runtime-execution-world-dir-output-hardening-2026-03-09.prd.md`
@@ -14,15 +14,15 @@
 ## 入口分工
 - 当前页只承担 `launcher/` 子目录 landing page 职责，不复制完整长表。
 - `../README.md` 是 world-simulator 模块级 landing page，负责跨 `viewer / launcher / llm / kernel / scenario / m4` 分流。
-- `../project.md` 是模块执行台账，适合确认当前 launcher 相关活跃任务、阻断和 `.pm` trace。
+- `../project.md` 是模块执行台账，适合确认当前 launcher 相关活跃任务、阻断和 GitHub task issue evidence comments；`.pm/github-project-sync` 只作为 task_uid 到 issue/project item 的本地 mapping/archive 辅助。
 - `../prd.index.md` 是 world-simulator 模块完整文件级索引，适合已知主题后按文件名查找。
 - 本页只维护簇级入口；当某个专题退化为历史执行证据时，继续让它通过 `../prd.index.md` 可检索，而不是回到默认首读路径。
 
 ## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-06-23）:
-  - `doc/world-simulator/launcher/`: 87 份 Markdown
-  - `doc/world-simulator/`: 475 份 Markdown
-- 该子域已经超过热点阈值；本页目标是降低首读扫描成本，不在本批直接减少文件数。
+- 当前 inventory 快照（`./scripts/doc-inventory-report.sh`，2026-07-05，本次删除完成后）:
+  - `doc/world-simulator/launcher/`: 84 份 Markdown
+  - `doc/world-simulator/`: 454 份 Markdown
+- 该子域仍超过热点阈值；本页目标是降低首读扫描成本，并持续退役不再承担当前入口职责的历史专题。
 
 ## 首读主题簇
 
@@ -76,7 +76,7 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
-- 如果问题涉及当前本地 launcher/playtest 操作口径，优先看 `../project.md` 当前状态和 `.pm` task trace，再决定是否进入某个历史专题。
+- 如果问题涉及当前本地 launcher/playtest 操作口径，优先看 `../project.md` 当前状态和 GitHub task issue evidence comments，再决定是否进入某个历史专题。
 - 如果问题需要判断 runtime 正确性、hosted auth、chain behavior 或 release readiness，本页只提供文档入口，结论必须回到对应专业角色和当前任务证据。
 - 历史完成的 launcher 专题继续保留可检索性；除非它仍是当前 operator 入口，不再提升为默认首读路径。
 
