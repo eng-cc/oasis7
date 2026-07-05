@@ -1,10 +1,4 @@
 use super::*;
-use std::sync::{Mutex, OnceLock};
-
-fn runtime_llm_timeout_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
 
 #[test]
 fn bind_agent_player_emits_unbind_before_rebind_for_same_agent() {
@@ -104,30 +98,4 @@ fn sync_shadow_kernel_preserves_generated_seed_locations() {
             .locations
             .contains_key("frag-shadow")
     );
-}
-
-#[test]
-fn runtime_live_llm_timeout_defaults_to_configured_budget() {
-    let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    }
-    assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 30_000);
-    assert_eq!(resolve_runtime_live_llm_timeout_ms(8_000), 8_000);
-}
-
-#[test]
-fn runtime_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
-    let _guard = runtime_llm_timeout_env_lock().lock().expect("env lock");
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::set_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS, "9000");
-    }
-    assert_eq!(resolve_runtime_live_llm_timeout_ms(180_000), 9_000);
-    assert_eq!(resolve_runtime_live_llm_timeout_ms(4_000), 4_000);
-    // SAFETY: This test/setup code mutates process environment in a controlled scope.
-    unsafe {
-        oasis7::env_mut::remove_var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS);
-    }
 }

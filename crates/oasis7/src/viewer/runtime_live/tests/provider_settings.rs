@@ -10,6 +10,42 @@ fn provider_settings_from_env_defaults_to_none() {
 }
 
 #[test]
+fn runtime_live_llm_timeout_defaults_to_configured_budget() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+
+    assert_eq!(
+        super::control_plane::resolve_runtime_live_llm_timeout_ms(180_000),
+        30_000
+    );
+    assert_eq!(
+        super::control_plane::resolve_runtime_live_llm_timeout_ms(8_000),
+        8_000
+    );
+}
+
+#[test]
+fn runtime_live_llm_timeout_respects_env_ceiling_without_expanding_budget() {
+    let _guard = runtime_provider_env_lock().lock().expect("env lock");
+    clear_runtime_provider_env();
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(RUNTIME_LIVE_LLM_TIMEOUT_ENV, "9000");
+    }
+
+    assert_eq!(
+        super::control_plane::resolve_runtime_live_llm_timeout_ms(180_000),
+        9_000
+    );
+    assert_eq!(
+        super::control_plane::resolve_runtime_live_llm_timeout_ms(4_000),
+        4_000
+    );
+
+    clear_runtime_provider_env();
+}
+
+#[test]
 fn provider_settings_from_env_parses_profile_and_timeout() {
     let _guard = runtime_provider_env_lock().lock().expect("env lock");
     clear_runtime_provider_env();

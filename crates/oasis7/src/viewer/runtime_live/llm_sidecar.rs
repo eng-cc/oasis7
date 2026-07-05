@@ -107,7 +107,9 @@ pub(in crate::viewer::runtime_live) struct RuntimeProviderCheckSnapshot {
     cache_key: String,
 }
 
-fn resolve_runtime_live_llm_timeout_ms(configured_timeout_ms: u64) -> u64 {
+pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
+    configured_timeout_ms: u64,
+) -> u64 {
     let configured_timeout_ms = configured_timeout_ms.max(1);
     let runtime_timeout_ceiling_ms = std::env::var(ENV_RUNTIME_LIVE_LLM_TIMEOUT_MS)
         .ok()
