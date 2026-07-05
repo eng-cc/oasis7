@@ -1110,6 +1110,12 @@ function PixelWorldFocusRail(props) {
         <div class="pixel-world-focus-rail__label">
           {tr(props.locale(), "焦点", "Focus")}
         </div>
+        <Show when={surface()?.blocker.label}>
+          <div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker" data-focus-priority="blocker">
+            <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
+            <strong>{surface().blocker.label}</strong>
+          </div>
+        </Show>
         <Show when={activeAgent()}>
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "Agent", "Agent")}</span>
@@ -1126,12 +1132,6 @@ function PixelWorldFocusRail(props) {
           <div class="pixel-world-focus-rail__item">
             <span>{tr(props.locale(), "路线", "Routes")}</span>
             <strong>{routeCount()}</strong>
-          </div>
-        </Show>
-        <Show when={surface()?.blocker.label}>
-          <div class="pixel-world-focus-rail__item">
-            <span>{tr(props.locale(), "阻塞", "Blocker")}</span>
-            <strong>{surface().blocker.label}</strong>
           </div>
         </Show>
       </div>

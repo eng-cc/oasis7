@@ -751,6 +751,14 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("agent-0");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Routes");
     expect(document.querySelector(".pixel-world-focus-rail")).toHaveTextContent("Missing Material");
+    expect(document.querySelectorAll(".pixel-world-focus-rail__item")[0]).toHaveClass("pixel-world-focus-rail__item--blocker");
+    expect(document.querySelector(".pixel-world-focus-rail__item--blocker")).toHaveAttribute("data-focus-priority", "blocker");
+    expect(document.querySelector(".pixel-world-focus-rail__item--blocker")).toHaveTextContent("Missing Material");
+    expect(
+      document.querySelector(".pixel-world-focus-rail__item--blocker").compareDocumentPosition(
+        Array.from(document.querySelectorAll(".pixel-world-focus-rail__item")).find((item) => item.textContent.includes("Routes")),
+      ) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(document.querySelector(".pixel-world-focus-receipt")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveClass("pixel-world-action-receipt--focus-compact");
     expect(document.querySelector(".pixel-world-focus-receipt .pixel-world-action-receipt")).toHaveAttribute("data-receipt-confidence", "world_delta");
