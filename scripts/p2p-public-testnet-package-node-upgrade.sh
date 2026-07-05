@@ -388,6 +388,8 @@ for bundle_path in bundle_paths:
     runtime["ref"] = artifact_ref
     runtime["sha256"] = runtime_sha
     runtime["size_bytes"] = runtime_size
+    runtime["package_version"] = package_version
+    runtime["run_id"] = run_id
     runtime["updated_by"] = updated_by
     data["git_commit"] = commit
     data["updated_by"] = updated_by

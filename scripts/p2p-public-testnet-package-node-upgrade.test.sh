@@ -63,6 +63,8 @@ tar -czf "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-l
 
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 expected_sha=$(shasum -a 256 "$node_root_abs/current/bin/oasis7_chain_runtime" | awk '{print $1}')
+expected_size=$(wc -c <"$node_root_abs/current/bin/oasis7_chain_runtime" | tr -d ' ')
+expected_artifact_ref="testnet-package-linux-x64-$package_version/oasis7-linux-x64-bundle.tar.gz!/bin/oasis7_chain_runtime"
 
 test "$(readlink "$node_root_abs/current")" = "$node_root_abs/releases/$package_version"
 test -x "$node_root_abs/releases/$package_version/bin/oasis7_chain_runtime"
@@ -86,13 +88,20 @@ test -f "$node_root_abs/backups/sentinel.txt"
 jq -e \
   --arg expected "$expected_sha" \
   --arg commit "$commit" \
+  --arg package_version "$package_version" \
+  --arg run_id "$run_id" \
   --arg runtime "$node_root_abs/current/bin/oasis7_chain_runtime" \
+  --arg artifact_ref "$expected_artifact_ref" \
+  --argjson size_bytes "$expected_size" \
   '.git_commit == $commit
     and .runtime_build.git_commit == $commit
+    and .runtime_build.package_version == $package_version
+    and .runtime_build.run_id == $run_id
     and .runtime_build.sha256 == $expected
+    and .runtime_build.size_bytes == $size_bytes
     and .runtime_build.path == $runtime
     and .runtime_build.resolved_path == $runtime
-    and (.runtime_build.ref | contains("testnet-package-linux-x64-"))' \
+    and .runtime_build.ref == $artifact_ref' \
   "$node_root_abs/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 
 directory_current_node="$TMP_DIR/directory-current-node"
