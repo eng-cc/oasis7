@@ -2169,7 +2169,7 @@ function WorldStageHero() {
       </div>
       <Show when={selectedLabel()}>
         {(selected) => (
-          <div class="badge-row">
+          <div class="badge-row stage-hero__selection">
             <Badge class="badge badge--accent">{tr(locale(), "当前选择", "Current Selection")}</Badge>
             <Badge>{selected()}</Badge>
           </div>

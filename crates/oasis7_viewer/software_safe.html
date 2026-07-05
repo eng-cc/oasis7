@@ -1624,6 +1624,37 @@
         font-size: 13px;
         line-height: 1.45;
       }
+      .stage-hero__selection {
+        align-items: center;
+        width: fit-content;
+        max-width: 100%;
+        padding: 7px;
+        border: 1px solid rgba(141, 199, 170, 0.2);
+        border-radius: 10px;
+        background:
+          linear-gradient(180deg, rgba(141, 199, 170, 0.08), rgba(141, 199, 170, 0.025)),
+          rgba(9, 13, 11, 0.28);
+      }
+      .stage-hero__selection .badge {
+        min-width: 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+      }
+      .stage-hero__selection .badge:first-child {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        background: rgba(247, 242, 230, 0.025);
+        border-color: rgba(247, 242, 230, 0.1);
+      }
+      .stage-hero__selection .badge:last-child {
+        color: #dff5e8;
+        font-weight: 700;
+        border-color: rgba(141, 199, 170, 0.38);
+        background: rgba(141, 199, 170, 0.11);
+      }
       .stage-hero__mobile-shortcuts {
         display: none;
       }

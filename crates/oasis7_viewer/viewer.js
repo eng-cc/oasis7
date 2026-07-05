@@ -8749,7 +8749,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$39 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$40 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$41 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$42 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$43 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$44 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$45 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$46 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$47 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$48 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$49 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$58 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$59 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$61 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$62 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$63 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$44 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$46 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$47 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$48 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$49 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$59 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$60 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$61 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$62 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$63 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$64 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {
@@ -10808,7 +10808,7 @@ function WorldStageHero() {
         return selectedLabel();
       },
       children: (selected) => (() => {
-        var _el$180 = _tmpl$8();
+        var _el$180 = _tmpl$38();
         insert(_el$180, createComponent(Badge, {
           "class": "badge badge--accent",
           get children() {
@@ -10916,7 +10916,7 @@ function WorldStageHero() {
 function MobileJumpRail() {
   const locale = () => uiLocale();
   return (() => {
-    var _el$181 = _tmpl$38(), _el$182 = _el$181.firstChild, _el$183 = _el$182.nextSibling, _el$184 = _el$183.nextSibling, _el$185 = _el$184.nextSibling;
+    var _el$181 = _tmpl$39(), _el$182 = _el$181.firstChild, _el$183 = _el$182.nextSibling, _el$184 = _el$183.nextSibling, _el$185 = _el$184.nextSibling;
     insert(_el$182, () => tr(locale(), "世界", "World"));
     insert(_el$183, () => tr(locale(), "目标", "Targets"));
     insert(_el$184, () => tr(locale(), "指挥", "Command"));
@@ -10943,7 +10943,7 @@ function TargetsPanel() {
     return `${state.selectedKind}:${state.selectedId}`;
   };
   return (() => {
-    var _el$186 = _tmpl$39(), _el$187 = _el$186.firstChild, _el$188 = _el$187.firstChild, _el$189 = _el$188.nextSibling, _el$190 = _el$187.nextSibling, _el$191 = _el$190.firstChild, _el$192 = _el$191.nextSibling, _el$193 = _el$190.nextSibling, _el$194 = _el$193.firstChild, _el$195 = _el$194.nextSibling;
+    var _el$186 = _tmpl$40(), _el$187 = _el$186.firstChild, _el$188 = _el$187.firstChild, _el$189 = _el$188.nextSibling, _el$190 = _el$187.nextSibling, _el$191 = _el$190.firstChild, _el$192 = _el$191.nextSibling, _el$193 = _el$190.nextSibling, _el$194 = _el$193.firstChild, _el$195 = _el$194.nextSibling;
     insert(_el$186, createComponent(Show, {
       get when() {
         return selectedLabel();
@@ -11055,7 +11055,7 @@ function TargetsPanel() {
           children: (agent, index) => {
             const status = () => describeAgentSessionStatus(agent.id, locale());
             return (() => {
-              var _el$200 = _tmpl$40(), _el$201 = _el$200.firstChild, _el$202 = _el$201.nextSibling, _el$203 = _el$202.nextSibling, _el$204 = _el$203.nextSibling;
+              var _el$200 = _tmpl$41(), _el$201 = _el$200.firstChild, _el$202 = _el$201.nextSibling, _el$203 = _el$202.nextSibling, _el$204 = _el$203.nextSibling;
               _el$200.$$click = () => applySelection({
                 kind: "agent",
                 id: agent.id
@@ -11127,7 +11127,7 @@ function TargetsPanel() {
             return lists().locations;
           },
           children: (location) => (() => {
-            var _el$205 = _tmpl$41(), _el$206 = _el$205.firstChild, _el$207 = _el$206.nextSibling;
+            var _el$205 = _tmpl$42(), _el$206 = _el$205.firstChild, _el$207 = _el$206.nextSibling;
             _el$205.$$click = () => applySelection({
               kind: "location",
               id: location.id
@@ -11198,7 +11198,7 @@ function WorldSummaryPanel() {
       });
     }
   }), (() => {
-    var _el$208 = _tmpl$44(), _el$209 = _el$208.firstChild, _el$210 = _el$209.firstChild, _el$211 = _el$210.firstChild, _el$212 = _el$211.nextSibling, _el$213 = _el$209.nextSibling, _el$217 = _el$213.firstChild, _el$218 = _el$217.firstChild, _el$219 = _el$218.firstChild, _el$220 = _el$219.firstChild, _el$221 = _el$220.nextSibling, _el$222 = _el$219.nextSibling, _el$223 = _el$218.nextSibling, _el$224 = _el$223.firstChild, _el$225 = _el$224.nextSibling, _el$226 = _el$225.nextSibling, _el$234 = _el$226.nextSibling, _el$235 = _el$234.nextSibling, _el$236 = _el$235.firstChild, _el$237 = _el$236.nextSibling;
+    var _el$208 = _tmpl$45(), _el$209 = _el$208.firstChild, _el$210 = _el$209.firstChild, _el$211 = _el$210.firstChild, _el$212 = _el$211.nextSibling, _el$213 = _el$209.nextSibling, _el$217 = _el$213.firstChild, _el$218 = _el$217.firstChild, _el$219 = _el$218.firstChild, _el$220 = _el$219.firstChild, _el$221 = _el$220.nextSibling, _el$222 = _el$219.nextSibling, _el$223 = _el$218.nextSibling, _el$224 = _el$223.firstChild, _el$225 = _el$224.nextSibling, _el$226 = _el$225.nextSibling, _el$234 = _el$226.nextSibling, _el$235 = _el$234.nextSibling, _el$236 = _el$235.firstChild, _el$237 = _el$236.nextSibling;
     insert(_el$211, () => tr(locale(), "玩法明细", "Gameplay Details"));
     insert(_el$212, () => tr(locale(), "世界棋盘上方已保留目标、下一步和回执；这里展开看完整状态机与经济明细。", "The world board already carries objective, next move, and receipt; expand here for the full state machine and economy details."));
     insert(_el$209, createComponent(Badge, {
@@ -11658,7 +11658,7 @@ function WorldSummaryPanel() {
                 },
                 get children() {
                   return [(() => {
-                    var _el$259 = _tmpl$45();
+                    var _el$259 = _tmpl$46();
                     insert(_el$259, createComponent(Badge, {
                       "class": "badge badge--warn",
                       get children() {
@@ -11682,7 +11682,7 @@ function WorldSummaryPanel() {
                   return _el$261;
                 }
               }), (() => {
-                var _el$262 = _tmpl$45();
+                var _el$262 = _tmpl$46();
                 insert(_el$262, createComponent(Badge, {
                   "class": "badge badge--accent",
                   get children() {
@@ -11964,7 +11964,7 @@ function WorldSummaryPanel() {
               });
             }
           }), (() => {
-            var _el$267 = _tmpl$46(), _el$268 = _el$267.firstChild, _el$269 = _el$268.nextSibling;
+            var _el$267 = _tmpl$47(), _el$268 = _el$267.firstChild, _el$269 = _el$268.nextSibling;
             insert(_el$268, () => tr(locale(), "可用玩法动作", "Available Gameplay Actions"));
             insert(_el$269, createComponent(Show, {
               get when() {
@@ -12147,7 +12147,7 @@ function WorldSummaryPanel() {
                 return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
               },
               get children() {
-                var _el$215 = _tmpl$42(), _el$216 = _el$215.firstChild;
+                var _el$215 = _tmpl$43(), _el$216 = _el$215.firstChild;
                 _el$216.$$click = () => {
                   void logoutHostedPlayerSession();
                 };
@@ -12372,7 +12372,7 @@ function WorldSummaryPanel() {
         return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
       },
       get children() {
-        var _el$227 = _tmpl$43();
+        var _el$227 = _tmpl$44();
         _el$227.$$click = () => {
           void logoutHostedPlayerSession();
         };
@@ -12843,7 +12843,7 @@ function InteractionPanel() {
       });
     },
     get children() {
-      var _el$289 = _tmpl$58(), _el$290 = _el$289.firstChild, _el$292 = _el$290.nextSibling;
+      var _el$289 = _tmpl$59(), _el$290 = _el$289.firstChild, _el$292 = _el$290.nextSibling;
       insert(_el$290, createComponent(Badge, {
         "class": "badge badge--accent",
         get children() {
@@ -12885,7 +12885,7 @@ function InteractionPanel() {
         },
         get children() {
           return [(() => {
-            var _el$291 = _tmpl$47();
+            var _el$291 = _tmpl$48();
             insert(_el$291, createComponent(Badge, {
               "class": "badge badge--good",
               get children() {
@@ -12986,7 +12986,7 @@ function InteractionPanel() {
         },
         get children() {
           return [(() => {
-            var _el$293 = _tmpl$48(), _el$294 = _el$293.firstChild, _el$295 = _el$294.nextSibling;
+            var _el$293 = _tmpl$49(), _el$294 = _el$293.firstChild, _el$295 = _el$294.nextSibling;
             insert(_el$294, () => tr(locale(), "消息", "Message"));
             _el$295.$$input = (event) => {
               state.chatDraft.message = String(event.currentTarget.value || "");
@@ -13004,7 +13004,7 @@ function InteractionPanel() {
             createRenderEffect(() => _el$295.value = state.chatDraft.message);
             return _el$293;
           })(), (() => {
-            var _el$296 = _tmpl$49(), _el$297 = _el$296.firstChild;
+            var _el$296 = _tmpl$50(), _el$297 = _el$296.firstChild;
             _el$297.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
             insert(_el$297, () => tr(locale(), "发送聊天", "Send Chat"));
             createRenderEffect(() => _el$297.disabled = !chatControlsEnabled());
@@ -13129,7 +13129,7 @@ function InteractionPanel() {
               return promptSettingsSummary();
             }
           }), (() => {
-            var _el$302 = _tmpl$50(), _el$303 = _el$302.firstChild;
+            var _el$302 = _tmpl$51(), _el$303 = _el$302.firstChild;
             _el$303.$$click = () => togglePromptOverridesVisible();
             insert(_el$303, promptSettingsButtonLabel);
             createRenderEffect(() => _el$303.disabled = !canControlSelectedAgent());
@@ -13160,7 +13160,7 @@ function InteractionPanel() {
                   return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
                 },
                 get children() {
-                  var _el$306 = _tmpl$51(), _el$307 = _el$306.firstChild, _el$308 = _el$307.nextSibling;
+                  var _el$306 = _tmpl$52(), _el$307 = _el$306.firstChild, _el$308 = _el$307.nextSibling;
                   insert(_el$307, () => tr(locale(), "后端审批码", "Backend Approval Code"));
                   _el$308.$$input = (event) => {
                     state.strongAuth.approvalCode = String(event.currentTarget.value || "");
@@ -13169,7 +13169,7 @@ function InteractionPanel() {
                   return _el$306;
                 }
               }), (() => {
-                var _el$309 = _tmpl$52(), _el$310 = _el$309.firstChild, _el$311 = _el$310.nextSibling;
+                var _el$309 = _tmpl$53(), _el$310 = _el$309.firstChild, _el$311 = _el$310.nextSibling;
                 insert(_el$310, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
                 _el$311.$$input = (event) => {
                   state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
@@ -13179,7 +13179,7 @@ function InteractionPanel() {
                 createRenderEffect(() => _el$311.value = state.promptDraft.systemPrompt);
                 return _el$309;
               })(), (() => {
-                var _el$312 = _tmpl$53(), _el$313 = _el$312.firstChild, _el$314 = _el$313.nextSibling;
+                var _el$312 = _tmpl$54(), _el$313 = _el$312.firstChild, _el$314 = _el$313.nextSibling;
                 insert(_el$313, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
                 _el$314.$$input = (event) => {
                   state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
@@ -13189,7 +13189,7 @@ function InteractionPanel() {
                 createRenderEffect(() => _el$314.value = state.promptDraft.shortTermGoal);
                 return _el$312;
               })(), (() => {
-                var _el$315 = _tmpl$54(), _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling;
+                var _el$315 = _tmpl$55(), _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling;
                 insert(_el$316, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
                 _el$317.$$input = (event) => {
                   state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
@@ -13199,7 +13199,7 @@ function InteractionPanel() {
                 createRenderEffect(() => _el$317.value = state.promptDraft.longTermGoal);
                 return _el$315;
               })(), (() => {
-                var _el$318 = _tmpl$55(), _el$319 = _el$318.firstChild, _el$320 = _el$319.nextSibling;
+                var _el$318 = _tmpl$56(), _el$319 = _el$318.firstChild, _el$320 = _el$319.nextSibling;
                 _el$319.$$click = () => sendPromptControl("preview", null);
                 insert(_el$319, () => tr(locale(), "预览提示词", "Preview Prompt"));
                 _el$320.$$click = () => sendPromptControl("apply", null);
@@ -13215,7 +13215,7 @@ function InteractionPanel() {
                 });
                 return _el$318;
               })(), (() => {
-                var _el$321 = _tmpl$56(), _el$322 = _el$321.firstChild, _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling, _el$325 = _el$322.nextSibling;
+                var _el$321 = _tmpl$57(), _el$322 = _el$321.firstChild, _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling, _el$325 = _el$322.nextSibling;
                 insert(_el$323, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
                 _el$324.$$input = (event) => {
                   const nextValue = Number(event.currentTarget.value || 0);
@@ -13328,7 +13328,7 @@ function InteractionPanel() {
               return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
             }
           }), (() => {
-            var _el$327 = _tmpl$57(), _el$328 = _el$327.firstChild;
+            var _el$327 = _tmpl$58(), _el$328 = _el$327.firstChild;
             insert(_el$328, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
             return _el$327;
           })()];
@@ -13386,7 +13386,7 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$332 = _tmpl$60(), _el$333 = _el$332.firstChild, _el$334 = _el$333.nextSibling, _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling, _el$337 = _el$336.nextSibling;
+    var _el$332 = _tmpl$61(), _el$333 = _el$332.firstChild, _el$334 = _el$333.nextSibling, _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling, _el$337 = _el$336.nextSibling;
     insert(_el$333, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
@@ -13496,7 +13496,7 @@ function DetailsPanel() {
         return state.lastError;
       },
       get children() {
-        var _el$338 = _tmpl$59(), _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling;
+        var _el$338 = _tmpl$60(), _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling;
         insert(_el$339, () => tr(locale(), "最近错误", "Last Error"));
         insert(_el$340, () => state.lastError);
         return _el$338;
@@ -13511,7 +13511,7 @@ function AppShell() {
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(buildGameplaySummary(locale()));
   return [createComponent(MobileJumpRail, {}), createComponent(HostedLoginGate, {}), createComponent(StarterOcRequiredGate, {}), (() => {
-    var _el$341 = _tmpl$61(), _el$342 = _el$341.firstChild, _el$343 = _el$342.firstChild, _el$344 = _el$343.nextSibling, _el$345 = _el$344.nextSibling, _el$346 = _el$342.nextSibling;
+    var _el$341 = _tmpl$62(), _el$342 = _el$341.firstChild, _el$343 = _el$342.firstChild, _el$344 = _el$343.nextSibling, _el$345 = _el$344.nextSibling, _el$346 = _el$342.nextSibling;
     insert(_el$343, () => tr(locale(), "导航", "Navigate"));
     insert(_el$344, () => tr(locale(), "目标", "Targets"));
     insert(_el$345, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface."));
@@ -13527,7 +13527,7 @@ function AppShell() {
     });
     return _el$341;
   })(), (() => {
-    var _el$347 = _tmpl$62(), _el$348 = _el$347.firstChild, _el$349 = _el$348.firstChild;
+    var _el$347 = _tmpl$63(), _el$348 = _el$347.firstChild, _el$349 = _el$348.firstChild;
     insert(_el$349, createComponent(Show, {
       get when() {
         return diagnosticsVisualFixture();
@@ -13561,7 +13561,7 @@ function AppShell() {
     });
     return _el$347;
   })(), (() => {
-    var _el$350 = _tmpl$63(), _el$351 = _el$350.firstChild, _el$352 = _el$351.firstChild, _el$353 = _el$352.nextSibling, _el$354 = _el$353.nextSibling, _el$355 = _el$351.nextSibling;
+    var _el$350 = _tmpl$64(), _el$351 = _el$350.firstChild, _el$352 = _el$351.firstChild, _el$353 = _el$352.nextSibling, _el$354 = _el$353.nextSibling, _el$355 = _el$351.nextSibling;
     insert(_el$352, () => tr(locale(), "指挥与核查", "Command and Inspect"));
     insert(_el$353, () => tr(locale(), "交互与明细", "Interact and Inspect"));
     insert(_el$354, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
