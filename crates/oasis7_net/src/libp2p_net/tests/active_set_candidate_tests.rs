@@ -65,10 +65,7 @@ fn active_set_candidate_status_flags_bucket_overflow_without_full_recompute() {
 #[test]
 fn active_set_candidate_count_limit_allows_third_and_blocks_fourth_subnet_peer() {
     let candidate = ActivePeerCandidate {
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Rendezvous,
-        ],
+        discovery_source_labels: BTreeSet::from(["dht", "rendezvous"]),
         ipv4_subnet_bucket: Some("10.0.0".to_string()),
         relay_domain: None,
         source_operator: None,
@@ -168,10 +165,7 @@ fn active_set_candidate_status_admits_distinct_peer_without_degrading_existing_a
 #[test]
 fn active_set_candidate_status_counts_unique_candidate_discovery_sources() {
     let candidate = ActivePeerCandidate {
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Dht,
-        ],
+        discovery_source_labels: BTreeSet::from(["dht"]),
         ipv4_subnet_bucket: None,
         relay_domain: None,
         source_operator: None,
@@ -192,10 +186,7 @@ fn active_set_candidate_status_counts_unique_candidate_discovery_sources() {
 #[test]
 fn active_set_candidate_status_projects_unique_active_discovery_source_union() {
     let candidate = ActivePeerCandidate {
-        discovery_sources: vec![
-            crate::dht::PeerDiscoverySource::Dht,
-            crate::dht::PeerDiscoverySource::Dht,
-        ],
+        discovery_source_labels: BTreeSet::from(["dht"]),
         ipv4_subnet_bucket: None,
         relay_domain: None,
         source_operator: None,
