@@ -60,6 +60,7 @@
 | PRD-GAME-013 | oasis7 采用真实厘米尺度，但当前玩家主路线仍是间接控制文明模拟；不得把 `1cm` 写成 Minecraft 式逐块直接操作承诺。 | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | 四层合同：厘米真值、coarse-grained 子系统、玩家动作粒度、表现层夸张。 |
 | PRD-GAME-014 | 间接控制必须保留 agency：accepted intent、主因果、打断/重排、续玩恢复和 fallback 需要可读、可测。 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | control-feeling 相关 runtime/viewer/agent/QA 证据以专题 project 与 evidence 为准。 |
 | PRD-GAME-015 | mature-world 小玩家需要不依赖立即投靠 major power 的成长线：local operator -> regional specialist -> limited-scope regional influence。 | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md` | `protected first industrial win` 指低爆炸半径、可恢复、leverage 可见，不是新手无敌。 |
+| PRD-GAME-016 | `micro_depot` 是第一个 WASM-backed 可编程区域设施：玩家通过小型、可审计、带 upkeep 的区域设施，改变一次 repair / logistics quote 并获得可追溯 receipt。 | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md` | 区域专业化 / limited-scope regional influence 专题；不进入首 10 分钟新手循环，不开放自由建造、任意 WASM 上传或 global governance 权力。 |
 
 ## 3. Player-Facing Authority Boundary
 - `doc/game/prd.md` 只维护当前 gameplay baseline 与专题路由。
@@ -81,6 +82,7 @@
   - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+  - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - Edge Cases & Error Handling:
   - 若根 PRD 与专题 PRD 冲突，优先检查更新时间、topic ownership 与 `.pm` task trace；不得用根 PRD 的旧摘要覆盖专题新真值。
   - 若 evidence / project 状态与 PRD baseline 冲突，先保留 blocker 口径并派发对应 owner slice，不直接改写玩家承诺。

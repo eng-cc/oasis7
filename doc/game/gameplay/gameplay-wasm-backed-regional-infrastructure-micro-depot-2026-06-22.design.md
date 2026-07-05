@@ -1,6 +1,7 @@
 # Gameplay WASM-backed Regional Infrastructure: micro_depot 设计（2026-06-22）
 
-- 对应需求文档: 暂无（本文件为调研后设计补充，后续若进入实现应新建 PRD / project）
+- 对应需求文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
+- 对应项目管理文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md`
 - 对应任务日志: `.pm/tasks/task_3c55fc4c17ea44aa850adf7a6a4463f4.execution.md`
 - 关联玩法真值:
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`

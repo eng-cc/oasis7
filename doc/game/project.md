@@ -28,6 +28,7 @@
 | TASK-GAME-037 | PRD-GAME-010 | `qa_engineer` | pending preview signal | 输出 `QA Weekly / Event Verdict`，确认 unified gate 是否仍为 `pass`，或给出 continue / conditional go / no-go 建议。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md` |
 | TASK-GAME-038 | PRD-GAME-010 | `producer_system_designer` | pending TASK-GAME-036/037 | 基于真实执行样本决定继续维持、收紧节奏，或触发下一轮阶段评审。 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`, `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`, future producer sink |
 | TASK-GAME-076 | PRD-GAME-012 | `gameplay_designer` | required pass / live-boundary retained | 自动化、诊断框架和 content-volume supplement 已补齐：required summary 为 `attraction_pass` / `content_volume_pass`，覆盖诊断、路线取舍、微型委托、事故修复、机会扫描、回访封装和本地订单贡献。 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`, `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md`, GitHub task issue evidence comments / mapping-backed task trace |
+| `task_34c10ce5bafc46fa9c943178285d5a0b` / GitHub #1957 | PRD-GAME-016 | `tpm` + `producer_system_designer` + `gameplay_designer` + `repository_health_engineer` | in progress / docs traceability | 将 design-only `micro_depot` 补成正式 PRD/design/project triplet，并同步 root/gameplay/index 路由；不改变阶段、gate verdict 或 claim envelope。 | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`, `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md`, GitHub issue `eng-cc/oasis7#1957` |
 
 ## 最近收口但仍影响当前判断
 | 主题 | 当前可复用结论 | Trace |
@@ -68,6 +69,7 @@
   - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
+  - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - Test / evidence references: `testing-manual.md`, `doc/testing/evidence/`, `doc/playability_test_result/`
 
 ## 状态
