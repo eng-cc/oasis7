@@ -131,7 +131,16 @@ cat >"$TMP_DIR/status/sequencer.json" <<'JSON'
   "consensus": {
     "committed_height": 1,
     "last_execution_height": 1,
-    "storage_challenge_network_degraded_height": null
+    "last_execution_block_hash": "sequencer-execution-block",
+    "last_execution_state_root": "sequencer-execution-root",
+    "storage_challenge_network_degraded_height": null,
+    "network_head": {
+      "height": 1
+    }
+  },
+  "world_resource": {
+    "readiness_status": "ready",
+    "failed_gates": []
   },
   "replication": {
     "local_peer_id": "12D3KooWSequencer",
@@ -152,11 +161,17 @@ cat >"$TMP_DIR/status/storage.json" <<'JSON'
   },
   "consensus": {
     "committed_height": 1,
-    "last_execution_height": 0,
+    "last_execution_height": 1,
+    "last_execution_block_hash": "storage-execution-block",
+    "last_execution_state_root": "storage-execution-root",
     "storage_challenge_network_degraded_height": null,
     "network_head": {
       "height": 1
     }
+  },
+  "world_resource": {
+    "readiness_status": "ready",
+    "failed_gates": []
   },
   "replication": {
     "local_peer_id": "12D3KooWStorage",
@@ -470,6 +485,7 @@ for host in root@sequencer root@storage; do
 NODE_ID=triad-testnet-sequencer
 NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:100
 NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:old-sequencer-signer,triad-testnet-storage:old-storage-signer
+POS_ADAPTIVE_TICK_SCHEDULER=0
 GENESIS_VALIDATOR_REGISTRY_PATH=${STACK_ROOT}/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
 EOF
   printf 'runtime-v2' >"$host_root/current/bin/oasis7_chain_runtime"
@@ -592,7 +608,7 @@ jq -e '
   .sequencer.running == true
   and .sequencer.committed_height == 1
   and .storage.running == true
-  and .storage.last_execution_height == 0
+  and .storage.last_execution_height == 1
 ' <<<"$json" >/dev/null
 
 test -f "$TMP_DIR/out/rebuild-summary.json"
@@ -606,6 +622,10 @@ test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-wo
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
   "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"
 grep -q '^NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:new-sequencer-signer,triad-testnet-storage:new-storage-signer$' \
+  "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/node.env"
+grep -q '^POS_ADAPTIVE_TICK_SCHEDULER=1$' \
+  "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/config/node.env"
+grep -q '^POS_ADAPTIVE_TICK_SCHEDULER=1$' \
   "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/config/node.env"
 grep -q -- "--world-id 'oasis7-public-testnet-governed-20260606' --chain-id 'oasis7-public-testnet-governed-20260606' --resource-commit-height 0 --resource-commit-hash genesis" \
   "$TEST_EVENT_LOG"
@@ -702,7 +722,7 @@ JSON
 
 : >"$TEST_SSH_LOG"
 rm -f "$TEST_REMOTE_ROOT"/started-*
-json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
   --sequencer-ssh-host root@sequencer \
@@ -716,16 +736,13 @@ json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --stack-root /opt/oasis7/p2p-testnet \
   --out-dir "$TMP_DIR/out-clean-genesis" \
   --poll-attempts 1 \
-  --poll-sleep-seconds 0)
+  --poll-sleep-seconds 0 >/tmp/oasis7-rebuild-validators-clean-genesis.out 2>&1; then
+  echo "expected rebuild to fail when status is still clean genesis/self_only" >&2
+  exit 1
+fi
 
-jq -e '
-  .sequencer.running == true
-  and .sequencer.committed_height == null
-  and .sequencer.last_execution_height == null
-  and .storage.running == true
-  and .storage.committed_height == null
-  and .storage.last_execution_height == null
-' <<<"$json" >/dev/null
+grep -q "sequencer readiness failed checks after restart" \
+  /tmp/oasis7-rebuild-validators-clean-genesis.out
 
 python3 - "$TEST_SSH_LOG" <<'PY'
 import pathlib
@@ -753,8 +770,8 @@ for host, service in (
     ]
     if not start_indexes:
         raise SystemExit(f"missing {host} start command for clean-genesis path")
-    if any(index > start_indexes[-1] for index in cleanup_indexes):
-        raise SystemExit(f"unexpected post-start cleanup for clean-genesis ready {host}")
+    if not any(index > start_indexes[-1] for index in cleanup_indexes):
+        raise SystemExit(f"missing post-start cleanup for clean-genesis failure {host}")
 PY
 
 cat >"$TMP_DIR/status/sequencer.json" <<'JSON'

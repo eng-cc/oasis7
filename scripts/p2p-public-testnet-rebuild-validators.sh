@@ -254,19 +254,13 @@ json_sequencer_ok() {
     and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and (
-      (
-        ((.consensus.committed_height // 0) > 0)
-        and ((.consensus.last_execution_height // 0) > 0)
-      )
-      or (
-        ((.consensus.committed_height // .committed_height // 0) == 0)
-        and ((.consensus.last_execution_height // 0) == 0)
-        and ((.consensus.network_head.source // null) == "self_only")
-        and ((.consensus.network_head.required_peer_count // 0) == 0)
-        and ((.consensus.network_head.decision // null) == "ready")
-      )
-    )
+    and ((.consensus.committed_height // 0) > 0)
+    and ((.consensus.last_execution_height // 0) > 0)
+    and (((.consensus.last_execution_block_hash // "") | tostring | length) > 0)
+    and (((.consensus.last_execution_state_root // "") | tostring | length) > 0)
+    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+    and ((.world_resource.readiness_status // null) == "ready")
+    and (((.world_resource.failed_gates // []) | length) == 0)
   ' "$path" >/dev/null 2>&1
 }
 
@@ -288,18 +282,13 @@ json_storage_ok() {
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
     and (.replication.connected_peers | length) >= 1
-    and (
-      (
-        ((.consensus.committed_height // 0) > 0)
-        and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
-      )
-      or (
-        ((.consensus.committed_height // .committed_height // 0) == 0)
-        and ((.consensus.network_head.source // null) == "self_only")
-        and ((.consensus.network_head.required_peer_count // 0) == 0)
-        and ((.consensus.network_head.decision // null) == "ready")
-      )
-    )
+    and ((.consensus.committed_height // 0) > 0)
+    and ((.consensus.last_execution_height // 0) > 0)
+    and (((.consensus.last_execution_block_hash // "") | tostring | length) > 0)
+    and (((.consensus.last_execution_state_root // "") | tostring | length) > 0)
+    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+    and ((.world_resource.readiness_status // null) == "ready")
+    and (((.world_resource.failed_gates // []) | length) == 0)
   ' "$path" >/dev/null 2>&1
 }
 
@@ -452,15 +441,21 @@ signers_csv = ','.join(signer_pairs)
 
 lines = env_path.read_text(encoding='utf-8').splitlines()
 rewrote_signers = False
+rewrote_adaptive_tick_scheduler = False
 rendered = []
 for line in lines:
     if line.startswith('NODE_VALIDATOR_SIGNERS_CSV='):
         rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
         rewrote_signers = True
+    elif line.startswith('POS_ADAPTIVE_TICK_SCHEDULER='):
+        rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
+        rewrote_adaptive_tick_scheduler = True
     else:
         rendered.append(line)
 if not rewrote_signers:
     rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
+if not rewrote_adaptive_tick_scheduler:
+    rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
 env_path.write_text('\\n'.join(rendered) + '\\n', encoding='utf-8')
 
 digest = hashlib.sha256()
