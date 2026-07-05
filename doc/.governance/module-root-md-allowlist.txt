@@ -1,8 +1,5 @@
 doc/core/README.md
 doc/core/design.md
-doc/core/doc-readme-public-entry-sync-2026-03-11.design.md
-doc/core/doc-readme-public-entry-sync-2026-03-11.prd.md
-doc/core/doc-readme-public-entry-sync-2026-03-11.project.md
 doc/core/next-round-priority-slate-2026-03-11.design.md
 doc/core/next-round-priority-slate-2026-03-11.prd.md
 doc/core/next-round-priority-slate-2026-03-11.project.md
