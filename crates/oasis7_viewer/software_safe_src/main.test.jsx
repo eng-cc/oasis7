@@ -1481,6 +1481,10 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Total upfront")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Eligible balance")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Liquid balance")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Owned / cap").closest(".metric")).toHaveClass("metric--claim-primary");
+    expect(within(stagePanel).getByText("Total upfront").closest(".metric")).toHaveClass("metric--claim-primary", "metric--claim-total");
+    expect(within(stagePanel).getByText("Eligible balance").closest(".metric")).toHaveClass("metric--claim-primary");
+    expect(within(stagePanel).getByText("Liquid balance").closest(".metric")).not.toHaveClass("metric--claim-primary");
     expect(within(stagePanel).getByText("Restricted starter")).toBeInTheDocument();
     expect(within(stagePanel).getByText("agent-0")).toBeInTheDocument();
     expect(within(stagePanel).getByText(/upkeep paid through epoch 17/i)).toBeInTheDocument();

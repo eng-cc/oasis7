@@ -208,6 +208,16 @@ function claimQuoteRows(quote) {
   ].filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
 
+const PRIMARY_CLAIM_QUOTE_LABELS = new Set(["Total upfront", "Eligible balance", "Owned / cap"]);
+
+function claimQuoteMetricClass(label) {
+  return [
+    "metric",
+    PRIMARY_CLAIM_QUOTE_LABELS.has(label) ? "metric--claim-primary" : null,
+    label === "Total upfront" ? "metric--claim-total" : null,
+  ].filter(Boolean).join(" ");
+}
+
 function claimTarget(claim) {
   return claimField(claim, "target_agent_id", "targetAgentId", "agent_id", "agentId", "target") || "agent";
 }
@@ -329,7 +339,7 @@ function ClaimAgentChoiceCard(props) {
       <div class="summary-grid">
         <For each={claimQuoteRows(quote())}>
           {([label, value]) => (
-            <MetricCard label={label} value={compactValue(value)} />
+            <MetricCard class={claimQuoteMetricClass(label)} label={label} value={compactValue(value)} />
           )}
         </For>
       </div>
@@ -489,7 +499,7 @@ function FeedbackCard(props) {
 
 function MetricCard(props) {
   return (
-    <div class="metric">
+    <div class={props.class ?? "metric"}>
       <div class="metric__label">{props.label}</div>
       <div class="metric__value">{props.value}</div>
       <Show when={props.detail}>
