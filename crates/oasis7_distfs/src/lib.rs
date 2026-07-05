@@ -83,6 +83,14 @@ impl FileIndexAuditReport {
     }
 }
 
+struct BlobReferenceSets {
+    total_indexed_files: usize,
+    total_pins: usize,
+    indexed_hashes: BTreeSet<String>,
+    pinned_hashes: BTreeSet<String>,
+    blob_hashes: BTreeSet<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct LocalCasStore {
     root: PathBuf,
@@ -418,39 +426,33 @@ impl LocalCasStore {
     }
 
     pub fn audit_file_index(&self) -> Result<FileIndexAuditReport, WorldError> {
-        self.ensure_dirs()?;
-        let file_index = self.load_file_index()?;
-        let pins = self.load_pins()?.pins;
-        let blob_hashes = self.scan_blob_hashes()?;
+        let references = self.load_blob_reference_sets()?;
 
-        let mut indexed_hashes = BTreeSet::new();
-        for metadata in file_index.files.values() {
-            validate_hash(metadata.content_hash.as_str())?;
-            indexed_hashes.insert(metadata.content_hash.clone());
-        }
-        for pin in &pins {
-            validate_hash(pin.as_str())?;
-        }
-
-        let missing_file_blob_hashes = indexed_hashes
+        let missing_file_blob_hashes = references
+            .indexed_hashes
             .iter()
-            .filter(|hash| !blob_hashes.contains(*hash))
+            .filter(|hash| !references.blob_hashes.contains(*hash))
             .cloned()
             .collect::<Vec<_>>();
-        let dangling_pin_hashes = pins
+        let dangling_pin_hashes = references
+            .pinned_hashes
             .iter()
-            .filter(|hash| !blob_hashes.contains(*hash))
+            .filter(|hash| !references.blob_hashes.contains(*hash))
             .cloned()
             .collect::<Vec<_>>();
-        let orphan_blob_hashes = blob_hashes
+        let orphan_blob_hashes = references
+            .blob_hashes
             .iter()
-            .filter(|hash| !indexed_hashes.contains(*hash) && !pins.contains(*hash))
+            .filter(|hash| {
+                !references.indexed_hashes.contains(*hash)
+                    && !references.pinned_hashes.contains(*hash)
+            })
             .cloned()
             .collect::<Vec<_>>();
 
         Ok(FileIndexAuditReport {
-            total_indexed_files: file_index.files.len(),
-            total_pins: pins.len(),
+            total_indexed_files: references.total_indexed_files,
+            total_pins: references.total_pins,
             missing_file_blob_hashes,
             dangling_pin_hashes,
             orphan_blob_hashes,
@@ -458,9 +460,11 @@ impl LocalCasStore {
     }
 
     pub fn prune_orphan_blobs(&self) -> Result<u64, WorldError> {
-        let report = self.audit_file_index()?;
+        let references = self.load_blob_reference_sets()?;
         let mut freed = 0_u64;
-        for orphan_hash in report.orphan_blob_hashes {
+        for orphan_hash in references.blob_hashes.iter().filter(|hash| {
+            !references.indexed_hashes.contains(*hash) && !references.pinned_hashes.contains(*hash)
+        }) {
             let path = self.blob_path(orphan_hash.as_str())?;
             if !path.exists() {
                 continue;
@@ -470,6 +474,30 @@ impl LocalCasStore {
             freed = freed.saturating_add(size);
         }
         Ok(freed)
+    }
+
+    fn load_blob_reference_sets(&self) -> Result<BlobReferenceSets, WorldError> {
+        self.ensure_dirs()?;
+        let file_index = self.load_file_index()?;
+        let pinned_hashes = self.load_pins()?.pins;
+        let blob_hashes = self.scan_blob_hashes()?;
+
+        let mut indexed_hashes = BTreeSet::new();
+        for metadata in file_index.files.values() {
+            validate_hash(metadata.content_hash.as_str())?;
+            indexed_hashes.insert(metadata.content_hash.clone());
+        }
+        for pin in &pinned_hashes {
+            validate_hash(pin.as_str())?;
+        }
+
+        Ok(BlobReferenceSets {
+            total_indexed_files: file_index.files.len(),
+            total_pins: pinned_hashes.len(),
+            indexed_hashes,
+            pinned_hashes,
+            blob_hashes,
+        })
     }
 
     fn scan_blob_hashes(&self) -> Result<BTreeSet<String>, WorldError> {
