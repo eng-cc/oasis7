@@ -251,6 +251,25 @@ Deterministic script contract:
   the task to `pr_watch` when GitHub-backed mapping exists.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
   GitHub task issue evidence comments and mapping-backed task truth.
+- `scripts/prepare-task-pr.sh --create` must include a GitHub auto-close
+  keyword for the bound GitHub task issue in the PR body, or reject an explicit
+  PR body file that omits the linkage. The normal generated linkage is
+  `Closes #<task-issue-number>` and is separate from `Task UID`.
+- `scripts/pm/audit-pr-watch-issues.sh --close` is the remedial post-merge
+  audit for GitHub-backed tasks whose recorded PR is already merged but whose
+  PM task issue/body/Project state still says `pr_watch`. The PR body
+  auto-close keyword is only a missed-closure backstop; the audit remains the
+  PM lifecycle synchronizer. It may synchronize only PM task issues whose body
+  contains the task marker, `status: pr_watch`, a recorded `pr_number` whose
+  GitHub PR state is merged, and existing issue comments with passed pre-PR
+  local role review plus verified ready closeout/claim evidence. The audit is
+  remedial PM metadata synchronization, not independent professional completion
+  judgment. For OPEN issues it writes remedial sync evidence, updates
+  Project/body state to `done`, then closes the issue; for already CLOSED issues
+  it writes remedial sync evidence and updates Project/body state without
+  issuing another close. Missing task issue mapping, missing Project Done fields,
+  missing existing review/ready evidence, unmerged PRs, non-`pr_watch` statuses,
+  or manual hold markers are fail-closed blockers.
 - `./scripts/pm/fallback-evidence.sh` is the replay/audit helper for temporary
   `.pm/scratch/<TASK-UID>/fallback-evidence/` packets; unreplayed fallback
   packets do not satisfy task truth and are rejected by PR-readiness lint.
@@ -298,7 +317,7 @@ Deterministic script contract:
 4. **Fresh verification gate**: current-round verification success before completion claims.
 5. **Pre-PR local role review gate**: fresh local subagent review by all involved relevant roles, with actionable findings addressed or explicitly rejected with evidence.
 6. **Closeout gate**: closeout metadata + task status transition + lint/governance checks + commit + PR creation.
-7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks, mergeability, and PR comments/review threads to completion, fix failures through the review/debug loop, then merge and clean up. `REVIEW_REQUIRED` is informational and is not a blocking item by itself. `mergeStateStatus=BEHIND` is also informational by itself: if the PR stays mergeable, has no actionable comments/requested changes/blocking threads, and the repository/GitHub merge path accepts the merge without a local branch sync, the normal path may merge directly without rebasing first. If `mergeStateStatus=BLOCKED` is caused only by missing review approval, and the user/task policy explicitly authorizes skipping that approval, the normal path may use the repository's admin merge path after re-checking required checks, mergeability, requested changes, and PR comments/review threads.
+7. **Post-PR watch/merge gate**: unless the PR is explicitly opened only to access manual-trigger packaging/release CI, watch normal PR required checks, mergeability, and PR comments/review threads to completion, fix failures through the review/debug loop, then merge and clean up. `REVIEW_REQUIRED` is informational and is not a blocking item by itself. `mergeStateStatus=BEHIND` is also informational by itself: if the PR stays mergeable, has no actionable comments/requested changes/blocking threads, and the repository/GitHub merge path accepts the merge without a local branch sync, the normal path may merge directly without rebasing first. If `mergeStateStatus=BLOCKED` is caused only by missing review approval, and the user/task policy explicitly authorizes skipping that approval, the normal path may use the repository's admin merge path after re-checking required checks, mergeability, requested changes, and PR comments/review threads. Normal task PRs must carry a GitHub auto-close link to the bound task issue; after merge, the task issue must be closed by the auto-close link, the final `done` closeout path, or the `audit-pr-watch-issues --close` remedial audit when an already-merged task still has stale `pr_watch` PM issue/body/Project state.
 
 ### 3.2 Optional Gates (risk-based)
 1. Bounded brainstorming gate (ambiguous scope / architecture tradeoffs).
@@ -447,8 +466,8 @@ Deterministic script contract:
 - For `normal_pr_ci_watch`, TPM continues without waiting for another user prompt: watch the PR's normal required checks, mergeability, review decisions, and PR comments/review threads. `REVIEW_REQUIRED` is a status signal to report, not a blocker. If checks fail, review requests changes, actionable comments appear, unresolved blocking review threads remain, or the merge API/branch protection rejects the merge for reasons other than review approval, route through the fix loop, rerun fresh verification, push fixes or answer/resolve comments, and continue watching.
 - If GitHub reports `mergeStateStatus=BEHIND`, treat it as a branch-sync signal, not an automatic blocker. When the PR is still mergeable and the repository/GitHub merge path accepts the merge without requiring a local branch sync, TPM may merge directly after the same checks/comments/thread closeout steps. If GitHub refuses because the branch must be updated first or because a conflict/non-mergeable state exists, sync the branch to the current base, rerun fresh verification as needed, push, and continue watching.
 - If GitHub reports `mergeStateStatus=BLOCKED` / `REVIEW_REQUIRED` only because review approval is missing, and the current user request or task truth explicitly authorizes skipping review approval, TPM may use the repository's admin merge path as part of the normal PR watch/merge flow. Before doing so, TPM must re-check that required checks pass, the PR is mergeable, no requested changes remain, PR comments/review threads have been checked, and no actionable comments or unresolved blocking review threads remain. Admin merge must not be used for failed checks, non-mergeable code state, requested changes, unresolved actionable comments/threads, manual packaging CI holds, or unrelated branch-protection failures.
-- Once normal required checks pass, the PR is mergeable by the repository/GitHub merge path or by the authorized review-approval admin path above, PR comments/review threads have been checked, and no actionable comments, requested changes, or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then sync local `main` and clean up the task worktree/branch.
-- After merge, sync local `main` and clean up task worktree/branch.
+- Once normal required checks pass, the PR is mergeable by the repository/GitHub merge path or by the authorized review-approval admin path above, PR comments/review threads have been checked, and no actionable comments, requested changes, or unresolved blocking review threads remain, merge the PR using the repository's configured merge method, then confirm the bound GitHub task issue and PM state reach `done` or run the post-merge `pr_watch` audit closeout if the merged PR left the issue open or left stale `pr_watch` metadata behind.
+- After merge, sync local `main`, clean up task worktree/branch, and leave the GitHub task issue closed or with an explicit evidence comment explaining any intentionally retained manual hold.
 
 ## 6. Required Artifacts by Phase
 - Bootstrap/Router: decision record in GitHub task issue evidence comments; project or handoff records may supplement it.
@@ -631,6 +650,7 @@ required task, review, verification, or merge semantics.
 - [x] Pre-PR local role-subagent review packet before PR creation.
 - [x] Closeout command chain and `done` verification strictness.
 - [x] Local role-subagent review + GitHub PR + required checks + PR comment/thread closeout + mergeability as formal review/merge boundary; `REVIEW_REQUIRED` is informational, not a blocker.
+- [x] Normal task PR bodies include a GitHub auto-close link to the bound task issue, with a post-merge `pr_watch` audit fallback for already-merged PRs whose task issue remains open.
 - [x] PR review fix loop: fix -> re-verify -> resolve threads -> merge claim.
 - [x] Workflow phase-to-skill map preserves required, conditional, optional, and specialist skill reachability.
 - [x] Module-local verification remains distinct from integration/release readiness claims.
