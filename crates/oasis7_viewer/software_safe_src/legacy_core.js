@@ -2351,6 +2351,39 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   }
 }
 
+function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
+  if (state.connectionStatus === "error" && /player session registration timed out/i.test(String(state.lastError || ""))) {
+    state.connectionStatus = "connected";
+    state.lastError = null;
+  }
+  state.auth.syncInFlight = false;
+  state.auth.recoveryErrorCode = null;
+  state.auth.recoveryErrorMessage = null;
+  state.auth.error = null;
+  if (ack?.player_id) {
+    state.auth.playerId = ack.player_id;
+  }
+  if (ack?.session_pubkey) {
+    state.auth.publicKey = ack.session_pubkey;
+  }
+  if (ack?.session_epoch != null) {
+    state.auth.sessionEpoch = Number(ack.session_epoch);
+  }
+}
+
+function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
+  recoverConnectedSessionStateAfterRuntimeAck(ack);
+  if (!pendingSessionRegisterWaiter) {
+    return;
+  }
+  const waiter = pendingSessionRegisterWaiter;
+  pendingSessionRegisterWaiter = null;
+  if (waiter.timeoutId) {
+    window.clearTimeout(waiter.timeoutId);
+  }
+  waiter.resolve(ack);
+}
+
 function expirePendingSessionRegisterWaiterForTest() {
   if (!isTestApiEnabled()) {
     throw new Error("expirePendingSessionRegisterWaiterForTest requires test_api=1");
@@ -3078,6 +3111,7 @@ function sendGameplayAction(actionOrId) {
 
 function handleGameplayActionAck(ack) {
   clearPendingGameplayActionAckTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     ack?.action_id || "gameplay_action",
@@ -3253,6 +3287,7 @@ function handlePromptControlError(error) {
 function handleAgentChatAck(ack) {
   clearPendingAgentChatAckTimer();
   clearPendingAgentChatOverallTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
   feedback.stage = "ack";
   feedback.ok = true;
@@ -3365,13 +3400,8 @@ function adoptHostedRecoveryAck(ack) {
       syncHostedSessionRefreshLoop();
     }
   }
-  if (pendingSessionRegisterWaiter && (ack.status === "session_registered" || ack.status === "catch_up_ready")) {
-    const waiter = pendingSessionRegisterWaiter;
-    pendingSessionRegisterWaiter = null;
-    if (waiter.timeoutId) {
-      window.clearTimeout(waiter.timeoutId);
-    }
-    waiter.resolve(ack);
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   }
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
   if (ack.status === "session_registered") {

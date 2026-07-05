@@ -2123,6 +2123,87 @@ describe("viewer web ui automation baseline", () => {
 
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("clears stale player session registration timeout after runtime action ack", async () => {
+    activeCleanup?.();
+    activeCleanup = null;
+    vi.resetModules();
+    window.history.replaceState(
+      {},
+      "",
+      "/software_safe.html?test_api=1&connect=1&hosted_bootstrap=0&locale=en&ws=ws://127.0.0.1:5011",
+    );
+    window.localStorage.clear();
+    document.body.innerHTML = "";
+    const { sockets, sentMessages } = installMockWebSocket();
+    const core = await import("./legacy_core.js");
+
+    core.initializeSoftwareSafeCore();
+    sockets[0].open();
+    sockets[0].receive({ type: "hello_ack", server: "test-live", world_id: "test-world" });
+    core.injectSnapshot(sampleSnapshot());
+    core.applySelection({ kind: "agent", id: "agent-0" });
+    core.state.auth = {
+      ...core.state.auth,
+      available: true,
+      playerId: "local-test-player-bound",
+      publicKey: "abcdef0123456789abcdef0123456789",
+      privateKey: "07".repeat(32),
+      source: "local_test_api_ephemeral",
+      registrationStatus: "registered",
+      runtimeStatus: "issued",
+      boundAgentId: "agent-0",
+      syncInFlight: false,
+    };
+
+    const registerPromise = core.registerPlayerSessionForTest("agent-0");
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "authoritative_recovery",
+            command: expect.objectContaining({
+              mode: "register_session",
+              request: expect.objectContaining({
+                player_id: "local-test-player-bound",
+                requested_agent_id: "agent-0",
+              }),
+            }),
+          }),
+        ]),
+      );
+    });
+
+    core.state.connectionStatus = "error";
+    core.state.lastError = "window.unhandledrejection: player session registration timed out waiting for ack/error from live server";
+    core.state.auth.runtimeStatus = "error";
+    core.state.auth.error = "player session registration timed out waiting for ack/error from live server";
+    core.state.auth.recoveryErrorCode = "session_register_timeout";
+    core.state.auth.recoveryErrorMessage = core.state.auth.error;
+
+    sockets[0].receive({
+      type: "agent_chat_ack",
+      ack: {
+        agent_id: "agent-0",
+        player_id: "local-test-player-bound",
+        accepted_at_tick: 12,
+        intent_seq: 99,
+      },
+    });
+
+    await expect(registerPromise).resolves.toEqual(
+      expect.objectContaining({
+        agent_id: "agent-0",
+        player_id: "local-test-player-bound",
+      }),
+    );
+    expect(core.state.connectionStatus).toBe("connected");
+    expect(core.state.lastError).toBeNull();
+    expect(core.state.auth.error).toBeNull();
+    expect(core.state.auth.recoveryErrorCode).toBeNull();
+    expect(core.state.auth.recoveryErrorMessage).toBeNull();
+    expect(core.expirePendingSessionRegisterWaiterForTest()).toBe(false);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("persists acknowledged chat messages for the current world", async () => {
     const { core } = await renderViewerApp({
       snapshot: null,
