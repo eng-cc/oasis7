@@ -6,58 +6,20 @@ use super::node_engine_storage_challenge::{
     StorageChallengeSampleOutcome, evaluate_storage_challenge_sample,
 };
 use super::*;
+use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
-    // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
-    // the older retained-window boundaries. The newest aligned boundary can still be in-flight
-    // or unretained on live testnet nodes, so retained-window probing starts one interval back.
-    const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
-
-    pub(super) fn high_replication_checkpoint_candidates(
-        advertised_network_height: u64,
-        blocked_height: u64,
-    ) -> Vec<u64> {
-        let mut candidates = Vec::new();
-        let mut push_candidate = |height: u64| {
-            if height > blocked_height && height > 0 && !candidates.contains(&height) {
-                candidates.push(height);
-            }
-        };
-        push_candidate(advertised_network_height);
-        for interval in [64_u64, 32_u64] {
-            let aligned = advertised_network_height - (advertised_network_height % interval);
-            let first_lookback = if aligned.saturating_sub(interval) > blocked_height
-                && aligned != advertised_network_height
-            {
-                1
-            } else {
-                0
-            };
-            for lookback in first_lookback..=Self::HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS {
-                push_candidate(aligned.saturating_sub(interval.saturating_mul(lookback)));
-            }
-        }
-        candidates
-    }
-
-    pub(super) fn high_replication_checkpoint_probe_can_continue(err: &NodeError) -> bool {
-        let NodeError::Replication { reason } = err else {
-            return false;
-        };
-        let fetch_commit_route_error =
-            crate::network_bridge::replication_network_error_is_protocol_unavailable(
-                err,
-                REPLICATION_FETCH_COMMIT_PROTOCOL,
-            ) || crate::network_bridge::replication_network_error_is_timeout_protocol(
-                err,
-                REPLICATION_FETCH_COMMIT_PROTOCOL,
-            );
-        let checkpoint_blob_missing = reason.contains("execution checkpoint blob not found hash=")
-            || (reason.contains("gap sync height ")
-                && reason.contains(" blob not found for hash "));
-        fetch_commit_route_error || checkpoint_blob_missing
+    fn record_replication_gap_sync_repair_attempt(
+        &mut self,
+        height: u64,
+        repair_summary: String,
+        route_snapshot: NodeReplicationGapSyncRouteSnapshot,
+    ) {
+        self.last_replication_gap_sync_repair_attempt_height = Some(height);
+        self.last_replication_gap_sync_repair_attempt_summary = Some(repair_summary);
+        self.last_replication_gap_sync_repair_attempt_route_snapshot = Some(route_snapshot);
     }
 
     pub(super) fn publish_execution_checkpoint_descriptor_providers(
@@ -104,6 +66,7 @@ impl PosNodeEngine {
             self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
+            self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         }
     }
 
@@ -628,7 +591,9 @@ impl PosNodeEngine {
             replication_runtime,
             checkpoint_height,
         )? {
-            GapSyncHeightOutcome::Synced { message, payload } => (message, payload),
+            GapSyncHeightOutcome::Synced {
+                message, payload, ..
+            } => (message, payload),
             GapSyncHeightOutcome::NotFound { .. } => return Ok(false),
         };
         let (message, payload) = checkpoint;
@@ -727,6 +692,7 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
+        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         if let Some(callback) = progress_callback.as_deref_mut() {
             let decision = self.idle_pending_decision()?;
             callback(self.snapshot_from_decision(&decision));
@@ -920,6 +886,7 @@ impl PosNodeEngine {
                         self.last_replication_gap_sync_repair_attempt_summary = Some(format!(
                             "checkpoint_candidate={checkpoint_candidate} transient_error={err}"
                         ));
+                        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
                     }
                     Err(err) => return Err(err),
                 }
@@ -961,15 +928,30 @@ impl PosNodeEngine {
                     replication_runtime,
                     next_height,
                 ) {
-                    Ok(GapSyncHeightOutcome::Synced { message, payload }) => {
+                    Ok(GapSyncHeightOutcome::Synced {
+                        message,
+                        payload,
+                        repair_summary,
+                        route_snapshot,
+                    }) => {
+                        self.record_replication_gap_sync_repair_attempt(
+                            next_height,
+                            repair_summary,
+                            route_snapshot,
+                        );
                         synced_commit = Some((message, payload));
                         break;
                     }
-                    Ok(GapSyncHeightOutcome::NotFound { repair_summary }) => {
+                    Ok(GapSyncHeightOutcome::NotFound {
+                        repair_summary,
+                        route_snapshot,
+                    }) => {
                         not_found = true;
-                        self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
-                        self.last_replication_gap_sync_repair_attempt_summary =
-                            Some(repair_summary);
+                        self.record_replication_gap_sync_repair_attempt(
+                            next_height,
+                            repair_summary,
+                            route_snapshot,
+                        );
                         break;
                     }
                     Err(err) if replication_request_waitable_connection_gap(&err) => {
@@ -989,6 +971,7 @@ impl PosNodeEngine {
                         self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
                         self.last_replication_gap_sync_repair_attempt_summary =
                             Some(summary.clone());
+                        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
                         last_error = Some(summary);
                         break;
                     }
@@ -1085,6 +1068,7 @@ impl PosNodeEngine {
                             self.last_replication_gap_sync_repair_attempt_summary = Some(format!(
                                 "checkpoint_candidate={checkpoint_candidate} transient_error={err}"
                             ));
+                            self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
                         }
                         Err(err) => return Err(err),
                     }
@@ -1129,6 +1113,7 @@ impl PosNodeEngine {
             self.last_replication_gap_sync_blocked_at_ms = None;
             self.last_replication_gap_sync_repair_attempt_height = None;
             self.last_replication_gap_sync_repair_attempt_summary = None;
+            self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         } else {
             self.clear_replication_gap_sync_blocked_if_unblocked();
         }

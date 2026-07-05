@@ -1,4 +1,5 @@
-use crate::network_bridge::GapSyncFetchCommitResponse;
+use crate::network_bridge_gap_sync_observability::GapSyncFetchCommitResponse;
+use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 use crate::replication_state_reconcile::ReplicationCommitPayload;
 
 use super::node_engine_core::InboundSlotWindow;
@@ -177,8 +178,11 @@ impl PosNodeEngine {
         if !fetch_commit.response.found {
             return Ok(GapSyncHeightOutcome::NotFound {
                 repair_summary: fetch_commit.repair_summary,
+                route_snapshot: fetch_commit.route_snapshot,
             });
         }
+        let repair_summary = fetch_commit.repair_summary;
+        let route_snapshot = fetch_commit.route_snapshot;
         let mut message = fetch_commit
             .response
             .message
@@ -265,6 +269,7 @@ impl PosNodeEngine {
             Ok(false) => {
                 return Ok(GapSyncHeightOutcome::NotFound {
                     repair_summary: "commit validation rejected apply".to_string(),
+                    route_snapshot,
                 });
             }
             Err(err) => return Err(err),
@@ -294,7 +299,12 @@ impl PosNodeEngine {
                 message: Some(message.clone()),
             },
         );
-        Ok(GapSyncHeightOutcome::Synced { message, payload })
+        Ok(GapSyncHeightOutcome::Synced {
+            message,
+            payload,
+            repair_summary,
+            route_snapshot,
+        })
     }
 
     fn annotate_fetch_commit_gap_sync_error(height: u64, err: NodeError) -> NodeError {
@@ -579,6 +589,7 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_blocked_at_ms = None;
         self.last_replication_gap_sync_repair_attempt_height = None;
         self.last_replication_gap_sync_repair_attempt_summary = None;
+        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         self.last_committed_at_ms = Some(committed_at_ms);
         self.next_height = next_height;
         self.last_committed_block_hash = Some(block_hash);

@@ -1019,6 +1019,20 @@ pub struct NodeFinalityLatencySnapshot {
     pub p95_latency_ms: Option<i64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct NodeReplicationGapSyncRouteSnapshot {
+    pub elapsed_ms: u64,
+    pub route_attempt_count: u64,
+    pub synced_route_count: u64,
+    pub not_found_route_count: u64,
+    pub error_route_count: u64,
+    pub generic_route_count: u64,
+    pub provider_route_count: u64,
+    pub generic_retry_route_count: u64,
+    pub budget_exhausted_count: u64,
+    pub last_slow_route_reason: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NodeConsensusSnapshot {
     pub mode: NodeConsensusMode,
@@ -1041,6 +1055,8 @@ pub struct NodeConsensusSnapshot {
     pub replication_gap_sync_blocked_reason: Option<String>,
     pub replication_gap_sync_repair_attempt_height: Option<u64>,
     pub replication_gap_sync_repair_attempt_summary: Option<String>,
+    pub replication_gap_sync_repair_attempt_route_snapshot:
+        Option<NodeReplicationGapSyncRouteSnapshot>,
     pub storage_challenge_network_degraded_height: Option<u64>,
     pub storage_challenge_network_degraded_reason: Option<String>,
     pub storage_challenge_network_last_probe_at_ms: Option<i64>,
@@ -1108,6 +1124,7 @@ impl Default for NodeConsensusSnapshot {
             replication_gap_sync_blocked_reason: None,
             replication_gap_sync_repair_attempt_height: None,
             replication_gap_sync_repair_attempt_summary: None,
+            replication_gap_sync_repair_attempt_route_snapshot: None,
             storage_challenge_network_degraded_height: None,
             storage_challenge_network_degraded_reason: None,
             storage_challenge_network_last_probe_at_ms: None,

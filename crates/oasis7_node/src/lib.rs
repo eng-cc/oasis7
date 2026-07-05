@@ -50,10 +50,13 @@ mod libp2p_replication_network;
 mod libp2p_replication_network_wasm;
 mod network_bridge;
 mod network_bridge_gap_sync_budget;
+mod network_bridge_gap_sync_observability;
 mod network_error_classification;
 mod node_engine_core;
+mod node_engine_gap_sync_outcome;
 mod node_engine_network;
 mod node_engine_replication;
+mod node_engine_replication_checkpoint;
 mod node_engine_replication_provider_route;
 mod node_engine_slashing;
 mod node_engine_storage_challenge;
@@ -117,8 +120,8 @@ pub use types::{
     NodeMainTokenControllerSignerPolicy, NodeNetworkPolicy, NodePeerCommittedHead,
     NodePendingConsensusActionsSnapshot, NodePendingProposalSnapshot, NodePosConfig,
     NodePublicPortReachability, NodeReachabilityAutoDetection, NodeReplicaMaintenanceConfig,
-    NodeRole, NodeSnapshot, NodeUserMode, NodeUserModeRecommendation, PosConsensusStatus,
-    PosValidator,
+    NodeReplicationGapSyncRouteSnapshot, NodeRole, NodeSnapshot, NodeUserMode,
+    NodeUserModeRecommendation, PosConsensusStatus, PosValidator,
 };
 pub use types_consensus::{
     NodeConsensusMisbehaviorEvidenceSnapshot, NodeConsensusSlashingIntentSnapshot,
@@ -187,17 +190,6 @@ impl NodePosStatusAdapter for PosConsensusStatus {
     fn rejected() -> Self {
         PosConsensusStatus::Rejected
     }
-}
-
-#[derive(Debug, Clone)]
-enum GapSyncHeightOutcome {
-    Synced {
-        message: replication::GossipReplicationMessage,
-        payload: replication_state_reconcile::ReplicationCommitPayload,
-    },
-    NotFound {
-        repair_summary: String,
-    },
 }
 
 fn with_execution_hook<T>(
@@ -1102,6 +1094,8 @@ struct PosNodeEngine {
     last_replication_gap_sync_blocked_at_ms: Option<i64>,
     last_replication_gap_sync_repair_attempt_height: Option<u64>,
     last_replication_gap_sync_repair_attempt_summary: Option<String>,
+    last_replication_gap_sync_repair_attempt_route_snapshot:
+        Option<NodeReplicationGapSyncRouteSnapshot>,
     last_replication_successor_probe_height: Option<u64>,
     last_replication_successor_probe_at_ms: Option<i64>,
     last_replication_successor_probe_hold: Option<bool>,

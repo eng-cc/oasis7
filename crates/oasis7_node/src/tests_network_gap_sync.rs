@@ -1,4 +1,5 @@
 use super::*;
+use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 
 pub(super) fn build_fetch_commit_success_cache_fixture(
     world_id: &str,
