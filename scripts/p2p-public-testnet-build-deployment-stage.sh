@@ -203,10 +203,12 @@ validator_specs=(
   "$sequencer_node_id:$sequencer_public_key:$stake"
   "$storage_node_id:$storage_public_key:$stake"
 )
-for extra_validator in "${extra_validators[@]}"; do
-  require_non_empty "--extra-validator" "$extra_validator"
-  validator_specs+=("$extra_validator")
-done
+if ((${#extra_validators[@]} > 0)); then
+  for extra_validator in "${extra_validators[@]}"; do
+    require_non_empty "--extra-validator" "$extra_validator"
+    validator_specs+=("$extra_validator")
+  done
+fi
 
 out_dir=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$out_dir")
 rm -rf "$out_dir"
@@ -271,6 +273,7 @@ cp "$registry_path" "$out_dir/config/doc/testing/evidence/"
 python3 - "$base_genesis" "$genesis_path" "$registry_path" <<'PY'
 import json
 import pathlib
+import shutil
 import sys
 
 base_path = pathlib.Path(sys.argv[1]).resolve()
@@ -300,6 +303,17 @@ for key, value in list(refs.items()):
 refs["genesis_validator_registry_ref"] = str(registry_path)
 
 out_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+
+evidence_dir = out_path.parent / "doc" / "testing" / "evidence"
+evidence_dir.mkdir(parents=True, exist_ok=True)
+for value in refs.values():
+    if not isinstance(value, str) or not value.strip():
+        continue
+    source = pathlib.Path(value)
+    if source.is_file():
+        target = evidence_dir / source.name
+        if source.resolve() != target.resolve():
+            shutil.copy2(source, target)
 PY
 cp "$genesis_path" "$out_dir/config/doc/testing/evidence/"
 

@@ -1547,7 +1547,8 @@ function createViewerFeedbackModule({
     if (!gameplay || typeof gameplay !== "object") {
       return null;
     }
-    const agents = Object.keys(state2.snapshot?.model?.agents || {}).filter((agentId) => isAgentVisibleToCurrentSession2?.(agentId) !== false);
+    const modelAgents = state2.snapshot?.model?.agents || {};
+    const agents = Object.keys(modelAgents).filter((agentId) => isAgentVisibleToCurrentSession2?.(agentId) !== false);
     const locations = Object.keys(state2.snapshot?.model?.locations || {});
     const missingAgents = agents.length === 0;
     const missingLocations = locations.length === 0;
@@ -1582,14 +1583,23 @@ function createViewerFeedbackModule({
     const lastWorldChange = gameplay.last_world_change || null;
     const resumeAnchor = gameplay.resume_anchor || null;
     const resumeNextStep = gameplay.resume_next_step || null;
-    let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => ({
-      actionId: action?.action_id || null,
-      label: action?.label || null,
-      protocolAction: action?.protocol_action || null,
-      targetAgentId: action?.target_agent_id || null,
-      disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
-      executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
-    })) : [];
+    const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
+    const firstAgentClaimSyncPending = emptyEntityBlocker && state2.lastGameplayActionFeedback?.action === "claim_first_agent" && state2.lastGameplayActionFeedback?.accepted !== false && state2.lastGameplayActionFeedback?.stage !== "error";
+    let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => {
+      const starterOcMissingAgentReason = action?.action_id === "claim_starter_oc" && !agentExists(action?.target_agent_id) ? localeText2(
+        locale,
+        "第一个 Agent 认领已提交，正在等待 committed 快照创建 Agent；请先推进或刷新一次。",
+        "First Agent claim submitted; waiting for the committed snapshot to create the Agent. Advance or refresh once first."
+      ) : null;
+      return {
+        actionId: action?.action_id || null,
+        label: action?.label || null,
+        protocolAction: action?.protocol_action || null,
+        targetAgentId: action?.target_agent_id || null,
+        disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.step" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.play" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || starterOcMissingAgentReason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
+        executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
+      };
+    }) : [];
     const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object" ? {
       source: "runtime",
       action: gameplay.recent_feedback.action || null,
@@ -2853,6 +2863,11 @@ function createSoftwareSafeState() {
     lastPromptFeedback: null,
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
+    gameplayActionPending: {
+      actionKey: null,
+      label: null,
+      startedAtUnixMs: null
+    },
     snapshot: null,
     metrics: null,
     hostedAccess: null,
@@ -3101,9 +3116,15 @@ let helloAckTimer = null;
 let initialSnapshotRequested = false;
 let initialSnapshotRetryTimer = null;
 let initialSnapshotRetryCount = 0;
+let emptyEntitySnapshotRefreshTimer = null;
 let hostedSessionRefreshTimer = null;
+let hostedRuntimeSyncTimer = null;
 let pendingAgentChatAckTimer = null;
 let pendingAgentChatOverallTimer = null;
+let pendingPromptControlAckTimer = null;
+let pendingGameplayActionAckTimer = null;
+let firstAgentClaimAutoAdvanceTimer = null;
+let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
 let semanticSendLoop = null;
@@ -3117,8 +3138,13 @@ const HELLO_ACK_TIMEOUT_MS = 2e3;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1e3;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5e3;
+const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
+const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
+const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15e3;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 3e4;
+const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 3e4;
+const SEMANTIC_ACTION_OVERALL_TIMEOUT_MS = 45e3;
 const AGENT_CHAT_OVERALL_TIMEOUT_MS = resolveAgentChatOverallTimeoutMs();
 const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
@@ -3531,6 +3557,9 @@ function isAgentVisibleToCurrentSession(agentId) {
   if (boundPlayerId && currentPlayerId && boundPlayerId === currentPlayerId) {
     return true;
   }
+  if (id === STARTER_AGENT_ID && isTestApiEnabled() && state.auth.source === "local_test_api_ephemeral" && boundPlayerId.startsWith(LOCAL_TEST_PLAYER_ID_PREFIX)) {
+    return true;
+  }
   return false;
 }
 function currentBoundAgentControlError(agentId, actionLabel = "agent action") {
@@ -3742,8 +3771,75 @@ function clearPendingAgentChatOverallTimer() {
     pendingAgentChatOverallTimer = null;
   }
 }
+function clearPendingPromptControlAckTimer() {
+  if (pendingPromptControlAckTimer) {
+    window.clearTimeout(pendingPromptControlAckTimer);
+    pendingPromptControlAckTimer = null;
+  }
+}
+function clearPendingGameplayActionAckTimer() {
+  if (pendingGameplayActionAckTimer) {
+    window.clearTimeout(pendingGameplayActionAckTimer);
+    pendingGameplayActionAckTimer = null;
+  }
+}
+function clearHostedRuntimeSyncTimer() {
+  if (hostedRuntimeSyncTimer) {
+    window.clearTimeout(hostedRuntimeSyncTimer);
+    hostedRuntimeSyncTimer = null;
+  }
+}
+function expireHostedRuntimeSyncTimeout() {
+  hostedRuntimeSyncTimer = null;
+  if (!state.auth.syncInFlight || pendingSessionRegisterWaiter) {
+    return;
+  }
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = state.auth.available ? "issued" : "guest";
+  state.auth.runtimeStatus = "error";
+  state.auth.recoveryErrorCode = "runtime_sync_timeout";
+  state.auth.recoveryErrorMessage = "runtime session sync timed out waiting for ack/error from live server";
+  state.auth.error = state.auth.recoveryErrorMessage;
+  maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
+  render();
+}
+function scheduleHostedRuntimeSyncTimeout() {
+  clearHostedRuntimeSyncTimer();
+  hostedRuntimeSyncTimer = window.setTimeout(
+    expireHostedRuntimeSyncTimeout,
+    SESSION_REGISTER_ACK_TIMEOUT_MS
+  );
+}
+function expireHostedRuntimeSyncTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expireHostedRuntimeSyncTimeoutForTest requires test_api=1");
+  }
+  clearHostedRuntimeSyncTimer();
+  expireHostedRuntimeSyncTimeout();
+}
 function agentChatFeedbackInFlight(feedback) {
   return feedback && ["queued", "registering", "signing", "sent"].includes(String(feedback.stage || ""));
+}
+function semanticFeedbackInFlight(feedback) {
+  return feedback && ["queued", "registering", "authorizing", "signing", "sent"].includes(String(feedback.stage || ""));
+}
+function sameAgentChatFeedback(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return left.id === right.id && left.kind === right.kind && left.action === right.action && left.agentId === right.agentId;
+}
+function sameSemanticFeedback(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return left.id === right.id && left.kind === right.kind && left.action === right.action && left.agentId === right.agentId;
 }
 function isAgentChatInFlight() {
   return agentChatFeedbackInFlight(state.lastChatFeedback);
@@ -3760,7 +3856,7 @@ function markAgentChatFeedbackError(feedback, reason, effect = "agent_chat faile
   state.lastChatFeedback = feedback;
 }
 function expireAgentChatOverallTimeout(feedback) {
-  if (state.lastChatFeedback !== feedback || !agentChatFeedbackInFlight(feedback)) {
+  if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
     return false;
   }
   clearPendingAgentChatOverallTimer();
@@ -3804,6 +3900,16 @@ async function executeSemanticCommand(command) {
     });
     if (command.kind === "chat") {
       expireAgentChatOverallTimeout(command.feedback);
+    } else if (command.kind === "prompt") {
+      if (sameSemanticFeedback(state.lastPromptFeedback, command.feedback)) {
+        markSemanticFeedbackError(
+          command.feedback,
+          "prompt_control timed out before live server ack/error completed",
+          "prompt_control overall timeout"
+        );
+        state.lastPromptFeedback = command.feedback;
+        render();
+      }
     }
     return;
   }
@@ -3819,7 +3925,7 @@ function scheduleAgentChatAckTimeout(feedback) {
   clearPendingAgentChatAckTimer();
   pendingAgentChatAckTimer = window.setTimeout(() => {
     pendingAgentChatAckTimer = null;
-    if (state.lastChatFeedback !== feedback || feedback.stage !== "sent") {
+    if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || state.lastChatFeedback.stage !== "sent") {
       return;
     }
     clearPendingAgentChatOverallTimer();
@@ -3839,6 +3945,90 @@ function failPendingAgentChatAck(reason, effect = "agent_chat ack failed") {
     return;
   }
   markAgentChatFeedbackError(feedback, reason, effect);
+}
+function markSemanticFeedbackError(feedback, reason, effect) {
+  if (!feedback) {
+    return;
+  }
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = reason;
+  feedback.effect = effect;
+}
+function expirePromptControlAckTimeout(feedback) {
+  if (!sameSemanticFeedback(state.lastPromptFeedback, feedback) || state.lastPromptFeedback.stage !== "sent") {
+    return false;
+  }
+  clearPendingPromptControlAckTimer();
+  markSemanticFeedbackError(
+    feedback,
+    "prompt_control timed out waiting for ack/error from live server",
+    "prompt_control ack timeout"
+  );
+  state.lastPromptFeedback = feedback;
+  render();
+  return true;
+}
+function expireGameplayActionAckTimeout(feedback) {
+  if (!sameSemanticFeedback(state.lastGameplayActionFeedback, feedback) || state.lastGameplayActionFeedback.stage !== "sent") {
+    return false;
+  }
+  clearPendingGameplayActionAckTimer();
+  markSemanticFeedbackError(
+    feedback,
+    "gameplay_action timed out waiting for ack/error from live server",
+    "gameplay_action ack timeout"
+  );
+  state.lastGameplayActionFeedback = feedback;
+  render();
+  return true;
+}
+function schedulePromptControlAckTimeout(feedback) {
+  clearPendingPromptControlAckTimer();
+  pendingPromptControlAckTimer = window.setTimeout(() => {
+    pendingPromptControlAckTimer = null;
+    expirePromptControlAckTimeout(feedback);
+  }, SEMANTIC_ACTION_ACK_TIMEOUT_MS);
+}
+function scheduleGameplayActionAckTimeout(feedback) {
+  clearPendingGameplayActionAckTimer();
+  pendingGameplayActionAckTimer = window.setTimeout(() => {
+    pendingGameplayActionAckTimer = null;
+    expireGameplayActionAckTimeout(feedback);
+  }, SEMANTIC_ACTION_ACK_TIMEOUT_MS);
+}
+function expirePendingPromptControlAckTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingPromptControlAckTimeoutForTest requires test_api=1");
+  }
+  clearPendingPromptControlAckTimer();
+  return expirePromptControlAckTimeout(state.lastPromptFeedback);
+}
+function expirePendingGameplayActionAckTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingGameplayActionAckTimeoutForTest requires test_api=1");
+  }
+  clearPendingGameplayActionAckTimer();
+  return expireGameplayActionAckTimeout(state.lastGameplayActionFeedback);
+}
+function failPendingPromptControlAck(reason, effect = "prompt_control ack failed") {
+  clearPendingPromptControlAckTimer();
+  const feedback = state.lastPromptFeedback;
+  if (!feedback || feedback.stage !== "sent") {
+    return;
+  }
+  markSemanticFeedbackError(feedback, reason, effect);
+  state.lastPromptFeedback = feedback;
+}
+function failPendingGameplayActionAck(reason, effect = "gameplay_action ack failed") {
+  clearPendingGameplayActionAckTimer();
+  const feedback = state.lastGameplayActionFeedback;
+  if (!feedback || feedback.stage !== "sent") {
+    return;
+  }
+  markSemanticFeedbackError(feedback, reason, effect);
+  state.lastGameplayActionFeedback = feedback;
 }
 function closeSocketForReconnect(targetSocket) {
   if (!targetSocket || targetSocket.readyState === WebSocket.CLOSING || targetSocket.readyState === WebSocket.CLOSED) {
@@ -3980,6 +4170,57 @@ function sendViewerControl(action, payload) {
 }
 function sendControl(action, payload = null) {
   return sendViewerControl(action, payload);
+}
+function clearFirstAgentClaimAutoAdvanceTimers() {
+  if (firstAgentClaimAutoAdvanceTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoAdvanceTimer);
+    firstAgentClaimAutoAdvanceTimer = null;
+  }
+  if (firstAgentClaimAutoRefreshTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoRefreshTimer);
+    firstAgentClaimAutoRefreshTimer = null;
+  }
+}
+function scheduleFirstAgentClaimAutoAdvance() {
+  if (!isTestApiEnabled()) {
+    return;
+  }
+  clearFirstAgentClaimAutoAdvanceTimers();
+  firstAgentClaimAutoAdvanceTimer = window.setTimeout(() => {
+    firstAgentClaimAutoAdvanceTimer = null;
+    const currentRequestId = nextRequestId();
+    const feedback = {
+      id: currentRequestId,
+      action: "step",
+      accepted: true,
+      stage: "queued",
+      reason: null,
+      hint: "auto-advancing after first-agent claim ack",
+      effect: "queued first-agent claim auto-advance",
+      baselineLogicalTime: state.logicalTime,
+      baselineEventSeq: state.eventSeq,
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+      deltaTraceCount: 0,
+      requestId: currentRequestId
+    };
+    try {
+      sendJson({
+        type: "live_control",
+        mode: { mode: "step", count: 1 },
+        request_id: currentRequestId
+      });
+      pendingControlFeedback.set(currentRequestId, feedback);
+      state.lastControlFeedback = feedback;
+      render();
+    } catch (_) {
+      requestSnapshotSafe();
+    }
+    firstAgentClaimAutoRefreshTimer = window.setTimeout(() => {
+      firstAgentClaimAutoRefreshTimer = null;
+      requestSnapshotSafe();
+    }, FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS);
+  }, FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS);
 }
 function runSteps(payload) {
   const count = parseStepCount(payload);
@@ -4202,6 +4443,66 @@ function handleSnapshot(snapshot) {
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
+  syncEmptyEntitySnapshotRefreshLoop();
+  if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
+    clearFirstAgentClaimAutoAdvanceTimers();
+  }
+}
+function normalizedGameplayActions(snapshot = state.snapshot) {
+  const actions = snapshot?.player_gameplay?.available_actions || snapshot?.player_gameplay?.availableActions || [];
+  return Array.isArray(actions) ? actions : [];
+}
+function gameplayActionId(action) {
+  return String(action?.action_id || action?.actionId || "").trim();
+}
+function gameplayProtocolAction(action) {
+  return String(action?.protocol_action || action?.protocolAction || "").trim();
+}
+function hasGameplayAction(snapshot, actionId) {
+  return normalizedGameplayActions(snapshot).some((action) => gameplayActionId(action) === actionId);
+}
+function hasSnapshotRefreshAction(snapshot) {
+  return normalizedGameplayActions(snapshot).some((action) => {
+    const protocol = gameplayProtocolAction(action);
+    return gameplayActionId(action) === "request_snapshot" || protocol === "request_snapshot" || protocol === "world.request_snapshot";
+  });
+}
+function needsEmptyEntitySnapshotRefresh(snapshot = state.snapshot) {
+  const gameplay = snapshot?.player_gameplay || {};
+  const blockerKind = String(gameplay.blocker_kind || gameplay.blockerKind || "").trim();
+  if (blockerKind !== "runtime_snapshot_empty_entities") {
+    return false;
+  }
+  if (hasGameplayAction(snapshot, "claim_first_agent")) {
+    return false;
+  }
+  return hasSnapshotRefreshAction(snapshot);
+}
+function clearEmptyEntitySnapshotRefreshTimer() {
+  if (emptyEntitySnapshotRefreshTimer) {
+    window.clearTimeout(emptyEntitySnapshotRefreshTimer);
+    emptyEntitySnapshotRefreshTimer = null;
+  }
+}
+function syncEmptyEntitySnapshotRefreshLoop() {
+  if (!needsEmptyEntitySnapshotRefresh()) {
+    clearEmptyEntitySnapshotRefreshTimer();
+    return;
+  }
+  if (emptyEntitySnapshotRefreshTimer || !socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  emptyEntitySnapshotRefreshTimer = window.setTimeout(() => {
+    emptyEntitySnapshotRefreshTimer = null;
+    if (!needsEmptyEntitySnapshotRefresh()) {
+      return;
+    }
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    requestSnapshotSafe();
+    syncEmptyEntitySnapshotRefreshLoop();
+  }, EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS);
 }
 function adoptCurrentPlayerBindingFromSnapshot(snapshot) {
   const playerId = String(state.auth.playerId || "").trim();
@@ -4335,6 +4636,10 @@ function handleControlCompletionAck(ack) {
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
+  if (feedback.stage === "completed_advanced") {
+    requestSnapshotSafe();
+  }
+  render();
 }
 async function buildAgentChatAuthProof(request, auth) {
   const nonce = nextAuthNonce();
@@ -4740,6 +5045,7 @@ async function sendReconnectSync() {
   state.auth.runtimeStatus = "probing";
   state.auth.recoveryErrorCode = null;
   state.auth.recoveryErrorMessage = null;
+  scheduleHostedRuntimeSyncTimeout();
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -4757,6 +5063,7 @@ function probeHostedRuntimeSession() {
   }
   state.auth.syncInFlight = true;
   state.auth.runtimeStatus = "probing";
+  scheduleHostedRuntimeSyncTimeout();
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -4867,6 +5174,37 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
     waiter.reject(error instanceof Error ? error : new Error(String(error)));
   }
 }
+function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
+  if (state.connectionStatus === "error" && /player session registration timed out/i.test(String(state.lastError || ""))) {
+    state.connectionStatus = "connected";
+    state.lastError = null;
+  }
+  state.auth.syncInFlight = false;
+  state.auth.recoveryErrorCode = null;
+  state.auth.recoveryErrorMessage = null;
+  state.auth.error = null;
+  if (ack?.player_id) {
+    state.auth.playerId = ack.player_id;
+  }
+  if (ack?.session_pubkey) {
+    state.auth.publicKey = ack.session_pubkey;
+  }
+  if (ack?.session_epoch != null) {
+    state.auth.sessionEpoch = Number(ack.session_epoch);
+  }
+}
+function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
+  recoverConnectedSessionStateAfterRuntimeAck(ack);
+  if (!pendingSessionRegisterWaiter) {
+    return;
+  }
+  const waiter = pendingSessionRegisterWaiter;
+  pendingSessionRegisterWaiter = null;
+  if (waiter.timeoutId) {
+    window.clearTimeout(waiter.timeoutId);
+  }
+  waiter.resolve(ack);
+}
 function expirePendingSessionRegisterWaiterForTest() {
   if (!isTestApiEnabled()) {
     throw new Error("expirePendingSessionRegisterWaiterForTest requires test_api=1");
@@ -4886,6 +5224,7 @@ function expirePendingSessionRegisterWaiterForTest() {
   return true;
 }
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
+  clearHostedRuntimeSyncTimer();
   const auth = state.auth.source === "legacy_viewer_auth_bootstrap" ? state.auth : await ensureHostedAuthSigningKey(state.auth);
   const normalizedRequestedAgentId = String(requestedAgentId || "").trim() || null;
   if (state.auth.source !== "legacy_viewer_auth_bootstrap") {
@@ -4932,6 +5271,15 @@ async function retryPendingSessionRegisterWaiterWithForceRebind() {
     clearPendingSessionRegisterWaiter(error);
     throw error;
   }
+}
+function rebindAgentIdFromRecoveryError(error) {
+  const explicit = String(error?.agent_id || error?.agentId || error?.target_agent_id || error?.targetAgentId || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const message = String(error?.message || "");
+  const match = message.match(/^agent\s+(\S+)\s+is bound to player\s+\S+,\s+not\s+\S+/);
+  return match?.[1] || null;
 }
 function latestRequestedAgentId(fallbackAgentId = null) {
   const agentId = String(
@@ -5145,12 +5493,19 @@ function enqueueSemanticCommand(command) {
 }
 function handleSemanticCommandError(command, error) {
   if (command.kind === "chat") {
-    if (state.lastChatFeedback !== command.feedback || !agentChatFeedbackInFlight(command.feedback)) {
+    if (!sameAgentChatFeedback(state.lastChatFeedback, command.feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
       render();
       return;
     }
     clearPendingAgentChatAckTimer();
     clearPendingAgentChatOverallTimer();
+  }
+  if (command.kind === "prompt") {
+    if (!sameSemanticFeedback(state.lastPromptFeedback, command.feedback) || !semanticFeedbackInFlight(state.lastPromptFeedback)) {
+      render();
+      return;
+    }
+    clearPendingPromptControlAckTimer();
   }
   command.feedback.stage = "error";
   command.feedback.ok = false;
@@ -5187,9 +5542,16 @@ function assertSemanticCapability(actionId) {
   }
 }
 function assertAgentChatFeedbackActive(feedback) {
-  if (state.lastChatFeedback !== feedback || !agentChatFeedbackInFlight(feedback)) {
+  if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
     throw new Error("agent_chat request expired before send completed");
   }
+  state.lastChatFeedback = feedback;
+}
+function assertPromptFeedbackActive(feedback) {
+  if (!sameSemanticFeedback(state.lastPromptFeedback, feedback) || !semanticFeedbackInFlight(state.lastPromptFeedback)) {
+    throw new Error("prompt_control request expired before send completed");
+  }
+  state.lastPromptFeedback = feedback;
 }
 function sendAgentChat(agentIdOrPayload, maybeMessage) {
   let agentId = null;
@@ -5220,12 +5582,13 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
     pendingPlayerId: state.auth.playerId || null
   });
   state.lastChatFeedback = feedback;
-  scheduleAgentChatOverallTimeout(feedback);
   const command = {
     kind: "chat",
     feedback,
     timeoutMs: AGENT_CHAT_OVERALL_TIMEOUT_MS,
     execute: async () => {
+      assertAgentChatFeedbackActive(feedback);
+      scheduleAgentChatOverallTimeout(feedback);
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();
@@ -5255,9 +5618,7 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
       render();
     }
   };
-  void Promise.resolve(command.execute()).catch((error) => {
-    handleSemanticCommandError(command, error);
-  });
+  enqueueSemanticCommand(command);
   render();
   return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
 }
@@ -5300,13 +5661,16 @@ function sendPromptControl(mode, payload = null) {
   enqueueSemanticCommand({
     kind: "prompt",
     feedback,
+    timeoutMs: SEMANTIC_ACTION_OVERALL_TIMEOUT_MS,
     execute: async () => {
       await ensureHostedPlayerAuthAvailable();
+      assertPromptFeedbackActive(feedback);
       assertSemanticCapability("prompt_control");
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();
       await ensureRegisteredPlayerSession(agentId);
+      assertPromptFeedbackActive(feedback);
       let strongAuthGrant = null;
       if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
@@ -5316,6 +5680,7 @@ function sendPromptControl(mode, payload = null) {
           normalizedMode === "rollback" ? "prompt_control_rollback" : `prompt_control_${normalizedMode}`,
           agentId
         );
+        assertPromptFeedbackActive(feedback);
       }
       feedback.stage = "signing";
       feedback.effect = "building auth proof";
@@ -5336,6 +5701,7 @@ function sendPromptControl(mode, payload = null) {
           commandRequest.strong_auth_grant = strongAuthGrant;
         }
       }
+      assertPromptFeedbackActive(feedback);
       feedback.stage = "sent";
       feedback.effect = `prompt ${normalizedMode} request sent; waiting for ack`;
       state.lastPromptFeedback = feedback;
@@ -5346,6 +5712,7 @@ function sendPromptControl(mode, payload = null) {
           request: commandRequest
         }
       });
+      schedulePromptControlAckTimeout(feedback);
       render();
     }
   });
@@ -5498,6 +5865,7 @@ function sendGameplayAction(actionOrId) {
         type: "gameplay_action",
         request
       });
+      scheduleGameplayActionAckTimeout(feedback);
       render();
     } catch (error) {
       markCurrentGameplayActionFeedbackError(error);
@@ -5507,6 +5875,8 @@ function sendGameplayAction(actionOrId) {
   return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
 }
 function handleGameplayActionAck(ack) {
+  clearPendingGameplayActionAckTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     ack?.action_id || "gameplay_action",
@@ -5528,6 +5898,7 @@ function handleGameplayActionAck(ack) {
     state.auth.registrationStatus = "registered";
     state.auth.runtimeStatus = "registered";
     state.auth.error = null;
+    scheduleFirstAgentClaimAutoAdvance();
   }
   requestSnapshotSafe();
 }
@@ -5577,6 +5948,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
   }
 }
 function handleGameplayActionError(error) {
+  clearPendingGameplayActionAckTimer();
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     error?.action_id || "gameplay_action",
@@ -5630,6 +6002,7 @@ function applyPromptAckLocally(ack) {
   }
 }
 function handlePromptControlAck(ack) {
+  clearPendingPromptControlAckTimer();
   const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
   const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
   feedback.stage = ack?.preview ? "preview_ack" : operation === "rollback" ? "rollback_ack" : "apply_ack";
@@ -5652,6 +6025,7 @@ function handlePromptControlAck(ack) {
   applyPromptAckLocally(ack);
 }
 function handlePromptControlError(error) {
+  clearPendingPromptControlAckTimer();
   const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_error", error?.agent_id || selectedAgentId());
   feedback.stage = "error";
   feedback.ok = false;
@@ -5664,6 +6038,7 @@ function handlePromptControlError(error) {
 function handleAgentChatAck(ack) {
   clearPendingAgentChatAckTimer();
   clearPendingAgentChatOverallTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
   feedback.stage = "ack";
   feedback.ok = true;
@@ -5713,6 +6088,7 @@ function adoptHostedRecoveryAck(ack) {
   if (!ack || !state.auth.available) {
     return;
   }
+  clearHostedRuntimeSyncTimer();
   const usesLegacyPreviewBootstrap = state.auth.source === "legacy_viewer_auth_bootstrap";
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
@@ -5766,10 +6142,8 @@ function adoptHostedRecoveryAck(ack) {
       syncHostedSessionRefreshLoop();
     }
   }
-  if (pendingSessionRegisterWaiter && ack.status === "session_registered") {
-    const waiter = pendingSessionRegisterWaiter;
-    pendingSessionRegisterWaiter = null;
-    waiter.resolve(ack);
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   }
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
   if (ack.status === "session_registered") {
@@ -5781,6 +6155,9 @@ async function recoverHostedSessionFromError(error) {
     return;
   }
   const code = String(error?.code || "").trim();
+  if (code === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    return;
+  }
   if (recoveryErrorRequiresExplicitRebind(error) && state.auth.pendingRequestedAgentId && !state.auth.pendingForceRebind) {
     await ensureRegisteredPlayerSession(state.auth.pendingRequestedAgentId, { forceRebind: true });
     return;
@@ -5817,7 +6194,21 @@ function handleAuthoritativeRecoveryAck(ack) {
   adoptHostedRecoveryAck(ack);
 }
 function handleAuthoritativeRecoveryError(error) {
-  if (pendingSessionRegisterWaiter && recoveryErrorRequiresExplicitRebind(error) && pendingSessionRegisterWaiter.requestedAgentId && !pendingSessionRegisterWaiter.forceRebind) {
+  clearHostedRuntimeSyncTimer();
+  if (String(error?.code || "").trim() === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    state.auth.recoveryErrorCode = null;
+    state.auth.recoveryErrorMessage = null;
+    state.auth.runtimeStatus = "rebind_registering";
+    state.auth.error = null;
+    render();
+    return;
+  }
+  const rebindAgentId = rebindAgentIdFromRecoveryError(error);
+  if (pendingSessionRegisterWaiter && recoveryErrorRequiresExplicitRebind(error) && (pendingSessionRegisterWaiter.requestedAgentId || rebindAgentId) && !pendingSessionRegisterWaiter.forceRebind) {
+    if (!pendingSessionRegisterWaiter.requestedAgentId && rebindAgentId) {
+      pendingSessionRegisterWaiter.requestedAgentId = rebindAgentId;
+      state.auth.pendingRequestedAgentId = rebindAgentId;
+    }
     state.auth.recoveryErrorCode = error?.code || null;
     state.auth.recoveryErrorMessage = error?.message || null;
     state.auth.error = error?.message || error?.code || "authoritative recovery failed";
@@ -5831,6 +6222,25 @@ function handleAuthoritativeRecoveryError(error) {
       handleAuthoritativeRecoveryError({
         code: "player_bind_failed",
         message: String(retryError)
+      });
+    });
+    return;
+  }
+  if (!pendingSessionRegisterWaiter && state.auth.source === "local_test_api_ephemeral" && recoveryErrorRequiresExplicitRebind(error) && rebindAgentId) {
+    state.auth.recoveryErrorCode = error?.code || null;
+    state.auth.recoveryErrorMessage = error?.message || null;
+    state.auth.error = error?.message || error?.code || "authoritative recovery failed";
+    state.auth.registrationStatus = "registering";
+    state.auth.runtimeStatus = "rebind_retrying";
+    state.auth.pendingRequestedAgentId = rebindAgentId;
+    state.auth.pendingForceRebind = true;
+    state.auth.rebindNotice = `Requested agent ${rebindAgentId} needs explicit rebind; retrying now.`;
+    render();
+    void ensureRegisteredPlayerSession(rebindAgentId, { forceRebind: true }).catch((retryError) => {
+      handleAuthoritativeRecoveryError({
+        code: "player_bind_failed",
+        message: String(retryError),
+        agent_id: rebindAgentId
       });
     });
     return;
@@ -5954,6 +6364,7 @@ function attachSocket(ws) {
   });
   ws.addEventListener("close", () => {
     state.connectionStatus = "connecting";
+    clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
       state.auth.syncInFlight = false;
       state.auth.runtimeStatus = "disconnected";
@@ -5962,6 +6373,14 @@ function attachSocket(ws) {
     failPendingAgentChatAck(
       "websocket disconnected before agent_chat ack/error returned",
       "agent_chat websocket disconnected"
+    );
+    failPendingPromptControlAck(
+      "websocket disconnected before prompt_control ack/error returned",
+      "prompt_control websocket disconnected"
+    );
+    failPendingGameplayActionAck(
+      "websocket disconnected before gameplay_action ack/error returned",
+      "gameplay_action websocket disconnected"
     );
     stopHostedSessionRefreshLoop();
     render();
@@ -6103,6 +6522,9 @@ function installTestApi() {
     retryHostedPlayerIdentityIssue,
     registerPlayerSessionForTest,
     expirePendingSessionRegisterWaiterForTest,
+    expireHostedRuntimeSyncTimeoutForTest,
+    expirePendingPromptControlAckTimeoutForTest,
+    expirePendingGameplayActionAckTimeoutForTest,
     reportFatalError
   };
 }
@@ -8306,8 +8728,12 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$35 = /* @__PURE__ */ template(`<option>`), _tmpl$36 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$37 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$39 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$40 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$41 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$42 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$43 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$44 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$45 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$46 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$47 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$48 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$49 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$57 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$58 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$60 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$61 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$62 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$39 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$40 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__title></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$41 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__title></div><div class=list-item__meta>`), _tmpl$42 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$43 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$44 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$45 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$46 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$47 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$48 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$49 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$50 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$58 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$59 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$61 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$62 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$63 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
+const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
+function observeViewerStateRevision() {
+  viewerStateRevision();
+}
 function uiLocale() {
   return state.uiLocale;
 }
@@ -9085,6 +9511,7 @@ function focusableElements(root) {
   return [...root.querySelectorAll(["a[href]", "button:not([disabled])", "input:not([disabled])", "select:not([disabled])", "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])"].join(","))].filter((element) => !element.hasAttribute("aria-hidden"));
 }
 function HostedLoginGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   let dialogRef;
   let previousFocus = null;
@@ -9221,8 +9648,18 @@ function EmptyEntityRecoveryCard(props) {
         children: (action) => (() => {
           var _el$83 = _tmpl$28(), _el$84 = _el$83.firstChild;
           _el$84.$$click = () => renderGameplayAction(action());
-          insert(_el$84, () => gameplayActionButtonLabel(action(), locale()));
-          createRenderEffect(() => _el$84.disabled = Boolean(gameplayActionDisabledReason(action(), gameplay(), locale())));
+          insert(_el$84, () => gameplayActionDisplayLabel(action(), locale()));
+          createRenderEffect((_p$) => {
+            var _v$15 = gameplayActionButtonClass(action()), _v$16 = gameplayActionButtonBusyAttrs(action()), _v$17 = gameplayActionButtonDisabled(action(), gameplay(), locale());
+            _v$15 !== _p$.e && className(_el$84, _p$.e = _v$15);
+            _v$16 !== _p$.t && setAttribute(_el$84, "aria-busy", _p$.t = _v$16);
+            _v$17 !== _p$.a && (_el$84.disabled = _p$.a = _v$17);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0
+          });
           return _el$83;
         })()
       }), (() => {
@@ -9253,9 +9690,9 @@ function ViewerEntryMenu() {
     }));
     insert(_el$95, () => viewerEntryUrls().softwareSafeUrl);
     createRenderEffect((_p$) => {
-      var _v$15 = locale() === "zh", _v$16 = locale() === "en";
-      _v$15 !== _p$.e && (_el$92.disabled = _p$.e = _v$15);
-      _v$16 !== _p$.t && (_el$93.disabled = _p$.t = _v$16);
+      var _v$18 = locale() === "zh", _v$19 = locale() === "en";
+      _v$18 !== _p$.e && (_el$92.disabled = _p$.e = _v$18);
+      _v$19 !== _p$.t && (_el$93.disabled = _p$.t = _v$19);
       return _p$;
     }, {
       e: void 0,
@@ -9289,6 +9726,70 @@ function goalExecutionBadgeClass(state2) {
   return state2 === "blocked" || state2 === "rejected" ? "badge badge--warn" : state2 === "completed" ? "badge badge--good" : "badge badge--accent";
 }
 const PENDING_GAMEPLAY_FEEDBACK_STAGES = /* @__PURE__ */ new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_BUSY_STAGES = /* @__PURE__ */ new Set(["queued", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_PENDING_MIN_MS = 900;
+let gameplayActionPendingClearTimer = null;
+function gameplayActionKey(action) {
+  if (!action) {
+    return "";
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  return `${actionId}::${targetAgentId}`;
+}
+function gameplayActionFeedbackMatches(action, feedback = snapshotSemanticFeedback(state.lastGameplayActionFeedback)) {
+  if (!action || !feedback || feedback.kind !== "gameplay_action") {
+    return false;
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const feedbackAction = normalizedId(feedback.action);
+  if (!actionId || !feedbackAction || !feedbackAction.includes(actionId)) {
+    return false;
+  }
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  const feedbackAgentId = normalizedId(feedback.agentId || feedback.targetAgentId);
+  return !targetAgentId || !feedbackAgentId || targetAgentId === feedbackAgentId;
+}
+function clearGameplayActionPending(action = null) {
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+    gameplayActionPendingClearTimer = null;
+  }
+  if (action && state.gameplayActionPending.actionKey !== gameplayActionKey(action)) {
+    return;
+  }
+  state.gameplayActionPending.actionKey = null;
+  state.gameplayActionPending.label = null;
+  state.gameplayActionPending.startedAtUnixMs = null;
+  requestRender();
+}
+function markGameplayActionPending(action, label) {
+  const key = gameplayActionKey(action);
+  if (!key) {
+    return;
+  }
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+  }
+  state.gameplayActionPending.actionKey = key;
+  state.gameplayActionPending.label = label || normalizedId(action.label || action.actionId || action.executeKind);
+  state.gameplayActionPending.startedAtUnixMs = Date.now();
+  gameplayActionPendingClearTimer = window.setTimeout(() => {
+    gameplayActionPendingClearTimer = null;
+    if (!gameplayActionFeedbackMatches(action) || !GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(state.lastGameplayActionFeedback?.stage).toLowerCase())) {
+      clearGameplayActionPending(action);
+    }
+  }, GAMEPLAY_ACTION_PENDING_MIN_MS);
+  requestRender();
+}
+function gameplayActionFeedbackInFlight(action) {
+  const feedback = snapshotSemanticFeedback(state.lastGameplayActionFeedback);
+  return gameplayActionFeedbackMatches(action, feedback) && GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(feedback.stage).toLowerCase());
+}
+function gameplayActionPendingFor(action) {
+  const key = gameplayActionKey(action);
+  return Boolean(key && state.gameplayActionPending.actionKey === key) || gameplayActionFeedbackInFlight(action);
+}
 function isPendingFirstAgentClaimSync(action, gameplay) {
   if (action?.actionId !== "claim_first_agent") {
     return false;
@@ -9357,6 +9858,39 @@ function gameplayActionButtonLabel(action, locale) {
   }
   return tr(locale, "提交玩法动作", "Submit Gameplay Action");
 }
+function gameplayActionBusyLabel(action, locale) {
+  if (action?.executeKind === "request_snapshot") {
+    return tr(locale, "刷新中...", "Refreshing...");
+  }
+  if (action?.executeKind === "step") {
+    return tr(locale, "推进中...", "Advancing...");
+  }
+  if (action?.executeKind === "play") {
+    return tr(locale, "恢复中...", "Resuming...");
+  }
+  if (action?.actionId === "claim_starter_oc") {
+    return tr(locale, "确认中...", "Confirming...");
+  }
+  if (action?.actionId === "claim_first_agent" || action?.executeKind === "claim_agent") {
+    return tr(locale, "提交中...", "Submitting...");
+  }
+  return tr(locale, "处理中...", "Working...");
+}
+function gameplayActionDisplayLabel(action, locale, fallback = null) {
+  if (gameplayActionPendingFor(action)) {
+    return gameplayActionBusyLabel(action, locale);
+  }
+  return fallback ?? gameplayActionButtonLabel(action, locale);
+}
+function gameplayActionButtonClass(action) {
+  return gameplayActionPendingFor(action) ? "is-loading" : "";
+}
+function gameplayActionButtonBusyAttrs(action) {
+  return gameplayActionPendingFor(action) ? "true" : "false";
+}
+function gameplayActionButtonDisabled(action, gameplay, locale) {
+  return Boolean(gameplayActionDisabledReason(action, gameplay, locale) || gameplayActionPendingFor(action));
+}
 function gameplayActionTestId(action, role = "available") {
   if (role === "recommended") {
     return "viewer-playthrough-action-recommended";
@@ -9391,7 +9925,7 @@ function starterOcAction(gameplay) {
   if (starterOcOnboardingState.pending && pendingTargetAgentId) {
     return null;
   }
-  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc");
+  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc" && !action.disabledReason);
   if (existing) {
     return existing;
   }
@@ -9490,6 +10024,17 @@ function starterOcSubmittedFeedback() {
   }
   return null;
 }
+function starterOcFeedbackNeedsLocalAdvance(feedback = starterOcSubmittedFeedback()) {
+  if (!feedback) {
+    return false;
+  }
+  const stage = String(feedback.stage || "").toLowerCase();
+  if (stage === "submitted") {
+    return false;
+  }
+  const effect = String(feedback.effect || "").toLowerCase();
+  return ["accepted", "ack", "queued", "sent"].includes(stage) || effect.includes("queued gameplay action") || effect.includes("advance");
+}
 function shouldShowStarterOcRequiredGate(gameplay = buildGameplaySummary(uiLocale())) {
   return Boolean(starterOcAction(gameplay) || starterOcSubmittedFeedback() || starterOcClaimPendingForCurrentAgent());
 }
@@ -9555,8 +10100,18 @@ function StarterOcOnboardingPanel(props) {
           children: (starterAction) => (() => {
             var _el$111 = _tmpl$28(), _el$112 = _el$111.firstChild;
             _el$112.$$click = () => renderGameplayAction(starterAction());
-            insert(_el$112, () => gameplayActionButtonLabel(starterAction(), locale()));
-            createRenderEffect(() => _el$112.disabled = Boolean(gameplayActionDisabledReason(starterAction(), gameplay(), locale())));
+            insert(_el$112, () => gameplayActionDisplayLabel(starterAction(), locale()));
+            createRenderEffect((_p$) => {
+              var _v$20 = gameplayActionButtonClass(starterAction()), _v$21 = gameplayActionButtonBusyAttrs(starterAction()), _v$22 = gameplayActionButtonDisabled(starterAction(), gameplay(), locale());
+              _v$20 !== _p$.e && className(_el$112, _p$.e = _v$20);
+              _v$21 !== _p$.t && setAttribute(_el$112, "aria-busy", _p$.t = _v$21);
+              _v$22 !== _p$.a && (_el$112.disabled = _p$.a = _v$22);
+              return _p$;
+            }, {
+              e: void 0,
+              t: void 0,
+              a: void 0
+            });
             return _el$111;
           })()
         });
@@ -9579,8 +10134,11 @@ function StarterOcOnboardingPanel(props) {
   })();
 }
 function StarterOcRequiredGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const [autoConfirmAttempts, setAutoConfirmAttempts] = createSignal(0);
+  const [manualConfirmAttempts, setManualConfirmAttempts] = createSignal(0);
+  const [lastConfirmMode, setLastConfirmMode] = createSignal("auto");
   const gameplay = () => buildGameplaySummary(locale());
   const action = () => starterOcAction(gameplay());
   const submittedFeedback = () => starterOcSubmittedFeedback();
@@ -9590,11 +10148,44 @@ function StarterOcRequiredGate() {
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action2) => action2.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
   const chatAction = () => firstAgentChatAction(gameplay());
+  const confirmationAction = () => {
+    const refreshAction = snapshotRefreshAction();
+    const advanceAction = progressionAction();
+    return starterOcFeedbackNeedsLocalAdvance(submittedFeedback()) ? advanceAction || refreshAction : refreshAction || advanceAction;
+  };
+  const visibleConfirmAttempt = () => lastConfirmMode() === "manual" ? Math.max(manualConfirmAttempts(), 1) : Math.min(autoConfirmAttempts() + 1, 3);
+  const confirmStatusLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "已入账", "Credited");
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction()) ? tr(locale(), "手动确认中", "Manual confirmation") : tr(locale(), "等待手动确认回执", "Waiting for manual confirmation");
+    }
+    return autoConfirmAttempts() >= 3 ? tr(locale(), "等待手动确认", "Waiting for manual confirmation") : tr(locale(), "自动确认中", "Auto-confirming");
+  };
+  const confirmProgressLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "完成", "Done");
+    }
+    if (lastConfirmMode() === "manual") {
+      return tr(locale(), `手动第 ${visibleConfirmAttempt()} 次确认`, `Manual check ${visibleConfirmAttempt()}`);
+    }
+    return tr(locale(), `第 ${visibleConfirmAttempt()} 次确认`, `Check ${visibleConfirmAttempt()} of 3`);
+  };
+  const confirmSummaryCopy = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。", "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.");
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction()) ? tr(locale(), "已发起手动确认。本地世界正在刷新快照，确认这笔初始 OC 是否已经写入。", "Manual confirmation started. The local world is refreshing the snapshot to verify whether the starter OC is visible.") : tr(locale(), "自动确认还没有看到入账结果；可以再次手动刷新确认，或等待下一次快照同步。", "Auto-confirmation has not seen the credit yet; retry manual refresh or wait for the next snapshot sync.");
+    }
+    return autoConfirmAttempts() >= 3 ? tr(locale(), "自动确认已经跑完 3 次，仍未看到入账结果。可以手动再确认一次，或等待运行时快照继续同步。", "Auto-confirmation has completed 3 checks without seeing the credit. Retry manual confirmation or wait for the runtime snapshot to keep syncing.") : tr(locale(), "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。", "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.");
+  };
   const primaryAction = () => {
     if (creditConfirmed()) {
       return chatAction();
     }
-    return pendingCredit() ? snapshotRefreshAction() || progressionAction() : action();
+    return pendingCredit() ? confirmationAction() : action();
   };
   let primaryButtonRef;
   let scheduledAutoConfirmAttempt = -1;
@@ -9611,6 +10202,8 @@ function StarterOcRequiredGate() {
         autoCompleteTimer = window.setTimeout(() => {
           completeStarterOcOnboarding();
           setAutoConfirmAttempts(0);
+          setManualConfirmAttempts(0);
+          setLastConfirmMode("auto");
           requestRender();
           autoCompleteTimer = null;
         }, 1200);
@@ -9625,19 +10218,22 @@ function StarterOcRequiredGate() {
       scheduledAutoConfirmAttempt = -1;
       if (!pendingCredit()) {
         setAutoConfirmAttempts(0);
+        setManualConfirmAttempts(0);
+        setLastConfirmMode("auto");
       }
       return;
     }
-    const nextAction = snapshotRefreshAction();
+    const nextAction = confirmationAction();
     const attempt = autoConfirmAttempts();
     if (!nextAction || attempt >= 3 || scheduledAutoConfirmAttempt === attempt) {
       return;
     }
-    if (gameplayActionDisabledReason(nextAction, gameplay(), locale())) {
+    if (gameplayActionButtonDisabled(nextAction, gameplay(), locale())) {
       return;
     }
     scheduledAutoConfirmAttempt = attempt;
     autoConfirmTimer = window.setTimeout(() => {
+      setLastConfirmMode("auto");
       renderGameplayAction(nextAction);
       setAutoConfirmAttempts((value) => value + 1);
     }, attempt === 0 ? 450 : 1600);
@@ -9676,24 +10272,21 @@ function StarterOcRequiredGate() {
         get fallback() {
           return (() => {
             var _el$122 = _tmpl$30(), _el$123 = _el$122.firstChild, _el$124 = _el$123.nextSibling, _el$125 = _el$124.firstChild, _el$126 = _el$125.firstChild, _el$127 = _el$126.nextSibling, _el$128 = _el$125.nextSibling, _el$129 = _el$128.firstChild, _el$130 = _el$129.nextSibling, _el$131 = _el$128.nextSibling, _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling;
-            insert(_el$123, (() => {
-              var _c$0 = memo(() => !!creditConfirmed());
-              return () => _c$0() ? tr(locale(), "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。", "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.") : tr(locale(), "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。", "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.");
-            })());
+            insert(_el$123, confirmSummaryCopy);
             insert(_el$126, () => tr(locale(), "状态", "Status"));
             insert(_el$127, (() => {
-              var _c$1 = memo(() => !!creditConfirmed());
-              return () => _c$1() ? tr(locale(), "已入账", "Credited") : tr(locale(), "自动确认中", "Auto-confirming");
+              var _c$0 = memo(() => !!creditConfirmed());
+              return () => _c$0() ? tr(locale(), "已入账", "Credited") : confirmStatusLabel();
             })());
             insert(_el$129, () => tr(locale(), "进度", "Progress"));
             insert(_el$130, (() => {
-              var _c$10 = memo(() => !!creditConfirmed());
-              return () => _c$10() ? tr(locale(), "完成", "Done") : tr(locale(), `第 ${Math.min(autoConfirmAttempts() + 1, 3)} 次确认`, `Check ${Math.min(autoConfirmAttempts() + 1, 3)} of 3`);
+              var _c$1 = memo(() => !!creditConfirmed());
+              return () => _c$1() ? tr(locale(), "完成", "Done") : confirmProgressLabel();
             })());
             insert(_el$132, () => tr(locale(), "你可以做什么", "What To Do"));
             insert(_el$133, (() => {
-              var _c$11 = memo(() => !!creditConfirmed());
-              return () => _c$11() ? tr(locale(), "开始聊天", "Start chat") : tr(locale(), "先看玩法说明", "Read the guide");
+              var _c$10 = memo(() => !!creditConfirmed());
+              return () => _c$10() ? tr(locale(), "开始聊天", "Start chat") : tr(locale(), "先看玩法说明", "Read the guide");
             })());
             insert(_el$122, createComponent(StarterOcGuide, {
               get locale() {
@@ -9724,21 +10317,34 @@ function StarterOcRequiredGate() {
           return primaryAction();
         },
         children: (nextAction) => (() => {
-          var _el$134 = _tmpl$32();
+          var _el$134 = _tmpl$34();
           _el$134.$$click = () => {
             if (creditConfirmed()) {
               completeStarterOcOnboarding();
               setAutoConfirmAttempts(0);
+              setManualConfirmAttempts(0);
+              setLastConfirmMode("auto");
+            }
+            if (pendingCredit()) {
+              setLastConfirmMode("manual");
+              setManualConfirmAttempts((value) => value + 1);
             }
             renderGameplayAction(nextAction());
           };
           var _ref$4 = primaryButtonRef;
           typeof _ref$4 === "function" ? use(_ref$4, _el$134) : primaryButtonRef = _el$134;
-          insert(_el$134, (() => {
-            var _c$12 = memo(() => !!creditConfirmed());
-            return () => _c$12() ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat") : memo(() => !!pendingCredit())() ? tr(locale(), "手动再确认一次", "Retry Confirmation") : gameplayActionButtonLabel(nextAction(), locale());
-          })());
-          createRenderEffect(() => _el$134.disabled = Boolean(gameplayActionDisabledReason(nextAction(), gameplay(), locale())));
+          insert(_el$134, () => gameplayActionDisplayLabel(nextAction(), locale(), creditConfirmed() ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat") : pendingCredit() ? tr(locale(), "手动再确认一次", "Retry Confirmation") : gameplayActionButtonLabel(nextAction(), locale())));
+          createRenderEffect((_p$) => {
+            var _v$23 = gameplayActionButtonClass(nextAction()), _v$24 = gameplayActionButtonBusyAttrs(nextAction()), _v$25 = gameplayActionButtonDisabled(nextAction(), gameplay(), locale());
+            _v$23 !== _p$.e && className(_el$134, _p$.e = _v$23);
+            _v$24 !== _p$.t && setAttribute(_el$134, "aria-busy", _p$.t = _v$24);
+            _v$25 !== _p$.a && (_el$134.disabled = _p$.a = _v$25);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0
+          });
           return _el$134;
         })()
       }), null);
@@ -9751,6 +10357,8 @@ function StarterOcRequiredGate() {
           _el$121.$$click = () => {
             completeStarterOcOnboarding();
             setAutoConfirmAttempts(0);
+            setManualConfirmAttempts(0);
+            setLastConfirmMode("auto");
             requestRender();
           };
           var _ref$3 = primaryButtonRef;
@@ -9771,10 +10379,16 @@ function renderGameplayAction(action) {
     });
     return;
   }
+  markGameplayActionPending(action, gameplayActionButtonLabel(action, uiLocale()));
   if (action.actionId === "claim_starter_oc") {
     markStarterOcClaimPending(action);
   }
   const result = sendGameplayAction(action);
+  if (result && result.ok === false) {
+    clearGameplayActionPending(action);
+  } else if (result && result.ok === true && !result.feedback && action.executeKind !== "request_snapshot" && !(starterOcClaimPendingForCurrentAgent() && ["step", "play"].includes(action.executeKind))) {
+    clearGameplayActionPending(action);
+  }
   if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
     clearStarterOcClaimPending();
   } else if (action.actionId === "claim_starter_oc") {
@@ -10002,7 +10616,7 @@ function AgentClaimPanel(props) {
         }), null);
         return _el$140;
       })(), (() => {
-        var _el$141 = _tmpl$34(), _el$142 = _el$141.firstChild, _el$143 = _el$142.firstChild, _el$144 = _el$143.nextSibling;
+        var _el$141 = _tmpl$35(), _el$142 = _el$141.firstChild, _el$143 = _el$142.firstChild, _el$144 = _el$143.nextSibling;
         insert(_el$143, () => tr(locale(), "目标 Agent", "Target Agent"));
         _el$144.$$input = (event) => setSelectedTargetId(event.currentTarget.value);
         insert(_el$144, createComponent(For, {
@@ -10010,7 +10624,7 @@ function AgentClaimPanel(props) {
             return targets();
           },
           children: (target) => (() => {
-            var _el$147 = _tmpl$35();
+            var _el$147 = _tmpl$36();
             insert(_el$147, () => `${target.name}${target.isClaimer ? ` (${tr(locale(), "当前绑定", "current binding")})` : ""}`);
             createRenderEffect(() => _el$147.value = target.id);
             return _el$147;
@@ -10026,8 +10640,18 @@ function AgentClaimPanel(props) {
             renderGameplayAction(action);
           }
         };
-        insert(_el$146, () => tr(locale(), "认领 Agent", "Claim Agent"));
-        createRenderEffect(() => _el$146.disabled = Boolean(disabledReason()));
+        insert(_el$146, () => gameplayActionDisplayLabel(claimAction(), locale(), tr(locale(), "认领 Agent", "Claim Agent")));
+        createRenderEffect((_p$) => {
+          var _v$26 = gameplayActionButtonClass(claimAction()), _v$27 = gameplayActionButtonBusyAttrs(claimAction()), _v$28 = Boolean(disabledReason()) || gameplayActionPendingFor(claimAction());
+          _v$26 !== _p$.e && className(_el$146, _p$.e = _v$26);
+          _v$27 !== _p$.t && setAttribute(_el$146, "aria-busy", _p$.t = _v$27);
+          _v$28 !== _p$.a && (_el$146.disabled = _p$.a = _v$28);
+          return _p$;
+        }, {
+          e: void 0,
+          t: void 0,
+          a: void 0
+        });
         return _el$145;
       })()];
     }
@@ -10079,6 +10703,7 @@ function renderResourceSummary(resources) {
   return resourceSummary(resources);
 }
 function WorldStageHero() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => buildGameplaySummary(locale());
   const authSurface = () => buildAuthSurfaceModel();
@@ -10137,7 +10762,7 @@ function WorldStageHero() {
     return context ? tr(locale(), `推进一步，尝试：${context}`, `Advance One Step toward: ${context}`) : tr(locale(), "推进一步，尝试当前下一步", "Advance One Step toward the current next move");
   };
   return (() => {
-    var _el$148 = _tmpl$36(), _el$149 = _el$148.firstChild, _el$150 = _el$149.firstChild, _el$151 = _el$150.firstChild, _el$152 = _el$151.firstChild, _el$153 = _el$151.nextSibling, _el$154 = _el$153.nextSibling, _el$155 = _el$149.nextSibling, _el$156 = _el$155.firstChild, _el$157 = _el$156.firstChild, _el$158 = _el$157.nextSibling, _el$159 = _el$158.nextSibling, _el$160 = _el$156.nextSibling, _el$161 = _el$160.firstChild, _el$162 = _el$161.nextSibling, _el$163 = _el$162.nextSibling, _el$164 = _el$160.nextSibling, _el$165 = _el$164.firstChild, _el$166 = _el$165.nextSibling, _el$167 = _el$164.nextSibling, _el$168 = _el$167.firstChild, _el$169 = _el$168.nextSibling, _el$170 = _el$169.nextSibling, _el$171 = _el$170.nextSibling, _el$172 = _el$155.nextSibling, _el$173 = _el$172.firstChild, _el$174 = _el$173.nextSibling, _el$175 = _el$172.nextSibling, _el$176 = _el$175.nextSibling, _el$177 = _el$176.firstChild, _el$178 = _el$177.nextSibling;
+    var _el$148 = _tmpl$37(), _el$149 = _el$148.firstChild, _el$150 = _el$149.firstChild, _el$151 = _el$150.firstChild, _el$152 = _el$151.firstChild, _el$153 = _el$151.nextSibling, _el$154 = _el$153.nextSibling, _el$155 = _el$149.nextSibling, _el$156 = _el$155.firstChild, _el$157 = _el$156.firstChild, _el$158 = _el$157.nextSibling, _el$159 = _el$158.nextSibling, _el$160 = _el$156.nextSibling, _el$161 = _el$160.firstChild, _el$162 = _el$161.nextSibling, _el$163 = _el$162.nextSibling, _el$164 = _el$160.nextSibling, _el$165 = _el$164.firstChild, _el$166 = _el$165.nextSibling, _el$167 = _el$164.nextSibling, _el$168 = _el$167.firstChild, _el$169 = _el$168.nextSibling, _el$170 = _el$169.nextSibling, _el$171 = _el$170.nextSibling, _el$172 = _el$155.nextSibling, _el$173 = _el$172.firstChild, _el$174 = _el$173.nextSibling, _el$175 = _el$172.nextSibling, _el$176 = _el$175.nextSibling, _el$177 = _el$176.firstChild, _el$178 = _el$177.nextSibling;
     insert(_el$152, () => tr(locale(), "工业世界指挥桌", "Industrial World Command Desk"));
     insert(_el$151, createComponent(InlineHelpTip, {
       get locale() {
@@ -10190,14 +10815,14 @@ function WorldStageHero() {
     insert(_el$170, identityDetail);
     insert(_el$171, identityMeta);
     _el$173.$$click = () => renderGameplayAction(refreshSnapshotAction());
-    insert(_el$173, () => tr(locale(), "刷新快照", "Refresh Snapshot"));
+    insert(_el$173, () => gameplayActionDisplayLabel(refreshSnapshotAction(), locale(), tr(locale(), "刷新快照", "Refresh Snapshot")));
     _el$174.$$click = () => sendControl("step", {
       count: 1
     });
     insert(_el$174, () => tr(locale(), "推进一步", "Advance One Step"));
     insert(_el$175, (() => {
-      var _c$13 = memo(() => !!primaryActionContext());
-      return () => _c$13() ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`) : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.");
+      var _c$11 = memo(() => !!primaryActionContext());
+      return () => _c$11() ? tr(locale(), `推荐上下文：${primaryActionContext()}`, `Recommended context: ${primaryActionContext()}`) : tr(locale(), "先读目标和下一步，再选择刷新或推进。", "Read the goal and next step before choosing refresh or advance.");
     })());
     insert(_el$148, createComponent(Show, {
       get when() {
@@ -10242,13 +10867,16 @@ function WorldStageHero() {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$17 = gameplaySummary()?.blockerKind || "ready", _v$18 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$19 = tr(locale(), "主要玩法动作", "Primary gameplay actions"), _v$20 = primaryRefreshLabel(), _v$21 = primaryStepLabel(), _v$22 = tr(locale(), "移动端快速入口", "Mobile quick actions");
-      _v$17 !== _p$.e && setAttribute(_el$148, "data-stage-state", _p$.e = _v$17);
-      _v$18 !== _p$.t && className(_el$158, _p$.t = _v$18);
-      _v$19 !== _p$.a && setAttribute(_el$172, "aria-label", _p$.a = _v$19);
-      _v$20 !== _p$.o && setAttribute(_el$173, "aria-label", _p$.o = _v$20);
-      _v$21 !== _p$.i && setAttribute(_el$174, "aria-label", _p$.i = _v$21);
-      _v$22 !== _p$.n && setAttribute(_el$176, "aria-label", _p$.n = _v$22);
+      var _v$29 = gameplaySummary()?.blockerKind || "ready", _v$30 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$31 = tr(locale(), "主要玩法动作", "Primary gameplay actions"), _v$32 = primaryRefreshLabel(), _v$33 = gameplayActionButtonClass(refreshSnapshotAction()), _v$34 = gameplayActionButtonBusyAttrs(refreshSnapshotAction()), _v$35 = gameplayActionPendingFor(refreshSnapshotAction()), _v$36 = primaryStepLabel(), _v$37 = tr(locale(), "移动端快速入口", "Mobile quick actions");
+      _v$29 !== _p$.e && setAttribute(_el$148, "data-stage-state", _p$.e = _v$29);
+      _v$30 !== _p$.t && className(_el$158, _p$.t = _v$30);
+      _v$31 !== _p$.a && setAttribute(_el$172, "aria-label", _p$.a = _v$31);
+      _v$32 !== _p$.o && setAttribute(_el$173, "aria-label", _p$.o = _v$32);
+      _v$33 !== _p$.i && className(_el$173, _p$.i = _v$33);
+      _v$34 !== _p$.n && setAttribute(_el$173, "aria-busy", _p$.n = _v$34);
+      _v$35 !== _p$.s && (_el$173.disabled = _p$.s = _v$35);
+      _v$36 !== _p$.h && setAttribute(_el$174, "aria-label", _p$.h = _v$36);
+      _v$37 !== _p$.r && setAttribute(_el$176, "aria-label", _p$.r = _v$37);
       return _p$;
     }, {
       e: void 0,
@@ -10256,7 +10884,10 @@ function WorldStageHero() {
       a: void 0,
       o: void 0,
       i: void 0,
-      n: void 0
+      n: void 0,
+      s: void 0,
+      h: void 0,
+      r: void 0
     });
     return _el$148;
   })();
@@ -10264,7 +10895,7 @@ function WorldStageHero() {
 function MobileJumpRail() {
   const locale = () => uiLocale();
   return (() => {
-    var _el$181 = _tmpl$37(), _el$182 = _el$181.firstChild, _el$183 = _el$182.nextSibling, _el$184 = _el$183.nextSibling, _el$185 = _el$184.nextSibling;
+    var _el$181 = _tmpl$38(), _el$182 = _el$181.firstChild, _el$183 = _el$182.nextSibling, _el$184 = _el$183.nextSibling, _el$185 = _el$184.nextSibling;
     insert(_el$182, () => tr(locale(), "世界", "World"));
     insert(_el$183, () => tr(locale(), "目标", "Targets"));
     insert(_el$184, () => tr(locale(), "指挥", "Command"));
@@ -10274,6 +10905,7 @@ function MobileJumpRail() {
   })();
 }
 function TargetsPanel() {
+  observeViewerStateRevision();
   const lists = () => modelLists();
   const locale = () => uiLocale();
   const gameplaySummary = () => buildGameplaySummary(locale());
@@ -10290,7 +10922,7 @@ function TargetsPanel() {
     return `${state.selectedKind}:${state.selectedId}`;
   };
   return (() => {
-    var _el$186 = _tmpl$38(), _el$187 = _el$186.firstChild, _el$188 = _el$187.firstChild, _el$189 = _el$188.nextSibling, _el$190 = _el$187.nextSibling, _el$191 = _el$190.firstChild, _el$192 = _el$191.nextSibling, _el$193 = _el$190.nextSibling, _el$194 = _el$193.firstChild, _el$195 = _el$194.nextSibling;
+    var _el$186 = _tmpl$39(), _el$187 = _el$186.firstChild, _el$188 = _el$187.firstChild, _el$189 = _el$188.nextSibling, _el$190 = _el$187.nextSibling, _el$191 = _el$190.firstChild, _el$192 = _el$191.nextSibling, _el$193 = _el$190.nextSibling, _el$194 = _el$193.firstChild, _el$195 = _el$194.nextSibling;
     insert(_el$186, createComponent(Show, {
       get when() {
         return selectedLabel();
@@ -10356,8 +10988,18 @@ function TargetsPanel() {
           }), (() => {
             var _el$198 = _tmpl$28(), _el$199 = _el$198.firstChild;
             _el$199.$$click = () => renderGameplayAction(action());
-            insert(_el$199, () => gameplayActionButtonLabel(action(), locale()));
-            createRenderEffect(() => _el$199.disabled = Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale())));
+            insert(_el$199, () => gameplayActionDisplayLabel(action(), locale()));
+            createRenderEffect((_p$) => {
+              var _v$38 = gameplayActionButtonClass(action()), _v$39 = gameplayActionButtonBusyAttrs(action()), _v$40 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
+              _v$38 !== _p$.e && className(_el$199, _p$.e = _v$38);
+              _v$39 !== _p$.t && setAttribute(_el$199, "aria-busy", _p$.t = _v$39);
+              _v$40 !== _p$.a && (_el$199.disabled = _p$.a = _v$40);
+              return _p$;
+            }, {
+              e: void 0,
+              t: void 0,
+              a: void 0
+            });
             return _el$198;
           })()];
         }
@@ -10392,7 +11034,7 @@ function TargetsPanel() {
           children: (agent, index) => {
             const status = () => describeAgentSessionStatus(agent.id, locale());
             return (() => {
-              var _el$200 = _tmpl$39(), _el$201 = _el$200.firstChild, _el$202 = _el$201.nextSibling, _el$203 = _el$202.nextSibling, _el$204 = _el$203.nextSibling;
+              var _el$200 = _tmpl$40(), _el$201 = _el$200.firstChild, _el$202 = _el$201.nextSibling, _el$203 = _el$202.nextSibling, _el$204 = _el$203.nextSibling;
               _el$200.$$click = () => applySelection({
                 kind: "agent",
                 id: agent.id
@@ -10421,11 +11063,11 @@ function TargetsPanel() {
               insert(_el$203, () => `${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`);
               insert(_el$204, () => status().detail);
               createRenderEffect((_p$) => {
-                var _v$23 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$24 = agent.id, _v$25 = status().kind, _v$26 = state.selectedKind === "agent" && state.selectedId === agent.id;
-                _v$23 !== _p$.e && setAttribute(_el$200, "data-testid", _p$.e = _v$23);
-                _v$24 !== _p$.t && setAttribute(_el$200, "data-select-id", _p$.t = _v$24);
-                _v$25 !== _p$.a && setAttribute(_el$200, "data-agent-session-status", _p$.a = _v$25);
-                _v$26 !== _p$.o && setAttribute(_el$200, "data-selected", _p$.o = _v$26);
+                var _v$41 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$42 = agent.id, _v$43 = status().kind, _v$44 = state.selectedKind === "agent" && state.selectedId === agent.id;
+                _v$41 !== _p$.e && setAttribute(_el$200, "data-testid", _p$.e = _v$41);
+                _v$42 !== _p$.t && setAttribute(_el$200, "data-select-id", _p$.t = _v$42);
+                _v$43 !== _p$.a && setAttribute(_el$200, "data-agent-session-status", _p$.a = _v$43);
+                _v$44 !== _p$.o && setAttribute(_el$200, "data-selected", _p$.o = _v$44);
                 return _p$;
               }, {
                 e: void 0,
@@ -10464,7 +11106,7 @@ function TargetsPanel() {
             return lists().locations;
           },
           children: (location) => (() => {
-            var _el$205 = _tmpl$40(), _el$206 = _el$205.firstChild, _el$207 = _el$206.nextSibling;
+            var _el$205 = _tmpl$41(), _el$206 = _el$205.firstChild, _el$207 = _el$206.nextSibling;
             _el$205.$$click = () => applySelection({
               kind: "location",
               id: location.id
@@ -10472,10 +11114,10 @@ function TargetsPanel() {
             insert(_el$206, () => location.name || location.id);
             insert(_el$207, () => `id=${location.id} · ${tr(locale(), "半径", "radius")}=${formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`);
             createRenderEffect((_p$) => {
-              var _v$27 = `viewer-select-location-${location.id}`, _v$28 = location.id, _v$29 = state.selectedKind === "location" && state.selectedId === location.id;
-              _v$27 !== _p$.e && setAttribute(_el$205, "data-testid", _p$.e = _v$27);
-              _v$28 !== _p$.t && setAttribute(_el$205, "data-select-id", _p$.t = _v$28);
-              _v$29 !== _p$.a && setAttribute(_el$205, "data-selected", _p$.a = _v$29);
+              var _v$45 = `viewer-select-location-${location.id}`, _v$46 = location.id, _v$47 = state.selectedKind === "location" && state.selectedId === location.id;
+              _v$45 !== _p$.e && setAttribute(_el$205, "data-testid", _p$.e = _v$45);
+              _v$46 !== _p$.t && setAttribute(_el$205, "data-select-id", _p$.t = _v$46);
+              _v$47 !== _p$.a && setAttribute(_el$205, "data-selected", _p$.a = _v$47);
               return _p$;
             }, {
               e: void 0,
@@ -10493,6 +11135,7 @@ function TargetsPanel() {
   })();
 }
 function WorldSummaryPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const state$1 = state;
   const gameplaySummary = () => buildGameplaySummary(locale());
@@ -10534,7 +11177,7 @@ function WorldSummaryPanel() {
       });
     }
   }), (() => {
-    var _el$208 = _tmpl$43(), _el$209 = _el$208.firstChild, _el$210 = _el$209.firstChild, _el$211 = _el$210.firstChild, _el$212 = _el$211.nextSibling, _el$213 = _el$209.nextSibling, _el$217 = _el$213.firstChild, _el$218 = _el$217.firstChild, _el$219 = _el$218.firstChild, _el$220 = _el$219.firstChild, _el$221 = _el$220.nextSibling, _el$222 = _el$219.nextSibling, _el$223 = _el$218.nextSibling, _el$224 = _el$223.firstChild, _el$225 = _el$224.nextSibling, _el$226 = _el$225.nextSibling, _el$234 = _el$226.nextSibling, _el$235 = _el$234.nextSibling, _el$236 = _el$235.firstChild, _el$237 = _el$236.nextSibling;
+    var _el$208 = _tmpl$44(), _el$209 = _el$208.firstChild, _el$210 = _el$209.firstChild, _el$211 = _el$210.firstChild, _el$212 = _el$211.nextSibling, _el$213 = _el$209.nextSibling, _el$217 = _el$213.firstChild, _el$218 = _el$217.firstChild, _el$219 = _el$218.firstChild, _el$220 = _el$219.firstChild, _el$221 = _el$220.nextSibling, _el$222 = _el$219.nextSibling, _el$223 = _el$218.nextSibling, _el$224 = _el$223.firstChild, _el$225 = _el$224.nextSibling, _el$226 = _el$225.nextSibling, _el$234 = _el$226.nextSibling, _el$235 = _el$234.nextSibling, _el$236 = _el$235.firstChild, _el$237 = _el$236.nextSibling;
     insert(_el$211, () => tr(locale(), "玩法明细", "Gameplay Details"));
     insert(_el$212, () => tr(locale(), "世界棋盘上方已保留目标、下一步和回执；这里展开看完整状态机与经济明细。", "The world board already carries objective, next move, and receipt; expand here for the full state machine and economy details."));
     insert(_el$209, createComponent(Badge, {
@@ -10994,7 +11637,7 @@ function WorldSummaryPanel() {
                 },
                 get children() {
                   return [(() => {
-                    var _el$259 = _tmpl$44();
+                    var _el$259 = _tmpl$45();
                     insert(_el$259, createComponent(Badge, {
                       "class": "badge badge--warn",
                       get children() {
@@ -11018,7 +11661,7 @@ function WorldSummaryPanel() {
                   return _el$261;
                 }
               }), (() => {
-                var _el$262 = _tmpl$44();
+                var _el$262 = _tmpl$45();
                 insert(_el$262, createComponent(Badge, {
                   "class": "badge badge--accent",
                   get children() {
@@ -11226,15 +11869,19 @@ function WorldSummaryPanel() {
                 })(), (() => {
                   var _el$277 = _tmpl$28(), _el$278 = _el$277.firstChild;
                   _el$278.$$click = () => renderGameplayAction(action());
-                  insert(_el$278, () => gameplayActionButtonLabel(action(), locale()));
+                  insert(_el$278, () => gameplayActionDisplayLabel(action(), locale()));
                   createRenderEffect((_p$) => {
-                    var _v$30 = gameplayActionTestId(action(), "recommended"), _v$31 = Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()));
-                    _v$30 !== _p$.e && setAttribute(_el$278, "data-testid", _p$.e = _v$30);
-                    _v$31 !== _p$.t && (_el$278.disabled = _p$.t = _v$31);
+                    var _v$48 = gameplayActionTestId(action(), "recommended"), _v$49 = gameplayActionButtonClass(action()), _v$50 = gameplayActionButtonBusyAttrs(action()), _v$51 = gameplayActionButtonDisabled(action(), gameplay(), locale());
+                    _v$48 !== _p$.e && setAttribute(_el$278, "data-testid", _p$.e = _v$48);
+                    _v$49 !== _p$.t && className(_el$278, _p$.t = _v$49);
+                    _v$50 !== _p$.a && setAttribute(_el$278, "aria-busy", _p$.a = _v$50);
+                    _v$51 !== _p$.o && (_el$278.disabled = _p$.o = _v$51);
                     return _p$;
                   }, {
                     e: void 0,
-                    t: void 0
+                    t: void 0,
+                    a: void 0,
+                    o: void 0
                   });
                   return _el$277;
                 })()];
@@ -11296,7 +11943,7 @@ function WorldSummaryPanel() {
               });
             }
           }), (() => {
-            var _el$267 = _tmpl$45(), _el$268 = _el$267.firstChild, _el$269 = _el$268.nextSibling;
+            var _el$267 = _tmpl$46(), _el$268 = _el$267.firstChild, _el$269 = _el$268.nextSibling;
             insert(_el$268, () => tr(locale(), "可用玩法动作", "Available Gameplay Actions"));
             insert(_el$269, createComponent(Show, {
               get when() {
@@ -11340,15 +11987,19 @@ function WorldSummaryPanel() {
                         get children() {
                           var _el$280 = _tmpl$28(), _el$281 = _el$280.firstChild;
                           _el$281.$$click = () => renderGameplayAction(action);
-                          insert(_el$281, () => gameplayActionButtonLabel(action, locale()));
+                          insert(_el$281, () => gameplayActionDisplayLabel(action, locale()));
                           createRenderEffect((_p$) => {
-                            var _v$32 = gameplayActionTestId(action), _v$33 = Boolean(gameplayActionDisabledReason(action, gameplay(), locale()));
-                            _v$32 !== _p$.e && setAttribute(_el$281, "data-testid", _p$.e = _v$32);
-                            _v$33 !== _p$.t && (_el$281.disabled = _p$.t = _v$33);
+                            var _v$52 = gameplayActionTestId(action), _v$53 = gameplayActionButtonClass(action), _v$54 = gameplayActionButtonBusyAttrs(action), _v$55 = gameplayActionButtonDisabled(action, gameplay(), locale());
+                            _v$52 !== _p$.e && setAttribute(_el$281, "data-testid", _p$.e = _v$52);
+                            _v$53 !== _p$.t && className(_el$281, _p$.t = _v$53);
+                            _v$54 !== _p$.a && setAttribute(_el$281, "aria-busy", _p$.a = _v$54);
+                            _v$55 !== _p$.o && (_el$281.disabled = _p$.o = _v$55);
                             return _p$;
                           }, {
                             e: void 0,
-                            t: void 0
+                            t: void 0,
+                            a: void 0,
+                            o: void 0
                           });
                           return _el$280;
                         }
@@ -11359,15 +12010,19 @@ function WorldSummaryPanel() {
                         get children() {
                           var _el$282 = _tmpl$28(), _el$283 = _el$282.firstChild;
                           _el$283.$$click = () => renderGameplayAction(action);
-                          insert(_el$283, () => gameplayActionButtonLabel(action, locale()));
+                          insert(_el$283, () => gameplayActionDisplayLabel(action, locale()));
                           createRenderEffect((_p$) => {
-                            var _v$34 = gameplayActionTestId(action), _v$35 = Boolean(gameplayActionDisabledReason(action, gameplay(), locale()));
-                            _v$34 !== _p$.e && setAttribute(_el$283, "data-testid", _p$.e = _v$34);
-                            _v$35 !== _p$.t && (_el$283.disabled = _p$.t = _v$35);
+                            var _v$56 = gameplayActionTestId(action), _v$57 = gameplayActionButtonClass(action), _v$58 = gameplayActionButtonBusyAttrs(action), _v$59 = gameplayActionButtonDisabled(action, gameplay(), locale());
+                            _v$56 !== _p$.e && setAttribute(_el$283, "data-testid", _p$.e = _v$56);
+                            _v$57 !== _p$.t && className(_el$283, _p$.t = _v$57);
+                            _v$58 !== _p$.a && setAttribute(_el$283, "aria-busy", _p$.a = _v$58);
+                            _v$59 !== _p$.o && (_el$283.disabled = _p$.o = _v$59);
                             return _p$;
                           }, {
                             e: void 0,
-                            t: void 0
+                            t: void 0,
+                            a: void 0,
+                            o: void 0
                           });
                           return _el$282;
                         }
@@ -11471,7 +12126,7 @@ function WorldSummaryPanel() {
                 return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
               },
               get children() {
-                var _el$215 = _tmpl$41(), _el$216 = _el$215.firstChild;
+                var _el$215 = _tmpl$42(), _el$216 = _el$215.firstChild;
                 _el$216.$$click = () => {
                   void logoutHostedPlayerSession();
                 };
@@ -11696,7 +12351,7 @@ function WorldSummaryPanel() {
         return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
       },
       get children() {
-        var _el$227 = _tmpl$42();
+        var _el$227 = _tmpl$43();
         _el$227.$$click = () => {
           void logoutHostedPlayerSession();
         };
@@ -12061,8 +12716,12 @@ function WorldSummaryPanel() {
   })()];
 }
 function InteractionPanel() {
+  const revision = () => observeViewerStateRevision();
   const locale = () => uiLocale();
-  const selectedAgentId$1 = () => selectedAgentId();
+  const selectedAgentId$1 = () => {
+    revision();
+    return selectedAgentId();
+  };
   const agentId = () => {
     const id = normalizedId(selectedAgentId$1());
     if (!id || !isAgentVisibleToCurrentSession(id)) {
@@ -12070,551 +12729,605 @@ function InteractionPanel() {
     }
     return id;
   };
-  const gameplaySummary = () => buildGameplaySummary(locale());
-  const authSurface = () => buildAuthSurfaceModel();
+  const gameplaySummary = () => {
+    revision();
+    return buildGameplaySummary(locale());
+  };
+  const authSurface = () => {
+    revision();
+    return buildAuthSurfaceModel();
+  };
   const promptCapability = () => authSurface().capabilities.prompt_control;
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const mainTokenTransferCapability = () => authSurface().capabilities.main_token_transfer;
   const mainTokenTransferPolicy = () => hostedActionPolicy("main_token_transfer");
-  const binding = () => selectedAgentBindingInfo();
+  const binding = () => {
+    revision();
+    return selectedAgentBindingInfo();
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
-  const promptFeedback = () => snapshotSemanticFeedback(state.lastPromptFeedback);
-  const chatFeedback = () => snapshotSemanticFeedback(state.lastChatFeedback);
+  const promptFeedback = () => {
+    revision();
+    return snapshotSemanticFeedback(state.lastPromptFeedback);
+  };
+  const chatFeedback = () => {
+    revision();
+    return snapshotSemanticFeedback(state.lastChatFeedback);
+  };
   const promptFeedbackDisplay = () => describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => describeSemanticFeedback(chatFeedback(), locale());
   const promptVersionState = () => describePromptVersionState(promptFeedback(), locale());
-  const chatHistory = () => state.chatHistory.filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId()).slice(0, 12);
+  const chatHistory = () => {
+    revision();
+    return state.chatHistory.filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId()).slice(0, 12);
+  };
   const interactionEnabled = () => promptCapability().enabled;
   const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
-  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent() && !isAgentChatInFlight();
+  const chatControlsEnabled = () => {
+    revision();
+    return chatCapability().enabled && canControlSelectedAgent() && !isAgentChatInFlight();
+  };
   const commandStarterOcAction = () => starterOcAction(gameplaySummary());
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
-  const promptOverridesVisible = () => !!state.promptOverridesVisible;
+  const promptOverridesVisible = () => {
+    revision();
+    return !!state.promptOverridesVisible;
+  };
   const assetLaneStatusText = () => mainTokenTransferCapability().enabled ? tr(locale(), "仅预览", "preview_only") : mainTokenTransferCapability().code || "blocked";
   const assetLaneDetail = () => mainTokenTransferCapability().enabled ? tr(locale(), "契约表明这个通道具备 strong_auth 级 main_token_transfer 能力，但观察器这里仍然不会直接暴露转账表单。", "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here.") : mainTokenTransferCapability().reason;
   const promptSettingsSummary = () => promptOverridesVisible() ? tr(locale(), "高级提示词设置已展开；你可以继续做预览、应用、回滚，页面也会显示最近一次反馈。", "Advanced prompt settings are expanded; preview/apply/rollback and the latest prompt feedback are visible.") : tr(locale(), "提示词覆盖默认收起，避免把操作员级编辑控件直接堆在主入口。显式展开后仍可做预览、应用、回滚，`__AW_TEST__.sendPromptControl(...)` 也保持可用。", "Prompt Overrides stay hidden by default so operator-level editing controls do not dominate the primary entry. Expanding them keeps preview/apply/rollback available, and `__AW_TEST__.sendPromptControl(...)` remains available.");
   const promptSettingsButtonLabel = () => promptOverridesVisible() ? tr(locale(), "收起提示词覆盖", "Hide Prompt Overrides") : tr(locale(), "显示提示词覆盖", "Show Prompt Overrides");
   const playerSessionReadyCopy = () => tr(locale(), "当前 Agent 已绑定到你的本地玩家会话。可以直接发送第一条聊天指令；提示词和资产治理能力先收在后置区域。", "This Agent is bound to your local player session. Send the first chat command here; prompt and asset/governance controls stay in the deferred area.");
   const commandBoundaryCopy = () => canControlSelectedAgent() ? playerSessionReadyCopy() : selectedAgentControlReason();
-  if (selectedAgentId$1() && !agentId()) {
-    return createComponent(EmptyState, {
-      get children() {
-        return tr(locale(), "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。", "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.");
-      }
-    });
-  }
-  if (!agentId()) {
-    if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
-      return createComponent(EmptyEntityRecoveryCard, {
-        get locale() {
-          return locale();
+  return createComponent(Show, {
+    get when() {
+      return agentId();
+    },
+    get fallback() {
+      return createComponent(Show, {
+        get when() {
+          return selectedAgentId$1();
         },
-        gameplay: gameplaySummary
-      });
-    }
-    return createComponent(EmptyState, {
-      get children() {
-        return tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.");
-      }
-    });
-  }
-  return (() => {
-    var _el$289 = _tmpl$57(), _el$290 = _el$289.firstChild, _el$292 = _el$290.nextSibling;
-    insert(_el$290, createComponent(Badge, {
-      "class": "badge badge--accent",
-      get children() {
-        return tr(locale(), "当前交互目标", "Current Target");
-      }
-    }), null);
-    insert(_el$290, createComponent(Badge, {
-      get children() {
-        return `agent=${agentId()}`;
-      }
-    }), null);
-    insert(_el$290, createComponent(Badge, {
-      get ["class"]() {
-        return selectedAgentStatus().badgeClass;
-      },
-      get children() {
-        return selectedAgentStatus().badge;
-      }
-    }), null);
-    insert(_el$290, createComponent(Badge, {
-      get ["class"]() {
-        return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
-      },
-      get children() {
-        return memo(() => !!chatControlsEnabled())() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited");
-      }
-    }), null);
-    insert(_el$289, createComponent(Show, {
-      get when() {
-        return memo(() => !!interactionEnabled())() && canControlSelectedAgent();
-      },
-      get fallback() {
-        return createComponent(EmptyState, {
-          "class": "command-surface__auth-boundary",
-          get children() {
-            return commandBoundaryCopy();
-          }
-        });
-      },
-      get children() {
-        return [(() => {
-          var _el$291 = _tmpl$46();
-          insert(_el$291, createComponent(Badge, {
-            "class": "badge badge--good",
-            get children() {
-              return authSurface().currentTier;
-            }
-          }), null);
-          insert(_el$291, createComponent(Badge, {
-            get children() {
-              return `player=${state.auth.playerId}`;
-            }
-          }), null);
-          insert(_el$291, createComponent(Badge, {
-            get children() {
-              return `source=${authSurface().source}`;
-            }
-          }), null);
-          return _el$291;
-        })(), createComponent(EmptyState, {
-          "class": "command-surface__auth-boundary",
-          get children() {
-            return playerSessionReadyCopy();
-          }
-        })];
-      }
-    }), _el$292);
-    insert(_el$292, createComponent(Badge, {
-      get children() {
-        return `boundPlayer=${binding()?.playerId || "-"}`;
-      }
-    }), null);
-    insert(_el$292, createComponent(Badge, {
-      get children() {
-        return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
-      }
-    }), null);
-    insert(_el$292, createComponent(Badge, {
-      get ["class"]() {
-        return promptControlsEnabled() ? "badge badge--good" : "badge badge--warn";
-      },
-      get children() {
-        return `prompt=${promptControlsEnabled() ? "enabled" : promptCapability().code || "agent_not_bound"}`;
-      }
-    }), null);
-    insert(_el$292, createComponent(Badge, {
-      get ["class"]() {
-        return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
-      },
-      get children() {
-        return `chat=${chatControlsEnabled() ? "enabled" : chatCapability().code || "agent_not_bound"}`;
-      }
-    }), null);
-    insert(_el$292, createComponent(Badge, {
-      get ["class"]() {
-        return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
-      },
-      get children() {
-        return `mainToken=${assetLaneStatusText()}`;
-      }
-    }), null);
-    insert(_el$289, createComponent(EmptyState, {
-      "class": "command-surface__asset-boundary",
-      get children() {
-        return assetLaneDetail();
-      }
-    }), null);
-    insert(_el$289, createComponent(Show, {
-      get when() {
-        return memo(() => !!(!starterOcGateOpen() && canControlSelectedAgent()))() && commandStarterOcAction();
-      },
-      children: (action) => (() => {
-        var _el$329 = _tmpl$28(), _el$330 = _el$329.firstChild;
-        _el$330.$$click = () => renderGameplayAction(action());
-        insert(_el$330, () => gameplayActionButtonLabel(action(), locale()));
-        createRenderEffect(() => _el$330.disabled = Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale())));
-        return _el$329;
-      })()
-    }), null);
-    insert(_el$289, createComponent(PanelSection, {
-      "class": "command-surface__chat-panel",
-      get title() {
-        return tr(locale(), "行动体聊天", "Agent Chat");
-      },
-      get eyebrow() {
-        return tr(locale(), "指挥面板", "Command Surface");
-      },
-      get meta() {
-        return tr(locale(), "向当前目标发消息并读回复。", "Message the current target and read replies.");
-      },
-      get children() {
-        return [(() => {
-          var _el$293 = _tmpl$47(), _el$294 = _el$293.firstChild, _el$295 = _el$294.nextSibling;
-          insert(_el$294, () => tr(locale(), "消息", "Message"));
-          _el$295.$$input = (event) => {
-            state.chatDraft.message = String(event.currentTarget.value || "");
-            state.chatDraft.dirty = true;
-          };
-          createRenderEffect((_p$) => {
-            var _v$36 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$37 = !chatControlsEnabled();
-            _v$36 !== _p$.e && setAttribute(_el$295, "placeholder", _p$.e = _v$36);
-            _v$37 !== _p$.t && (_el$295.disabled = _p$.t = _v$37);
-            return _p$;
-          }, {
-            e: void 0,
-            t: void 0
-          });
-          createRenderEffect(() => _el$295.value = state.chatDraft.message);
-          return _el$293;
-        })(), (() => {
-          var _el$296 = _tmpl$48(), _el$297 = _el$296.firstChild;
-          _el$297.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
-          insert(_el$297, () => tr(locale(), "发送聊天", "Send Chat"));
-          createRenderEffect(() => _el$297.disabled = !chatControlsEnabled());
-          return _el$296;
-        })(), createComponent(Show, {
-          get when() {
-            return chatFeedback();
-          },
-          get fallback() {
-            return createComponent(EmptyState, {
-              get children() {
-                return tr(locale(), "还没有聊天反馈。", "No chat feedback yet.");
-              }
-            });
-          },
-          children: (feedback) => createComponent(FeedbackCard, {
-            get feedback() {
-              return feedback();
-            },
-            get display() {
-              return chatFeedbackDisplay();
-            }
-          })
-        }), (() => {
-          var _el$298 = _tmpl$1(), _el$299 = _el$298.firstChild, _el$300 = _el$299.nextSibling;
-          insert(_el$299, () => tr(locale(), "消息流", "Message Flow"));
-          insert(_el$300, createComponent(Show, {
+        get fallback() {
+          return createComponent(Show, {
             get when() {
-              return chatHistory().length > 0;
+              return gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities";
             },
             get fallback() {
               return createComponent(EmptyState, {
                 get children() {
-                  return tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.");
+                  return tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.");
                 }
               });
             },
             get children() {
-              return createComponent(For, {
-                get each() {
-                  return chatHistory();
+              return createComponent(EmptyEntityRecoveryCard, {
+                get locale() {
+                  return locale();
                 },
-                children: (entry) => createComponent(EventCard, {
-                  get title() {
-                    return chatEntryTitle(entry, locale());
-                  },
-                  get badge() {
-                    return `tick=${Number(entry.tick || 0)}`;
-                  },
-                  get meta() {
-                    return chatEntryMeta(entry, locale());
-                  },
-                  get children() {
-                    return [(() => {
-                      var _el$331 = _tmpl$9();
-                      insert(_el$331, () => chatEntryMessage(entry, locale()));
-                      return _el$331;
-                    })(), createComponent(DiagnosticDetails, {
-                      value: entry
-                    })];
-                  }
-                })
+                gameplay: gameplaySummary
               });
             }
-          }));
-          return _el$298;
-        })()];
-      }
-    }), null);
-    insert(_el$289, createComponent(PanelSection, {
-      "class": "command-surface__advanced-panel",
-      get title() {
-        return tr(locale(), "高级提示词设置", "Advanced Prompt Settings");
-      },
-      get eyebrow() {
-        return tr(locale(), "高级控制", "Advanced Controls");
-      },
-      get meta() {
-        return tr(locale(), "保留操作员级提示词控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.");
-      },
-      get children() {
-        return [(() => {
-          var _el$301 = _tmpl$8();
-          insert(_el$301, createComponent(Badge, {
+          });
+        },
+        get children() {
+          return createComponent(EmptyState, {
             get children() {
-              return `activePrompt=v${promptVersionState().currentVersion}`;
+              return tr(locale(), "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。", "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.");
             }
-          }), null);
-          insert(_el$301, createComponent(Badge, {
+          });
+        }
+      });
+    },
+    get children() {
+      var _el$289 = _tmpl$58(), _el$290 = _el$289.firstChild, _el$292 = _el$290.nextSibling;
+      insert(_el$290, createComponent(Badge, {
+        "class": "badge badge--accent",
+        get children() {
+          return tr(locale(), "当前交互目标", "Current Target");
+        }
+      }), null);
+      insert(_el$290, createComponent(Badge, {
+        get children() {
+          return `agent=${agentId()}`;
+        }
+      }), null);
+      insert(_el$290, createComponent(Badge, {
+        get ["class"]() {
+          return selectedAgentStatus().badgeClass;
+        },
+        get children() {
+          return selectedAgentStatus().badge;
+        }
+      }), null);
+      insert(_el$290, createComponent(Badge, {
+        get ["class"]() {
+          return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
+        },
+        get children() {
+          return memo(() => !!chatControlsEnabled())() ? tr(locale(), "聊天可用", "Chat Ready") : tr(locale(), "聊天受限", "Chat Limited");
+        }
+      }), null);
+      insert(_el$289, createComponent(Show, {
+        get when() {
+          return memo(() => !!interactionEnabled())() && canControlSelectedAgent();
+        },
+        get fallback() {
+          return createComponent(EmptyState, {
+            "class": "command-surface__auth-boundary",
             get children() {
-              return `nextRollback=v${promptVersionState().nextRollbackTargetVersion}`;
+              return commandBoundaryCopy();
             }
-          }), null);
-          insert(_el$301, createComponent(Show, {
+          });
+        },
+        get children() {
+          return [(() => {
+            var _el$291 = _tmpl$47();
+            insert(_el$291, createComponent(Badge, {
+              "class": "badge badge--good",
+              get children() {
+                return authSurface().currentTier;
+              }
+            }), null);
+            insert(_el$291, createComponent(Badge, {
+              get children() {
+                return `player=${state.auth.playerId}`;
+              }
+            }), null);
+            insert(_el$291, createComponent(Badge, {
+              get children() {
+                return `source=${authSurface().source}`;
+              }
+            }), null);
+            return _el$291;
+          })(), createComponent(EmptyState, {
+            "class": "command-surface__auth-boundary",
+            get children() {
+              return playerSessionReadyCopy();
+            }
+          })];
+        }
+      }), _el$292);
+      insert(_el$292, createComponent(Badge, {
+        get children() {
+          return `boundPlayer=${binding()?.playerId || "-"}`;
+        }
+      }), null);
+      insert(_el$292, createComponent(Badge, {
+        get children() {
+          return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
+        }
+      }), null);
+      insert(_el$292, createComponent(Badge, {
+        get ["class"]() {
+          return promptControlsEnabled() ? "badge badge--good" : "badge badge--warn";
+        },
+        get children() {
+          return `prompt=${promptControlsEnabled() ? "enabled" : promptCapability().code || "agent_not_bound"}`;
+        }
+      }), null);
+      insert(_el$292, createComponent(Badge, {
+        get ["class"]() {
+          return chatControlsEnabled() ? "badge badge--good" : "badge badge--warn";
+        },
+        get children() {
+          return `chat=${chatControlsEnabled() ? "enabled" : chatCapability().code || "agent_not_bound"}`;
+        }
+      }), null);
+      insert(_el$292, createComponent(Badge, {
+        get ["class"]() {
+          return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
+        },
+        get children() {
+          return `mainToken=${assetLaneStatusText()}`;
+        }
+      }), null);
+      insert(_el$289, createComponent(EmptyState, {
+        "class": "command-surface__asset-boundary",
+        get children() {
+          return assetLaneDetail();
+        }
+      }), null);
+      insert(_el$289, createComponent(Show, {
+        get when() {
+          return memo(() => !!(!starterOcGateOpen() && canControlSelectedAgent()))() && commandStarterOcAction();
+        },
+        children: (action) => (() => {
+          var _el$329 = _tmpl$28(), _el$330 = _el$329.firstChild;
+          _el$330.$$click = () => renderGameplayAction(action());
+          insert(_el$330, () => gameplayActionDisplayLabel(action(), locale()));
+          createRenderEffect((_p$) => {
+            var _v$68 = gameplayActionButtonClass(action()), _v$69 = gameplayActionButtonBusyAttrs(action()), _v$70 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
+            _v$68 !== _p$.e && className(_el$330, _p$.e = _v$68);
+            _v$69 !== _p$.t && setAttribute(_el$330, "aria-busy", _p$.t = _v$69);
+            _v$70 !== _p$.a && (_el$330.disabled = _p$.a = _v$70);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0,
+            a: void 0
+          });
+          return _el$329;
+        })()
+      }), null);
+      insert(_el$289, createComponent(PanelSection, {
+        "class": "command-surface__chat-panel",
+        get title() {
+          return tr(locale(), "行动体聊天", "Agent Chat");
+        },
+        get eyebrow() {
+          return tr(locale(), "指挥面板", "Command Surface");
+        },
+        get meta() {
+          return tr(locale(), "向当前目标发消息并读回复。", "Message the current target and read replies.");
+        },
+        get children() {
+          return [(() => {
+            var _el$293 = _tmpl$48(), _el$294 = _el$293.firstChild, _el$295 = _el$294.nextSibling;
+            insert(_el$294, () => tr(locale(), "消息", "Message"));
+            _el$295.$$input = (event) => {
+              state.chatDraft.message = String(event.currentTarget.value || "");
+              state.chatDraft.dirty = true;
+            };
+            createRenderEffect((_p$) => {
+              var _v$60 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$61 = !chatControlsEnabled();
+              _v$60 !== _p$.e && setAttribute(_el$295, "placeholder", _p$.e = _v$60);
+              _v$61 !== _p$.t && (_el$295.disabled = _p$.t = _v$61);
+              return _p$;
+            }, {
+              e: void 0,
+              t: void 0
+            });
+            createRenderEffect(() => _el$295.value = state.chatDraft.message);
+            return _el$293;
+          })(), (() => {
+            var _el$296 = _tmpl$49(), _el$297 = _el$296.firstChild;
+            _el$297.$$click = () => sendAgentChat(agentId(), state.chatDraft.message);
+            insert(_el$297, () => tr(locale(), "发送聊天", "Send Chat"));
+            createRenderEffect(() => _el$297.disabled = !chatControlsEnabled());
+            return _el$296;
+          })(), createComponent(Show, {
             get when() {
-              return promptVersionState().restoredFromVersion != null;
+              return chatFeedback();
             },
-            get children() {
-              return createComponent(Badge, {
+            get fallback() {
+              return createComponent(EmptyState, {
                 get children() {
-                  return `restoredFrom=v${promptVersionState().restoredFromVersion}`;
+                  return tr(locale(), "还没有聊天反馈。", "No chat feedback yet.");
                 }
               });
-            }
-          }), null);
-          insert(_el$301, createComponent(Badge, {
-            get ["class"]() {
-              return promptOverridesVisible() ? "badge badge--good" : "badge";
             },
-            get children() {
-              return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
-            }
-          }), null);
-          insert(_el$301, createComponent(Badge, {
-            get children() {
-              return tr(locale(), "本地设置持久化", "locally persisted");
-            }
-          }), null);
-          return _el$301;
-        })(), createComponent(EmptyState, {
-          get children() {
-            return promptSettingsSummary();
-          }
-        }), (() => {
-          var _el$302 = _tmpl$49(), _el$303 = _el$302.firstChild;
-          _el$303.$$click = () => togglePromptOverridesVisible();
-          insert(_el$303, promptSettingsButtonLabel);
-          createRenderEffect(() => _el$303.disabled = !canControlSelectedAgent());
-          return _el$302;
-        })()];
-      }
-    }), null);
-    insert(_el$289, createComponent(Show, {
-      get when() {
-        return promptOverridesVisible();
-      },
-      get children() {
-        return createComponent(PanelSection, {
-          get title() {
-            return tr(locale(), "提示词覆盖", "Prompt Overrides");
-          },
-          get children() {
-            return [(() => {
-              var _el$304 = _tmpl$6();
-              insert(_el$304, () => promptVersionState().summary);
-              return _el$304;
-            })(), (() => {
-              var _el$305 = _tmpl$6();
-              insert(_el$305, () => promptVersionState().detail);
-              return _el$305;
-            })(), createComponent(Show, {
-              get when() {
-                return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
+            children: (feedback) => createComponent(FeedbackCard, {
+              get feedback() {
+                return feedback();
               },
-              get children() {
-                var _el$306 = _tmpl$50(), _el$307 = _el$306.firstChild, _el$308 = _el$307.nextSibling;
-                insert(_el$307, () => tr(locale(), "后端审批码", "Backend Approval Code"));
-                _el$308.$$input = (event) => {
-                  state.strongAuth.approvalCode = String(event.currentTarget.value || "");
-                };
-                createRenderEffect(() => _el$308.value = state.strongAuth.approvalCode || "");
-                return _el$306;
+              get display() {
+                return chatFeedbackDisplay();
               }
-            }), (() => {
-              var _el$309 = _tmpl$51(), _el$310 = _el$309.firstChild, _el$311 = _el$310.nextSibling;
-              insert(_el$310, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
-              _el$311.$$input = (event) => {
-                state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
-                state.promptDraft.dirty = true;
-              };
-              createRenderEffect(() => _el$311.disabled = !promptControlsEnabled());
-              createRenderEffect(() => _el$311.value = state.promptDraft.systemPrompt);
-              return _el$309;
-            })(), (() => {
-              var _el$312 = _tmpl$52(), _el$313 = _el$312.firstChild, _el$314 = _el$313.nextSibling;
-              insert(_el$313, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
-              _el$314.$$input = (event) => {
-                state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
-                state.promptDraft.dirty = true;
-              };
-              createRenderEffect(() => _el$314.disabled = !promptControlsEnabled());
-              createRenderEffect(() => _el$314.value = state.promptDraft.shortTermGoal);
-              return _el$312;
-            })(), (() => {
-              var _el$315 = _tmpl$53(), _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling;
-              insert(_el$316, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
-              _el$317.$$input = (event) => {
-                state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
-                state.promptDraft.dirty = true;
-              };
-              createRenderEffect(() => _el$317.disabled = !promptControlsEnabled());
-              createRenderEffect(() => _el$317.value = state.promptDraft.longTermGoal);
-              return _el$315;
-            })(), (() => {
-              var _el$318 = _tmpl$54(), _el$319 = _el$318.firstChild, _el$320 = _el$319.nextSibling;
-              _el$319.$$click = () => sendPromptControl("preview", null);
-              insert(_el$319, () => tr(locale(), "预览提示词", "Preview Prompt"));
-              _el$320.$$click = () => sendPromptControl("apply", null);
-              insert(_el$320, () => tr(locale(), "应用提示词", "Apply Prompt"));
-              createRenderEffect((_p$) => {
-                var _v$38 = !promptControlsEnabled(), _v$39 = !promptControlsEnabled();
-                _v$38 !== _p$.e && (_el$319.disabled = _p$.e = _v$38);
-                _v$39 !== _p$.t && (_el$320.disabled = _p$.t = _v$39);
-                return _p$;
-              }, {
-                e: void 0,
-                t: void 0
-              });
-              return _el$318;
-            })(), (() => {
-              var _el$321 = _tmpl$55(), _el$322 = _el$321.firstChild, _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling, _el$325 = _el$322.nextSibling;
-              insert(_el$323, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
-              _el$324.$$input = (event) => {
-                const nextValue = Number(event.currentTarget.value || 0);
-                state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
-                requestRender();
-              };
-              _el$325.$$click = () => {
-                sendPromptControl("rollback", {
-                  toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
-                });
-              };
-              insert(_el$325, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
-              createRenderEffect((_p$) => {
-                var _v$40 = !promptControlsEnabled(), _v$41 = !promptControlsEnabled();
-                _v$40 !== _p$.e && (_el$324.disabled = _p$.e = _v$40);
-                _v$41 !== _p$.t && (_el$325.disabled = _p$.t = _v$41);
-                return _p$;
-              }, {
-                e: void 0,
-                t: void 0
-              });
-              createRenderEffect(() => _el$324.value = Number(state.promptDraft.rollbackTargetVersion || 0));
-              return _el$321;
-            })(), createComponent(Show, {
+            })
+          }), (() => {
+            var _el$298 = _tmpl$1(), _el$299 = _el$298.firstChild, _el$300 = _el$299.nextSibling;
+            insert(_el$299, () => tr(locale(), "消息流", "Message Flow"));
+            insert(_el$300, createComponent(Show, {
               get when() {
-                return promptFeedback();
+                return chatHistory().length > 0;
               },
               get fallback() {
                 return createComponent(EmptyState, {
                   get children() {
-                    return tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.");
+                    return tr(locale(), "这个行动体还没有聊天历史。", "No chat history for this agent yet.");
                   }
                 });
               },
-              children: (feedback) => createComponent(FeedbackCard, {
-                get feedback() {
-                  return feedback();
-                },
-                get display() {
-                  return promptFeedbackDisplay();
-                }
-              })
-            }), createComponent(Show, {
+              get children() {
+                return createComponent(For, {
+                  get each() {
+                    return chatHistory();
+                  },
+                  children: (entry) => createComponent(EventCard, {
+                    get title() {
+                      return chatEntryTitle(entry, locale());
+                    },
+                    get badge() {
+                      return `tick=${Number(entry.tick || 0)}`;
+                    },
+                    get meta() {
+                      return chatEntryMeta(entry, locale());
+                    },
+                    get children() {
+                      return [(() => {
+                        var _el$331 = _tmpl$9();
+                        insert(_el$331, () => chatEntryMessage(entry, locale()));
+                        return _el$331;
+                      })(), createComponent(DiagnosticDetails, {
+                        value: entry
+                      })];
+                    }
+                  })
+                });
+              }
+            }));
+            return _el$298;
+          })()];
+        }
+      }), null);
+      insert(_el$289, createComponent(PanelSection, {
+        "class": "command-surface__advanced-panel",
+        get title() {
+          return tr(locale(), "高级提示词设置", "Advanced Prompt Settings");
+        },
+        get eyebrow() {
+          return tr(locale(), "高级控制", "Advanced Controls");
+        },
+        get meta() {
+          return tr(locale(), "保留操作员级提示词控制，但默认收起，不与玩家主路径竞争。", "Operator-level prompt controls stay available here, but collapsed by default so they do not compete with the player path.");
+        },
+        get children() {
+          return [(() => {
+            var _el$301 = _tmpl$8();
+            insert(_el$301, createComponent(Badge, {
+              get children() {
+                return `activePrompt=v${promptVersionState().currentVersion}`;
+              }
+            }), null);
+            insert(_el$301, createComponent(Badge, {
+              get children() {
+                return `nextRollback=v${promptVersionState().nextRollbackTargetVersion}`;
+              }
+            }), null);
+            insert(_el$301, createComponent(Show, {
               get when() {
-                return state.strongAuth.lastGrantActionId;
+                return promptVersionState().restoredFromVersion != null;
               },
               get children() {
-                return createComponent(EmptyState, {
+                return createComponent(Badge, {
                   get children() {
-                    return `lastGrant=${state.strongAuth.lastGrantActionId} expiresAt=${state.strongAuth.lastGrantExpiresAtUnixMs || "-"}`;
+                    return `restoredFrom=v${promptVersionState().restoredFromVersion}`;
                   }
                 });
               }
-            }), createComponent(Show, {
-              get when() {
-                return state.strongAuth.lastGrantError;
+            }), null);
+            insert(_el$301, createComponent(Badge, {
+              get ["class"]() {
+                return promptOverridesVisible() ? "badge badge--good" : "badge";
               },
               get children() {
-                return createComponent(EmptyState, {
-                  "class": "empty--danger",
-                  get children() {
-                    return state.strongAuth.lastGrantError;
-                  }
-                });
+                return memo(() => !!promptOverridesVisible())() ? tr(locale(), "状态=已展开", "state=expanded") : tr(locale(), "状态=默认收起", "state=hidden_by_default");
               }
-            })];
-          }
-        });
-      }
-    }), null);
-    insert(_el$289, createComponent(PanelSection, {
-      "class": "command-surface__asset-panel",
-      get title() {
-        return tr(locale(), "资产 / 治理通道", "Asset / Governance Lane");
-      },
-      get eyebrow() {
-        return tr(locale(), "后置能力", "Deferred Surface");
-      },
-      get meta() {
-        return tr(locale(), "这类能力保留在右侧底部，只作为边界说明，不再抢占聊天与主玩法路径。", "These capabilities stay at the bottom of the right column as boundary guidance instead of competing with chat and the main player path.");
-      },
-      get children() {
-        return [(() => {
-          var _el$326 = _tmpl$8();
-          insert(_el$326, createComponent(Badge, {
-            get ["class"]() {
-              return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
+            }), null);
+            insert(_el$301, createComponent(Badge, {
+              get children() {
+                return tr(locale(), "本地设置持久化", "locally persisted");
+              }
+            }), null);
+            return _el$301;
+          })(), createComponent(EmptyState, {
+            get children() {
+              return promptSettingsSummary();
+            }
+          }), (() => {
+            var _el$302 = _tmpl$50(), _el$303 = _el$302.firstChild;
+            _el$303.$$click = () => togglePromptOverridesVisible();
+            insert(_el$303, promptSettingsButtonLabel);
+            createRenderEffect(() => _el$303.disabled = !canControlSelectedAgent());
+            return _el$302;
+          })()];
+        }
+      }), null);
+      insert(_el$289, createComponent(Show, {
+        get when() {
+          return promptOverridesVisible();
+        },
+        get children() {
+          return createComponent(PanelSection, {
+            get title() {
+              return tr(locale(), "提示词覆盖", "Prompt Overrides");
             },
             get children() {
-              return `main_token_transfer=${assetLaneStatusText()}`;
+              return [(() => {
+                var _el$304 = _tmpl$6();
+                insert(_el$304, () => promptVersionState().summary);
+                return _el$304;
+              })(), (() => {
+                var _el$305 = _tmpl$6();
+                insert(_el$305, () => promptVersionState().detail);
+                return _el$305;
+              })(), createComponent(Show, {
+                get when() {
+                  return memo(() => !!authSurface().capabilities.prompt_control.enabled)() && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode);
+                },
+                get children() {
+                  var _el$306 = _tmpl$51(), _el$307 = _el$306.firstChild, _el$308 = _el$307.nextSibling;
+                  insert(_el$307, () => tr(locale(), "后端审批码", "Backend Approval Code"));
+                  _el$308.$$input = (event) => {
+                    state.strongAuth.approvalCode = String(event.currentTarget.value || "");
+                  };
+                  createRenderEffect(() => _el$308.value = state.strongAuth.approvalCode || "");
+                  return _el$306;
+                }
+              }), (() => {
+                var _el$309 = _tmpl$52(), _el$310 = _el$309.firstChild, _el$311 = _el$310.nextSibling;
+                insert(_el$310, () => tr(locale(), "系统提示词覆盖", "System Prompt Override"));
+                _el$311.$$input = (event) => {
+                  state.promptDraft.systemPrompt = String(event.currentTarget.value || "");
+                  state.promptDraft.dirty = true;
+                };
+                createRenderEffect(() => _el$311.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$311.value = state.promptDraft.systemPrompt);
+                return _el$309;
+              })(), (() => {
+                var _el$312 = _tmpl$53(), _el$313 = _el$312.firstChild, _el$314 = _el$313.nextSibling;
+                insert(_el$313, () => tr(locale(), "短期目标覆盖", "Short-Term Goal Override"));
+                _el$314.$$input = (event) => {
+                  state.promptDraft.shortTermGoal = String(event.currentTarget.value || "");
+                  state.promptDraft.dirty = true;
+                };
+                createRenderEffect(() => _el$314.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$314.value = state.promptDraft.shortTermGoal);
+                return _el$312;
+              })(), (() => {
+                var _el$315 = _tmpl$54(), _el$316 = _el$315.firstChild, _el$317 = _el$316.nextSibling;
+                insert(_el$316, () => tr(locale(), "长期目标覆盖", "Long-Term Goal Override"));
+                _el$317.$$input = (event) => {
+                  state.promptDraft.longTermGoal = String(event.currentTarget.value || "");
+                  state.promptDraft.dirty = true;
+                };
+                createRenderEffect(() => _el$317.disabled = !promptControlsEnabled());
+                createRenderEffect(() => _el$317.value = state.promptDraft.longTermGoal);
+                return _el$315;
+              })(), (() => {
+                var _el$318 = _tmpl$55(), _el$319 = _el$318.firstChild, _el$320 = _el$319.nextSibling;
+                _el$319.$$click = () => sendPromptControl("preview", null);
+                insert(_el$319, () => tr(locale(), "预览提示词", "Preview Prompt"));
+                _el$320.$$click = () => sendPromptControl("apply", null);
+                insert(_el$320, () => tr(locale(), "应用提示词", "Apply Prompt"));
+                createRenderEffect((_p$) => {
+                  var _v$62 = !promptControlsEnabled(), _v$63 = !promptControlsEnabled();
+                  _v$62 !== _p$.e && (_el$319.disabled = _p$.e = _v$62);
+                  _v$63 !== _p$.t && (_el$320.disabled = _p$.t = _v$63);
+                  return _p$;
+                }, {
+                  e: void 0,
+                  t: void 0
+                });
+                return _el$318;
+              })(), (() => {
+                var _el$321 = _tmpl$56(), _el$322 = _el$321.firstChild, _el$323 = _el$322.firstChild, _el$324 = _el$323.nextSibling, _el$325 = _el$322.nextSibling;
+                insert(_el$323, () => tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version"));
+                _el$324.$$input = (event) => {
+                  const nextValue = Number(event.currentTarget.value || 0);
+                  state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
+                  requestRender();
+                };
+                _el$325.$$click = () => {
+                  sendPromptControl("rollback", {
+                    toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
+                  });
+                };
+                insert(_el$325, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
+                createRenderEffect((_p$) => {
+                  var _v$64 = !promptControlsEnabled(), _v$65 = !promptControlsEnabled();
+                  _v$64 !== _p$.e && (_el$324.disabled = _p$.e = _v$64);
+                  _v$65 !== _p$.t && (_el$325.disabled = _p$.t = _v$65);
+                  return _p$;
+                }, {
+                  e: void 0,
+                  t: void 0
+                });
+                createRenderEffect(() => _el$324.value = Number(state.promptDraft.rollbackTargetVersion || 0));
+                return _el$321;
+              })(), createComponent(Show, {
+                get when() {
+                  return promptFeedback();
+                },
+                get fallback() {
+                  return createComponent(EmptyState, {
+                    get children() {
+                      return tr(locale(), "还没有提示词反馈。", "No prompt feedback yet.");
+                    }
+                  });
+                },
+                children: (feedback) => createComponent(FeedbackCard, {
+                  get feedback() {
+                    return feedback();
+                  },
+                  get display() {
+                    return promptFeedbackDisplay();
+                  }
+                })
+              }), createComponent(Show, {
+                get when() {
+                  return state.strongAuth.lastGrantActionId;
+                },
+                get children() {
+                  return createComponent(EmptyState, {
+                    get children() {
+                      return `lastGrant=${state.strongAuth.lastGrantActionId} expiresAt=${state.strongAuth.lastGrantExpiresAtUnixMs || "-"}`;
+                    }
+                  });
+                }
+              }), createComponent(Show, {
+                get when() {
+                  return state.strongAuth.lastGrantError;
+                },
+                get children() {
+                  return createComponent(EmptyState, {
+                    "class": "empty--danger",
+                    get children() {
+                      return state.strongAuth.lastGrantError;
+                    }
+                  });
+                }
+              })];
             }
-          }), null);
-          insert(_el$326, createComponent(Badge, {
+          });
+        }
+      }), null);
+      insert(_el$289, createComponent(PanelSection, {
+        "class": "command-surface__asset-panel",
+        get title() {
+          return tr(locale(), "资产 / 治理通道", "Asset / Governance Lane");
+        },
+        get eyebrow() {
+          return tr(locale(), "后置能力", "Deferred Surface");
+        },
+        get meta() {
+          return tr(locale(), "这类能力保留在右侧底部，只作为边界说明，不再抢占聊天与主玩法路径。", "These capabilities stay at the bottom of the right column as boundary guidance instead of competing with chat and the main player path.");
+        },
+        get children() {
+          return [(() => {
+            var _el$326 = _tmpl$8();
+            insert(_el$326, createComponent(Badge, {
+              get ["class"]() {
+                return mainTokenTransferCapability().enabled ? "badge badge--good" : "badge badge--warn";
+              },
+              get children() {
+                return `main_token_transfer=${assetLaneStatusText()}`;
+              }
+            }), null);
+            insert(_el$326, createComponent(Badge, {
+              get children() {
+                return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
+              }
+            }), null);
+            insert(_el$326, createComponent(Badge, {
+              get children() {
+                return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
+              }
+            }), null);
+            return _el$326;
+          })(), createComponent(EmptyState, {
             get children() {
-              return `required_auth=${mainTokenTransferPolicy()?.required_auth || "-"}`;
+              return assetLaneDetail();
             }
-          }), null);
-          insert(_el$326, createComponent(Badge, {
+          }), createComponent(EmptyState, {
             get children() {
-              return `availability=${mainTokenTransferPolicy()?.availability || "-"}`;
+              return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
             }
-          }), null);
-          return _el$326;
-        })(), createComponent(EmptyState, {
-          get children() {
-            return assetLaneDetail();
-          }
-        }), createComponent(EmptyState, {
-          get children() {
-            return mainTokenTransferPolicy()?.reason || tr(locale(), "当前通道没有 main_token_transfer 的托管动作策略。", "No hosted action policy is available for main_token_transfer on this lane.");
-          }
-        }), (() => {
-          var _el$327 = _tmpl$56(), _el$328 = _el$327.firstChild;
-          insert(_el$328, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
-          return _el$327;
-        })()];
-      }
-    }), null);
-    createRenderEffect((_p$) => {
-      var _v$42 = agentId(), _v$43 = String(chatHistory().length);
-      _v$42 !== _p$.e && setAttribute(_el$289, "data-command-agent", _p$.e = _v$42);
-      _v$43 !== _p$.t && setAttribute(_el$289, "data-command-chat-history", _p$.t = _v$43);
-      return _p$;
-    }, {
-      e: void 0,
-      t: void 0
-    });
-    return _el$289;
-  })();
+          }), (() => {
+            var _el$327 = _tmpl$57(), _el$328 = _el$327.firstChild;
+            insert(_el$328, () => tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)"));
+            return _el$327;
+          })()];
+        }
+      }), null);
+      createRenderEffect((_p$) => {
+        var _v$66 = agentId(), _v$67 = String(chatHistory().length);
+        _v$66 !== _p$.e && setAttribute(_el$289, "data-command-agent", _p$.e = _v$66);
+        _v$67 !== _p$.t && setAttribute(_el$289, "data-command-chat-history", _p$.t = _v$67);
+        return _p$;
+      }, {
+        e: void 0,
+        t: void 0
+      });
+      return _el$289;
+    }
+  });
 }
 function DetailsPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => buildGameplaySummary(locale());
   const worldScaleSurface = () => buildWorldScaleSurface(locale());
@@ -12652,7 +13365,7 @@ function DetailsPanel() {
   });
   const hasSnapshotDiagnostics = () => !!state.snapshot || !!state.metrics || !!state.hostedAccess;
   return (() => {
-    var _el$332 = _tmpl$59(), _el$333 = _el$332.firstChild, _el$334 = _el$333.nextSibling, _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling, _el$337 = _el$336.nextSibling;
+    var _el$332 = _tmpl$60(), _el$333 = _el$332.firstChild, _el$334 = _el$333.nextSibling, _el$335 = _el$334.firstChild, _el$336 = _el$335.nextSibling, _el$337 = _el$336.nextSibling;
     insert(_el$333, createComponent(Badge, {
       "class": "badge badge--accent",
       get children() {
@@ -12762,7 +13475,7 @@ function DetailsPanel() {
         return state.lastError;
       },
       get children() {
-        var _el$338 = _tmpl$58(), _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling;
+        var _el$338 = _tmpl$59(), _el$339 = _el$338.firstChild, _el$340 = _el$339.nextSibling;
         insert(_el$339, () => tr(locale(), "最近错误", "Last Error"));
         insert(_el$340, () => state.lastError);
         return _el$338;
@@ -12772,19 +13485,20 @@ function DetailsPanel() {
   })();
 }
 function AppShell() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(buildGameplaySummary(locale()));
   return [createComponent(MobileJumpRail, {}), createComponent(HostedLoginGate, {}), createComponent(StarterOcRequiredGate, {}), (() => {
-    var _el$341 = _tmpl$60(), _el$342 = _el$341.firstChild, _el$343 = _el$342.firstChild, _el$344 = _el$343.nextSibling, _el$345 = _el$344.nextSibling, _el$346 = _el$342.nextSibling;
+    var _el$341 = _tmpl$61(), _el$342 = _el$341.firstChild, _el$343 = _el$342.firstChild, _el$344 = _el$343.nextSibling, _el$345 = _el$344.nextSibling, _el$346 = _el$342.nextSibling;
     insert(_el$343, () => tr(locale(), "导航", "Navigate"));
     insert(_el$344, () => tr(locale(), "目标", "Targets"));
     insert(_el$345, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface."));
     insert(_el$346, createComponent(TargetsPanel, {}));
     createRenderEffect((_p$) => {
-      var _v$44 = starterOcGateOpen() ? "true" : void 0, _v$45 = starterOcGateOpen() ? true : void 0;
-      _v$44 !== _p$.e && setAttribute(_el$341, "aria-hidden", _p$.e = _v$44);
-      _v$45 !== _p$.t && (_el$341.inert = _p$.t = _v$45);
+      var _v$71 = starterOcGateOpen() ? "true" : void 0, _v$72 = starterOcGateOpen() ? true : void 0;
+      _v$71 !== _p$.e && setAttribute(_el$341, "aria-hidden", _p$.e = _v$71);
+      _v$72 !== _p$.t && (_el$341.inert = _p$.t = _v$72);
       return _p$;
     }, {
       e: void 0,
@@ -12792,7 +13506,7 @@ function AppShell() {
     });
     return _el$341;
   })(), (() => {
-    var _el$347 = _tmpl$61(), _el$348 = _el$347.firstChild, _el$349 = _el$348.firstChild;
+    var _el$347 = _tmpl$62(), _el$348 = _el$347.firstChild, _el$349 = _el$348.firstChild;
     insert(_el$349, createComponent(Show, {
       get when() {
         return diagnosticsVisualFixture();
@@ -12816,9 +13530,9 @@ function AppShell() {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$46 = starterOcGateOpen() ? "true" : void 0, _v$47 = starterOcGateOpen() ? true : void 0;
-      _v$46 !== _p$.e && setAttribute(_el$347, "aria-hidden", _p$.e = _v$46);
-      _v$47 !== _p$.t && (_el$347.inert = _p$.t = _v$47);
+      var _v$73 = starterOcGateOpen() ? "true" : void 0, _v$74 = starterOcGateOpen() ? true : void 0;
+      _v$73 !== _p$.e && setAttribute(_el$347, "aria-hidden", _p$.e = _v$73);
+      _v$74 !== _p$.t && (_el$347.inert = _p$.t = _v$74);
       return _p$;
     }, {
       e: void 0,
@@ -12826,15 +13540,15 @@ function AppShell() {
     });
     return _el$347;
   })(), (() => {
-    var _el$350 = _tmpl$62(), _el$351 = _el$350.firstChild, _el$352 = _el$351.firstChild, _el$353 = _el$352.nextSibling, _el$354 = _el$353.nextSibling, _el$355 = _el$351.nextSibling;
+    var _el$350 = _tmpl$63(), _el$351 = _el$350.firstChild, _el$352 = _el$351.firstChild, _el$353 = _el$352.nextSibling, _el$354 = _el$353.nextSibling, _el$355 = _el$351.nextSibling;
     insert(_el$352, () => tr(locale(), "指挥与核查", "Command and Inspect"));
     insert(_el$353, () => tr(locale(), "交互与明细", "Interact and Inspect"));
     insert(_el$354, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
     insert(_el$355, createComponent(DetailsPanel, {}));
     createRenderEffect((_p$) => {
-      var _v$48 = starterOcGateOpen() ? "true" : void 0, _v$49 = starterOcGateOpen() ? true : void 0;
-      _v$48 !== _p$.e && setAttribute(_el$350, "aria-hidden", _p$.e = _v$48);
-      _v$49 !== _p$.t && (_el$350.inert = _p$.t = _v$49);
+      var _v$75 = starterOcGateOpen() ? "true" : void 0, _v$76 = starterOcGateOpen() ? true : void 0;
+      _v$75 !== _p$.e && setAttribute(_el$350, "aria-hidden", _p$.e = _v$75);
+      _v$76 !== _p$.t && (_el$350.inert = _p$.t = _v$76);
       return _p$;
     }, {
       e: void 0,
@@ -13349,8 +14063,7 @@ function mountViewerApp(root = document.getElementById("app")) {
     root.removeAttribute("data-viewer-visual-fixture");
   }
   let dispose2 = render$1(() => createComponent(AppShell, {}), root);
-  setRenderHook(() => {
-  });
+  setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
   return () => {
     setRenderHook(null);
     dispose2();

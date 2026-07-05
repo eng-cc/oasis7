@@ -19,6 +19,7 @@ pub(super) const VIEWER_AGENT_PROVIDER_PROFILE_ENV: &str = "OASIS7_AGENT_PROVIDE
 pub(super) const VIEWER_AGENT_EXECUTION_LANE_ENV: &str = "OASIS7_AGENT_EXECUTION_LANE";
 pub(super) const VIEWER_AGENT_PROVIDER_MODE_ENV: &str = "OASIS7_AGENT_PROVIDER_MODE";
 pub(super) const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
+pub(super) const RUNTIME_LIVE_LLM_TIMEOUT_ENV: &str = "OASIS7_RUNTIME_LIVE_LLM_TIMEOUT_MS";
 pub(super) const HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV: &str =
     "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 
@@ -84,6 +85,7 @@ pub(super) fn clear_runtime_provider_env() {
         VIEWER_AGENT_EXECUTION_LANE_ENV,
         VIEWER_AGENT_PROVIDER_MODE_ENV,
         RUNTIME_AGENT_CHAT_ECHO_ENV,
+        RUNTIME_LIVE_LLM_TIMEOUT_ENV,
     ] {
         // SAFETY: This test/setup code mutates process environment in a controlled scope.
         unsafe {

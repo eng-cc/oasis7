@@ -44,9 +44,15 @@ let helloAckTimer = null;
 let initialSnapshotRequested = false;
 let initialSnapshotRetryTimer = null;
 let initialSnapshotRetryCount = 0;
+let emptyEntitySnapshotRefreshTimer = null;
 let hostedSessionRefreshTimer = null;
+let hostedRuntimeSyncTimer = null;
 let pendingAgentChatAckTimer = null;
 let pendingAgentChatOverallTimer = null;
+let pendingPromptControlAckTimer = null;
+let pendingGameplayActionAckTimer = null;
+let firstAgentClaimAutoAdvanceTimer = null;
+let firstAgentClaimAutoRefreshTimer = null;
 let requestId = 0;
 let authNonceCounter = 0;
 let semanticSendLoop = null;
@@ -61,8 +67,13 @@ const HELLO_ACK_TIMEOUT_MS = 2000;
 const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
 const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
 const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
+const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
+const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
+const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15000;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
+const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 30000;
+const SEMANTIC_ACTION_OVERALL_TIMEOUT_MS = 45000;
 const AGENT_CHAT_OVERALL_TIMEOUT_MS = resolveAgentChatOverallTimeoutMs();
 const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
@@ -543,6 +554,14 @@ function isAgentVisibleToCurrentSession(agentId) {
   if (boundPlayerId && currentPlayerId && boundPlayerId === currentPlayerId) {
     return true;
   }
+  if (
+    id === STARTER_AGENT_ID
+    && isTestApiEnabled()
+    && state.auth.source === "local_test_api_ephemeral"
+    && boundPlayerId.startsWith(LOCAL_TEST_PLAYER_ID_PREFIX)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -773,8 +792,90 @@ function clearPendingAgentChatOverallTimer() {
   }
 }
 
+function clearPendingPromptControlAckTimer() {
+  if (pendingPromptControlAckTimer) {
+    window.clearTimeout(pendingPromptControlAckTimer);
+    pendingPromptControlAckTimer = null;
+  }
+}
+
+function clearPendingGameplayActionAckTimer() {
+  if (pendingGameplayActionAckTimer) {
+    window.clearTimeout(pendingGameplayActionAckTimer);
+    pendingGameplayActionAckTimer = null;
+  }
+}
+
+function clearHostedRuntimeSyncTimer() {
+  if (hostedRuntimeSyncTimer) {
+    window.clearTimeout(hostedRuntimeSyncTimer);
+    hostedRuntimeSyncTimer = null;
+  }
+}
+
+function expireHostedRuntimeSyncTimeout() {
+  hostedRuntimeSyncTimer = null;
+  if (!state.auth.syncInFlight || pendingSessionRegisterWaiter) {
+    return;
+  }
+  state.auth.syncInFlight = false;
+  state.auth.registrationStatus = state.auth.available ? "issued" : "guest";
+  state.auth.runtimeStatus = "error";
+  state.auth.recoveryErrorCode = "runtime_sync_timeout";
+  state.auth.recoveryErrorMessage = "runtime session sync timed out waiting for ack/error from live server";
+  state.auth.error = state.auth.recoveryErrorMessage;
+  maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
+  render();
+}
+
+function scheduleHostedRuntimeSyncTimeout() {
+  clearHostedRuntimeSyncTimer();
+  hostedRuntimeSyncTimer = window.setTimeout(
+    expireHostedRuntimeSyncTimeout,
+    SESSION_REGISTER_ACK_TIMEOUT_MS,
+  );
+}
+
+function expireHostedRuntimeSyncTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expireHostedRuntimeSyncTimeoutForTest requires test_api=1");
+  }
+  clearHostedRuntimeSyncTimer();
+  expireHostedRuntimeSyncTimeout();
+}
+
 function agentChatFeedbackInFlight(feedback) {
   return feedback && ["queued", "registering", "signing", "sent"].includes(String(feedback.stage || ""));
+}
+
+function semanticFeedbackInFlight(feedback) {
+  return feedback && ["queued", "registering", "authorizing", "signing", "sent"].includes(String(feedback.stage || ""));
+}
+
+function sameAgentChatFeedback(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return left.id === right.id
+    && left.kind === right.kind
+    && left.action === right.action
+    && left.agentId === right.agentId;
+}
+
+function sameSemanticFeedback(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+  if (left === right) {
+    return true;
+  }
+  return left.id === right.id
+    && left.kind === right.kind
+    && left.action === right.action
+    && left.agentId === right.agentId;
 }
 
 function isAgentChatInFlight() {
@@ -794,7 +895,7 @@ function markAgentChatFeedbackError(feedback, reason, effect = "agent_chat faile
 }
 
 function expireAgentChatOverallTimeout(feedback) {
-  if (state.lastChatFeedback !== feedback || !agentChatFeedbackInFlight(feedback)) {
+  if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
     return false;
   }
   clearPendingAgentChatOverallTimer();
@@ -839,6 +940,16 @@ async function executeSemanticCommand(command) {
     executePromise.catch(() => {});
     if (command.kind === "chat") {
       expireAgentChatOverallTimeout(command.feedback);
+    } else if (command.kind === "prompt") {
+      if (sameSemanticFeedback(state.lastPromptFeedback, command.feedback)) {
+        markSemanticFeedbackError(
+          command.feedback,
+          "prompt_control timed out before live server ack/error completed",
+          "prompt_control overall timeout",
+        );
+        state.lastPromptFeedback = command.feedback;
+        render();
+      }
     }
     return;
   }
@@ -864,7 +975,7 @@ function scheduleAgentChatAckTimeout(feedback) {
   clearPendingAgentChatAckTimer();
   pendingAgentChatAckTimer = window.setTimeout(() => {
     pendingAgentChatAckTimer = null;
-    if (state.lastChatFeedback !== feedback || feedback.stage !== "sent") {
+    if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || state.lastChatFeedback.stage !== "sent") {
       return;
     }
     clearPendingAgentChatOverallTimer();
@@ -885,6 +996,99 @@ function failPendingAgentChatAck(reason, effect = "agent_chat ack failed") {
     return;
   }
   markAgentChatFeedbackError(feedback, reason, effect);
+}
+
+function markSemanticFeedbackError(feedback, reason, effect) {
+  if (!feedback) {
+    return;
+  }
+  feedback.stage = "error";
+  feedback.ok = false;
+  feedback.accepted = false;
+  feedback.reason = reason;
+  feedback.effect = effect;
+}
+
+function expirePromptControlAckTimeout(feedback) {
+  if (!sameSemanticFeedback(state.lastPromptFeedback, feedback) || state.lastPromptFeedback.stage !== "sent") {
+    return false;
+  }
+  clearPendingPromptControlAckTimer();
+  markSemanticFeedbackError(
+    feedback,
+    "prompt_control timed out waiting for ack/error from live server",
+    "prompt_control ack timeout",
+  );
+  state.lastPromptFeedback = feedback;
+  render();
+  return true;
+}
+
+function expireGameplayActionAckTimeout(feedback) {
+  if (!sameSemanticFeedback(state.lastGameplayActionFeedback, feedback) || state.lastGameplayActionFeedback.stage !== "sent") {
+    return false;
+  }
+  clearPendingGameplayActionAckTimer();
+  markSemanticFeedbackError(
+    feedback,
+    "gameplay_action timed out waiting for ack/error from live server",
+    "gameplay_action ack timeout",
+  );
+  state.lastGameplayActionFeedback = feedback;
+  render();
+  return true;
+}
+
+function schedulePromptControlAckTimeout(feedback) {
+  clearPendingPromptControlAckTimer();
+  pendingPromptControlAckTimer = window.setTimeout(() => {
+    pendingPromptControlAckTimer = null;
+    expirePromptControlAckTimeout(feedback);
+  }, SEMANTIC_ACTION_ACK_TIMEOUT_MS);
+}
+
+function scheduleGameplayActionAckTimeout(feedback) {
+  clearPendingGameplayActionAckTimer();
+  pendingGameplayActionAckTimer = window.setTimeout(() => {
+    pendingGameplayActionAckTimer = null;
+    expireGameplayActionAckTimeout(feedback);
+  }, SEMANTIC_ACTION_ACK_TIMEOUT_MS);
+}
+
+function expirePendingPromptControlAckTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingPromptControlAckTimeoutForTest requires test_api=1");
+  }
+  clearPendingPromptControlAckTimer();
+  return expirePromptControlAckTimeout(state.lastPromptFeedback);
+}
+
+function expirePendingGameplayActionAckTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingGameplayActionAckTimeoutForTest requires test_api=1");
+  }
+  clearPendingGameplayActionAckTimer();
+  return expireGameplayActionAckTimeout(state.lastGameplayActionFeedback);
+}
+
+function failPendingPromptControlAck(reason, effect = "prompt_control ack failed") {
+  clearPendingPromptControlAckTimer();
+  const feedback = state.lastPromptFeedback;
+  if (!feedback || feedback.stage !== "sent") {
+    return;
+  }
+  markSemanticFeedbackError(feedback, reason, effect);
+  state.lastPromptFeedback = feedback;
+}
+
+function failPendingGameplayActionAck(reason, effect = "gameplay_action ack failed") {
+  clearPendingGameplayActionAckTimer();
+  const feedback = state.lastGameplayActionFeedback;
+  if (!feedback || feedback.stage !== "sent") {
+    return;
+  }
+  markSemanticFeedbackError(feedback, reason, effect);
+  state.lastGameplayActionFeedback = feedback;
 }
 
 function closeSocketForReconnect(targetSocket) {
@@ -1047,6 +1251,59 @@ function sendViewerControl(action, payload) {
 
 function sendControl(action, payload = null) {
   return sendViewerControl(action, payload);
+}
+
+function clearFirstAgentClaimAutoAdvanceTimers() {
+  if (firstAgentClaimAutoAdvanceTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoAdvanceTimer);
+    firstAgentClaimAutoAdvanceTimer = null;
+  }
+  if (firstAgentClaimAutoRefreshTimer != null) {
+    window.clearTimeout(firstAgentClaimAutoRefreshTimer);
+    firstAgentClaimAutoRefreshTimer = null;
+  }
+}
+
+function scheduleFirstAgentClaimAutoAdvance() {
+  if (!isTestApiEnabled()) {
+    return;
+  }
+  clearFirstAgentClaimAutoAdvanceTimers();
+  firstAgentClaimAutoAdvanceTimer = window.setTimeout(() => {
+    firstAgentClaimAutoAdvanceTimer = null;
+    const currentRequestId = nextRequestId();
+    const feedback = {
+      id: currentRequestId,
+      action: "step",
+      accepted: true,
+      stage: "queued",
+      reason: null,
+      hint: "auto-advancing after first-agent claim ack",
+      effect: "queued first-agent claim auto-advance",
+      baselineLogicalTime: state.logicalTime,
+      baselineEventSeq: state.eventSeq,
+      deltaLogicalTime: 0,
+      deltaEventSeq: 0,
+      deltaTraceCount: 0,
+      requestId: currentRequestId,
+    };
+    try {
+      sendJson({
+        type: "live_control",
+        mode: { mode: "step", count: 1 },
+        request_id: currentRequestId,
+      });
+      pendingControlFeedback.set(currentRequestId, feedback);
+      state.lastControlFeedback = feedback;
+      render();
+    } catch (_) {
+      requestSnapshotSafe();
+    }
+    firstAgentClaimAutoRefreshTimer = window.setTimeout(() => {
+      firstAgentClaimAutoRefreshTimer = null;
+      requestSnapshotSafe();
+    }, FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS);
+  }, FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS);
 }
 
 function runSteps(payload) {
@@ -1284,6 +1541,92 @@ function handleSnapshot(snapshot) {
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(false);
+  syncEmptyEntitySnapshotRefreshLoop();
+  if (snapshot?.model?.agents?.[STARTER_AGENT_ID]) {
+    clearFirstAgentClaimAutoAdvanceTimers();
+  }
+}
+
+function normalizedGameplayActions(snapshot = state.snapshot) {
+  const actions = snapshot?.player_gameplay?.available_actions
+    || snapshot?.player_gameplay?.availableActions
+    || [];
+  return Array.isArray(actions) ? actions : [];
+}
+
+function gameplayActionId(action) {
+  return String(action?.action_id || action?.actionId || "").trim();
+}
+
+function gameplayProtocolAction(action) {
+  return String(action?.protocol_action || action?.protocolAction || "").trim();
+}
+
+function hasGameplayAction(snapshot, actionId) {
+  return normalizedGameplayActions(snapshot).some((action) => gameplayActionId(action) === actionId);
+}
+
+function hasSnapshotRefreshAction(snapshot) {
+  return normalizedGameplayActions(snapshot).some((action) => {
+    const protocol = gameplayProtocolAction(action);
+    return gameplayActionId(action) === "request_snapshot"
+      || protocol === "request_snapshot"
+      || protocol === "world.request_snapshot";
+  });
+}
+
+function needsEmptyEntitySnapshotRefresh(snapshot = state.snapshot) {
+  const gameplay = snapshot?.player_gameplay || {};
+  const blockerKind = String(gameplay.blocker_kind || gameplay.blockerKind || "").trim();
+  if (blockerKind !== "runtime_snapshot_empty_entities") {
+    return false;
+  }
+  if (hasGameplayAction(snapshot, "claim_first_agent")) {
+    return false;
+  }
+  return hasSnapshotRefreshAction(snapshot);
+}
+
+function clearEmptyEntitySnapshotRefreshTimer() {
+  if (emptyEntitySnapshotRefreshTimer) {
+    window.clearTimeout(emptyEntitySnapshotRefreshTimer);
+    emptyEntitySnapshotRefreshTimer = null;
+  }
+}
+
+function needsEmptyEntitySnapshotRefreshForTest(snapshot = state.snapshot) {
+  if (!isTestApiEnabled()) {
+    throw new Error("needsEmptyEntitySnapshotRefreshForTest requires test_api=1");
+  }
+  return needsEmptyEntitySnapshotRefresh(snapshot);
+}
+
+function isEmptyEntitySnapshotRefreshPendingForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("isEmptyEntitySnapshotRefreshPendingForTest requires test_api=1");
+  }
+  return Boolean(emptyEntitySnapshotRefreshTimer);
+}
+
+function syncEmptyEntitySnapshotRefreshLoop() {
+  if (!needsEmptyEntitySnapshotRefresh()) {
+    clearEmptyEntitySnapshotRefreshTimer();
+    return;
+  }
+  if (emptyEntitySnapshotRefreshTimer || !socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  emptyEntitySnapshotRefreshTimer = window.setTimeout(() => {
+    emptyEntitySnapshotRefreshTimer = null;
+    if (!needsEmptyEntitySnapshotRefresh()) {
+      return;
+    }
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    requestSnapshotSafe();
+    syncEmptyEntitySnapshotRefreshLoop();
+  }, EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS);
 }
 
 function adoptCurrentPlayerBindingFromSnapshot(snapshot) {
@@ -1431,6 +1774,10 @@ function handleControlCompletionAck(ack) {
   }
   state.lastControlFeedback = feedback;
   pendingControlFeedback.delete(feedback.requestId);
+  if (feedback.stage === "completed_advanced") {
+    requestSnapshotSafe();
+  }
+  render();
 }
 
 async function buildAgentChatAuthProof(request, auth) {
@@ -1863,6 +2210,7 @@ async function sendReconnectSync() {
   state.auth.runtimeStatus = "probing";
   state.auth.recoveryErrorCode = null;
   state.auth.recoveryErrorMessage = null;
+  scheduleHostedRuntimeSyncTimeout();
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -1886,6 +2234,7 @@ function probeHostedRuntimeSession() {
   }
   state.auth.syncInFlight = true;
   state.auth.runtimeStatus = "probing";
+  scheduleHostedRuntimeSyncTimeout();
   sendJson({
     type: "authoritative_recovery",
     command: {
@@ -2004,6 +2353,39 @@ function clearPendingSessionRegisterWaiter(error = null, options = {}) {
   }
 }
 
+function recoverConnectedSessionStateAfterRuntimeAck(ack = null) {
+  if (state.connectionStatus === "error" && /player session registration timed out/i.test(String(state.lastError || ""))) {
+    state.connectionStatus = "connected";
+    state.lastError = null;
+  }
+  state.auth.syncInFlight = false;
+  state.auth.recoveryErrorCode = null;
+  state.auth.recoveryErrorMessage = null;
+  state.auth.error = null;
+  if (ack?.player_id) {
+    state.auth.playerId = ack.player_id;
+  }
+  if (ack?.session_pubkey) {
+    state.auth.publicKey = ack.session_pubkey;
+  }
+  if (ack?.session_epoch != null) {
+    state.auth.sessionEpoch = Number(ack.session_epoch);
+  }
+}
+
+function resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack = null) {
+  recoverConnectedSessionStateAfterRuntimeAck(ack);
+  if (!pendingSessionRegisterWaiter) {
+    return;
+  }
+  const waiter = pendingSessionRegisterWaiter;
+  pendingSessionRegisterWaiter = null;
+  if (waiter.timeoutId) {
+    window.clearTimeout(waiter.timeoutId);
+  }
+  waiter.resolve(ack);
+}
+
 function expirePendingSessionRegisterWaiterForTest() {
   if (!isTestApiEnabled()) {
     throw new Error("expirePendingSessionRegisterWaiterForTest requires test_api=1");
@@ -2024,6 +2406,7 @@ function expirePendingSessionRegisterWaiterForTest() {
 }
 
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
+  clearHostedRuntimeSyncTimer();
   const auth = state.auth.source === "legacy_viewer_auth_bootstrap"
     ? state.auth
     : await ensureHostedAuthSigningKey(state.auth);
@@ -2073,6 +2456,16 @@ async function retryPendingSessionRegisterWaiterWithForceRebind() {
     clearPendingSessionRegisterWaiter(error);
     throw error;
   }
+}
+
+function rebindAgentIdFromRecoveryError(error) {
+  const explicit = String(error?.agent_id || error?.agentId || error?.target_agent_id || error?.targetAgentId || "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const message = String(error?.message || "");
+  const match = message.match(/^agent\s+(\S+)\s+is bound to player\s+\S+,\s+not\s+\S+/);
+  return match?.[1] || null;
 }
 
 function latestRequestedAgentId(fallbackAgentId = null) {
@@ -2314,12 +2707,19 @@ function enqueueSemanticCommand(command) {
 
 function handleSemanticCommandError(command, error) {
   if (command.kind === "chat") {
-    if (state.lastChatFeedback !== command.feedback || !agentChatFeedbackInFlight(command.feedback)) {
+    if (!sameAgentChatFeedback(state.lastChatFeedback, command.feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
       render();
       return;
     }
     clearPendingAgentChatAckTimer();
     clearPendingAgentChatOverallTimer();
+  }
+  if (command.kind === "prompt") {
+    if (!sameSemanticFeedback(state.lastPromptFeedback, command.feedback) || !semanticFeedbackInFlight(state.lastPromptFeedback)) {
+      render();
+      return;
+    }
+    clearPendingPromptControlAckTimer();
   }
   command.feedback.stage = "error";
   command.feedback.ok = false;
@@ -2359,9 +2759,17 @@ function assertSemanticCapability(actionId) {
 }
 
 function assertAgentChatFeedbackActive(feedback) {
-  if (state.lastChatFeedback !== feedback || !agentChatFeedbackInFlight(feedback)) {
+  if (!sameAgentChatFeedback(state.lastChatFeedback, feedback) || !agentChatFeedbackInFlight(state.lastChatFeedback)) {
     throw new Error("agent_chat request expired before send completed");
   }
+  state.lastChatFeedback = feedback;
+}
+
+function assertPromptFeedbackActive(feedback) {
+  if (!sameSemanticFeedback(state.lastPromptFeedback, feedback) || !semanticFeedbackInFlight(state.lastPromptFeedback)) {
+    throw new Error("prompt_control request expired before send completed");
+  }
+  state.lastPromptFeedback = feedback;
 }
 
 function sendAgentChat(agentIdOrPayload, maybeMessage) {
@@ -2393,12 +2801,13 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
     pendingPlayerId: state.auth.playerId || null,
   });
   state.lastChatFeedback = feedback;
-  scheduleAgentChatOverallTimeout(feedback);
   const command = {
     kind: "chat",
     feedback,
     timeoutMs: AGENT_CHAT_OVERALL_TIMEOUT_MS,
     execute: async () => {
+      assertAgentChatFeedbackActive(feedback);
+      scheduleAgentChatOverallTimeout(feedback);
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();
@@ -2428,9 +2837,7 @@ function sendAgentChat(agentIdOrPayload, maybeMessage) {
       render();
     },
   };
-  void Promise.resolve(command.execute()).catch((error) => {
-    handleSemanticCommandError(command, error);
-  });
+  enqueueSemanticCommand(command);
   render();
   return { ok: true, feedback: snapshotSemanticFeedback(feedback) };
 }
@@ -2475,13 +2882,16 @@ function sendPromptControl(mode, payload = null) {
   enqueueSemanticCommand({
     kind: "prompt",
     feedback,
+    timeoutMs: SEMANTIC_ACTION_OVERALL_TIMEOUT_MS,
     execute: async () => {
       await ensureHostedPlayerAuthAvailable();
+      assertPromptFeedbackActive(feedback);
       assertSemanticCapability("prompt_control");
       feedback.stage = "registering";
       feedback.effect = "registering player session";
       render();
       await ensureRegisteredPlayerSession(agentId);
+      assertPromptFeedbackActive(feedback);
       let strongAuthGrant = null;
       if (isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode)) {
         feedback.stage = "authorizing";
@@ -2491,6 +2901,7 @@ function sendPromptControl(mode, payload = null) {
           normalizedMode === "rollback" ? "prompt_control_rollback" : `prompt_control_${normalizedMode}`,
           agentId,
         );
+        assertPromptFeedbackActive(feedback);
       }
       feedback.stage = "signing";
       feedback.effect = "building auth proof";
@@ -2511,6 +2922,7 @@ function sendPromptControl(mode, payload = null) {
           commandRequest.strong_auth_grant = strongAuthGrant;
         }
       }
+      assertPromptFeedbackActive(feedback);
       feedback.stage = "sent";
       feedback.effect = `prompt ${normalizedMode} request sent; waiting for ack`;
       state.lastPromptFeedback = feedback;
@@ -2521,6 +2933,7 @@ function sendPromptControl(mode, payload = null) {
           request: commandRequest,
         },
       });
+      schedulePromptControlAckTimeout(feedback);
       render();
     },
   });
@@ -2688,6 +3101,7 @@ function sendGameplayAction(actionOrId) {
         type: "gameplay_action",
         request,
       });
+      scheduleGameplayActionAckTimeout(feedback);
       render();
     } catch (error) {
       markCurrentGameplayActionFeedbackError(error);
@@ -2699,6 +3113,8 @@ function sendGameplayAction(actionOrId) {
 }
 
 function handleGameplayActionAck(ack) {
+  clearPendingGameplayActionAckTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     ack?.action_id || "gameplay_action",
@@ -2720,6 +3136,7 @@ function handleGameplayActionAck(ack) {
     state.auth.registrationStatus = "registered";
     state.auth.runtimeStatus = "registered";
     state.auth.error = null;
+    scheduleFirstAgentClaimAutoAdvance();
   }
   requestSnapshotSafe();
 }
@@ -2775,6 +3192,7 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 }
 
 function handleGameplayActionError(error) {
+  clearPendingGameplayActionAckTimer();
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     error?.action_id || "gameplay_action",
@@ -2830,6 +3248,7 @@ function applyPromptAckLocally(ack) {
 }
 
 function handlePromptControlAck(ack) {
+  clearPendingPromptControlAckTimer();
   const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_ack", ack?.agent_id || null);
   const operation = String(ack?.operation || (ack?.preview ? "preview" : "apply"));
   feedback.stage = ack?.preview ? "preview_ack" : operation === "rollback" ? "rollback_ack" : "apply_ack";
@@ -2857,6 +3276,7 @@ function handlePromptControlAck(ack) {
 }
 
 function handlePromptControlError(error) {
+  clearPendingPromptControlAckTimer();
   const feedback = state.lastPromptFeedback || createSemanticFeedback("prompt", "prompt_error", error?.agent_id || selectedAgentId());
   feedback.stage = "error";
   feedback.ok = false;
@@ -2870,6 +3290,7 @@ function handlePromptControlError(error) {
 function handleAgentChatAck(ack) {
   clearPendingAgentChatAckTimer();
   clearPendingAgentChatOverallTimer();
+  resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   const feedback = state.lastChatFeedback || createSemanticFeedback("chat", "agent_chat", ack?.agent_id || null);
   feedback.stage = "ack";
   feedback.ok = true;
@@ -2921,6 +3342,7 @@ function adoptHostedRecoveryAck(ack) {
   if (!ack || !state.auth.available) {
     return;
   }
+  clearHostedRuntimeSyncTimer();
   const usesLegacyPreviewBootstrap = state.auth.source === "legacy_viewer_auth_bootstrap";
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
@@ -2981,10 +3403,8 @@ function adoptHostedRecoveryAck(ack) {
       syncHostedSessionRefreshLoop();
     }
   }
-  if (pendingSessionRegisterWaiter && ack.status === "session_registered") {
-    const waiter = pendingSessionRegisterWaiter;
-    pendingSessionRegisterWaiter = null;
-    waiter.resolve(ack);
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    resolvePendingSessionRegisterWaiterAfterRuntimeAck(ack);
   }
   maybeRecoverLocalTestStarterBindingFromSnapshot(state.snapshot);
   if (ack.status === "session_registered") {
@@ -3000,6 +3420,9 @@ async function recoverHostedSessionFromError(error) {
     return;
   }
   const code = String(error?.code || "").trim();
+  if (code === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    return;
+  }
   if (recoveryErrorRequiresExplicitRebind(error) && state.auth.pendingRequestedAgentId && !state.auth.pendingForceRebind) {
     await ensureRegisteredPlayerSession(state.auth.pendingRequestedAgentId, { forceRebind: true });
     return;
@@ -3036,12 +3459,26 @@ function handleAuthoritativeRecoveryAck(ack) {
 }
 
 function handleAuthoritativeRecoveryError(error) {
+  clearHostedRuntimeSyncTimer();
+  if (String(error?.code || "").trim() === "session_not_found" && pendingSessionRegisterWaiter?.forceRebind) {
+    state.auth.recoveryErrorCode = null;
+    state.auth.recoveryErrorMessage = null;
+    state.auth.runtimeStatus = "rebind_registering";
+    state.auth.error = null;
+    render();
+    return;
+  }
+  const rebindAgentId = rebindAgentIdFromRecoveryError(error);
   if (
     pendingSessionRegisterWaiter
     && recoveryErrorRequiresExplicitRebind(error)
-    && pendingSessionRegisterWaiter.requestedAgentId
+    && (pendingSessionRegisterWaiter.requestedAgentId || rebindAgentId)
     && !pendingSessionRegisterWaiter.forceRebind
   ) {
+    if (!pendingSessionRegisterWaiter.requestedAgentId && rebindAgentId) {
+      pendingSessionRegisterWaiter.requestedAgentId = rebindAgentId;
+      state.auth.pendingRequestedAgentId = rebindAgentId;
+    }
     state.auth.recoveryErrorCode = error?.code || null;
     state.auth.recoveryErrorMessage = error?.message || null;
     state.auth.error = error?.message || error?.code || "authoritative recovery failed";
@@ -3055,6 +3492,30 @@ function handleAuthoritativeRecoveryError(error) {
       handleAuthoritativeRecoveryError({
         code: "player_bind_failed",
         message: String(retryError),
+      });
+    });
+    return;
+  }
+  if (
+    !pendingSessionRegisterWaiter
+    && state.auth.source === "local_test_api_ephemeral"
+    && recoveryErrorRequiresExplicitRebind(error)
+    && rebindAgentId
+  ) {
+    state.auth.recoveryErrorCode = error?.code || null;
+    state.auth.recoveryErrorMessage = error?.message || null;
+    state.auth.error = error?.message || error?.code || "authoritative recovery failed";
+    state.auth.registrationStatus = "registering";
+    state.auth.runtimeStatus = "rebind_retrying";
+    state.auth.pendingRequestedAgentId = rebindAgentId;
+    state.auth.pendingForceRebind = true;
+    state.auth.rebindNotice = `Requested agent ${rebindAgentId} needs explicit rebind; retrying now.`;
+    render();
+    void ensureRegisteredPlayerSession(rebindAgentId, { forceRebind: true }).catch((retryError) => {
+      handleAuthoritativeRecoveryError({
+        code: "player_bind_failed",
+        message: String(retryError),
+        agent_id: rebindAgentId,
       });
     });
     return;
@@ -3189,6 +3650,7 @@ function attachSocket(ws) {
 
   ws.addEventListener("close", () => {
     state.connectionStatus = "connecting";
+    clearHostedRuntimeSyncTimer();
     if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
       state.auth.syncInFlight = false;
       state.auth.runtimeStatus = "disconnected";
@@ -3197,6 +3659,14 @@ function attachSocket(ws) {
     failPendingAgentChatAck(
       "websocket disconnected before agent_chat ack/error returned",
       "agent_chat websocket disconnected",
+    );
+    failPendingPromptControlAck(
+      "websocket disconnected before prompt_control ack/error returned",
+      "prompt_control websocket disconnected",
+    );
+    failPendingGameplayActionAck(
+      "websocket disconnected before gameplay_action ack/error returned",
+      "gameplay_action websocket disconnected",
     );
     stopHostedSessionRefreshLoop();
     render();
@@ -3969,6 +4439,9 @@ function installTestApi() {
     retryHostedPlayerIdentityIssue,
     registerPlayerSessionForTest,
     expirePendingSessionRegisterWaiterForTest,
+    expireHostedRuntimeSyncTimeoutForTest,
+    expirePendingPromptControlAckTimeoutForTest,
+    expirePendingGameplayActionAckTimeoutForTest,
     reportFatalError,
   };
 }
@@ -4057,6 +4530,7 @@ export {
   describePromptVersionState,
   describeSemanticFeedback,
   entityCollections,
+  expireHostedRuntimeSyncTimeoutForTest,
   expirePendingAgentChatOverallTimeoutForTest,
   expirePendingSessionRegisterWaiterForTest,
   feedbackBadgeClass,
@@ -4069,9 +4543,11 @@ export {
   chatHistoryStorageKey,
   hostedActionPolicy,
   injectSnapshot,
+  isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
   modelLists,
+  needsEmptyEntitySnapshotRefreshForTest,
   pushChatHistory,
   refreshHostedAdmissionState,
   requestRender,
@@ -4096,6 +4572,8 @@ export {
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,
+  expirePendingPromptControlAckTimeoutForTest,
+  expirePendingGameplayActionAckTimeoutForTest,
   updatePixelWorldRuntimeMeta,
   snapshotControlFeedback,
   snapshotSemanticFeedback,

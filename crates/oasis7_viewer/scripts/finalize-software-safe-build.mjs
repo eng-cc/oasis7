@@ -150,6 +150,8 @@ async function buildPixelWorldRuntimeVariant({ featureName, backendDirName }) {
   await access(pixelWorldCompiledWasmPath);
   const outputDir = resolve(pixelWorldRuntimeDir, backendDirName);
   await mkdir(outputDir, { recursive: true });
+  const runtimeModuleSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_wasm.js");
+  await copyFile(runtimeModuleSourcePath, resolve(outputDir, "pixel_world_bridge.js"));
   const wasmBindgenCommand = await resolveWasmBindgenCommand();
   await runChecked(wasmBindgenCommand, [
     "--target",
@@ -160,8 +162,6 @@ async function buildPixelWorldRuntimeVariant({ featureName, backendDirName }) {
     "pixel_world_bridge_bindgen",
     pixelWorldCompiledWasmPath,
   ]);
-  const runtimeModuleSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_wasm.js");
-  await copyFile(runtimeModuleSourcePath, resolve(outputDir, "pixel_world_bridge.js"));
 }
 
 await access(builtBundlePath);
@@ -177,11 +177,11 @@ await copyFile(builtBundlePath, finalDistBundlePath);
 await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
+await copyFile(pixelWorldRuntimeSelectorSourcePath, pixelWorldRuntimeModulePath);
 await buildPixelWorldRuntimeVariant({
   featureName: "webgl2_runtime",
   backendDirName: "webgl2",
 });
-await copyFile(pixelWorldRuntimeSelectorSourcePath, pixelWorldRuntimeModulePath);
 await rm(tempOutDir, { recursive: true, force: true });
 
 console.log(`software_safe build finalized: ${finalCanonicalBundlePath}`);

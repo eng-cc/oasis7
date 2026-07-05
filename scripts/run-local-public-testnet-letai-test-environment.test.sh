@@ -62,13 +62,19 @@ if [[ -n "${FAKE_CURL_FAIL_UNTIL:-}" && "$attempt" -le "$FAKE_CURL_FAIL_UNTIL" ]
   readiness_status="syncing"
   failed_gates_json='["catching_up"]'
 fi
+world_resource_status="${FAKE_WORLD_RESOURCE_STATUS:-ready}"
+world_resource_failed_gates_json="${FAKE_WORLD_RESOURCE_FAILED_GATES_JSON:-[]}"
+world_resource_json=""
+if [[ "${FAKE_OMIT_WORLD_RESOURCE:-0}" != "1" ]]; then
+  world_resource_json=',"world_resource":{"readiness_status":"'"$world_resource_status"'","failed_gates":'"$world_resource_failed_gates_json"'}'
+fi
 if [[ -n "${FAKE_CURL_TRANSPORT_FAIL_UNTIL:-}" && "$attempt" -le "$FAKE_CURL_TRANSPORT_FAIL_UNTIL" ]]; then
   echo "curl: (7) failed to connect to fake endpoint" >&2
   exit 7
 fi
 case "$url" in
   http://remote.test:6631/v1/chain/status|http://read.test:19083/v1/chain/status|http://submit.test:6631/v1/chain/status)
-    printf '{"node_id":"triad-testnet-sequencer","role":"sequencer","world_id":"oasis7-public-testnet-governed-20260606","network_tier":{"tier":"public_testnet","chain_id":"oasis7-public-testnet-governed-20260606","network_id":"oasis7-public-testnet-governed-20260606"},"readiness":{"status":"%s","failed_gates":%s},"consensus":{"committed_height":42,"network_committed_height":42},"observability":{"network_height_lag":0,"connected_peer_count":2}}\n' "$readiness_status" "$failed_gates_json"
+    printf '{"node_id":"triad-testnet-sequencer","role":"sequencer","world_id":"oasis7-public-testnet-governed-20260606","network_tier":{"tier":"public_testnet","chain_id":"oasis7-public-testnet-governed-20260606","network_id":"oasis7-public-testnet-governed-20260606"},"readiness":{"status":"%s","failed_gates":%s},"consensus":{"committed_height":42,"network_committed_height":42},"observability":{"network_height_lag":0,"connected_peer_count":2}%s}\n' "$readiness_status" "$failed_gates_json" "$world_resource_json"
     ;;
   *)
     echo "unexpected curl URL: $url" >&2
@@ -178,5 +184,41 @@ PATH="$tmp_dir/bin:$PATH" \
 assert_contains "$transport_retry_out" "public_testnet submit endpoint not reachable yet (attempt 1/5); retrying"
 assert_contains "$transport_retry_out" "public_testnet submit endpoint not reachable yet (attempt 2/5); retrying"
 assert_occurrences "$tmp_dir/transport-retry.urls" "http://remote.test:6631/v1/chain/status" "4"
+
+world_resource_fail_out="$tmp_dir/world-resource-fail.out"
+if FAKE_CURL_LOG="$tmp_dir/world-resource-fail.urls" \
+FAKE_WORLD_RESOURCE_STATUS=not_ready \
+FAKE_WORLD_RESOURCE_FAILED_GATES_JSON='["world_resource_world_id_mismatch"]' \
+PATH="$tmp_dir/bin:$PATH" \
+  ./scripts/run-local-public-testnet-letai-test-environment.sh \
+    --public-testnet-base-url http://remote.test:6631 \
+    --skip-newapi-bridge \
+    --skip-provider-bridge \
+    --skip-static-viewer \
+    --viewer-api-bind "$(free_bind_addr)" \
+    --viewer-ws-bind "$(free_bind_addr)" \
+    --preflight-only \
+    >"$world_resource_fail_out" 2>&1; then
+  echo "expected world_resource not_ready to fail preflight" >&2
+  exit 1
+fi
+assert_contains "$world_resource_fail_out" "world_resource_readiness='not_ready'"
+assert_contains "$world_resource_fail_out" "world_resource_failed_gates=['world_resource_world_id_mismatch']"
+
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "stop_stale_viewer_live_services"
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "oasis7.local-public-testnet.viewer-live-clean"
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh '[[ "$REUSE_EXISTING" == "1" ]]'
+python3 - <<'PY'
+from pathlib import Path
+source = Path("scripts/run-local-public-testnet-letai-test-environment.sh").read_text()
+public_testnet_index = source.index("check_public_testnet_node")
+cleanup_index = source.index("stop_stale_viewer_live_services", public_testnet_index)
+preflight_index = source.index('check_or_reuse_port "viewer live API" "$VIEWER_API_BIND" >/dev/null || true')
+preflight_only_index = source.index('if [[ "$PREFLIGHT_ONLY" == "1" ]]', public_testnet_index)
+if not public_testnet_index < cleanup_index < preflight_index < preflight_only_index:
+    raise SystemExit("expected stale viewer live cleanup before viewer port preflight in normal startup path")
+if '[[ "$PREFLIGHT_ONLY" != "1" && "$SKIP_VIEWER_LIVE" != "1" ]]' not in source:
+    raise SystemExit("expected preflight-only path to avoid launchd viewer-live cleanup")
+PY
 
 echo "run-local-public-testnet-letai-test-environment checks passed"

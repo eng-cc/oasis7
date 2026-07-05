@@ -38,6 +38,11 @@ export function createSoftwareSafeState() {
     lastPromptFeedback: null,
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
+    gameplayActionPending: {
+      actionKey: null,
+      label: null,
+      startedAtUnixMs: null,
+    },
     snapshot: null,
     metrics: null,
     hostedAccess: null,

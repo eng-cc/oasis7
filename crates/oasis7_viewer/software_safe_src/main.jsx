@@ -9,6 +9,11 @@ import {
 } from "./software_safe_constants.js";
 
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
+const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
+
+function observeViewerStateRevision() {
+  viewerStateRevision();
+}
 
 function uiLocale() {
   return core.state.uiLocale;
@@ -658,6 +663,7 @@ function focusableElements(root) {
 }
 
 function HostedLoginGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   let dialogRef;
   let previousFocus = null;
@@ -786,10 +792,12 @@ function EmptyEntityRecoveryCard(props) {
         {(action) => (
           <div class="toolbar">
             <button
-              disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
+              class={gameplayActionButtonClass(action())}
+              aria-busy={gameplayActionButtonBusyAttrs(action())}
+              disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
               onClick={() => renderGameplayAction(action())}
             >
-              {gameplayActionButtonLabel(action(), locale())}
+              {gameplayActionDisplayLabel(action(), locale())}
             </button>
           </div>
         )}
@@ -897,6 +905,77 @@ function goalExecutionBadgeClass(state) {
 }
 
 const PENDING_GAMEPLAY_FEEDBACK_STAGES = new Set(["accepted", "submitted", "queued", "ack", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_BUSY_STAGES = new Set(["queued", "registering", "signing", "sent"]);
+const GAMEPLAY_ACTION_PENDING_MIN_MS = 900;
+let gameplayActionPendingClearTimer = null;
+
+function gameplayActionKey(action) {
+  if (!action) {
+    return "";
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  return `${actionId}::${targetAgentId}`;
+}
+
+function gameplayActionFeedbackMatches(action, feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback)) {
+  if (!action || !feedback || feedback.kind !== "gameplay_action") {
+    return false;
+  }
+  const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
+  const feedbackAction = normalizedId(feedback.action);
+  if (!actionId || !feedbackAction || !feedbackAction.includes(actionId)) {
+    return false;
+  }
+  const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
+  const feedbackAgentId = normalizedId(feedback.agentId || feedback.targetAgentId);
+  return !targetAgentId || !feedbackAgentId || targetAgentId === feedbackAgentId;
+}
+
+function clearGameplayActionPending(action = null) {
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+    gameplayActionPendingClearTimer = null;
+  }
+  if (action && core.state.gameplayActionPending.actionKey !== gameplayActionKey(action)) {
+    return;
+  }
+  core.state.gameplayActionPending.actionKey = null;
+  core.state.gameplayActionPending.label = null;
+  core.state.gameplayActionPending.startedAtUnixMs = null;
+  core.requestRender();
+}
+
+function markGameplayActionPending(action, label) {
+  const key = gameplayActionKey(action);
+  if (!key) {
+    return;
+  }
+  if (gameplayActionPendingClearTimer != null) {
+    window.clearTimeout(gameplayActionPendingClearTimer);
+  }
+  core.state.gameplayActionPending.actionKey = key;
+  core.state.gameplayActionPending.label = label || normalizedId(action.label || action.actionId || action.executeKind);
+  core.state.gameplayActionPending.startedAtUnixMs = Date.now();
+  gameplayActionPendingClearTimer = window.setTimeout(() => {
+    gameplayActionPendingClearTimer = null;
+    if (!gameplayActionFeedbackMatches(action) || !GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(core.state.lastGameplayActionFeedback?.stage).toLowerCase())) {
+      clearGameplayActionPending(action);
+    }
+  }, GAMEPLAY_ACTION_PENDING_MIN_MS);
+  core.requestRender();
+}
+
+function gameplayActionFeedbackInFlight(action) {
+  const feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback);
+  return gameplayActionFeedbackMatches(action, feedback)
+    && GAMEPLAY_ACTION_BUSY_STAGES.has(normalizedId(feedback.stage).toLowerCase());
+}
+
+function gameplayActionPendingFor(action) {
+  const key = gameplayActionKey(action);
+  return Boolean(key && core.state.gameplayActionPending.actionKey === key) || gameplayActionFeedbackInFlight(action);
+}
 
 function isPendingFirstAgentClaimSync(action, gameplay) {
   if (action?.actionId !== "claim_first_agent") {
@@ -982,6 +1061,44 @@ function gameplayActionButtonLabel(action, locale) {
   return tr(locale, "提交玩法动作", "Submit Gameplay Action");
 }
 
+function gameplayActionBusyLabel(action, locale) {
+  if (action?.executeKind === "request_snapshot") {
+    return tr(locale, "刷新中...", "Refreshing...");
+  }
+  if (action?.executeKind === "step") {
+    return tr(locale, "推进中...", "Advancing...");
+  }
+  if (action?.executeKind === "play") {
+    return tr(locale, "恢复中...", "Resuming...");
+  }
+  if (action?.actionId === "claim_starter_oc") {
+    return tr(locale, "确认中...", "Confirming...");
+  }
+  if (action?.actionId === "claim_first_agent" || action?.executeKind === "claim_agent") {
+    return tr(locale, "提交中...", "Submitting...");
+  }
+  return tr(locale, "处理中...", "Working...");
+}
+
+function gameplayActionDisplayLabel(action, locale, fallback = null) {
+  if (gameplayActionPendingFor(action)) {
+    return gameplayActionBusyLabel(action, locale);
+  }
+  return fallback ?? gameplayActionButtonLabel(action, locale);
+}
+
+function gameplayActionButtonClass(action) {
+  return gameplayActionPendingFor(action) ? "is-loading" : "";
+}
+
+function gameplayActionButtonBusyAttrs(action) {
+  return gameplayActionPendingFor(action) ? "true" : "false";
+}
+
+function gameplayActionButtonDisabled(action, gameplay, locale) {
+  return Boolean(gameplayActionDisabledReason(action, gameplay, locale) || gameplayActionPendingFor(action));
+}
+
 function gameplayActionTestId(action, role = "available") {
   if (role === "recommended") {
     return "viewer-playthrough-action-recommended";
@@ -1024,7 +1141,7 @@ function starterOcAction(gameplay) {
   if (starterOcOnboardingState.pending && pendingTargetAgentId) {
     return null;
   }
-  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc");
+  const existing = (gameplay?.availableActions || []).find((action) => action.actionId === "claim_starter_oc" && !action.disabledReason);
   if (existing) {
     return existing;
   }
@@ -1162,6 +1279,20 @@ function starterOcSubmittedFeedback() {
   return null;
 }
 
+function starterOcFeedbackNeedsLocalAdvance(feedback = starterOcSubmittedFeedback()) {
+  if (!feedback) {
+    return false;
+  }
+  const stage = String(feedback.stage || "").toLowerCase();
+  if (stage === "submitted") {
+    return false;
+  }
+  const effect = String(feedback.effect || "").toLowerCase();
+  return ["accepted", "ack", "queued", "sent"].includes(stage)
+    || effect.includes("queued gameplay action")
+    || effect.includes("advance");
+}
+
 function shouldShowStarterOcRequiredGate(gameplay = core.buildGameplaySummary(uiLocale())) {
   return Boolean(starterOcAction(gameplay) || starterOcSubmittedFeedback() || starterOcClaimPendingForCurrentAgent());
 }
@@ -1245,10 +1376,12 @@ function StarterOcOnboardingPanel(props) {
           {(starterAction) => (
             <div class="toolbar">
               <button
-                disabled={Boolean(gameplayActionDisabledReason(starterAction(), gameplay(), locale()))}
+                class={gameplayActionButtonClass(starterAction())}
+                aria-busy={gameplayActionButtonBusyAttrs(starterAction())}
+                disabled={gameplayActionButtonDisabled(starterAction(), gameplay(), locale())}
                 onClick={() => renderGameplayAction(starterAction())}
               >
-                {gameplayActionButtonLabel(starterAction(), locale())}
+                {gameplayActionDisplayLabel(starterAction(), locale())}
               </button>
             </div>
           )}
@@ -1274,8 +1407,11 @@ function StarterOcOnboardingPanel(props) {
 }
 
 function StarterOcRequiredGate() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const [autoConfirmAttempts, setAutoConfirmAttempts] = createSignal(0);
+  const [manualConfirmAttempts, setManualConfirmAttempts] = createSignal(0);
+  const [lastConfirmMode, setLastConfirmMode] = createSignal("auto");
   const gameplay = () => core.buildGameplaySummary(locale());
   const action = () => starterOcAction(gameplay());
   const submittedFeedback = () => starterOcSubmittedFeedback();
@@ -1287,11 +1423,80 @@ function StarterOcRequiredGate() {
   const snapshotRefreshAction = () => (gameplay()?.availableActions || []).find((action) => action.executeKind === "request_snapshot") || null;
   const gateOpen = () => shouldShowStarterOcRequiredGate(gameplay());
   const chatAction = () => firstAgentChatAction(gameplay());
+  const confirmationAction = () => {
+    const refreshAction = snapshotRefreshAction();
+    const advanceAction = progressionAction();
+    return starterOcFeedbackNeedsLocalAdvance(submittedFeedback())
+      ? advanceAction || refreshAction
+      : refreshAction || advanceAction;
+  };
+  const visibleConfirmAttempt = () => lastConfirmMode() === "manual"
+    ? Math.max(manualConfirmAttempts(), 1)
+    : Math.min(autoConfirmAttempts() + 1, 3);
+  const confirmStatusLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "已入账", "Credited");
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction())
+        ? tr(locale(), "手动确认中", "Manual confirmation")
+        : tr(locale(), "等待手动确认回执", "Waiting for manual confirmation");
+    }
+    return autoConfirmAttempts() >= 3
+      ? tr(locale(), "等待手动确认", "Waiting for manual confirmation")
+      : tr(locale(), "自动确认中", "Auto-confirming");
+  };
+  const confirmProgressLabel = () => {
+    if (creditConfirmed()) {
+      return tr(locale(), "完成", "Done");
+    }
+    if (lastConfirmMode() === "manual") {
+      return tr(
+        locale(),
+        `手动第 ${visibleConfirmAttempt()} 次确认`,
+        `Manual check ${visibleConfirmAttempt()}`,
+      );
+    }
+    return tr(locale(), `第 ${visibleConfirmAttempt()} 次确认`, `Check ${visibleConfirmAttempt()} of 3`);
+  };
+  const confirmSummaryCopy = () => {
+    if (creditConfirmed()) {
+      return tr(
+        locale(),
+        "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。",
+        "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.",
+      );
+    }
+    if (lastConfirmMode() === "manual") {
+      return gameplayActionPendingFor(snapshotRefreshAction())
+        ? tr(
+          locale(),
+          "已发起手动确认。本地世界正在刷新快照，确认这笔初始 OC 是否已经写入。",
+          "Manual confirmation started. The local world is refreshing the snapshot to verify whether the starter OC is visible.",
+        )
+        : tr(
+          locale(),
+          "自动确认还没有看到入账结果；可以再次手动刷新确认，或等待下一次快照同步。",
+          "Auto-confirmation has not seen the credit yet; retry manual refresh or wait for the next snapshot sync.",
+        );
+    }
+    return autoConfirmAttempts() >= 3
+      ? tr(
+        locale(),
+        "自动确认已经跑完 3 次，仍未看到入账结果。可以手动再确认一次，或等待运行时快照继续同步。",
+        "Auto-confirmation has completed 3 checks without seeing the credit. Retry manual confirmation or wait for the runtime snapshot to keep syncing.",
+      )
+      : tr(
+        locale(),
+        "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。",
+        "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.",
+      );
+  };
   const primaryAction = () => {
     if (creditConfirmed()) {
       return chatAction();
     }
-    return pendingCredit() ? snapshotRefreshAction() || progressionAction() : action();
+    return pendingCredit() ? confirmationAction() : action();
   };
   let primaryButtonRef;
   let scheduledAutoConfirmAttempt = -1;
@@ -1310,6 +1515,8 @@ function StarterOcRequiredGate() {
         autoCompleteTimer = window.setTimeout(() => {
           completeStarterOcOnboarding();
           setAutoConfirmAttempts(0);
+          setManualConfirmAttempts(0);
+          setLastConfirmMode("auto");
           core.requestRender();
           autoCompleteTimer = null;
         }, 1200);
@@ -1324,19 +1531,22 @@ function StarterOcRequiredGate() {
       scheduledAutoConfirmAttempt = -1;
       if (!pendingCredit()) {
         setAutoConfirmAttempts(0);
+        setManualConfirmAttempts(0);
+        setLastConfirmMode("auto");
       }
       return;
     }
-    const nextAction = snapshotRefreshAction();
+    const nextAction = confirmationAction();
     const attempt = autoConfirmAttempts();
     if (!nextAction || attempt >= 3 || scheduledAutoConfirmAttempt === attempt) {
       return;
     }
-    if (gameplayActionDisabledReason(nextAction, gameplay(), locale())) {
+    if (gameplayActionButtonDisabled(nextAction, gameplay(), locale())) {
       return;
     }
     scheduledAutoConfirmAttempt = attempt;
     autoConfirmTimer = window.setTimeout(() => {
+      setLastConfirmMode("auto");
       renderGameplayAction(nextAction);
       setAutoConfirmAttempts((value) => value + 1);
     }, attempt === 0 ? 450 : 1600);
@@ -1382,17 +1592,7 @@ function StarterOcRequiredGate() {
               fallback={(
                 <div class="stack stack--compact">
                   <div class="feedback-summary">
-                    {creditConfirmed()
-                      ? tr(
-                        locale(),
-                        "第一笔 OC 已经写入本地快照。现在可以开始第一次 Agent 聊天，后续早期玩法动作也会解锁。",
-                        "The first OC is now visible in the local snapshot. You can start the first Agent chat and continue early gameplay actions.",
-                      )
-                      : tr(
-                        locale(),
-                        "领取请求已经提交。系统正在自动推进并刷新本地世界，确认这笔初始 OC 写入可见快照。",
-                        "The claim was submitted. The system is automatically advancing and refreshing the local world to confirm the starter OC in the visible snapshot.",
-                      )}
+                    {confirmSummaryCopy()}
                   </div>
                   <div class="summary-grid">
                     <div class="metric">
@@ -1400,7 +1600,7 @@ function StarterOcRequiredGate() {
                       <div class="metric__value">
                         {creditConfirmed()
                           ? tr(locale(), "已入账", "Credited")
-                          : tr(locale(), "自动确认中", "Auto-confirming")}
+                          : confirmStatusLabel()}
                       </div>
                     </div>
                     <div class="metric">
@@ -1408,7 +1608,7 @@ function StarterOcRequiredGate() {
                       <div class="metric__value">
                         {creditConfirmed()
                           ? tr(locale(), "完成", "Done")
-                          : tr(locale(), `第 ${Math.min(autoConfirmAttempts() + 1, 3)} 次确认`, `Check ${Math.min(autoConfirmAttempts() + 1, 3)} of 3`)}
+                          : confirmProgressLabel()}
                       </div>
                     </div>
                     <div class="metric">
@@ -1450,20 +1650,33 @@ function StarterOcRequiredGate() {
                 {(nextAction) => (
                   <button
                     ref={primaryButtonRef}
-                    disabled={Boolean(gameplayActionDisabledReason(nextAction(), gameplay(), locale()))}
+                    data-testid="viewer-playthrough-action-claim-starter-oc"
+                    class={gameplayActionButtonClass(nextAction())}
+                    aria-busy={gameplayActionButtonBusyAttrs(nextAction())}
+                    disabled={gameplayActionButtonDisabled(nextAction(), gameplay(), locale())}
                     onClick={() => {
                       if (creditConfirmed()) {
                         completeStarterOcOnboarding();
                         setAutoConfirmAttempts(0);
+                        setManualConfirmAttempts(0);
+                        setLastConfirmMode("auto");
+                      }
+                      if (pendingCredit()) {
+                        setLastConfirmMode("manual");
+                        setManualConfirmAttempts((value) => value + 1);
                       }
                       renderGameplayAction(nextAction());
                     }}
                   >
-                    {creditConfirmed()
-                      ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat")
-                      : pendingCredit()
-                      ? tr(locale(), "手动再确认一次", "Retry Confirmation")
-                      : gameplayActionButtonLabel(nextAction(), locale())}
+                    {gameplayActionDisplayLabel(
+                      nextAction(),
+                      locale(),
+                      creditConfirmed()
+                        ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat")
+                        : pendingCredit()
+                        ? tr(locale(), "手动再确认一次", "Retry Confirmation")
+                        : gameplayActionButtonLabel(nextAction(), locale()),
+                    )}
                   </button>
                 )}
               </Show>
@@ -1473,6 +1686,8 @@ function StarterOcRequiredGate() {
                   onClick={() => {
                     completeStarterOcOnboarding();
                     setAutoConfirmAttempts(0);
+                    setManualConfirmAttempts(0);
+                    setLastConfirmMode("auto");
                     core.requestRender();
                   }}
                 >
@@ -1492,10 +1707,22 @@ function renderGameplayAction(action) {
     core.applySelection({ kind: "agent", id: action.targetAgentId });
     return;
   }
+  markGameplayActionPending(action, gameplayActionButtonLabel(action, uiLocale()));
   if (action.actionId === "claim_starter_oc") {
     markStarterOcClaimPending(action);
   }
   const result = core.sendGameplayAction(action);
+  if (result && result.ok === false) {
+    clearGameplayActionPending(action);
+  } else if (
+    result
+    && result.ok === true
+    && !result.feedback
+    && action.executeKind !== "request_snapshot"
+    && !(starterOcClaimPendingForCurrentAgent() && ["step", "play"].includes(action.executeKind))
+  ) {
+    clearGameplayActionPending(action);
+  }
   if (action.actionId === "claim_starter_oc" && result && result.ok === false) {
     clearStarterOcClaimPending();
   } else if (action.actionId === "claim_starter_oc") {
@@ -1732,7 +1959,9 @@ function AgentClaimPanel(props) {
       </div>
       <div class="toolbar">
         <button
-          disabled={Boolean(disabledReason())}
+          class={gameplayActionButtonClass(claimAction())}
+          aria-busy={gameplayActionButtonBusyAttrs(claimAction())}
+          disabled={Boolean(disabledReason()) || gameplayActionPendingFor(claimAction())}
           onClick={() => {
             const action = claimAction();
             if (action) {
@@ -1740,7 +1969,7 @@ function AgentClaimPanel(props) {
             }
           }}
         >
-          {tr(locale(), "认领 Agent", "Claim Agent")}
+          {gameplayActionDisplayLabel(claimAction(), locale(), tr(locale(), "认领 Agent", "Claim Agent"))}
         </button>
       </div>
     </CalloutCard>
@@ -1803,6 +2032,7 @@ function renderResourceSummary(resources) {
 }
 
 function WorldStageHero() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const authSurface = () => core.buildAuthSurfaceModel();
@@ -1974,9 +2204,12 @@ function WorldStageHero() {
           type="button"
           data-testid="viewer-playthrough-action-request-snapshot"
           aria-label={primaryRefreshLabel()}
+          class={gameplayActionButtonClass(refreshSnapshotAction())}
+          aria-busy={gameplayActionButtonBusyAttrs(refreshSnapshotAction())}
+          disabled={gameplayActionPendingFor(refreshSnapshotAction())}
           onClick={() => renderGameplayAction(refreshSnapshotAction())}
         >
-          {tr(locale(), "刷新快照", "Refresh Snapshot")}
+          {gameplayActionDisplayLabel(refreshSnapshotAction(), locale(), tr(locale(), "刷新快照", "Refresh Snapshot"))}
         </button>
         <button
           type="button"
@@ -2038,6 +2271,7 @@ function MobileJumpRail() {
 }
 
 function TargetsPanel() {
+  observeViewerStateRevision();
   const lists = () => core.modelLists();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
@@ -2097,10 +2331,12 @@ function TargetsPanel() {
             </Show>
             <div class="toolbar">
               <button
-                disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+                class={gameplayActionButtonClass(action())}
+                aria-busy={gameplayActionButtonBusyAttrs(action())}
+                disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
                 onClick={() => renderGameplayAction(action())}
               >
-                {gameplayActionButtonLabel(action(), locale())}
+                {gameplayActionDisplayLabel(action(), locale())}
               </button>
             </div>
           </CalloutCard>
@@ -2198,6 +2434,7 @@ function TargetsPanel() {
 }
 
 function WorldSummaryPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const state = core.state;
   const gameplaySummary = () => core.buildGameplaySummary(locale());
@@ -2605,10 +2842,12 @@ function WorldSummaryPanel() {
                     <div class="toolbar">
                       <button
                         data-testid={gameplayActionTestId(action(), "recommended")}
-                        disabled={Boolean(gameplayActionDisabledReason(action(), gameplay(), locale()))}
+                        class={gameplayActionButtonClass(action())}
+                        aria-busy={gameplayActionButtonBusyAttrs(action())}
+                        disabled={gameplayActionButtonDisabled(action(), gameplay(), locale())}
                         onClick={() => renderGameplayAction(action())}
                       >
-                        {gameplayActionButtonLabel(action(), locale())}
+                        {gameplayActionDisplayLabel(action(), locale())}
                       </button>
                     </div>
                   </CalloutCard>
@@ -2663,10 +2902,12 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
-                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
+                                class={gameplayActionButtonClass(action)}
+                                aria-busy={gameplayActionButtonBusyAttrs(action)}
+                                disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
                                 onClick={() => renderGameplayAction(action)}
                               >
-                                {gameplayActionButtonLabel(action, locale())}
+                                {gameplayActionDisplayLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
@@ -2674,10 +2915,12 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
-                                disabled={Boolean(gameplayActionDisabledReason(action, gameplay(), locale()))}
+                                class={gameplayActionButtonClass(action)}
+                                aria-busy={gameplayActionButtonBusyAttrs(action)}
+                                disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
                                 onClick={() => renderGameplayAction(action)}
                               >
-                                {gameplayActionButtonLabel(action, locale())}
+                                {gameplayActionDisplayLabel(action, locale())}
                               </button>
                             </div>
                           </Show>
@@ -3022,8 +3265,12 @@ function WorldSummaryPanel() {
 }
 
 function InteractionPanel() {
+  const revision = () => observeViewerStateRevision();
   const locale = () => uiLocale();
-  const selectedAgentId = () => core.selectedAgentId();
+  const selectedAgentId = () => {
+    revision();
+    return core.selectedAgentId();
+  };
   const agentId = () => {
     const id = normalizedId(selectedAgentId());
     if (!id || !core.isAgentVisibleToCurrentSession(id)) {
@@ -3031,31 +3278,55 @@ function InteractionPanel() {
     }
     return id;
   };
-  const gameplaySummary = () => core.buildGameplaySummary(locale());
-  const authSurface = () => core.buildAuthSurfaceModel();
+  const gameplaySummary = () => {
+    revision();
+    return core.buildGameplaySummary(locale());
+  };
+  const authSurface = () => {
+    revision();
+    return core.buildAuthSurfaceModel();
+  };
   const promptCapability = () => authSurface().capabilities.prompt_control;
   const chatCapability = () => authSurface().capabilities.agent_chat;
   const mainTokenTransferCapability = () => authSurface().capabilities.main_token_transfer;
   const mainTokenTransferPolicy = () => core.hostedActionPolicy("main_token_transfer");
-  const binding = () => core.selectedAgentBindingInfo();
+  const binding = () => {
+    revision();
+    return core.selectedAgentBindingInfo();
+  };
   const selectedAgentStatus = () => describeAgentSessionStatus(agentId(), locale());
   const canControlSelectedAgent = () => selectedAgentStatus().isCurrentSessionAgent;
   const selectedAgentControlReason = () => selectedAgentStatus().detail;
-  const promptFeedback = () => core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
-  const chatFeedback = () => core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  const promptFeedback = () => {
+    revision();
+    return core.snapshotSemanticFeedback(core.state.lastPromptFeedback);
+  };
+  const chatFeedback = () => {
+    revision();
+    return core.snapshotSemanticFeedback(core.state.lastChatFeedback);
+  };
   const promptFeedbackDisplay = () => core.describeSemanticFeedback(promptFeedback(), locale());
   const chatFeedbackDisplay = () => core.describeSemanticFeedback(chatFeedback(), locale());
   const promptVersionState = () => core.describePromptVersionState(promptFeedback(), locale());
   const chatHistory = () =>
-    core.state.chatHistory
-      .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
-      .slice(0, 12);
+    {
+      revision();
+      return core.state.chatHistory
+        .filter((entry) => entry.agentId === agentId() || entry.targetAgentId === agentId())
+        .slice(0, 12);
+    };
   const interactionEnabled = () => promptCapability().enabled;
   const promptControlsEnabled = () => interactionEnabled() && canControlSelectedAgent();
-  const chatControlsEnabled = () => chatCapability().enabled && canControlSelectedAgent() && !core.isAgentChatInFlight();
+  const chatControlsEnabled = () => {
+    revision();
+    return chatCapability().enabled && canControlSelectedAgent() && !core.isAgentChatInFlight();
+  };
   const commandStarterOcAction = () => starterOcAction(gameplaySummary());
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(gameplaySummary());
-  const promptOverridesVisible = () => !!core.state.promptOverridesVisible;
+  const promptOverridesVisible = () => {
+    revision();
+    return !!core.state.promptOverridesVisible;
+  };
   const assetLaneStatusText = () =>
     mainTokenTransferCapability().enabled
       ? tr(locale(), "仅预览", "preview_only")
@@ -3095,27 +3366,32 @@ function InteractionPanel() {
       ? playerSessionReadyCopy()
       : selectedAgentControlReason();
 
-  if (selectedAgentId() && !agentId()) {
-    return (
-      <EmptyState>
-        {tr(
-          locale(),
-          "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
-          "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
-        )}
-      </EmptyState>
-    );
-  }
-
-  if (!agentId()) {
-    if (gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities") {
-      return <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />;
-    }
-    return <EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>;
-  }
-
   return (
-    <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
+    <Show
+      when={agentId()}
+      fallback={
+        <Show
+          when={selectedAgentId()}
+          fallback={
+            <Show
+              when={gameplaySummary()?.blockerKind === "runtime_snapshot_empty_entities"}
+              fallback={<EmptyState>{tr(locale(), "先选中一个行动体，才能解锁提示词和聊天控制。", "Select an agent to unlock prompt/chat controls.")}</EmptyState>}
+            >
+              <EmptyEntityRecoveryCard locale={locale()} gameplay={gameplaySummary} />
+            </Show>
+          }
+        >
+          <EmptyState>
+            {tr(
+              locale(),
+              "当前账号还没有可操作的 Agent。请先认领你的第一个 Agent，或等待绑定同步完成。",
+              "This account has no controllable Agent yet. Claim your first Agent, or wait for binding sync to complete.",
+            )}
+          </EmptyState>
+        </Show>
+      }
+    >
+      <div class="stack command-surface" data-command-agent={agentId()} data-command-chat-history={String(chatHistory().length)}>
       <div class="badge-row command-surface__target-row">
         <Badge class="badge badge--accent">{tr(locale(), "当前交互目标", "Current Target")}</Badge>
         <Badge>{`agent=${agentId()}`}</Badge>
@@ -3157,10 +3433,12 @@ function InteractionPanel() {
         {(action) => (
           <div class="toolbar">
             <button
-              disabled={Boolean(gameplayActionDisabledReason(action(), gameplaySummary(), locale()))}
+              class={gameplayActionButtonClass(action())}
+              aria-busy={gameplayActionButtonBusyAttrs(action())}
+              disabled={gameplayActionButtonDisabled(action(), gameplaySummary(), locale())}
               onClick={() => renderGameplayAction(action())}
             >
-              {gameplayActionButtonLabel(action(), locale())}
+              {gameplayActionDisplayLabel(action(), locale())}
             </button>
           </div>
         )}
@@ -3391,11 +3669,13 @@ function InteractionPanel() {
           <button disabled>{tr(locale(), "主代币转账（这里暂未开放）", "Main Token Transfer (Not Exposed Here Yet)")}</button>
         </div>
       </PanelSection>
-    </div>
+      </div>
+    </Show>
   );
 }
 
 function DetailsPanel() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const gameplaySummary = () => core.buildGameplaySummary(locale());
   const worldScaleSurface = () => core.buildWorldScaleSurface(locale());
@@ -3525,6 +3805,7 @@ function DetailsPanel() {
 }
 
 function AppShell() {
+  observeViewerStateRevision();
   const locale = () => uiLocale();
   const diagnosticsVisualFixture = () => viewerVisualFixtureNameFromQuery() === "gameplay_diagnostics_expanded";
   const starterOcGateOpen = () => shouldShowStarterOcRequiredGate(core.buildGameplaySummary(locale()));
@@ -4011,7 +4292,7 @@ export function mountViewerApp(root = document.getElementById("app")) {
     root.removeAttribute("data-viewer-visual-fixture");
   }
   let dispose = mount(() => <AppShell />, root);
-  core.setRenderHook(() => {});
+  core.setRenderHook(() => setViewerStateRevision((revision) => revision + 1));
 
   return () => {
     core.setRenderHook(null);

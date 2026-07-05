@@ -843,6 +843,53 @@ fn genesis_validator_registry_rejects_existing_world_without_registry() {
 }
 
 #[test]
+fn genesis_validator_registry_allows_existing_world_with_registry() {
+    let temp_dir = temp_dir("genesis-existing-world-with-registry");
+    let mut world = World::new();
+    world
+        .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
+            slot_id: "governance.finality.v1".to_string(),
+            threshold: 1,
+            threshold_bps: 0,
+            signer_bindings: BTreeMap::from([(
+                "governance.finality.v1.validator-a".to_string(),
+                "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+            )]),
+            validator_stakes: BTreeMap::from([(
+                "governance.finality.v1.validator-a".to_string(),
+                100,
+            )]),
+        })
+        .expect("write registry");
+    world.save_to_dir(&temp_dir).expect("save existing world");
+    let manifest_path = temp_dir.join("genesis-validator-registry.json");
+    std::fs::write(
+        manifest_path.as_path(),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "slot_id": "governance.finality.v1",
+            "threshold": 1,
+            "validators": [
+                {
+                    "node_id": "validator-a",
+                    "scheme": "ed25519",
+                    "finality_signer_public_key": "1111111111111111111111111111111111111111111111111111111111111111",
+                    "stake": 100
+                }
+            ]
+        }))
+        .expect("encode manifest"),
+    )
+    .expect("write manifest");
+
+    ensure_world_governance_validator_registry(
+        temp_dir.as_path(),
+        Some(manifest_path.as_path()),
+        Some(&public_testnet_loaded_manifest()),
+    )
+    .expect("existing world with registry should be idempotent");
+}
+
+#[test]
 fn public_tier_without_world_registry_or_genesis_manifest_fails() {
     let temp_dir = temp_dir("public-missing-registry");
     std::fs::create_dir_all(&temp_dir).expect("create temp dir");

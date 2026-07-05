@@ -35,6 +35,13 @@ pub(in crate::viewer::runtime_live) fn runtime_provider_settings_from_env()
     llm_sidecar::provider_settings_from_env()
 }
 
+#[allow(dead_code)]
+pub(in crate::viewer::runtime_live) fn resolve_runtime_live_llm_timeout_ms(
+    configured_timeout_ms: u64,
+) -> u64 {
+    llm_sidecar::resolve_runtime_live_llm_timeout_ms(configured_timeout_ms)
+}
+
 pub fn runtime_agent_chat_echo_enabled_from_env() -> bool {
     std::env::var(RUNTIME_AGENT_CHAT_ECHO_ENV)
         .ok()

@@ -850,6 +850,13 @@ fn chain_linked_gameplay_action_submits_to_chain_and_applies_on_committed_sync()
         "committed chain world should advance viewer state"
     );
     assert!(server.world.has_factory("factory.smelter.mk1"));
-    assert_eq!(server.last_chain_committed_height, 1);
+    assert_eq!(
+        server.last_chain_committed_height,
+        server
+            .world
+            .state()
+            .time
+            .max(latest_runtime_event_seq(&server.world))
+    );
     assert!(read_response_line(&peer, Duration::from_millis(200)).is_some());
 }

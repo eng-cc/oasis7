@@ -181,6 +181,26 @@ while IFS= read -r path; do
 done < <(find "$CONFIG_DIR" -maxdepth 1 -type f | sort)
 [[ ${#config_files[@]} -gt 0 ]] || die "no top-level config files found in $CONFIG_DIR"
 
+evidence_files=()
+if [[ -d "$CONFIG_DIR/doc/testing/evidence" ]]; then
+  while IFS= read -r path; do
+    evidence_files+=("$path")
+  done < <(find "$CONFIG_DIR/doc/testing/evidence" -maxdepth 1 -type f | sort)
+fi
+
+network_manifest_path=""
+for file in "${config_files[@]}"; do
+  if jq -e '(.schema_version // "") == "oasis7.network_tier_manifest.v1"' "$file" >/dev/null 2>&1; then
+    network_manifest_path=$file
+    break
+  fi
+done
+[[ -n "$network_manifest_path" ]] || die "missing oasis7.network_tier_manifest.v1 config"
+WORLD_RESOURCE_WORLD_ID=$(jq -r '.network_id // empty' "$network_manifest_path")
+WORLD_RESOURCE_CHAIN_ID=$(jq -r '.chain_id // .network_id // empty' "$network_manifest_path")
+[[ -n "$WORLD_RESOURCE_WORLD_ID" ]] || die "network tier manifest missing network_id"
+[[ -n "$WORLD_RESOURCE_CHAIN_ID" ]] || die "network tier manifest missing chain_id"
+
 control_path_for() {
   local host=$1
   local label
@@ -319,15 +339,30 @@ stage_host() {
     ssh_run "$host" "$control_path" "cat > '$STACK_ROOT/config/$base'" <"$file"
     ssh_run "$host" "$control_path" "cp '$STACK_ROOT/config/$base' '$STACK_ROOT/config/doc/testing/evidence/$base'"
   done
+  if ((${#evidence_files[@]} > 0)); then
+    for file in "${evidence_files[@]}"; do
+      require_file "$file"
+      local base
+      base=$(basename "$file")
+      ssh_run "$host" "$control_path" "cat > '$STACK_ROOT/config/doc/testing/evidence/$base'" <"$file"
+    done
+  fi
 
+  ssh_run "$host" "$control_path" \
+    "test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
   ssh_run "$host" "$control_path" \
     "rm -rf '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world' && mkdir -p '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
-  tar -C "$WORLD_DIR" -cf - . \
+  COPYFILE_DISABLE=1 tar -C "$WORLD_DIR" -cf - . \
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"
   ssh_run "$host" "$control_path" \
-    "cp -R '$STACK_ROOT/staged-world/.' '$STACK_ROOT/data/execution-world/'"
+    "find '$STACK_ROOT/staged-world' \\( -name '._*' -o -name '.DS_Store' \\) -delete"
+  ssh_run "$host" "$control_path" \
+    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis"
+  ssh_run "$host" "$control_path" \
+    "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
   sync_staged_deployment_truth "$host" "$control_path" >&2
+  import_staged_governance_registry "$host" "$control_path" >&2
 }
 
 sync_staged_deployment_truth() {
@@ -346,11 +381,18 @@ stack_root = Path(os.environ['STACK_ROOT'])
 config_dir = stack_root / 'config'
 env_path = config_dir / 'node.env'
 runtime_path = stack_root / 'current' / 'bin' / 'oasis7_chain_runtime'
+generated_world_root = stack_root / 'data' / 'execution-world'
+generated_world_sidecar_path = generated_world_root / 'generated-scenario-world'
+world_generation_provenance_path = generated_world_root / 'world-generation-provenance.json'
 
 if not env_path.is_file():
     raise SystemExit(f'missing node env: {env_path}')
 if not runtime_path.is_file():
     raise SystemExit(f'missing installed runtime: {runtime_path}')
+if not generated_world_sidecar_path.is_dir():
+    raise SystemExit(f'missing staged generated world sidecar: {generated_world_sidecar_path}')
+if not world_generation_provenance_path.is_file():
+    raise SystemExit(f'missing staged world generation provenance: {world_generation_provenance_path}')
 
 env_values = {}
 env_values['STACK_ROOT'] = str(stack_root)
@@ -427,6 +469,12 @@ with runtime_path.open('rb') as fh:
         digest.update(chunk)
 runtime_sha = digest.hexdigest()
 runtime_size = runtime_path.stat().st_size
+provenance_digest = hashlib.sha256()
+with world_generation_provenance_path.open('rb') as fh:
+    for chunk in iter(lambda: fh.read(1024 * 1024), b''):
+        provenance_digest.update(chunk)
+world_generation_provenance_sha = provenance_digest.hexdigest()
+world_generation_provenance_size = world_generation_provenance_path.stat().st_size
 
 buildinfo = {}
 buildinfo_path = stack_root / 'DEPLOYED_BUILDINFO'
@@ -439,6 +487,10 @@ if buildinfo_path.is_file():
 bundle_paths = sorted(config_dir.rglob('public-testnet-governed-bootstrap-bundle-2026-06-06.json'))
 if not bundle_paths:
     raise SystemExit(f'no governed bootstrap bundle found under {config_dir}')
+
+genesis_paths = sorted(config_dir.rglob('public-testnet-governed-bootstrap-genesis-2026-06-06.json'))
+if not genesis_paths:
+    raise SystemExit(f'no governed bootstrap genesis found under {config_dir}')
 
 updated_by = 'p2p-public-testnet-rebuild-validators staged deployment truth sync'
 if buildinfo.get('package_version') or buildinfo.get('run_id'):
@@ -460,15 +512,99 @@ for bundle_path in bundle_paths:
         runtime['package_version'] = buildinfo['package_version']
     if buildinfo.get('run_id'):
         runtime['run_id'] = buildinfo['run_id']
+    if isinstance(data.get('generated_world_sidecar'), dict):
+        sidecar = data['generated_world_sidecar']
+        sidecar['kind'] = 'directory'
+        sidecar['path'] = str(generated_world_sidecar_path)
+        sidecar['resolved_path'] = str(generated_world_sidecar_path)
+    if isinstance(data.get('world_generation_provenance'), dict):
+        provenance = data['world_generation_provenance']
+        provenance['kind'] = 'file'
+        provenance['path'] = str(world_generation_provenance_path)
+        provenance['resolved_path'] = str(world_generation_provenance_path)
+        provenance['sha256'] = world_generation_provenance_sha
+        provenance['size_bytes'] = world_generation_provenance_size
     data['updated_by'] = updated_by
     bundle_path.write_text(
         json.dumps(data, ensure_ascii=True, indent=2, sort_keys=True) + '\\n',
         encoding='utf-8',
     )
 
+for genesis_path in genesis_paths:
+    data = json.loads(genesis_path.read_text(encoding='utf-8'))
+    refs = data.get('governance_bootstrap_refs')
+    if isinstance(refs, dict):
+        for key, value in list(refs.items()):
+            if not isinstance(value, str) or not value.strip():
+                continue
+            refs[key] = str(config_dir / 'doc' / 'testing' / 'evidence' / Path(value).name)
+        genesis_path.write_text(
+            json.dumps(data, ensure_ascii=True, indent=2, sort_keys=True) + '\\n',
+            encoding='utf-8',
+        )
+
 print(f'synced_validator_signer_count={len(signer_pairs)}')
 print(f'synced_runtime_sha256={runtime_sha}')
+print(f'synced_generated_world_sidecar={generated_world_sidecar_path}')
+print(f'synced_world_generation_provenance_sha256={world_generation_provenance_sha}')
 print(f'synced_bundle_count={len(bundle_paths)}')
+print(f'synced_genesis_count={len(genesis_paths)}')
+PY"
+}
+
+import_staged_governance_registry() {
+  local host=$1
+  local control_path=$2
+  ssh_run "$host" "$control_path" \
+    "STACK_ROOT='$STACK_ROOT' python3 - <<'PY'
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+stack_root = Path(os.environ['STACK_ROOT'])
+config_dir = stack_root / 'config'
+world_dir = stack_root / 'data' / 'execution-world'
+import_bin = stack_root / 'current' / 'bin' / 'oasis7_governance_registry_import'
+
+if not import_bin.is_file():
+    raise SystemExit(f'missing governance registry import binary: {import_bin}')
+if not world_dir.is_dir():
+    raise SystemExit(f'missing execution world dir before governance import: {world_dir}')
+
+genesis_paths = sorted(config_dir.rglob('public-testnet-governed-bootstrap-genesis-2026-06-06.json'))
+if not genesis_paths:
+    raise SystemExit(f'no governed bootstrap genesis found under {config_dir}')
+
+governance_public_manifest = None
+for genesis_path in genesis_paths:
+    data = json.loads(genesis_path.read_text(encoding='utf-8'))
+    refs = data.get('governance_bootstrap_refs')
+    if not isinstance(refs, dict):
+        continue
+    raw = refs.get('governance_public_manifest_ref')
+    if isinstance(raw, str) and raw.strip():
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = genesis_path.parent / candidate
+        if candidate.is_file():
+            governance_public_manifest = candidate
+            break
+
+if governance_public_manifest is None:
+    raise SystemExit(f'no readable governance_public_manifest_ref found under {config_dir}')
+
+command = [
+    str(import_bin),
+    '--world-dir',
+    str(world_dir),
+    '--public-manifest',
+    str(governance_public_manifest),
+]
+subprocess.run(command, check=True)
+print(f'imported_governance_public_manifest={governance_public_manifest}')
 PY"
 }
 

@@ -228,6 +228,154 @@ fn chain_linked_runtime_sync_advances_without_play() {
 }
 
 #[test]
+fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_same_watermark_rebuild");
+    let mut first_world = crate::runtime::World::new_production_hardened();
+    first_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "first-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    first_world.step().expect("advance first execution world");
+    first_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist first execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    session.subscribed.insert(ViewerStream::Events);
+    session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut writer, peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("first chain sync should succeed");
+    assert!(progressed);
+    assert!(server.world.state().agents.contains_key("first-agent"));
+    assert!(read_response_line(&peer, Duration::from_millis(200)).is_some());
+
+    let mut rebuilt_world = crate::runtime::World::new_production_hardened();
+    rebuilt_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "rebuilt-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(9, 2, 0),
+    });
+    rebuilt_world
+        .step()
+        .expect("advance rebuilt execution world");
+    assert_eq!(rebuilt_world.state().time, first_world.state().time);
+    assert_eq!(
+        latest_runtime_event_seq(&rebuilt_world),
+        latest_runtime_event_seq(&first_world)
+    );
+    rebuilt_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("replace execution world with same-watermark rebuilt world");
+
+    let (mut writer, peer) = test_writer_pair();
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("same-watermark rebuilt chain sync should succeed");
+
+    assert!(
+        progressed,
+        "materially different generated-map rebuild should advance despite the same sync watermark"
+    );
+    assert!(!server.world.state().agents.contains_key("first-agent"));
+    assert!(server.world.state().agents.contains_key("rebuilt-agent"));
+    let line = read_response_line(&peer, Duration::from_millis(200))
+        .expect("expected rebuilt execution-world sync response");
+    assert!(!line.trim().is_empty());
+}
+
+#[test]
+fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_stale_local_test_binding");
+    let execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist empty execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    server.llm_sidecar.agent_player_bindings.insert(
+        "starter-agent-0".to_string(),
+        "local-test-player-old".to_string(),
+    );
+    server.llm_sidecar.player_agent_bindings.insert(
+        "local-test-player-old".to_string(),
+        "starter-agent-0".to_string(),
+    );
+    server
+        .llm_sidecar
+        .agent_public_key_bindings
+        .insert("starter-agent-0".to_string(), "old-key".to_string());
+    server
+        .llm_sidecar
+        .agent_player_bindings
+        .insert("agent-real".to_string(), "player-real".to_string());
+    server
+        .llm_sidecar
+        .player_agent_bindings
+        .insert("player-real".to_string(), "agent-real".to_string());
+
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, _peer) = test_writer_pair();
+
+    let progressed = server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("chain sync should succeed");
+
+    assert!(
+        !progressed,
+        "empty chain world may not advance viewer state, but stale local binding should be pruned"
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get("starter-agent-0"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_agent_bindings
+            .get("local-test-player-old"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .get("starter-agent-0"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get("agent-real")
+            .map(String::as_str),
+        Some("player-real")
+    );
+}
+
+#[test]
 fn chain_linked_runtime_empty_poll_does_not_advance_world() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_idle");
     let execution_world = crate::runtime::World::new_production_hardened();
@@ -315,7 +463,7 @@ fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
 }
 
 #[test]
-fn chain_linked_runtime_committed_height_zero_skips_bootstrap_execution_world_validation() {
+fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_committed_height");
     let mut execution_world = crate::runtime::World::new_production_hardened();
     execution_world.submit_action(RuntimeAction::RegisterAgent {
@@ -360,11 +508,17 @@ fn chain_linked_runtime_committed_height_zero_skips_bootstrap_execution_world_va
 
     let progressed = server
         .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should ignore zero-height bootstrap state");
+        .expect("chain sync should consume persisted zero-height execution world");
 
-    assert!(!progressed);
-    assert_eq!(server.world.state().time, initial_time);
-    assert_eq!(server.last_chain_committed_height, 0);
+    assert!(progressed);
+    assert_eq!(server.world.state().time, execution_world.state().time);
+    assert_ne!(server.world.state().time, initial_time);
+    assert_eq!(
+        server.last_chain_committed_height,
+        execution_world.state().time.max(1)
+    );
     assert!(server.latest_player_gameplay_feedback.is_none());
-    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
+    let line = read_response_line(&peer, Duration::from_millis(200))
+        .expect("expected zero-height execution-world sync response");
+    assert!(!line.trim().is_empty());
 }

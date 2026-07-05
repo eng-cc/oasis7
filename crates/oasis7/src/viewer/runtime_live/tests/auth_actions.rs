@@ -962,3 +962,68 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
         None
     );
 }
+
+#[test]
+fn runtime_session_register_allows_different_player_rebind_with_force_rebind() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (old_public_key, old_private_key) = test_signer(27);
+    let (new_public_key, new_private_key) = test_signer(28);
+
+    let first_ack = register_runtime_session(
+        &mut server,
+        "player-old",
+        Some(agent_id.as_str()),
+        1,
+        old_public_key.as_str(),
+        old_private_key.as_str(),
+    );
+    assert_eq!(
+        first_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(first_ack.agent_id.as_deref(), Some(agent_id.as_str()));
+
+    let second_ack = register_runtime_session_with_options(
+        &mut server,
+        "player-new",
+        Some(agent_id.as_str()),
+        true,
+        2,
+        new_public_key.as_str(),
+        new_private_key.as_str(),
+    );
+    assert_eq!(
+        second_ack.status,
+        AuthoritativeRecoveryStatus::SessionRegistered
+    );
+    assert_eq!(second_ack.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert_eq!(
+        server.llm_sidecar.bound_agent_for_player("player-new"),
+        Some(agent_id.as_str())
+    );
+    assert_eq!(
+        server.llm_sidecar.bound_agent_for_player("player-old"),
+        None
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some("player-new")
+    );
+}

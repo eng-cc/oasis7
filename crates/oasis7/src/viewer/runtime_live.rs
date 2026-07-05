@@ -87,6 +87,7 @@ use support::{
 
 pub use control_plane::runtime_agent_chat_echo_enabled_from_env;
 pub use support::bootstrap_formal_release_runtime_world as viewer_bootstrap_formal_release_runtime_world;
+pub use support::bootstrap_generated_sidecar_runtime_world as viewer_bootstrap_generated_sidecar_runtime_world;
 
 pub const VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID: &str = FORMAL_RELEASE_DEFAULT_WORLD_ID;
 

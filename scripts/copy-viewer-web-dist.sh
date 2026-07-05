@@ -62,11 +62,17 @@ viewer_js="$VIEWER_ROOT/viewer.js"
 compat_js="$VIEWER_ROOT/software_safe.js"
 pixel_world_bridge_dir="$VIEWER_ROOT/dist/pixel-world-bridge"
 pixel_world_bridge_js="$pixel_world_bridge_dir/pixel_world_bridge.js"
+pixel_world_webgl2_bridge_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge.js"
+pixel_world_webgl2_bindgen_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge_bindgen.js"
+pixel_world_webgl2_wasm="$pixel_world_bridge_dir/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
 require_file "$software_safe_html"
 require_file "$viewer_js"
 require_file "$compat_js"
 require_file "$pixel_world_bridge_js"
+require_file "$pixel_world_webgl2_bridge_js"
+require_file "$pixel_world_webgl2_bindgen_js"
+require_file "$pixel_world_webgl2_wasm"
 while read -r source_rel _; do
   require_file "$VIEWER_ROOT/$source_rel"
 done < <(viewer_web_dist_contract_pairs)

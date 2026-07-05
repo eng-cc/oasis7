@@ -594,14 +594,20 @@ impl ViewerRuntimeLiveServer {
         public_key: Option<&str>,
         allow_player_rebind: bool,
     ) -> Result<(), String> {
-        control_plane::ensure_agent_player_binding_target_runtime(
-            &self.world,
-            &self.llm_sidecar,
-            agent_id,
-            player_id,
-            public_key,
-        )
-        .map_err(|err| err.message)?;
+        if allow_player_rebind {
+            if !self.world.state().agents.contains_key(agent_id) {
+                return Err(format!("agent not found: {agent_id}"));
+            }
+        } else {
+            control_plane::ensure_agent_player_binding_target_runtime(
+                &self.world,
+                &self.llm_sidecar,
+                agent_id,
+                player_id,
+                public_key,
+            )
+            .map_err(|err| err.message)?;
+        }
         for event in self.llm_sidecar.bind_agent_player(
             agent_id,
             player_id,

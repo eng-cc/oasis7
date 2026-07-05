@@ -14,7 +14,7 @@ mkdir -p \
   "$tmp_repo/bin" \
   "$tmp_repo/crates/oasis7_viewer/dist" \
   "$tmp_repo/crates/oasis7_proto/src" \
-  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge"
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2"
 
 printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/index.html"
 printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer.html"
@@ -36,6 +36,9 @@ mkdir -p \
 printf 'console.log("finalize");\n' > "$tmp_repo/crates/oasis7_viewer/scripts/finalize-software-safe-build.mjs"
 printf 'console.log("src");\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_src/main.jsx"
 printf 'export function createPixelWorldBridge() { return \"old\"; }\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js"
+printf 'export function createPixelWorldBridge() { return "old-webgl2"; }\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js"
+printf 'export function initSync() {}\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js"
+printf 'wasm\n' > "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 printf 'icon\n' > "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico"
 printf '[package]\nname = "pixel_world_bridge"\nversion = "0.0.0"\n' > "$tmp_repo/crates/pixel_world_bridge/Cargo.toml"
@@ -53,6 +56,9 @@ touch -d '2026-03-17 00:00:00' \
   "$tmp_repo/crates/oasis7_viewer/dist/software_safe.js" \
   "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" \
   "$tmp_repo/crates/oasis7_viewer/dist/favicon.ico" \
   "$tmp_repo/crates/oasis7_viewer/viewer.js" \
   "$tmp_repo/crates/oasis7_viewer/software_safe.js" \
@@ -88,6 +94,14 @@ if [[ ! -f "$expected_dir/pixel-world-bridge/pixel_world_bridge.js" ]]; then
   echo "expected rebuilt dist pixel world runtime at $expected_dir/pixel-world-bridge/pixel_world_bridge.js" >&2
   exit 1
 fi
+if [[ ! -f "$expected_dir/pixel-world-bridge/webgl2/pixel_world_bridge.js" ]]; then
+  echo "expected rebuilt dist webgl2 pixel world wrapper" >&2
+  exit 1
+fi
+if [[ ! -f "$expected_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "expected rebuilt dist webgl2 pixel world wasm" >&2
+  exit 1
+fi
 
 if [[ ! -f "$expected_dir/.oasis7-viewer-dist-manifest.json" ]]; then
   echo "expected rebuilt dist manifest at $expected_dir/.oasis7-viewer-dist-manifest.json" >&2
@@ -112,6 +126,13 @@ fi
 mkdir -p crates/oasis7_viewer/dist/pixel-world-bridge
 printf 'export function createPixelWorldBridge() { return "rebuilt"; }\n' \
   > crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js
+mkdir -p crates/oasis7_viewer/dist/pixel-world-bridge/webgl2
+printf 'export function createPixelWorldBridge() { return "rebuilt-webgl2"; }\n' \
+  > crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js
+printf 'export function initSync() {}\n' \
+  > crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen.js
+printf 'wasm\n' \
+  > crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm
 printf 'software safe rebuild missing bridge\n'
 NPM
 chmod +x "$tmp_repo/bin/npm"
@@ -125,6 +146,14 @@ if [[ "$resolved_missing_bridge_dir" != "$expected_missing_bridge_dir" ]]; then
 fi
 if [[ ! -f "$expected_missing_bridge_dir/pixel-world-bridge/pixel_world_bridge.js" ]]; then
   echo "expected rebuilt missing-bridge dist pixel world runtime" >&2
+  exit 1
+fi
+if [[ ! -f "$expected_missing_bridge_dir/pixel-world-bridge/webgl2/pixel_world_bridge.js" ]]; then
+  echo "expected rebuilt missing-bridge dist webgl2 pixel world wrapper" >&2
+  exit 1
+fi
+if [[ ! -f "$expected_missing_bridge_dir/pixel-world-bridge/webgl2/pixel_world_bridge_bindgen_bg.wasm" ]]; then
+  echo "expected rebuilt missing-bridge dist webgl2 pixel world wasm" >&2
   exit 1
 fi
 if ! grep -Fq 'npm --prefix' "$tmp_repo/missing-bridge-stderr.log"; then

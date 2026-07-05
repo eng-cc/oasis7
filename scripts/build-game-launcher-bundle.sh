@@ -20,6 +20,7 @@ Build a distributable launcher bundle:
 - bin/oasis7_web_launcher
 - bin/oasis7_viewer_live
 - bin/oasis7_chain_runtime
+- bin/oasis7_world_repair_rebuild
 - bin/oasis7_governance_registry_import
 - bin/oasis7_governance_registry_audit
 - web/ (prebuilt viewer static assets)
@@ -219,6 +220,7 @@ LAUNCHER_BIN_NAME="$(resolve_binary_name oasis7_game_launcher "$TARGET_TRIPLE")"
 WEB_LAUNCHER_BIN_NAME="$(resolve_binary_name oasis7_web_launcher "$TARGET_TRIPLE")"
 LIVE_BIN_NAME="$(resolve_binary_name oasis7_viewer_live "$TARGET_TRIPLE")"
 CHAIN_BIN_NAME="$(resolve_binary_name oasis7_chain_runtime "$TARGET_TRIPLE")"
+WORLD_REPAIR_REBUILD_BIN_NAME="$(resolve_binary_name oasis7_world_repair_rebuild "$TARGET_TRIPLE")"
 GOVERNANCE_REGISTRY_IMPORT_BIN_NAME="$(resolve_binary_name oasis7_governance_registry_import "$TARGET_TRIPLE")"
 GOVERNANCE_REGISTRY_AUDIT_BIN_NAME="$(resolve_binary_name oasis7_governance_registry_audit "$TARGET_TRIPLE")"
 CLIENT_LAUNCHER_BIN_NAME="$(resolve_binary_name oasis7_client_launcher "$TARGET_TRIPLE")"
@@ -248,6 +250,7 @@ BUNDLE_NATIVE_BUILD_ARGS=(
   --bin oasis7_web_launcher
   --bin oasis7_viewer_live
   --bin oasis7_chain_runtime
+  --bin oasis7_world_repair_rebuild
   --bin oasis7_governance_registry_import
   --bin oasis7_governance_registry_audit
   --bin oasis7_client_launcher
@@ -265,6 +268,7 @@ LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$LAUNCHER_BIN_NAME"
 WEB_LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$WEB_LAUNCHER_BIN_NAME"
 LIVE_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$LIVE_BIN_NAME"
 CHAIN_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$CHAIN_BIN_NAME"
+WORLD_REPAIR_REBUILD_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
 GOVERNANCE_REGISTRY_IMPORT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
 GOVERNANCE_REGISTRY_AUDIT_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 CLIENT_LAUNCHER_SRC="$ROOT_DIR/target/$TARGET_OUTPUT_SUBDIR/$CLIENT_LAUNCHER_BIN_NAME"
@@ -274,6 +278,7 @@ if [[ "$DRY_RUN" != "1" ]]; then
   [[ -f "$WEB_LAUNCHER_SRC" ]] || { echo "error: web launcher binary not found: $WEB_LAUNCHER_SRC" >&2; exit 1; }
   [[ -f "$LIVE_SRC" ]] || { echo "error: oasis7_viewer_live binary not found: $LIVE_SRC" >&2; exit 1; }
   [[ -f "$CHAIN_SRC" ]] || { echo "error: oasis7_chain_runtime binary not found: $CHAIN_SRC" >&2; exit 1; }
+  [[ -f "$WORLD_REPAIR_REBUILD_SRC" ]] || { echo "error: oasis7_world_repair_rebuild binary not found: $WORLD_REPAIR_REBUILD_SRC" >&2; exit 1; }
   [[ -f "$GOVERNANCE_REGISTRY_IMPORT_SRC" ]] || { echo "error: oasis7_governance_registry_import binary not found: $GOVERNANCE_REGISTRY_IMPORT_SRC" >&2; exit 1; }
   [[ -f "$GOVERNANCE_REGISTRY_AUDIT_SRC" ]] || { echo "error: oasis7_governance_registry_audit binary not found: $GOVERNANCE_REGISTRY_AUDIT_SRC" >&2; exit 1; }
   [[ -f "$CLIENT_LAUNCHER_SRC" ]] || { echo "error: client launcher binary not found: $CLIENT_LAUNCHER_SRC" >&2; exit 1; }
@@ -283,6 +288,7 @@ replace_file "$LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$LAUNCHER_BIN_NAME"
 replace_file "$WEB_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$WEB_LAUNCHER_BIN_NAME"
 replace_file "$LIVE_SRC" "$BUNDLE_BIN_DIR/$LIVE_BIN_NAME"
 replace_file "$CHAIN_SRC" "$BUNDLE_BIN_DIR/$CHAIN_BIN_NAME"
+replace_file "$WORLD_REPAIR_REBUILD_SRC" "$BUNDLE_BIN_DIR/$WORLD_REPAIR_REBUILD_BIN_NAME"
 replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGISTRY_IMPORT_BIN_NAME"
 replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 replace_file "$CLIENT_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$CLIENT_LAUNCHER_BIN_NAME"

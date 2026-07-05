@@ -44,6 +44,21 @@ struct PublicManifestEntry {
     oc_account_id: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+enum PublicManifest {
+    Entries(Vec<PublicManifestEntry>),
+    Document { entries: Vec<PublicManifestEntry> },
+}
+
+impl PublicManifest {
+    fn into_entries(self) -> Vec<PublicManifestEntry> {
+        match self {
+            Self::Entries(entries) | Self::Document { entries } => entries,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ManifestSlotThresholds {
     thresholds: BTreeMap<String, u16>,
@@ -103,13 +118,14 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
             options.public_manifest.display()
         )
     })?;
-    let entries: Vec<PublicManifestEntry> = serde_json::from_slice(manifest_bytes.as_slice())
-        .map_err(|err| {
+    let manifest: PublicManifest =
+        serde_json::from_slice(manifest_bytes.as_slice()).map_err(|err| {
             format!(
                 "decode public manifest {} failed: {err}",
                 options.public_manifest.display()
             )
         })?;
+    let entries = manifest.into_entries();
     let slot_thresholds =
         resolve_manifest_slot_thresholds(entries.as_slice(), options.default_threshold)?;
     let mut world = load_or_create_world(options.world_dir.as_path())?;
@@ -598,6 +614,64 @@ mod tests {
             Some(&10)
         );
         assert!(world.governance_main_token_controller_registry().is_some());
+    }
+
+    #[test]
+    fn import_accepts_document_manifest_entries() {
+        let temp_dir = temp_dir("document-manifest");
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let manifest_path = temp_dir.join("public_manifest.json");
+        std::fs::write(
+            manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": "test",
+                "entries": [
+                    {
+                        "slot_id": "governance.finality.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc"
+                    },
+                    {
+                        "slot_id": "msig.genesis.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+                    },
+                    {
+                        "slot_id": "msig.staking_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"
+                    },
+                    {
+                        "slot_id": "msig.ecosystem_governance.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "0241f2e23305407676f2a5cec6d154da74944b2a366b2b2b6913cb746d402d0e"
+                    },
+                    {
+                        "slot_id": "msig.security_council.v1",
+                        "signer_id": "signer01",
+                        "scheme": "ed25519",
+                        "public_key_hex": "d09de9413371ae42f643e4f8f31e2139611d1617809375b1ad884df3fb089448"
+                    }
+                ]
+            }))
+            .expect("encode manifest"),
+        )
+        .expect("write manifest");
+
+        let summary = run_import(super::CliOptions {
+            world_dir: temp_dir.join("world"),
+            public_manifest: manifest_path,
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_threshold: 1,
+        })
+        .expect("run import");
+
+        assert_eq!(summary.finality_signer_count, 1);
+        assert_eq!(summary.controller_policy_count, 4);
     }
 
     #[test]
