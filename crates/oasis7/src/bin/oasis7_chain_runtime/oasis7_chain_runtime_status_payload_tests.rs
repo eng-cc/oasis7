@@ -1,16 +1,25 @@
 use super::cli::TrafficProfile;
 use super::{build_chain_status_payload, release_security_policy_for_storage_profile};
-use oasis7::runtime::ReleaseSecurityPolicy;
+use ed25519_dalek::{Signer, SigningKey};
+use oasis7::runtime::{
+    Manifest, ModuleAbiContract, ModuleActivation, ModuleArtifactIdentity, ModuleChangeSet,
+    ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
+    ModuleSubscriptionStage, PolicySet, ProposalDecision, ReleaseSecurityPolicy, World,
+};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, NodeConsensusSnapshot, NodeNetworkPolicy,
     NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+use oasis7_wasm_abi::{ModuleCallFailure, ModuleCallRequest, ModuleOutput, ModuleSandbox};
+use sha2::Digest;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 
 fn temp_dir(prefix: &str) -> PathBuf {
     let unique = SystemTime::now()
@@ -107,6 +116,16 @@ fn minimal_transfer_status() -> super::transfer_submit_api::ChainTransferMetrics
 fn build_minimal_status_payload(
     execution_records_dir: Option<&Path>,
 ) -> super::status_payload::ChainStatusResponse {
+    build_minimal_status_payload_with_world_dir(
+        Path::new("/tmp/execution-world"),
+        execution_records_dir,
+    )
+}
+
+fn build_minimal_status_payload_with_world_dir(
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+) -> super::status_payload::ChainStatusResponse {
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
         player_id: "player-a".to_string(),
@@ -129,7 +148,7 @@ fn build_minimal_status_payload(
 
     build_chain_status_payload(
         snapshot,
-        Path::new("/tmp/execution-world"),
+        execution_world_dir,
         execution_records_dir,
         None,
         &recommendation,
@@ -151,6 +170,181 @@ fn build_minimal_status_payload(
         minimal_transfer_status(),
         super::ChainReplicationDebugStatus::default(),
     )
+}
+
+#[derive(Default)]
+struct CountingSandbox {
+    calls: usize,
+}
+
+impl ModuleSandbox for CountingSandbox {
+    fn call(&mut self, _request: &ModuleCallRequest) -> Result<ModuleOutput, ModuleCallFailure> {
+        self.calls += 1;
+        Ok(ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        })
+    }
+}
+
+fn install_tick_module(world: &mut World) {
+    world.set_policy(PolicySet::allow_all());
+    world
+        .bind_node_identity(
+            TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
+            test_module_artifact_signer_public_key_hex().as_str(),
+        )
+        .expect("bind test module signer identity");
+    let wasm_bytes = b"status-payload-tick-routing-observability";
+    let wasm_hash = sha256_hex(wasm_bytes);
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .expect("register module artifact");
+    let module_manifest = ModuleManifest {
+        module_id: "m.status.tick".to_string(),
+        name: "Status Tick".to_string(),
+        version: "0.1.0".to_string(),
+        kind: ModuleKind::Reducer,
+        role: ModuleRole::Domain,
+        wasm_hash: wasm_hash.clone(),
+        interface_version: "wasm-1".to_string(),
+        abi_contract: ModuleAbiContract::default(),
+        exports: vec!["reduce".to_string()],
+        subscriptions: vec![ModuleSubscription {
+            event_kinds: Vec::new(),
+            action_kinds: Vec::new(),
+            stage: Some(ModuleSubscriptionStage::Tick),
+            filters: None,
+        }],
+        required_caps: Vec::new(),
+        artifact_identity: Some(signed_test_artifact_identity(wasm_hash.as_str())),
+        limits: ModuleLimits::unbounded(),
+    };
+    let changes = ModuleChangeSet {
+        register: vec![module_manifest.clone()],
+        activate: vec![ModuleActivation {
+            module_id: module_manifest.module_id.clone(),
+            version: module_manifest.version.clone(),
+        }],
+        ..ModuleChangeSet::default()
+    };
+    let proposal_id = world
+        .propose_manifest_update(
+            Manifest {
+                version: 2,
+                content: serde_json::json!({ "module_changes": changes }),
+            },
+            "alice",
+        )
+        .expect("propose manifest");
+    world.shadow_proposal(proposal_id).expect("shadow proposal");
+    world
+        .approve_proposal(proposal_id, "bob", ProposalDecision::Approve)
+        .expect("approve proposal");
+    world.apply_proposal(proposal_id).expect("apply proposal");
+}
+
+fn signed_test_artifact_identity(wasm_hash: &str) -> ModuleArtifactIdentity {
+    let source_hash = sha256_hex(format!("test-src:{wasm_hash}").as_bytes());
+    let build_manifest_hash = sha256_hex(b"test-build-manifest-v1");
+    let payload = ModuleArtifactIdentity::signing_payload_v1(
+        wasm_hash,
+        source_hash.as_str(),
+        build_manifest_hash.as_str(),
+        TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
+    );
+    let signing_key = test_module_artifact_signing_key();
+    let signature = signing_key.sign(payload.as_slice());
+    ModuleArtifactIdentity {
+        source_hash,
+        build_manifest_hash,
+        signer_node_id: TEST_MODULE_ARTIFACT_SIGNER_NODE_ID.to_string(),
+        signature_scheme: ModuleArtifactIdentity::SIGNATURE_SCHEME_ED25519.to_string(),
+        artifact_signature: format!(
+            "{}{}",
+            ModuleArtifactIdentity::SIGNATURE_PREFIX_ED25519_V1,
+            hex::encode(signature.to_bytes())
+        ),
+    }
+}
+
+fn test_module_artifact_signing_key() -> SigningKey {
+    let seed = sha256_hex(b"oasis7-test-module-artifact-signer-v1");
+    let seed_bytes = hex::decode(seed).expect("decode test module signing seed");
+    let private_key_bytes: [u8; 32] = seed_bytes
+        .as_slice()
+        .try_into()
+        .expect("test module signing seed is 32 bytes");
+    SigningKey::from_bytes(&private_key_bytes)
+}
+
+fn test_module_artifact_signer_public_key_hex() -> String {
+    hex::encode(
+        test_module_artifact_signing_key()
+            .verifying_key()
+            .to_bytes(),
+    )
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = sha2::Sha256::digest(bytes);
+    hex::encode(digest)
+}
+
+#[test]
+fn build_chain_status_payload_surfaces_persisted_module_tick_routing_metrics() {
+    let dir = temp_dir("module-routing-status");
+    let mut world = World::new();
+    install_tick_module(&mut world);
+    let mut sandbox = CountingSandbox::default();
+    world
+        .route_tick_to_modules(&mut sandbox)
+        .expect("route tick module");
+    assert_eq!(sandbox.calls, 1);
+    world.save_to_dir(&dir).expect("save execution world");
+    let snapshot_path = dir.join("snapshot.json");
+    let mut snapshot_json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(snapshot_path.as_path()).expect("read snapshot"))
+            .expect("parse snapshot");
+    snapshot_json["module_tick_routing_metrics"] = serde_json::json!({
+        "last_due_count": 1,
+        "last_invoked_count": 1,
+        "missing_invocation_count": 0,
+        "last_missing_invocation_count": 0,
+        "oldest_overdue_ticks": 0,
+        "routing_count": 1
+    });
+    fs::write(
+        snapshot_path.as_path(),
+        serde_json::to_vec_pretty(&snapshot_json).expect("encode snapshot"),
+    )
+    .expect("write snapshot with module routing metrics");
+
+    let payload = build_minimal_status_payload_with_world_dir(dir.as_path(), None);
+    assert!(payload.module_tick_routing.available);
+    assert_eq!(payload.module_tick_routing.source, "execution_world");
+    assert!(payload.module_tick_routing.load_error.is_none());
+    let metrics = payload
+        .module_tick_routing
+        .metrics
+        .as_ref()
+        .expect("module tick routing metrics");
+    assert_eq!(metrics["routing_count"], 1);
+    assert_eq!(metrics["last_due_count"], 1);
+    assert_eq!(metrics["last_invoked_count"], 1);
+    assert!(
+        metrics.get("duration_buckets").is_none(),
+        "persisted module routing metrics must stay deterministic"
+    );
+    assert!(
+        metrics.get("last_route_duration_ms").is_none(),
+        "wall-clock route duration must not enter canonical snapshots"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

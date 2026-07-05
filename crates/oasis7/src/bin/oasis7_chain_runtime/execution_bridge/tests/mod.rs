@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 mod determinism;
 mod driver;
 mod driver_checkpoint;
+mod driver_observability;
 mod driver_storage_profile;
 mod replay;
 mod retention;

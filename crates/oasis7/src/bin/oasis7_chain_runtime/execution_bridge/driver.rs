@@ -35,7 +35,6 @@ use super::driver_observability::{
     emit_commit_observation, emit_stale_height_restore_complete, emit_stale_height_restore_start,
     execution_record_recovery_ref_count,
 };
-#[cfg(test)]
 pub(crate) use super::driver_persistence::load_execution_world;
 pub(crate) use super::driver_persistence::{
     execution_world_persistence_files_missing, load_execution_bridge_state,

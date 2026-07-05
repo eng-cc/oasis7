@@ -15,7 +15,9 @@ use super::policy::PolicySet;
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
 use super::util::{deserialize_btreemap_u64_keys, read_json_from_path, write_json_to_path};
-use super::world::{WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits};
+use super::world::{
+    ModuleTickRoutingDeterministicSnapshot, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
+};
 use super::world_event::WorldEvent;
 use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 
@@ -90,6 +92,8 @@ pub struct Snapshot {
     pub inflight_effects: BTreeMap<String, EffectIntent>,
     #[serde(default)]
     pub module_tick_schedule: BTreeMap<String, WorldTime>,
+    #[serde(default)]
+    pub module_tick_routing_metrics: ModuleTickRoutingDeterministicSnapshot,
     pub capabilities: BTreeMap<String, CapabilityGrant>,
     pub policies: PolicySet,
     #[serde(deserialize_with = "deserialize_btreemap_u64_keys")]

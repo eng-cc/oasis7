@@ -257,7 +257,9 @@ pub use state::{
 // World
 pub use world::{
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState, M1ScenarioBootstrapConfig,
-    ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats, WorldRuntimeMemoryLimits,
+    ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
+    ModuleTickRoutingMetricsSnapshot, ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats,
+    WorldRuntimeMemoryLimits,
 };
 
 // World event

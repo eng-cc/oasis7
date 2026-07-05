@@ -1,5 +1,6 @@
 use super::*;
 use crate::runtime::state::ModuleInstanceState;
+use crate::runtime::tests::signed_test_artifact_identity;
 use crate::runtime::{
     ModuleAbiContract, ModuleRecord, ModuleRole, ModuleSubscription, ModuleSubscriptionStage,
 };
@@ -22,7 +23,7 @@ fn manifest_with_subscription(wasm_hash: &str, event_kind: &str) -> ModuleManife
             filters: None,
         }],
         required_caps: Vec::new(),
-        artifact_identity: None,
+        artifact_identity: Some(signed_test_artifact_identity(wasm_hash)),
         limits: ModuleLimits::unbounded(),
     }
 }
@@ -45,7 +46,7 @@ fn tick_manifest(module_id: &str, wasm_hash: &str) -> ModuleManifest {
             filters: None,
         }],
         required_caps: Vec::new(),
-        artifact_identity: None,
+        artifact_identity: Some(signed_test_artifact_identity(wasm_hash)),
         limits: ModuleLimits::unbounded(),
     }
 }
@@ -245,6 +246,134 @@ fn active_module_invocation_for_id_errors_only_for_referenced_missing_record() {
 }
 
 #[test]
+fn route_tick_to_modules_reports_due_and_overdue_routing_metrics() {
+    let mut world = World::new();
+    world.state.time = 10;
+    let wasm_bytes = b"tick-routing-observability";
+    let wasm_hash = crate::runtime::util::sha256_hex(wasm_bytes);
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .expect("register artifact");
+    world.state.module_instances.insert(
+        "inst-due".to_string(),
+        ModuleInstanceState {
+            instance_id: "inst-due".to_string(),
+            module_id: "m.due".to_string(),
+            module_version: "0.1.0".to_string(),
+            wasm_hash: wasm_hash.clone(),
+            owner_agent_id: "owner".to_string(),
+            install_target: ModuleInstallTarget::SelfAgent,
+            active: true,
+            installed_at: 1,
+        },
+    );
+    world.module_registry.records.insert(
+        ModuleRegistry::record_key("m.due", "0.1.0"),
+        ModuleRecord {
+            manifest: tick_manifest("m.due", &wasm_hash),
+            registered_at: 1,
+            registered_by: "owner".to_string(),
+            audit_event_id: None,
+        },
+    );
+    world.module_tick_schedule.insert("inst-due".to_string(), 4);
+    world
+        .module_tick_schedule
+        .insert("not-active".to_string(), 7);
+    world.module_tick_schedule.insert("future".to_string(), 20);
+
+    let mut sandbox = CountingSandbox::default();
+    assert_eq!(
+        world
+            .route_tick_to_modules(&mut sandbox)
+            .expect("route due modules"),
+        1
+    );
+
+    let metrics = world.module_tick_routing_metrics_snapshot();
+    assert_eq!(metrics.schedule_len, 1);
+    assert_eq!(metrics.last_due_count, 2);
+    assert_eq!(metrics.last_invoked_count, 1);
+    assert_eq!(metrics.last_missing_invocation_count, 1);
+    assert_eq!(metrics.missing_invocation_count, 1);
+    assert_eq!(metrics.oldest_overdue_ticks, Some(6));
+    assert_eq!(metrics.routing_count, 1);
+}
+
+#[test]
+fn module_tick_routing_metrics_survive_world_persistence() {
+    let mut world = World::new();
+    world.state.time = 10;
+    let wasm_bytes = b"tick-routing-observability-persist";
+    let wasm_hash = crate::runtime::util::sha256_hex(wasm_bytes);
+    world
+        .register_module_artifact(wasm_hash.clone(), wasm_bytes)
+        .expect("register artifact");
+    world.state.module_instances.insert(
+        "inst-due".to_string(),
+        ModuleInstanceState {
+            instance_id: "inst-due".to_string(),
+            module_id: "m.due".to_string(),
+            module_version: "0.1.0".to_string(),
+            wasm_hash: wasm_hash.clone(),
+            owner_agent_id: "owner".to_string(),
+            install_target: ModuleInstallTarget::SelfAgent,
+            active: true,
+            installed_at: 1,
+        },
+    );
+    world.module_registry.records.insert(
+        ModuleRegistry::record_key("m.due", "0.1.0"),
+        ModuleRecord {
+            manifest: tick_manifest("m.due", &wasm_hash),
+            registered_at: 1,
+            registered_by: "owner".to_string(),
+            audit_event_id: None,
+        },
+    );
+    world.module_tick_schedule.insert("inst-due".to_string(), 4);
+    world
+        .module_tick_schedule
+        .insert("not-active".to_string(), 7);
+
+    let mut sandbox = CountingSandbox::default();
+    world
+        .route_tick_to_modules(&mut sandbox)
+        .expect("route due modules");
+
+    let dir = std::env::temp_dir().join(format!(
+        "oasis7-module-routing-metrics-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos()
+    ));
+    world.save_to_dir(&dir).expect("save world");
+    let restored = World::load_from_dir(&dir).expect("load world");
+    let _ = std::fs::remove_dir_all(&dir);
+
+    let metrics = restored.module_tick_routing_metrics_snapshot();
+    assert_eq!(metrics.last_due_count, 2);
+    assert_eq!(metrics.last_invoked_count, 1);
+    assert_eq!(metrics.last_missing_invocation_count, 1);
+    assert_eq!(metrics.missing_invocation_count, 1);
+    assert_eq!(metrics.oldest_overdue_ticks, Some(6));
+    assert_eq!(metrics.routing_count, 1);
+    assert_eq!(metrics.last_route_duration_ms, 0);
+    assert_eq!(metrics.max_route_duration_ms, 0);
+    assert_eq!(metrics.cumulative_route_duration_ms, 0);
+    assert_eq!(
+        metrics.duration_buckets.lt_1ms
+            + metrics.duration_buckets.ms_1_to_5
+            + metrics.duration_buckets.ms_5_to_25
+            + metrics.duration_buckets.ms_25_to_100
+            + metrics.duration_buckets.ge_100ms,
+        0,
+        "wall-clock duration buckets must not persist into canonical snapshots"
+    );
+}
+
+#[test]
 fn route_tick_to_modules_keeps_schedule_when_due_record_is_missing() {
     let mut world = World::new();
     world.state.time = 7;
@@ -292,6 +421,14 @@ fn route_tick_to_modules_keeps_schedule_when_due_record_is_missing() {
     );
     assert_eq!(sandbox.calls, 1);
     assert_eq!(world.module_tick_schedule.get("inst-due"), None);
+    let metrics = world.module_tick_routing_metrics_snapshot();
+    assert_eq!(metrics.schedule_len, 0);
+    assert_eq!(metrics.last_due_count, 1);
+    assert_eq!(metrics.last_invoked_count, 1);
+    assert_eq!(metrics.missing_invocation_count, 1);
+    assert_eq!(metrics.last_missing_invocation_count, 0);
+    assert_eq!(metrics.oldest_overdue_ticks, Some(6));
+    assert_eq!(metrics.routing_count, 2);
 }
 
 #[test]
@@ -349,4 +486,20 @@ fn route_tick_to_modules_preflights_due_records_before_side_effects() {
     assert_eq!(sandbox.calls, 0);
     assert_eq!(world.module_tick_schedule.get("inst-a"), Some(&1));
     assert_eq!(world.module_tick_schedule.get("inst-z"), Some(&1));
+    let metrics = world.module_tick_routing_metrics_snapshot();
+    assert_eq!(metrics.schedule_len, 2);
+    assert_eq!(metrics.last_due_count, 2);
+    assert_eq!(metrics.last_invoked_count, 0);
+    assert_eq!(metrics.last_missing_invocation_count, 1);
+    assert_eq!(metrics.missing_invocation_count, 1);
+    assert_eq!(metrics.oldest_overdue_ticks, Some(6));
+    assert_eq!(metrics.routing_count, 1);
+    assert_eq!(
+        metrics.duration_buckets.lt_1ms
+            + metrics.duration_buckets.ms_1_to_5
+            + metrics.duration_buckets.ms_5_to_25
+            + metrics.duration_buckets.ms_25_to_100
+            + metrics.duration_buckets.ge_100ms,
+        1
+    );
 }
