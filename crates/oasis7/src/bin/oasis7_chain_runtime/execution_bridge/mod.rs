@@ -741,7 +741,9 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 
 mod checkpoint;
 mod driver;
+mod driver_checkpoint_install;
 mod driver_committed_heights;
+mod driver_observability;
 mod driver_persistence;
 mod external_effect;
 mod simulator_mirror;
