@@ -743,8 +743,18 @@
           rgba(18, 15, 8, 0.76);
         box-shadow: var(--shadow-inset-stage), 0 12px 30px rgba(250, 204, 21, 0.08);
       }
+      .pixel-world-command-cell--next[data-blocker-present="true"] {
+        border-color: rgba(229, 143, 118, 0.54);
+        background:
+          linear-gradient(135deg, rgba(229, 143, 118, 0.15), rgba(250, 204, 21, 0.07) 58%),
+          rgba(24, 11, 9, 0.76);
+        box-shadow: var(--shadow-inset-stage), 0 12px 30px rgba(229, 143, 118, 0.1);
+      }
       .pixel-world-command-cell--next::before {
         background: rgba(250, 204, 21, 0.76);
+      }
+      .pixel-world-command-cell--next[data-blocker-present="true"]::before {
+        background: var(--color-blocker-danger);
       }
       .pixel-world-command-cell--leverage {
         border-color: rgba(99, 179, 255, 0.26);
@@ -844,6 +854,29 @@
         font-size: 11px;
         letter-spacing: 0;
         text-transform: uppercase;
+      }
+      .pixel-world-command-cell__header {
+        min-width: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 6px 8px;
+      }
+      .pixel-world-command-cell__blocker-chip {
+        max-width: 100%;
+        display: inline-flex;
+        align-items: center;
+        min-height: 20px;
+        padding: 2px 7px;
+        border: 1px solid rgba(229, 143, 118, 0.72);
+        border-radius: 999px;
+        background: rgba(229, 143, 118, 0.16);
+        color: #ffd8d0;
+        font-size: 10px;
+        font-weight: 800;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
       }
       .pixel-world-command-cell__value {
         color: #eef6f1;

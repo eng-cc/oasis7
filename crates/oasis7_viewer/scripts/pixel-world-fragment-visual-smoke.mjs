@@ -211,6 +211,12 @@ function visualProbeScript() {
           },
           agent_prompt_profiles: {},
           agent_execution_debug_contexts: {},
+          agent_player_bindings: {
+            "agent-0": "viewer-bound",
+          },
+          agent_player_public_key_bindings: {
+            "agent-0": "oc:pk:viewer-session-key",
+          },
         },
         player_gameplay: {
           stage_id: "post_onboarding",
@@ -282,8 +288,30 @@ function visualProbeScript() {
       const zIndexOf = (element) => Number.parseInt(getComputedStyle(element).zIndex || "0", 10) || 0;
 
       await waitFor(() => window.__AW_TEST__?.injectSnapshot);
+      const authSession = await waitFor(() => {
+        const current = state();
+        if (current.authReady && current.authPlayerId) {
+          return {
+            playerId: current.authPlayerId,
+            publicKey: current.authPublicKey,
+          };
+        }
+        throw new Error("auth fixture not ready: " + JSON.stringify({
+          appFixture: document.getElementById("app")?.dataset.viewerVisualFixture || null,
+          bodyFixture: document.body?.dataset.viewerVisualFixture || null,
+          authReady: current.authReady,
+          authPlayerId: current.authPlayerId,
+          authBoundAgentId: current.authBoundAgentId,
+          authSource: current.authSource,
+        }));
+      });
+      snapshot.model.agent_player_bindings["agent-0"] = authSession.playerId;
+      if (authSession.publicKey) {
+        snapshot.model.agent_player_public_key_bindings["agent-0"] = authSession.publicKey;
+      }
       window.__PIXEL_WORLD_VISUAL_BASE_SNAPSHOT__ = snapshot;
       window.__AW_TEST__.injectSnapshot(snapshot);
+      await waitFor(() => state().authBoundAgentId === "agent-0");
       await waitFor(() => document.querySelector("#pixel-world-embedded-runtime-canvas"));
       await waitFor(() => state().pixelWorldRuntimeStatus === "ready");
 
@@ -310,6 +338,18 @@ function visualProbeScript() {
       };
 
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
+      await waitFor(() => {
+        const marker = document.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
+        if (marker) {
+          return marker;
+        }
+        throw new Error("agent visual marker not rendered: " + JSON.stringify({
+          agentMarkers: document.querySelectorAll(".pixel-world-entity--agent").length,
+          hitTargets: document.querySelectorAll(".pixel-world-entity--agent.pixel-world-entity--canvas-hit-target").length,
+          fragments: document.querySelectorAll(".pixel-world-fragment-terrain").length,
+          badges: badges(),
+        }));
+      });
 
       const stage = document.querySelector(".pixel-world-canvas");
       const fragments = Array.from(stage.querySelectorAll(".pixel-world-fragment-terrain"));
@@ -642,7 +682,7 @@ const server = createServer(serveFile);
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
   console.log(`opening pixel-world viewer visual smoke: ${url}`);

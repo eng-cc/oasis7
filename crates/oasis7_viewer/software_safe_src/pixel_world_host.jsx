@@ -919,13 +919,21 @@ function PixelWorldCommercialHud(props) {
           class="pixel-world-command-cell pixel-world-command-cell--next"
           data-next-move-route={nextMoveRoute()}
           data-execute-kind={surface().next_action.execute_kind || "none"}
+          data-blocker-present={surface().blocker.label ? "true" : "false"}
           role="button"
           tabIndex="0"
           onClick={activateNextMove}
           onKeyDown={activateNextMoveFromKeyboard}
         >
-          <div class="pixel-world-command-cell__label">
-            {tr(props.locale(), "下一步", "Next Move")}
+          <div class="pixel-world-command-cell__header">
+            <div class="pixel-world-command-cell__label">
+              {tr(props.locale(), "下一步", "Next Move")}
+            </div>
+            <Show when={surface().blocker.label}>
+              <span class="pixel-world-command-cell__blocker-chip">
+                {`${tr(props.locale(), "阻塞", "Blocker")}: ${surface().blocker.label}`}
+              </span>
+            </Show>
           </div>
           <div class="pixel-world-command-cell__value">{surface().next_action.label}</div>
           <Show when={surface().next_action.detail}>
