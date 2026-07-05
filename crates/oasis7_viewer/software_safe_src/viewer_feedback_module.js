@@ -588,6 +588,10 @@ export function createViewerFeedbackModule({
     const resumeAnchor = gameplay.resume_anchor || null;
     const resumeNextStep = gameplay.resume_next_step || null;
     const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
+    const firstAgentClaimSyncPending = emptyEntityBlocker
+      && state.lastGameplayActionFeedback?.action === "claim_first_agent"
+      && state.lastGameplayActionFeedback?.accepted !== false
+      && state.lastGameplayActionFeedback?.stage !== "error";
     let availableActions = Array.isArray(gameplay.available_actions)
       ? gameplay.available_actions
         .map((action) => {
@@ -606,8 +610,8 @@ export function createViewerFeedbackModule({
             disabledReason:
               action?.protocol_action === "request_snapshot"
                   || action?.protocol_action === "world.request_snapshot"
-                  || action?.protocol_action === "live_control.step"
-                  || action?.protocol_action === "live_control.play"
+                  || (firstAgentClaimSyncPending && action?.protocol_action === "live_control.step")
+                  || (firstAgentClaimSyncPending && action?.protocol_action === "live_control.play")
                   || action?.action_id === "claim_first_agent"
                   || action?.action_id === "claim_starter_oc"
                 ? action?.disabled_reason || starterOcMissingAgentReason || null

@@ -1584,6 +1584,7 @@ function createViewerFeedbackModule({
     const resumeAnchor = gameplay.resume_anchor || null;
     const resumeNextStep = gameplay.resume_next_step || null;
     const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
+    const firstAgentClaimSyncPending = emptyEntityBlocker && state2.lastGameplayActionFeedback?.action === "claim_first_agent" && state2.lastGameplayActionFeedback?.accepted !== false && state2.lastGameplayActionFeedback?.stage !== "error";
     let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => {
       const starterOcMissingAgentReason = action?.action_id === "claim_starter_oc" && !agentExists(action?.target_agent_id) ? localeText2(
         locale,
@@ -1595,7 +1596,7 @@ function createViewerFeedbackModule({
         label: action?.label || null,
         protocolAction: action?.protocol_action || null,
         targetAgentId: action?.target_agent_id || null,
-        disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || action?.protocol_action === "live_control.step" || action?.protocol_action === "live_control.play" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || starterOcMissingAgentReason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
+        disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.step" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.play" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || starterOcMissingAgentReason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
         executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
       };
     }) : [];
