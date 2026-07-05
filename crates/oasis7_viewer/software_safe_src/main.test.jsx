@@ -1054,6 +1054,7 @@ describe("viewer web ui automation baseline", () => {
     const stagePanel = container.querySelector("#viewer-stage-panel");
     const claimButtons = within(stagePanel).getAllByRole("button", { name: "Claim First Agent" });
     expect(claimButtons.length).toBeGreaterThan(0);
+    expect(container.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]')).toBeInTheDocument();
 
     fireEvent.click(claimButtons[0]);
 

@@ -214,6 +214,30 @@ async function selectBoundAgent(page) {
   return result;
 }
 
+async function clickClaimFirstAgent(page) {
+  const testIdButton = page.getByTestId("viewer-playthrough-action-claim-first-agent").first();
+  if (await testIdButton.count()) {
+    const disabled = await testIdButton.evaluate((button) => button.disabled).catch(() => true);
+    if (!disabled) {
+      await testIdButton.click();
+      return { clicked: true, selector: "data-testid" };
+    }
+    return { clicked: false, selector: "data-testid", disabled: true };
+  }
+
+  const roleButton = page.getByRole("button", { name: /^(Claim First Agent|认领第一个 Agent)$/ }).first();
+  if (await roleButton.count()) {
+    const disabled = await roleButton.evaluate((button) => button.disabled).catch(() => true);
+    if (!disabled) {
+      await roleButton.click();
+      return { clicked: true, selector: "role" };
+    }
+    return { clicked: false, selector: "role", disabled: true };
+  }
+
+  return { clicked: false, selector: "missing" };
+}
+
 function chromeExecutablePath(requestedPath) {
   if (requestedPath && existsSync(requestedPath)) return requestedPath;
   const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -250,23 +274,21 @@ async function main() {
     await page.waitForFunction(() => window.__AW_TEST__?.getState?.()?.connectionStatus === "connected", null, { timeout: options.timeoutMs });
 
     await page.waitForFunction(() => {
-      const bodyText = document.body?.innerText ?? "";
       const state = window.__AW_TEST__?.getState?.();
-      const agents = state?.snapshot?.model?.agents ?? {};
-      const agentCount = Object.keys(agents).length
-        || Number(state?.gameplaySummary?.entityCounts?.agents ?? state?.gameplaySummary?.agentCount ?? 0);
-      return bodyText.includes("认领第一个 Agent")
-        || bodyText.includes("Claim First Agent")
-        || agentCount >= 1
-        || Boolean(state?.auth?.boundAgentId ?? state?.authBoundAgentId);
-    }, null, { timeout: options.timeoutMs });
-    const claimFirstAgentButton = page.getByTestId("viewer-playthrough-action-claim-first-agent").first();
-    if (await claimFirstAgentButton.count()) {
-      const disabled = await claimFirstAgentButton.evaluate((button) => button.disabled).catch(() => true);
-      if (!disabled) {
-        await claimFirstAgentButton.click();
+      if (state?.auth?.boundAgentId ?? state?.authBoundAgentId) {
+        return true;
       }
-    }
+      const testIdButton = document.querySelector('[data-testid="viewer-playthrough-action-claim-first-agent"]');
+      if (testIdButton && !testIdButton.disabled) {
+        return true;
+      }
+      return Array.from(document.querySelectorAll("button")).some((button) => (
+        /^(Claim First Agent|认领第一个 Agent)$/.test(button.textContent?.trim() || "")
+        && !button.disabled
+      ));
+    }, null, { timeout: options.timeoutMs });
+    const claimFirstAgentResult = await clickClaimFirstAgent(page);
+    await writeJson(join(options.outDir, "claim_first_agent_result.json"), claimFirstAgentResult);
 
     await page.waitForFunction(() => {
       const state = window.__AW_TEST__?.getState?.();
