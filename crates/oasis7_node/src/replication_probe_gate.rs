@@ -77,8 +77,11 @@ impl PosNodeEngine {
                 Ok(false)
             }
             Err(err) if replication_request_waitable_connection_gap(&err) => {
-                self.note_replication_successor_probe_attempt(probe_height, now_ms, true);
-                Ok(true)
+                let hold_proposals = !(self.committed_height == 0
+                    && self.replication_persisted_height == 0
+                    && self.peer_heads.is_empty());
+                self.note_replication_successor_probe_attempt(probe_height, now_ms, hold_proposals);
+                Ok(hold_proposals)
             }
             Err(err) if replication_successor_probe_fetch_commit_unavailable(&err) => {
                 self.note_replication_successor_probe_attempt(probe_height, now_ms, false);

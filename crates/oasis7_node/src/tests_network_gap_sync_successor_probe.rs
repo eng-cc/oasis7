@@ -3,6 +3,82 @@ use super::network_gap_sync_tests::{
     build_fetch_commit_success_cache_fixture, PeerDirectedFetchCommitTestNetwork,
 };
 
+#[derive(Clone)]
+struct WaitableFetchCommitGapNetwork {
+    request_count: Arc<Mutex<usize>>,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for WaitableFetchCommitGapNetwork {
+    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        *self.request_count.lock().expect("lock request count") += 1;
+        Err(WorldError::NetworkProtocolUnavailable {
+            protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn successor_probe_clean_genesis_waitable_gap_keeps_local_proposals_enabled() {
+    let dir_remote = temp_dir("successor-probe-clean-genesis-gap-remote");
+    let dir_local = temp_dir("successor-probe-clean-genesis-gap-local");
+    let world_id = "world-successor-probe-clean-genesis-gap";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(WaitableFetchCommitGapNetwork {
+        request_count: Arc::clone(&request_count),
+    });
+    let (mut engine, mut replication, endpoint, _) = build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        136,
+        137,
+        Arc::clone(&network),
+    );
+
+    let hold = engine
+        .maybe_hold_proposal_for_replication_successor_probe(
+            &endpoint,
+            "node-b",
+            world_id,
+            1_000,
+            Some(&mut replication),
+            None,
+        )
+        .expect("waitable genesis gap should not be fatal");
+
+    assert!(
+        !hold,
+        "clean genesis with no peer heads should not wait forever for a possible remote height 1"
+    );
+    assert_eq!(*request_count.lock().expect("lock request count"), 1);
+    assert_eq!(engine.committed_height, 0);
+    assert_eq!(engine.replication_persisted_height, 0);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
 #[test]
 fn successor_probe_unsupported_fetch_commit_keeps_local_proposals_enabled() {
     let dir_remote = temp_dir("successor-probe-unsupported-remote");
