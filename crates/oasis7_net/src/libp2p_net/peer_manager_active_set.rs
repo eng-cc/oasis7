@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use libp2p::PeerId;
-use oasis7_proto::distributed_dht::{PeerDiscoverySource, SignedPeerRecord};
+use oasis7_proto::distributed_dht::SignedPeerRecord;
 
 use super::peer_manager::{
     PeerManagerHealthStatus, PeerManagerPolicy, discovery_source_label, exceeds_share_limit,
@@ -80,7 +80,7 @@ impl ActivePeerSetStats {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ActivePeerCandidate {
-    pub discovery_sources: Vec<PeerDiscoverySource>,
+    pub discovery_source_labels: BTreeSet<&'static str>,
     pub ipv4_subnet_bucket: Option<String>,
     pub relay_domain: Option<String>,
     pub source_operator: Option<String>,
@@ -94,7 +94,12 @@ impl ActivePeerCandidate {
         active_path: &TransportPath,
     ) -> Self {
         Self {
-            discovery_sources: record.record.discovery_sources.clone(),
+            discovery_source_labels: record
+                .record
+                .discovery_sources
+                .iter()
+                .map(|source| discovery_source_label(*source))
+                .collect(),
             ipv4_subnet_bucket: ipv4_subnet_bucket(active_path),
             relay_domain: relay_domain(active_path),
             source_operator: normalized_source_label(record.record.source_operator.as_deref()),
@@ -104,27 +109,18 @@ impl ActivePeerCandidate {
     }
 }
 
-fn candidate_discovery_source_labels(candidate: &ActivePeerCandidate) -> BTreeSet<&'static str> {
-    candidate
-        .discovery_sources
-        .iter()
-        .map(|source| discovery_source_label(*source))
-        .collect()
-}
-
 pub(super) fn candidate_status_with_active_set(
     candidate: &ActivePeerCandidate,
     active_set_stats: &ActivePeerSetStats,
     policy: &PeerManagerPolicy,
 ) -> PeerManagerHealthStatus {
     let projected_active_peer_count = active_set_stats.active_peer_count.saturating_add(1);
-    let candidate_discovery_source_labels = candidate_discovery_source_labels(candidate);
-    let mut has_issue = candidate_discovery_source_labels.len() < policy.min_peer_discovery_sources;
+    let mut has_issue = candidate.discovery_source_labels.len() < policy.min_peer_discovery_sources;
     let mut hard_block = false;
 
     let projected_active_discovery_sources = active_set_stats
         .active_discovery_sources
-        .union(&candidate_discovery_source_labels)
+        .union(&candidate.discovery_source_labels)
         .count();
     if projected_active_peer_count > 0
         && projected_active_discovery_sources < policy.min_active_discovery_sources
