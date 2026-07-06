@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 use bevy::ecs::system::SystemParam;
@@ -395,6 +395,21 @@ fn reconcile_grid(
     runtime.grid_layout = Some(next_layout);
 }
 
+fn despawn_stale_entities(
+    commands: &mut Commands,
+    entities: &mut HashMap<String, Entity>,
+    active_ids: &HashSet<String>,
+) {
+    entities.retain(|id, entity| {
+        if active_ids.contains(id) {
+            true
+        } else {
+            commands.entity(*entity).despawn();
+            false
+        }
+    });
+}
+
 fn reconcile_fragments(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -454,17 +469,7 @@ fn reconcile_fragments(
         }
     }
 
-    let stale_ids: Vec<String> = runtime
-        .fragment_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.fragment_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
+    despawn_stale_entities(commands, &mut runtime.fragment_entities, &active_ids);
 }
 
 fn reconcile_locations(
@@ -532,17 +537,7 @@ fn reconcile_locations(
         });
     }
 
-    let stale_ids: Vec<String> = runtime
-        .location_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.location_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
+    despawn_stale_entities(commands, &mut runtime.location_entities, &active_ids);
 }
 
 fn reconcile_agents(
@@ -618,17 +613,7 @@ fn reconcile_agents(
         });
     }
 
-    let stale_ids: Vec<String> = runtime
-        .agent_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.agent_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
+    despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
 }
 
 fn reconcile_links(
@@ -690,17 +675,7 @@ fn reconcile_links(
         }
     }
 
-    let stale_ids: Vec<String> = runtime
-        .link_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.link_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
+    despawn_stale_entities(commands, &mut runtime.link_entities, &active_ids);
 }
 
 fn reconcile_hotspots(
@@ -761,17 +736,7 @@ fn reconcile_hotspots(
         }
     }
 
-    let stale_ids: Vec<String> = runtime
-        .hotspot_entities
-        .keys()
-        .filter(|id| !active_ids.contains(*id))
-        .cloned()
-        .collect();
-    for id in stale_ids {
-        if let Some(entity) = runtime.hotspot_entities.remove(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
+    despawn_stale_entities(commands, &mut runtime.hotspot_entities, &active_ids);
 }
 
 fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState) {
