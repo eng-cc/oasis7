@@ -95,7 +95,7 @@
    - `guarded_testnet_faucet`
    - `non-mainnet value semantics`
 4. 跑 runtime bootstrap rehearsal，留下 bundle/genesis/bootstrap peer 对账证据。
-5. 可选执行 external verifier / light-client-lite audit：用 `network-tier-external-verifier-light-client-lite.sh` 从节点进程外验证 sampled `WorldHeadProofV1` artifact，并把 `external_verifier_light_client_lite_ready` 作为 non-promotional optional lane 写入 TSV。该 lane 只能进入 `ignored_lanes`，不能替代 required lanes，也不能单独升级 `ready_for_live_candidate`。
+5. 可选执行 external verifier / light-client-lite audit：用 `network-tier-external-verifier-light-client-lite.sh` 从节点进程外验证 sampled `WorldHeadProofV1` artifact，并把 `external_verifier_light_client_lite_ready` 作为 non-promotional optional lane 写入 TSV。若已有连续 proof window，再用 `network-tier-light-client-continuity-window.sh` 验证 trusted anchor、连续高度、prev-hash linkage、observed head 与基础 quorum，并把 `light_client_continuity_window_ready` 作为第二条 non-promotional optional lane 写入 TSV。两条 lane 都只能进入 `ignored_lanes`，不能替代 required lanes，也不能单独升级 `ready_for_live_candidate`。
 6. 若要暴露本机 hosted-login 形态入口，先确认本机节点已健康接入 testnet 网络，再确认 hosted-login / launcher / viewer / pure API 读取的是该节点的 testnet world state；节点健康是必要条件，但不是充分条件。
 7. 由 `qa_engineer` 审 claims boundary，确认允许/禁止表述。
 8. 把全部 required lane 写入正式 TSV，再运行 readiness review 脚本，只有全部 `pass` 才允许进入 `ready_for_live_candidate`。
@@ -121,6 +121,17 @@
   --sample-started-at <iso8601> \
   --sample-ended-at <iso8601> \
   --out <external-verifier-evidence.json>
+
+./scripts/network-tier-light-client-continuity-window.sh \
+  --manifest <public-testnet-manifest.json> \
+  --proof-window <world-head-proof-window.json> \
+  --world-id <world-id> \
+  --expect-from-height <from-height> \
+  --expect-to-height <to-height> \
+  --expect-anchor-hash <trusted-anchor-block-hash> \
+  --sample-started-at <iso8601> \
+  --sample-ended-at <iso8601> \
+  --out <light-client-continuity-window-evidence.json>
 
 ./scripts/network-tier-exit-review.sh \
   --manifest <public-testnet-manifest.json>

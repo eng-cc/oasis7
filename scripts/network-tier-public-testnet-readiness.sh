@@ -785,6 +785,218 @@ def validate_external_verifier_light_client_lite_pass_evidence(
     return blockers
 
 
+def validate_light_client_continuity_window_pass_evidence(
+    raw: str,
+    evidence: pathlib.Path,
+    manifest_path: pathlib.Path,
+    manifest_ref: str,
+    manifest_data: dict,
+) -> list[str]:
+    lane = "light_client_continuity_window_ready"
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"{lane} evidence must be JSON: {raw} ({exc})"]
+
+    if data.get("evidence_schema") != "oasis7.light_client_continuity_window.v1":
+        blockers.append(f"{lane} evidence_schema mismatch: {raw}")
+    if data.get("status") != "pass":
+        blockers.append(f"{lane} status must be pass: {raw}")
+    if data.get("verifier_mode") != "proof_window_continuity":
+        blockers.append(f"{lane} verifier_mode must be proof_window_continuity: {raw}")
+    if data.get("independent_process") is not True:
+        blockers.append(f"{lane} independent_process must be true: {raw}")
+    for key in ("implementation_ref", "command_ref", "proof_window_ref"):
+        if not str(data.get(key) or "").strip():
+            blockers.append(f"{lane} {key} missing: {raw}")
+
+    network_tier = data.get("network_tier")
+    if not isinstance(network_tier, dict):
+        blockers.append(f"{lane} network_tier object missing: {raw}")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            blockers.append(f"{lane} network_tier.tier must be public_testnet: {raw}")
+        if network_tier.get("network_id") != manifest_data.get("network_id"):
+            blockers.append(f"{lane} network_tier.network_id must match manifest: {raw}")
+        if network_tier.get("chain_id") != manifest_data.get("chain_id"):
+            blockers.append(f"{lane} network_tier.chain_id must match manifest: {raw}")
+        for key in ("network_id", "chain_id", "world_id"):
+            if not str(network_tier.get(key) or "").strip():
+                blockers.append(f"{lane} network_tier.{key} missing: {raw}")
+
+    expected_refs = [
+        ("manifest_ref", manifest_ref, manifest_path),
+        ("genesis_ref", manifest_data["runtime_refs"]["genesis_ref"], resolve_ref(manifest_data["runtime_refs"]["genesis_ref"])),
+        ("bootstrap_peer_ref", manifest_data["runtime_refs"]["bootstrap_peer_ref"], resolve_ref(manifest_data["runtime_refs"]["bootstrap_peer_ref"])),
+    ]
+    for key, expected_raw, expected_resolved in expected_refs:
+        actual = str(data.get(key) or "").strip()
+        if not actual:
+            blockers.append(f"{lane} {key} missing: {raw}")
+        elif not ref_matches(actual, expected_raw, expected_resolved):
+            blockers.append(f"{lane} {key} must match manifest: {raw}")
+
+    rpc_ref = str(data.get("rpc_ref") or "").strip()
+    status_endpoint_ref = str(data.get("status_endpoint_ref") or "").strip()
+    expected_rpc_ref = str(manifest_data.get("endpoint_policy", {}).get("rpc_ref") or "").strip()
+    if not rpc_ref and not status_endpoint_ref:
+        blockers.append(f"{lane} rpc_ref or status_endpoint_ref missing: {raw}")
+    if rpc_ref and rpc_ref != expected_rpc_ref:
+        blockers.append(f"{lane} rpc_ref must match manifest endpoint_policy.rpc_ref: {raw}")
+
+    sample_window = data.get("sample_window")
+    if not isinstance(sample_window, dict):
+        blockers.append(f"{lane} sample_window object missing: {raw}")
+    else:
+        for key in ("started_at", "ended_at"):
+            if not str(sample_window.get(key) or "").strip():
+                blockers.append(f"{lane} sample_window.{key} missing: {raw}")
+
+    trusted_anchor = data.get("trusted_anchor")
+    if not isinstance(trusted_anchor, dict):
+        blockers.append(f"{lane} trusted_anchor object missing: {raw}")
+    else:
+        try:
+            anchor_height = int(trusted_anchor.get("height") or 0)
+        except (TypeError, ValueError):
+            anchor_height = 0
+        if anchor_height <= 0:
+            blockers.append(f"{lane} trusted_anchor.height must be positive: {raw}")
+        if not str(trusted_anchor.get("block_hash") or "").strip():
+            blockers.append(f"{lane} trusted_anchor.block_hash missing: {raw}")
+
+    observed_head = data.get("observed_head")
+    observed_height = 0
+    if not isinstance(observed_head, dict):
+        blockers.append(f"{lane} observed_head object missing: {raw}")
+    else:
+        try:
+            observed_height = int(observed_head.get("height") or 0)
+        except (TypeError, ValueError):
+            observed_height = 0
+        if observed_height <= 0:
+            blockers.append(f"{lane} observed_head.height must be positive: {raw}")
+        for key in ("hash", "state_root"):
+            if not str(observed_head.get(key) or "").strip():
+                blockers.append(f"{lane} observed_head.{key} missing: {raw}")
+
+    verified_range = data.get("verified_range")
+    from_height = 0
+    to_height = 0
+    proof_count = 0
+    if not isinstance(verified_range, dict):
+        blockers.append(f"{lane} verified_range object missing: {raw}")
+    else:
+        try:
+            from_height = int(verified_range.get("from_height") or 0)
+            to_height = int(verified_range.get("to_height") or 0)
+            proof_count = int(verified_range.get("proof_count") or 0)
+        except (TypeError, ValueError):
+            from_height = 0
+            to_height = 0
+            proof_count = 0
+        if from_height <= 0:
+            blockers.append(f"{lane} verified_range.from_height must be positive: {raw}")
+        if to_height < from_height:
+            blockers.append(f"{lane} verified_range.to_height must be >= from_height: {raw}")
+        if observed_height and to_height != observed_height:
+            blockers.append(f"{lane} verified_range.to_height must match observed_head.height: {raw}")
+        if proof_count != (to_height - from_height + 1):
+            blockers.append(f"{lane} verified_range.proof_count must match height span: {raw}")
+
+    if data.get("continuity_result") != "accepted":
+        blockers.append(f"{lane} continuity_result must be accepted: {raw}")
+    if data.get("fork_or_reorg_result") not in {"none_observed", "rejected"}:
+        blockers.append(f"{lane} fork_or_reorg_result must be none_observed or rejected: {raw}")
+
+    proof_refs = data.get("proof_refs")
+    proof_hashes = data.get("proof_hashes")
+    if not isinstance(proof_refs, list) or not proof_refs:
+        blockers.append(f"{lane} proof_refs must be a non-empty array: {raw}")
+    elif any(not str(item).strip() for item in proof_refs):
+        blockers.append(f"{lane} proof_refs cannot contain empty values: {raw}")
+    if not isinstance(proof_hashes, list) or not proof_hashes:
+        blockers.append(f"{lane} proof_hashes must be a non-empty array: {raw}")
+    elif any(not str(item).strip() for item in proof_hashes):
+        blockers.append(f"{lane} proof_hashes cannot contain empty values: {raw}")
+    if isinstance(proof_refs, list) and isinstance(proof_hashes, list) and len(proof_refs) != len(proof_hashes):
+        blockers.append(f"{lane} proof_hashes length must match proof_refs: {raw}")
+
+    verifier = data.get("window_verifier")
+    if not isinstance(verifier, dict):
+        blockers.append(f"{lane} window_verifier object missing: {raw}")
+    else:
+        if verifier.get("schema_version") != "oasis7.world_head_proof_window_verifier.v1":
+            blockers.append(f"{lane} window_verifier.schema_version mismatch: {raw}")
+        if verifier.get("status") != "pass":
+            blockers.append(f"{lane} window_verifier.status must be pass: {raw}")
+        if verifier.get("verifier_mode") != "proof_window_continuity":
+            blockers.append(f"{lane} window_verifier.verifier_mode mismatch: {raw}")
+        if verifier.get("window_contract") != "WorldHeadProofWindowV1":
+            blockers.append(f"{lane} window_verifier.window_contract must be WorldHeadProofWindowV1: {raw}")
+        if verifier.get("claim_boundary") != "proof_window_continuity_evidence_only_not_full_light_client_or_mainnet_readiness":
+            blockers.append(f"{lane} window_verifier.claim_boundary mismatch: {raw}")
+        if verifier.get("world_id") != (network_tier.get("world_id") if isinstance(network_tier, dict) else None):
+            blockers.append(f"{lane} window_verifier.world_id must match network_tier.world_id: {raw}")
+        if int(verifier.get("from_height") or 0) != from_height:
+            blockers.append(f"{lane} window_verifier.from_height must match verified_range: {raw}")
+        if int(verifier.get("to_height") or 0) != to_height:
+            blockers.append(f"{lane} window_verifier.to_height must match verified_range: {raw}")
+        if int(verifier.get("proof_count") or 0) != proof_count:
+            blockers.append(f"{lane} window_verifier.proof_count must match verified_range: {raw}")
+        verifier_anchor = verifier.get("trusted_anchor")
+        if isinstance(trusted_anchor, dict):
+            if not isinstance(verifier_anchor, dict):
+                blockers.append(f"{lane} window_verifier.trusted_anchor object missing: {raw}")
+            elif verifier_anchor.get("block_hash") != trusted_anchor.get("block_hash"):
+                blockers.append(f"{lane} window_verifier.trusted_anchor must match evidence: {raw}")
+        verifier_head = verifier.get("head")
+        if isinstance(observed_head, dict) and isinstance(verifier_head, dict):
+            if verifier_head.get("block_hash") != observed_head.get("hash"):
+                blockers.append(f"{lane} window_verifier.head.block_hash must match observed_head.hash: {raw}")
+            if verifier_head.get("state_root") != observed_head.get("state_root"):
+                blockers.append(f"{lane} window_verifier.head.state_root must match observed_head.state_root: {raw}")
+        else:
+            blockers.append(f"{lane} window_verifier.head object missing: {raw}")
+
+    for key in (
+        "node_db_access_used",
+        "manual_checkpoint_or_data_copy_used",
+        "privileged_internal_api_used",
+    ):
+        if data.get(key) is not False:
+            blockers.append(f"{lane} {key} must be false: {raw}")
+
+    does_not_claim = data.get("does_not_claim")
+    if not isinstance(does_not_claim, list):
+        blockers.append(f"{lane} does_not_claim must be an array: {raw}")
+    else:
+        required_denials = {
+            "full light client security",
+            "mainnet-grade finality",
+            "trust-minimized validator transition",
+            "state proof",
+            "receipt proof",
+            "DA sampling",
+            "multi-client consensus equivalence",
+            "ready_for_live_candidate",
+        }
+        missing_denials = sorted(required_denials.difference(set(does_not_claim)))
+        if missing_denials:
+            blockers.append(
+                f"{lane} does_not_claim missing: "
+                + ",".join(missing_denials)
+                + f": {raw}"
+            )
+
+    residual_risk = data.get("residual_risk")
+    if not isinstance(residual_risk, list) or not residual_risk:
+        blockers.append(f"{lane} residual_risk must be a non-empty array: {raw}")
+
+    return blockers
+
+
 def escape_markdown_cell(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -890,6 +1102,12 @@ if lanes_tsv_arg:
                 )
                 if verifier_blockers:
                     raise SystemExit("; ".join(verifier_blockers))
+            if lane_id == "light_client_continuity_window_ready" and status == "pass":
+                window_blockers = validate_light_client_continuity_window_pass_evidence(
+                    evidence_path, evidence, manifest_path, sys.argv[1], data
+                )
+                if window_blockers:
+                    raise SystemExit("; ".join(window_blockers))
             seen_lane_ids.add(lane_id)
             lanes.append(
                 {
