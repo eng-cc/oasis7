@@ -418,6 +418,57 @@ fn wasm_executor_metrics_track_compile_call_and_failure_paths() {
         snapshot.call_wall_ms_buckets.values().copied().sum::<u64>(),
         snapshot.calls_total
     );
+    assert_eq!(snapshot.module_hotspots.len(), 1);
+    assert_eq!(snapshot.module_hotspots[0].module_id, "m.metrics");
+    assert_eq!(snapshot.module_hotspots[0].calls_total, 3);
+    assert_eq!(snapshot.module_hotspots[0].failure_count, 1);
+    assert!(snapshot.module_hotspots[0].wall_ms_total > 0);
+}
+
+#[test]
+fn wasm_executor_module_hotspot_labels_are_byte_budgeted() {
+    let metrics = init_shared_wasm_executor_metrics();
+    let long_module_id = format!("m.{}", "模块".repeat(100));
+
+    super::metrics::observe_wasm_executor_call_result(&metrics, &long_module_id, 42, None);
+
+    let snapshot = snapshot_wasm_executor_metrics(&metrics);
+    assert_eq!(snapshot.module_hotspots.len(), 1);
+    assert!(snapshot.module_hotspots[0].module_id.ends_with("..."));
+    assert!(snapshot.module_hotspots[0].module_id.len() <= 120);
+    assert!(
+        snapshot.module_hotspots[0]
+            .module_id
+            .is_char_boundary(snapshot.module_hotspots[0].module_id.len() - "...".len())
+    );
+}
+
+#[test]
+fn wasm_executor_module_hotspots_are_top_n_with_overflow_bucket() {
+    let metrics = init_shared_wasm_executor_metrics();
+
+    for index in 0..270 {
+        let module_id = format!("m.hotspot.{index:03}");
+        super::metrics::observe_wasm_executor_call_result(
+            &metrics,
+            &module_id,
+            index as u64 + 1,
+            None,
+        );
+    }
+
+    let snapshot = snapshot_wasm_executor_metrics(&metrics);
+    assert_eq!(snapshot.calls_total, 270);
+    assert_eq!(snapshot.module_hotspots.len(), 10);
+    assert!(
+        snapshot
+            .module_hotspots
+            .iter()
+            .any(|hotspot| hotspot.module_id == "__overflow__")
+    );
+    assert!(snapshot.module_hotspots.iter().all(|hotspot| {
+        hotspot.module_id == "__overflow__" || hotspot.module_id.starts_with("m.hotspot.")
+    }));
 }
 
 #[cfg(feature = "wasmtime")]

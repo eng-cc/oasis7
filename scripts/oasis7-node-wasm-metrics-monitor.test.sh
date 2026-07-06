@@ -29,6 +29,127 @@ assert summary["window"]["executor"]["p95_call_ms"]["upper_bound_ms"] == 50
 assert summary["window"]["router"]["match_calls_total_delta"] == 5
 assert summary["window"]["router"]["p95_match_ms"]["upper_bound_ms"] == 25
 assert summary["window"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
+assert summary["window"]["module_hotspot_source"] == "not_reported"
+assert summary["window"]["top_module_hotspot"] == "not_reported"
+PY
+}
+
+check_module_hotspot_window() {
+  local sample_dir="$tmp_root/module-hotspots"
+  local out_dir="$tmp_root/module-hotspots-out"
+  mkdir -p "$sample_dir"
+  python3 - "$sample_dir/001.json" "$sample_dir/002.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+samples = [
+    ("fixtures/wasm_metrics_monitor/no_reset/001.json", sys.argv[1], [
+        {
+            "module_id": "m.alpha",
+            "calls_total": 10,
+            "wall_ms_total": 100,
+            "failure_count": 0,
+            "share_ppm": 625000,
+        },
+        {
+            "module_id": "m.beta",
+            "calls_total": 5,
+            "wall_ms_total": 60,
+            "failure_count": 1,
+            "share_ppm": 375000,
+        },
+    ]),
+    ("fixtures/wasm_metrics_monitor/no_reset/002.json", sys.argv[2], [
+        {
+            "module_id": "m.alpha",
+            "calls_total": 12,
+            "wall_ms_total": 130,
+            "failure_count": 0,
+            "share_ppm": 342105,
+        },
+        {
+            "module_id": "m.beta",
+            "calls_total": 8,
+            "wall_ms_total": 145,
+            "failure_count": 2,
+            "share_ppm": 381579,
+        },
+        {
+            "module_id": "m.gamma",
+            "calls_total": 1,
+            "wall_ms_total": 105,
+            "failure_count": 0,
+            "share_ppm": 276316,
+        },
+    ]),
+]
+for src, dst, module_hotspots in samples:
+    payload = json.loads(Path(src).read_text())
+    payload["wasm"]["executor"]["module_hotspots"] = module_hotspots
+    Path(dst).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+PY
+
+  bash ./scripts/oasis7-node-wasm-metrics-monitor.sh \
+    --status-sample-dir "$sample_dir" \
+    --node-label test-node \
+    --out-dir "$out_dir"
+
+  python3 - "$out_dir/latest_summary.json" "$out_dir/latest_summary.md" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+summary = json.loads(Path(sys.argv[1]).read_text())
+markdown = Path(sys.argv[2]).read_text()
+module_hotspots = summary["window"]["latest_module_hotspots"]
+assert summary["window"]["module_hotspot_source"] == "reported"
+assert summary["window"]["top_module_hotspot"] == "m.beta"
+assert module_hotspots[0]["module_id"] == "m.beta"
+assert module_hotspots[0]["wall_ms_total"] == 145
+assert module_hotspots[0]["failure_count"] == 2
+assert module_hotspots[1]["module_id"] == "m.alpha"
+assert module_hotspots[2]["module_id"] == "m.gamma"
+assert "## Module Hotspots" in markdown
+assert "scope: `latest_cumulative_bounded_top_n`" in markdown
+assert "`m.beta`: wall_ms_total=`145`" in markdown
+PY
+}
+
+check_reported_empty_module_hotspots() {
+  local sample_dir="$tmp_root/reported-empty-module-hotspots"
+  local out_dir="$tmp_root/reported-empty-module-hotspots-out"
+  mkdir -p "$sample_dir"
+  python3 - "$sample_dir/001.json" "$sample_dir/002.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+for src, dst in [
+    ("fixtures/wasm_metrics_monitor/no_reset/001.json", sys.argv[1]),
+    ("fixtures/wasm_metrics_monitor/no_reset/002.json", sys.argv[2]),
+]:
+    payload = json.loads(Path(src).read_text())
+    payload["wasm"]["executor"]["module_hotspots"] = []
+    Path(dst).write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+PY
+
+  bash ./scripts/oasis7-node-wasm-metrics-monitor.sh \
+    --status-sample-dir "$sample_dir" \
+    --node-label test-node \
+    --out-dir "$out_dir"
+
+  python3 - "$out_dir/latest_summary.json" "$out_dir/latest_summary.md" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+summary = json.loads(Path(sys.argv[1]).read_text())
+markdown = Path(sys.argv[2]).read_text()
+assert summary["window"]["module_hotspot_source"] == "reported"
+assert summary["window"]["top_module_hotspot"] == "none"
+assert summary["window"]["latest_module_hotspots"] == []
+assert "- none" in markdown
 PY
 }
 
@@ -178,6 +299,8 @@ PY
 }
 
 check_no_reset_window
+check_module_hotspot_window
+check_reported_empty_module_hotspots
 check_reset_window
 check_build_timestamp_churn_keeps_runtime_window
 check_single_sample_compat

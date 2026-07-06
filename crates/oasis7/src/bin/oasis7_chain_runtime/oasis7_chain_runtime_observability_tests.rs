@@ -118,6 +118,13 @@ pub(super) fn sample_wasm_status() -> super::wasm_status::ChainWasmStatus {
             entrypoint_call_ms_total: 45,
             decode_ms_total: 10,
             call_wall_ms_buckets: BTreeMap::from([("le_0010_ms".to_string(), 4)]),
+            module_hotspots: vec![oasis7_wasm_executor::WasmExecutorModuleHotspot {
+                module_id: "m.metrics".to_string(),
+                calls_total: 4,
+                wall_ms_total: 45,
+                failure_count: 1,
+                share_ppm: 1_000_000,
+            }],
         },
         router: oasis7_wasm_router::WasmRouterMetricsSnapshot {
             observed_since_unix_ms: 1_700_000_000_000,
@@ -460,6 +467,11 @@ fn assert_chain_status_payload_consensus_health_metrics() {
     assert!(payload.wasm.metrics_available);
     assert_eq!(payload.wasm.build.total_build_wall_ms, Some(120));
     assert_eq!(payload.wasm.executor.memory_cache_hits, 2);
+    assert_eq!(
+        payload.wasm.executor.module_hotspots[0].module_id,
+        "m.metrics"
+    );
+    assert_eq!(payload.wasm.executor.module_hotspots[0].calls_total, 4);
     assert_eq!(payload.wasm.router.prepared_hits, 5);
     assert!(payload.traffic.udp_gossip.is_none());
     assert_eq!(payload.observability.status, "warn");

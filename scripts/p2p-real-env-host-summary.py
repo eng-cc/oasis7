@@ -177,6 +177,8 @@ def summarize_node(records: list[dict]) -> dict:
             alerts.append("storage_usage_high")
         else:
             storage_status = "normal"
+    else:
+        alerts.append("storage_metrics_unavailable")
 
     service_state = latest.get("service") or {}
     if service_state.get("active_state") != "active" or service_state.get("sub_state") != "running":
