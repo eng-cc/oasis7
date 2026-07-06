@@ -97,6 +97,8 @@ for path in paths:
     if path_matches_structural_slice_pattern(path):
         structural_entries.append(("slice_file", path, "-"))
 
+    if b'include!("' not in data:
+        continue
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
