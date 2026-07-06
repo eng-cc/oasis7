@@ -110,8 +110,8 @@
 | --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-032 | `skill-replacement-rationalization` | `test_tier_required` | inventory matrix、角色卡/活跃文档引用清理、`doc-governance-check`、`pm-lint`、`git diff --check` | `.agents/skills`、`.agents/roles`、engineering 根入口 |
 | PRD-ENGINEERING-032C | `skill-authoring-surface-tightening` | `test_tier_required` | 本地 skill authoring skill、template、checklist、README、topic/root project 回写与治理校验 | `.agents/skills`、角色卡、skill 治理专题 |
-| PRD-ENGINEERING-032D | `brainstorming-skill-boundary-reconciliation`、`tdd-skill-boundary-reconciliation` | `test_tier_required` | bounded borrowed workflow skill、本地 trigger/README、topic/root project 与 borrowing/conflict 文档对齐 | `.agents/skills`、workflow skill surface、engineering 治理专题 |
-| PRD-ENGINEERING-032E | `workflow-router-skill-reconciliation` | `test_tier_required` | `repo-owned-workflow-router`、`.agents/skills/README.md`、root `AGENTS.md` phase order、borrowing/conflict/skill-surface 文档与 `.pm` trace 对齐 | `.agents/skills`、workflow entrypoint surface、engineering 治理专题 |
+| PRD-ENGINEERING-032D | `brainstorming-skill-boundary-reconciliation`、`tdd-skill-boundary-reconciliation` | `test_tier_required` | bounded borrowed workflow skill、本地 trigger/README、topic/root project 与 borrowing design 文档对齐 | `.agents/skills`、workflow skill surface、engineering 治理专题 |
+| PRD-ENGINEERING-032E | `workflow-router-skill-reconciliation` | `test_tier_required` | `repo-owned-workflow-router`、`.agents/skills/README.md`、root `AGENTS.md` phase order、borrowing design / skill-surface 文档与 `.pm` trace 对齐 | `.agents/skills`、workflow entrypoint surface、engineering 治理专题 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

@@ -13,7 +13,7 @@
 - 想确认 pixel-world 下一轮如何表达玩家因果、行动反馈、生产可读性与商业化长期循环：先读 `viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`
 - 想确认 runtime live / event-driven / step-control 现行口径：先读 `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
 - 想确认聊天、右侧面板、Prompt 与输入桥接：先读 `viewer-chat-right-panel-polish.prd.md` 或 `viewer-egui-right-panel.prd.md`
-- 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`
+- 想确认 gameplay release / current web experience：先读 `viewer-gameplay-release-experience-overhaul.prd.md`；旧 `immersion-phase2~10` 阶段三件套不再作为首读或 active 索引入口。
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -95,7 +95,7 @@
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。
 - 旧 2026-03-11 模块状态 closure / viewer-to-producer handoff 文档已退役删除；当前状态以 `../project.md` 为准，历史专题从 `../prd.index.md`、topic project、GitHub task issue evidence comments 与 `.pm/github-project-sync/task-archive.jsonl` 进入。
-- 如果某个主题已经出现“主文档物理合并”，应优先进入主文档，而不是从旧阶段文档开始。
+- 如果某个主题已经出现“主文档物理合并”，应优先进入主文档，而不是从旧阶段文档开始；release immersion phase2~10 的历史追溯从主文档、`../prd.index.md` 历史说明、core review logs、git history 与 GitHub task issue evidence comments 进入。
 
 ## 维护约定
 - 新增 Viewer 专题后，若改变了默认首读路径，应同步更新本页。

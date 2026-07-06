@@ -2,7 +2,7 @@
 
 - 对应需求文档: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`
 - 对应项目管理文档: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
-- 冲突 / 互借参考: `doc/engineering/self-evolution/superpowers-conflict-reconciliation-2026-05-20.md`
+- 冲突 / 互借参考: 本文件“继续拒绝或 deferred 的边界”与“逐 skill 冲突边界速查”。
 
 审计轮次: 1
 
@@ -68,7 +68,7 @@
 - root workflow: `AGENTS.md`
 - local skills: `.agents/skills/README.md` 与对应 repo-owned skills
 - role collaboration: `.agents/roles/*.md` 与 handoff/planning templates
-- topic truth: 本专题 `prd.md`、`project.md`、conflict reference
+- topic truth: 本专题 `prd.md`、`design.md`、`project.md`
 
 重开 deferred 项时必须同时提供：
 
@@ -90,8 +90,24 @@
 - brainstorming / TDD 若被写成所有任务的 mandatory pre-step，视为越界。
 - visual companion 若绕过实现 task / 真实截图或交互 smoke / regression / PR review，视为越界。
 
+## 逐 skill 冲突边界速查
+
+本节承接已退役的 standalone `superpowers` conflict reference；正式状态仍以本专题 PRD / project 为准。
+
+| upstream skill / pattern | 当前状态 | 剩余冲突 | 已吸收的 repo-owned 部分 | 重开条件 |
+| --- | --- | --- | --- | --- |
+| `brainstorming` | adopted（bounded） | universal gate、逐段审批、强制转入 `writing-plans` | `bounded-brainstorming`、scope decomposition、2-3 方案对比、推荐方向、optional visual companion | 只允许在局部专题内扩张；不得回流成 root mandatory pre-step |
+| `requesting-code-review` | adopted（bounded） | every-task reviewer ritual、把本地 review 提升为正式评审主链 | `requesting-repo-owned-review`、review packet、`findings / no_findings / residual_risk` formal sink | 只允许补强 high-risk local diff；不得替代 GitHub PR review |
+| `subagent-driven-development` | adopted（bounded） | fresh subagent-per-task、local review ritual、subagent 独立真值化 | bounded subagent-driven execution、任务拆分、上下文最小化、write-scope / return-contract contract | 仅当 repo-owned multi-agent eval 稳定且 review 边界变化时重开 |
+| `test-driven-development` | adopted（bounded） | universal TDD gate、对无稳定 harness 任务强套 RED | behavior-first / regression-first contract、`tdd-test-writer`、RED command or skip reason | 只允许在更细局部领域继续扩张；不得升成 universal gate |
+| `writing-plans` | rejected（整体 skill） | 与 `prd.md` / `project.md` / GitHub-backed task evidence 形成第二套计划真值 | `File Structure / Affected Paths`、handoff 原子步骤、planning self-checklist | 只有在不竞争正式计划真值时才允许继续局部 salvage |
+| `using-superpowers` | rejected（overall bootstrap） | 外部 bootstrap、packaging、第二套入口语义 | `default-workflow-bootstrap`、`repo-owned-workflow-router`、触发说明、skill 发现习惯 | bootstrap / packaging / 第二套入口语义继续 rejected |
+| `dispatching-parallel-agents` | adopted（bounded） | 无 owner / 无 write-scope 的自由并行 | `tpm` orchestrator + role subagents、parallel task decomposition、disjoint write scope | 仅当 multi-agent eval 稳定后，才应继续评估 swarm / packaging 扩张 |
+| `executing-plans` | deferred（整体 skill） | 整包引入会与正式 project/task 执行链重复 | `.agents/skills/executing-project-tasks`、execution gap review、逐步验证、blocker handling | 剩余会话包装与默认收尾假设继续 deferred |
+| `writing-skills` | deferred（整体 skill） | 分发/作者规范容易先于治理真值 | `.agents/skills/README.md`、`writing-repo-owned-skills`、template、checklist | 剩余分发部署与上游 gate 部分继续 deferred |
+
 ## 使用方式
 
 - 看正式裁决：读 `agent-workflow-borrowing-governance-2026-05-19.prd.md`
 - 看当前 rollout 和 follow-up：读 `agent-workflow-borrowing-governance-2026-05-19.project.md`
-- 看逐 skill 冲突、已吸收部分和 reopen 条件：读 `superpowers-conflict-reconciliation-2026-05-20.md`
+- 看逐 skill 冲突、已吸收部分和 reopen 条件：读本文件“逐 skill 冲突边界速查”。
