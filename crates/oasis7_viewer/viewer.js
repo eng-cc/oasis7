@@ -2376,11 +2376,14 @@ function createViewerLocalePreferencesModule({
   function legacyUiLocaleStorageKeys() {
     return legacyViewerEntryStorageSegments().map((segment) => `${uiLocaleStoragePrefix}:${segment}`);
   }
-  function persistUiLocale(locale) {
+  function trySetStorageItem(getStorage, key, value) {
     try {
-      windowRef.localStorage?.setItem(uiLocaleStorageKey(), locale);
+      getStorage()?.setItem(key, value);
     } catch (_) {
     }
+  }
+  function persistUiLocale(locale) {
+    trySetStorageItem(() => windowRef.localStorage, uiLocaleStorageKey(), locale);
   }
   function resolveStoredUiLocale() {
     try {
@@ -2392,7 +2395,7 @@ function createViewerLocalePreferencesModule({
       for (const legacyKey of legacyUiLocaleStorageKeys()) {
         const legacyLocale = normalizeUiLocale2(storage?.getItem(legacyKey));
         if (legacyLocale) {
-          storage?.setItem(uiLocaleStorageKey(), legacyLocale);
+          trySetStorageItem(() => storage, uiLocaleStorageKey(), legacyLocale);
           return legacyLocale;
         }
       }
@@ -2412,10 +2415,7 @@ function createViewerLocalePreferencesModule({
     return legacyViewerEntryStorageSegments().map((segment) => `${promptOverridesVisibilityStoragePrefix}:${segment}`);
   }
   function persistPromptOverridesVisibility(visible) {
-    try {
-      windowRef.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
-    } catch (_) {
-    }
+    trySetStorageItem(() => windowRef.localStorage, promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
   }
   function resolveStoredPromptOverridesVisibility2() {
     try {
@@ -2427,7 +2427,7 @@ function createViewerLocalePreferencesModule({
       for (const legacyKey of legacyPromptOverridesVisibilityStorageKeys()) {
         const legacyValue = storage?.getItem(legacyKey);
         if (legacyValue !== null && legacyValue !== void 0) {
-          storage?.setItem(promptOverridesVisibilityStorageKey(), legacyValue);
+          trySetStorageItem(() => storage, promptOverridesVisibilityStorageKey(), legacyValue);
           return legacyValue === "1";
         }
       }

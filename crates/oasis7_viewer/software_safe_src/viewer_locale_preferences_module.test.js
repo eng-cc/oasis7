@@ -54,6 +54,38 @@ describe("viewer locale preferences module", () => {
     expect(createPreferencesModule().resolveInitialUiLocale()).toBe("zh");
   });
 
+  it("keeps legacy UI locale readable when shared-key migration cannot be written", () => {
+    window.localStorage.setItem("oasis7:viewer:ui-locale:/software_safe.html", "zh");
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage quota exceeded");
+    });
+
+    try {
+      setViewerPath("/software_safe.html?test_api=1&connect=0");
+      expect(createPreferencesModule().resolveInitialUiLocale()).toBe("zh");
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
+  it("keeps UI locale updates usable when localStorage is unavailable", () => {
+    const localStorageDescriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+    const module = createPreferencesModule();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("localStorage unavailable");
+      },
+    });
+
+    try {
+      expect(module.setViewerLocale("zh")).toBe("zh");
+      expect(document.documentElement.lang).toBe("zh-CN");
+    } finally {
+      Object.defineProperty(window, "localStorage", localStorageDescriptor);
+    }
+  });
+
   it("shares prompt override visibility across viewer entrypoint aliases", () => {
     setViewerPath("/viewer.html?test_api=1&connect=0");
     createPreferencesModule().setPromptOverridesVisible(true);
@@ -74,6 +106,37 @@ describe("viewer locale preferences module", () => {
 
     setViewerPath("/software_safe.html?test_api=1&connect=0");
     expect(createPreferencesModule().resolveStoredPromptOverridesVisibility()).toBe(true);
+  });
+
+  it("keeps legacy prompt override visibility readable when shared-key migration cannot be written", () => {
+    window.localStorage.setItem("oasis7:viewer:prompt-overrides-visible:/viewer.html", "1");
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage quota exceeded");
+    });
+
+    try {
+      setViewerPath("/viewer.html?test_api=1&connect=0");
+      expect(createPreferencesModule().resolveStoredPromptOverridesVisibility()).toBe(true);
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  });
+
+  it("keeps prompt override visibility updates usable when localStorage is unavailable", () => {
+    const localStorageDescriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+    const module = createPreferencesModule();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("localStorage unavailable");
+      },
+    });
+
+    try {
+      expect(module.setPromptOverridesVisible(true)).toBe(true);
+    } finally {
+      Object.defineProperty(window, "localStorage", localStorageDescriptor);
+    }
   });
 
   it("keeps non-alias viewer paths isolated from alias legacy preferences", () => {

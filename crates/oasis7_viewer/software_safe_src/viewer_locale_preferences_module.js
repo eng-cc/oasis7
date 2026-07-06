@@ -36,11 +36,15 @@ export function createViewerLocalePreferencesModule({
     return legacyViewerEntryStorageSegments().map((segment) => `${uiLocaleStoragePrefix}:${segment}`);
   }
 
-  function persistUiLocale(locale) {
+  function trySetStorageItem(getStorage, key, value) {
     try {
-      windowRef.localStorage?.setItem(uiLocaleStorageKey(), locale);
+      getStorage()?.setItem(key, value);
     } catch (_) {
     }
+  }
+
+  function persistUiLocale(locale) {
+    trySetStorageItem(() => windowRef.localStorage, uiLocaleStorageKey(), locale);
   }
 
   function resolveStoredUiLocale() {
@@ -53,7 +57,7 @@ export function createViewerLocalePreferencesModule({
       for (const legacyKey of legacyUiLocaleStorageKeys()) {
         const legacyLocale = normalizeUiLocale(storage?.getItem(legacyKey));
         if (legacyLocale) {
-          storage?.setItem(uiLocaleStorageKey(), legacyLocale);
+          trySetStorageItem(() => storage, uiLocaleStorageKey(), legacyLocale);
           return legacyLocale;
         }
       }
@@ -81,10 +85,7 @@ export function createViewerLocalePreferencesModule({
   }
 
   function persistPromptOverridesVisibility(visible) {
-    try {
-      windowRef.localStorage?.setItem(promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
-    } catch (_) {
-    }
+    trySetStorageItem(() => windowRef.localStorage, promptOverridesVisibilityStorageKey(), visible ? "1" : "0");
   }
 
   function resolveStoredPromptOverridesVisibility() {
@@ -97,7 +98,7 @@ export function createViewerLocalePreferencesModule({
       for (const legacyKey of legacyPromptOverridesVisibilityStorageKeys()) {
         const legacyValue = storage?.getItem(legacyKey);
         if (legacyValue !== null && legacyValue !== undefined) {
-          storage?.setItem(promptOverridesVisibilityStorageKey(), legacyValue);
+          trySetStorageItem(() => storage, promptOverridesVisibilityStorageKey(), legacyValue);
           return legacyValue === "1";
         }
       }
