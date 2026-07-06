@@ -9,10 +9,20 @@ use oasis7_proto::distributed::{
 use serde::Serialize;
 use serde_json::json;
 
+#[path = "oasis7_world_head_proof_verify/oasis7_state_receipt_proof.rs"]
+mod oasis7_state_receipt_proof;
 #[path = "oasis7_world_head_proof_verify/oasis7_world_head_proof_window.rs"]
 mod oasis7_world_head_proof_window;
 
+use oasis7_state_receipt_proof::{
+    verify_state_receipt_proof_path, write_sample_state_receipt_json,
+};
 use oasis7_world_head_proof_window::{ProofWindowExpectations, verify_proof_window};
+
+#[cfg(test)]
+use oasis7_proto::distributed::WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1;
+#[cfg(test)]
+use oasis7_state_receipt_proof::sample_world_state_receipt_proof;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputFormat {
@@ -20,10 +30,20 @@ enum InputFormat {
     Json,
 }
 
+impl InputFormat {
+    fn as_str(self) -> &'static str {
+        match self {
+            InputFormat::Cbor => "cbor",
+            InputFormat::Json => "json",
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Args {
     proof_path: PathBuf,
     proof_window_path: Option<PathBuf>,
+    state_receipt_proof_path: Option<PathBuf>,
     proof_ref: Option<String>,
     format: InputFormat,
     expect_hash: Option<String>,
@@ -34,11 +54,12 @@ struct Args {
     expect_anchor_hash: Option<String>,
     write_sample_json: Option<PathBuf>,
     write_sample_window_json: Option<PathBuf>,
+    write_sample_state_receipt_json: Option<PathBuf>,
     emit_json: bool,
 }
 
 fn usage() -> &'static str {
-    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--json]"
+    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>|--state-receipt-proof <path>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--write-sample-state-receipt-json <path>] [--json]"
 }
 
 fn parse_args<I>(args: I) -> Result<Args, String>
@@ -47,6 +68,7 @@ where
 {
     let mut proof_path = None;
     let mut proof_window_path = None;
+    let mut state_receipt_proof_path = None;
     let mut proof_ref = None;
     let mut format = InputFormat::Cbor;
     let mut expect_hash = None;
@@ -57,6 +79,7 @@ where
     let mut expect_anchor_hash = None;
     let mut write_sample_json = None;
     let mut write_sample_window_json = None;
+    let mut write_sample_state_receipt_json = None;
     let mut emit_json = false;
     let mut iter = args.into_iter();
     let _program = iter.next();
@@ -72,6 +95,12 @@ where
                 proof_window_path =
                     Some(PathBuf::from(iter.next().ok_or_else(|| {
                         "--proof-window requires a path".to_string()
+                    })?));
+            }
+            "--state-receipt-proof" => {
+                state_receipt_proof_path =
+                    Some(PathBuf::from(iter.next().ok_or_else(|| {
+                        "--state-receipt-proof requires a path".to_string()
                     })?));
             }
             "--format" => {
@@ -146,6 +175,12 @@ where
                     "--write-sample-window-json requires a directory".to_string()
                 })?));
             }
+            "--write-sample-state-receipt-json" => {
+                write_sample_state_receipt_json =
+                    Some(PathBuf::from(iter.next().ok_or_else(|| {
+                        "--write-sample-state-receipt-json requires a path".to_string()
+                    })?));
+            }
             "--json" => {
                 emit_json = true;
             }
@@ -159,6 +194,7 @@ where
         return Ok(Args {
             proof_path: PathBuf::new(),
             proof_window_path,
+            state_receipt_proof_path,
             proof_ref,
             format,
             expect_hash,
@@ -169,6 +205,7 @@ where
             expect_anchor_hash,
             write_sample_json,
             write_sample_window_json,
+            write_sample_state_receipt_json,
             emit_json,
         });
     }
@@ -176,6 +213,7 @@ where
         return Ok(Args {
             proof_path: PathBuf::new(),
             proof_window_path,
+            state_receipt_proof_path,
             proof_ref,
             format,
             expect_hash,
@@ -186,19 +224,55 @@ where
             expect_anchor_hash,
             write_sample_json,
             write_sample_window_json,
+            write_sample_state_receipt_json,
             emit_json,
         });
     }
+    if write_sample_state_receipt_json.is_some() {
+        return Ok(Args {
+            proof_path: PathBuf::new(),
+            proof_window_path,
+            state_receipt_proof_path,
+            proof_ref,
+            format,
+            expect_hash,
+            expect_world_id,
+            expect_height,
+            expect_from_height,
+            expect_to_height,
+            expect_anchor_hash,
+            write_sample_json,
+            write_sample_window_json,
+            write_sample_state_receipt_json,
+            emit_json,
+        });
+    }
+    let selected_modes = [
+        proof_path.is_some(),
+        proof_window_path.is_some(),
+        state_receipt_proof_path.is_some(),
+    ]
+    .into_iter()
+    .filter(|selected| *selected)
+    .count();
+    if selected_modes > 1 {
+        return Err(
+            "--proof, --proof-window, and --state-receipt-proof cannot be combined".to_string(),
+        );
+    }
     Ok(Args {
-        proof_path: match (&proof_path, &proof_window_path) {
-            (Some(_), Some(_)) => {
-                return Err("--proof and --proof-window cannot be combined".to_string());
+        proof_path: match (&proof_path, &proof_window_path, &state_receipt_proof_path) {
+            (Some(path), None, None) => path.clone(),
+            (None, Some(_), None) | (None, None, Some(_)) => PathBuf::new(),
+            (None, None, None) => {
+                return Err(
+                    "--proof, --proof-window, or --state-receipt-proof is required".to_string(),
+                );
             }
-            (Some(path), None) => path.clone(),
-            (None, Some(_)) => PathBuf::new(),
-            (None, None) => return Err("--proof or --proof-window is required".to_string()),
+            _ => unreachable!("selected_modes rejected combined proof modes"),
         },
         proof_window_path,
+        state_receipt_proof_path,
         proof_ref,
         format,
         expect_hash,
@@ -209,6 +283,7 @@ where
         expect_anchor_hash,
         write_sample_json,
         write_sample_window_json,
+        write_sample_state_receipt_json,
         emit_json,
     })
 }
@@ -320,6 +395,9 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
             }
         }));
     }
+    if let Some(path) = args.write_sample_state_receipt_json {
+        return write_sample_state_receipt_json(path.as_path());
+    }
     if let Some(window_path) = args.proof_window_path.clone() {
         return verify_proof_window(
             window_path.as_path(),
@@ -330,6 +408,16 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
                 expect_to_height: args.expect_to_height,
                 expect_anchor_hash: args.expect_anchor_hash.as_deref(),
             },
+        );
+    }
+    if let Some(path) = args.state_receipt_proof_path.clone() {
+        return verify_state_receipt_proof_path(
+            path.as_path(),
+            args.format.as_str(),
+            args.expect_hash.as_deref(),
+            args.expect_world_id.as_deref(),
+            args.expect_height,
+            args.proof_ref,
         );
     }
     let proof = decode_proof_from_path(args.proof_path.as_path(), args.format)?;
@@ -512,6 +600,7 @@ mod tests {
         Args {
             proof_path: PathBuf::new(),
             proof_window_path: None,
+            state_receipt_proof_path: None,
             format: InputFormat::Cbor,
             expect_hash: None,
             proof_ref: None,
@@ -522,6 +611,7 @@ mod tests {
             expect_anchor_hash: None,
             write_sample_json: None,
             write_sample_window_json: None,
+            write_sample_state_receipt_json: None,
             emit_json: true,
         }
     }
@@ -682,6 +772,81 @@ mod tests {
         .expect_err("tamper rejected");
         let _ = fs::remove_file(&proof_path);
         assert!(err.contains("execution state_root mismatch"), "{err}");
+    }
+
+    #[test]
+    fn verifies_valid_state_receipt_json_proof_and_expectations() {
+        let proof = sample_world_state_receipt_proof();
+        let proof_hash = proof.proof_hash().expect("proof hash");
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-state-receipt-proof-{}-valid.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let summary = verify(Args {
+            proof_path: PathBuf::new(),
+            state_receipt_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Json,
+            expect_hash: Some(proof_hash.clone()),
+            proof_ref: Some("state-receipt-proof-ref-42".to_string()),
+            expect_world_id: Some("world-a".to_string()),
+            expect_height: Some(42),
+            ..base_args()
+        })
+        .expect("verify state receipt proof");
+        let _ = fs::remove_file(&proof_path);
+        assert_eq!(summary["status"], "pass");
+        assert_eq!(summary["proof_contract"], "WorldStateReceiptProofV1");
+        assert_eq!(summary["proof_hash"], proof_hash);
+        assert_eq!(summary["proof_ref"], "state-receipt-proof-ref-42");
+        assert_eq!(
+            summary["claim_boundary"],
+            WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1
+        );
+    }
+
+    #[test]
+    fn rejects_state_receipt_hash_mismatch() {
+        let proof = sample_world_state_receipt_proof();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-state-receipt-proof-{}-hash-mismatch.cbor",
+            std::process::id()
+        ));
+        fs::write(
+            &proof_path,
+            serde_cbor::to_vec(&proof).expect("encode state receipt proof cbor"),
+        )
+        .expect("write proof");
+        let err = verify(Args {
+            proof_path: PathBuf::new(),
+            state_receipt_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Cbor,
+            expect_hash: Some("wrong-hash".to_string()),
+            ..base_args()
+        })
+        .expect_err("hash mismatch");
+        let _ = fs::remove_file(&proof_path);
+        assert!(err.contains("state receipt proof hash mismatch"), "{err}");
+    }
+
+    #[test]
+    fn rejects_state_receipt_root_tamper() {
+        let mut proof = sample_world_state_receipt_proof();
+        proof.root_hash = "wrong-root".to_string();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-state-receipt-proof-{}-root-tamper.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let err = verify(Args {
+            proof_path: PathBuf::new(),
+            state_receipt_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Json,
+            ..base_args()
+        })
+        .expect_err("root tamper rejected");
+        let _ = fs::remove_file(&proof_path);
+        assert!(err.contains("root hash mismatch"), "{err}");
     }
 
     #[test]
@@ -1011,7 +1176,7 @@ mod tests {
         ])
         .expect_err("combined proof modes rejected");
         assert!(
-            err.contains("--proof and --proof-window cannot be combined"),
+            err.contains("--proof, --proof-window, and --state-receipt-proof cannot be combined"),
             "{err}"
         );
     }
@@ -1020,7 +1185,7 @@ mod tests {
     fn rejects_missing_proof_mode_args() {
         let err = parse_args(["verify".to_string()]).expect_err("missing proof mode rejected");
         assert!(
-            err.contains("--proof or --proof-window is required"),
+            err.contains("--proof, --proof-window, or --state-receipt-proof is required"),
             "{err}"
         );
     }

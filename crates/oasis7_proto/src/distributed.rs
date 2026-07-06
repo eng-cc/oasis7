@@ -156,6 +156,15 @@ pub const WORLD_HEAD_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_head_proof.v1";
 pub const WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1: &str =
     "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness";
 
+pub use crate::distributed_state_receipt::{
+    WORLD_STATE_RECEIPT_LEAF_HASH_DOMAIN_V1, WORLD_STATE_RECEIPT_NODE_HASH_DOMAIN_V1,
+    WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1, WORLD_STATE_RECEIPT_PROOF_HASH_DOMAIN_V1,
+    WORLD_STATE_RECEIPT_PROOF_V1_SCHEMA, WorldStateReceiptProofKindV1,
+    WorldStateReceiptProofNodeV1, WorldStateReceiptProofSiblingSideV1,
+    WorldStateReceiptProofStatusV1, WorldStateReceiptProofSubjectV1, WorldStateReceiptProofV1,
+    compute_world_state_receipt_root,
+};
+
 fn world_head_proof_v1_schema() -> u16 {
     WORLD_HEAD_PROOF_V1_SCHEMA
 }
@@ -369,6 +378,17 @@ impl WorldHeadProofV1 {
 fn canonical_blake3_hex<T: Serialize>(value: &T) -> Result<String, serde_cbor::Error> {
     let payload = serde_cbor::to_vec(value)?;
     Ok(blake3::hash(&payload).to_hex().to_string())
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use serde::Serialize;
+
+    pub(crate) fn canonical_blake3_hex<T: Serialize>(
+        value: &T,
+    ) -> Result<String, serde_cbor::Error> {
+        super::canonical_blake3_hex(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
