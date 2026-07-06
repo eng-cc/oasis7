@@ -12,6 +12,7 @@ mod network;
 mod provider_cache;
 mod provider_distribution;
 mod provider_selection;
+mod provider_trim;
 mod replay_flow;
 mod replica_maintenance;
 mod util;
