@@ -690,18 +690,18 @@
 - `doc/world-simulator/viewer/viewer-fragment-element-rendering.project.md`
 - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
 - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase3.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase3.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase4.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase4.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase5.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase5.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.project.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.prd.md`
-- `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.project.md`
+- `retired viewer release immersion phase2 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase2 project doc (see git history and issue 2083)`
+- `retired viewer release immersion phase3 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase3 project doc (see git history and issue 2083)`
+- `retired viewer release immersion phase4 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase4 project doc (see git history and issue 2083)`
+- `retired viewer release immersion phase5 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase5 project doc (see git history and issue 2083)`
+- `retired viewer release immersion phase6 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase6 project doc (see git history and issue 2083)`
+- `retired viewer release immersion phase7 prd doc (see git history and issue 2083)`
+- `retired viewer release immersion phase7 project doc (see git history and issue 2083)`
 - `doc/world-simulator/viewer/viewer-generic-focus-targets.prd.md`
 - `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md`
 - `doc/world-simulator/viewer/viewer-i18n.prd.md`

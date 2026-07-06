@@ -8,6 +8,7 @@
 ## ROUND-002 物理合并
 - 本文件为项目主入口文档（当前权威入口）。
 - `immersion-phase8~10` 项目内容已物理合并入本文件，对应阶段项目文档已合并并从仓库移除（不再保留 archive 目录）。
+- `immersion-phase2~7` 旧阶段项目三件套已退役删除；其完成态追溯只保留在 core review logs、git history 与 GitHub task issue evidence comments，当前执行/状态入口统一以本文件为准。
 
 ## 任务拆解（含 PRD-ID 映射）
 - [x] VGRO0：建立设计文档与项目管理文档。

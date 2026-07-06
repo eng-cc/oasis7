@@ -8,6 +8,8 @@
 
 - [x] core-release-candidate-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 core 首读/活跃索引的 2026-03 release-candidate readiness / version / go-no-go 根目录三件套，将历史候选证据收敛到 `doc/core/reviews/*` 审计留痕、git history 与 GitHub task issue evidence comments，并同步收紧 core README、PRD index、project 状态和 module-root allowlist。 Trace: #2066 (task_e56d696bddcb4d2baa173b02e4631921)
 
+- [x] viewer-release-immersion-phase-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 `world-simulator/viewer` active 索引的 release immersion phase2~7 旧阶段三件套，将当前 release / 体验收口入口统一到 `viewer-gameplay-release-experience-overhaul` 主文档、viewer 子域 README、world-simulator 索引、core review logs、git history 与 GitHub task issue evidence comments。 Trace: #2083 (task_6dfd332bab5b4fff93237390aec200ac)
+
 - [x] self-evolution-file-based-pm-pointer-prd-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已压缩为历史锚点且仍保留旧 `.pm/tasks` / `.pm/inbox/signals.jsonl` 语义提示的 file-based self-evolution historical pointer PRD，将当前规则入口收敛到 workflow source-of-truth，将仍有效的 repo-local memory / working_memory / stage-gate object-model 背景收敛到同名 design 文档。 Trace: #2042 (task_44d20868aeb9433d9fbfa7bea4177d60)
 
 - [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
@@ -549,7 +551,7 @@
 - 更新日期: 2026-07-06
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算仍显示 module density / hotspot `action_required`；后续 repository health 巡检应继续按热点分类结果，为 `doc/world-simulator/launcher`、`doc/testing/evidence` 或其他选中热点单独切 focused follow-up，避免回到已收口的 near-limit project 状态区队列。
-- 最新完成: `testing-launcher-legacy-triplet-retirement`（已删除 `doc/testing/launcher` 早期 launcher chain migration / lifecycle hardening / viewer auth-node config autowire / full-usability closure audit 四组三件套，并将当前 launcher/playtest/Web UI 闭环入口收敛到 `testing-manual.md`、current launcher manual/checklist、bundle-first playtest topic、Web UI manual、GitHub task issue evidence comments 与 git history。）
+- 最新完成: `viewer-release-immersion-phase-retirement`（已删除 `doc/world-simulator/viewer` release immersion phase2~7 旧阶段三件套，并将当前 release / 体验收口入口收敛到 `viewer-gameplay-release-experience-overhaul` 主文档、viewer 子域 README、world-simulator 索引、core review logs、git history 与 GitHub task issue evidence comments。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

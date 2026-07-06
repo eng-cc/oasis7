@@ -163,12 +163,6 @@
 | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.prd.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.design.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.project.md` |
 | `doc/world-simulator/viewer/viewer-fragment-element-rendering.prd.md` | `doc/world-simulator/viewer/viewer-fragment-element-rendering.design.md` | `doc/world-simulator/viewer/viewer-fragment-element-rendering.project.md` |
 | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase2.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase3.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase3.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase3.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase4.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase4.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase4.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase5.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase5.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase5.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase6.project.md` |
-| `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.design.md` | `doc/world-simulator/viewer/viewer-gameplay-release-immersion-phase7.project.md` |
 | `doc/world-simulator/viewer/viewer-generic-focus-targets.prd.md` | `doc/world-simulator/viewer/viewer-generic-focus-targets.design.md` | `doc/world-simulator/viewer/viewer-generic-focus-targets.project.md` |
 | `doc/world-simulator/viewer/viewer-i18n.prd.md` | `doc/world-simulator/viewer/viewer-i18n.design.md` | `doc/world-simulator/viewer/viewer-i18n.project.md` |
 | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.prd.md` | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.design.md` | `doc/world-simulator/viewer/viewer-industry-graph-layered-symbolic-zoom-2026-02-28.project.md` |
@@ -204,7 +198,7 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；若热点子域进入后仍无首读入口，则继续追加路径级治理。当前 `viewer/README.md` 即为 `viewer/` 的首个已执行子域入口。
-- ROUND-002 物理合并（gameplay release）：`viewer-gameplay-release-experience-overhaul` 为主文档，`immersion-phase8~10` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
+- ROUND-002 物理合并（gameplay release）：`viewer-gameplay-release-experience-overhaul` 为主文档，`immersion-phase2~10` 均已收敛到该主文档、审计日志、git history 与 GitHub task issue evidence comments；旧阶段三件套已从仓库移除（不再保留 archive）。
 - ROUND-002 物理合并（live event-driven）：`viewer-live-full-event-driven-phase10-2026-02-27` 为主文档，`phase8/9` 已并入并从仓库移除旧阶段文档（不再保留 archive）。
 
 ## 补充验收模板
