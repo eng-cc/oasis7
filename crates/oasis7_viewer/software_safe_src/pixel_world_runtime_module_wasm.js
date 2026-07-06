@@ -34,6 +34,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
   let animationFrameId = null;
   let removeCanvasListeners = () => {};
   let dragState = null;
+  let suppressNextClick = false;
 
   const runtime = new PixelWorldBridge(
     (event) => {
@@ -93,6 +94,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
         pointerId: event.pointerId,
         moved: false,
       };
+      suppressNextClick = false;
       canvas.style.cursor = "grabbing";
       canvas.setPointerCapture?.(event.pointerId);
       runtime.pointer_down(point.x, point.y, event.pointerId);
@@ -118,6 +120,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       runtime.pointer_up(event.pointerId);
       canvas.releasePointerCapture?.(event.pointerId);
       canvas.style.cursor = "grab";
+      suppressNextClick = dragState?.moved === true;
       dragState = null;
     };
 
@@ -131,7 +134,8 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       if (!point) {
         return;
       }
-      if (dragState?.moved) {
+      if (suppressNextClick) {
+        suppressNextClick = false;
         return;
       }
       runtime.click(point.x, point.y);
@@ -155,6 +159,7 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       for (const dispose of disposers.splice(0)) {
         dispose();
       }
+      suppressNextClick = false;
     };
   }
 

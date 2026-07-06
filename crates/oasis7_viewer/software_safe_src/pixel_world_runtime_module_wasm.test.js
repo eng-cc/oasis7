@@ -42,6 +42,20 @@ describe("pixel world wasm runtime bridge", () => {
     runtimeState.instances.length = 0;
   });
 
+  function pointerEvent(type, options = {}) {
+    const event = new MouseEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: options.clientX ?? 0,
+      clientY: options.clientY ?? 0,
+    });
+    Object.defineProperty(event, "pointerId", {
+      configurable: true,
+      value: options.pointerId ?? 1,
+    });
+    return event;
+  }
+
   it("forwards click coordinates in CSS pixels so Bevy hit testing matches the embedded window", async () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const onEvent = vi.fn();
@@ -95,5 +109,39 @@ describe("pixel world wasm runtime bridge", () => {
         id: "120,75",
       },
     });
+  });
+
+  it("suppresses the synthetic click that follows a drag gesture", async () => {
+    const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
+    const bridge = await createPixelWorldBridge();
+    const canvas = document.createElement("canvas");
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 480,
+      height: 270,
+      right: 480,
+      bottom: 270,
+      x: 0,
+      y: 0,
+      toJSON() {
+        return this;
+      },
+    });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    bridge.mount(canvas, { selection: null });
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 48, clientY: 10 }));
+    canvas.dispatchEvent(pointerEvent("pointerup", { clientX: 48, clientY: 10 }));
+    canvas.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      clientX: 48,
+      clientY: 10,
+    }));
+
+    expect(runtimeState.instances).toHaveLength(1);
+    expect(runtimeState.instances[0].click).not.toHaveBeenCalled();
   });
 });
