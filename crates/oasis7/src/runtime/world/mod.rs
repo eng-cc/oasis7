@@ -66,6 +66,7 @@ use super::signer::ReceiptSigner;
 use super::snapshot::{Journal, SnapshotCatalog};
 use super::state::WorldState;
 use super::types::{ActionId, IntentSeq, ProposalId, WorldEventId, WorldTime};
+use crate::chain_resource_schema::{ChainResourceDelta, ChainResourceManifest};
 
 #[derive(Debug, Clone)]
 pub(super) struct PreparedSubscriptionCacheEntry {
@@ -254,6 +255,10 @@ pub struct World {
     prepared_subscription_cache: BTreeMap<String, PreparedSubscriptionCacheEntry>,
     module_limits_max: ModuleLimits,
     snapshot_catalog: SnapshotCatalog,
+    #[serde(default)]
+    chain_resource_manifest: ChainResourceManifest,
+    #[serde(default)]
+    latest_chain_resource_delta: Option<ChainResourceDelta>,
     state: WorldState,
     journal: Journal,
     next_event_id: WorldEventId,
@@ -381,6 +386,8 @@ impl World {
             prepared_subscription_cache: BTreeMap::new(),
             module_limits_max: ModuleLimits::unbounded(),
             snapshot_catalog: SnapshotCatalog::default(),
+            chain_resource_manifest: ChainResourceManifest::default(),
+            latest_chain_resource_delta: None,
             state,
             journal: Journal::new(),
             next_event_id: 1,

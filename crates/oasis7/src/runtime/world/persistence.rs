@@ -540,6 +540,43 @@ fn load_persisted_tick_consensus_snapshot_from_dir(dir: &Path) -> Result<Snapsho
     Ok(snapshot)
 }
 
+fn load_json_snapshot_if_newer_chain_resource_context(
+    dir: &Path,
+    distfs_snapshot: &Snapshot,
+) -> Result<Option<Snapshot>, WorldError> {
+    let snapshot_path = dir.join(SNAPSHOT_FILE);
+    if !snapshot_path.exists() {
+        return Ok(None);
+    }
+    let json_snapshot = Snapshot::load_json(snapshot_path)?;
+    if !chain_resource_manifest_is_bound(&json_snapshot.chain_resource_manifest) {
+        return Ok(None);
+    }
+    if !chain_resource_manifest_is_bound(&distfs_snapshot.chain_resource_manifest) {
+        return Ok(Some(json_snapshot));
+    }
+    if json_snapshot.chain_resource_manifest.world_id
+        != distfs_snapshot.chain_resource_manifest.world_id
+        || json_snapshot.chain_resource_manifest.chain_id
+            != distfs_snapshot.chain_resource_manifest.chain_id
+    {
+        return Ok(Some(json_snapshot));
+    }
+    let json_manifest_height = json_snapshot.chain_resource_manifest.manifest_height;
+    let distfs_manifest_height = distfs_snapshot.chain_resource_manifest.manifest_height;
+    if json_manifest_height > distfs_manifest_height
+        || (json_manifest_height == distfs_manifest_height
+            && json_snapshot.state.time > distfs_snapshot.state.time)
+    {
+        return Ok(Some(json_snapshot));
+    }
+    Ok(None)
+}
+
+fn chain_resource_manifest_is_bound(manifest: &super::super::ChainResourceManifest) -> bool {
+    manifest.is_schema_current() && manifest.world_id != "unbound" && manifest.chain_id != "unbound"
+}
+
 fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result<(), WorldError> {
     let mut previous_block_hash = None;
     let mut previous_height: Option<u64> = None;
@@ -603,7 +640,7 @@ impl World {
 
     pub fn snapshot(&self) -> Snapshot {
         let manifest_hash = super::super::util::hash_json(&self.manifest).unwrap_or_default();
-        self.snapshot_with_chain_resource_context(
+        let mut snapshot = self.snapshot_with_chain_resource_context(
             super::super::ChainResourceDerivationContext {
                 world_id: DISTFS_WORLD_ID_FALLBACK,
                 chain_id: "runtime-chain",
@@ -615,7 +652,14 @@ impl World {
             },
             manifest_hash.clone(),
             manifest_hash,
-        )
+        );
+        if self.chain_resource_manifest.is_schema_current()
+            && self.chain_resource_manifest.world_id != "unbound"
+        {
+            snapshot.chain_resource_manifest = self.chain_resource_manifest.clone();
+            snapshot.latest_chain_resource_delta = self.latest_chain_resource_delta.clone();
+        }
+        snapshot
     }
 
     pub fn snapshot_with_chain_resource_context(
@@ -772,6 +816,20 @@ impl World {
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
+            if let Some(mut json_snapshot) =
+                load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
+            {
+                let _ = write_distfs_recovery_audit(
+                    dir,
+                    "fallback_json",
+                    Some("distfs_restore_stale_chain_resource_context".to_string()),
+                );
+                let journal = Journal::load_json(dir.join(JOURNAL_FILE))?;
+                hydrate_tick_consensus_snapshot_from_archive(dir, &mut json_snapshot)?;
+                let mut world = Self::from_snapshot(json_snapshot, journal)?;
+                world.load_module_store_from_dir(dir)?;
+                return Ok(world);
+            }
             hydrate_tick_consensus_snapshot_from_archive(dir, &mut snapshot)?;
             let mut world = Self::from_snapshot(snapshot, journal)?;
             world.load_module_store_from_dir(dir)?;
@@ -910,6 +968,8 @@ impl World {
         world.module_cache = ModuleCache::default();
         world.module_limits_max = snapshot.module_limits_max;
         world.snapshot_catalog = snapshot.snapshot_catalog;
+        world.chain_resource_manifest = snapshot.chain_resource_manifest;
+        world.latest_chain_resource_delta = snapshot.latest_chain_resource_delta;
         world.next_event_id = snapshot.last_event_id.saturating_add(1).max(1);
         world.next_event_id_era = snapshot.event_id_era;
         world.next_action_id = snapshot.next_action_id.max(1);

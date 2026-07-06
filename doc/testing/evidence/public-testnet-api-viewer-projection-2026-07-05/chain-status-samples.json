@@ -1,0 +1,56 @@
+[
+  {
+    "api_projection": {
+      "chain_id": "oasis7-public-testnet-governed-20260606",
+      "committed_height": 111,
+      "last_block_hash": "9e04d9cef46d7a65b1e1c305c69dd407150ab2f3502ff08a6d0c7adb97ddf3bb",
+      "last_execution_block_hash": "9e6d011393e9724f8f1a5a87ad82d267603e0e795c1c23ff8208a4349ca9746b",
+      "last_execution_height": 111,
+      "node_id": "triad-testnet-sequencer",
+      "observed_at_unix_ms": 1783268753793,
+      "role": "sequencer",
+      "source": "http://39.104.204.172:6631/v1/chain/status",
+      "world_id": "oasis7-public-testnet-governed-20260606",
+      "world_resource_delta_id": "resource-delta-111-111",
+      "world_resource_failed_gates": [],
+      "world_resource_manifest_hash": "ff03e0bb60d4519bc75ede1c09472365988bad66d208dd697dff04a0c4ba682d",
+      "world_resource_readiness": "ready"
+    },
+    "attempt": 1,
+    "checks": {
+      "api_resource_ready": true,
+      "hash_match": true,
+      "height_match": true,
+      "storage_resource_ready": true,
+      "viewer_ok": true,
+      "world_id_match": true
+    },
+    "storage_api_projection": {
+      "chain_id": "oasis7-public-testnet-governed-20260606",
+      "committed_height": 111,
+      "last_block_hash": "9e04d9cef46d7a65b1e1c305c69dd407150ab2f3502ff08a6d0c7adb97ddf3bb",
+      "last_execution_block_hash": "9e6d011393e9724f8f1a5a87ad82d267603e0e795c1c23ff8208a4349ca9746b",
+      "last_execution_height": 111,
+      "node_id": "triad-testnet-storage",
+      "observed_at_unix_ms": 1783268753868,
+      "role": "storage",
+      "source": "http://39.104.205.67:6632/v1/chain/status",
+      "world_id": "oasis7-public-testnet-governed-20260606",
+      "world_resource_delta_id": "resource-delta-111-111",
+      "world_resource_failed_gates": [],
+      "world_resource_manifest_hash": "ff03e0bb60d4519bc75ede1c09472365988bad66d208dd697dff04a0c4ba682d",
+      "world_resource_readiness": "ready"
+    },
+    "viewer_projection": {
+      "committed_height": 111,
+      "last_block_hash": "9e04d9cef46d7a65b1e1c305c69dd407150ab2f3502ff08a6d0c7adb97ddf3bb",
+      "last_execution_block_hash": "9e6d011393e9724f8f1a5a87ad82d267603e0e795c1c23ff8208a4349ca9746b",
+      "network_committed_height": 111,
+      "node_id": "triad-testnet-storage",
+      "observed_at_unix_ms": 1783268753947,
+      "ok": true,
+      "source": "http://39.104.205.67:6632/v1/chain/explorer/overview",
+      "world_id": "oasis7-public-testnet-governed-20260606"
+    }
+  }
+]

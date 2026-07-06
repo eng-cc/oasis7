@@ -313,9 +313,135 @@ def validate_same_world_hosted_entry_pass_evidence(
         "viewer_config_ref",
         "pure_api_config_ref",
     ]
+    resolved_refs: dict[str, pathlib.Path] = {}
     for key in required_refs:
-        if not str(data.get(key) or "").strip():
+        raw_ref = str(data.get(key) or "").strip()
+        if not raw_ref:
             blockers.append(f"same_world_hosted_entry_ready {key} missing: {raw}")
+            continue
+        resolved = resolve_ref(raw_ref)
+        if not resolved.is_file():
+            blockers.append(f"same_world_hosted_entry_ready {key} file missing: {raw_ref}")
+            continue
+        resolved_refs[key] = resolved
+
+    chain_status_ref = resolved_refs.get("chain_status_samples_ref")
+    if chain_status_ref is not None:
+        try:
+            chain_status = json.loads(chain_status_ref.read_text(encoding="utf-8"))
+        except Exception as exc:
+            blockers.append(
+                f"same_world_hosted_entry_ready chain_status_samples_ref must be JSON: {chain_status_ref} ({exc})"
+            )
+        else:
+            if chain_status.get("ok") is not True:
+                blockers.append(
+                    f"same_world_hosted_entry_ready chain status ok must be true: {chain_status_ref}"
+                )
+            readiness = chain_status.get("readiness")
+            if not isinstance(readiness, dict):
+                blockers.append(
+                    f"same_world_hosted_entry_ready chain readiness object missing: {chain_status_ref}"
+                )
+            else:
+                if readiness.get("ready") is not True:
+                    blockers.append(
+                        f"same_world_hosted_entry_ready chain readiness.ready must be true: {chain_status_ref}"
+                    )
+                if readiness.get("failed_gates") != []:
+                    blockers.append(
+                        f"same_world_hosted_entry_ready chain readiness.failed_gates must be []: {chain_status_ref}"
+                    )
+            world_resource = chain_status.get("world_resource")
+            if not isinstance(world_resource, dict):
+                blockers.append(
+                    f"same_world_hosted_entry_ready chain world_resource object missing: {chain_status_ref}"
+                )
+            else:
+                if world_resource.get("readiness_status") != "ready":
+                    blockers.append(
+                        f"same_world_hosted_entry_ready world_resource.readiness_status must be ready: {chain_status_ref}"
+                    )
+                if world_resource.get("failed_gates") != []:
+                    blockers.append(
+                        f"same_world_hosted_entry_ready world_resource.failed_gates must be []: {chain_status_ref}"
+                    )
+                if isinstance(network_tier, dict):
+                    if world_resource.get("world_id") != network_tier.get("world_id"):
+                        blockers.append(
+                            f"same_world_hosted_entry_ready world_resource.world_id must match network_tier.world_id: {chain_status_ref}"
+                        )
+                    if world_resource.get("chain_id") != network_tier.get("chain_id"):
+                        blockers.append(
+                            f"same_world_hosted_entry_ready world_resource.chain_id must match network_tier.chain_id: {chain_status_ref}"
+                        )
+
+    pure_api_snapshot_ref = ""
+    raw_samples = data.get("raw_samples")
+    if isinstance(raw_samples, dict):
+        pure_api_snapshot_ref = str(raw_samples.get("pure_api_snapshot") or "").strip()
+    pure_api_config_ref = resolved_refs.get("pure_api_config_ref")
+    if pure_api_config_ref is not None and not pure_api_snapshot_ref:
+        try:
+            pure_api_config = json.loads(pure_api_config_ref.read_text(encoding="utf-8"))
+        except Exception as exc:
+            blockers.append(
+                f"same_world_hosted_entry_ready pure_api_config_ref must be JSON: {pure_api_config_ref} ({exc})"
+            )
+        else:
+            pure_api_snapshot_ref = str(pure_api_config.get("sample_path") or "").strip()
+    if not pure_api_snapshot_ref:
+        blockers.append(f"same_world_hosted_entry_ready raw pure API snapshot ref missing: {raw}")
+    else:
+        pure_api_snapshot_path = resolve_ref(pure_api_snapshot_ref)
+        if not pure_api_snapshot_path.is_file():
+            blockers.append(
+                f"same_world_hosted_entry_ready pure API snapshot file missing: {pure_api_snapshot_ref}"
+            )
+        else:
+            try:
+                pure_api_snapshot = json.loads(
+                    pure_api_snapshot_path.read_text(encoding="utf-8")
+                )
+            except Exception as exc:
+                blockers.append(
+                    f"same_world_hosted_entry_ready pure API snapshot must be JSON: {pure_api_snapshot_path} ({exc})"
+                )
+            else:
+                manifest = pure_api_snapshot.get("chain_resource_manifest")
+                runtime_manifest = (
+                    pure_api_snapshot.get("runtime_snapshot", {}).get("chain_resource_manifest")
+                    if isinstance(pure_api_snapshot.get("runtime_snapshot"), dict)
+                    else None
+                )
+                delta = pure_api_snapshot.get("latest_chain_resource_delta")
+                if not isinstance(manifest, dict):
+                    blockers.append(
+                        f"same_world_hosted_entry_ready pure API chain_resource_manifest missing: {pure_api_snapshot_path}"
+                    )
+                if not isinstance(runtime_manifest, dict):
+                    blockers.append(
+                        f"same_world_hosted_entry_ready pure API runtime_snapshot.chain_resource_manifest missing: {pure_api_snapshot_path}"
+                    )
+                if not isinstance(delta, dict):
+                    blockers.append(
+                        f"same_world_hosted_entry_ready pure API latest_chain_resource_delta missing: {pure_api_snapshot_path}"
+                    )
+                if isinstance(network_tier, dict):
+                    for label, obj in (
+                        ("pure API manifest", manifest),
+                        ("runtime snapshot manifest", runtime_manifest),
+                        ("pure API delta", delta),
+                    ):
+                        if isinstance(obj, dict):
+                            if obj.get("world_id") != network_tier.get("world_id"):
+                                blockers.append(
+                                    f"same_world_hosted_entry_ready {label} world_id must match network_tier.world_id: {pure_api_snapshot_path}"
+                                )
+                            if obj.get("chain_id") != network_tier.get("chain_id"):
+                                blockers.append(
+                                    f"same_world_hosted_entry_ready {label} chain_id must match network_tier.chain_id: {pure_api_snapshot_path}"
+                                )
 
     if data.get("node_joined_public_testnet") is not True:
         blockers.append(f"same_world_hosted_entry_ready node_joined_public_testnet must be true: {raw}")

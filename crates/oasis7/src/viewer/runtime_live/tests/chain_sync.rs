@@ -228,6 +228,118 @@ fn chain_linked_runtime_sync_advances_without_play() {
 }
 
 #[test]
+fn chain_linked_runtime_primes_initial_snapshot() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_initial_snapshot");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world.step().expect("advance execution world");
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: "testnet-world",
+                chain_id: "testnet-chain",
+                genesis_ref: Some("testnet-genesis"),
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("testnet-block-1"),
+                tick: execution_world.state().time,
+            },
+            "testnet-world-config",
+            "testnet-generation-algorithm",
+        )
+        .expect("persist execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(ViewerRequest::RequestSnapshot, &mut session, &mut writer)
+        .expect("request snapshot");
+    writer.flush().expect("flush snapshot");
+
+    assert_eq!(server.world.state().time, execution_world.state().time);
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(200));
+    let snapshot = responses
+        .iter()
+        .find_map(|response| match response {
+            ViewerResponse::Snapshot { snapshot } => Some(snapshot),
+            _ => None,
+        })
+        .expect("initial snapshot response");
+    assert_eq!(snapshot.time, execution_world.state().time);
+    assert_eq!(snapshot.chain_resource_manifest.world_id, "testnet-world");
+    assert_eq!(snapshot.chain_resource_manifest.chain_id, "testnet-chain");
+    assert_eq!(
+        snapshot.latest_chain_resource_delta.world_id,
+        "testnet-world"
+    );
+    assert_eq!(
+        snapshot.latest_chain_resource_delta.chain_id,
+        "testnet-chain"
+    );
+    let runtime_snapshot = snapshot
+        .runtime_snapshot
+        .as_ref()
+        .expect("runtime snapshot should be embedded");
+    assert_eq!(
+        runtime_snapshot.chain_resource_manifest.world_id,
+        snapshot.chain_resource_manifest.world_id
+    );
+    assert_eq!(
+        runtime_snapshot.chain_resource_manifest.chain_id,
+        snapshot.chain_resource_manifest.chain_id
+    );
+    assert!(
+        snapshot
+            .model
+            .agents
+            .iter()
+            .any(|(_, agent)| agent.id == "chain-agent")
+    );
+}
+
+#[test]
+fn chain_linked_runtime_enforcing_rejects_initial_snapshot_when_prime_fails() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind("127.0.0.1:1")
+            .with_chain_link_policy(ChainLinkPolicy::Enforcing)
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(ViewerRequest::RequestSnapshot, &mut session, &mut writer)
+        .expect_err("enforcing initial snapshot should reject chain prime failure");
+    writer.flush().expect("flush writer");
+
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(50));
+    assert!(
+        responses.is_empty(),
+        "enforcing chain prime failure must not emit a fallback snapshot"
+    );
+    assert!(
+        !session.initial_snapshot_sent,
+        "failed enforcing prime must not mark initial snapshot sent"
+    );
+}
+
+#[test]
 fn chain_linked_runtime_sync_accepts_same_watermark_snapshot_rebuild() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_same_watermark_rebuild");
     let mut first_world = crate::runtime::World::new_production_hardened();
