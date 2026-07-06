@@ -178,10 +178,11 @@ pub(crate) fn verify_proof_window(
             ));
         }
     }
-    if let (Some(anchor), Some(expected)) = (
-        manifest.trusted_anchor.as_ref(),
-        expectations.expect_anchor_hash,
-    ) {
+    if let Some(expected) = expectations.expect_anchor_hash {
+        let anchor = manifest
+            .trusted_anchor
+            .as_ref()
+            .ok_or_else(|| "proof window trusted_anchor missing".to_string())?;
         if anchor.block_hash != expected {
             return Err(format!(
                 "proof window anchor hash mismatch: expected={} actual={}",

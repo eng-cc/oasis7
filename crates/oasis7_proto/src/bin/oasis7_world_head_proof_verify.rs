@@ -857,6 +857,26 @@ mod tests {
     }
 
     #[test]
+    fn rejects_proof_window_missing_expected_anchor() {
+        let proofs = sample_proof_window();
+        let window_path = write_window_fixture("missing-expected-anchor", &proofs, None);
+        let mut manifest = read_json(&window_path);
+        manifest
+            .as_object_mut()
+            .expect("window manifest object")
+            .remove("trusted_anchor");
+        rewrite_json(&window_path, &manifest);
+        let err = verify(Args {
+            proof_window_path: Some(window_path.clone()),
+            expect_anchor_hash: Some("prev-block-39".to_string()),
+            ..base_args()
+        })
+        .expect_err("missing expected anchor rejected");
+        let _ = fs::remove_dir_all(window_path.parent().expect("window parent"));
+        assert!(err.contains("trusted_anchor missing"), "{err}");
+    }
+
+    #[test]
     fn rejects_proof_window_quorum_zero() {
         let first = sample_world_head_proof_at(40, "prev-block-39");
         let mut second = sample_world_head_proof_at(41, first.head.block_hash.as_str());

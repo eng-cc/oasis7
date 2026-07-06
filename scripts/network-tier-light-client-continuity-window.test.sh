@@ -95,6 +95,8 @@ elif case_name == "proof_count":
     data["verified_range"]["proof_count"] = 2
 elif case_name == "head_mismatch":
     data["window_verifier"]["head"]["block_hash"] = "wrong-head"
+elif case_name == "missing_verifier_anchor":
+    data["window_verifier"].pop("trusted_anchor", None)
 elif case_name == "empty_proof_ref":
     data["proof_refs"][0] = ""
 else:
@@ -127,6 +129,7 @@ run_invalid_readiness_case "db_access" "light_client_continuity_window_ready nod
 run_invalid_readiness_case "claim_boundary" "light_client_continuity_window_ready window_verifier.claim_boundary mismatch"
 run_invalid_readiness_case "proof_count" "light_client_continuity_window_ready verified_range.proof_count must match height span"
 run_invalid_readiness_case "head_mismatch" "light_client_continuity_window_ready window_verifier.head.block_hash must match observed_head.hash"
+run_invalid_readiness_case "missing_verifier_anchor" "light_client_continuity_window_ready window_verifier.trusted_anchor object missing"
 run_invalid_readiness_case "empty_proof_ref" "light_client_continuity_window_ready proof_refs cannot contain empty values"
 
 echo "light-client continuity window lane test passed"

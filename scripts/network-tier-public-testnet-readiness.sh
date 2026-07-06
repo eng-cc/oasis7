@@ -946,8 +946,10 @@ def validate_light_client_continuity_window_pass_evidence(
         if int(verifier.get("proof_count") or 0) != proof_count:
             blockers.append(f"{lane} window_verifier.proof_count must match verified_range: {raw}")
         verifier_anchor = verifier.get("trusted_anchor")
-        if isinstance(trusted_anchor, dict) and isinstance(verifier_anchor, dict):
-            if verifier_anchor.get("block_hash") != trusted_anchor.get("block_hash"):
+        if isinstance(trusted_anchor, dict):
+            if not isinstance(verifier_anchor, dict):
+                blockers.append(f"{lane} window_verifier.trusted_anchor object missing: {raw}")
+            elif verifier_anchor.get("block_hash") != trusted_anchor.get("block_hash"):
                 blockers.append(f"{lane} window_verifier.trusted_anchor must match evidence: {raw}")
         verifier_head = verifier.get("head")
         if isinstance(observed_head, dict) and isinstance(verifier_head, dict):
