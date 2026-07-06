@@ -5,6 +5,7 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 script_path="$repo_root/scripts/check-standalone-tool-lockfiles.sh"
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
+real_git="$(command -v git)"
 
 fixture_repo="$tmp_dir/repo"
 mkdir -p "$fixture_repo/tools/valid_tool/src"
@@ -29,8 +30,25 @@ git add tools/valid_tool/Cargo.toml tools/valid_tool/Cargo.lock tools/valid_tool
 git commit -q -m "valid tool"
 
 valid_out="$tmp_dir/valid.out"
-OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" "$script_path" >"$valid_out"
+fake_bin="$tmp_dir/fake-bin"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/git" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "ls-files" ]]; then
+  echo "git ls-files $*" >>"$OASIS7_GIT_CALL_LOG"
+fi
+exec "$OASIS7_REAL_GIT" "$@"
+SH
+chmod +x "$fake_bin/git"
+
+OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
+  OASIS7_REAL_GIT="$real_git" \
+  OASIS7_GIT_CALL_LOG="$tmp_dir/git-calls.log" \
+  PATH="$fake_bin:$PATH" \
+  "$script_path" >"$valid_out"
 grep -q "ok: standalone tool lockfiles are locked and manifest-consistent (1 manifests)" "$valid_out"
+test "$(grep -c "^git ls-files " "$tmp_dir/git-calls.log")" -eq 1
 
 mkdir -p tools/missing_lock/src
 cat >tools/missing_lock/Cargo.toml <<'TOML'

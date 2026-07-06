@@ -126,6 +126,33 @@ def dir_size_bytes(path: Path) -> int | None:
     return int(raw_size) * 1024
 
 
+def cached_dir_size_bytes(path: Path, cache: dict[str, int | None]) -> int | None:
+    cache_key = str(path)
+    if cache_key not in cache:
+        cache[cache_key] = dir_size_bytes(path)
+    return cache[cache_key]
+
+
+def target_footprint(path: Path, shared_target_size_cache: dict[str, int | None]) -> dict[str, object]:
+    target_path = path / "target"
+    target_exists = target_path.exists()
+    target_is_symlink = target_path.is_symlink()
+    target_resolved_path = str(target_path.resolve(strict=False)) if target_is_symlink else None
+    measured_path = Path(target_resolved_path) if target_resolved_path else target_path
+    target_bytes = (
+        cached_dir_size_bytes(measured_path, shared_target_size_cache)
+        if target_exists and target_is_symlink
+        else dir_size_bytes(measured_path)
+        if target_exists
+        else 0
+    )
+    return {
+        "bytes": target_bytes,
+        "is_symlink": target_is_symlink,
+        "resolved_path": target_resolved_path,
+    }
+
+
 def parse_porcelain() -> list[dict[str, object]]:
     raw = run("git", f"--git-dir={common_git_dir}", "worktree", "list", "--porcelain")
     records: list[dict[str, object]] = []
@@ -271,6 +298,10 @@ cleanup_candidates: list[dict[str, object]] = []
 dirty_count = 0
 prunable_count = 0
 known_target_bytes = 0
+known_local_target_bytes = 0
+known_shared_target_bytes = 0
+known_shared_target_paths: set[str] = set()
+shared_target_size_cache: dict[str, int | None] = {}
 known_node_modules_bytes = 0
 
 for record in records:
@@ -298,15 +329,24 @@ for record in records:
         latest_task = sorted(task_matches, key=lambda item: item.get("updated_at", ""))[-1]
 
     target_bytes = None
+    target_is_symlink = None
+    target_resolved_path = None
     node_modules_bytes = None
     total_footprint_bytes = None
     if include_footprint and exists:
-        target_bytes = dir_size_bytes(path_obj / "target")
+        target = target_footprint(path_obj, shared_target_size_cache)
+        target_bytes = target["bytes"]
+        target_is_symlink = target["is_symlink"]
+        target_resolved_path = target["resolved_path"]
         node_modules_bytes = dir_size_bytes(path_obj / "crates" / "oasis7_viewer" / "node_modules")
         known_parts = [value for value in (target_bytes, node_modules_bytes) if value is not None]
         total_footprint_bytes = sum(known_parts) if len(known_parts) == 2 else None
         if target_bytes is not None:
             known_target_bytes += target_bytes
+            if target_is_symlink and isinstance(target_resolved_path, str):
+                known_shared_target_paths.add(target_resolved_path)
+            else:
+                known_local_target_bytes += target_bytes
         if node_modules_bytes is not None:
             known_node_modules_bytes += node_modules_bytes
 
@@ -405,6 +445,8 @@ for record in records:
         entry["footprint"] = {
             "target_bytes": target_bytes,
             "target_human": human_size(target_bytes),
+            "target_is_symlink": target_is_symlink,
+            "target_resolved_path": target_resolved_path,
             "viewer_node_modules_bytes": node_modules_bytes,
             "viewer_node_modules_human": human_size(node_modules_bytes),
             "known_total_bytes": total_footprint_bytes,
@@ -426,11 +468,21 @@ payload = {
     "entries": entries,
 }
 if include_footprint:
+    for shared_target_path in sorted(known_shared_target_paths):
+        shared_target_bytes = shared_target_size_cache.get(shared_target_path)
+        if shared_target_bytes is not None:
+            known_shared_target_bytes += shared_target_bytes
     payload["summary"].update(
         {
             "footprint_included": True,
             "known_target_bytes": known_target_bytes,
             "known_target_human": human_size(known_target_bytes),
+            "known_local_target_bytes": known_local_target_bytes,
+            "known_local_target_human": human_size(known_local_target_bytes),
+            "known_shared_target_bytes": known_shared_target_bytes,
+            "known_shared_target_human": human_size(known_shared_target_bytes),
+            "known_deduplicated_target_bytes": known_local_target_bytes + known_shared_target_bytes,
+            "known_deduplicated_target_human": human_size(known_local_target_bytes + known_shared_target_bytes),
             "known_viewer_node_modules_bytes": known_node_modules_bytes,
             "known_viewer_node_modules_human": human_size(known_node_modules_bytes),
             "known_footprint_bytes": known_target_bytes + known_node_modules_bytes,
@@ -451,6 +503,8 @@ print(f"- dirty_worktrees: {dirty_count}")
 print(f"- cleanup_candidates: {len(cleanup_candidates)}")
 if include_footprint:
     print(f"- known_target_size: {human_size(known_target_bytes)}")
+    print(f"- known_deduplicated_target_size: {human_size(known_local_target_bytes + known_shared_target_bytes)}")
+    print(f"- known_shared_target_size: {human_size(known_shared_target_bytes)}")
     print(f"- known_viewer_node_modules_size: {human_size(known_node_modules_bytes)}")
     print(f"- known_worktree_cache_size: {human_size(known_target_bytes + known_node_modules_bytes)}")
 
