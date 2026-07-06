@@ -42,6 +42,24 @@ describe("viewer world scale module", () => {
     );
   });
 
+  it("suppresses incomplete world bounds instead of exposing null dimensions", () => {
+    const state = {
+      snapshot: {
+        config: {
+          space: { depth_cm: 1_000, height_cm: 100 },
+        },
+        model: { locations: {} },
+      },
+      uiLocale: "en",
+    };
+    const module = createWorldScaleModule(state);
+
+    const physicalTruth = module.buildWorldScaleSurface().physicalTruth;
+
+    expect(physicalTruth.worldBoundsLabel).toBe(null);
+    expect(physicalTruth.worldBoundsDetail).toBe("The current snapshot does not publish world bounds yet.");
+  });
+
   it("keeps nearest locations stable without full-array sorting", () => {
     const state = {
       selectedId: "origin",
