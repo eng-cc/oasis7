@@ -12,12 +12,16 @@ valid_external_verifier_evidence="$TMPDIR/external-verifier-light-client-lite-va
 valid_state_receipt_evidence="$TMPDIR/state-resource-receipt-proof-valid.json"
 valid_state_receipt_absence_evidence="$TMPDIR/state-resource-receipt-proof-absence-valid.json"
 valid_finality_evidence="$TMPDIR/validator-finality-proof-valid.json"
+valid_finality_transition_evidence="$TMPDIR/validator-finality-proof-transition-valid.json"
 lanes="$TMPDIR/lanes.tsv"
 absence_lanes="$TMPDIR/lanes-state-receipt-absence.tsv"
+transition_lanes="$TMPDIR/lanes-validator-finality-transition.tsv"
 out_dir="$TMPDIR/readiness"
 absence_out_dir="$TMPDIR/readiness-state-receipt-absence"
+transition_out_dir="$TMPDIR/readiness-validator-finality-transition"
 summary="$TMPDIR/summary.json"
 absence_summary="$TMPDIR/summary-state-receipt-absence.json"
+transition_summary="$TMPDIR/summary-validator-finality-transition.json"
 stderr="$TMPDIR/stderr.txt"
 
 cat >"$valid_evidence" <<'JSON'
@@ -314,11 +318,15 @@ cat >"$valid_finality_evidence" <<'JSON'
     "misbehavior_evidence_count": 1,
     "stake_threshold_checked": true,
     "validator_set_hash_checked": true,
-    "consensus_approver_subset_checked": true
+    "consensus_approver_subset_checked": true,
+    "ed25519_signature_verification_checked": true,
+    "validator_set_transition_execution_checked": true,
+    "validator_set_transition_count": 0
   },
   "transition_sample": {
-    "transition_result": "not_claimed",
-    "reason": "single validator set bounded sample"
+    "transition_result": "no_transition_in_sample",
+    "transition_count": 0,
+    "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance"
   },
   "fork_or_reorg_cases": [
     "conflicting_head_rejected_or_recorded",
@@ -355,7 +363,10 @@ cat >"$valid_finality_evidence" <<'JSON'
       "misbehavior_evidence_count": 1,
       "stake_threshold_checked": true,
       "validator_set_hash_checked": true,
-      "consensus_approver_subset_checked": true
+      "consensus_approver_subset_checked": true,
+      "ed25519_signature_verification_checked": true,
+      "validator_set_transition_execution_checked": true,
+      "validator_set_transition_count": 0
     },
     "head": {
       "height": 42,
@@ -365,8 +376,7 @@ cat >"$valid_finality_evidence" <<'JSON'
     "does_not_claim": [
       "mainnet-grade finality",
       "full light client",
-      "cryptographic signature verification",
-      "validator-set transition execution",
+      "trust-minimized validator-set transition governance",
       "DA sampling",
       "multi-client consensus equivalence",
       "public validator onboarding open"
@@ -379,12 +389,12 @@ cat >"$valid_finality_evidence" <<'JSON'
     "full light client security",
     "mainnet-grade finality",
     "trust-minimized validator transition",
-    "cryptographic signature verification",
     "public validator onboarding open",
     "permissionless validator onboarding",
     "DA sampling",
     "multi-client consensus equivalence",
-    "ready_for_live_candidate"
+    "ready_for_live_candidate",
+    "live public launch"
   ],
   "residual_risk": [
     "same implementation family verifier",
@@ -392,6 +402,19 @@ cat >"$valid_finality_evidence" <<'JSON'
   ]
 }
 JSON
+
+python3 - "$valid_finality_evidence" "$valid_finality_transition_evidence" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+data["finality_sample"]["validator_set_transition_count"] = 1
+data["transition_sample"]["transition_result"] = "bounded_transition_execution_checked"
+data["transition_sample"]["transition_count"] = 1
+data["external_verifier"]["finality"]["validator_set_transition_count"] = 1
+pathlib.Path(sys.argv[2]).write_text(json.dumps(data, indent=2), encoding="utf-8")
+PY
 
 python3 - "$valid_state_receipt_evidence" "$valid_state_receipt_absence_evidence" <<'PY'
 import json
@@ -428,15 +451,26 @@ EOF
   --lanes-tsv "$absence_lanes" \
   --out-dir "$absence_out_dir" >"$absence_summary"
 
-python3 - "$summary" "$absence_summary" "$valid_evidence" "$valid_state_receipt_absence_evidence" <<'PY'
+cat >"$transition_lanes" <<EOF
+validator_finality_proof_ready	blockchain_ops_engineer	pass	$valid_finality_transition_evidence	optional validator/finality transition proof lane must not promote public_testnet readiness by itself
+EOF
+
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json \
+  --lanes-tsv "$transition_lanes" \
+  --out-dir "$transition_out_dir" >"$transition_summary"
+
+python3 - "$summary" "$absence_summary" "$transition_summary" "$valid_evidence" "$valid_state_receipt_absence_evidence" "$valid_finality_transition_evidence" <<'PY'
 import json
 import pathlib
 import sys
 
 summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 absence_summary = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
-evidence = str(pathlib.Path(sys.argv[3]).resolve())
-absence_evidence = str(pathlib.Path(sys.argv[4]).resolve())
+transition_summary = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+evidence = str(pathlib.Path(sys.argv[4]).resolve())
+absence_evidence = str(pathlib.Path(sys.argv[5]).resolve())
+transition_evidence = str(pathlib.Path(sys.argv[6]).resolve())
 ignored = summary.get("ignored_lanes", [])
 if summary.get("readiness_verdict") == "ready_for_live_candidate":
     raise SystemExit("optional chain proof lane must not promote readiness")
@@ -482,6 +516,20 @@ if absence_matches[0].get("resolved_evidence_path") != absence_evidence:
     )
 if absence_summary.get("readiness_verdict") == "ready_for_live_candidate":
     raise SystemExit("optional absence proof lane must not promote readiness")
+transition_ignored = transition_summary.get("ignored_lanes", [])
+transition_matches = [
+    lane for lane in transition_ignored if lane.get("lane_id") == "validator_finality_proof_ready"
+]
+if len(transition_matches) != 1:
+    raise SystemExit(
+        f"expected one ignored validator/finality transition lane, got {transition_ignored}"
+    )
+if transition_matches[0].get("resolved_evidence_path") != transition_evidence:
+    raise SystemExit(
+        f"expected resolved transition evidence path {transition_evidence}, got {transition_matches[0]}"
+    )
+if transition_summary.get("readiness_verdict") == "ready_for_live_candidate":
+    raise SystemExit("optional validator/finality transition lane must not promote readiness")
 PY
 
 run_invalid_state_receipt_case() {
@@ -601,6 +649,16 @@ elif case_name == "validator_set_hash_mismatch":
     data["external_verifier"]["validator_set"]["validator_set_hash"] = "wrong-validator-set-hash"
 elif case_name == "threshold_not_checked":
     data["finality_sample"]["stake_threshold_checked"] = False
+elif case_name == "signature_not_checked":
+    data["finality_sample"]["ed25519_signature_verification_checked"] = False
+elif case_name == "transition_not_checked":
+    data["finality_sample"]["validator_set_transition_execution_checked"] = False
+elif case_name == "external_signature_mismatch":
+    data["external_verifier"]["finality"]["ed25519_signature_verification_checked"] = False
+elif case_name == "external_transition_count_mismatch":
+    data["external_verifier"]["finality"]["validator_set_transition_count"] = 1
+elif case_name == "external_missing_denials":
+    data["external_verifier"]["does_not_claim"] = ["full light client"]
 elif case_name == "db_access":
     data["node_db_access_used"] = True
 elif case_name == "missing_denials":
@@ -633,6 +691,11 @@ run_invalid_finality_case "verifier_hash_mismatch" "validator_finality_proof_rea
 run_invalid_finality_case "head_hash_mismatch" "validator_finality_proof_ready external_verifier.head.block_hash must match observed_head.hash"
 run_invalid_finality_case "validator_set_hash_mismatch" "validator_finality_proof_ready external_verifier.validator_set_hash must match evidence"
 run_invalid_finality_case "threshold_not_checked" "validator_finality_proof_ready finality_sample.stake_threshold_checked must be true"
+run_invalid_finality_case "signature_not_checked" "validator_finality_proof_ready finality_sample.ed25519_signature_verification_checked must be true"
+run_invalid_finality_case "transition_not_checked" "validator_finality_proof_ready finality_sample.validator_set_transition_execution_checked must be true"
+run_invalid_finality_case "external_signature_mismatch" "validator_finality_proof_ready external_verifier.finality.ed25519_signature_verification_checked must match finality_sample"
+run_invalid_finality_case "external_transition_count_mismatch" "validator_finality_proof_ready external_verifier.finality.validator_set_transition_count must match finality_sample"
+run_invalid_finality_case "external_missing_denials" "validator_finality_proof_ready external_verifier.does_not_claim missing"
 run_invalid_finality_case "db_access" "validator_finality_proof_ready node_db_access_used must be false"
 run_invalid_finality_case "missing_denials" "validator_finality_proof_ready does_not_claim missing"
 

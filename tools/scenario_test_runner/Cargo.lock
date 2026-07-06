@@ -3129,6 +3129,8 @@ name = "oasis7_proto"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "ed25519-dalek",
+ "hex",
  "serde",
  "serde_cbor",
  "serde_json",

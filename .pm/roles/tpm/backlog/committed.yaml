@@ -1,4 +1,17 @@
 version: 1
 role: tpm
 status: committed
-tasks: []
+tasks:
+  - task_uid: task_5b0cd9948a23408eaf5e49533d696f51
+    title: "Add live finality signature and validator transition verification"
+    module: p2p
+    priority: P1
+    source_signal: ""
+    related_prd: []
+    acceptance:
+      - "Add cryptographic finality signature verification path for WorldFinalityProofV1 without widening public-testnet claims"
+      - "Add bounded validator-set transition contract/verifier semantics anchored to committed world heads"
+      - "Keep readiness lanes optional/non-promotional and update benchmark/project docs with remaining gaps"
+    handoff_to: []
+    status: committed
+    task_path: https://github.com/eng-cc/oasis7/issues/2110

@@ -2,11 +2,13 @@
 
 Purpose: record one bounded `WorldFinalityProofV1` external verifier sample for
 validator-set hash, stake threshold, finality-vote target binding, and
-fork/misbehavior evidence. This is optional, non-promotional evidence.
+fork/misbehavior evidence, live Ed25519 finality vote verification, and bounded
+validator-set transition execution semantics. This is optional, non-promotional
+evidence.
 
-It does not claim full light-client security, cryptographic signature
-verification, trust-minimized validator-set transition execution, public
-validator onboarding, or mainnet-grade finality.
+It does not claim full light-client security, trust-minimized validator
+governance/transition security, public validator onboarding, or mainnet-grade
+finality.
 
 | Field | Expected value |
 | --- | --- |
@@ -70,11 +72,15 @@ validator onboarding, or mainnet-grade finality.
     "misbehavior_evidence_count": 1,
     "stake_threshold_checked": true,
     "validator_set_hash_checked": true,
-    "consensus_approver_subset_checked": true
+    "consensus_approver_subset_checked": true,
+    "ed25519_signature_verification_checked": true,
+    "validator_set_transition_execution_checked": true,
+    "validator_set_transition_count": 0
   },
   "transition_sample": {
-    "transition_result": "not_claimed",
-    "reason": "single validator set bounded sample; no live validator-set transition execution claimed"
+    "transition_result": "no_transition_in_sample",
+    "transition_count": 0,
+    "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance"
   },
   "fork_or_reorg_cases": [
     "conflicting_head_rejected_or_recorded",
@@ -98,15 +104,28 @@ validator onboarding, or mainnet-grade finality.
       "validator_set_hash": "replace-with-validator-set-hash"
     },
     "finality": {
+      "commitment_count": 3,
+      "vote_count": 6,
       "stake_threshold_checked": true,
       "validator_set_hash_checked": true,
-      "consensus_approver_subset_checked": true
+      "consensus_approver_subset_checked": true,
+      "ed25519_signature_verification_checked": true,
+      "validator_set_transition_execution_checked": true,
+      "validator_set_transition_count": 0
     },
     "head": {
       "height": 42,
       "block_hash": "replace-with-observed-head-hash",
       "state_root": "replace-with-observed-state-root"
-    }
+    },
+    "does_not_claim": [
+      "mainnet-grade finality",
+      "full light client",
+      "trust-minimized validator-set transition governance",
+      "DA sampling",
+      "multi-client consensus equivalence",
+      "public validator onboarding open"
+    ]
   },
   "node_db_access_used": false,
   "manual_checkpoint_or_data_copy_used": false,
@@ -115,17 +134,16 @@ validator onboarding, or mainnet-grade finality.
     "full light client security",
     "mainnet-grade finality",
     "trust-minimized validator transition",
-    "cryptographic signature verification",
     "public validator onboarding open",
     "permissionless validator onboarding",
     "DA sampling",
     "multi-client consensus equivalence",
-    "ready_for_live_candidate"
+    "ready_for_live_candidate",
+    "live public launch"
   ],
   "residual_risk": [
     "same implementation family verifier; no independent client parity",
-    "signature_evidence_hash is checked as evidence binding, not live cryptographic signature verification",
-    "single validator set sample does not prove live validator-set transition execution"
+    "bounded transition execution is same-family verifier evidence, not trust-minimized validator governance"
   ]
 }
 ```

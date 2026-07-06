@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
 use crate::distributed::WorldHeadProofV1;
@@ -10,6 +11,9 @@ pub const WORLD_FINALITY_PROOF_V1_SCHEMA: u16 = 1;
 pub const WORLD_FINALITY_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_finality_proof.v1";
 pub const WORLD_FINALITY_VALIDATOR_SET_HASH_DOMAIN_V1: &str =
     "oasis7.world_finality_validator_set.v1";
+pub const WORLD_FINALITY_VOTE_SIGNING_DOMAIN_V1: &str = "oasis7.world_finality_vote.v1";
+pub const WORLD_FINALITY_VALIDATOR_SET_TRANSITION_SIGNING_DOMAIN_V1: &str =
+    "oasis7.world_finality_validator_set_transition.v1";
 pub const WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1: &str =
     "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness";
 
@@ -39,6 +43,8 @@ pub struct WorldFinalityVoteV1 {
     pub state_root: String,
     pub signature_scheme: String,
     pub signature_evidence_hash: String,
+    #[serde(default)]
+    pub signature_hex: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +69,32 @@ pub struct WorldFinalityMisbehaviorEvidenceV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFinalityValidatorSetTransitionApprovalV1 {
+    pub validator_id: String,
+    pub from_validator_set_hash: String,
+    pub to_validator_set_hash: String,
+    pub to_validator_set_activation_height: u64,
+    pub transition_height: u64,
+    pub transition_block_hash: String,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFinalityValidatorSetTransitionV1 {
+    pub from_validator_set_id: String,
+    pub from_validator_set_hash: String,
+    pub to_validator_set_id: String,
+    pub to_validator_set_activation_height: u64,
+    pub to_quorum_threshold_bps: u64,
+    pub to_validator_set_hash: String,
+    pub to_validators: Vec<WorldFinalityValidatorV1>,
+    pub transition_height: u64,
+    pub transition_block_hash: String,
+    pub approvals: Vec<WorldFinalityValidatorSetTransitionApprovalV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldFinalityProofV1 {
     #[serde(default = "world_finality_proof_v1_schema")]
     pub schema_version: u16,
@@ -78,6 +110,8 @@ pub struct WorldFinalityProofV1 {
     pub quorum_threshold_bps: u64,
     pub head_proofs: Vec<WorldHeadProofV1>,
     pub finality_commitments: Vec<WorldFinalityCommitmentV1>,
+    #[serde(default)]
+    pub validator_set_transitions: Vec<WorldFinalityValidatorSetTransitionV1>,
     #[serde(default)]
     pub misbehavior_evidence: Vec<WorldFinalityMisbehaviorEvidenceV1>,
     #[serde(default = "world_finality_proof_claim_boundary_v1")]
@@ -160,14 +194,10 @@ impl WorldFinalityProofV1 {
             ));
         }
 
-        let validators_by_id = self
-            .validators
-            .iter()
-            .map(|validator| (validator.validator_id.as_str(), validator))
-            .collect::<BTreeMap<_, _>>();
         let mut previous_block_hash: Option<String> = None;
         let mut previous_timestamp_ms: Option<i64> = None;
         let mut committed_blocks = BTreeMap::new();
+        let mut consensus_approvers_by_height = BTreeMap::new();
 
         for (index, proof) in self.head_proofs.iter().enumerate() {
             proof.validate_contract()?;
@@ -210,29 +240,45 @@ impl WorldFinalityProofV1 {
                 proof.height,
                 (proof.head.block_hash.clone(), proof.head.state_root.clone()),
             );
+            consensus_approvers_by_height
+                .insert(proof.height, proof.consensus.approver_ids.clone());
         }
 
-        let active_total_stake_by_height = active_total_stake_by_height(
-            self.validators.as_slice(),
-            self.from_height,
-            self.to_height,
+        let active_validator_sets = validate_validator_set_transitions(
+            self,
+            &committed_blocks,
+            &consensus_approvers_by_height,
         )?;
         for (index, commitment) in self.finality_commitments.iter().enumerate() {
             let expected_height = self.from_height + index as u64;
+            let active_set =
+                active_validator_set_for_height(&active_validator_sets, expected_height)
+                    .ok_or_else(|| {
+                        format!("missing active validator set at height {expected_height}")
+                    })?;
+            let validators_by_id = active_set
+                .validators
+                .iter()
+                .map(|validator| (validator.validator_id.as_str(), validator))
+                .collect::<BTreeMap<_, _>>();
+            let consensus_approvers = consensus_approvers_by_height
+                .get(&expected_height)
+                .ok_or_else(|| {
+                    format!("missing consensus approvers at height {expected_height}")
+                })?;
             validate_commitment(
                 commitment,
                 expected_height,
-                self.validator_set_hash.as_str(),
-                self.quorum_threshold_bps,
+                active_set.validator_set_hash.as_str(),
+                active_set.quorum_threshold_bps,
                 &validators_by_id,
-                &active_total_stake_by_height,
                 &committed_blocks,
-                self.head_proofs[index].consensus.approver_ids.as_slice(),
+                consensus_approvers.as_slice(),
             )?;
         }
         validate_misbehavior_evidence(
             self.misbehavior_evidence.as_slice(),
-            &validators_by_id,
+            &active_validator_sets,
             &committed_blocks,
         )?;
         Ok(())
@@ -243,6 +289,53 @@ impl WorldFinalityProofV1 {
         canonical_blake3_hex(&(WORLD_FINALITY_PROOF_HASH_DOMAIN_V1, self))
             .map_err(|err| format!("encode world finality proof: {err}"))
     }
+}
+
+pub fn world_finality_vote_signing_payload(
+    validator_id: &str,
+    height: u64,
+    block_hash: &str,
+    state_root: &str,
+    validator_set_hash: &str,
+    round_id: &str,
+) -> Result<Vec<u8>, serde_cbor::Error> {
+    serde_cbor::to_vec(&(
+        WORLD_FINALITY_VOTE_SIGNING_DOMAIN_V1,
+        validator_id,
+        height,
+        block_hash,
+        state_root,
+        validator_set_hash,
+        round_id,
+    ))
+}
+
+pub fn world_finality_validator_set_transition_signing_payload(
+    validator_id: &str,
+    from_validator_set_hash: &str,
+    to_validator_set_hash: &str,
+    to_validator_set_activation_height: u64,
+    transition_height: u64,
+    transition_block_hash: &str,
+) -> Result<Vec<u8>, serde_cbor::Error> {
+    serde_cbor::to_vec(&(
+        WORLD_FINALITY_VALIDATOR_SET_TRANSITION_SIGNING_DOMAIN_V1,
+        validator_id,
+        from_validator_set_hash,
+        to_validator_set_hash,
+        to_validator_set_activation_height,
+        transition_height,
+        transition_block_hash,
+    ))
+}
+
+#[derive(Debug, Clone)]
+struct ActiveFinalityValidatorSet {
+    validator_set_id: String,
+    activation_height: u64,
+    validator_set_hash: String,
+    validators: Vec<WorldFinalityValidatorV1>,
+    quorum_threshold_bps: u64,
 }
 
 pub fn compute_world_finality_validator_set_hash(
@@ -301,24 +394,265 @@ fn validate_validator_set(validators: &[WorldFinalityValidatorV1]) -> Result<(),
     Ok(())
 }
 
-fn active_total_stake_by_height(
+fn active_total_stake(
     validators: &[WorldFinalityValidatorV1],
-    from_height: u64,
-    to_height: u64,
-) -> Result<BTreeMap<u64, u128>, String> {
-    let mut totals = BTreeMap::new();
-    for height in from_height..=to_height {
-        let total = validators
-            .iter()
-            .filter(|validator| validator.is_active_at(height))
-            .map(|validator| u128::from(validator.stake_weight))
-            .sum::<u128>();
-        if total == 0 {
-            return Err(format!("no active validator stake at height {height}"));
-        }
-        totals.insert(height, total);
+    height: u64,
+) -> Result<u128, String> {
+    let total = validators
+        .iter()
+        .filter(|validator| validator.is_active_at(height))
+        .map(|validator| u128::from(validator.stake_weight))
+        .sum::<u128>();
+    if total == 0 {
+        return Err(format!("no active validator stake at height {height}"));
     }
-    Ok(totals)
+    Ok(total)
+}
+
+fn active_validator_set_for_height(
+    active_sets: &BTreeMap<u64, ActiveFinalityValidatorSet>,
+    height: u64,
+) -> Option<&ActiveFinalityValidatorSet> {
+    active_sets.range(..=height).next_back().map(|(_, set)| set)
+}
+
+fn validate_validator_set_transitions(
+    proof: &WorldFinalityProofV1,
+    committed_blocks: &BTreeMap<u64, (String, String)>,
+    consensus_approvers_by_height: &BTreeMap<u64, Vec<String>>,
+) -> Result<BTreeMap<u64, ActiveFinalityValidatorSet>, String> {
+    let mut active_sets = BTreeMap::new();
+    let mut current = ActiveFinalityValidatorSet {
+        validator_set_id: proof.validator_set_id.clone(),
+        activation_height: proof.validator_set_activation_height,
+        validator_set_hash: proof.validator_set_hash.clone(),
+        validators: proof.validators.clone(),
+        quorum_threshold_bps: proof.quorum_threshold_bps,
+    };
+    active_sets.insert(proof.from_height, current.clone());
+
+    let mut previous_activation_height = current.activation_height;
+    let mut previous_transition_height = current.activation_height.saturating_sub(1);
+    for (index, transition) in proof.validator_set_transitions.iter().enumerate() {
+        if transition.to_validator_set_activation_height > proof.to_height {
+            return Err(format!(
+                "validator_set_transitions[{index}].to_validator_set_activation_height must be inside verified range"
+            ));
+        }
+        if transition.to_validator_set_activation_height <= previous_activation_height
+            || transition.transition_height <= previous_transition_height
+        {
+            return Err(format!(
+                "validator_set_transitions[{index}] must be in strictly increasing execution order"
+            ));
+        }
+        previous_activation_height = transition.to_validator_set_activation_height;
+        previous_transition_height = transition.transition_height;
+    }
+
+    let mut seen_activation_heights = BTreeSet::new();
+    for (index, transition) in proof.validator_set_transitions.iter().enumerate() {
+        validate_single_validator_set_transition(
+            index,
+            transition,
+            &current,
+            committed_blocks,
+            consensus_approvers_by_height,
+        )?;
+        if !seen_activation_heights.insert(transition.to_validator_set_activation_height) {
+            return Err(format!(
+                "validator_set_transitions[{index}] duplicates an activation height"
+            ));
+        }
+        current = ActiveFinalityValidatorSet {
+            validator_set_id: transition.to_validator_set_id.clone(),
+            activation_height: transition.to_validator_set_activation_height,
+            validator_set_hash: transition.to_validator_set_hash.clone(),
+            validators: transition.to_validators.clone(),
+            quorum_threshold_bps: transition.to_quorum_threshold_bps,
+        };
+        active_sets.insert(
+            transition.to_validator_set_activation_height,
+            current.clone(),
+        );
+    }
+    Ok(active_sets)
+}
+
+fn validate_single_validator_set_transition(
+    index: usize,
+    transition: &WorldFinalityValidatorSetTransitionV1,
+    current: &ActiveFinalityValidatorSet,
+    committed_blocks: &BTreeMap<u64, (String, String)>,
+    consensus_approvers_by_height: &BTreeMap<u64, Vec<String>>,
+) -> Result<(), String> {
+    require_non_empty(
+        format!("validator_set_transitions[{index}].from_validator_set_id").as_str(),
+        &transition.from_validator_set_id,
+    )?;
+    require_non_empty(
+        format!("validator_set_transitions[{index}].to_validator_set_id").as_str(),
+        &transition.to_validator_set_id,
+    )?;
+    if transition.from_validator_set_id != current.validator_set_id {
+        return Err(format!(
+            "validator_set_transitions[{index}].from_validator_set_id must match active set"
+        ));
+    }
+    if transition.from_validator_set_hash != current.validator_set_hash {
+        return Err(format!(
+            "validator_set_transitions[{index}].from_validator_set_hash must match active set"
+        ));
+    }
+    if !(5_001..=10_000).contains(&transition.to_quorum_threshold_bps) {
+        return Err(format!(
+            "validator_set_transitions[{index}].to_quorum_threshold_bps must be in 5001..=10000"
+        ));
+    }
+    if transition.to_validator_set_activation_height != transition.transition_height + 1 {
+        return Err(format!(
+            "validator_set_transitions[{index}].to_validator_set_activation_height must be transition_height + 1"
+        ));
+    }
+    if transition.to_validator_set_activation_height <= current.activation_height {
+        return Err(format!(
+            "validator_set_transitions[{index}].to_validator_set_activation_height must advance active set height"
+        ));
+    }
+    let (transition_block_hash, _) = committed_blocks
+        .get(&transition.transition_height)
+        .ok_or_else(|| {
+            format!("validator_set_transitions[{index}].transition_height outside verified range")
+        })?;
+    if transition.transition_block_hash != *transition_block_hash {
+        return Err(format!(
+            "validator_set_transitions[{index}].transition_block_hash mismatch"
+        ));
+    }
+    let computed_to_hash = compute_world_finality_validator_set_hash(
+        transition.to_validator_set_id.as_str(),
+        transition.to_validator_set_activation_height,
+        transition.to_quorum_threshold_bps,
+        transition.to_validators.as_slice(),
+    )?;
+    if transition.to_validator_set_hash != computed_to_hash {
+        return Err(format!(
+            "validator_set_transitions[{index}] transition to_validator_set_hash mismatch"
+        ));
+    }
+
+    let current_validators_by_id = current
+        .validators
+        .iter()
+        .map(|validator| (validator.validator_id.as_str(), validator))
+        .collect::<BTreeMap<_, _>>();
+    let consensus_approvers = consensus_approvers_by_height
+        .get(&transition.transition_height)
+        .ok_or_else(|| {
+            format!(
+                "validator_set_transitions[{index}] missing consensus approvers at transition height"
+            )
+        })?;
+    validate_transition_approvals(
+        index,
+        transition,
+        &current_validators_by_id,
+        consensus_approvers.as_slice(),
+        current.quorum_threshold_bps,
+        current.validators.as_slice(),
+    )
+}
+
+fn validate_transition_approvals(
+    transition_index: usize,
+    transition: &WorldFinalityValidatorSetTransitionV1,
+    validators_by_id: &BTreeMap<&str, &WorldFinalityValidatorV1>,
+    consensus_approvers: &[String],
+    quorum_threshold_bps: u64,
+    validators: &[WorldFinalityValidatorV1],
+) -> Result<(), String> {
+    if transition.approvals.is_empty() {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].approvals must not be empty"
+        ));
+    }
+    let consensus_approver_set = consensus_approvers
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
+    let mut seen_approvers = BTreeSet::new();
+    let mut signed_stake = 0_u128;
+    for (index, approval) in transition.approvals.iter().enumerate() {
+        require_non_empty(
+            format!(
+                "validator_set_transitions[{transition_index}].approvals[{index}].validator_id"
+            )
+            .as_str(),
+            &approval.validator_id,
+        )?;
+        if !seen_approvers.insert(approval.validator_id.as_str()) {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].approvals[{index}] duplicate validator"
+            ));
+        }
+        if approval.from_validator_set_hash != transition.from_validator_set_hash
+            || approval.to_validator_set_hash != transition.to_validator_set_hash
+            || approval.to_validator_set_activation_height
+                != transition.to_validator_set_activation_height
+            || approval.transition_height != transition.transition_height
+            || approval.transition_block_hash != transition.transition_block_hash
+        {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].approvals[{index}] target mismatch"
+            ));
+        }
+        let validator = validators_by_id
+            .get(approval.validator_id.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "validator_set_transitions[{transition_index}].approvals[{index}] validator not in active set"
+                )
+            })?;
+        if !validator.is_active_at(transition.transition_height) {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].approvals[{index}] validator not active"
+            ));
+        }
+        if !consensus_approver_set.contains(approval.validator_id.as_str()) {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].approvals[{index}] validator was not a consensus approver"
+            ));
+        }
+        if approval.signature_scheme != "ed25519" {
+            return Err(format!(
+                "unsupported transition approval signature_scheme: {}",
+                approval.signature_scheme
+            ));
+        }
+        let payload = world_finality_validator_set_transition_signing_payload(
+            approval.validator_id.as_str(),
+            approval.from_validator_set_hash.as_str(),
+            approval.to_validator_set_hash.as_str(),
+            approval.to_validator_set_activation_height,
+            approval.transition_height,
+            approval.transition_block_hash.as_str(),
+        )
+        .map_err(|err| format!("encode transition approval signing payload: {err}"))?;
+        verify_ed25519_signature(
+            validator.finality_signer_public_key.as_str(),
+            approval.signature_hex.as_str(),
+            payload.as_slice(),
+            "transition approval signature",
+        )?;
+        signed_stake += u128::from(validator.stake_weight);
+    }
+    let total_stake = active_total_stake(validators, transition.transition_height)?;
+    if signed_stake * 10_000 < total_stake * u128::from(quorum_threshold_bps) {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}] approval stake below threshold: signed={signed_stake} total={total_stake} threshold_bps={quorum_threshold_bps}"
+        ));
+    }
+    Ok(())
 }
 
 fn validate_commitment(
@@ -327,7 +661,6 @@ fn validate_commitment(
     validator_set_hash: &str,
     quorum_threshold_bps: u64,
     validators_by_id: &BTreeMap<&str, &WorldFinalityValidatorV1>,
-    active_total_stake_by_height: &BTreeMap<u64, u128>,
     committed_blocks: &BTreeMap<u64, (String, String)>,
     consensus_approvers: &[String],
 ) -> Result<(), String> {
@@ -412,7 +745,7 @@ fn validate_commitment(
                 commitment.height, vote.validator_id
             ));
         }
-        if vote.signature_scheme != "ed25519_evidence_hash_v1" {
+        if vote.signature_scheme != "ed25519" {
             return Err(format!(
                 "unsupported finality vote signature_scheme: {}",
                 vote.signature_scheme
@@ -422,12 +755,41 @@ fn validate_commitment(
             format!("finality vote[{index}].signature_evidence_hash").as_str(),
             &vote.signature_evidence_hash,
         )?;
+        require_non_empty(
+            format!("finality vote[{index}].signature_hex").as_str(),
+            &vote.signature_hex,
+        )?;
+        let payload = world_finality_vote_signing_payload(
+            vote.validator_id.as_str(),
+            vote.height,
+            vote.block_hash.as_str(),
+            vote.state_root.as_str(),
+            commitment.validator_set_hash.as_str(),
+            commitment.round_id.as_str(),
+        )
+        .map_err(|err| format!("encode finality vote signing payload: {err}"))?;
+        let payload_hash = canonical_blake3_hex(&payload)
+            .map_err(|err| format!("encode finality vote signature evidence hash: {err}"))?;
+        if vote.signature_evidence_hash != payload_hash {
+            return Err(format!(
+                "finality vote signature_evidence_hash mismatch at height {} for {}",
+                commitment.height, vote.validator_id
+            ));
+        }
+        verify_ed25519_signature(
+            validator.finality_signer_public_key.as_str(),
+            vote.signature_hex.as_str(),
+            payload.as_slice(),
+            "finality vote signature",
+        )?;
         signed_stake += u128::from(validator.stake_weight);
     }
-    let total_stake = active_total_stake_by_height
-        .get(&commitment.height)
+    let active_validators = validators_by_id
+        .values()
         .copied()
-        .ok_or_else(|| format!("missing active stake at height {}", commitment.height))?;
+        .cloned()
+        .collect::<Vec<_>>();
+    let total_stake = active_total_stake(active_validators.as_slice(), commitment.height)?;
     if signed_stake * 10_000 < total_stake * u128::from(quorum_threshold_bps) {
         return Err(format!(
             "finality signed stake below threshold at height {}: signed={} total={} threshold_bps={}",
@@ -439,7 +801,7 @@ fn validate_commitment(
 
 fn validate_misbehavior_evidence(
     evidence: &[WorldFinalityMisbehaviorEvidenceV1],
-    validators_by_id: &BTreeMap<&str, &WorldFinalityValidatorV1>,
+    active_validator_sets: &BTreeMap<u64, ActiveFinalityValidatorSet>,
     committed_blocks: &BTreeMap<u64, (String, String)>,
 ) -> Result<(), String> {
     let mut seen = BTreeSet::new();
@@ -453,9 +815,23 @@ fn validate_misbehavior_evidence(
                 "misbehavior_evidence[{index}] duplicates an earlier evidence key"
             ));
         }
-        if !validators_by_id.contains_key(item.validator_id.as_str()) {
+        let active_set = active_validator_set_for_height(active_validator_sets, item.height)
+            .ok_or_else(|| {
+                format!("misbehavior_evidence[{index}].height is outside verified range")
+            })?;
+        let validators_by_id = active_set
+            .validators
+            .iter()
+            .map(|validator| (validator.validator_id.as_str(), validator))
+            .collect::<BTreeMap<_, _>>();
+        let validator = validators_by_id
+            .get(item.validator_id.as_str())
+            .ok_or_else(|| {
+                format!("misbehavior_evidence[{index}].validator_id not in active validator set")
+            })?;
+        if !validator.is_active_at(item.height) {
             return Err(format!(
-                "misbehavior_evidence[{index}].validator_id not in validator set"
+                "misbehavior_evidence[{index}].validator_id not active at evidence height"
             ));
         }
         if !matches!(
@@ -499,274 +875,37 @@ fn require_non_empty(label: &str, value: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn verify_ed25519_signature(
+    public_key_hex: &str,
+    signature_hex: &str,
+    payload: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    let public_key_bytes =
+        decode_hex_array::<32>(public_key_hex, format!("{label} public key").as_str())?;
+    let signature_bytes =
+        decode_hex_array::<64>(signature_hex, format!("{label} signature").as_str())?;
+    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+        .map_err(|err| format!("{label} public key invalid: {err}"))?;
+    let signature = Signature::from_bytes(&signature_bytes);
+    verifying_key
+        .verify(payload, &signature)
+        .map_err(|err| format!("{label} verification failed: {err}"))
+}
+
+fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], String> {
+    let bytes =
+        hex::decode(raw.trim()).map_err(|err| format!("{label} hex decode failed: {err}"))?;
+    bytes
+        .try_into()
+        .map_err(|bytes: Vec<u8>| format!("{label} must be {N} bytes, got {}", bytes.len()))
+}
+
 fn canonical_blake3_hex<T: Serialize>(value: &T) -> Result<String, serde_cbor::Error> {
     let payload = serde_cbor::to_vec(value)?;
     Ok(blake3::hash(&payload).to_hex().to_string())
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::distributed::{
-        BlobRef, CheckpointClosureEvidenceV1, ExecutionBindingEvidenceV1, HeadConsensusEvidenceV1,
-        WIRE_ENCODING_CBOR, WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_V1_SCHEMA,
-        WorldBlock, WorldHeadAnnounce,
-    };
-
-    fn sample_world_head_proof_at(height: u64, prev_block_hash: &str) -> WorldHeadProofV1 {
-        let state_root = format!("state-root-{height}");
-        let action_root = format!("action-root-{height}");
-        let journal_ref = format!("journal-ref-{height}");
-        let snapshot_ref = format!("snapshot-ref-{height}");
-        let block = WorldBlock {
-            world_id: "world-a".to_string(),
-            height,
-            prev_block_hash: prev_block_hash.to_string(),
-            action_root: action_root.clone(),
-            event_root: format!("event-root-{height}"),
-            state_root: state_root.clone(),
-            journal_ref: journal_ref.clone(),
-            snapshot_ref: snapshot_ref.clone(),
-            receipts_root: format!("receipts-root-{height}"),
-            proposer_id: "validator-a".to_string(),
-            timestamp_ms: 1_772_467_200_000 + height as i64,
-            signature: "block-signature-evidence-only".to_string(),
-        };
-        let block_hash = canonical_blake3_hex(&block).expect("block hash");
-        WorldHeadProofV1 {
-            schema_version: WORLD_HEAD_PROOF_V1_SCHEMA,
-            world_id: "world-a".to_string(),
-            height,
-            timestamp_ms: 1_772_467_200_000 + height as i64,
-            head: WorldHeadAnnounce {
-                world_id: "world-a".to_string(),
-                height,
-                block_hash: block_hash.clone(),
-                state_root: state_root.clone(),
-                timestamp_ms: 1_772_467_200_000 + height as i64,
-                signature: "head-signature-evidence-only".to_string(),
-            },
-            block,
-            snapshot_manifest_ref: BlobRef {
-                content_hash: snapshot_ref.clone(),
-                size_bytes: 120,
-                codec: WIRE_ENCODING_CBOR.to_string(),
-                links: vec!["snapshot-chunk-1".to_string()],
-            },
-            journal_segments_ref: BlobRef {
-                content_hash: journal_ref.clone(),
-                size_bytes: 80,
-                codec: WIRE_ENCODING_CBOR.to_string(),
-                links: vec!["journal-segment-1".to_string()],
-            },
-            consensus: HeadConsensusEvidenceV1 {
-                consensus_status: "committed".to_string(),
-                proposer_id: "validator-a".to_string(),
-                quorum_threshold: 2,
-                validator_count: 3,
-                vote_count: 2,
-                approver_ids: vec!["validator-a".to_string(), "validator-b".to_string()],
-                evidence_hash: format!("consensus-evidence-{height}"),
-            },
-            execution: ExecutionBindingEvidenceV1 {
-                execution_height: height,
-                node_block_hash: block_hash,
-                execution_block_hash: format!("execution-block-{height}"),
-                execution_state_root: state_root.clone(),
-                action_root,
-            },
-            checkpoint: Some(CheckpointClosureEvidenceV1 {
-                checkpoint_height: height,
-                execution_block_hash: format!("execution-block-{height}"),
-                execution_state_root: state_root.clone(),
-                manifest_ref: format!("checkpoint-manifest-{height}"),
-                manifest_hash: format!("checkpoint-manifest-hash-{height}"),
-                pinned_refs: vec![snapshot_ref, journal_ref, state_root],
-            }),
-            claim_boundary: WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1.to_string(),
-        }
-    }
-
-    fn sample_valid_finality_proof() -> WorldFinalityProofV1 {
-        let first = sample_world_head_proof_at(40, "prev-block-39");
-        let second = sample_world_head_proof_at(41, first.head.block_hash.as_str());
-        let third = sample_world_head_proof_at(42, second.head.block_hash.as_str());
-        let validators = vec![
-            WorldFinalityValidatorV1 {
-                validator_id: "validator-a".to_string(),
-                stake_weight: 34,
-                finality_signer_public_key: "finality-pk-a".to_string(),
-                activation_height: 1,
-                exit_height: None,
-            },
-            WorldFinalityValidatorV1 {
-                validator_id: "validator-b".to_string(),
-                stake_weight: 33,
-                finality_signer_public_key: "finality-pk-b".to_string(),
-                activation_height: 1,
-                exit_height: None,
-            },
-            WorldFinalityValidatorV1 {
-                validator_id: "validator-c".to_string(),
-                stake_weight: 33,
-                finality_signer_public_key: "finality-pk-c".to_string(),
-                activation_height: 1,
-                exit_height: None,
-            },
-        ];
-        let validator_set_hash =
-            compute_world_finality_validator_set_hash("sample-set-1", 1, 6_667, &validators)
-                .expect("validator set hash");
-        let head_proofs = vec![first, second, third];
-        let finality_commitments = head_proofs
-            .iter()
-            .map(|proof| WorldFinalityCommitmentV1 {
-                height: proof.height,
-                round_id: format!("round-{}", proof.height),
-                block_hash: proof.head.block_hash.clone(),
-                state_root: proof.head.state_root.clone(),
-                validator_set_hash: validator_set_hash.clone(),
-                quorum_threshold_bps: 6_667,
-                votes: vec![
-                    WorldFinalityVoteV1 {
-                        validator_id: "validator-a".to_string(),
-                        height: proof.height,
-                        block_hash: proof.head.block_hash.clone(),
-                        state_root: proof.head.state_root.clone(),
-                        signature_scheme: "ed25519_evidence_hash_v1".to_string(),
-                        signature_evidence_hash: format!("sig-a-{}", proof.height),
-                    },
-                    WorldFinalityVoteV1 {
-                        validator_id: "validator-b".to_string(),
-                        height: proof.height,
-                        block_hash: proof.head.block_hash.clone(),
-                        state_root: proof.head.state_root.clone(),
-                        signature_scheme: "ed25519_evidence_hash_v1".to_string(),
-                        signature_evidence_hash: format!("sig-b-{}", proof.height),
-                    },
-                ],
-            })
-            .collect();
-        WorldFinalityProofV1 {
-            schema_version: WORLD_FINALITY_PROOF_V1_SCHEMA,
-            world_id: "world-a".to_string(),
-            from_height: 40,
-            to_height: 42,
-            trusted_anchor_height: 39,
-            trusted_anchor_block_hash: "prev-block-39".to_string(),
-            validator_set_id: "sample-set-1".to_string(),
-            validator_set_activation_height: 1,
-            validator_set_hash,
-            validators,
-            quorum_threshold_bps: 6_667,
-            head_proofs,
-            finality_commitments,
-            misbehavior_evidence: vec![WorldFinalityMisbehaviorEvidenceV1 {
-                height: 42,
-                validator_id: "validator-c".to_string(),
-                evidence_kind: "conflicting_head".to_string(),
-                conflicting_block_hash: "conflicting-block-42".to_string(),
-                conflicting_proof_hash: "conflicting-proof-42".to_string(),
-                disposition: "rejected".to_string(),
-            }],
-            claim_boundary: WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1.to_string(),
-        }
-    }
-
-    #[test]
-    fn world_finality_proof_v1_validates_contract_and_hash() {
-        let proof = sample_valid_finality_proof();
-        proof.validate_contract().expect("valid finality proof");
-        let proof_hash = proof.proof_hash().expect("proof hash");
-        assert!(!proof_hash.is_empty());
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_below_stake_threshold() {
-        let mut proof = sample_valid_finality_proof();
-        for commitment in &mut proof.finality_commitments {
-            commitment.votes.pop();
-        }
-
-        let err = proof
-            .validate_contract()
-            .expect_err("below threshold rejected");
-        assert!(err.contains("signed stake below threshold"), "{err}");
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_large_stake_below_threshold_without_overflow() {
-        let mut proof = sample_valid_finality_proof();
-        proof.validators[0].stake_weight = u64::MAX;
-        proof.validators[1].stake_weight = u64::MAX;
-        proof.validators[2].stake_weight = 1;
-        proof.validator_set_hash = compute_world_finality_validator_set_hash(
-            proof.validator_set_id.as_str(),
-            proof.validator_set_activation_height,
-            proof.quorum_threshold_bps,
-            proof.validators.as_slice(),
-        )
-        .expect("large validator set hash");
-        for commitment in &mut proof.finality_commitments {
-            commitment.validator_set_hash = proof.validator_set_hash.clone();
-            commitment.votes.truncate(1);
-        }
-
-        let err = proof
-            .validate_contract()
-            .expect_err("large below-threshold stake rejected");
-        assert!(err.contains("signed stake below threshold"), "{err}");
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_vote_not_in_consensus_approvers() {
-        let mut proof = sample_valid_finality_proof();
-        proof.finality_commitments[0].votes[1].validator_id = "validator-c".to_string();
-        proof.finality_commitments[0].votes[1].signature_evidence_hash = "sig-c-40".to_string();
-
-        let err = proof
-            .validate_contract()
-            .expect_err("non consensus approver rejected");
-        assert!(
-            err.contains("was not a consensus approver at height 40"),
-            "{err}"
-        );
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_validator_set_hash_tamper() {
-        let mut proof = sample_valid_finality_proof();
-        proof.validator_set_hash = "wrong-validator-set-hash".to_string();
-
-        let err = proof
-            .validate_contract()
-            .expect_err("validator set hash tamper rejected");
-        assert!(err.contains("validator set hash mismatch"), "{err}");
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_conflicting_hash_equal_to_committed_head() {
-        let mut proof = sample_valid_finality_proof();
-        proof.misbehavior_evidence[0].conflicting_block_hash =
-            proof.head_proofs[2].head.block_hash.clone();
-
-        let err = proof
-            .validate_contract()
-            .expect_err("same conflicting hash rejected");
-        assert!(
-            err.contains("conflicting_block_hash must differ from committed head"),
-            "{err}"
-        );
-    }
-
-    #[test]
-    fn world_finality_proof_v1_rejects_misbehavior_height_outside_verified_range() {
-        let mut proof = sample_valid_finality_proof();
-        proof.misbehavior_evidence[0].height = 99;
-
-        let err = proof
-            .validate_contract()
-            .expect_err("out-of-window misbehavior evidence rejected");
-        assert!(err.contains("height is outside verified range"), "{err}");
-    }
-}
+#[path = "distributed_finality_tests.rs"]
+mod distributed_finality_tests;

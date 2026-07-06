@@ -256,10 +256,11 @@ evidence = {
         "DA sampling",
         "multi-client consensus equivalence",
         "ready_for_live_candidate",
+        "live public launch",
     ],
     "residual_risk": [
         "continuity window verifies bounded head/proof linkage only",
-        "validator-set transition and finality signature verification are not yet proven",
+        "validator-set transition and finality signature verification are not proven by this continuity-window lane",
     ],
 }
 
