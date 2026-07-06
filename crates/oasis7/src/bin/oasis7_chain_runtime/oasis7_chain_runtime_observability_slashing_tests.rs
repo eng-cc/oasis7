@@ -165,6 +165,7 @@ fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
         &network_head,
         &sample_slashing_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
 
@@ -220,6 +221,7 @@ fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
         &receipted_network_head,
         &sample_slashing_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
     assert_eq!(receipted_status.slashing_receipt_count, 1);

@@ -53,6 +53,7 @@ fn mainnet_validator_relay_policy_requires_governed_redundancy_and_surfaces_slas
         &network_head,
         &p2p,
         &policy,
+        None,
         1_700_000_000_000,
     );
 

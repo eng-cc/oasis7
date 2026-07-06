@@ -687,6 +687,7 @@ fn build_chain_status_payload_marks_local_chain_ahead_of_network_head() {
         &network_head,
         &sample_observability_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
 
@@ -796,6 +797,7 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
         &network_head,
         &sample_observability_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
 
@@ -992,6 +994,7 @@ fn build_chain_status_payload_marks_validator_unknown_reachability_not_ready() {
         &network_head,
         &p2p,
         &policy,
+        None,
         10_100,
     );
 
