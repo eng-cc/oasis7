@@ -4248,7 +4248,7 @@ function renderDetails() {
       </div>
       ${renderInteractionPanel()}
       ${state.selectedObject
-        ? `<pre class="json">${escapeHtml(JSON.stringify(clone(state.selectedObject), null, 2))}</pre>`
+        ? `<pre class="json">${escapeHtml(JSON.stringify(state.selectedObject, null, 2))}</pre>`
         : '<div class="empty">Select an agent or location from the left list.</div>'}
       <div>
         <div class="panel__title" style="margin-bottom:10px;">Snapshot Summary</div>
