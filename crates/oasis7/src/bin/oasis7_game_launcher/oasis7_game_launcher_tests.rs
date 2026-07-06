@@ -35,6 +35,8 @@ use oasis7_proto::storage_profile::StorageProfile;
 #[path = "viewer_static_dir_tests.rs"]
 mod viewer_static_dir_tests;
 use viewer_static_dir_tests::make_temp_dir;
+#[path = "launcher_hosted_public_join_tests.rs"]
+mod launcher_hosted_public_join_tests;
 #[path = "launcher_static_http_tests.rs"]
 mod launcher_static_http_tests;
 #[path = "launcher_viewer_auth_bootstrap_tests.rs"]
@@ -766,36 +768,6 @@ fn parse_options_ignores_chain_tuning_when_hosted_public_join_disables_chain() {
     assert!(!options.chain_enabled);
     assert_eq!(options.chain_pos_ticks_per_slot, 4);
     assert_eq!(options.chain_pos_proposal_tick_phase, 4);
-}
-
-#[test]
-fn build_viewer_live_command_keeps_chain_status_bind_for_hosted_public_join() {
-    let options = parse_options(
-        [
-            "--deployment-mode",
-            "hosted_public_join",
-            "--chain-status-bind",
-            "39.104.204.172:6631",
-            "--chain-link-policy",
-            "enforcing",
-        ]
-        .into_iter(),
-    )
-    .expect("hosted public join should parse");
-    assert!(!options.chain_enabled);
-
-    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-
-    assert!(args.contains(&"--deployment-mode".to_string()));
-    assert!(args.contains(&"hosted_public_join".to_string()));
-    assert!(args.contains(&"--chain-status-bind".to_string()));
-    assert!(args.contains(&"39.104.204.172:6631".to_string()));
-    assert!(args.contains(&"--chain-link-policy".to_string()));
-    assert!(args.contains(&"enforcing".to_string()));
 }
 
 #[test]
