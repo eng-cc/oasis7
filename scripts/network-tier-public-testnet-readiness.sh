@@ -1279,6 +1279,224 @@ def validate_light_client_continuity_window_pass_evidence(
     return blockers
 
 
+def validate_validator_finality_proof_pass_evidence(
+    raw: str,
+    evidence: pathlib.Path,
+    manifest_path: pathlib.Path,
+    manifest_ref: str,
+    manifest_data: dict,
+) -> list[str]:
+    lane = "validator_finality_proof_ready"
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"{lane} evidence must be JSON: {raw} ({exc})"]
+
+    if data.get("evidence_schema") != "oasis7.validator_finality_proof.v1":
+        blockers.append(f"{lane} evidence_schema mismatch: {raw}")
+    if data.get("status") != "pass":
+        blockers.append(f"{lane} status must be pass: {raw}")
+    if data.get("verifier_mode") != "validator_set_finality":
+        blockers.append(f"{lane} verifier_mode must be validator_set_finality: {raw}")
+    if data.get("independent_process") is not True:
+        blockers.append(f"{lane} independent_process must be true: {raw}")
+    for key in ("implementation_ref", "command_ref", "finality_proof_ref", "finality_proof_hash"):
+        if not str(data.get(key) or "").strip():
+            blockers.append(f"{lane} {key} missing: {raw}")
+
+    network_tier = data.get("network_tier")
+    if not isinstance(network_tier, dict):
+        blockers.append(f"{lane} network_tier object missing: {raw}")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            blockers.append(f"{lane} network_tier.tier must be public_testnet: {raw}")
+        if network_tier.get("network_id") != manifest_data.get("network_id"):
+            blockers.append(f"{lane} network_tier.network_id must match manifest: {raw}")
+        if network_tier.get("chain_id") != manifest_data.get("chain_id"):
+            blockers.append(f"{lane} network_tier.chain_id must match manifest: {raw}")
+        for key in ("network_id", "chain_id", "world_id"):
+            if not str(network_tier.get(key) or "").strip():
+                blockers.append(f"{lane} network_tier.{key} missing: {raw}")
+
+    expected_refs = [
+        ("manifest_ref", manifest_ref, manifest_path),
+        ("genesis_ref", manifest_data["runtime_refs"]["genesis_ref"], resolve_ref(manifest_data["runtime_refs"]["genesis_ref"])),
+        ("bootstrap_peer_ref", manifest_data["runtime_refs"]["bootstrap_peer_ref"], resolve_ref(manifest_data["runtime_refs"]["bootstrap_peer_ref"])),
+    ]
+    for key, expected_raw, expected_resolved in expected_refs:
+        actual = str(data.get(key) or "").strip()
+        if not actual:
+            blockers.append(f"{lane} {key} missing: {raw}")
+        elif not ref_matches(actual, expected_raw, expected_resolved):
+            blockers.append(f"{lane} {key} must match manifest: {raw}")
+
+    rpc_ref = str(data.get("rpc_ref") or "").strip()
+    status_endpoint_ref = str(data.get("status_endpoint_ref") or "").strip()
+    expected_rpc_ref = str(manifest_data.get("endpoint_policy", {}).get("rpc_ref") or "").strip()
+    if not rpc_ref and not status_endpoint_ref:
+        blockers.append(f"{lane} rpc_ref or status_endpoint_ref missing: {raw}")
+    if rpc_ref and rpc_ref != expected_rpc_ref:
+        blockers.append(f"{lane} rpc_ref must match manifest endpoint_policy.rpc_ref: {raw}")
+
+    sample_window = data.get("sample_window")
+    if not isinstance(sample_window, dict):
+        blockers.append(f"{lane} sample_window object missing: {raw}")
+    else:
+        for key in ("started_at", "ended_at"):
+            if not str(sample_window.get(key) or "").strip():
+                blockers.append(f"{lane} sample_window.{key} missing: {raw}")
+
+    observed_head = data.get("observed_head")
+    observed_height = 0
+    observed_hash = ""
+    observed_state_root = ""
+    if not isinstance(observed_head, dict):
+        blockers.append(f"{lane} observed_head object missing: {raw}")
+    else:
+        try:
+            observed_height = int(observed_head.get("height") or 0)
+        except (TypeError, ValueError):
+            observed_height = 0
+        if observed_height <= 0:
+            blockers.append(f"{lane} observed_head.height must be positive: {raw}")
+        observed_hash = str(observed_head.get("hash") or "").strip()
+        observed_state_root = str(observed_head.get("state_root") or "").strip()
+        if not observed_hash:
+            blockers.append(f"{lane} observed_head.hash missing: {raw}")
+        if not observed_state_root:
+            blockers.append(f"{lane} observed_head.state_root missing: {raw}")
+
+    verified_range = data.get("verified_range")
+    from_height = 0
+    to_height = 0
+    if not isinstance(verified_range, dict):
+        blockers.append(f"{lane} verified_range object missing: {raw}")
+    else:
+        try:
+            from_height = int(verified_range.get("from_height") or 0)
+            to_height = int(verified_range.get("to_height") or 0)
+        except (TypeError, ValueError):
+            from_height = 0
+            to_height = 0
+        if from_height <= 0:
+            blockers.append(f"{lane} verified_range.from_height must be positive: {raw}")
+        if to_height < from_height:
+            blockers.append(f"{lane} verified_range.to_height must be >= from_height: {raw}")
+        if observed_height and to_height != observed_height:
+            blockers.append(f"{lane} verified_range.to_height must match observed_head.height: {raw}")
+
+    validator_set = data.get("validator_set")
+    if not isinstance(validator_set, dict):
+        blockers.append(f"{lane} validator_set object missing: {raw}")
+    else:
+        for key in ("validator_set_id", "validator_set_hash", "quorum_threshold_bps"):
+            if not str(validator_set.get(key) or "").strip():
+                blockers.append(f"{lane} validator_set.{key} missing: {raw}")
+        if int(validator_set.get("validator_count") or 0) <= 0:
+            blockers.append(f"{lane} validator_set.validator_count must be positive: {raw}")
+
+    finality_sample = data.get("finality_sample")
+    if not isinstance(finality_sample, dict):
+        blockers.append(f"{lane} finality_sample object missing: {raw}")
+    else:
+        for key in (
+            "commitment_count",
+            "vote_count",
+            "stake_threshold_checked",
+            "validator_set_hash_checked",
+            "consensus_approver_subset_checked",
+        ):
+            if key not in finality_sample:
+                blockers.append(f"{lane} finality_sample.{key} missing: {raw}")
+        for key in ("stake_threshold_checked", "validator_set_hash_checked", "consensus_approver_subset_checked"):
+            if finality_sample.get(key) is not True:
+                blockers.append(f"{lane} finality_sample.{key} must be true: {raw}")
+        if int(finality_sample.get("commitment_count") or 0) <= 0:
+            blockers.append(f"{lane} finality_sample.commitment_count must be positive: {raw}")
+        if int(finality_sample.get("vote_count") or 0) <= 0:
+            blockers.append(f"{lane} finality_sample.vote_count must be positive: {raw}")
+
+    if data.get("misbehavior_result") not in {"none_observed", "rejected", "evidence_recorded"}:
+        blockers.append(f"{lane} misbehavior_result unsupported: {raw}")
+    fork_cases = data.get("fork_or_reorg_cases")
+    if not isinstance(fork_cases, list) or not fork_cases:
+        blockers.append(f"{lane} fork_or_reorg_cases must be a non-empty array: {raw}")
+
+    verifier = data.get("external_verifier")
+    if not isinstance(verifier, dict):
+        blockers.append(f"{lane} external_verifier object missing: {raw}")
+    else:
+        if verifier.get("schema_version") != "oasis7.world_finality_proof_verifier.v1":
+            blockers.append(f"{lane} external_verifier.schema_version mismatch: {raw}")
+        if verifier.get("status") != "pass":
+            blockers.append(f"{lane} external_verifier.status must be pass: {raw}")
+        if verifier.get("verifier_mode") != "validator_set_finality":
+            blockers.append(f"{lane} external_verifier.verifier_mode mismatch: {raw}")
+        if verifier.get("proof_contract") != "WorldFinalityProofV1":
+            blockers.append(f"{lane} external_verifier.proof_contract must be WorldFinalityProofV1: {raw}")
+        if verifier.get("claim_boundary") != "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness":
+            blockers.append(f"{lane} external_verifier.claim_boundary mismatch: {raw}")
+        if str(verifier.get("proof_hash") or "").strip() != str(data.get("finality_proof_hash") or "").strip():
+            blockers.append(f"{lane} external_verifier.proof_hash must match evidence finality_proof_hash: {raw}")
+        if str(verifier.get("world_id") or "").strip() != str(network_tier.get("world_id") if isinstance(network_tier, dict) else "").strip():
+            blockers.append(f"{lane} external_verifier.world_id must match network_tier.world_id: {raw}")
+        if int(verifier.get("from_height") or 0) != from_height:
+            blockers.append(f"{lane} external_verifier.from_height must match verified_range: {raw}")
+        if int(verifier.get("to_height") or 0) != to_height:
+            blockers.append(f"{lane} external_verifier.to_height must match verified_range: {raw}")
+        verifier_head = verifier.get("head")
+        if not isinstance(verifier_head, dict):
+            blockers.append(f"{lane} external_verifier.head object missing: {raw}")
+        else:
+            if str(verifier_head.get("block_hash") or "").strip() != observed_hash:
+                blockers.append(f"{lane} external_verifier.head.block_hash must match observed_head.hash: {raw}")
+            if str(verifier_head.get("state_root") or "").strip() != observed_state_root:
+                blockers.append(f"{lane} external_verifier.head.state_root must match observed_head.state_root: {raw}")
+        verifier_set = verifier.get("validator_set")
+        if isinstance(validator_set, dict) and isinstance(verifier_set, dict):
+            if verifier_set.get("validator_set_hash") != validator_set.get("validator_set_hash"):
+                blockers.append(f"{lane} external_verifier.validator_set_hash must match evidence: {raw}")
+        else:
+            blockers.append(f"{lane} external_verifier.validator_set object missing: {raw}")
+
+    for key in (
+        "node_db_access_used",
+        "manual_checkpoint_or_data_copy_used",
+        "privileged_internal_api_used",
+    ):
+        if data.get(key) is not False:
+            blockers.append(f"{lane} {key} must be false: {raw}")
+
+    does_not_claim = data.get("does_not_claim")
+    if not isinstance(does_not_claim, list):
+        blockers.append(f"{lane} does_not_claim must be an array: {raw}")
+    else:
+        required_denials = {
+            "full light client security",
+            "mainnet-grade finality",
+            "trust-minimized validator transition",
+            "cryptographic signature verification",
+            "public validator onboarding open",
+            "permissionless validator onboarding",
+            "DA sampling",
+            "multi-client consensus equivalence",
+            "ready_for_live_candidate",
+        }
+        missing_denials = sorted(required_denials.difference(set(does_not_claim)))
+        if missing_denials:
+            blockers.append(
+                f"{lane} does_not_claim missing: "
+                + ",".join(missing_denials)
+                + f": {raw}"
+            )
+
+    residual_risk = data.get("residual_risk")
+    if not isinstance(residual_risk, list) or not residual_risk:
+        blockers.append(f"{lane} residual_risk must be a non-empty array: {raw}")
+    return blockers
+
+
 def escape_markdown_cell(raw: str) -> str:
     return raw.replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>")
 
@@ -1396,6 +1614,12 @@ if lanes_tsv_arg:
                 )
                 if window_blockers:
                     raise SystemExit("; ".join(window_blockers))
+            if lane_id == "validator_finality_proof_ready" and status == "pass":
+                finality_blockers = validate_validator_finality_proof_pass_evidence(
+                    evidence_path, evidence, manifest_path, sys.argv[1], data
+                )
+                if finality_blockers:
+                    raise SystemExit("; ".join(finality_blockers))
             seen_lane_ids.add(lane_id)
             lanes.append(
                 {

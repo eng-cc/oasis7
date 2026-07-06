@@ -2,27 +2,41 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use oasis7_proto::distributed::{
-    BlobRef, CheckpointClosureEvidenceV1, ExecutionBindingEvidenceV1, HeadConsensusEvidenceV1,
-    WIRE_ENCODING_CBOR, WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_HASH_DOMAIN_V1,
-    WORLD_HEAD_PROOF_V1_SCHEMA, WorldBlock, WorldHeadAnnounce, WorldHeadProofV1,
+    WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_HASH_DOMAIN_V1, WorldHeadProofV1,
 };
-use serde::Serialize;
 use serde_json::json;
 
+#[path = "oasis7_world_head_proof_verify/oasis7_finality_proof.rs"]
+mod oasis7_finality_proof;
 #[path = "oasis7_world_head_proof_verify/oasis7_state_receipt_proof.rs"]
 mod oasis7_state_receipt_proof;
+#[path = "oasis7_world_head_proof_verify/oasis7_world_head_proof_samples.rs"]
+mod oasis7_world_head_proof_samples;
 #[path = "oasis7_world_head_proof_verify/oasis7_world_head_proof_window.rs"]
 mod oasis7_world_head_proof_window;
 
+use oasis7_finality_proof::{verify_finality_proof_path, write_sample_finality_json};
 use oasis7_state_receipt_proof::{
     verify_state_receipt_proof_path, write_sample_state_receipt_json,
 };
+use oasis7_world_head_proof_samples::{write_sample_head_json, write_sample_window_json};
 use oasis7_world_head_proof_window::{ProofWindowExpectations, verify_proof_window};
 
 #[cfg(test)]
-use oasis7_proto::distributed::WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1;
+use oasis7_finality_proof::sample_world_finality_proof;
+#[cfg(test)]
+use oasis7_proto::distributed::{
+    WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1, WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1,
+};
 #[cfg(test)]
 use oasis7_state_receipt_proof::sample_world_state_receipt_proof;
+#[cfg(test)]
+use oasis7_world_head_proof_samples::{
+    canonical_blake3_hex, sample_world_head_proof, sample_world_head_proof_at,
+    sample_world_head_proof_window,
+};
+#[cfg(test)]
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputFormat {
@@ -44,6 +58,7 @@ struct Args {
     proof_path: PathBuf,
     proof_window_path: Option<PathBuf>,
     state_receipt_proof_path: Option<PathBuf>,
+    finality_proof_path: Option<PathBuf>,
     proof_ref: Option<String>,
     format: InputFormat,
     expect_hash: Option<String>,
@@ -55,11 +70,12 @@ struct Args {
     write_sample_json: Option<PathBuf>,
     write_sample_window_json: Option<PathBuf>,
     write_sample_state_receipt_json: Option<PathBuf>,
+    write_sample_finality_json: Option<PathBuf>,
     emit_json: bool,
 }
 
 fn usage() -> &'static str {
-    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>|--state-receipt-proof <path>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--write-sample-state-receipt-json <path>] [--json]"
+    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>|--state-receipt-proof <path>|--finality-proof <path>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--write-sample-state-receipt-json <path>] [--write-sample-finality-json <path>] [--json]"
 }
 
 fn parse_args<I>(args: I) -> Result<Args, String>
@@ -69,6 +85,7 @@ where
     let mut proof_path = None;
     let mut proof_window_path = None;
     let mut state_receipt_proof_path = None;
+    let mut finality_proof_path = None;
     let mut proof_ref = None;
     let mut format = InputFormat::Cbor;
     let mut expect_hash = None;
@@ -80,6 +97,7 @@ where
     let mut write_sample_json = None;
     let mut write_sample_window_json = None;
     let mut write_sample_state_receipt_json = None;
+    let mut write_sample_finality_json = None;
     let mut emit_json = false;
     let mut iter = args.into_iter();
     let _program = iter.next();
@@ -101,6 +119,12 @@ where
                 state_receipt_proof_path =
                     Some(PathBuf::from(iter.next().ok_or_else(|| {
                         "--state-receipt-proof requires a path".to_string()
+                    })?));
+            }
+            "--finality-proof" => {
+                finality_proof_path =
+                    Some(PathBuf::from(iter.next().ok_or_else(|| {
+                        "--finality-proof requires a path".to_string()
                     })?));
             }
             "--format" => {
@@ -181,6 +205,12 @@ where
                         "--write-sample-state-receipt-json requires a path".to_string()
                     })?));
             }
+            "--write-sample-finality-json" => {
+                write_sample_finality_json =
+                    Some(PathBuf::from(iter.next().ok_or_else(|| {
+                        "--write-sample-finality-json requires a path".to_string()
+                    })?));
+            }
             "--json" => {
                 emit_json = true;
             }
@@ -195,6 +225,7 @@ where
             proof_path: PathBuf::new(),
             proof_window_path,
             state_receipt_proof_path,
+            finality_proof_path,
             proof_ref,
             format,
             expect_hash,
@@ -206,6 +237,7 @@ where
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
+            write_sample_finality_json,
             emit_json,
         });
     }
@@ -214,6 +246,7 @@ where
             proof_path: PathBuf::new(),
             proof_window_path,
             state_receipt_proof_path,
+            finality_proof_path,
             proof_ref,
             format,
             expect_hash,
@@ -225,6 +258,7 @@ where
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
+            write_sample_finality_json,
             emit_json,
         });
     }
@@ -233,6 +267,7 @@ where
             proof_path: PathBuf::new(),
             proof_window_path,
             state_receipt_proof_path,
+            finality_proof_path,
             proof_ref,
             format,
             expect_hash,
@@ -244,6 +279,28 @@ where
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
+            write_sample_finality_json,
+            emit_json,
+        });
+    }
+    if write_sample_finality_json.is_some() {
+        return Ok(Args {
+            proof_path: PathBuf::new(),
+            proof_window_path,
+            state_receipt_proof_path,
+            finality_proof_path,
+            proof_ref,
+            format,
+            expect_hash,
+            expect_world_id,
+            expect_height,
+            expect_from_height,
+            expect_to_height,
+            expect_anchor_hash,
+            write_sample_json,
+            write_sample_window_json,
+            write_sample_state_receipt_json,
+            write_sample_finality_json,
             emit_json,
         });
     }
@@ -251,28 +308,37 @@ where
         proof_path.is_some(),
         proof_window_path.is_some(),
         state_receipt_proof_path.is_some(),
+        finality_proof_path.is_some(),
     ]
     .into_iter()
     .filter(|selected| *selected)
     .count();
     if selected_modes > 1 {
         return Err(
-            "--proof, --proof-window, and --state-receipt-proof cannot be combined".to_string(),
+            "--proof, --proof-window, --state-receipt-proof, and --finality-proof cannot be combined".to_string(),
         );
     }
     Ok(Args {
-        proof_path: match (&proof_path, &proof_window_path, &state_receipt_proof_path) {
-            (Some(path), None, None) => path.clone(),
-            (None, Some(_), None) | (None, None, Some(_)) => PathBuf::new(),
-            (None, None, None) => {
+        proof_path: match (
+            &proof_path,
+            &proof_window_path,
+            &state_receipt_proof_path,
+            &finality_proof_path,
+        ) {
+            (Some(path), None, None, None) => path.clone(),
+            (None, Some(_), None, None)
+            | (None, None, Some(_), None)
+            | (None, None, None, Some(_)) => PathBuf::new(),
+            (None, None, None, None) => {
                 return Err(
-                    "--proof, --proof-window, or --state-receipt-proof is required".to_string(),
+                    "--proof, --proof-window, --state-receipt-proof, or --finality-proof is required".to_string(),
                 );
             }
             _ => unreachable!("selected_modes rejected combined proof modes"),
         },
         proof_window_path,
         state_receipt_proof_path,
+        finality_proof_path,
         proof_ref,
         format,
         expect_hash,
@@ -284,6 +350,7 @@ where
         write_sample_json,
         write_sample_window_json,
         write_sample_state_receipt_json,
+        write_sample_finality_json,
         emit_json,
     })
 }
@@ -304,99 +371,16 @@ fn decode_proof_from_path(path: &Path, format: InputFormat) -> Result<WorldHeadP
 
 fn verify(args: Args) -> Result<serde_json::Value, String> {
     if let Some(path) = args.write_sample_json {
-        let proof = sample_world_head_proof();
-        fs::write(
-            &path,
-            serde_json::to_vec_pretty(&proof)
-                .map_err(|err| format!("encode sample proof json: {err}"))?,
-        )
-        .map_err(|err| format!("write sample proof {}: {err}", path.display()))?;
-        return Ok(json!({
-            "schema_version": "oasis7.world_head_proof_verifier_fixture.v1",
-            "status": "sample_written",
-            "proof_path": path,
-            "proof_hash": proof.proof_hash()?,
-            "world_id": proof.world_id,
-            "height": proof.height,
-            "head": {
-                "block_hash": proof.head.block_hash,
-                "state_root": proof.head.state_root
-            }
-        }));
+        return write_sample_head_json(path.as_path());
     }
     if let Some(dir) = args.write_sample_window_json {
-        let proofs = sample_world_head_proof_window();
-        fs::create_dir_all(&dir)
-            .map_err(|err| format!("create sample proof window dir {}: {err}", dir.display()))?;
-        let mut entries = Vec::new();
-        for (index, proof) in proofs.iter().enumerate() {
-            let proof_file_name = format!("proof-{index}.json");
-            let proof_path = dir.join(&proof_file_name);
-            fs::write(
-                &proof_path,
-                serde_json::to_vec_pretty(proof)
-                    .map_err(|err| format!("encode sample window proof json: {err}"))?,
-            )
-            .map_err(|err| format!("write sample window proof {}: {err}", proof_path.display()))?;
-            entries.push(json!({
-                "proof": proof_file_name,
-                "proof_ref": format!("sample-proof-ref-{}", proof.height),
-                "format": "json",
-                "expect_hash": proof.proof_hash()?,
-            }));
-        }
-        let first = proofs.first().expect("sample proof window first proof");
-        let last = proofs.last().expect("sample proof window last proof");
-        let window_path = dir.join("window.json");
-        let manifest = json!({
-            "schema_version": "oasis7.world_head_proof_window.v1",
-            "window_id": "sample-window-40-42",
-            "world_id": first.world_id,
-            "from_height": first.height,
-            "to_height": last.height,
-            "trusted_anchor": {
-                "height": first.height - 1,
-                "block_hash": first.block.prev_block_hash,
-                "state_root": "trusted-anchor-state-root"
-            },
-            "proofs": entries,
-            "observed_head": {
-                "height": last.height,
-                "block_hash": last.head.block_hash,
-                "state_root": last.head.state_root
-            }
-        });
-        fs::write(
-            &window_path,
-            serde_json::to_vec_pretty(&manifest)
-                .map_err(|err| format!("encode sample window manifest json: {err}"))?,
-        )
-        .map_err(|err| {
-            format!(
-                "write sample window manifest {}: {err}",
-                window_path.display()
-            )
-        })?;
-        return Ok(json!({
-            "schema_version": "oasis7.world_head_proof_window_verifier_fixture.v1",
-            "status": "sample_window_written",
-            "window_path": window_path,
-            "world_id": first.world_id,
-            "from_height": first.height,
-            "to_height": last.height,
-            "trusted_anchor": {
-                "height": first.height - 1,
-                "block_hash": first.block.prev_block_hash
-            },
-            "observed_head": {
-                "height": last.height,
-                "block_hash": last.head.block_hash,
-                "state_root": last.head.state_root
-            }
-        }));
+        return write_sample_window_json(dir.as_path());
     }
     if let Some(path) = args.write_sample_state_receipt_json {
         return write_sample_state_receipt_json(path.as_path());
+    }
+    if let Some(path) = args.write_sample_finality_json {
+        return write_sample_finality_json(path.as_path());
     }
     if let Some(window_path) = args.proof_window_path.clone() {
         return verify_proof_window(
@@ -412,6 +396,16 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
     }
     if let Some(path) = args.state_receipt_proof_path.clone() {
         return verify_state_receipt_proof_path(
+            path.as_path(),
+            args.format.as_str(),
+            args.expect_hash.as_deref(),
+            args.expect_world_id.as_deref(),
+            args.expect_height,
+            args.proof_ref,
+        );
+    }
+    if let Some(path) = args.finality_proof_path.clone() {
+        return verify_finality_proof_path(
             path.as_path(),
             args.format.as_str(),
             args.expect_hash.as_deref(),
@@ -471,96 +465,6 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
     }))
 }
 
-fn canonical_blake3_hex<T: Serialize>(value: &T) -> String {
-    let payload = serde_cbor::to_vec(value).expect("encode canonical cbor");
-    blake3::hash(payload.as_slice()).to_hex().to_string()
-}
-
-fn sample_world_head_proof() -> WorldHeadProofV1 {
-    sample_world_head_proof_at(42, "prev-block-41")
-}
-
-fn sample_world_head_proof_at(height: u64, prev_block_hash: &str) -> WorldHeadProofV1 {
-    let state_root = format!("state-root-{height}");
-    let action_root = format!("action-root-{height}");
-    let journal_ref = format!("journal-ref-{height}");
-    let snapshot_ref = format!("snapshot-ref-{height}");
-    let block = WorldBlock {
-        world_id: "world-a".to_string(),
-        height,
-        prev_block_hash: prev_block_hash.to_string(),
-        action_root: action_root.clone(),
-        event_root: format!("event-root-{height}"),
-        state_root: state_root.clone(),
-        journal_ref: journal_ref.clone(),
-        snapshot_ref: snapshot_ref.clone(),
-        receipts_root: format!("receipts-root-{height}"),
-        proposer_id: "validator-a".to_string(),
-        timestamp_ms: 1_772_467_200_000 + height as i64,
-        signature: "block-signature-evidence-only".to_string(),
-    };
-    let block_hash = canonical_blake3_hex(&block);
-    WorldHeadProofV1 {
-        schema_version: WORLD_HEAD_PROOF_V1_SCHEMA,
-        world_id: "world-a".to_string(),
-        height,
-        timestamp_ms: 1_772_467_200_000 + height as i64,
-        head: WorldHeadAnnounce {
-            world_id: "world-a".to_string(),
-            height,
-            block_hash: block_hash.clone(),
-            state_root: state_root.clone(),
-            timestamp_ms: 1_772_467_200_000 + height as i64,
-            signature: "head-signature-evidence-only".to_string(),
-        },
-        block,
-        snapshot_manifest_ref: BlobRef {
-            content_hash: snapshot_ref.clone(),
-            size_bytes: 120,
-            codec: WIRE_ENCODING_CBOR.to_string(),
-            links: vec!["snapshot-chunk-1".to_string()],
-        },
-        journal_segments_ref: BlobRef {
-            content_hash: journal_ref.clone(),
-            size_bytes: 80,
-            codec: WIRE_ENCODING_CBOR.to_string(),
-            links: vec!["journal-segment-1".to_string()],
-        },
-        consensus: HeadConsensusEvidenceV1 {
-            consensus_status: "committed".to_string(),
-            proposer_id: "validator-a".to_string(),
-            quorum_threshold: 2,
-            validator_count: 3,
-            vote_count: 2,
-            approver_ids: vec!["validator-a".to_string(), "validator-b".to_string()],
-            evidence_hash: "consensus-evidence-42".to_string(),
-        },
-        execution: ExecutionBindingEvidenceV1 {
-            execution_height: height,
-            node_block_hash: block_hash,
-            execution_block_hash: format!("execution-block-{height}"),
-            execution_state_root: state_root.clone(),
-            action_root,
-        },
-        checkpoint: Some(CheckpointClosureEvidenceV1 {
-            checkpoint_height: height,
-            execution_block_hash: format!("execution-block-{height}"),
-            execution_state_root: state_root.clone(),
-            manifest_ref: format!("checkpoint-manifest-{height}"),
-            manifest_hash: format!("checkpoint-manifest-hash-{height}"),
-            pinned_refs: vec![snapshot_ref, journal_ref, state_root],
-        }),
-        claim_boundary: WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1.to_string(),
-    }
-}
-
-fn sample_world_head_proof_window() -> Vec<WorldHeadProofV1> {
-    let first = sample_world_head_proof_at(40, "prev-block-39");
-    let second = sample_world_head_proof_at(41, first.head.block_hash.as_str());
-    let third = sample_world_head_proof_at(42, second.head.block_hash.as_str());
-    vec![first, second, third]
-}
-
 fn main() {
     let args = match parse_args(std::env::args()) {
         Ok(args) => args,
@@ -601,6 +505,7 @@ mod tests {
             proof_path: PathBuf::new(),
             proof_window_path: None,
             state_receipt_proof_path: None,
+            finality_proof_path: None,
             format: InputFormat::Cbor,
             expect_hash: None,
             proof_ref: None,
@@ -612,6 +517,7 @@ mod tests {
             write_sample_json: None,
             write_sample_window_json: None,
             write_sample_state_receipt_json: None,
+            write_sample_finality_json: None,
             emit_json: true,
         }
     }
@@ -847,6 +753,84 @@ mod tests {
         .expect_err("root tamper rejected");
         let _ = fs::remove_file(&proof_path);
         assert!(err.contains("root hash mismatch"), "{err}");
+    }
+
+    #[test]
+    fn verifies_valid_finality_json_proof_and_expectations() {
+        let proof = sample_world_finality_proof();
+        let proof_hash = proof.proof_hash().expect("proof hash");
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-valid.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let summary = verify(Args {
+            proof_path: PathBuf::new(),
+            finality_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Json,
+            expect_hash: Some(proof_hash.clone()),
+            proof_ref: Some("finality-proof-ref-42".to_string()),
+            expect_world_id: Some("world-a".to_string()),
+            expect_height: Some(42),
+            ..base_args()
+        })
+        .expect("verify finality proof");
+        let _ = fs::remove_file(&proof_path);
+        assert_eq!(summary["status"], "pass");
+        assert_eq!(summary["verifier_mode"], "validator_set_finality");
+        assert_eq!(summary["proof_contract"], "WorldFinalityProofV1");
+        assert_eq!(summary["proof_hash"], proof_hash);
+        assert_eq!(summary["proof_ref"], "finality-proof-ref-42");
+        assert_eq!(
+            summary["claim_boundary"],
+            WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1
+        );
+        assert_eq!(summary["validator_set"]["validator_count"], 3);
+        assert_eq!(summary["finality"]["stake_threshold_checked"], true);
+    }
+
+    #[test]
+    fn rejects_finality_hash_mismatch() {
+        let proof = sample_world_finality_proof();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-hash-mismatch.cbor",
+            std::process::id()
+        ));
+        fs::write(
+            &proof_path,
+            serde_cbor::to_vec(&proof).expect("encode finality proof cbor"),
+        )
+        .expect("write proof");
+        let err = verify(Args {
+            proof_path: PathBuf::new(),
+            finality_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Cbor,
+            expect_hash: Some("wrong-hash".to_string()),
+            ..base_args()
+        })
+        .expect_err("hash mismatch");
+        let _ = fs::remove_file(&proof_path);
+        assert!(err.contains("finality proof hash mismatch"), "{err}");
+    }
+
+    #[test]
+    fn rejects_finality_commitment_tamper() {
+        let mut proof = sample_world_finality_proof();
+        proof.finality_commitments[0].votes.pop();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-below-threshold.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let err = verify(Args {
+            proof_path: PathBuf::new(),
+            finality_proof_path: Some(proof_path.clone()),
+            format: InputFormat::Json,
+            ..base_args()
+        })
+        .expect_err("below threshold rejected");
+        let _ = fs::remove_file(&proof_path);
+        assert!(err.contains("signed stake below threshold"), "{err}");
     }
 
     #[test]
@@ -1171,12 +1155,14 @@ mod tests {
             "verify".to_string(),
             "--proof".to_string(),
             "proof.cbor".to_string(),
-            "--proof-window".to_string(),
-            "window.json".to_string(),
+            "--finality-proof".to_string(),
+            "finality.json".to_string(),
         ])
         .expect_err("combined proof modes rejected");
         assert!(
-            err.contains("--proof, --proof-window, and --state-receipt-proof cannot be combined"),
+            err.contains(
+                "--proof, --proof-window, --state-receipt-proof, and --finality-proof cannot be combined"
+            ),
             "{err}"
         );
     }
@@ -1185,7 +1171,9 @@ mod tests {
     fn rejects_missing_proof_mode_args() {
         let err = parse_args(["verify".to_string()]).expect_err("missing proof mode rejected");
         assert!(
-            err.contains("--proof, --proof-window, or --state-receipt-proof is required"),
+            err.contains(
+                "--proof, --proof-window, --state-receipt-proof, or --finality-proof is required"
+            ),
             "{err}"
         );
     }

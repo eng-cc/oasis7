@@ -11,6 +11,7 @@ valid_evidence="$TMPDIR/chain-proof-evidence-valid.json"
 valid_external_verifier_evidence="$TMPDIR/external-verifier-light-client-lite-valid.json"
 valid_state_receipt_evidence="$TMPDIR/state-resource-receipt-proof-valid.json"
 valid_state_receipt_absence_evidence="$TMPDIR/state-resource-receipt-proof-absence-valid.json"
+valid_finality_evidence="$TMPDIR/validator-finality-proof-valid.json"
 lanes="$TMPDIR/lanes.tsv"
 absence_lanes="$TMPDIR/lanes-state-receipt-absence.tsv"
 out_dir="$TMPDIR/readiness"
@@ -82,6 +83,7 @@ cat >"$lanes" <<EOF
 chain_proof_evidence_ready	blockchain_ops_engineer	pass	$valid_evidence	optional proof lane must not promote public_testnet readiness by itself
 external_verifier_light_client_lite_ready	blockchain_ops_engineer	pass	$valid_external_verifier_evidence	optional external verifier lane must not promote public_testnet readiness by itself
 state_resource_receipt_proof_ready	blockchain_ops_engineer	pass	$valid_state_receipt_evidence	optional state/resource/receipt proof lane must not promote public_testnet readiness by itself
+validator_finality_proof_ready	blockchain_ops_engineer	pass	$valid_finality_evidence	optional validator/finality proof lane must not promote public_testnet readiness by itself
 EOF
 
 cat >"$valid_external_verifier_evidence" <<'JSON'
@@ -261,6 +263,136 @@ cat >"$valid_state_receipt_evidence" <<'JSON'
 }
 JSON
 
+cat >"$valid_finality_evidence" <<'JSON'
+{
+  "evidence_schema": "oasis7.validator_finality_proof.v1",
+  "status": "pass",
+  "verifier_mode": "validator_set_finality",
+  "independent_process": true,
+  "implementation_ref": "crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs",
+  "command_ref": "cargo run -p oasis7_proto --bin oasis7_world_head_proof_verify -- --finality-proof proof.json --format json --expect-world-id world-a --expect-height 42 --json",
+  "network_tier": {
+    "tier": "public_testnet",
+    "status": "rehearsal",
+    "chain_id": "oasis7-public-testnet-example",
+    "network_id": "oasis7-public-testnet-example",
+    "world_id": "world-a"
+  },
+  "manifest_ref": "doc/testing/templates/network-tier-public-testnet.example.json",
+  "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+  "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt",
+  "rpc_ref": "https://public-testnet.example.invalid/rpc",
+  "finality_proof_ref": "finality-proof-ref-42",
+  "finality_proof_hash": "finality-proof-hash-42",
+  "sample_window": {
+    "started_at": "2026-07-03T00:00:00Z",
+    "ended_at": "2026-07-03T00:01:00Z"
+  },
+  "trusted_anchor": {
+    "height": 39,
+    "block_hash": "anchor-block-39"
+  },
+  "observed_head": {
+    "height": 42,
+    "hash": "block-hash-42",
+    "state_root": "state-root-42"
+  },
+  "verified_range": {
+    "from_height": 40,
+    "to_height": 42
+  },
+  "validator_set": {
+    "validator_set_id": "sample-set-1",
+    "activation_height": 1,
+    "validator_set_hash": "validator-set-hash-42",
+    "validator_count": 3,
+    "quorum_threshold_bps": 6667
+  },
+  "finality_sample": {
+    "commitment_count": 3,
+    "vote_count": 6,
+    "misbehavior_evidence_count": 1,
+    "stake_threshold_checked": true,
+    "validator_set_hash_checked": true,
+    "consensus_approver_subset_checked": true
+  },
+  "transition_sample": {
+    "transition_result": "not_claimed",
+    "reason": "single validator set bounded sample"
+  },
+  "fork_or_reorg_cases": [
+    "conflicting_head_rejected_or_recorded",
+    "unknown_signer_rejected",
+    "insufficient_signed_stake_rejected"
+  ],
+  "misbehavior_result": "evidence_recorded",
+  "external_verifier": {
+    "schema_version": "oasis7.world_finality_proof_verifier.v1",
+    "status": "pass",
+    "verifier_mode": "validator_set_finality",
+    "proof_contract": "WorldFinalityProofV1",
+    "hash_domain": "oasis7.world_finality_proof.v1",
+    "claim_boundary": "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness",
+    "proof_ref": "finality-proof-ref-42",
+    "proof_hash": "finality-proof-hash-42",
+    "world_id": "world-a",
+    "from_height": 40,
+    "to_height": 42,
+    "trusted_anchor": {
+      "height": 39,
+      "block_hash": "anchor-block-39"
+    },
+    "validator_set": {
+      "validator_set_id": "sample-set-1",
+      "activation_height": 1,
+      "validator_set_hash": "validator-set-hash-42",
+      "validator_count": 3,
+      "quorum_threshold_bps": 6667
+    },
+    "finality": {
+      "commitment_count": 3,
+      "vote_count": 6,
+      "misbehavior_evidence_count": 1,
+      "stake_threshold_checked": true,
+      "validator_set_hash_checked": true,
+      "consensus_approver_subset_checked": true
+    },
+    "head": {
+      "height": 42,
+      "block_hash": "block-hash-42",
+      "state_root": "state-root-42"
+    },
+    "does_not_claim": [
+      "mainnet-grade finality",
+      "full light client",
+      "cryptographic signature verification",
+      "validator-set transition execution",
+      "DA sampling",
+      "multi-client consensus equivalence",
+      "public validator onboarding open"
+    ]
+  },
+  "node_db_access_used": false,
+  "manual_checkpoint_or_data_copy_used": false,
+  "privileged_internal_api_used": false,
+  "does_not_claim": [
+    "full light client security",
+    "mainnet-grade finality",
+    "trust-minimized validator transition",
+    "cryptographic signature verification",
+    "public validator onboarding open",
+    "permissionless validator onboarding",
+    "DA sampling",
+    "multi-client consensus equivalence",
+    "ready_for_live_candidate"
+  ],
+  "residual_risk": [
+    "same implementation family verifier",
+    "signature evidence hash is not live signature verification"
+  ]
+}
+JSON
+
 python3 - "$valid_state_receipt_evidence" "$valid_state_receipt_absence_evidence" <<'PY'
 import json
 import pathlib
@@ -314,6 +446,7 @@ for optional_lane in (
     "chain_proof_evidence_ready",
     "external_verifier_light_client_lite_ready",
     "state_resource_receipt_proof_ready",
+    "validator_finality_proof_ready",
 ):
     if optional_lane in summary.get("required_lanes", []):
         raise SystemExit(f"{optional_lane} must not be required for public_testnet promotion")
@@ -332,6 +465,11 @@ state_receipt_matches = [
 ]
 if len(state_receipt_matches) != 1:
     raise SystemExit(f"expected one ignored state/resource/receipt proof lane, got {ignored}")
+finality_matches = [
+    lane for lane in ignored if lane.get("lane_id") == "validator_finality_proof_ready"
+]
+if len(finality_matches) != 1:
+    raise SystemExit(f"expected one ignored validator/finality proof lane, got {ignored}")
 absence_ignored = absence_summary.get("ignored_lanes", [])
 absence_matches = [
     lane for lane in absence_ignored if lane.get("lane_id") == "state_resource_receipt_proof_ready"
@@ -440,6 +578,63 @@ run_invalid_state_receipt_case "state_target_status_mismatch" "state_resource_re
 run_invalid_state_receipt_case "receipt_action_mismatch" "state_resource_receipt_proof_ready proof_targets.receipt.action_id must match external_verifier.subject.action_id"
 run_invalid_state_receipt_case "db_access" "state_resource_receipt_proof_ready node_db_access_used must be false"
 run_invalid_state_receipt_case "missing_denials" "state_resource_receipt_proof_ready does_not_claim missing"
+
+run_invalid_finality_case() {
+  local case_name=$1
+  local expected_error=$2
+  local invalid_evidence="$TMPDIR/validator-finality-proof-invalid-$case_name.json"
+  python3 - "$valid_finality_evidence" "$invalid_evidence" "$case_name" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+case_name = sys.argv[3]
+
+if case_name == "network_mismatch":
+    data["network_tier"]["network_id"] = "other-network"
+elif case_name == "verifier_hash_mismatch":
+    data["external_verifier"]["proof_hash"] = "wrong-finality-proof-hash"
+elif case_name == "head_hash_mismatch":
+    data["external_verifier"]["head"]["block_hash"] = "wrong-block-hash"
+elif case_name == "validator_set_hash_mismatch":
+    data["external_verifier"]["validator_set"]["validator_set_hash"] = "wrong-validator-set-hash"
+elif case_name == "threshold_not_checked":
+    data["finality_sample"]["stake_threshold_checked"] = False
+elif case_name == "db_access":
+    data["node_db_access_used"] = True
+elif case_name == "missing_denials":
+    data["does_not_claim"] = ["ready_for_live_candidate"]
+else:
+    raise SystemExit(f"unknown invalid finality case: {case_name}")
+
+pathlib.Path(sys.argv[2]).write_text(json.dumps(data, indent=2), encoding="utf-8")
+PY
+  local invalid_lanes="$TMPDIR/lanes-finality-invalid-$case_name.tsv"
+  cat >"$invalid_lanes" <<EOF
+validator_finality_proof_ready	blockchain_ops_engineer	pass	$invalid_evidence	invalid validator/finality proof lane must fail closed
+EOF
+  if ./scripts/network-tier-public-testnet-readiness.sh \
+    --manifest doc/testing/templates/network-tier-public-testnet.example.json \
+    --lanes-tsv "$invalid_lanes" \
+    --out-dir "$TMPDIR/readiness-invalid-finality-$case_name" >"$TMPDIR/invalid-finality-$case_name.json" 2>"$stderr"; then
+    echo "expected invalid validator/finality proof case to fail: $case_name" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected_error" "$stderr"; then
+    echo "expected error '$expected_error' for validator/finality case '$case_name'" >&2
+    cat "$stderr" >&2
+    exit 1
+  fi
+}
+
+run_invalid_finality_case "network_mismatch" "validator_finality_proof_ready network_tier.network_id must match manifest"
+run_invalid_finality_case "verifier_hash_mismatch" "validator_finality_proof_ready external_verifier.proof_hash must match evidence finality_proof_hash"
+run_invalid_finality_case "head_hash_mismatch" "validator_finality_proof_ready external_verifier.head.block_hash must match observed_head.hash"
+run_invalid_finality_case "validator_set_hash_mismatch" "validator_finality_proof_ready external_verifier.validator_set_hash must match evidence"
+run_invalid_finality_case "threshold_not_checked" "validator_finality_proof_ready finality_sample.stake_threshold_checked must be true"
+run_invalid_finality_case "db_access" "validator_finality_proof_ready node_db_access_used must be false"
+run_invalid_finality_case "missing_denials" "validator_finality_proof_ready does_not_claim missing"
 
 run_invalid_case() {
   local case_name=$1

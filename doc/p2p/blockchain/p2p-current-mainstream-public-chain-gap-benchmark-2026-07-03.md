@@ -16,6 +16,10 @@ After the 2026-07-06 public-testnet 11-lane verification refresh, Oasis7 also ha
 
 `controlled formal public_testnet live-candidate readiness evidence`
 
+After the 2026-07-06 validator-finality proof semantics slice, Oasis7 also has:
+
+`bounded validator-set finality and fork-misbehavior evidence semantics anchored to committed world heads`
+
 It should not be assessed as:
 
 `live public testnet already online`, `mainstream public-chain-ready`, `full light client`, `mainnet-grade`, or `multi-client consensus equivalent`.
@@ -25,14 +29,17 @@ The main changes since the previous benchmark are that Oasis7 now has concrete e
 - `WorldHeadProofV1` proof artifacts exist for committed world-head evidence.
 - `oasis7_world_head_proof_verify` can validate sampled proof artifacts outside the node process.
 - `WorldStateReceiptProofV1` now defines a bounded resource/query/receipt proof contract anchored to a verified `WorldHeadProofV1`, and `oasis7_world_head_proof_verify --state-receipt-proof` validates its head-proof hash, state/receipt root, leaf hash, ordered proof path, and claim boundary outside the node process.
+- `WorldFinalityProofV1` now defines a bounded validator-set finality, stake-threshold, committed-head binding, and fork/reorg/misbehavior evidence contract anchored to verified `WorldHeadProofV1` windows.
+- `oasis7_world_head_proof_verify --finality-proof` validates the bounded finality proof contract outside the node process.
 - `network-tier-external-verifier-light-client-lite.sh` emits operator evidence and binds it to manifest/genesis/bootstrap/RPC/sample-window context.
 - `external_verifier_light_client_lite_ready` is validated by readiness tooling as an optional non-promotional lane.
 - `oasis7_world_head_proof_verify --proof-window` validates contiguous `WorldHeadProofV1` windows with trusted-anchor, height, prev-hash, world-id, observed-head, timestamp, and basic quorum fail-closed checks.
 - `network-tier-light-client-continuity-window.sh` emits optional `light_client_continuity_window_ready` evidence and readiness tooling validates it as non-promotional `ignored_lanes` evidence.
 - `state_resource_receipt_proof_ready` is validated by readiness tooling as an optional non-promotional `ignored_lanes` evidence lane when present.
+- `validator_finality_proof_ready` is validated by readiness tooling as an optional non-promotional `ignored_lanes` evidence lane when present.
 - `public-testnet-current-required-lanes-2026-07-03.tsv` now covers all 11 active required lanes with pass evidence, and `network-tier-public-testnet-readiness.sh` returns `gate_result=pass`, `readiness_verdict=ready_for_live_candidate`, and `live_candidate_allowed=true` for controlled public-testnet live-candidate claims.
 
-This closes a bounded continuity/auditability gap, the current controlled public-testnet live-candidate readiness gap, and the minimal state/resource/receipt proof contract/verifier gap. It does not close public launch, mainnet-grade release, full light-client, validator-set transition/finality proof, live arbitrary runtime proof emission, full state/receipt index completeness, or multi-client-equivalence gaps.
+This closes a bounded continuity/auditability gap, the current controlled public-testnet live-candidate readiness gap, the minimal state/resource/receipt proof contract/verifier gap, and bounded validator-set finality/fork-misbehavior evidence semantics. It does not close public launch, mainnet-grade release, full light-client, live cryptographic finality signature verification, trust-minimized validator-set transition execution, live arbitrary runtime proof emission, full state/receipt index completeness, or multi-client-equivalence gaps.
 
 Residual risk remains explicit: the governed-bootstrap manifest still records `status="rehearsal"`, the bundle provenance records `git_worktree_dirty=true`, and faucet evidence is guarded/cooldown/plain-HTTP testnet evidence rather than durable anti-abuse, WAF/TLS, or production faucet operations.
 
@@ -42,11 +49,11 @@ Residual risk remains explicit: the governed-bootstrap manifest still records `s
 | --- | --- | --- | --- |
 | World-state substrate framing | P2P is no longer treated as the whole milestone; current target is the chain-backed large-world state substrate. | `doc/p2p/project.md`, `testing-manual.md` S9A | `stronger_than_transport_only` |
 | Head proof artifact | `WorldHeadProofV1` binds committed head / execution context / optional checkpoint closure. | `crates/oasis7_proto`, chain proof template | `present` |
-| External verifier | Independent binary + operator wrappers validate sampled proof contract/hash/world/height/observed head, contiguous proof-window continuity, and bounded state/resource/receipt proof contract evidence. | `crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs`, `scripts/network-tier-external-verifier-light-client-lite.sh`, `scripts/network-tier-light-client-continuity-window.sh` | `present_continuous_light_client_lite_plus_bounded_state_receipt` |
+| External verifier | Independent binary + operator wrappers validate sampled proof contract/hash/world/height/observed head, contiguous proof-window continuity, bounded state/resource/receipt proof contract evidence, and bounded validator-set finality/fork-misbehavior evidence. | `crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs`, `scripts/network-tier-external-verifier-light-client-lite.sh`, `scripts/network-tier-light-client-continuity-window.sh`, `scripts/network-tier-validator-finality-proof.sh` | `present_continuous_light_client_lite_plus_bounded_state_receipt_finality` |
 | Readiness gate integration | Proof lanes are validated but optional and non-promotional. | `scripts/network-tier-public-testnet-readiness.sh`, readiness lane templates | `present_non_promotional` |
 | Formal public testnet | Current 11-lane TSV is complete and all-pass; readiness script allows controlled `ready_for_live_candidate` claims. | formal network-tier runbook/project, `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv` | `ready_for_live_candidate_controlled` |
 | Release train / live network closure | 11-lane live-candidate evidence is present, but public launch / validator admission / mainnet release train remain separately gated. | formal network-tier runbook/project, lane evidence history | `gap_medium_high` |
-| Full light client | Continuous proof-window and bounded state/receipt proof evidence exist, but finality signatures, validator-set transition, live arbitrary proof emission, and independent client parity remain missing. | verifier/window/state-receipt lanes + role slices | `gap_medium_high` |
+| Full light client | Continuous proof-window, bounded state/receipt proof evidence, and bounded validator-set finality/fork-misbehavior evidence exist, but live cryptographic finality signature verification, trust-minimized validator-set transition execution, live arbitrary proof emission, and independent client parity remain missing. | verifier/window/state-receipt/finality lanes + role slices | `gap_medium_high` |
 | State/resource/receipt proof | Minimal proof contract and verifier coverage exist for sampled resource/query/receipt inclusion or absence evidence anchored to `WorldHeadProofV1`; live runtime emission and full state/receipt index completeness remain open. | `WorldStateReceiptProofV1`, verifier tests, optional readiness lane | `bounded_contract_present_live_emission_gap` |
 | Multi-client equivalence | External process is not an independent implementation/client diversity strategy. | runtime/producer slices | `gap_medium_high` |
 
@@ -75,7 +82,7 @@ These chains differ architecturally, but their mature infrastructure posture gen
 | P0 | Formal `public_testnet` 11-lane all-pass readiness | Mainstream public chains present a reachable, current, operator-safe public surface before stronger claims. | Closed for controlled live-candidate readiness: the current TSV has 11/11 required lanes pass and readiness returns `ready_for_live_candidate`. | Keep evidence fresh during release train and do not convert it into public launch/mainnet claims. |
 | P0 | Same-world hosted entry + API/viewer projection | Player-facing and API-facing views must read the same formal world state, not a local smoke world or copied checkpoint. | Closed for the current readiness packet by same-window JSON evidence for API/viewer and same-world hosted entry. | Re-sample before any external public launch or release train decision. |
 | P0 | Runtime bootstrap and freshness re-validation | Historical endpoint/faucet evidence was later constrained by freshness/runtime drift findings. | Closed for the current readiness packet by run142 runtime/world-resource closure, public surface freshness, and faucet guard evidence. | Keep this as a freshness-sensitive release-train gate, not a permanent proof. |
-| P1 | Continuous light-client-lite to trust-minimized light client | Mainstream light-client posture is not a sampled proof hash; it needs continuity/finality/transition semantics. | Continuous proof-window verifier now checks anchor, height continuity, prev-hash linkage, world identity, observed head, timestamps, and basic quorum fail-closed cases; it remains optional/non-promotional evidence. | Add validator-set transition, finality signature/stake semantics, fork/reorg/misbehavior evidence, and independent spec/replay parity before claiming trust-minimized light-client equivalence. |
+| P1 | Continuous light-client-lite to trust-minimized light client | Mainstream light-client posture is not a sampled proof hash; it needs continuity/finality/transition semantics. | Continuous proof-window verifier now checks anchor, height continuity, prev-hash linkage, world identity, observed head, timestamps, and basic quorum fail-closed cases; `WorldFinalityProofV1` adds bounded validator-set, stake-threshold, committed-head binding, and fork/reorg/misbehavior evidence semantics; both remain optional/non-promotional evidence. | Add live cryptographic finality signature verification, trust-minimized validator-set transition execution, and independent spec/replay parity before claiming trust-minimized light-client equivalence. |
 | P1 | State/resource/receipt proof contract | Head proof alone cannot prove a concrete account/resource/query/receipt to an external consumer. | Closed for bounded contract/verifier scope: `WorldStateReceiptProofV1` validates resource/query/receipt subjects, leaf hash, ordered proof path, and state/receipt root binding against a verified `WorldHeadProofV1`; optional `state_resource_receipt_proof_ready` evidence remains non-promotional. | Add live runtime emission, operator sampling on real artifacts, full state/receipt index completeness, and property/fuzz pressure before claiming broad arbitrary state-proof availability. |
 | P1 | Fault/negative/release-train drills | Mature public chains prove operational resilience via rehearsals, faults, and recovery evidence. | Existing runbooks and readiness scripts are strong, but current live rehearsal evidence is incomplete. | Run network rehearsal/release-train drill with clean bootstrap, rollback/restore, fork/freshness negative cases, and evidence writeback. |
 | P2 | Fuzz/property gate | Mainstream-grade testing expects invariant/property pressure beyond deterministic examples. | Prior benchmark already marked fuzz/property gate as missing. | Define first property targets around proof contract validation, state/replay determinism, and readiness fail-closed behavior. |
@@ -95,6 +102,7 @@ Allowed:
 - `WorldHeadProofV1 can be externally verified as light-client-lite sampled evidence`
 - `contiguous WorldHeadProofV1 windows can be externally verified as bounded continuity evidence`
 - `WorldStateReceiptProofV1 can be externally verified as bounded sampled state/resource/receipt inclusion evidence anchored to a committed world head`
+- `WorldFinalityProofV1 can be externally verified as bounded validator-set finality and fork-misbehavior evidence anchored to committed world heads`
 - `legacy shared_devnet is legacy/rehearsal evidence, not the target public_testnet`
 
 Forbidden:
@@ -107,6 +115,8 @@ Forbidden:
 - `production OC settlement`
 - `mainstream public-chain-grade security/testing`
 - `full light client security`
+- `live cryptographic finality signature verification`
+- `trust-minimized validator-set transition execution`
 - `live runtime arbitrary state proof availability`
 - `full state/receipt index completeness`
 - `multi-client consensus equivalence`
@@ -116,16 +126,16 @@ Forbidden:
 `runtime_engineer`:
 
 - The proof posture improved materially after Gap 3.
-- The verifier path now covers sampled proof, contiguous proof-window evidence, and bounded state/resource/receipt proof contract evidence.
-- It still lacks validator-set transition, finality signature/stake semantics, live arbitrary proof emission, DA sampling, and multi-client equivalence.
-- The next technical step is validator/finality transition semantics plus live state/resource/receipt proof emission and sampling.
+- The verifier path now covers sampled proof, contiguous proof-window evidence, bounded state/resource/receipt proof contract evidence, and bounded validator-set finality/fork-misbehavior evidence semantics.
+- It still lacks live cryptographic finality signature verification, trust-minimized validator-set transition execution, live arbitrary proof emission, DA sampling, and multi-client equivalence.
+- The next technical step is live cryptographic finality verification plus live state/resource/receipt proof emission and sampling.
 
 `blockchain_ops_engineer`:
 
 - Formal network-tier 11-lane readiness is currently all-pass for controlled live-candidate evidence.
 - Existing governed-bootstrap/live evidence satisfies the current 11 required lanes, as verified by `network-tier-public-testnet-readiness.sh`.
 - Ops residual risks remain: manifest `status="rehearsal"`, bundle `git_worktree_dirty=true`, guarded faucet cooldown/plain-HTTP limits, and no public launch/mainnet/validator-admission claim.
-- `light_client_continuity_window_ready` and `state_resource_receipt_proof_ready` are valid optional evidence lanes but must remain non-promotional until the required lanes and stronger light-client/runtime emission semantics are complete.
+- `light_client_continuity_window_ready`, `state_resource_receipt_proof_ready`, and `validator_finality_proof_ready` are valid optional evidence lanes but must remain non-promotional until the required lanes and stronger light-client/runtime emission semantics are complete.
 - The next ops step is to keep live-candidate evidence fresh through release-train drills and avoid treating optional proof lanes as promotion gates.
 
 `producer_system_designer`:
@@ -137,7 +147,7 @@ Forbidden:
 `qa_engineer`:
 
 - Verification maturity is stronger and the current required-lane packet is all-pass.
-- Sampled proof, proof-window verifier, and bounded state/resource/receipt proof lanes are optional ignored lanes and cannot promote readiness.
+- Sampled proof, proof-window verifier, bounded state/resource/receipt proof, and bounded validator/finality proof lanes are optional ignored lanes and cannot promote readiness.
 - API/viewer same-window projection and same-world hosted entry are closed for the current packet, but must be re-sampled before public launch/release-train promotion.
 
 `liveops_community`:
@@ -149,8 +159,8 @@ Forbidden:
 
 1. Keep the current all-pass formal `public_testnet` 11-lane packet fresh during any release-train or public launch decision.
 2. Re-sample public RPC / explorer / guarded faucet / runtime status / hosted/API/viewer evidence immediately before external claims.
-3. Run the optional external verifier lanes on real sampled and contiguous-window `WorldHeadProofV1` evidence; keep them non-promotional.
-4. Continue the light-client-lite upgrade: validator-set transition, finality/fork/misbehavior boundaries, live state/resource/receipt proof emission and sampling, and independent spec/replay parity.
+3. Run the optional external verifier lanes on real sampled, contiguous-window, state/resource/receipt, and validator/finality `WorldHeadProofV1`-anchored evidence; keep them non-promotional.
+4. Continue the light-client-lite upgrade: live cryptographic finality signature verification, trust-minimized validator-set transition execution, live state/resource/receipt proof emission and sampling, and independent spec/replay parity.
 5. Add fault/negative/release-train drill and fuzz/property targets now that the 11-lane public-testnet blocker is closed for controlled live-candidate readiness.
 
 ## External References

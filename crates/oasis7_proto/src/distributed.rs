@@ -156,6 +156,12 @@ pub const WORLD_HEAD_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_head_proof.v1";
 pub const WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1: &str =
     "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness";
 
+pub use crate::distributed_finality::{
+    WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1, WORLD_FINALITY_PROOF_HASH_DOMAIN_V1,
+    WORLD_FINALITY_PROOF_V1_SCHEMA, WORLD_FINALITY_VALIDATOR_SET_HASH_DOMAIN_V1,
+    WorldFinalityCommitmentV1, WorldFinalityMisbehaviorEvidenceV1, WorldFinalityProofV1,
+    WorldFinalityValidatorV1, WorldFinalityVoteV1, compute_world_finality_validator_set_hash,
+};
 pub use crate::distributed_state_receipt::{
     WORLD_STATE_RECEIPT_LEAF_HASH_DOMAIN_V1, WORLD_STATE_RECEIPT_NODE_HASH_DOMAIN_V1,
     WORLD_STATE_RECEIPT_PROOF_CLAIM_BOUNDARY_V1, WORLD_STATE_RECEIPT_PROOF_HASH_DOMAIN_V1,
