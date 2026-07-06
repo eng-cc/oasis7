@@ -13,7 +13,6 @@
 - [x] TASK-ENGINEERING-092 (PRD-ENGINEERING-MEM-001/004/005) [test_tier_required]: 起草 7 个标准角色 `topic` allowlist、扩展 `promotion_reason` 白名单与 close-phase 记忆抽取 checklist，并同步接入职责卡、`workflow-report` 与 `.pm/templates/role-memory-policy.yaml` 草案。
 
 ## 依赖
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/prd.index.md`

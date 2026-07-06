@@ -15,7 +15,6 @@
 - [ ] TASK-ENGINEERING-090 (PRD-ENGINEERING-MIR-003/004/005/006) [test_tier_required] + [test_tier_full]: 建立 recall/working_memory/reflection 质量评估与回归 smoke，覆盖 `.codex` 抽取、stale belief、working_memory close-phase 清理、重复 reflection 与新角色扩容场景。
 
 ## 依赖
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`

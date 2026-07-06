@@ -93,7 +93,7 @@
   - 原始会话与过程日志属于 `raw evidence`，先进入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 raw evidence 默认优先直读 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，只有被提炼过的结论才进入 GitHub-backed reflection intake、candidate task 或长期 `memory`。
   - 反思链路统一为 `.codex` raw evidence / GitHub task issue evidence comments -> working_memory -> GitHub-backed reflection intake -> owner review -> memory/task/rejected，正式 PRD/project 仍由 owner 手工回写；wrapper 导出的 `output/.../<task_uid>.jsonl` 仅作为后续可替代输入，不是 phase 1 前置条件。
 - Integration Points:
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
   - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md`
   - `doc/engineering/project.md`

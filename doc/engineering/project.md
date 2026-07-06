@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
+- [x] self-evolution-file-based-pm-pointer-prd-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已压缩为历史锚点且仍保留旧 `.pm/tasks` / `.pm/inbox/signals.jsonl` 语义提示的 file-based self-evolution historical pointer PRD，将当前规则入口收敛到 workflow source-of-truth，将仍有效的 repo-local memory / working_memory / stage-gate object-model 背景收敛到同名 design 文档。 Trace: #2042 (task_44d20868aeb9433d9fbfa7bea4177d60)
+
 - [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
 
 - [x] engineering-doc-legacy-semantics-governance (PRD-ENGINEERING-021/025/PRD-ENGINEERING-R1200) [test_tier_required]: 删除已被 Rust 1200 根治治理取代且仍暴露 `doc/devlog` / 一次性 round3 / `include!` 分段旧语义的 oversized Rust file splitting 三件套，将当前入口收敛到 `rust-1200-line-root-cause-governance-2026-03-29`、core review logs、git history 与 GitHub task issue evidence comments。 Trace: #1975 (task_1e15b6bcc6154e949c3a3338eb2d8194)
@@ -528,7 +530,6 @@
 - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md`
 - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md`
 - `doc/devlog/README.md`
-- `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
 - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`

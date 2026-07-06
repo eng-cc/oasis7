@@ -142,7 +142,7 @@ Current governance note (2026-07-01): 本专题仍保留 2026-05 外部 workflow
   - `doc/engineering/project.md`
   - `doc/engineering/prd.index.md`
   - `doc/engineering/README.md`
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
   - `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md`
   - `doc/world-simulator/project.md`
   - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md`

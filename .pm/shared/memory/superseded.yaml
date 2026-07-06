@@ -7,7 +7,7 @@ records:
     topic: gate.claim_envelope
     summary: "claim envelope remains experimental_internal"
     source_refs:
-      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md
+      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md
       - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
     tags:
       - stage
