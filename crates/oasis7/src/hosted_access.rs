@@ -16,6 +16,13 @@ const DEFAULT_KICK_POLICY: &str = "operator_audit_required";
 const HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY";
 const HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY";
 const HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV: &str = "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE";
+const PUBLIC_STATE_ROUTE: &str = "/api/public/state";
+const HOSTED_SESSION_LADDER: &[&str] = &["guest_session", "player_session", "strong_auth"];
+const PROMPT_CONTROL_ACTION_IDS: &[&str] = &[
+    "prompt_control_preview",
+    "prompt_control_apply",
+    "prompt_control_rollback",
+];
 
 #[cfg(test)]
 pub(super) fn hosted_strong_auth_test_env_lock() -> &'static Mutex<()> {
@@ -167,20 +174,10 @@ pub(super) fn hosted_player_access_contract(mode: DeploymentMode) -> HostedPlaye
         local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
         node_admission: mode.node_admission_mode().to_string(),
         gui_agent_action_surface: mode.gui_agent_action_surface().to_string(),
-        public_state_route: "/api/public/state".to_string(),
-        public_endpoints: web_launcher_public_endpoints()
-            .into_iter()
-            .map(|value| (*value).to_string())
-            .collect(),
-        private_endpoints: web_launcher_private_endpoints()
-            .into_iter()
-            .map(|value| (*value).to_string())
-            .collect(),
-        session_ladder: vec![
-            "guest_session".to_string(),
-            "player_session".to_string(),
-            "strong_auth".to_string(),
-        ],
+        public_state_route: PUBLIC_STATE_ROUTE.to_string(),
+        public_endpoints: string_list(web_launcher_public_endpoints()),
+        private_endpoints: string_list(web_launcher_private_endpoints()),
+        session_ladder: hosted_session_ladder(),
         action_matrix: hosted_action_matrix(mode),
         admission: HostedAdmissionControlContract {
             max_guest_sessions: DEFAULT_MAX_GUEST_SESSIONS,
@@ -200,12 +197,30 @@ pub(super) fn hosted_viewer_access_hint(mode: DeploymentMode) -> HostedViewerAcc
         browser_signer_bootstrap: mode.browser_signer_bootstrap_mode().to_string(),
         local_chain_runtime: mode.local_chain_runtime_mode().to_string(),
         node_admission: mode.node_admission_mode().to_string(),
-        session_ladder: vec![
-            "guest_session".to_string(),
-            "player_session".to_string(),
-            "strong_auth".to_string(),
-        ],
+        session_ladder: hosted_session_ladder(),
         action_matrix: hosted_action_matrix(mode),
+    }
+}
+
+fn string_list(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_string()).collect()
+}
+
+fn hosted_session_ladder() -> Vec<String> {
+    string_list(HOSTED_SESSION_LADDER)
+}
+
+fn hosted_action_policy(
+    action_id: &str,
+    required_auth: &str,
+    availability: &str,
+    reason: &str,
+) -> HostedActionAccessPolicy {
+    HostedActionAccessPolicy {
+        action_id: action_id.to_string(),
+        required_auth: required_auth.to_string(),
+        availability: availability.to_string(),
+        reason: reason.to_string(),
     }
 }
 
@@ -242,44 +257,34 @@ fn hosted_action_matrix(mode: DeploymentMode) -> Vec<HostedActionAccessPolicy> {
             "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
         }
     };
-    vec![
-        HostedActionAccessPolicy {
-            action_id: "gameplay_action".to_string(),
-            required_auth: "player_session".to_string(),
-            availability: "public_player_plane".to_string(),
-            reason: "core gameplay input stays on the player_session lane".to_string(),
-        },
-        HostedActionAccessPolicy {
-            action_id: "agent_chat".to_string(),
-            required_auth: "player_session".to_string(),
-            availability: "public_player_plane".to_string(),
-            reason: "agent chat currently stays on the low-risk player_session lane".to_string(),
-        },
-        HostedActionAccessPolicy {
-            action_id: "prompt_control_preview".to_string(),
-            required_auth: "strong_auth".to_string(),
-            availability: prompt_strong_auth_availability.to_string(),
-            reason: prompt_strong_auth_reason.to_string(),
-        },
-        HostedActionAccessPolicy {
-            action_id: "prompt_control_apply".to_string(),
-            required_auth: "strong_auth".to_string(),
-            availability: prompt_strong_auth_availability.to_string(),
-            reason: prompt_strong_auth_reason.to_string(),
-        },
-        HostedActionAccessPolicy {
-            action_id: "prompt_control_rollback".to_string(),
-            required_auth: "strong_auth".to_string(),
-            availability: prompt_strong_auth_availability.to_string(),
-            reason: prompt_strong_auth_reason.to_string(),
-        },
-        HostedActionAccessPolicy {
-            action_id: "main_token_transfer".to_string(),
-            required_auth: "strong_auth".to_string(),
-            availability: asset_strong_auth_availability.to_string(),
-            reason: asset_strong_auth_reason.to_string(),
-        },
-    ]
+    let mut matrix = Vec::with_capacity(3 + PROMPT_CONTROL_ACTION_IDS.len());
+    matrix.push(hosted_action_policy(
+        "gameplay_action",
+        "player_session",
+        "public_player_plane",
+        "core gameplay input stays on the player_session lane",
+    ));
+    matrix.push(hosted_action_policy(
+        "agent_chat",
+        "player_session",
+        "public_player_plane",
+        "agent chat currently stays on the low-risk player_session lane",
+    ));
+    matrix.extend(PROMPT_CONTROL_ACTION_IDS.iter().map(|action_id| {
+        hosted_action_policy(
+            action_id,
+            "strong_auth",
+            prompt_strong_auth_availability,
+            prompt_strong_auth_reason,
+        )
+    }));
+    matrix.push(hosted_action_policy(
+        "main_token_transfer",
+        "strong_auth",
+        asset_strong_auth_availability,
+        asset_strong_auth_reason,
+    ));
+    matrix
 }
 
 #[allow(dead_code)]

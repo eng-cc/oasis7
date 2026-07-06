@@ -297,8 +297,9 @@ fn resolve_tick_intent_conflicts(
         let Some(winner) = group.next() else {
             continue;
         };
-        accepted.push(winner.clone());
+        let winner_action_id = winner.id;
         let winner_submitter = submitter_label(&winner.submitter);
+        accepted.push(winner);
         let mut loser_action_ids = Vec::new();
         for loser in group {
             loser_action_ids.push(loser.id);
@@ -307,7 +308,7 @@ fn resolve_tick_intent_conflicts(
                 reason: RejectReason::RuleDenied {
                     notes: vec![format!(
                         "intent conflict on key={conflict_key}; winner_action_id={} winner_submitter={winner_submitter}",
-                        winner.id
+                        winner_action_id
                     )],
                 },
             });
@@ -317,7 +318,7 @@ fn resolve_tick_intent_conflicts(
         }
         conflicts.push(IntentConflictResolution {
             conflict_key,
-            winner_action_id: winner.id,
+            winner_action_id,
             loser_action_ids,
         });
     }
