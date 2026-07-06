@@ -41,7 +41,7 @@
 - 2026-04-17 任务启动前 `doc/` Markdown 总数: 1730
 - 高密度模块: `world-simulator` 549、`p2p` 269、`testing` 178
 - 热点历史目录: `doc/devlog/` retired daily files = 57
-- 原最大单文件: `doc/devlog/README.md` 3288 行（已退役）
+- 原最大 daily devlog 单文件: 3288 行（已退役删除）；当前 `doc/devlog/README.md` 是 compact archive summary，不再继承 daily 文件体量。
 - 近限活跃文件示例: `doc/world-simulator/project.md` 998 行
 
 ## 4. 库存报告设计
@@ -58,7 +58,7 @@
 - `total_docs >= 1500`: 进入 corpus-pressure。
 - `module_docs >= 200`: 进入 high-density。
 - `subdir_docs >= 80`: 进入 hotspot-subdir。
-- `devlog_docs >= 50` 或 `max_devlog_lines >= 2000`: 进入 archive-backlog。
+- `devlog_daily_docs >= 50` 或 `max_devlog_daily_lines >= 2000`: 进入 archive-backlog。
 - `non_devlog_lines >= 850`: 进入 near-limit。
 
 ### 4.3 输出格式

@@ -143,7 +143,7 @@ roles:
   - 这条结论如果不沉淀，其他 owner 很可能重复踩坑吗？
   - 这条结论会影响 PRD、实现、测试、阶段判断或对外口径吗？
 - 任一回答为 yes 时，owner 至少执行其一:
-  - 写 `signal`
+  - 写 GitHub-backed reflection signal
   - 写 `working_memory`
   - 提升到长期 `memory`
 - 若三问均为 no，则保留在 GitHub task issue evidence comments 或 task-scoped `working_memory`

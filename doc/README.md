@@ -60,9 +60,9 @@
 - `doc/<module>/**/*.md`：专题设计、实现方案、复盘与历史说明。
 - `doc/<module>/README.md`：模块目录索引（按主题子目录导航）。
 - GitHub task issue evidence comments：按任务维护的 canonical 过程日志；`.pm/github-project-sync/tasks.json` 负责 `task_uid` 到 issue/project item 的本地映射。
-- `doc/devlog/README.md`：历史归档入口；原始 `doc/devlog/*.md` 仅作回溯参考，不再作为运行态真值。
+- `doc/devlog/README.md`：历史归档摘要入口；原始 `doc/devlog/2026-*.md` daily 文件已删除，日级细节从 GitHub task issue evidence comments、Git history 与相关模块 `project.md` 追溯，不再作为运行态真值。
 - `doc/.governance/*-allowlist.txt`：文档组织门禁基线（根目录与模块根目录平铺文件冻结清单）。
-- `doc/**/archive/` 目录已移除；历史专题仅在模块目录内保留并在索引中标注。
+- `doc/**/archive/` 不作为默认文档结构；历史专题仅在模块目录内保留并在索引中标注。少量 manifest-backed evidence asset archive（例如退役视觉证据图片）只作追溯证据，不作为当前 release / viewer / gameplay 首读入口。
 
 ## 共享规则
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 `project.md`，最后实现与测试。
