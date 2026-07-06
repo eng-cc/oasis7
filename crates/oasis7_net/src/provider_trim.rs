@@ -1,5 +1,7 @@
 use super::distributed_dht::ProviderRecord;
 
+const BOUNDED_RECENCY_TRIM_MAX: usize = 64;
+
 pub(crate) fn trim_providers_by_recency(
     providers: Vec<ProviderRecord>,
     max_providers: usize,
@@ -10,6 +12,10 @@ pub(crate) fn trim_providers_by_recency(
 
     if providers.len() <= max_providers {
         return sort_recent_first(providers);
+    }
+
+    if max_providers > BOUNDED_RECENCY_TRIM_MAX {
+        return sort_recent_first_limited(providers, max_providers);
     }
 
     let mut top = Vec::with_capacity(max_providers);
@@ -47,6 +53,15 @@ pub(crate) fn trim_providers_by_recency(
 
 fn sort_recent_first(mut providers: Vec<ProviderRecord>) -> Vec<ProviderRecord> {
     providers.sort_by_key(|provider| std::cmp::Reverse(provider.last_seen_ms));
+    providers
+}
+
+fn sort_recent_first_limited(
+    providers: Vec<ProviderRecord>,
+    max_providers: usize,
+) -> Vec<ProviderRecord> {
+    let mut providers = sort_recent_first(providers);
+    providers.truncate(max_providers);
     providers
 }
 
@@ -121,5 +136,18 @@ mod tests {
             provider_ids(trim_providers_by_recency(providers, 2)),
             vec!["first", "second"]
         );
+    }
+
+    #[test]
+    fn trim_providers_by_recency_uses_sort_fallback_for_large_limits() {
+        let providers = (0..80)
+            .map(|index| provider(&format!("peer-{index}"), index))
+            .collect();
+
+        let trimmed = trim_providers_by_recency(providers, 65);
+
+        assert_eq!(trimmed.len(), 65);
+        assert_eq!(trimmed[0].provider_id, "peer-79");
+        assert_eq!(trimmed[64].provider_id, "peer-15");
     }
 }
