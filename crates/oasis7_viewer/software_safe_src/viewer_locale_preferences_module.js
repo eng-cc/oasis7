@@ -113,10 +113,13 @@ export function createViewerLocalePreferencesModule({
   }
 
   function updateUiLocaleQuery(locale) {
-    const url = new URL(windowRef.location.href);
-    url.searchParams.set("locale", locale);
-    url.searchParams.delete("language");
-    windowRef.history.replaceState({}, "", url.toString());
+    try {
+      const url = new URL(windowRef.location.href);
+      url.searchParams.set("locale", locale);
+      url.searchParams.delete("language");
+      windowRef.history.replaceState({}, "", url.toString());
+    } catch (_) {
+    }
   }
 
   function setViewerLocale(locale) {
