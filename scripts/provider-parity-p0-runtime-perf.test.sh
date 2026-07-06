@@ -119,6 +119,8 @@ builtin = json.loads((out_dir / "summary" / "P0-001.builtin.json").read_text())
 
 assert builtin["runtime_perf"]["tick"]["p95_ms_peak"] is None
 assert builtin["runtime_perf"]["tick"]["over_budget_ratio_ppm_peak"] is None
+assert builtin["runtime_perf"]["tick"]["coverage_sample_count"] == 0
+assert "runtime_perf_missing" in builtin["warnings"]
 
 rows = {
     row["metric"]: row
@@ -126,6 +128,8 @@ rows = {
 }
 assert rows["runtime_perf.tick.p95_ms_peak"]["builtin"] == ""
 assert rows["runtime_perf.tick.over_budget_ratio_ppm_peak"]["builtin"] == ""
+assert rows["runtime_perf.tick.coverage_sample_count"]["builtin"] == "0"
+assert rows["warnings"]["builtin"] == "runtime_perf_missing"
 PY
 
 echo "provider parity runtime perf aggregation smoke checks passed"

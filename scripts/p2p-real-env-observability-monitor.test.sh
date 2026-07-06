@@ -35,7 +35,18 @@ local_node = summary["nodes"]["local_node"]
 assert local_node["role"] == "observer"
 assert local_node["host"]["runtime_cpu_percent"] == 47.3
 assert local_node["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
+assert "traffic_monitor_unavailable" in local_node["alerts"]
+assert "traffic_samples_missing" in local_node["alerts"]
+assert "traffic_window_uncovered" in local_node["alerts"]
+assert "wasm_window_unavailable" in local_node["alerts"]
+assert "wasm_metrics_unavailable" not in local_node["alerts"]
 assert local_node["modules"]["consensus"]["status"] == "ok"
+assert "traffic_monitor_unavailable" in local_node["modules"]["traffic_control_plane"]["alerts"]
+assert "traffic_samples_missing" in local_node["modules"]["traffic_control_plane"]["alerts"]
+assert "traffic_window_uncovered" in local_node["modules"]["traffic_control_plane"]["alerts"]
+assert local_node["modules"]["traffic_control_plane"]["latest_fetch_error"] == "curl_failed"
+assert "wasm" not in local_node["modules"]
+assert "wasm_window_unavailable" in local_node["modules"]["wasm_executor_router"]["alerts"]
 assert local_node["optimization_candidates"] == []
 sequencer = summary["nodes"]["sequencer_ecs"]
 assert "runtime_cpu_hot" in sequencer["alerts"]

@@ -1,10 +1,15 @@
 {
   "latest": {
-    "metrics_available": true,
-    "degraded_reason": null
+    "wasm": {
+      "metrics_available": true,
+      "degraded_reason": null
+    }
   },
   "window": {
-    "available": true,
+    "available": false,
+    "notes": [
+      "need at least two metric-bearing samples for window delta"
+    ],
     "window_reset_detected": false,
     "top_hotspot": "executor.entrypoint_call_ms_total",
     "executor": {
