@@ -201,6 +201,13 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
     }
 }
 
+fn hit_regions(app: &mut App) -> Vec<HitRegion> {
+    app.world_mut()
+        .resource::<BevyRuntimeState>()
+        .hit_regions
+        .clone()
+}
+
 fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> PixelLayer {
     let size_px = sprite
         .custom_size
@@ -456,6 +463,68 @@ fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     assert!(summary.fragments[0].z < summary.locations[0].z);
     assert!(summary.locations[0].z < summary.agents[0].z);
     assert_eq!(summary.hit_regions, 2);
+}
+
+#[test]
+fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
+    let mut app = render_test_app(sample_render_state(12_000.0));
+    let first_regions = hit_regions(&mut app);
+    assert_eq!(first_regions.len(), 2);
+    {
+        let runtime = app.world_mut().resource::<BevyRuntimeState>();
+        assert!(!runtime.hit_regions_dirty);
+        assert!(runtime.hit_region_cache_key.is_some());
+    }
+
+    app.update();
+
+    let second_regions = hit_regions(&mut app);
+    assert_eq!(second_regions, first_regions);
+    let runtime = app.world_mut().resource::<BevyRuntimeState>();
+    assert!(!runtime.hit_regions_dirty);
+    assert!(runtime.hit_region_cache_key.is_some());
+}
+
+#[test]
+fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
+    let mut app = render_test_app(sample_render_state(12_000.0));
+    let first_regions = hit_regions(&mut app);
+    let mut updated_state = sample_render_state(12_000.0);
+    updated_state.agents[0].id = "agent-updated".to_string();
+    updated_state.agents[0].pos = Some(sample_position(2_500_000.0, 1_500_000.0));
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(updated_state);
+        runtime.render_version += 1;
+        runtime.hit_regions_dirty = true;
+    }
+    app.update();
+
+    let second_regions = hit_regions(&mut app);
+    assert_ne!(second_regions, first_regions);
+    assert!(
+        second_regions
+            .iter()
+            .any(|region| region.id == "agent-updated")
+    );
+    assert!(!second_regions.iter().any(|region| region.id == "agent-0"));
+}
+
+#[test]
+fn bevy_ecs_refreshes_hit_regions_after_camera_change() {
+    let mut app = render_test_app(sample_render_state(12_000.0));
+    let first_regions = hit_regions(&mut app);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.camera.pan_x_px += 40.0;
+    }
+    app.update();
+
+    let second_regions = hit_regions(&mut app);
+    assert_ne!(second_regions, first_regions);
+    assert_eq!(second_regions.len(), first_regions.len());
 }
 
 #[test]

@@ -158,7 +158,7 @@ struct DragState {
     start_pan_y: f64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct HitRegion {
     kind: &'static str,
     id: String,
@@ -218,6 +218,8 @@ struct BevyRuntimeState {
     active_follow_target: Option<FocusTarget>,
     drag_state: Option<DragState>,
     hit_regions: Vec<HitRegion>,
+    hit_region_cache_key: Option<HitRegionCacheKey>,
+    hit_regions_dirty: bool,
     hover_key: Option<String>,
     grid_layout: Option<render::GridLayoutKey>,
     fragment_entities: HashMap<String, Entity>,
@@ -225,6 +227,29 @@ struct BevyRuntimeState {
     agent_entities: HashMap<String, Entity>,
     link_entities: HashMap<String, Entity>,
     hotspot_entities: HashMap<String, Entity>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct HitRegionCacheKey {
+    render_version: u64,
+    width_px: u32,
+    height_px: u32,
+    camera_zoom_bits: u64,
+    camera_pan_x_bits: u64,
+    camera_pan_y_bits: u64,
+}
+
+impl HitRegionCacheKey {
+    fn new(runtime: &BevyRuntimeState, width: f64, height: f64) -> Self {
+        Self {
+            render_version: runtime.render_version,
+            width_px: width.round().max(0.0) as u32,
+            height_px: height.round().max(0.0) as u32,
+            camera_zoom_bits: runtime.camera.zoom.to_bits(),
+            camera_pan_x_bits: runtime.camera.pan_x_px.to_bits(),
+            camera_pan_y_bits: runtime.camera.pan_y_px.to_bits(),
+        }
+    }
 }
 
 enum RenderSnapshot {
@@ -562,6 +587,7 @@ fn apply_external_render_snapshot(
         runtime.camera_fit_version = 0;
         runtime.camera_user_override = false;
         runtime.render_content_signature = next_signature;
+        runtime.hit_regions_dirty = true;
     }
     if next_focus_target != previous_focus_target {
         runtime.pending_focus_target = next_focus_target.clone();
@@ -574,6 +600,7 @@ fn apply_external_render_snapshot(
     }
     runtime.render_version = render_version;
     runtime.render_state = render_state;
+    runtime.hit_regions_dirty = true;
 }
 
 fn push_input_event(event: InputEvent) {
@@ -650,6 +677,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
                 runtime.camera_user_override = true;
                 runtime.active_follow_target = None;
                 runtime.pending_focus_target = None;
+                runtime.hit_regions_dirty = true;
                 let _ = emit_camera_state(&runtime.camera);
                 return;
             }
@@ -690,6 +718,7 @@ fn process_input_event(runtime: &mut BevyRuntimeState, event: InputEvent) {
             runtime.camera_user_override = true;
             runtime.active_follow_target = None;
             runtime.pending_focus_target = None;
+            runtime.hit_regions_dirty = true;
             let _ = emit_camera_state(&runtime.camera);
         }
         InputEvent::Click { x, y } => {

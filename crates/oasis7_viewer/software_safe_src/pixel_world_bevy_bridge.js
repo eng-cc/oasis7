@@ -109,46 +109,10 @@ function drawBridgeFrame(canvas, renderState, cameraState, animationMs) {
   }
 }
 
-function positionSignature(position) {
-  if (!position) {
-    return "none";
-  }
-  return [
-    Number(position.x_cm) || 0,
-    Number(position.y_cm) || 0,
-    Number(position.z_cm) || 0,
-  ].join(",");
-}
-
-function entitySignature(entity) {
-  return `${entity?.id || ""}@${positionSignature(entity?.pos)}`;
-}
-
-function hitRegionSignature(canvas, renderState, cameraState) {
-  const worldBounds = renderState.world_bounds || renderState.worldBounds || {};
-  const locations = (renderState.locations || []).map(entitySignature).join("|");
-  const agents = (renderState.agents || []).map(entitySignature).join("|");
-  return [
-    canvas.width,
-    canvas.height,
-    Number(cameraState?.zoom) || 1,
-    Number(cameraState?.pan_x_px) || 0,
-    Number(cameraState?.pan_y_px) || 0,
-    Number(worldBounds.width_cm) || 0,
-    Number(worldBounds.depth_cm) || 0,
-    locations,
-    agents,
-  ].join(";");
-}
-
 export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
   let mountedCanvas = null;
   let lastRenderState = null;
   let hitRegions = [];
-  let lastHitRegionSignature = null;
-  let hitRegionsDirty = true;
-  let lastCanvasWidth = null;
-  let lastCanvasHeight = null;
   let cameraState = createInitialCameraState();
   let boundPointerDown = null;
   let boundPointerMove = null;
@@ -182,10 +146,6 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     };
     onFatal?.(normalized);
     return normalized;
-  }
-
-  function invalidateHitRegions() {
-    hitRegionsDirty = true;
   }
 
   function rebuildHitRegions(canvas, renderState) {
@@ -224,30 +184,13 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     hitRegions = nextRegions;
   }
 
-  function rebuildHitRegionsIfNeeded(canvas, renderState) {
-    if (canvas.width !== lastCanvasWidth || canvas.height !== lastCanvasHeight) {
-      lastCanvasWidth = canvas.width;
-      lastCanvasHeight = canvas.height;
-      invalidateHitRegions();
-    }
-    if (!hitRegionsDirty) {
-      return;
-    }
-    const nextSignature = hitRegionSignature(canvas, renderState, cameraState);
-    if (nextSignature !== lastHitRegionSignature) {
-      rebuildHitRegions(canvas, renderState);
-      lastHitRegionSignature = nextSignature;
-    }
-    hitRegionsDirty = false;
-  }
-
   function renderCurrentFrame(animationMs = lastAnimationMs) {
     if (!mountedCanvas || !lastRenderState) {
       return;
     }
     lastAnimationMs = animationMs;
     drawBridgeFrame(mountedCanvas, lastRenderState, cameraState, animationMs);
-    rebuildHitRegionsIfNeeded(mountedCanvas, lastRenderState);
+    rebuildHitRegions(mountedCanvas, lastRenderState);
   }
 
   function stopAnimationLoop() {
@@ -359,7 +302,6 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
           pan_x_px: dragState.startPanX + deltaX,
           pan_y_px: dragState.startPanY + deltaY,
         };
-        invalidateHitRegions();
         renderCurrentFrame();
         emitCameraState();
         return;
@@ -403,7 +345,6 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
         ...cameraState,
         zoom: nextZoom,
       };
-      invalidateHitRegions();
       renderCurrentFrame();
       emitCameraState();
     };
@@ -435,10 +376,6 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       mountedCanvas = canvas;
       lastRenderState = initialRenderState;
       cameraState = createInitialCameraState();
-      lastHitRegionSignature = null;
-      hitRegionsDirty = true;
-      lastCanvasWidth = null;
-      lastCanvasHeight = null;
       try {
         attachCanvasEvents(canvas);
         renderCurrentFrame(0);
@@ -469,10 +406,6 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       mountedCanvas = null;
       lastRenderState = null;
       hitRegions = [];
-      lastHitRegionSignature = null;
-      hitRegionsDirty = true;
-      lastCanvasWidth = null;
-      lastCanvasHeight = null;
       cameraState = createInitialCameraState();
       return { status: "detached" };
     },
