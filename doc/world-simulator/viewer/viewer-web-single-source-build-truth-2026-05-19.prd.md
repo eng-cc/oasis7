@@ -57,7 +57,7 @@
 ### 4.2 Generated Artifact Single Source of Truth
 - `viewer.js` 必须成为仓库内 canonical Viewer Web bundle 名称。
 - `software_safe.js` 只允许作为 compat alias，且其实现必须显式指向 `viewer.js`，不能再承载独立 bundle 真值。
-- `software_safe.html` 可以继续作为源码页面文件，但引用脚本时必须对齐 canonical bundle 真值，而不是继续把 compat bundle 当唯一入口。
+- `viewer.html` 是 canonical 源码页面文件；`software_safe.html` 只作为 compat HTML 副本，且两者都必须引用 canonical bundle `viewer.js`。
 - `dist/pixel-world-bridge/` 下的 JS / wasm bindgen 产物必须继续由 finalize 脚本生成，但其 canonical 生成边界要与 `viewer.js` 同步写死在同一条 build flow 中；该目录是生成产物 / dist 输入，不是手写源码目录。
 
 ### 4.3 Script and Bundle Contract
@@ -98,7 +98,7 @@
 ## 6. Acceptance Criteria
 - AC-1: `legacy_core.js` 不再包含全部主入口实现，而是退化为 facade / export assembly；主实现已下沉到多个职责模块。2026-06-13 状态：constants/routes、初始 state shape 与 auth/CBOR crypto helper 已下沉，`legacy_core.js` 仍保留 control / semantic command / DOM rendering / bootstrap 组装，AC-1 按部分完成并继续追踪剩余 viewer 工程债处理。
 - AC-2: `viewer.js` 成为仓库内 canonical Viewer Web bundle 名称；`software_safe.js` 仅作为显式 compat alias。
-- AC-3: `software_safe.html`、dist rebuild helper、bundle 打包脚本和 browser regression helper 均按同一 canonical/compat 关系工作，不再依赖“先有 `software_safe.js` 再复制成 `viewer.js`”。
+- AC-3: `viewer.html` / `software_safe.html`、dist rebuild helper、bundle 打包脚本和 browser regression helper 均按同一 canonical/compat 关系工作，不再依赖 compat 名称作为 canonical 源。
 - AC-4: `dist/pixel-world-bridge/` generated runtime 继续可用，且其来源明确绑定到 finalize flow，而不是被当成手工维护源码；浏览器 served-dist 路径仍保持 `./pixel-world-bridge/`。
 - AC-5: 现有 `npm --prefix crates/oasis7_viewer run test:ui`、`npm --prefix crates/oasis7_viewer run build:software-safe` 与相关 repo-owned Node/browser helper 回归通过。
 

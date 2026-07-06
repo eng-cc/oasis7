@@ -1,5 +1,5 @@
 {
-  "name": "oasis7-viewer-software-safe-ui",
+  "name": "oasis7-viewer-ui",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,8 +10,10 @@
     "test:performance": "node ./scripts/viewer-performance-probe.mjs",
     "test:perf-harness": "vitest run software_safe_src/performance_metrics.test.js",
     "perf:viewer": "node ./scripts/viewer-performance-probe.mjs",
-    "build:software-safe:bundle": "vite build --config vite.software-safe.config.mjs",
-    "build:software-safe": "npm run build:software-safe:bundle && node ./scripts/finalize-software-safe-build.mjs"
+    "build:viewer:bundle": "vite build --config vite.software-safe.config.mjs",
+    "build:viewer": "npm run build:viewer:bundle && node ./scripts/finalize-software-safe-build.mjs",
+    "build:software-safe:bundle": "npm run build:viewer:bundle",
+    "build:software-safe": "npm run build:viewer"
   },
   "dependencies": {
     "solid-js": "^1.9.9"

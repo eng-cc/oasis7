@@ -14,7 +14,7 @@
 - 范围内:
   - 发布产物 `viewer.html`（canonical）/ `software_safe.html`（compat）
   - 发布产物 `viewer.js`（canonical）/ `software_safe.js`（compat）
-  - 源码与构建入口 `software_safe.html` / `software_safe_src/**`，以及 generated bundle `viewer.js` / compat alias `software_safe.js`
+  - 源码与构建入口 `viewer.html` / `software_safe_src/**`，以及 compat HTML `software_safe.html`、generated bundle `viewer.js` / compat alias `software_safe.js`
   - `scripts/run-viewer-web.sh`
   - `scripts/viewer-primary-web-entry-regression.sh`
   - `scripts/viewer-software-safe-step-regression*.sh`
@@ -28,7 +28,7 @@
 ## 接口 / 数据
 - 入口 URL: `http://<host>:<port>/?ws=ws://<web-bind>`
 - Launcher 输出: 必须显式注入 `render_mode=viewer`
-- 静态入口: 发布产物 `viewer.html`（兼容保留 `software_safe.html`）；源码页面文件继续由 `software_safe.html` 承载，但其 canonical bundle 指向 `viewer.js`
+- 静态入口: 源码与发布产物 `viewer.html` 为 canonical，兼容保留 `software_safe.html` 副本；两者均指向 canonical bundle `viewer.js`
 - 测试契约: 发布产物 `viewer.js` / `software_safe.js` 暴露同一套 `__AW_TEST__` 状态与动作接口；`viewer.js` 为 canonical generated bundle，`software_safe.js` 为 compat alias
 - 验证数据:
   - Web 入口 freshness 检查结果
@@ -55,7 +55,8 @@
 
 ## 2. User Experience & Functionality
 - In Scope:
-  - `software_safe.html`
+  - `viewer.html`
+  - `software_safe.html`（compat）
   - `software_safe.js`
   - `software_safe_src/**`
   - `scripts/run-viewer-web.sh`
@@ -76,7 +77,7 @@
 - 默认 URL:
   - `http://<host>:<port>/?ws=ws://<web-bind>`
 - `oasis7_game_launcher` 生成的游戏页 URL 必须显式注入 `render_mode=viewer`
-- `viewer.html` 是 dist / bundle / release 的唯一 canonical 静态入口页面；`software_safe.html` 只保留兼容别名，源码页面文件暂不改名
+- `viewer.html` 是源码、dist、bundle、release 的唯一 canonical 静态入口页面；`software_safe.html` 只保留兼容别名
 
 ### 4.2 Capability Envelope
 - 必须保留：
@@ -94,7 +95,7 @@
 
 ### 4.3 Freshness
 - source-tree Web 入口必须继续阻断 stale dist
-- `run-viewer-web.sh` 继续在启动前重建 `viewer` canonical dist，并同步产出兼容 alias 文件；源码 bundle / HTML 文件名仍保留 `software_safe.*`
+- `run-viewer-web.sh` 继续在启动前重建 `viewer` canonical dist，并同步产出兼容 alias 文件；源码 HTML 文件名为 `viewer.html`，compat HTML 文件名为 `software_safe.html`
 
 ## 5. Acceptance Criteria
 - AC-1: `run-viewer-web.sh` 构建并服务 `viewer` canonical dist，同时保留 `software_safe` 兼容副本。

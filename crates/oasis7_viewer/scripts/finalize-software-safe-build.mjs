@@ -9,6 +9,8 @@ const workspaceRoot = resolve(viewerRoot, "..", "..");
 const tempOutDir = resolve(viewerRoot, ".software-safe-build");
 const softwareSafeSrcDir = resolve(viewerRoot, "software_safe_src");
 const viewerDistDir = resolve(viewerRoot, "dist");
+const canonicalHtmlPath = resolve(viewerRoot, "viewer.html");
+const compatHtmlPath = resolve(viewerRoot, "software_safe.html");
 const builtBundlePath = resolve(tempOutDir, "viewer.js");
 const finalCanonicalBundlePath = resolve(viewerRoot, "viewer.js");
 const finalDistBundlePath = resolve(viewerDistDir, "viewer.js");
@@ -164,6 +166,7 @@ async function buildPixelWorldRuntimeVariant({ featureName, backendDirName }) {
   ]);
 }
 
+await access(canonicalHtmlPath);
 await access(builtBundlePath);
 const emittedFiles = (await listFilesRecursively(tempOutDir))
   .map((filePath) => relative(tempOutDir, filePath))
@@ -172,6 +175,7 @@ if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
   throw new Error(`unexpected viewer canonical bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
 await copyFile(builtBundlePath, finalCanonicalBundlePath);
+await copyFile(canonicalHtmlPath, compatHtmlPath);
 await mkdir(viewerDistDir, { recursive: true });
 await copyFile(builtBundlePath, finalDistBundlePath);
 await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");

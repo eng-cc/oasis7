@@ -1,17 +1,4 @@
 version: 1
 role: tpm
 status: committed
-tasks:
-  - task_uid: task_6dfd332bab5b4fff93237390aec200ac
-    title: "Converge legacy governance docs"
-    module: engineering
-    priority: P2
-    source_signal: ""
-    related_prd: []
-    acceptance:
-      - "Identify the next high-value engineering governance doc convergence point focused on legacy semantics and stale document removal."
-      - "Apply the smallest safe documentation governance changes that converge old semantics into current canonical surfaces or delete obsolete documents."
-      - "Run documentation governance verification and record evidence."
-    handoff_to: []
-    status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/2083
+tasks: []

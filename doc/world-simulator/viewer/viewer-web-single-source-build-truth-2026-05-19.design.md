@@ -19,7 +19,7 @@
 
 ## 产物关系
 - Canonical:
-  - `software_safe.html` 源码页面文件
+  - `viewer.html` 源码页面文件
   - `viewer.js` 生成 bundle
   - `dist/pixel-world-bridge/*` 生成 runtime
 - Compat alias:
@@ -30,6 +30,7 @@
 - `vite.software-safe.config.mjs`
   - 产出 canonical `viewer.js`
 - `finalize-software-safe-build.mjs`
+  - 同步 canonical `viewer.html` 到 compat `software_safe.html`
   - 复制 canonical bundle 到 `viewer.js`
   - 生成 compat `software_safe.js`
   - 继续生成 `dist/pixel-world-bridge/*`
