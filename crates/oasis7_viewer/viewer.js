@@ -2547,6 +2547,18 @@ function createViewerWorldScaleModule({
     const space = state2.snapshot?.config?.space;
     return space && typeof space === "object" ? space : null;
   }
+  function formatWorldBoundsLabel(space, locale) {
+    if (!space) {
+      return null;
+    }
+    const width = formatPhysicalDistanceCm2(space.width_cm, locale);
+    const depth = formatPhysicalDistanceCm2(space.depth_cm, locale);
+    const height = formatPhysicalDistanceCm2(space.height_cm, locale);
+    if (!width || !depth || !height) {
+      return null;
+    }
+    return `${width} × ${depth} × ${height}`;
+  }
   function selectedWorldAnchor() {
     const selected = state2.selectedObject;
     if (selected && selected.pos) {
@@ -2611,14 +2623,15 @@ function createViewerWorldScaleModule({
   function buildWorldScaleSurface2(locale = state2.uiLocale) {
     const isZh = isLocaleZh2(locale);
     const space = snapshotSpaceConfig();
+    const worldBoundsLabel = formatWorldBoundsLabel(space, locale);
     const anchor = selectedWorldAnchor();
     const locations = Object.values(state2.snapshot?.model?.locations || {}).filter((location) => location?.id && location?.pos);
     const nearestLocations = nearestLocationsForAnchor(anchor, locations, locale);
     const physicalTruth = {
       canonicalUnitLabel: formatPhysicalDistanceCm2(1, locale),
       canonicalUnitDetail: isZh ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。" : "World positions, distances, radii, and sizes are stored as integer centimeters.",
-      worldBoundsLabel: space ? `${formatPhysicalDistanceCm2(space.width_cm, locale)} × ${formatPhysicalDistanceCm2(space.depth_cm, locale)} × ${formatPhysicalDistanceCm2(space.height_cm, locale)}` : null,
-      worldBoundsDetail: space ? isZh ? "真实世界边界来自 snapshot.config.space；锚点选择 fallback 另行处理。" : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
+      worldBoundsLabel,
+      worldBoundsDetail: worldBoundsLabel ? isZh ? "真实世界边界来自 snapshot.config.space；锚点选择 fallback 另行处理。" : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately." : isZh ? "当前快照没有发布 world bounds。" : "The current snapshot does not publish world bounds yet.",
       anchor: anchor ? {
         kind: anchor.kind,
         id: anchor.id,

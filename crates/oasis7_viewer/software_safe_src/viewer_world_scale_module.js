@@ -72,6 +72,19 @@ export function createViewerWorldScaleModule({
     return space && typeof space === "object" ? space : null;
   }
 
+  function formatWorldBoundsLabel(space, locale) {
+    if (!space) {
+      return null;
+    }
+    const width = formatPhysicalDistanceCm(space.width_cm, locale);
+    const depth = formatPhysicalDistanceCm(space.depth_cm, locale);
+    const height = formatPhysicalDistanceCm(space.height_cm, locale);
+    if (!width || !depth || !height) {
+      return null;
+    }
+    return `${width} × ${depth} × ${height}`;
+  }
+
   function selectedWorldAnchor() {
     const selected = state.selectedObject;
     if (selected && selected.pos) {
@@ -143,6 +156,7 @@ export function createViewerWorldScaleModule({
   function buildWorldScaleSurface(locale = state.uiLocale) {
     const isZh = isLocaleZh(locale);
     const space = snapshotSpaceConfig();
+    const worldBoundsLabel = formatWorldBoundsLabel(space, locale);
     const anchor = selectedWorldAnchor();
     const locations = Object.values(state.snapshot?.model?.locations || {})
       .filter((location) => location?.id && location?.pos);
@@ -154,10 +168,8 @@ export function createViewerWorldScaleModule({
       canonicalUnitDetail: isZh
         ? "世界位置、距离、半径和尺寸的正式真值都按整数厘米存储。"
         : "World positions, distances, radii, and sizes are stored as integer centimeters.",
-      worldBoundsLabel: space
-        ? `${formatPhysicalDistanceCm(space.width_cm, locale)} × ${formatPhysicalDistanceCm(space.depth_cm, locale)} × ${formatPhysicalDistanceCm(space.height_cm, locale)}`
-        : null,
-      worldBoundsDetail: space
+      worldBoundsLabel,
+      worldBoundsDetail: worldBoundsLabel
         ? isZh
           ? "真实世界边界来自 snapshot.config.space；锚点选择 fallback 另行处理。"
           : "Physical world bounds from snapshot.config.space; anchor selection fallback is handled separately."
