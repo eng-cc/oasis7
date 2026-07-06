@@ -2249,6 +2249,8 @@ function createViewerHostedAuthStateModule({
       ).trim();
       const issuedAtUnixMs = parsed?.issuedAtUnixMs ?? parsed?.issued_at_unix_ms ?? null;
       const sessionEpoch = parsed?.sessionEpoch ?? parsed?.session_epoch ?? null;
+      const normalizedIssuedAtUnixMs = normalizeOptionalFiniteNumber(issuedAtUnixMs);
+      const normalizedSessionEpoch = normalizeOptionalFiniteNumber(sessionEpoch);
       if (!playerId || !releaseToken) {
         clearHostedPlayerSession2();
         return null;
@@ -2262,8 +2264,8 @@ function createViewerHostedAuthStateModule({
           maskedLoginHint: maskedLoginHint || null,
           deviceSessionId: deviceSessionId || releaseToken,
           releaseToken,
-          issuedAtUnixMs,
-          sessionEpoch
+          issuedAtUnixMs: normalizedIssuedAtUnixMs,
+          sessionEpoch: normalizedSessionEpoch
         })
       );
       return buildDefaultAuthState({
@@ -2276,8 +2278,8 @@ function createViewerHostedAuthStateModule({
         releaseToken,
         source: "hosted_browser_storage",
         registrationStatus: "issued",
-        sessionEpoch: sessionEpoch == null ? null : Number(sessionEpoch),
-        issuedAtUnixMs: issuedAtUnixMs == null ? null : Number(issuedAtUnixMs),
+        sessionEpoch: normalizedSessionEpoch,
+        issuedAtUnixMs: normalizedIssuedAtUnixMs,
         runtimeStatus: "issued",
         error: null
       });
@@ -2285,6 +2287,13 @@ function createViewerHostedAuthStateModule({
       clearHostedPlayerSession2();
       return null;
     }
+  }
+  function normalizeOptionalFiniteNumber(value) {
+    if (value === null || value === void 0 || value === "") {
+      return null;
+    }
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
   function resolveViewerAuthState2() {
     const bootstrap2 = resolveAuthBootstrap2();
@@ -4762,14 +4771,14 @@ async function buildGameplayActionAuthProof(request, auth) {
   const payload = {
     operation: "gameplay_action",
     action_id: request.action_id,
-    target_agent_id: request.target_agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce
+    target_agent_id: request.target_agent_id
   };
   if (request.actor_agent_id != null) {
     payload.actor_agent_id = request.actor_agent_id;
   }
+  payload.player_id = auth.playerId;
+  payload.public_key = auth.publicKey;
+  payload.nonce = nonce;
   const signingPayload = buildAuthEnvelope(payload);
   return {
     scheme: "ed25519",
