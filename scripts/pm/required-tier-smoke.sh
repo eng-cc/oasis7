@@ -366,7 +366,7 @@ SIGNAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/promote-signal.sh" \
   --severity high \
   --summary "viewer smoke blocked on startup bridge init" \
   --create-task \
-  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
+  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md \
   --acceptance "blocked task exists in qa backlog" \
   --json)"
 
@@ -729,7 +729,7 @@ EMPTY_LOG_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" 
   --title "empty execution log current lint fixture" \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
-  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
+  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md \
   --acceptance "current workflow lint fails when execution log only has the generated template" \
   --json)"
 EMPTY_LOG_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$EMPTY_LOG_TASK_JSON")"
@@ -764,7 +764,7 @@ CLOSEOUT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --title "closeout helper smoke task" \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
-  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md \
+  --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md \
   --acceptance "task closeout helper can close the task only after fresh verification" \
   --json)"
 CLOSEOUT_TASK_UID="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())["task_uid"])' <<<"$CLOSEOUT_TASK_JSON")"

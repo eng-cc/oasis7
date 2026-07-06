@@ -112,8 +112,8 @@ GitHub Project 是 active work queue / external state gate，`.pm/` 只保留生
 - 若 rebase 命中 `.pm/**` 冲突，先运行 `./scripts/pm/rebase-conflict-helper.sh` 盘点类别；`.pm/inbox/signals.jsonl` 已退休，不再有 `.pm/**` 自动修复路径，canonical task/memory/stage 冲突仍需人工判断。
 
 QA / liveops 基础用法：
-- `./scripts/pm/promote-signal.sh --source-type issue_comment --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md --acceptance "candidate task exists in GitHub Project"`
-- `./scripts/pm/promote-signal.sh --source-type incident --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
+- `./scripts/pm/promote-signal.sh --source-type issue_comment --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint qa_engineer --severity high --summary "viewer smoke blocked on startup" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md --acceptance "candidate task exists in GitHub Project"`
+- `./scripts/pm/promote-signal.sh --source-type incident --source-ref https://github.com/eng-cc/oasis7/issues/<N>#issuecomment-<ID> --role-hint liveops_community --severity medium --summary "community feedback needs follow-up" --create-task --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 
 状态迁移基础用法：
 - `./scripts/pm/move-task.sh --task-uid task_<32hex> --to-status committed`

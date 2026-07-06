@@ -105,7 +105,6 @@
   - `.pm/shared/memory/{active,superseded}.yaml`：跨角色共享记忆。
   - `scripts/pm/promote-memory.sh`、`scripts/pm/supersede-memory.sh`、`scripts/pm/memory-report.sh`、`scripts/pm/memory-lint.sh`：memory 相关脚本层。
 - Integration Points:
-  - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.prd.md`
   - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
   - `doc/engineering/workflow/source-of-truth.md`
   - GitHub task issue evidence comments
