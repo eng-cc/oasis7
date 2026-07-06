@@ -1892,13 +1892,13 @@ async function buildGameplayActionAuthProof(request, auth) {
     operation: "gameplay_action",
     action_id: request.action_id,
     target_agent_id: request.target_agent_id,
-    player_id: auth.playerId,
-    public_key: auth.publicKey,
-    nonce,
   };
   if (request.actor_agent_id != null) {
     payload.actor_agent_id = request.actor_agent_id;
   }
+  payload.player_id = auth.playerId;
+  payload.public_key = auth.publicKey;
+  payload.nonce = nonce;
   const signingPayload = buildAuthEnvelope(payload);
   return {
     scheme: "ed25519",

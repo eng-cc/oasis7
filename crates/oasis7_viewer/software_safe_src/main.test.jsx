@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
 import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "./software_safe_constants.js";
+import { buildAuthEnvelope } from "./viewer_auth_crypto.js";
 
 vi.mock("./pixel_world_host.jsx", () => ({
   PixelWorldHost: (props) => (
@@ -2091,6 +2092,46 @@ describe("viewer web ui automation baseline", () => {
         reason: "gameplay_action timed out waiting for ack/error from live server",
       }),
     );
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("signs actor-scoped gameplay actions with the Rust auth payload field order", async () => {
+    const signSpy = vi.spyOn(window.crypto.subtle, "sign");
+    const { core, sentMessages } = await setupConnectedSemanticCore();
+
+    expect(core.sendGameplayAction({
+      protocol_action: "gameplay_action.submit",
+      action_id: "claim_agent",
+      target_agent_id: "agent-claim-target",
+      actor_agent_id: "agent-0",
+    })).toEqual(expect.objectContaining({ ok: true }));
+
+    await waitFor(() => {
+      expect(sentMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "gameplay_action",
+            request: expect.objectContaining({
+              action_id: "claim_agent",
+              target_agent_id: "agent-claim-target",
+              actor_agent_id: "agent-0",
+            }),
+          }),
+        ]),
+      );
+    });
+    const request = sentMessages.find((message) => message.type === "gameplay_action").request;
+    const actualSigningPayload = new Uint8Array(signSpy.mock.calls.at(-1)[2]);
+    const expectedSigningPayload = buildAuthEnvelope({
+      operation: "gameplay_action",
+      action_id: "claim_agent",
+      target_agent_id: "agent-claim-target",
+      actor_agent_id: "agent-0",
+      player_id: request.auth.player_id,
+      public_key: request.auth.public_key,
+      nonce: request.auth.nonce,
+    });
+
+    expect(Array.from(actualSigningPayload)).toEqual(Array.from(expectedSigningPayload));
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("auto-advances local test runtime after first-agent claim ack", async () => {
