@@ -34,6 +34,7 @@ scope = [
     "crates/oasis7/src/bin/oasis7_governance_registry_audit.rs",
     "crates/oasis7_proto/Cargo.toml",
     "crates/oasis7_proto/src",
+    "crates/oasis7_viewer/viewer.html",
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe.js",

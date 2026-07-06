@@ -2,8 +2,8 @@
 
 viewer_web_dist_contract_pairs() {
   cat <<'EOF'
-software_safe.html index.html
-software_safe.html viewer.html
+viewer.html index.html
+viewer.html viewer.html
 software_safe.html software_safe.html
 viewer.js viewer.js
 software_safe.js software_safe.js
@@ -43,6 +43,7 @@ repo_root = Path(sys.argv[1]).resolve()
 scope = [
     "Cargo.toml",
     "Cargo.lock",
+    "crates/oasis7_viewer/viewer.html",
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe.js",

@@ -21,7 +21,8 @@ mkdir -p \
 printf '[workspace]\nmembers = []\n' > "$tmp_repo/Cargo.toml"
 printf '# lock\n' > "$tmp_repo/Cargo.lock"
 printf 'pub const VIEWER_PROTOCOL_VERSION: u32 = 7;\n' > "$tmp_repo/crates/oasis7_proto/src/viewer.rs"
-printf '<!doctype html>software safe\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.html"
+printf '<!doctype html>viewer\n' > "$tmp_repo/crates/oasis7_viewer/viewer.html"
+cp "$tmp_repo/crates/oasis7_viewer/viewer.html" "$tmp_repo/crates/oasis7_viewer/software_safe.html"
 printf 'console.log("viewer");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
 printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '#!/usr/bin/env bash\nset -euo pipefail\n' > "$tmp_repo/scripts/copy-viewer-web-dist.sh"
@@ -32,6 +33,7 @@ printf '<!doctype html><script type="module" src="./app.js"></script>\n' > "$tmp
 printf 'console.log("launcher app");\n' > "$tmp_repo/bundle/web-launcher/app.js"
 
 required_scope_entries=(
+  "crates/oasis7_viewer/viewer.html"
   "crates/oasis7_viewer/software_safe.js"
   "scripts/copy-viewer-web-dist.sh"
   "scripts/viewer-web-dist-contract.sh"

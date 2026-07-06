@@ -57,6 +57,7 @@ require_file() {
   }
 }
 
+viewer_html="$VIEWER_ROOT/viewer.html"
 software_safe_html="$VIEWER_ROOT/software_safe.html"
 viewer_js="$VIEWER_ROOT/viewer.js"
 compat_js="$VIEWER_ROOT/software_safe.js"
@@ -66,6 +67,7 @@ pixel_world_webgl2_bridge_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge.
 pixel_world_webgl2_bindgen_js="$pixel_world_bridge_dir/webgl2/pixel_world_bridge_bindgen.js"
 pixel_world_webgl2_wasm="$pixel_world_bridge_dir/webgl2/pixel_world_bridge_bindgen_bg.wasm"
 
+require_file "$viewer_html"
 require_file "$software_safe_html"
 require_file "$viewer_js"
 require_file "$compat_js"
@@ -77,8 +79,12 @@ while read -r source_rel _; do
   require_file "$VIEWER_ROOT/$source_rel"
 done < <(viewer_web_dist_contract_pairs)
 
-if ! grep -Fq 'src="./viewer.js"' "$software_safe_html"; then
-  echo "error: software_safe.html no longer points at canonical viewer.js" >&2
+if ! grep -Fq 'src="./viewer.js"' "$viewer_html"; then
+  echo "error: viewer.html no longer points at canonical viewer.js" >&2
+  exit 1
+fi
+if ! cmp -s "$viewer_html" "$software_safe_html"; then
+  echo "error: software_safe.html must remain a compatibility copy of canonical viewer.html" >&2
   exit 1
 fi
 if ! grep -Fq 'import "./viewer.js";' "$compat_js"; then
