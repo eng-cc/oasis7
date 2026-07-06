@@ -443,6 +443,11 @@ describe("pixel world host", () => {
     expect(html).toMatch(/\.pixel-world-focus-rail\s*\{[^}]*top:\s*112px;/s);
     expect(html).toContain("max-height: min(42vh, 340px);");
     expect(html).toContain(".pixel-world-focus-command-tray");
+    expect(html).toMatch(/\.pixel-world-focus-minimap__node::before\s*\{[^}]*width:\s*7px;[^}]*height:\s*7px;/s);
+    expect(html).toMatch(/\.pixel-world-focus-minimap__node--target::before\s*\{[^}]*background:\s*var\(--good\);/s);
+    expect(html).toMatch(/\.pixel-world-focus-minimap__node--agent::before\s*\{[^}]*background:\s*var\(--accent\);/s);
+    expect(html).toMatch(/\.pixel-world-focus-minimap__node--selected\s*\{[^}]*border-color:\s*rgba\(208,\s*168,\s*91,\s*0\.58\);/s);
+    expect(html).toMatch(/\.pixel-world-focus-minimap__node--selected::before\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;[^}]*border:\s*1px solid rgba\(208,\s*168,\s*91,\s*0\.78\);/s);
   });
 
   it("resolves claim onboarding next moves to executable gameplay actions", async () => {
