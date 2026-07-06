@@ -65,4 +65,38 @@ describe("viewer hosted auth state module", () => {
       sessionEpoch: 7,
     });
   });
+
+  it("drops malformed numeric session metadata while preserving recoverable hosted auth", () => {
+    window.localStorage.setItem(
+      hostedSessionStorageKey(),
+      JSON.stringify({
+        playerId: "hosted-player-1",
+        deviceSessionId: "device-session-1",
+        releaseToken: "release-token-1",
+        issuedAtUnixMs: "not-a-timestamp",
+        sessionEpoch: "not-an-epoch",
+      }),
+    );
+
+    const auth = createHostedAuthStateModule().resolveViewerAuthState();
+
+    expect(auth).toMatchObject({
+      available: true,
+      playerId: "hosted-player-1",
+      deviceSessionId: "device-session-1",
+      releaseToken: "release-token-1",
+      source: "hosted_browser_storage",
+      registrationStatus: "issued",
+      sessionEpoch: null,
+      issuedAtUnixMs: null,
+      runtimeStatus: "issued",
+    });
+    expect(JSON.parse(window.localStorage.getItem(hostedSessionStorageKey()))).toMatchObject({
+      playerId: "hosted-player-1",
+      deviceSessionId: "device-session-1",
+      releaseToken: "release-token-1",
+      issuedAtUnixMs: null,
+      sessionEpoch: null,
+    });
+  });
 });
