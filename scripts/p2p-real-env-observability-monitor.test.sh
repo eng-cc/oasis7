@@ -7,6 +7,27 @@ cd "$repo_root"
 tmp_root="$(mktemp -d)"
 trap 'rm -rf "$tmp_root"' EXIT
 
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+
+module_path = Path("scripts/p2p-real-env-observability-summary.py")
+spec = importlib.util.spec_from_file_location("observability_summary", module_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+summary = module.summarize_runtime_perf({
+    "runtime_perf": {
+        "health": "healthy",
+        "bottleneck": "action_execution",
+        "action_execution": {"p95_ms": 4.2, "over_budget_ratio_ppm": 0},
+    },
+})
+assert summary["available"] is True
+assert summary["alerts"] == []
+assert summary["status"] == "ok"
+PY
+
 python3 ./scripts/p2p-real-env-observability-summary.py \
   --snapshot-summary fixtures/p2p_real_env_observability/snapshot_summary.json \
   --host-summary fixtures/p2p_real_env_observability/host_summary.json \
@@ -22,18 +43,24 @@ python3 ./scripts/p2p-real-env-observability-summary.py \
   --run-id test-run \
   --run-dir "$tmp_root/run"
 
-python3 - "$tmp_root/summary.json" <<'PY'
+python3 - "$tmp_root/summary.json" "$tmp_root/summary.md" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 summary = json.loads(Path(sys.argv[1]).read_text())
+markdown = Path(sys.argv[2]).read_text()
 assert summary["snapshot"]["claim_status"] == "pass_candidate"
 assert summary["overall"]["status"] == "pass_with_resource_alerts"
 assert "sequencer_ecs" in summary["host"]["aggregate"]["alerted_nodes"]
 local_node = summary["nodes"]["local_node"]
 assert local_node["role"] == "observer"
 assert local_node["host"]["runtime_cpu_percent"] == 47.3
+assert local_node["runtime_perf"]["health"] == "warn"
+assert local_node["runtime_perf"]["bottleneck"] == "decision"
+assert local_node["runtime_perf"]["decision_p95_ms"] == 24.2
+assert "runtime_perf_warn" in local_node["alerts"]
+assert "runtime_perf_bottleneck_decision" in local_node["modules"]["runtime_perf"]["alerts"]
 assert local_node["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
 assert "traffic_monitor_unavailable" in local_node["alerts"]
 assert "traffic_samples_missing" in local_node["alerts"]
@@ -67,5 +94,9 @@ storage = summary["nodes"]["storage_ecs"]
 assert storage["wasm"]["window_available"] is True
 assert storage["modules"]["storage"]["status"] == "ok"
 assert summary["traffic"]["aggregate"]["total_payload_bytes"] == 780646
+assert summary["traffic"]["aggregate"]["network_interface"]["partial_coverage"] is True
+assert "traffic_network_interface_partial_coverage" in summary["overall"]["alerts"]
+assert "Network interface coverage: partial" in markdown
+assert "missing=`local_node, storage_ecs`" in markdown
 assert summary["overall"]["optimization_candidate_count"] >= 3
 PY

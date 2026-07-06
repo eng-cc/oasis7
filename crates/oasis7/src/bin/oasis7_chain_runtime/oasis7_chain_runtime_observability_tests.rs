@@ -360,6 +360,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         reward_runtime,
         storage.clone(),
         sample_wasm_status(),
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
@@ -1109,6 +1110,7 @@ fn build_chain_status_payload_clamps_future_ages_to_zero() {
         reward_runtime,
         storage,
         sample_wasm_status(),
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),

@@ -512,6 +512,7 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
             executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot::empty(),
             router: oasis7_wasm_router::WasmRouterMetricsSnapshot::empty(),
         },
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),

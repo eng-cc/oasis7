@@ -140,6 +140,17 @@ def fmt_num(value):
     return f"{int(value):,}"
 
 
+def fmt_metric(value):
+    if value is None:
+        return "n/a"
+    if isinstance(value, str):
+        return value
+    amount = float(value)
+    if amount.is_integer():
+        return f"{int(amount):,}"
+    return f"{amount:.1f}"
+
+
 def fmt_bytes(value):
     if value is None:
         return "n/a"
@@ -228,6 +239,7 @@ reward_runtime = status.get("reward_runtime") or {}
 execution_bridge_commit_timing = status.get("execution_bridge_commit_timing") or {}
 module_tick_routing_status = status.get("module_tick_routing") or {}
 module_tick_routing = module_tick_routing_status.get("metrics") or {}
+runtime_perf = status.get("runtime_perf") or {}
 alerts = observability.get("alerts") or []
 
 summary = {
@@ -302,6 +314,7 @@ summary = {
     },
     "execution_bridge_commit_timing": execution_bridge_commit_timing,
     "module_tick_routing": module_tick_routing_status,
+    "runtime_perf": runtime_perf,
     "traffic_window": traffic_summary,
     "traffic_summary_missing": traffic_summary_missing,
 }
@@ -391,6 +404,27 @@ if alerts:
         )
 else:
     lines.extend(["", "## Active Alerts", "- none"])
+
+runtime_perf_stages = [
+    ("tick", runtime_perf.get("tick") or {}),
+    ("decision", runtime_perf.get("decision") or {}),
+    ("action_execution", runtime_perf.get("action_execution") or {}),
+    ("callback", runtime_perf.get("callback") or {}),
+    ("llm_api", runtime_perf.get("llm_api") or {}),
+]
+lines.extend(
+    [
+        "",
+        "## Runtime Performance",
+        f"- available: `{fmt_bool(bool(runtime_perf))}`",
+        f"- health: `{runtime_perf.get('health', 'not_reported')}`",
+        f"- bottleneck: `{runtime_perf.get('bottleneck', 'not_reported')}`",
+    ]
+)
+for stage_name, stage in runtime_perf_stages:
+    lines.append(
+        f"- {stage_name}: p95=`{fmt_metric(stage.get('p95_ms'))}` p99=`{fmt_metric(stage.get('p99_ms'))}` max=`{fmt_metric(stage.get('max_ms'))}` over_budget_ratio_ppm=`{fmt_num(stage.get('over_budget_ratio_ppm'))}` samples=`{fmt_num(stage.get('samples_window'))}`"
+    )
 
 lines.extend(
     [

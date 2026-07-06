@@ -107,6 +107,30 @@
       "max_latency_ms": null
     }
   },
+  "runtime_perf": {
+    "health": "warn",
+    "bottleneck": "decision",
+    "tick": {
+      "p95_ms": 31.5,
+      "over_budget_ratio_ppm": 0
+    },
+    "decision": {
+      "p95_ms": 24.2,
+      "over_budget_ratio_ppm": 125000
+    },
+    "action_execution": {
+      "p95_ms": 14.8,
+      "over_budget_ratio_ppm": 0
+    },
+    "callback": {
+      "p95_ms": 3.1,
+      "over_budget_ratio_ppm": 0
+    },
+    "llm_api": {
+      "p95_ms": 980.0,
+      "over_budget_ratio_ppm": 0
+    }
+  },
   "wasm": {
     "metrics_available": true,
     "degraded_reason": null,

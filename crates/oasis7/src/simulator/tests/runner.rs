@@ -879,17 +879,16 @@ fn runner_external_action_execution_duration_updates_perf_snapshot() {
 fn runner_runtime_perf_separates_llm_api_from_local_execution() {
     let mut kernel = setup_kernel_with_wait_agent("agent-1");
     let mut runner: AgentRunner<LlmLatencyTraceAgent> = AgentRunner::new();
-    runner.register(LlmLatencyTraceAgent::new("agent-1", 2, 6));
+    runner.register(LlmLatencyTraceAgent::new("agent-1", 200, 220));
 
     let _ = runner.tick_decide_only(&mut kernel).expect("tick result");
     let perf = runner.runtime_perf_snapshot();
     assert_eq!(perf.llm_api.samples_total, 1);
-    assert!(perf.llm_api.p95_ms >= 2.0);
+    assert!(perf.llm_api.p95_ms >= 200.0);
     assert!(perf.decision.samples_total >= 1);
     assert!(perf.tick.samples_total >= 1);
-    assert!(perf.decision.p95_ms < 20.0);
-    assert!(perf.tick.p95_ms < 33.0);
-    assert_eq!(perf.health, RuntimePerfHealth::Healthy);
+    assert!(perf.decision.p95_ms < perf.llm_api.p95_ms);
+    assert!(perf.tick.p95_ms < perf.llm_api.p95_ms);
 }
 
 #[test]

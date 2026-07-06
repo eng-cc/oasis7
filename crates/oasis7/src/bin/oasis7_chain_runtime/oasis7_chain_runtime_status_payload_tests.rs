@@ -6,6 +6,9 @@ use oasis7::runtime::{
     ModuleKind, ModuleLimits, ModuleManifest, ModuleRole, ModuleSubscription,
     ModuleSubscriptionStage, PolicySet, ProposalDecision, ReleaseSecurityPolicy, World,
 };
+use oasis7::simulator::{
+    RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,
+};
 use oasis7_node::{
     Libp2pReachabilitySnapshot, NodeConsensusSnapshot, NodeNetworkPolicy,
     NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
@@ -126,6 +129,28 @@ fn build_minimal_status_payload_with_world_dir(
     execution_world_dir: &Path,
     execution_records_dir: Option<&Path>,
 ) -> super::status_payload::ChainStatusResponse {
+    build_minimal_status_payload_with_world_dir_and_runtime_perf(
+        execution_world_dir,
+        execution_records_dir,
+        None,
+    )
+}
+
+fn build_minimal_status_payload_with_runtime_perf(
+    runtime_perf: RuntimePerfSnapshot,
+) -> super::status_payload::ChainStatusResponse {
+    build_minimal_status_payload_with_world_dir_and_runtime_perf(
+        Path::new("/tmp/execution-world"),
+        None,
+        Some(runtime_perf),
+    )
+}
+
+fn build_minimal_status_payload_with_world_dir_and_runtime_perf(
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+    runtime_perf: Option<RuntimePerfSnapshot>,
+) -> super::status_payload::ChainStatusResponse {
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
         player_id: "player-a".to_string(),
@@ -163,6 +188,7 @@ fn build_minimal_status_payload_with_world_dir(
         minimal_reward_runtime_metrics(),
         minimal_storage_metrics(),
         minimal_wasm_status(),
+        runtime_perf,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
@@ -170,6 +196,23 @@ fn build_minimal_status_payload_with_world_dir(
         minimal_transfer_status(),
         super::ChainReplicationDebugStatus::default(),
     )
+}
+
+fn runtime_perf_series(p95_ms: f64, over_budget_ratio_ppm: u64) -> RuntimePerfSeriesSnapshot {
+    RuntimePerfSeriesSnapshot {
+        samples_total: 10,
+        samples_window: 10,
+        budget_ms: 20.0,
+        last_ms: p95_ms,
+        avg_ms: p95_ms,
+        min_ms: p95_ms,
+        max_ms: p95_ms,
+        p50_ms: p95_ms,
+        p95_ms,
+        p99_ms: p95_ms,
+        over_budget_total: 1,
+        over_budget_ratio_ppm,
+    }
 }
 
 #[derive(Default)]
@@ -292,6 +335,35 @@ fn test_module_artifact_signer_public_key_hex() -> String {
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = sha2::Sha256::digest(bytes);
     hex::encode(digest)
+}
+
+#[test]
+fn build_chain_status_payload_surfaces_runtime_perf_snapshot() {
+    let runtime_perf = RuntimePerfSnapshot {
+        sample_window: 512,
+        tick: runtime_perf_series(31.5, 0),
+        decision: runtime_perf_series(24.2, 125_000),
+        action_execution: runtime_perf_series(14.8, 0),
+        callback: runtime_perf_series(3.1, 0),
+        llm_api: runtime_perf_series(980.0, 0),
+        health: RuntimePerfHealth::Warn,
+        bottleneck: RuntimePerfBottleneck::Decision,
+    };
+
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+
+    let runtime_perf = payload.runtime_perf.expect("runtime perf snapshot");
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    assert_eq!(runtime_perf.bottleneck, RuntimePerfBottleneck::Decision);
+    assert_eq!(runtime_perf.decision.p95_ms, 24.2);
+    assert_eq!(runtime_perf.decision.over_budget_ratio_ppm, 125_000);
+}
+
+#[test]
+fn build_chain_status_payload_marks_runtime_perf_unavailable_without_source() {
+    let payload = build_minimal_status_payload(None);
+
+    assert!(payload.runtime_perf.is_none());
 }
 
 #[test]
@@ -440,6 +512,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
             executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot::empty(),
             router: oasis7_wasm_router::WasmRouterMetricsSnapshot::empty(),
         },
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
@@ -569,6 +642,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
             executor: oasis7_wasm_executor::WasmExecutorMetricsSnapshot::empty(),
             router: oasis7_wasm_router::WasmRouterMetricsSnapshot::empty(),
         },
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),

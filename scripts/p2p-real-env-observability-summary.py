@@ -131,6 +131,36 @@ def summarize_host_runtime(host_node: dict) -> dict:
     }
 
 
+def summarize_runtime_perf(raw_status: dict) -> dict:
+    runtime_perf = raw_status.get("runtime_perf") or {}
+    alerts = []
+    health = runtime_perf.get("health")
+    bottleneck = runtime_perf.get("bottleneck")
+    if health in ("warn", "critical"):
+        alerts.append(f"runtime_perf_{health}")
+    if health in ("warn", "critical") and bottleneck and bottleneck != "none":
+        alerts.append(f"runtime_perf_bottleneck_{bottleneck}")
+    return {
+        "status": determine_module_status(
+            alerts,
+            critical_alerts={"runtime_perf_critical"},
+        ) if runtime_perf else "unknown",
+        "alerts": unique_sorted(alerts),
+        "available": bool(runtime_perf),
+        "health": health,
+        "bottleneck": bottleneck,
+        "tick_p95_ms": (runtime_perf.get("tick") or {}).get("p95_ms"),
+        "decision_p95_ms": (runtime_perf.get("decision") or {}).get("p95_ms"),
+        "action_execution_p95_ms": (runtime_perf.get("action_execution") or {}).get("p95_ms"),
+        "callback_p95_ms": (runtime_perf.get("callback") or {}).get("p95_ms"),
+        "llm_api_p95_ms": (runtime_perf.get("llm_api") or {}).get("p95_ms"),
+        "decision_over_budget_ratio_ppm": (
+            (runtime_perf.get("decision") or {}).get("over_budget_ratio_ppm")
+        ),
+        "raw": runtime_perf,
+    }
+
+
 def summarize_consensus(raw_status: dict) -> dict:
     consensus = raw_status.get("consensus") or {}
     network_head = consensus.get("network_head") or {}
@@ -676,6 +706,7 @@ def summarize_p2p_reachability(raw_status: dict) -> dict:
 def summarize_modules(snapshot_node: dict, host_node: dict, traffic_node: dict, raw_status: dict, wasm_summary: dict) -> dict:
     return {
         "host_runtime": summarize_host_runtime(host_node),
+        "runtime_perf": summarize_runtime_perf(raw_status),
         "consensus": summarize_consensus(raw_status),
         "observability": summarize_observability(raw_status),
         "replication": summarize_replication(raw_status),
@@ -1002,6 +1033,21 @@ def derive_node_summary(label: str, snapshot: dict, host: dict, traffic: dict, r
             "storage_used_percent": latest_storage.get("used_percent"),
             "status": host_node.get("status") or {},
         },
+        "runtime_perf": {
+            "available": (modules.get("runtime_perf") or {}).get("available"),
+            "health": (modules.get("runtime_perf") or {}).get("health"),
+            "bottleneck": (modules.get("runtime_perf") or {}).get("bottleneck"),
+            "tick_p95_ms": (modules.get("runtime_perf") or {}).get("tick_p95_ms"),
+            "decision_p95_ms": (modules.get("runtime_perf") or {}).get("decision_p95_ms"),
+            "action_execution_p95_ms": (
+                (modules.get("runtime_perf") or {}).get("action_execution_p95_ms")
+            ),
+            "callback_p95_ms": (modules.get("runtime_perf") or {}).get("callback_p95_ms"),
+            "llm_api_p95_ms": (modules.get("runtime_perf") or {}).get("llm_api_p95_ms"),
+            "decision_over_budget_ratio_ppm": (
+                (modules.get("runtime_perf") or {}).get("decision_over_budget_ratio_ppm")
+            ),
+        },
         "traffic": {
             "payload_total_bytes": payload_bytes,
             "window_covered_minutes": ((traffic_node.get("window") or {}).get("covered_minutes")),
@@ -1039,11 +1085,19 @@ def render_markdown(summary: dict) -> list[str]:
     ]
     aggregate = (summary.get("traffic") or {}).get("aggregate") or {}
     lane_distribution = aggregate.get("lane_distribution") or {}
+    aggregate_network = aggregate.get("network_interface") or {}
     if lane_distribution:
         lines.append(
             "- Aggregate lanes: "
             + f"udp `{fmt_bytes(((lane_distribution.get('udp_gossip') or {}).get('payload_bytes')))}` ({fmt_percent(((lane_distribution.get('udp_gossip') or {}).get('share_percent')))}), "
             + f"libp2p `{fmt_bytes(((lane_distribution.get('libp2p_replication') or {}).get('payload_bytes')))}` ({fmt_percent(((lane_distribution.get('libp2p_replication') or {}).get('share_percent')))})."
+        )
+        lines.append("")
+    if aggregate_network:
+        coverage_label = "partial" if aggregate_network.get("partial_coverage") else "complete"
+        missing_nodes = ", ".join(aggregate_network.get("missing_network_interface_nodes") or [])
+        lines.append(
+            f"- Network interface coverage: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` missing=`{missing_nodes or 'none'}`"
         )
         lines.append("")
     if summary.get("optimization_candidates"):
@@ -1061,6 +1115,7 @@ def render_markdown(summary: dict) -> list[str]:
                 f"- role=`{node.get('role')}` node_id=`{node.get('node_id')}`",
                 f"- heights=`{fmt_num((node.get('snapshot') or {}).get('committed_height_first'))} -> {fmt_num((node.get('snapshot') or {}).get('committed_height_last'))}` known_peer_heads_max=`{fmt_num((node.get('snapshot') or {}).get('known_peer_heads_max'))}`",
                 f"- runtime_cpu=`{fmt_percent((node.get('host') or {}).get('runtime_cpu_percent'))}` core_ratio=`{fmt_ratio_as_percent((node.get('host') or {}).get('runtime_cpu_core_ratio'))}` load1/core=`{fmt_num((node.get('host') or {}).get('load_per_core_ratio_1m'))}` mem_available=`{fmt_percent((node.get('host') or {}).get('mem_available_percent'))}` storage_used=`{fmt_percent((node.get('host') or {}).get('storage_used_percent'))}`",
+                f"- runtime_perf=`{(node.get('runtime_perf') or {}).get('health') or 'not_reported'}` bottleneck=`{(node.get('runtime_perf') or {}).get('bottleneck') or 'not_reported'}` decision_p95_ms=`{fmt_num((node.get('runtime_perf') or {}).get('decision_p95_ms'))}`",
                 f"- traffic_payload=`{fmt_bytes((node.get('traffic') or {}).get('payload_total_bytes'))}` control_plane_events=`{fmt_num((node.get('traffic') or {}).get('control_plane_total_events'))}`",
                 f"- wasm_metrics_available=`{(node.get('wasm') or {}).get('metrics_available')}` window_available=`{(node.get('wasm') or {}).get('window_available')}` hotspot=`{(node.get('wasm') or {}).get('top_hotspot')}`",
                 f"- alerts=`{', '.join(node.get('alerts') or ['(none)'])}`",
@@ -1110,6 +1165,9 @@ def main():
     if snapshot.get("claim_status") != "pass_candidate":
         overall_alerts.extend(snapshot.get("failure_signatures") or [])
     overall_alerts.extend(host.get("aggregate", {}).get("alerted_nodes") or [])
+    traffic_network = (traffic.get("aggregate") or {}).get("network_interface") or {}
+    if traffic_network.get("partial_coverage"):
+        overall_alerts.append("traffic_network_interface_partial_coverage")
     for label, node in nodes.items():
         for alert in node.get("alerts") or []:
             overall_alerts.append(f"{label}:{alert}")

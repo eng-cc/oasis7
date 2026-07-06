@@ -90,6 +90,7 @@ fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
             degraded_reason: None,
         },
         super::observability_tests::sample_wasm_status(),
+        None,
         super::ChainTrafficStatus {
             udp_gossip: None,
             libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
