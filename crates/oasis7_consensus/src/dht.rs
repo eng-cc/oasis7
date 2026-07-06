@@ -13,12 +13,18 @@ pub trait DistributedDht: proto_dht::DistributedDht<WorldError> {}
 
 impl<T> DistributedDht for T where T: proto_dht::DistributedDht<WorldError> {}
 
+type ProviderRecordsByProvider = BTreeMap<String, ProviderRecord>;
+type ProviderRecordsByContent = BTreeMap<String, ProviderRecordsByProvider>;
+type ProviderRecordsByWorld = BTreeMap<String, ProviderRecordsByContent>;
+type PeerRecordsByPeer = BTreeMap<String, SignedPeerRecord>;
+type PeerRecordsByWorld = BTreeMap<String, PeerRecordsByPeer>;
+
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryDht {
-    providers: Arc<Mutex<BTreeMap<(String, String), BTreeMap<String, ProviderRecord>>>>,
+    providers: Arc<Mutex<ProviderRecordsByWorld>>,
     heads: Arc<Mutex<BTreeMap<String, WorldHeadAnnounce>>>,
     memberships: Arc<Mutex<BTreeMap<String, MembershipDirectorySnapshot>>>,
-    peer_records: Arc<Mutex<BTreeMap<(String, String), SignedPeerRecord>>>,
+    peer_records: Arc<Mutex<PeerRecordsByWorld>>,
 }
 
 impl InMemoryDht {
@@ -35,7 +41,6 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
         provider_id: &str,
     ) -> Result<(), WorldError> {
         let mut providers = self.providers.lock().expect("lock providers");
-        let key = (world_id.to_string(), content_hash.to_string());
         let record = ProviderRecord {
             provider_id: provider_id.to_string(),
             last_seen_ms: now_ms(),
@@ -47,7 +52,9 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
             p50_read_latency_ms: None,
         };
         providers
-            .entry(key)
+            .entry(world_id.to_string())
+            .or_default()
+            .entry(content_hash.to_string())
             .or_default()
             .insert(provider_id.to_string(), record);
         Ok(())
@@ -59,9 +66,9 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
         content_hash: &str,
     ) -> Result<Vec<ProviderRecord>, WorldError> {
         let providers = self.providers.lock().expect("lock providers");
-        let key = (world_id.to_string(), content_hash.to_string());
         Ok(providers
-            .get(&key)
+            .get(world_id)
+            .and_then(|records_by_hash| records_by_hash.get(content_hash))
             .map(|records| records.values().cloned().collect())
             .unwrap_or_default())
     }
@@ -97,10 +104,10 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
 
     fn put_peer_record(&self, world_id: &str, record: &SignedPeerRecord) -> Result<(), WorldError> {
         let mut peer_records = self.peer_records.lock().expect("lock peer records");
-        peer_records.insert(
-            (world_id.to_string(), record.record.peer_id.clone()),
-            record.clone(),
-        );
+        peer_records
+            .entry(world_id.to_string())
+            .or_default()
+            .insert(record.record.peer_id.clone(), record.clone());
         Ok(())
     }
 
@@ -111,7 +118,8 @@ impl proto_dht::DistributedDht<WorldError> for InMemoryDht {
     ) -> Result<Option<SignedPeerRecord>, WorldError> {
         let peer_records = self.peer_records.lock().expect("lock peer records");
         Ok(peer_records
-            .get(&(world_id.to_string(), peer_id.to_string()))
+            .get(world_id)
+            .and_then(|records_by_peer| records_by_peer.get(peer_id))
             .cloned())
     }
 }

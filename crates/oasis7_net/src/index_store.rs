@@ -6,6 +6,10 @@ use oasis7_proto::distributed::WorldHeadAnnounce;
 use super::distributed_dht::ProviderRecord;
 use super::error::WorldError;
 
+type ProviderRecordsByProvider = BTreeMap<String, ProviderRecord>;
+type ProviderRecordsByContent = BTreeMap<String, ProviderRecordsByProvider>;
+type ProviderRecordsByWorld = BTreeMap<String, ProviderRecordsByContent>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeadIndexRecord {
     pub head: WorldHeadAnnounce,
@@ -32,7 +36,7 @@ pub trait DistributedIndexStore {
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryIndexStore {
     heads: Arc<Mutex<BTreeMap<String, HeadIndexRecord>>>,
-    providers: Arc<Mutex<BTreeMap<(String, String), BTreeMap<String, ProviderRecord>>>>,
+    providers: Arc<Mutex<ProviderRecordsByWorld>>,
 }
 
 impl InMemoryIndexStore {
@@ -67,7 +71,9 @@ impl DistributedIndexStore for InMemoryIndexStore {
     ) -> Result<(), WorldError> {
         let mut providers = self.providers.lock().expect("lock providers");
         providers
-            .entry((world_id.to_string(), content_hash.to_string()))
+            .entry(world_id.to_string())
+            .or_default()
+            .entry(content_hash.to_string())
             .or_default()
             .insert(record.provider_id.clone(), record);
         Ok(())
@@ -80,7 +86,8 @@ impl DistributedIndexStore for InMemoryIndexStore {
     ) -> Result<Vec<ProviderRecord>, WorldError> {
         let providers = self.providers.lock().expect("lock providers");
         Ok(providers
-            .get(&(world_id.to_string(), content_hash.to_string()))
+            .get(world_id)
+            .and_then(|records_by_hash| records_by_hash.get(content_hash))
             .map(|records| records.values().cloned().collect())
             .unwrap_or_default())
     }
