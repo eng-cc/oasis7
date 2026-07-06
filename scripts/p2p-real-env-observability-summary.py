@@ -161,6 +161,50 @@ def summarize_runtime_perf(raw_status: dict) -> dict:
     }
 
 
+def network_interface_coverage_warning(aggregate_network: dict) -> dict | None:
+    if not aggregate_network or not aggregate_network.get("partial_coverage"):
+        return None
+    warning = aggregate_network.get("coverage_warning")
+    if warning:
+        return warning
+    missing_nodes = aggregate_network.get("missing_network_interface_nodes") or []
+    skipped_nodes = aggregate_network.get("skipped_unavailable_nodes") or []
+    interface_counter_missing_nodes = (
+        aggregate_network.get("interface_counter_missing_nodes") or []
+    )
+    if not skipped_nodes:
+        successful = safe_int(aggregate_network.get("successful_node_count"))
+        interface_available = safe_int(
+            aggregate_network.get("network_interface_available_node_count")
+        )
+        skipped_count = max(len(missing_nodes) - max(successful - interface_available, 0), 0)
+    else:
+        skipped_count = len(skipped_nodes)
+    if not interface_counter_missing_nodes:
+        interface_counter_missing_count = max(len(missing_nodes) - skipped_count, 0)
+    else:
+        interface_counter_missing_count = len(interface_counter_missing_nodes)
+    return {
+        "code": "network_interface_partial_coverage",
+        "severity": "warn",
+        "summary": (
+            "Network-interface aggregate excludes unavailable nodes or nodes "
+            "without interface counters; totals only cover interface-available nodes."
+        ),
+        "expected_node_count": aggregate_network.get("expected_node_count", 0),
+        "successful_node_count": aggregate_network.get("successful_node_count", 0),
+        "network_interface_available_node_count": aggregate_network.get(
+            "network_interface_available_node_count", 0
+        ),
+        "skipped_unavailable_node_count": skipped_count,
+        "interface_counter_missing_node_count": interface_counter_missing_count,
+        "missing_network_interface_node_count": len(missing_nodes),
+        "missing_network_interface_nodes": missing_nodes,
+        "skipped_unavailable_nodes": skipped_nodes,
+        "interface_counter_missing_nodes": interface_counter_missing_nodes,
+    }
+
+
 def summarize_consensus(raw_status: dict) -> dict:
     consensus = raw_status.get("consensus") or {}
     network_head = consensus.get("network_head") or {}
@@ -763,6 +807,7 @@ def derive_optimization_candidates(node_label: str, modules: dict) -> list[dict]
     storage = modules.get("storage") or {}
     reward_runtime = modules.get("reward_runtime") or {}
     p2p = modules.get("p2p_reachability") or {}
+    runtime_perf = modules.get("runtime_perf") or {}
 
     runtime_hot = (host.get("runtime_cpu_core_ratio") or 0.0) >= 0.75
     traffic_chatter = (
@@ -788,6 +833,41 @@ def derive_optimization_candidates(node_label: str, modules: dict) -> list[dict]
                 suggested_optimizations=[
                     "Reduce peer-manager reconnect and discovery churn on the hot node.",
                     "Throttle or dedupe high-frequency control-plane messages before they hit libp2p replication.",
+                ],
+            )
+        )
+
+    runtime_perf_health = runtime_perf.get("health")
+    runtime_perf_bottleneck = runtime_perf.get("bottleneck")
+    if runtime_perf_health in ("warn", "critical") and runtime_perf_bottleneck not in (
+        None,
+        "",
+        "none",
+    ):
+        candidates.append(
+            build_candidate(
+                node_label=node_label,
+                module="runtime_perf",
+                severity="high" if runtime_perf_health == "critical" else "medium",
+                key=f"runtime_perf_bottleneck_{runtime_perf_bottleneck}",
+                summary=(
+                    "Runtime performance snapshot reports a bottleneck that should be visible in operator triad summaries."
+                ),
+                evidence={
+                    "health": runtime_perf_health,
+                    "bottleneck": runtime_perf_bottleneck,
+                    "tick_p95_ms": runtime_perf.get("tick_p95_ms"),
+                    "decision_p95_ms": runtime_perf.get("decision_p95_ms"),
+                    "action_execution_p95_ms": runtime_perf.get("action_execution_p95_ms"),
+                    "callback_p95_ms": runtime_perf.get("callback_p95_ms"),
+                    "llm_api_p95_ms": runtime_perf.get("llm_api_p95_ms"),
+                    "decision_over_budget_ratio_ppm": runtime_perf.get(
+                        "decision_over_budget_ratio_ppm"
+                    ),
+                },
+                suggested_optimizations=[
+                    "Inspect the reported runtime_perf bottleneck before treating node health as only resource or network pressure.",
+                    "Correlate runtime_perf p95 and over-budget ratios with host and traffic windows for the same node.",
                 ],
             )
         )
@@ -1096,8 +1176,34 @@ def render_markdown(summary: dict) -> list[str]:
     if aggregate_network:
         coverage_label = "partial" if aggregate_network.get("partial_coverage") else "complete"
         missing_nodes = ", ".join(aggregate_network.get("missing_network_interface_nodes") or [])
+        coverage_warning = network_interface_coverage_warning(aggregate_network) or {}
+        if coverage_warning:
+            aggregate_network["coverage_warning"] = coverage_warning
+        skipped_unavailable = coverage_warning.get(
+            "skipped_unavailable_node_count",
+            len(aggregate_network.get("skipped_unavailable_nodes") or []),
+        )
+        interface_counter_missing = coverage_warning.get(
+            "interface_counter_missing_node_count",
+            len(aggregate_network.get("interface_counter_missing_nodes") or []),
+        )
+        skipped_unavailable_nodes = ", ".join(
+            coverage_warning.get("skipped_unavailable_nodes")
+            or aggregate_network.get("skipped_unavailable_nodes")
+            or []
+        )
+        interface_counter_missing_nodes = ", ".join(
+            coverage_warning.get("interface_counter_missing_nodes")
+            or aggregate_network.get("interface_counter_missing_nodes")
+            or []
+        )
+        coverage_prefix = (
+            "Network interface coverage warning"
+            if aggregate_network.get("partial_coverage")
+            else "Network interface coverage"
+        )
         lines.append(
-            f"- Network interface coverage: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` missing=`{missing_nodes or 'none'}`"
+            f"- {coverage_prefix}: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` skipped_unavailable=`{skipped_unavailable}` skipped_nodes=`{skipped_unavailable_nodes or 'none'}` interface_counter_missing=`{interface_counter_missing}` interface_counter_missing_nodes=`{interface_counter_missing_nodes or 'none'}` missing=`{missing_nodes or 'none'}`"
         )
         lines.append("")
     if summary.get("optimization_candidates"):
@@ -1167,6 +1273,9 @@ def main():
     overall_alerts.extend(host.get("aggregate", {}).get("alerted_nodes") or [])
     traffic_network = (traffic.get("aggregate") or {}).get("network_interface") or {}
     if traffic_network.get("partial_coverage"):
+        coverage_warning = network_interface_coverage_warning(traffic_network)
+        if coverage_warning:
+            traffic_network["coverage_warning"] = coverage_warning
         overall_alerts.append("traffic_network_interface_partial_coverage")
     for label, node in nodes.items():
         for alert in node.get("alerts") or []:

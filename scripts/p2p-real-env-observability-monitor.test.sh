@@ -61,6 +61,10 @@ assert local_node["runtime_perf"]["bottleneck"] == "decision"
 assert local_node["runtime_perf"]["decision_p95_ms"] == 24.2
 assert "runtime_perf_warn" in local_node["alerts"]
 assert "runtime_perf_bottleneck_decision" in local_node["modules"]["runtime_perf"]["alerts"]
+assert any(
+    candidate["key"] == "runtime_perf_bottleneck_decision"
+    for candidate in local_node["optimization_candidates"]
+)
 assert local_node["wasm"]["top_hotspot"] == "executor.entrypoint_call_ms_total"
 assert "traffic_monitor_unavailable" in local_node["alerts"]
 assert "traffic_samples_missing" in local_node["alerts"]
@@ -74,7 +78,6 @@ assert "traffic_window_uncovered" in local_node["modules"]["traffic_control_plan
 assert local_node["modules"]["traffic_control_plane"]["latest_fetch_error"] == "curl_failed"
 assert "wasm" not in local_node["modules"]
 assert "wasm_window_unavailable" in local_node["modules"]["wasm_executor_router"]["alerts"]
-assert local_node["optimization_candidates"] == []
 sequencer = summary["nodes"]["sequencer_ecs"]
 assert "runtime_cpu_hot" in sequencer["alerts"]
 assert sequencer["traffic"]["control_plane_total_events"] == 178
@@ -95,8 +98,16 @@ assert storage["wasm"]["window_available"] is True
 assert storage["modules"]["storage"]["status"] == "ok"
 assert summary["traffic"]["aggregate"]["total_payload_bytes"] == 780646
 assert summary["traffic"]["aggregate"]["network_interface"]["partial_coverage"] is True
+coverage_warning = summary["traffic"]["aggregate"]["network_interface"]["coverage_warning"]
+assert coverage_warning["code"] == "network_interface_partial_coverage"
+assert coverage_warning["severity"] == "warn"
+assert coverage_warning["skipped_unavailable_node_count"] == 1
+assert coverage_warning["interface_counter_missing_node_count"] == 1
+assert coverage_warning["missing_network_interface_node_count"] == 2
 assert "traffic_network_interface_partial_coverage" in summary["overall"]["alerts"]
-assert "Network interface coverage: partial" in markdown
+assert "Network interface coverage warning: partial" in markdown
+assert "skipped_unavailable=`1`" in markdown
+assert "interface_counter_missing=`1`" in markdown
 assert "missing=`local_node, storage_ecs`" in markdown
 assert summary["overall"]["optimization_candidate_count"] >= 3
 PY
