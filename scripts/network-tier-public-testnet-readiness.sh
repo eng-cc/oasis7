@@ -1263,6 +1263,7 @@ def validate_light_client_continuity_window_pass_evidence(
             "DA sampling",
             "multi-client consensus equivalence",
             "ready_for_live_candidate",
+            "live public launch",
         }
         missing_denials = sorted(required_denials.difference(set(does_not_claim)))
         if missing_denials:
@@ -1406,10 +1407,18 @@ def validate_validator_finality_proof_pass_evidence(
             "stake_threshold_checked",
             "validator_set_hash_checked",
             "consensus_approver_subset_checked",
+            "ed25519_signature_verification_checked",
+            "validator_set_transition_execution_checked",
         ):
             if key not in finality_sample:
                 blockers.append(f"{lane} finality_sample.{key} missing: {raw}")
-        for key in ("stake_threshold_checked", "validator_set_hash_checked", "consensus_approver_subset_checked"):
+        for key in (
+            "stake_threshold_checked",
+            "validator_set_hash_checked",
+            "consensus_approver_subset_checked",
+            "ed25519_signature_verification_checked",
+            "validator_set_transition_execution_checked",
+        ):
             if finality_sample.get(key) is not True:
                 blockers.append(f"{lane} finality_sample.{key} must be true: {raw}")
         if int(finality_sample.get("commitment_count") or 0) <= 0:
@@ -1459,6 +1468,43 @@ def validate_validator_finality_proof_pass_evidence(
                 blockers.append(f"{lane} external_verifier.validator_set_hash must match evidence: {raw}")
         else:
             blockers.append(f"{lane} external_verifier.validator_set object missing: {raw}")
+        verifier_finality = verifier.get("finality")
+        if isinstance(finality_sample, dict) and isinstance(verifier_finality, dict):
+            for key in (
+                "commitment_count",
+                "vote_count",
+                "stake_threshold_checked",
+                "validator_set_hash_checked",
+                "consensus_approver_subset_checked",
+                "ed25519_signature_verification_checked",
+                "validator_set_transition_execution_checked",
+                "validator_set_transition_count",
+            ):
+                if verifier_finality.get(key) != finality_sample.get(key):
+                    blockers.append(f"{lane} external_verifier.finality.{key} must match finality_sample: {raw}")
+        else:
+            blockers.append(f"{lane} external_verifier.finality object missing: {raw}")
+        verifier_does_not_claim = verifier.get("does_not_claim")
+        if not isinstance(verifier_does_not_claim, list):
+            blockers.append(f"{lane} external_verifier.does_not_claim must be an array: {raw}")
+        else:
+            verifier_required_denials = {
+                "mainnet-grade finality",
+                "full light client",
+                "trust-minimized validator-set transition governance",
+                "DA sampling",
+                "multi-client consensus equivalence",
+                "public validator onboarding open",
+            }
+            missing_verifier_denials = sorted(
+                verifier_required_denials.difference(set(verifier_does_not_claim))
+            )
+            if missing_verifier_denials:
+                blockers.append(
+                    f"{lane} external_verifier.does_not_claim missing: "
+                    + ",".join(missing_verifier_denials)
+                    + f": {raw}"
+                )
 
     for key in (
         "node_db_access_used",
@@ -1476,7 +1522,6 @@ def validate_validator_finality_proof_pass_evidence(
             "full light client security",
             "mainnet-grade finality",
             "trust-minimized validator transition",
-            "cryptographic signature verification",
             "public validator onboarding open",
             "permissionless validator onboarding",
             "DA sampling",

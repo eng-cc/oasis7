@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use ed25519_dalek::{Signer, SigningKey};
 use oasis7_proto::distributed::{
     BlobRef, CheckpointClosureEvidenceV1, ExecutionBindingEvidenceV1, HeadConsensusEvidenceV1,
     WIRE_ENCODING_CBOR, WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1,
@@ -8,7 +9,7 @@ use oasis7_proto::distributed::{
     WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1, WORLD_HEAD_PROOF_V1_SCHEMA, WorldBlock,
     WorldFinalityCommitmentV1, WorldFinalityMisbehaviorEvidenceV1, WorldFinalityProofV1,
     WorldFinalityValidatorV1, WorldFinalityVoteV1, WorldHeadAnnounce, WorldHeadProofV1,
-    compute_world_finality_validator_set_hash,
+    compute_world_finality_validator_set_hash, world_finality_vote_signing_payload,
 };
 use serde::Serialize;
 use serde_json::json;
@@ -16,6 +17,53 @@ use serde_json::json;
 fn canonical_blake3_hex<T: Serialize>(value: &T) -> String {
     let payload = serde_cbor::to_vec(value).expect("encode canonical cbor");
     blake3::hash(payload.as_slice()).to_hex().to_string()
+}
+
+fn sample_validator_keys() -> Vec<(&'static str, SigningKey)> {
+    vec![
+        ("validator-a", SigningKey::from_bytes(&[1_u8; 32])),
+        ("validator-b", SigningKey::from_bytes(&[2_u8; 32])),
+        ("validator-c", SigningKey::from_bytes(&[3_u8; 32])),
+    ]
+}
+
+fn sample_public_key_hex(keys: &[(&'static str, SigningKey)], validator_id: &str) -> String {
+    let key = keys
+        .iter()
+        .find(|(id, _)| *id == validator_id)
+        .map(|(_, key)| key)
+        .expect("sample validator key");
+    hex::encode(key.verifying_key().to_bytes())
+}
+
+fn sample_signed_finality_vote(
+    keys: &[(&'static str, SigningKey)],
+    validator_id: &str,
+    commitment: &WorldFinalityCommitmentV1,
+) -> WorldFinalityVoteV1 {
+    let key = keys
+        .iter()
+        .find(|(id, _)| *id == validator_id)
+        .map(|(_, key)| key)
+        .expect("sample validator key");
+    let payload = world_finality_vote_signing_payload(
+        validator_id,
+        commitment.height,
+        commitment.block_hash.as_str(),
+        commitment.state_root.as_str(),
+        commitment.validator_set_hash.as_str(),
+        commitment.round_id.as_str(),
+    )
+    .expect("sample finality vote payload");
+    WorldFinalityVoteV1 {
+        validator_id: validator_id.to_string(),
+        height: commitment.height,
+        block_hash: commitment.block_hash.clone(),
+        state_root: commitment.state_root.clone(),
+        signature_scheme: "ed25519".to_string(),
+        signature_evidence_hash: canonical_blake3_hex(&payload),
+        signature_hex: hex::encode(key.sign(payload.as_slice()).to_bytes()),
+    }
 }
 
 pub(crate) fn verify_finality_proof_path(
@@ -99,7 +147,10 @@ pub(crate) fn verify_finality_proof_path(
             "misbehavior_evidence_count": proof.misbehavior_evidence.len(),
             "stake_threshold_checked": true,
             "validator_set_hash_checked": true,
-            "consensus_approver_subset_checked": true
+            "consensus_approver_subset_checked": true,
+            "ed25519_signature_verification_checked": true,
+            "validator_set_transition_execution_checked": true,
+            "validator_set_transition_count": proof.validator_set_transitions.len()
         },
         "head": {
             "height": head.height,
@@ -109,8 +160,7 @@ pub(crate) fn verify_finality_proof_path(
         "does_not_claim": [
             "mainnet-grade finality",
             "full light client",
-            "cryptographic signature verification",
-            "validator-set transition execution",
+            "trust-minimized validator-set transition governance",
             "DA sampling",
             "multi-client consensus equivalence",
             "public validator onboarding open"
@@ -141,25 +191,26 @@ pub(crate) fn sample_world_finality_proof() -> WorldFinalityProofV1 {
     let first = sample_world_head_proof_at(40, "prev-block-39");
     let second = sample_world_head_proof_at(41, first.head.block_hash.as_str());
     let third = sample_world_head_proof_at(42, second.head.block_hash.as_str());
+    let keys = sample_validator_keys();
     let validators = vec![
         WorldFinalityValidatorV1 {
             validator_id: "validator-a".to_string(),
             stake_weight: 34,
-            finality_signer_public_key: "finality-pk-a".to_string(),
+            finality_signer_public_key: sample_public_key_hex(&keys, "validator-a"),
             activation_height: 1,
             exit_height: None,
         },
         WorldFinalityValidatorV1 {
             validator_id: "validator-b".to_string(),
             stake_weight: 33,
-            finality_signer_public_key: "finality-pk-b".to_string(),
+            finality_signer_public_key: sample_public_key_hex(&keys, "validator-b"),
             activation_height: 1,
             exit_height: None,
         },
         WorldFinalityValidatorV1 {
             validator_id: "validator-c".to_string(),
             stake_weight: 33,
-            finality_signer_public_key: "finality-pk-c".to_string(),
+            finality_signer_public_key: sample_public_key_hex(&keys, "validator-c"),
             activation_height: 1,
             exit_height: None,
         },
@@ -170,31 +221,21 @@ pub(crate) fn sample_world_finality_proof() -> WorldFinalityProofV1 {
     let head_proofs = vec![first, second, third];
     let finality_commitments = head_proofs
         .iter()
-        .map(|proof| WorldFinalityCommitmentV1 {
-            height: proof.height,
-            round_id: format!("round-{}", proof.height),
-            block_hash: proof.head.block_hash.clone(),
-            state_root: proof.head.state_root.clone(),
-            validator_set_hash: validator_set_hash.clone(),
-            quorum_threshold_bps: 6_667,
-            votes: vec![
-                WorldFinalityVoteV1 {
-                    validator_id: "validator-a".to_string(),
-                    height: proof.height,
-                    block_hash: proof.head.block_hash.clone(),
-                    state_root: proof.head.state_root.clone(),
-                    signature_scheme: "ed25519_evidence_hash_v1".to_string(),
-                    signature_evidence_hash: format!("sig-a-{}", proof.height),
-                },
-                WorldFinalityVoteV1 {
-                    validator_id: "validator-b".to_string(),
-                    height: proof.height,
-                    block_hash: proof.head.block_hash.clone(),
-                    state_root: proof.head.state_root.clone(),
-                    signature_scheme: "ed25519_evidence_hash_v1".to_string(),
-                    signature_evidence_hash: format!("sig-b-{}", proof.height),
-                },
-            ],
+        .map(|proof| {
+            let mut commitment = WorldFinalityCommitmentV1 {
+                height: proof.height,
+                round_id: format!("round-{}", proof.height),
+                block_hash: proof.head.block_hash.clone(),
+                state_root: proof.head.state_root.clone(),
+                validator_set_hash: validator_set_hash.clone(),
+                quorum_threshold_bps: 6_667,
+                votes: vec![],
+            };
+            commitment.votes = vec![
+                sample_signed_finality_vote(&keys, "validator-a", &commitment),
+                sample_signed_finality_vote(&keys, "validator-b", &commitment),
+            ];
+            commitment
         })
         .collect();
     WorldFinalityProofV1 {
@@ -211,6 +252,7 @@ pub(crate) fn sample_world_finality_proof() -> WorldFinalityProofV1 {
         quorum_threshold_bps: 6_667,
         head_proofs,
         finality_commitments,
+        validator_set_transitions: vec![],
         misbehavior_evidence: vec![WorldFinalityMisbehaviorEvidenceV1 {
             height: 42,
             validator_id: "validator-c".to_string(),

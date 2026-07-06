@@ -20,9 +20,8 @@ Usage:
 Purpose:
   Verify a bounded WorldFinalityProofV1 artifact from an external process and
   emit optional validator-set/finality/fork-misbehavior evidence. This does not
-  claim full light-client security, cryptographic signature verification,
-  trust-minimized validator transition, public validator onboarding, or
-  mainnet-grade finality.
+  claim full light-client security, trust-minimized validator transition,
+  public validator onboarding, or mainnet-grade finality.
 USAGE
 }
 
@@ -200,8 +199,13 @@ evidence = {
     "validator_set": validator_set,
     "finality_sample": finality,
     "transition_sample": {
-        "transition_result": "not_claimed",
-        "reason": "single validator set bounded sample; no live validator-set transition execution claimed",
+        "transition_result": (
+            "bounded_transition_execution_checked"
+            if int(finality.get("validator_set_transition_count") or 0) > 0
+            else "no_transition_in_sample"
+        ),
+        "transition_count": int(finality.get("validator_set_transition_count") or 0),
+        "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance",
     },
     "fork_or_reorg_cases": [
         "conflicting_head_rejected_or_recorded",
@@ -222,17 +226,16 @@ evidence = {
         "full light client security",
         "mainnet-grade finality",
         "trust-minimized validator transition",
-        "cryptographic signature verification",
         "public validator onboarding open",
         "permissionless validator onboarding",
         "DA sampling",
         "multi-client consensus equivalence",
         "ready_for_live_candidate",
+        "live public launch",
     ],
     "residual_risk": [
         "same implementation family verifier; no independent client parity",
-        "signature_evidence_hash is checked as evidence binding, not live cryptographic signature verification",
-        "single validator set sample does not prove live validator-set transition execution",
+        "bounded transition execution is same-family verifier evidence, not trust-minimized validator governance",
     ],
 }
 
