@@ -39,6 +39,7 @@ assert "traffic_monitor_unavailable" in local_node["alerts"]
 assert "traffic_samples_missing" in local_node["alerts"]
 assert "traffic_window_uncovered" in local_node["alerts"]
 assert "wasm_window_unavailable" in local_node["alerts"]
+assert "wasm_metrics_unavailable" not in local_node["alerts"]
 assert local_node["modules"]["consensus"]["status"] == "ok"
 assert "traffic_monitor_unavailable" in local_node["modules"]["traffic_control_plane"]["alerts"]
 assert "traffic_samples_missing" in local_node["modules"]["traffic_control_plane"]["alerts"]

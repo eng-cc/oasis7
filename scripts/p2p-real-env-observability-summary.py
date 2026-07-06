@@ -487,15 +487,16 @@ def summarize_transactions(raw_status: dict) -> dict:
 def summarize_wasm(raw_status: dict, wasm_summary: dict) -> dict:
     raw_wasm = raw_status.get("wasm") or {}
     latest_wasm = wasm_summary.get("latest") or {}
+    latest_wasm_metrics = latest_wasm.get("wasm") or latest_wasm
     wasm_window = wasm_summary.get("window") or {}
     build = raw_wasm.get("build") or {}
     executor = raw_wasm.get("executor") or {}
     router = raw_wasm.get("router") or {}
-    degraded_reason = latest_wasm.get("degraded_reason") or raw_wasm.get("degraded_reason")
+    degraded_reason = latest_wasm_metrics.get("degraded_reason") or raw_wasm.get("degraded_reason")
     alerts = []
-    if latest_wasm.get("metrics_available") is False:
+    if latest_wasm_metrics.get("metrics_available") is False:
         alerts.append("wasm_metrics_unavailable")
-    if latest_wasm.get("metrics_available") is True and wasm_window.get("available") is False:
+    if latest_wasm_metrics.get("metrics_available") is True and wasm_window.get("available") is False:
         alerts.append("wasm_window_unavailable")
     if degraded_reason and degraded_reason not in IGNORED_WASM_DEGRADED_REASONS:
         alerts.append("wasm_degraded")
@@ -518,7 +519,7 @@ def summarize_wasm(raw_status: dict, wasm_summary: dict) -> dict:
             critical_alerts={"wasm_metrics_unavailable", "wasm_degraded"},
         ),
         "alerts": alerts,
-        "metrics_available": latest_wasm.get("metrics_available"),
+        "metrics_available": latest_wasm_metrics.get("metrics_available"),
         "degraded_reason": degraded_reason,
         "window_available": wasm_window.get("available"),
         "window_notes": wasm_window.get("notes"),
@@ -541,7 +542,7 @@ def summarize_traffic_control_plane(traffic_node: dict) -> dict:
     udp = traffic.get("udp_gossip") or {}
     control_plane = libp2p.get("control_plane") or {}
     covered_minutes = traffic_window.get("covered_minutes")
-    sample_count_successful = traffic_window.get("sample_count_successful")
+    sample_count_successful = traffic_window.get("sample_count_successful", traffic_node.get("sample_count_successful"))
     payload_total_bytes = safe_int(libp2p.get("total_payload_bytes")) + safe_int(udp.get("total_payload_bytes"))
     libp2p_wire_bytes = libp2p.get("total_wire_bytes")
     control_plane_wire_bytes = control_plane.get("total_wire_bytes")
@@ -581,7 +582,7 @@ def summarize_traffic_control_plane(traffic_node: dict) -> dict:
         "window_full_covered": traffic_window.get("full_window_covered"),
         "sample_count_successful": sample_count_successful,
         "last_error": latest_traffic.get("last_error"),
-        "latest_fetch_error": latest_traffic.get("latest_fetch_error"),
+        "latest_fetch_error": latest_traffic.get("latest_fetch_error") or traffic_node.get("latest_fetch_error"),
     }
 
 
@@ -947,6 +948,7 @@ def derive_node_summary(label: str, snapshot: dict, host: dict, traffic: dict, r
     traffic_node = ((traffic.get("nodes") or {}).get(label)) or {}
     wasm_window = wasm.get("window") or {}
     latest_wasm = wasm.get("latest") or {}
+    latest_wasm_metrics = latest_wasm.get("wasm") or latest_wasm
     raw_status = raw_status or {}
 
     roles = snapshot_node.get("roles") or []
@@ -966,9 +968,9 @@ def derive_node_summary(label: str, snapshot: dict, host: dict, traffic: dict, r
     alerts = []
     alerts.extend(snapshot.get("failure_signatures") or [])
     alerts.extend(host_node.get("alerts") or [])
-    if latest_wasm.get("metrics_available") is not True:
+    if latest_wasm_metrics.get("metrics_available") is not True:
         alerts.append("wasm_metrics_unavailable")
-    if (latest_wasm.get("degraded_reason") or ""):
+    if (latest_wasm_metrics.get("degraded_reason") or ""):
         alerts.append("wasm_degraded")
     if wasm_window.get("window_reset_detected") is True:
         alerts.append("wasm_counter_reset_detected")
@@ -1009,8 +1011,8 @@ def derive_node_summary(label: str, snapshot: dict, host: dict, traffic: dict, r
             "last_error": latest_traffic.get("last_error"),
         },
         "wasm": {
-            "metrics_available": latest_wasm.get("metrics_available"),
-            "degraded_reason": latest_wasm.get("degraded_reason"),
+            "metrics_available": latest_wasm_metrics.get("metrics_available"),
+            "degraded_reason": latest_wasm_metrics.get("degraded_reason"),
             "window_available": wasm_window.get("available"),
             "window_reset_detected": wasm_window.get("window_reset_detected"),
             "top_hotspot": wasm_window.get("top_hotspot"),
