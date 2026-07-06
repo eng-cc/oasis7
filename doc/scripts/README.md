@@ -26,7 +26,7 @@
 
 ## 入口分工
 - `README.md` 只承担 landing page 职责：帮助读者决定是先看规则、看项目状态，还是直接去某个高频脚本入口。
-- `prd.md` 是脚本模块的权威规格入口，适合先理解主入口分层、参数契约、稳定性趋势与隔离约束。
+- `prd.md` 是脚本模块的权威规格入口，适合先理解主入口分层、参数契约、fallback 围栏与隔离约束。
 - `project.md` 是执行台账，适合确认当前 worktree、landing、harness 等治理任务的完成状态。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 scripts 模块时的首读入口。
 - 高频脚本与治理专题承担主题真值：`new-task-worktree.sh` 负责新任务 bootstrap，`scripts/pm/task-closeout.sh` 负责带 fresh verification 的 GitHub-backed ready-for-PR closeout，`scripts/pm/workflow-behavior-eval.sh` 负责默认 workflow 主链 eval，`scripts/pr-review-thread-closeout.sh` 负责 same-PR review thread 盘点与 resolve，`prepare-task-pr.sh` 负责默认 GitHub PR 收口，`scripts/pm/rebase-conflict-helper.sh` 负责 `.pm` rebase 冲突分类，`worktree-gc-report.sh` 负责 worktree 生命周期盘点，`land-task-worktree.sh` 只保留给 local-only / fallback，`worktree-isolated-harness` 负责隔离栈与状态文件约束。
@@ -38,15 +38,15 @@
 - 维护 repo-family 共享的 cargo 开发态缓存入口，减少多 worktree 并行时的重复编译。
 - 维护本地真实 LetAI provider bridge + runtime/game 测试入口，避免把底层 launcher/bootstrap 脚本误当作人工试玩主入口。
 - 汇总 precommit、wasm 与治理专题文档。
-- 承接脚本稳定性趋势、文档门禁与运行约束收口。
+- 承接脚本治理基线、文档门禁与运行约束收口。
 
 ## 主题文档
 - `precommit/`：提交前检查与门禁策略。
 - `wasm/`：WASM 构建脚本与环境约束。
-- `governance/`：脚本分层、参数契约、稳定性趋势、worktree harness 与 task worktree bootstrap 专题。
+- `governance/`：脚本分层、参数契约、worktree harness 与 task worktree bootstrap 专题。
 
 ## 高频专题
-- 脚本治理基线：`doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`、`doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`、`doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
+- 脚本治理基线：`doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`、`doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`；历史稳定性趋势基线保留在 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
 - task worktree / PR 收口：`doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`、`doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`、`doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
 - 隔离栈：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
 - 其他高频入口：`doc/scripts/precommit/pre-commit.prd.md`

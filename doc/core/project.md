@@ -19,7 +19,7 @@
     - `rg -n "PRD-ID|任务ID|测试层级|命令|证据路径|结论" doc/core/templates/prd-id-test-evidence-mapping.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-005 (PRD-CORE-003) [test_tier_required]: 对模块 PRD 按轮次进行一致性审查并形成审查记录（含轮次状态与文档级审计轮次字段，缺省按 0 处理）。
-  - 当前追溯入口：ROUND-001~008 记录、`doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md`、`.pm` execution log 与 role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
+  - 当前追溯入口：ROUND-001~008 记录、`doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md`、GitHub task issue evidence comments 与 pre-PR local role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
 - 模块设计总览：`doc/core/design.md`
   - 产物文件: `doc/core/reviews/consistency-review-round-001.md`
   - 验收命令 (`test_tier_required`):
@@ -171,7 +171,7 @@
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
-    - `doc/core/release-candidate-*.{prd,design,project}.md`
+    - 历史已删除：`doc/core/release-candidate-*.{prd,design,project}.md`；当前 2026-03 候选追溯从 `doc/core/reviews/release-candidate-*.md` 与 GitHub task issue evidence comments 进入。
     - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
     - 历史已删除：`doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`；当前 docs hub / 公共阅读路径追溯从 `doc/README.md`、`doc/core/project.md` 的 `TASK-CORE-023` / `TASK-CORE-035` 与 doc structure standard 进入。
     - `doc/world-simulator/viewer/viewer-manual.manual.md`
@@ -370,9 +370,9 @@
 - 当前状态: active
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
-- 当前执行窗口: 继续以 `TASK-CORE-054` 为主；跨模块阶段判断、发布候选口径与入口治理仍以本页任务清单和对应专题 project 为准。
-- 最近完成的入口治理、taxonomy 收口与 readiness 建模不再在这里逐条滚动播报；统一回看对应专题 `*.project.md` 与 `.pm/tasks/*.execution.md`。
-- 说明: 本文档只保留当前执行窗口与下一步判断；历史完成态继续以任务清单、专题 project 与 execution log 为准。
+- 当前执行窗口: 继续以 `TASK-CORE-054` 为主；跨模块阶段判断、入口治理与后续发布候选口径仍以本页任务清单、当前专题 project 和 GitHub task issue evidence comments 为准。
+- 最近完成的入口治理、taxonomy 收口与 2026-03 readiness 建模不再在这里逐条滚动播报；统一回看当前专题 project、`doc/core/reviews/*` 审计留痕与 GitHub task issue evidence comments。
+- 说明: 本文档只保留当前执行窗口与下一步判断；历史完成态继续以任务清单、当前专题 project、审计留痕与 GitHub task issue evidence comments 为准。
 
 ## 阶段收口执行顺序（PRD-CORE-004）
 1. `TASK-CORE-013`: 对齐模块级下一任务与阻断条件，确保 P0/P1/P2 在各自 project 中可执行。

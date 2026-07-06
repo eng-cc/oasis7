@@ -9,7 +9,7 @@
 - 想先看下一轮跨模块优先级主入口：`doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - 想先看三种玩家访问模式与 execution lane 的正式契约：`doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - 想先看“统一持久大世界”默认产品模型与术语迁移计划：`doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
-- 想先看版本候选 readiness / go-no-go 的正式入口：`doc/core/release-candidate-readiness-entry-2026-03-11.prd.md` 与 `doc/core/release-candidate-go-no-go-entry-2026-03-11.prd.md`
+- 想追溯 2026-03 版本候选 readiness / go-no-go：按需进入 `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md` 与 `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
 
 ## 入口
 - PRD: `doc/core/prd.md`
@@ -31,12 +31,12 @@
 
 ## 模块职责
 - 提供项目级设计总览、模块地图、关键链路与术语口径。
-- 维护跨模块治理基线、候选级 readiness / go-no-go 入口与文档总入口同步。
+- 维护跨模块治理基线、候选级 readiness / go-no-go 审计留痕与文档总入口同步。
 - 维护项目级设计阅读顺序、下一轮优先级与 ROUND 台账入口。
 
 ## 热点子域导航（2026-06-23 快照）
 - `reviews/`（45）：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；默认按需进入。
-- 根目录保留专题：下一轮优先级、release candidate readiness / version / go-no-go、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 一次性 docs hub 同步专题与 core handoff 文件已退役删除，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
+- 根目录保留专题：下一轮优先级、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已退役删除，候选证据追溯改从 `reviews/` 审计记录进入，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
 - `templates/`（2）：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`（1）：跨模块影响检查清单。
 
