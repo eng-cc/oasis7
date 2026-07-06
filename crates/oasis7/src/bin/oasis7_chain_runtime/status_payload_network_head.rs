@@ -110,17 +110,15 @@ pub(crate) fn build_network_head_status(
 
     let fresh_peer_count = buckets.values().map(Vec::len).sum::<usize>();
     let mut conflicting_peer_count = 0usize;
-    let mut buckets_by_height: BTreeMap<u64, usize> = BTreeMap::new();
-    for key in buckets.keys() {
-        *buckets_by_height.entry(key.height).or_insert(0) += 1;
+    let mut bucket_stats_by_height: BTreeMap<u64, (usize, usize)> = BTreeMap::new();
+    for (key, peers) in &buckets {
+        let (bucket_count, peer_count) = bucket_stats_by_height.entry(key.height).or_default();
+        *bucket_count += 1;
+        *peer_count += peers.len();
     }
-    for (height, bucket_count) in buckets_by_height {
+    for (_height, (bucket_count, peer_count)) in bucket_stats_by_height {
         if bucket_count > 1 {
-            conflicting_peer_count += buckets
-                .iter()
-                .filter(|(key, _)| key.height == height)
-                .map(|(_, peers)| peers.len())
-                .sum::<usize>();
+            conflicting_peer_count += peer_count;
         }
     }
 
