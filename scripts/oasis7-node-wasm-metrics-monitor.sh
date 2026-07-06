@@ -289,6 +289,45 @@ def build_hotspots(executor_delta: dict, router_delta: dict) -> list[dict]:
     return result
 
 
+def module_hotspot_index(sample: dict) -> dict:
+    indexed = {}
+    for item in sample["executor"].get("module_hotspots") or []:
+        module_id = item.get("module_id")
+        if not module_id:
+            continue
+        indexed[module_id] = item
+    return indexed
+
+
+def build_latest_module_hotspots(latest: dict) -> list[dict]:
+    latest_modules = module_hotspot_index(latest)
+    hotspots = []
+    for module_id in sorted(latest_modules):
+        latest_item = latest_modules.get(module_id) or {}
+        calls_total = int(latest_item.get("calls_total") or 0)
+        wall_ms_total = int(latest_item.get("wall_ms_total") or 0)
+        failure_count = int(latest_item.get("failure_count") or 0)
+        if calls_total <= 0 and wall_ms_total <= 0 and failure_count <= 0:
+            continue
+        hotspots.append(
+            {
+                "module_id": module_id,
+                "calls_total": calls_total,
+                "wall_ms_total": wall_ms_total,
+                "failure_count": failure_count,
+                "share_ppm": int(latest_item.get("share_ppm") or 0),
+            }
+        )
+    return sorted(
+        hotspots,
+        key=lambda item: (
+            -item["wall_ms_total"],
+            -item["calls_total"],
+            item["module_id"],
+        ),
+    )[:10]
+
+
 def sample_from_status(path: str, payload: dict) -> dict:
     wasm = payload.get("wasm") or {}
     return {
@@ -473,10 +512,33 @@ else:
     router_delta["p95_match_ms"] = percentile_from_buckets(router_delta["match_ms_bucket_delta"], 95)
 
     hotspots = build_hotspots(executor_delta, router_delta)
+    latest_module_hotspots = build_latest_module_hotspots(latest)
+    latest_has_module_hotspots_field = "module_hotspots" in latest["executor"]
     window["executor"] = executor_delta
     window["router"] = router_delta
     window["hotspots"] = hotspots
     window["top_hotspot"] = hotspots[0]["name"] if hotspots else "none"
+    window["latest_module_hotspots"] = latest_module_hotspots
+    window["module_hotspot_source"] = (
+        "reported" if latest_has_module_hotspots_field else "not_reported"
+    )
+    window["top_module_hotspot"] = (
+        latest_module_hotspots[0]["module_id"]
+        if latest_module_hotspots
+        else ("none" if latest_has_module_hotspots_field else "not_reported")
+    )
+    if not latest_has_module_hotspots_field:
+        window["notes"].append(
+            "executor module_hotspots are not reported by the latest sample; module-level attribution is unavailable"
+        )
+    elif not latest_module_hotspots:
+        window["notes"].append(
+            "executor module_hotspots are reported by the latest sample but contain no nonzero cumulative module entries"
+        )
+    else:
+        window["notes"].append(
+            "module hotspots are latest cumulative bounded top-N entries, not window deltas; stage hotspots remain window-delta qualified"
+        )
     window["notes"].append(
         "build timing is reported as the latest snapshot only; it is not window-delta qualified because build and runtime metrics may come from different processes"
     )
@@ -573,6 +635,8 @@ else:
                 f"- router.p50_match_ms: `{fmt_ms_bound(router_window.get('p50_match_ms'))}`",
                 f"- router.p95_match_ms: `{fmt_ms_bound(router_window.get('p95_match_ms'))}`",
                 f"- top_hotspot: `{window.get('top_hotspot')}`",
+                f"- module_hotspot_source: `{window.get('module_hotspot_source')}`",
+                f"- top_module_hotspot: `{window.get('top_module_hotspot')}`",
             ]
         )
         lines.append("")
@@ -585,6 +649,22 @@ else:
                     "- `{}`: delta_ms=`{}` share_ppm=`{}`".format(
                         hotspot["name"],
                         hotspot["delta_ms"],
+                        hotspot["share_ppm"],
+                    )
+                )
+        lines.append("")
+        lines.append("## Module Hotspots")
+        if not window.get("latest_module_hotspots"):
+            lines.append(f"- {window.get('top_module_hotspot')}")
+        else:
+            lines.append("- scope: `latest_cumulative_bounded_top_n`")
+            for hotspot in window["latest_module_hotspots"]:
+                lines.append(
+                    "- `{}`: wall_ms_total=`{}` calls_total=`{}` failure_count=`{}` share_ppm=`{}`".format(
+                        hotspot["module_id"],
+                        hotspot["wall_ms_total"],
+                        hotspot["calls_total"],
+                        hotspot["failure_count"],
                         hotspot["share_ppm"],
                     )
                 )

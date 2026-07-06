@@ -4,7 +4,7 @@ mod metrics;
 
 pub use metrics::{
     CompileCachePathKind, SharedWasmExecutorMetrics, WasmExecutorMetricsSnapshot,
-    global_wasm_executor_metrics, init_shared_wasm_executor_metrics,
+    WasmExecutorModuleHotspot, global_wasm_executor_metrics, init_shared_wasm_executor_metrics,
     snapshot_global_wasm_executor_metrics, snapshot_wasm_executor_metrics,
 };
 
@@ -908,6 +908,7 @@ impl ModuleSandbox for WasmExecutor {
             })();
             metrics::observe_wasm_executor_call_result(
                 &self.metrics,
+                &request.module_id,
                 elapsed_ms(total_started),
                 result.as_ref().err().map(|failure| failure.code.clone()),
             );
@@ -924,6 +925,7 @@ impl ModuleSandbox for WasmExecutor {
             });
             metrics::observe_wasm_executor_call_result(
                 &self.metrics,
+                &request.module_id,
                 elapsed_ms(total_started),
                 result.as_ref().err().map(|failure| failure.code.clone()),
             );

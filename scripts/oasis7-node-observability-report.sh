@@ -234,12 +234,26 @@ elif selected_path_kind == "not_reported":
 else:
     reachability_confidence = "unknown"
 consensus = status.get("consensus") or {}
+transactions = status.get("transactions") or {}
 storage = status.get("storage") or {}
 reward_runtime = status.get("reward_runtime") or {}
 execution_bridge_commit_timing = status.get("execution_bridge_commit_timing") or {}
 module_tick_routing_status = status.get("module_tick_routing") or {}
 module_tick_routing = module_tick_routing_status.get("metrics") or {}
 runtime_perf = status.get("runtime_perf") or {}
+runtime_perf_smoke = {
+    "available": bool(runtime_perf),
+    "health": runtime_perf.get("health"),
+    "bottleneck": runtime_perf.get("bottleneck"),
+    "tick": {
+        "p95_ms": (runtime_perf.get("tick") or {}).get("p95_ms"),
+        "over_budget_ratio_ppm": (runtime_perf.get("tick") or {}).get("over_budget_ratio_ppm"),
+    },
+    "action_execution": {
+        "p95_ms": (runtime_perf.get("action_execution") or {}).get("p95_ms"),
+        "over_budget_ratio_ppm": (runtime_perf.get("action_execution") or {}).get("over_budget_ratio_ppm"),
+    },
+}
 alerts = observability.get("alerts") or []
 
 summary = {
@@ -296,6 +310,17 @@ summary = {
         "committed_height": consensus.get("committed_height"),
         "network_committed_height": consensus.get("network_committed_height"),
         "known_peer_heads": consensus.get("known_peer_heads"),
+        "last_commit_age_ms": consensus.get("last_commit_age_ms"),
+        "recent_finality_latency": consensus.get("recent_finality_latency"),
+    },
+    "transactions": {
+        "accepted_count": transactions.get("accepted_count"),
+        "pending_count": transactions.get("pending_count"),
+        "confirmed_count": transactions.get("confirmed_count"),
+        "failed_count": transactions.get("failed_count"),
+        "timeout_count": transactions.get("timeout_count"),
+        "inflight_count": transactions.get("inflight_count"),
+        "recent_confirmation_latency": transactions.get("recent_confirmation_latency"),
     },
     "storage": {
         "degraded_reason": storage.get("degraded_reason"),
@@ -315,6 +340,7 @@ summary = {
     "execution_bridge_commit_timing": execution_bridge_commit_timing,
     "module_tick_routing": module_tick_routing_status,
     "runtime_perf": runtime_perf,
+    "runtime_perf_smoke": runtime_perf_smoke,
     "traffic_window": traffic_summary,
     "traffic_summary_missing": traffic_summary_missing,
 }
@@ -415,10 +441,19 @@ runtime_perf_stages = [
 lines.extend(
     [
         "",
+        "## Consensus / Transaction Latency",
+        f"- committed_height: `{fmt_num(consensus.get('committed_height'))}` network_committed_height: `{fmt_num(consensus.get('network_committed_height'))}` known_peer_heads: `{fmt_num(consensus.get('known_peer_heads'))}`",
+        f"- last_commit_age_ms: `{fmt_num(consensus.get('last_commit_age_ms'))}`",
+        f"- finality_latency: samples=`{fmt_num((consensus.get('recent_finality_latency') or {}).get('sample_count'))}` avg_ms=`{fmt_num((consensus.get('recent_finality_latency') or {}).get('avg_latency_ms'))}` p95_ms=`{fmt_num((consensus.get('recent_finality_latency') or {}).get('p95_latency_ms'))}` max_ms=`{fmt_num((consensus.get('recent_finality_latency') or {}).get('max_latency_ms'))}`",
+        f"- transaction_counts: accepted=`{fmt_num(transactions.get('accepted_count'))}` pending=`{fmt_num(transactions.get('pending_count'))}` confirmed=`{fmt_num(transactions.get('confirmed_count'))}` failed=`{fmt_num(transactions.get('failed_count'))}` timeout=`{fmt_num(transactions.get('timeout_count'))}` inflight=`{fmt_num(transactions.get('inflight_count'))}`",
+        f"- transaction_confirmation_latency: samples=`{fmt_num((transactions.get('recent_confirmation_latency') or {}).get('sample_count'))}` avg_ms=`{fmt_num((transactions.get('recent_confirmation_latency') or {}).get('avg_latency_ms'))}` p95_ms=`{fmt_num((transactions.get('recent_confirmation_latency') or {}).get('p95_latency_ms'))}` max_ms=`{fmt_num((transactions.get('recent_confirmation_latency') or {}).get('max_latency_ms'))}`",
+        "",
         "## Runtime Performance",
         f"- available: `{fmt_bool(bool(runtime_perf))}`",
         f"- health: `{runtime_perf.get('health', 'not_reported')}`",
         f"- bottleneck: `{runtime_perf.get('bottleneck', 'not_reported')}`",
+        f"- smoke_tick: p95=`{fmt_metric(runtime_perf_smoke['tick'].get('p95_ms'))}` over_budget_ratio_ppm=`{fmt_num(runtime_perf_smoke['tick'].get('over_budget_ratio_ppm'))}`",
+        f"- smoke_action_execution: p95=`{fmt_metric(runtime_perf_smoke['action_execution'].get('p95_ms'))}` over_budget_ratio_ppm=`{fmt_num(runtime_perf_smoke['action_execution'].get('over_budget_ratio_ppm'))}`",
     ]
 )
 for stage_name, stage in runtime_perf_stages:
