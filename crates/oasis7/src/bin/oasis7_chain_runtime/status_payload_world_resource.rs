@@ -166,36 +166,26 @@ fn load_latest_world_resource_snapshot(
     Option<ChainResourceDelta>,
     Option<String>,
 ) {
-    let simulator_snapshot_path =
-        simulator_world_dir_from_execution_world_dir(execution_world_dir).join("snapshot.json");
     let mut load_errors = Vec::new();
-    if simulator_snapshot_path.exists() {
-        match SimulatorSnapshot::load_json(simulator_snapshot_path.as_path()) {
-            Ok(snapshot) if !snapshot.chain_resource_manifest.generated_chunks.is_empty() => {
-                return validate_world_resource_snapshot(
-                    snapshot.chain_resource_manifest,
-                    Some(snapshot.latest_chain_resource_delta),
-                    world_id,
-                    chain_id,
-                );
-            }
-            Ok(_) => load_errors.push("simulator_snapshot_empty_resource_manifest".to_string()),
-            Err(err) => load_errors.push(format!("simulator_snapshot:{err:?}")),
-        }
-    } else {
-        load_errors.push("simulator_snapshot_missing".to_string());
-    }
+    let mut fallback = None;
 
     let runtime_snapshot_path = execution_world_dir.join("snapshot.json");
     if runtime_snapshot_path.exists() {
         match RuntimeSnapshot::load_json(runtime_snapshot_path.as_path()) {
             Ok(snapshot) if !snapshot.chain_resource_manifest.generated_chunks.is_empty() => {
-                return validate_world_resource_snapshot(
+                let candidate = (
                     snapshot.chain_resource_manifest,
                     snapshot.latest_chain_resource_delta,
-                    world_id,
-                    chain_id,
                 );
+                if resource_snapshot_matches(&candidate.0, world_id, chain_id) {
+                    return validate_world_resource_snapshot(
+                        candidate.0,
+                        candidate.1,
+                        world_id,
+                        chain_id,
+                    );
+                }
+                fallback.get_or_insert(candidate);
             }
             Ok(_) => load_errors.push("runtime_snapshot_empty_resource_manifest".to_string()),
             Err(err) => load_errors.push(format!("runtime_snapshot:{err:?}")),
@@ -204,7 +194,45 @@ fn load_latest_world_resource_snapshot(
         load_errors.push("runtime_snapshot_missing".to_string());
     }
 
+    let simulator_snapshot_path =
+        simulator_world_dir_from_execution_world_dir(execution_world_dir).join("snapshot.json");
+    if simulator_snapshot_path.exists() {
+        match SimulatorSnapshot::load_json(simulator_snapshot_path.as_path()) {
+            Ok(snapshot) if !snapshot.chain_resource_manifest.generated_chunks.is_empty() => {
+                let candidate = (
+                    snapshot.chain_resource_manifest,
+                    Some(snapshot.latest_chain_resource_delta),
+                );
+                if resource_snapshot_matches(&candidate.0, world_id, chain_id) {
+                    return validate_world_resource_snapshot(
+                        candidate.0,
+                        candidate.1,
+                        world_id,
+                        chain_id,
+                    );
+                }
+                fallback.get_or_insert(candidate);
+            }
+            Ok(_) => load_errors.push("simulator_snapshot_empty_resource_manifest".to_string()),
+            Err(err) => load_errors.push(format!("simulator_snapshot:{err:?}")),
+        }
+    } else {
+        load_errors.push("simulator_snapshot_missing".to_string());
+    }
+
+    if let Some((manifest, latest_delta)) = fallback {
+        return validate_world_resource_snapshot(manifest, latest_delta, world_id, chain_id);
+    }
+
     (None, None, Some(load_errors.join(",")))
+}
+
+fn resource_snapshot_matches(
+    manifest: &ChainResourceManifest,
+    world_id: &str,
+    chain_id: &str,
+) -> bool {
+    manifest.world_id == world_id && manifest.chain_id == chain_id
 }
 
 fn validate_world_resource_snapshot(
@@ -275,6 +303,7 @@ mod tests {
     use super::*;
     use oasis7::geometry::GeoPos;
     use oasis7::runtime::{Action, ChainResourceDerivationContext, World as RuntimeWorld};
+    use oasis7::simulator::WorldKernel;
     use oasis7_node::{NodeConsensusSnapshot, NodeRole};
     use std::fs;
     use std::path::PathBuf;
@@ -407,5 +436,71 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn status_prefers_matching_runtime_snapshot_over_stale_simulator_mirror() {
+        let dir = temp_dir("runtime-over-simulator-mirror");
+        let world = RuntimeWorld::new();
+        world
+            .save_to_dir_with_chain_resource_context(
+                dir.as_path(),
+                ChainResourceDerivationContext {
+                    world_id: "world-a",
+                    chain_id: "world-a",
+                    genesis_ref: None,
+                    created_at_height: 0,
+                    manifest_height: 3,
+                    commit_block_hash: Some("block-h3"),
+                    tick: world.state().time,
+                },
+                "world-a-config",
+                "world-a-generation",
+            )
+            .expect("save runtime world with chain context");
+
+        let mirror_dir = simulator_world_dir_from_execution_world_dir(dir.as_path());
+        WorldKernel::new()
+            .save_to_dir_with_chain_resource_context(
+                mirror_dir.as_path(),
+                ChainResourceDerivationContext {
+                    world_id: "simulator-world",
+                    chain_id: "simulator-chain",
+                    genesis_ref: None,
+                    created_at_height: 0,
+                    manifest_height: 0,
+                    commit_block_hash: Some("simulator-genesis"),
+                    tick: 0,
+                },
+            )
+            .expect("save stale simulator mirror");
+
+        let snapshot = NodeSnapshot {
+            node_id: "node-a".to_string(),
+            player_id: "player-a".to_string(),
+            world_id: "world-a".to_string(),
+            role: NodeRole::Sequencer,
+            replication_enabled: false,
+            running: true,
+            tick_count: 3,
+            last_tick_unix_ms: None,
+            consensus: NodeConsensusSnapshot {
+                committed_height: 3,
+                last_block_hash: Some("block-h3".to_string()),
+                ..NodeConsensusSnapshot::default()
+            },
+            last_error: None,
+        };
+
+        let status = build_world_resource_status(&snapshot, dir.as_path(), None);
+
+        assert_eq!(status.readiness_status, "ready");
+        assert!(status.failed_gates.is_empty(), "{:?}", status.failed_gates);
+        assert_eq!(status.world_id, "world-a");
+        assert_eq!(status.chain_id, "world-a");
+        assert_eq!(status.last_delta_commit_height, Some(3));
+
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(mirror_dir);
     }
 }

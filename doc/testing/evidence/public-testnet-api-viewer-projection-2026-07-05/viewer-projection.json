@@ -1,0 +1,11 @@
+{
+  "committed_height": 111,
+  "last_block_hash": "9e04d9cef46d7a65b1e1c305c69dd407150ab2f3502ff08a6d0c7adb97ddf3bb",
+  "last_execution_block_hash": "9e6d011393e9724f8f1a5a87ad82d267603e0e795c1c23ff8208a4349ca9746b",
+  "network_committed_height": 111,
+  "node_id": "triad-testnet-storage",
+  "observed_at_unix_ms": 1783268753947,
+  "ok": true,
+  "source": "http://39.104.205.67:6632/v1/chain/explorer/overview",
+  "world_id": "oasis7-public-testnet-governed-20260606"
+}

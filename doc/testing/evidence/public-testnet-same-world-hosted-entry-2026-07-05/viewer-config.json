@@ -1,0 +1,17 @@
+{
+  "schema": "oasis7.same_world_hosted_entry.viewer_config.v1",
+  "binary": "oasis7_viewer_live.patched-linux-v4",
+  "deployment_mode": "hosted_public_join",
+  "chain_link_policy": "enforcing",
+  "chain_status_bind": "127.0.0.1:6631",
+  "llm_mode": false,
+  "scenario": "formal_release_default",
+  "observed_log_fields": {
+    "bind_addr": "127.0.0.1:6503",
+    "web_bind_addr": "127.0.0.1:6502",
+    "deployment_mode": "hosted_public_join",
+    "chain_status_bind": "127.0.0.1:6631",
+    "chain_link_policy": "enforcing"
+  },
+  "manual_checkpoint_or_data_copy_used": false
+}

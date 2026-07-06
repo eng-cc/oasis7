@@ -35,6 +35,8 @@ use oasis7_proto::storage_profile::StorageProfile;
 #[path = "viewer_static_dir_tests.rs"]
 mod viewer_static_dir_tests;
 use viewer_static_dir_tests::make_temp_dir;
+#[path = "launcher_hosted_public_join_tests.rs"]
+mod launcher_hosted_public_join_tests;
 #[path = "launcher_static_http_tests.rs"]
 mod launcher_static_http_tests;
 #[path = "launcher_viewer_auth_bootstrap_tests.rs"]

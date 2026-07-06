@@ -1,0 +1,73 @@
+{
+  "evidence_schema": "oasis7.same_world_hosted_entry.v1",
+  "status": "pass",
+  "observed_at": "2026-07-06T10:14:45+08:00",
+  "same_window_required": true,
+  "network_tier": {
+    "tier": "public_testnet",
+    "network_id": "oasis7-public-testnet-governed-20260606",
+    "chain_id": "oasis7-public-testnet-governed-20260606",
+    "world_id": "oasis7-public-testnet-governed-20260606"
+  },
+  "manifest_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json",
+  "genesis_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-genesis-2026-06-06.json",
+  "bootstrap_peer_ref": "doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt",
+  "chain_status_samples_ref": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/chain-status-sample.json",
+  "hosted_entry_ref": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/hosted-entry.json",
+  "launcher_config_ref": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/launcher-config.json",
+  "viewer_config_ref": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/viewer-config.json",
+  "pure_api_config_ref": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/pure-api-config.json",
+  "node_joined_public_testnet": true,
+  "height_progressing": true,
+  "hosted_entry_reads_same_world_state": true,
+  "manual_checkpoint_or_data_copy_used": false,
+  "raw_samples": {
+    "pure_api_snapshot": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/pure-api-snapshot.json",
+    "chain_status": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/chain-status-sample.json"
+  },
+  "observed": {
+    "chain_status_ok": true,
+    "chain_status_readiness_ready": true,
+    "chain_status_readiness_status": "ready",
+    "chain_status_readiness_failed_gates": [],
+    "chain_status_consensus_height": 1620,
+    "chain_status_network_head_height": 1620,
+    "chain_status_world_id": "oasis7-public-testnet-governed-20260606",
+    "chain_status_resource_world_id": "oasis7-public-testnet-governed-20260606",
+    "chain_status_resource_chain_id": "oasis7-public-testnet-governed-20260606",
+    "chain_status_world_resource_status": "ready",
+    "chain_status_world_resource_failed_gates": [],
+    "chain_status_latest_resource_commit_height": 1620,
+    "chain_status_latest_resource_commit_hash": "d346e509511b173d6b2492a532135375e3d8aab205329bd7c346a99b3510538b",
+    "chain_status_last_delta_id": "resource-delta-1620-1620",
+    "pure_api_snapshot_time": 1620,
+    "pure_api_world_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_chain_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_manifest_height": 1620,
+    "pure_api_manifest_hash": "dfdf0709620c88e59a6a3131ea5a67237fb1994bde8da63d5871b1d847fefa21",
+    "pure_api_delta_id": "resource-delta-1620-1620",
+    "pure_api_delta_height": 1620,
+    "pure_api_delta_world_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_delta_chain_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_delta_resulting_manifest_hash": "dfdf0709620c88e59a6a3131ea5a67237fb1994bde8da63d5871b1d847fefa21",
+    "pure_api_runtime_snapshot_world_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_runtime_snapshot_chain_id": "oasis7-public-testnet-governed-20260606",
+    "pure_api_agent_count": 1,
+    "pure_api_location_count": 1
+  },
+  "top_level_snapshot_matches_runtime_snapshot": true,
+  "fixes_validated": [
+    "hosted_public_join launcher command preserves chain-status-bind and chain-link-policy",
+    "runtime_live primes the first RequestSnapshot from the chain-linked execution world",
+    "World::load_from_dir preserves chain resource context from persisted snapshots",
+    "World::load_from_dir prefers formal JSON snapshots when a distfs sidecar has stale chain resource context",
+    "viewer live compat_snapshot exposes the runtime chain resource manifest and latest delta at the pure API top level"
+  ],
+  "does_not_claim": [
+    "mainnet-grade",
+    "production OC settlement",
+    "public validator onboarding open",
+    "public validator admission is open",
+    "permissionless validator onboarding"
+  ]
+}

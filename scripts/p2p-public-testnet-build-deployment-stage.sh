@@ -7,8 +7,8 @@ Usage:
   ./scripts/p2p-public-testnet-build-deployment-stage.sh \
     --runtime-build-ref <path> \
     --bootstrap-peers-file <path> \
-    --sequencer-node-keypair <path> \
-    --storage-node-keypair <path> \
+    --sequencer-finality-public-key <hex> \
+    --storage-finality-public-key <hex> \
     [--extra-validator <node_id:public_key[:stake]>]... \
     --out-dir <path> \
     [--track public_testnet_rehearsal|staging|canary]
@@ -24,8 +24,9 @@ Usage:
 
 Description:
   Build a deployment-only public_testnet stage from the current validator
-  signer truth. This stage preserves the frozen public testnet chain/world
-  identity but regenerates:
+  signer truth. Public key flags must be consensus/finality signer keys, not
+  libp2p/node identity keys. This stage preserves the frozen public testnet
+  chain/world identity but regenerates:
     - validator registry
     - genesis with deployment-only validator-registry ref
     - governed bootstrap world
@@ -64,8 +65,6 @@ cd "$repo_root"
 
 runtime_build_ref=""
 bootstrap_peers_file=""
-sequencer_node_keypair=""
-storage_node_keypair=""
 sequencer_public_key=""
 storage_public_key=""
 extra_validators=()
@@ -90,18 +89,16 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --sequencer-node-keypair)
-      sequencer_node_keypair=${2:-}
-      shift 2
+      die "--sequencer-node-keypair is not supported for deployment signer truth; pass --sequencer-finality-public-key"
       ;;
     --storage-node-keypair)
-      storage_node_keypair=${2:-}
-      shift 2
+      die "--storage-node-keypair is not supported for deployment signer truth; pass --storage-finality-public-key"
       ;;
-    --sequencer-public-key)
+    --sequencer-public-key|--sequencer-finality-public-key|--sequencer-consensus-signer-public-key)
       sequencer_public_key=${2:-}
       shift 2
       ;;
-    --storage-public-key)
+    --storage-public-key|--storage-finality-public-key|--storage-consensus-signer-public-key)
       storage_public_key=${2:-}
       shift 2
       ;;
@@ -163,41 +160,14 @@ require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
 
-extract_public_key_from_toml() {
-  local path=$1
-  python3 - "$path" <<'PY'
-import sys
-import tomllib
-from pathlib import Path
-
-path = Path(sys.argv[1])
-with path.open("rb") as fh:
-    payload = tomllib.load(fh)
-node = payload.get("node", {})
-value = (node.get("public_key") or "").strip()
-if not value:
-    raise SystemExit(f"missing node.public_key in {path}")
-print(value)
-PY
-}
-
 is_hex_32() {
   [[ "$1" =~ ^[0-9a-fA-F]{64}$ ]]
 }
 
-if [[ -n "$sequencer_node_keypair" ]]; then
-  require_file "$sequencer_node_keypair"
-  sequencer_public_key=$(extract_public_key_from_toml "$sequencer_node_keypair")
-fi
-if [[ -n "$storage_node_keypair" ]]; then
-  require_file "$storage_node_keypair"
-  storage_public_key=$(extract_public_key_from_toml "$storage_node_keypair")
-fi
-
-require_non_empty "--sequencer-node-keypair or --sequencer-public-key" "$sequencer_public_key"
-require_non_empty "--storage-node-keypair or --storage-public-key" "$storage_public_key"
-is_hex_32 "$sequencer_public_key" || die "sequencer public key must be 32-byte hex"
-is_hex_32 "$storage_public_key" || die "storage public key must be 32-byte hex"
+require_non_empty "--sequencer-finality-public-key" "$sequencer_public_key"
+require_non_empty "--storage-finality-public-key" "$storage_public_key"
+is_hex_32 "$sequencer_public_key" || die "sequencer finality public key must be 32-byte hex"
+is_hex_32 "$storage_public_key" || die "storage finality public key must be 32-byte hex"
 
 validator_specs=(
   "$sequencer_node_id:$sequencer_public_key:$stake"
@@ -215,6 +185,7 @@ rm -rf "$out_dir"
 mkdir -p "$out_dir/config/doc/testing/evidence" "$out_dir/generated-world"
 
 registry_path="$out_dir/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+public_signers_path="$out_dir/config/public-testnet-governance-public-signers-deployment-2026-06-06.json"
 genesis_path="$out_dir/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json"
 manifest_path="$out_dir/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json"
 bundle_path="$out_dir/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
@@ -240,7 +211,7 @@ seen_node_ids = set()
 for spec in specs:
     parts = spec.split(":")
     if len(parts) not in (2, 3):
-        raise SystemExit(f"invalid validator spec `{spec}`; expected node_id:public_key[:stake]")
+        raise SystemExit(f"invalid validator spec `{spec}`; expected node_id:finality_public_key[:stake]")
     node_id, public_key = parts[0].strip(), parts[1].strip()
     stake = int(parts[2]) if len(parts) == 3 and parts[2].strip() else 100
     if not node_id:
@@ -248,7 +219,7 @@ for spec in specs:
     if node_id in seen_node_ids:
         raise SystemExit(f"duplicate validator node_id `{node_id}`")
     if len(public_key) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in public_key):
-        raise SystemExit(f"validator public key must be 32-byte hex for node_id={node_id}")
+        raise SystemExit(f"validator finality public key must be 32-byte hex for node_id={node_id}")
     if stake <= 0:
         raise SystemExit(f"validator stake must be > 0 for node_id={node_id}")
     seen_node_ids.add(node_id)
@@ -270,7 +241,80 @@ path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encodin
 PY
 cp "$registry_path" "$out_dir/config/doc/testing/evidence/"
 
-python3 - "$base_genesis" "$genesis_path" "$registry_path" <<'PY'
+python3 - "$base_genesis" "$public_signers_path" "$registry_path" <<'PY'
+import json
+import pathlib
+import sys
+
+base_genesis = pathlib.Path(sys.argv[1]).resolve()
+out_path = pathlib.Path(sys.argv[2]).resolve()
+registry_path = pathlib.Path(sys.argv[3]).resolve()
+
+with base_genesis.open("r", encoding="utf-8") as fh:
+    genesis = json.load(fh)
+
+refs = genesis.get("governance_bootstrap_refs")
+if not isinstance(refs, dict):
+    raise SystemExit("base genesis missing governance_bootstrap_refs")
+raw_manifest_ref = refs.get("governance_public_manifest_ref")
+if not isinstance(raw_manifest_ref, str) or not raw_manifest_ref.strip():
+    raise SystemExit("base genesis missing governance_public_manifest_ref")
+
+def resolve_ref(raw: str) -> pathlib.Path:
+    candidate = pathlib.Path(raw).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    for base in (base_genesis.parent, *base_genesis.parents):
+        resolved = (base / candidate).resolve()
+        if resolved.exists():
+            return resolved
+    return (base_genesis.parent / candidate).resolve()
+
+base_manifest_path = resolve_ref(raw_manifest_ref)
+base_manifest = json.loads(base_manifest_path.read_text(encoding="utf-8"))
+entries = base_manifest.get("entries")
+if not isinstance(entries, list):
+    raise SystemExit(f"base governance public manifest has no entries: {base_manifest_path}")
+
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+validators = registry.get("validators")
+if not isinstance(validators, list) or not validators:
+    raise SystemExit(f"validator registry has no validators: {registry_path}")
+
+next_entries = [
+    entry
+    for entry in entries
+    if not (
+        isinstance(entry, dict)
+        and entry.get("slot_id") == "governance.finality.v1"
+    )
+]
+for validator in validators:
+    node_id = validator.get("node_id")
+    public_key = validator.get("finality_signer_public_key")
+    if not node_id or not public_key:
+        raise SystemExit("validator entry missing node_id/finality_signer_public_key")
+    next_entries.append(
+        {
+            "slot_id": "governance.finality.v1",
+            "signer_id": node_id,
+            "scheme": validator.get("scheme") or "ed25519",
+            "public_key_hex": public_key,
+        }
+    )
+
+base_manifest["entries"] = next_entries
+base_manifest["truth_kind"] = "deployment_public_signers"
+base_manifest["source_public_manifest_ref"] = str(base_manifest_path)
+base_manifest["deployment_validator_registry_ref"] = str(registry_path)
+out_path.write_text(
+    json.dumps(base_manifest, ensure_ascii=True, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+cp "$public_signers_path" "$out_dir/config/doc/testing/evidence/"
+
+python3 - "$base_genesis" "$genesis_path" "$registry_path" "$public_signers_path" <<'PY'
 import json
 import pathlib
 import shutil
@@ -279,6 +323,7 @@ import sys
 base_path = pathlib.Path(sys.argv[1]).resolve()
 out_path = pathlib.Path(sys.argv[2]).resolve()
 registry_path = pathlib.Path(sys.argv[3]).resolve()
+public_signers_path = pathlib.Path(sys.argv[4]).resolve()
 
 with base_path.open("r", encoding="utf-8") as fh:
     payload = json.load(fh)
@@ -301,6 +346,7 @@ for key, value in list(refs.items()):
         refs[key] = resolve_ref(value)
 
 refs["genesis_validator_registry_ref"] = str(registry_path)
+refs["governance_public_manifest_ref"] = str(public_signers_path)
 
 out_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 

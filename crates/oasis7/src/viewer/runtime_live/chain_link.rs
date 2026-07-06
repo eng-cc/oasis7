@@ -88,6 +88,26 @@ impl ViewerRuntimeLiveServer {
         Ok(dispatch.advanced)
     }
 
+    pub(super) fn prime_chain_linked_runtime_for_snapshot(
+        &mut self,
+    ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        let Some(chain_status_bind) = self
+            .config
+            .chain_status_bind
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(false);
+        };
+
+        let prepared = prepare_chain_linked_runtime_update(chain_status_bind)?;
+        self.clear_chain_sync_failure_feedback();
+        let mut silent_session = RuntimeLiveSession::new_with_playing(false);
+        let dispatch = self.apply_chain_linked_runtime_update(prepared, &mut silent_session)?;
+        Ok(dispatch.advanced)
+    }
+
     pub(super) fn sync_chain_linked_runtime_minimized_lock(
         shared: &Arc<Mutex<Self>>,
         session: &mut RuntimeLiveSession,

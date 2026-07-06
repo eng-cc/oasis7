@@ -49,6 +49,10 @@ if [[ -n "$network_tier_manifest_path" && "${ALLOW_NETWORK_TIER_REPLICATION_PEER
   replication_peers=()
 fi
 
+if [[ -n "$network_tier_manifest_path" && -z "${POS_ADAPTIVE_TICK_SCHEDULER+x}" ]]; then
+  POS_ADAPTIVE_TICK_SCHEDULER=1
+fi
+
 cmd=(
   "$BIN"
   --node-id "$NODE_ID"

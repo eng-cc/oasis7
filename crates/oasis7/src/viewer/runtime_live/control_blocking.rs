@@ -178,6 +178,11 @@ impl ViewerRuntimeLiveServer {
             model.agents.is_empty(),
             model.locations.is_empty(),
         );
+        let chain_resource_manifest = runtime_snapshot.chain_resource_manifest.clone();
+        let latest_chain_resource_delta = runtime_snapshot
+            .latest_chain_resource_delta
+            .clone()
+            .unwrap_or_default();
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
@@ -186,8 +191,8 @@ impl ViewerRuntimeLiveServer {
             model,
             runtime_snapshot: Some(runtime_snapshot),
             player_gameplay: Some(player_gameplay),
-            chain_resource_manifest: Default::default(),
-            latest_chain_resource_delta: Default::default(),
+            chain_resource_manifest,
+            latest_chain_resource_delta,
             chunk_runtime: ChunkRuntimeConfig::default(),
             intel_ttl_ticks: 0,
             next_event_id,

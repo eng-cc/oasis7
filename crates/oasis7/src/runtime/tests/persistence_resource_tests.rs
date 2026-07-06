@@ -101,6 +101,185 @@ fn persist_empty_runtime_snapshot_records_starter_resource_chunk_and_chain_conte
 }
 
 #[test]
+fn load_from_dir_preserves_chain_resource_context_in_runtime_snapshot() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-chain-context".to_string(),
+        pos: pos(2, 2),
+    });
+    world.step().expect("register agent");
+
+    let dir = temp_dir("load-preserves-chain-resource-context");
+    world
+        .save_to_dir_with_chain_resource_context(
+            &dir,
+            ChainResourceDerivationContext {
+                world_id: "testnet-world",
+                chain_id: "testnet-chain",
+                genesis_ref: Some("genesis-ref"),
+                created_at_height: 11,
+                manifest_height: 11,
+                commit_block_hash: Some("block-h11"),
+                tick: world.state().time,
+            },
+            "testnet-world-config",
+            "testnet-generation-algorithm",
+        )
+        .expect("save world with chain context");
+
+    let persisted =
+        Snapshot::load_json(dir.join("snapshot.json")).expect("load persisted snapshot");
+    let restored = World::load_from_dir(&dir).expect("load world");
+    let restored_snapshot = restored.snapshot();
+
+    assert_eq!(
+        restored_snapshot.chain_resource_manifest.world_id,
+        "testnet-world"
+    );
+    assert_eq!(
+        restored_snapshot.chain_resource_manifest.manifest_hash,
+        persisted.chain_resource_manifest.manifest_hash
+    );
+    let restored_delta = restored_snapshot
+        .latest_chain_resource_delta
+        .expect("restored resource delta");
+    let persisted_delta = persisted
+        .latest_chain_resource_delta
+        .expect("persisted resource delta");
+    assert_eq!(restored_delta.world_id, "testnet-world");
+    assert_eq!(
+        restored_delta.resulting_manifest_hash,
+        persisted_delta.resulting_manifest_hash
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_from_dir_prefers_json_when_distfs_sidecar_has_stale_chain_resource_context() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-stale-sidecar".to_string(),
+        pos: pos(3, 3),
+    });
+    world.step().expect("register agent");
+
+    let dir = temp_dir("load-prefers-json-stale-chain-resource-sidecar");
+    world.save_to_dir(&dir).expect("save world with sidecar");
+    let formal_snapshot = world.snapshot_with_chain_resource_context(
+        ChainResourceDerivationContext {
+            world_id: "testnet-world",
+            chain_id: "testnet-chain",
+            genesis_ref: Some("genesis-ref"),
+            created_at_height: 21,
+            manifest_height: 21,
+            commit_block_hash: Some("block-h21"),
+            tick: world.state().time,
+        },
+        "testnet-world-config",
+        "testnet-generation-algorithm",
+    );
+    formal_snapshot
+        .save_json(dir.join("snapshot.json"))
+        .expect("overwrite json snapshot with formal chain context");
+
+    let restored = World::load_from_dir(&dir).expect("load world");
+    let restored_snapshot = restored.snapshot();
+
+    assert_eq!(
+        restored_snapshot.chain_resource_manifest.world_id,
+        "testnet-world"
+    );
+    assert_eq!(
+        restored_snapshot.chain_resource_manifest.manifest_height,
+        21
+    );
+    let audit: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(dir.join("distfs.recovery.audit.json")).expect("read distfs recovery audit"),
+    )
+    .expect("decode recovery audit");
+    assert_eq!(
+        audit.get("status").and_then(|value| value.as_str()),
+        Some("fallback_json")
+    );
+    assert!(
+        audit
+            .get("reason")
+            .and_then(|value| value.as_str())
+            .is_some_and(|reason| reason.contains("stale_chain_resource_context"))
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_from_dir_keeps_distfs_sidecar_when_json_chain_resource_height_is_older() {
+    let mut world = World::new();
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-fresh-sidecar".to_string(),
+        pos: pos(4, 4),
+    });
+    world.step().expect("register agent");
+
+    let dir = temp_dir("load-keeps-distfs-newer-chain-resource-sidecar");
+    world
+        .save_to_dir_with_chain_resource_context(
+            &dir,
+            ChainResourceDerivationContext {
+                world_id: "testnet-world",
+                chain_id: "testnet-chain",
+                genesis_ref: Some("genesis-ref"),
+                created_at_height: 30,
+                manifest_height: 30,
+                commit_block_hash: Some("block-h30"),
+                tick: world.state().time,
+            },
+            "testnet-world-config",
+            "testnet-generation-algorithm",
+        )
+        .expect("save sidecar with newer chain context");
+
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-json-newer-state".to_string(),
+        pos: pos(5, 5),
+    });
+    world.step().expect("advance json state");
+    let older_chain_context_snapshot = world.snapshot_with_chain_resource_context(
+        ChainResourceDerivationContext {
+            world_id: "testnet-world",
+            chain_id: "testnet-chain",
+            genesis_ref: Some("genesis-ref"),
+            created_at_height: 21,
+            manifest_height: 21,
+            commit_block_hash: Some("block-h21"),
+            tick: world.state().time,
+        },
+        "testnet-world-config",
+        "testnet-generation-algorithm",
+    );
+    older_chain_context_snapshot
+        .save_json(dir.join("snapshot.json"))
+        .expect("overwrite json snapshot with older chain context");
+
+    let restored = World::load_from_dir(&dir).expect("load world");
+    let restored_snapshot = restored.snapshot();
+
+    assert_eq!(
+        restored_snapshot.chain_resource_manifest.manifest_height, 30,
+        "newer distfs chain resource context must not be replaced by older JSON context"
+    );
+    assert!(
+        !restored_snapshot
+            .state
+            .agents
+            .contains_key("agent-json-newer-state"),
+        "older chain resource context JSON must not win only because its state time is newer"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn persist_claimed_agent_runtime_snapshot_preserves_starter_chunk_resources() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {

@@ -30,12 +30,13 @@ assert_fails_containing() {
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
-  --sequencer-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
-  --storage-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
   --extra-validator triad-testnet-fourth-local:f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af:100 \
   --out-dir "$TMP_DIR/stage" >/dev/null
 
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+test -f "$TMP_DIR/stage/config/public-testnet-governance-public-signers-deployment-2026-06-06.json"
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
 test -f "$TMP_DIR/stage/generated-world/world/snapshot.json"
 test -f "$TMP_DIR/stage/generated-world/generated-scenario-world/snapshot.json"
@@ -49,6 +50,22 @@ jq -e '
 	  and .validators[2].finality_signer_public_key == "f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af"
 	  and .threshold == 2
 	' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" >/dev/null
+
+jq -e '
+  ([.entries[] | select(.slot_id == "governance.finality.v1")] | length) == 3
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][0].signer_id == "triad-testnet-sequencer")
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][0].public_key_hex == "65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16")
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][1].signer_id == "triad-testnet-storage")
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][1].public_key_hex == "858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6")
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][2].signer_id == "triad-testnet-fourth-local")
+  and ([.entries[] | select(.slot_id == "governance.finality.v1")][2].public_key_hex == "f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af")
+  and .truth_kind == "deployment_public_signers"
+' "$TMP_DIR/stage/config/public-testnet-governance-public-signers-deployment-2026-06-06.json" >/dev/null
+
+jq -e '
+  (.governance_bootstrap_refs.governance_public_manifest_ref | endswith("public-testnet-governance-public-signers-deployment-2026-06-06.json"))
+  and (.governance_bootstrap_refs.genesis_validator_registry_ref | endswith("public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"))
+' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-genesis-2026-06-06.json" >/dev/null
 
 jq -e '
   .runtime_build.sha256 != null
@@ -104,7 +121,7 @@ assert_fails_containing \
     --out-dir "$TMP_DIR/stage-duplicate"
 
 assert_fails_containing \
-  'validator public key must be 32-byte hex for node_id=triad-testnet-bad-key' \
+  'validator finality public key must be 32-byte hex for node_id=triad-testnet-bad-key' \
   "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
     --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
     --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
@@ -112,3 +129,13 @@ assert_fails_containing \
     --storage-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
     --extra-validator triad-testnet-bad-key:not-hex:100 \
     --out-dir "$TMP_DIR/stage-bad-key"
+
+printf '[node]\npublic_key = "e57c3c343887766b09fb247a9373a6db5c77e41b5fe69584573bdbe000ab220e"\n' >"$TMP_DIR/node-keypair.toml"
+assert_fails_containing \
+  '--sequencer-node-keypair is not supported for deployment signer truth; pass --sequencer-finality-public-key' \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+    --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+    --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+    --sequencer-node-keypair "$TMP_DIR/node-keypair.toml" \
+    --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+    --out-dir "$TMP_DIR/stage-node-keypair"

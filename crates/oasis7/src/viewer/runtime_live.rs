@@ -472,6 +472,21 @@ impl ViewerRuntimeLiveServer {
                 };
             }
             ViewerRequest::RequestSnapshot => {
+                if self.chain_link_enabled() && !session.initial_snapshot_sent {
+                    if let Err(err) = self.prime_chain_linked_runtime_for_snapshot() {
+                        if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
+                            return Err(err);
+                        }
+                        emit_stderr_or_event(
+                            Level::WARN,
+                            format!(
+                                "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
+                            )
+                            .as_str(),
+                            "viewer runtime live initial chain sync skipped",
+                        );
+                    }
+                }
                 if session.wants_initial_snapshot() {
                     let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
                     send_response(writer, &ViewerResponse::Snapshot { snapshot })?;

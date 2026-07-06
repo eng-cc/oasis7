@@ -22,7 +22,7 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--generated-world-dir")
             .arg(options.generated_world_dir.as_str());
     }
-    if options.chain_enabled {
+    if options.chain_enabled || options.deployment_mode == "hosted_public_join" {
         command
             .arg("--chain-status-bind")
             .arg(options.chain_status_bind.as_str())

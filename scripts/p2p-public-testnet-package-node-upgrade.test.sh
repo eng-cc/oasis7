@@ -188,6 +188,73 @@ grep -q "systemctl stop oasis7-testnet-orphan.service" "$TMP_DIR/fake-systemctl.
 orphan_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$orphan_node_abs/current")
 test "$orphan_current" = "$orphan_node_abs/releases/old"
 
+blocked_post_restart_node="$TMP_DIR/blocked-post-restart-node"
+mkdir -p "$blocked_post_restart_node/releases/old/bin" "$blocked_post_restart_node/config/doc/testing/evidence"
+printf 'runtime-v1\n' >"$blocked_post_restart_node/releases/old/bin/oasis7_chain_runtime"
+chmod +x "$blocked_post_restart_node/releases/old/bin/oasis7_chain_runtime"
+ln -s "$blocked_post_restart_node/releases/old" "$blocked_post_restart_node/current"
+cp \
+  "$node_root_abs/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  "$blocked_post_restart_node/config/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+blocked_post_restart_node_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$blocked_post_restart_node")
+cat >"$TMP_DIR/fake-bin/ps" <<SH
+#!/usr/bin/env bash
+printf '777 1 harmless-process\\n'
+SH
+cat >"$TMP_DIR/fake-bin/curl" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSON'
+{
+  "running": true,
+  "last_error": null,
+  "readiness": {"status": "ready", "failed_gates": []},
+  "consensus": {
+    "committed_height": 0,
+    "network_committed_height": 0,
+    "last_block_hash": "genesis",
+    "last_execution_height": 0,
+    "last_execution_block_hash": null,
+    "last_execution_state_root": null,
+    "network_head": {"height": null, "block_hash": null},
+    "storage_challenge_network_degraded_height": null
+  },
+  "world_resource": {
+    "readiness_status": "not_ready",
+    "failed_gates": [
+      "world_resource_world_id_mismatch",
+      "world_resource_chain_id_mismatch",
+      "world_resource_delta_commit_hash_missing",
+      "world_resource_delta_height_mismatch"
+    ],
+    "last_delta_commit_height": 1
+  },
+  "observability": {"storage_challenge_network_degraded": false}
+}
+JSON
+SH
+chmod +x "$TMP_DIR/fake-bin/curl"
+set +e
+FAKE_SYSTEMCTL_LOG="$TMP_DIR/fake-systemctl.log" \
+PATH="$TMP_DIR/fake-bin:$PATH" \
+"$ROOT_DIR/scripts/p2p-public-testnet-package-node-upgrade.sh" \
+  --node-root "$blocked_post_restart_node" \
+  --bundle-tar "$TMP_DIR/oasis7-linux-x64-bundle.tar.gz" \
+  --package-version "$package_version-blocked-post-restart" \
+  --commit "$commit" \
+  --run-id "$run_id" \
+  --systemd-service oasis7-testnet-blocked-post-restart.service \
+  --restart-service \
+  --post-restart-status-url http://127.0.0.1:6631/v1/chain/status \
+  --post-restart-timeout-secs 1 \
+  >/tmp/oasis7-package-node-upgrade-blocked-post-restart.out 2>&1
+blocked_post_restart_status=$?
+set -e
+test "$blocked_post_restart_status" -ne 0
+grep -q "post-restart status did not become ready before timeout" /tmp/oasis7-package-node-upgrade-blocked-post-restart.out
+grep -q "world_resource_delta_commit_hash_missing" /tmp/oasis7-package-node-upgrade-blocked-post-restart.out
+blocked_post_restart_current=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$blocked_post_restart_node_abs/current")
+test "$blocked_post_restart_current" = "$blocked_post_restart_node_abs/releases/$package_version-blocked-post-restart"
+
 scanner_node="$TMP_DIR/scanner-node"
 mkdir -p "$scanner_node/releases/old/bin" "$scanner_node/config/doc/testing/evidence"
 printf 'runtime-v1\n' >"$scanner_node/releases/old/bin/oasis7_chain_runtime"

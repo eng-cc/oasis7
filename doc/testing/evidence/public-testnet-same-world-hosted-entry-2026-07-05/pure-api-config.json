@@ -1,0 +1,9 @@
+{
+  "schema": "oasis7.same_world_hosted_entry.pure_api_config.v1",
+  "client": "oasis7_pure_api_client",
+  "client_id": "same-world-patched-linux-v4",
+  "addr": "127.0.0.1:6503",
+  "timeout_ms": 12000,
+  "sample_path": "doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05/pure-api-snapshot.json",
+  "manual_checkpoint_or_data_copy_used": false
+}

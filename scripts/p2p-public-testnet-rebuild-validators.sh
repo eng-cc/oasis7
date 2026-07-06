@@ -18,7 +18,8 @@ Usage:
     [--stack-root <path>] \
     [--out-dir <path>] \
     [--poll-attempts <n>] \
-    [--poll-sleep-seconds <n>]
+    [--poll-sleep-seconds <n>] \
+    [--disable-ssh-multiplex]
 
 Description:
   Stage deployment-truth config/world onto the validator pair, destructively
@@ -68,6 +69,7 @@ STACK_ROOT="/opt/oasis7/p2p-testnet"
 OUT_DIR=""
 POLL_ATTEMPTS=20
 POLL_SLEEP_SECONDS=3
+DISABLE_SSH_MULTIPLEX=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -126,6 +128,10 @@ while [[ $# -gt 0 ]]; do
     --poll-sleep-seconds)
       POLL_SLEEP_SECONDS=${2:-}
       shift 2
+      ;;
+    --disable-ssh-multiplex)
+      DISABLE_SSH_MULTIPLEX=1
+      shift
       ;;
     -h|--help)
       usage
@@ -211,6 +217,10 @@ control_path_for() {
 open_master_connection() {
   local host=$1
   local sshpass_env_name=$2
+  if [[ "$DISABLE_SSH_MULTIPLEX" -eq 1 ]]; then
+    printf '\n'
+    return 0
+  fi
   local control_path
   control_path=$(control_path_for "$host")
   if [[ -S "$control_path" ]]; then
@@ -237,8 +247,42 @@ ssh_run() {
   local host=$1
   local control_path=$2
   shift 2
-  ssh \
-    -S "$control_path" \
+  local ssh_args=()
+  if [[ -n "$control_path" ]]; then
+    ssh_args+=(-S "$control_path")
+  else
+    ssh_args+=(
+      -o ControlMaster=no
+      -o ControlPath=none
+      -o PreferredAuthentications=password
+      -o PubkeyAuthentication=no
+      -o NumberOfPasswordPrompts=1
+      -o ConnectTimeout=10
+      -o ServerAliveInterval=15
+      -o ServerAliveCountMax=2
+    )
+    if [[ "$host" == "$SEQUENCER_SSH_HOST" ]]; then
+      local sequencer_sshpass=${!SEQUENCER_SSHPASS_ENV:-}
+      [[ -n "$sequencer_sshpass" ]] || die "ssh password env is empty: $SEQUENCER_SSHPASS_ENV"
+      SSHPASS="$sequencer_sshpass" sshpass -e ssh "${ssh_args[@]}" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "$host" \
+        "$@"
+      return $?
+    fi
+    if [[ "$host" == "$STORAGE_SSH_HOST" ]]; then
+      local storage_sshpass=${!STORAGE_SSHPASS_ENV:-}
+      [[ -n "$storage_sshpass" ]] || die "ssh password env is empty: $STORAGE_SSHPASS_ENV"
+      SSHPASS="$storage_sshpass" sshpass -e ssh "${ssh_args[@]}" \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        "$host" \
+        "$@"
+      return $?
+    fi
+  fi
+  ssh "${ssh_args[@]}" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     "$host" \
@@ -254,19 +298,13 @@ json_sequencer_ok() {
     and (((.readiness.failed_gates // []) | length) == 0)
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
-    and (
-      (
-        ((.consensus.committed_height // 0) > 0)
-        and ((.consensus.last_execution_height // 0) > 0)
-      )
-      or (
-        ((.consensus.committed_height // .committed_height // 0) == 0)
-        and ((.consensus.last_execution_height // 0) == 0)
-        and ((.consensus.network_head.source // null) == "self_only")
-        and ((.consensus.network_head.required_peer_count // 0) == 0)
-        and ((.consensus.network_head.decision // null) == "ready")
-      )
-    )
+    and ((.consensus.committed_height // 0) > 0)
+    and ((.consensus.last_execution_height // 0) > 0)
+    and (((.consensus.last_execution_block_hash // "") | tostring | length) > 0)
+    and (((.consensus.last_execution_state_root // "") | tostring | length) > 0)
+    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+    and ((.world_resource.readiness_status // null) == "ready")
+    and (((.world_resource.failed_gates // []) | length) == 0)
   ' "$path" >/dev/null 2>&1
 }
 
@@ -288,18 +326,13 @@ json_storage_ok() {
     and (.consensus.storage_challenge_network_degraded_height // null) == null
     and ((.observability.storage_challenge_network_degraded // false) | not)
     and (.replication.connected_peers | length) >= 1
-    and (
-      (
-        ((.consensus.committed_height // 0) > 0)
-        and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
-      )
-      or (
-        ((.consensus.committed_height // .committed_height // 0) == 0)
-        and ((.consensus.network_head.source // null) == "self_only")
-        and ((.consensus.network_head.required_peer_count // 0) == 0)
-        and ((.consensus.network_head.decision // null) == "ready")
-      )
-    )
+    and ((.consensus.committed_height // 0) > 0)
+    and ((.consensus.last_execution_height // 0) > 0)
+    and (((.consensus.last_execution_block_hash // "") | tostring | length) > 0)
+    and (((.consensus.last_execution_state_root // "") | tostring | length) > 0)
+    and ((.consensus.network_head.height // 0) >= (.consensus.committed_height // 0))
+    and ((.world_resource.readiness_status // null) == "ready")
+    and (((.world_resource.failed_gates // []) | length) == 0)
   ' "$path" >/dev/null 2>&1
 }
 
@@ -325,9 +358,49 @@ poll_status_with_check() {
   return 1
 }
 
+repair_rebuild_log_value() {
+  local log_path=$1
+  local key=$2
+  awk -F= -v key="$key" '$1 == key { value=$2 } END { if (value != "") print value }' "$log_path"
+}
+
+validate_repair_rebuild_log() {
+  local log_path=$1
+  local label=$2
+  local world_time
+  local journal_events
+  local tick_consensus_records
+  world_time=$(repair_rebuild_log_value "$log_path" "world_time")
+  journal_events=$(repair_rebuild_log_value "$log_path" "journal_events")
+  tick_consensus_records=$(repair_rebuild_log_value "$log_path" "tick_consensus_records")
+
+  [[ "$world_time" == "0" ]] || die "$label repair rebuild produced world_time=$world_time, expected 0"
+  [[ "$journal_events" == "0" ]] || die "$label repair rebuild produced journal_events=$journal_events, expected 0"
+  [[ "$tick_consensus_records" == "0" ]] || die "$label repair rebuild produced tick_consensus_records=$tick_consensus_records, expected 0"
+}
+
+run_repair_rebuild_host() {
+  local host=$1
+  local control_path=$2
+  local label=$3
+  local repair_log="$OUT_DIR/$label-repair-rebuild.log"
+  local remote_log="$STACK_ROOT/config/doc/testing/evidence/public-testnet-repair-rebuild-$label.log"
+
+  if ! ssh_run "$host" "$control_path" \
+    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis" \
+    >"$repair_log" 2>&1; then
+    cat "$repair_log" >&2 || true
+    die "$label repair rebuild failed"
+  fi
+  cat "$repair_log" >&2
+  validate_repair_rebuild_log "$repair_log" "$label"
+  ssh_run "$host" "$control_path" "cat > '$remote_log'" <"$repair_log"
+}
+
 stage_host() {
   local host=$1
   local control_path=$2
+  local label=$3
   ssh_run "$host" "$control_path" \
     "mkdir -p '$STACK_ROOT/config/doc/testing/evidence' '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
 
@@ -356,8 +429,7 @@ stage_host() {
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"
   ssh_run "$host" "$control_path" \
     "find '$STACK_ROOT/staged-world' \\( -name '._*' -o -name '.DS_Store' \\) -delete"
-  ssh_run "$host" "$control_path" \
-    "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis"
+  run_repair_rebuild_host "$host" "$control_path" "$label"
   ssh_run "$host" "$control_path" \
     "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
@@ -452,15 +524,21 @@ signers_csv = ','.join(signer_pairs)
 
 lines = env_path.read_text(encoding='utf-8').splitlines()
 rewrote_signers = False
+rewrote_adaptive_tick_scheduler = False
 rendered = []
 for line in lines:
     if line.startswith('NODE_VALIDATOR_SIGNERS_CSV='):
         rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
         rewrote_signers = True
+    elif line.startswith('POS_ADAPTIVE_TICK_SCHEDULER='):
+        rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
+        rewrote_adaptive_tick_scheduler = True
     else:
         rendered.append(line)
 if not rewrote_signers:
     rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
+if not rewrote_adaptive_tick_scheduler:
+    rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
 env_path.write_text('\\n'.join(rendered) + '\\n', encoding='utf-8')
 
 digest = hashlib.sha256()
@@ -792,8 +870,8 @@ cleanup_started_hosts() {
   return "$ok"
 }
 
-stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
-stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
+stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
+stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
 
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
@@ -823,6 +901,8 @@ jq -n \
   --arg stack_root "$STACK_ROOT" \
   --arg sequencer_status_url "$SEQUENCER_STATUS_URL" \
   --arg storage_status_url "$STORAGE_STATUS_URL" \
+  --arg sequencer_repair_rebuild_log "$OUT_DIR/sequencer-repair-rebuild.log" \
+  --arg storage_repair_rebuild_log "$OUT_DIR/storage-repair-rebuild.log" \
   --slurpfile sequencer "$OUT_DIR/sequencer-status.json" \
   --slurpfile storage "$OUT_DIR/storage-status.json" \
   '
@@ -832,6 +912,8 @@ jq -n \
       stack_root: $stack_root,
       sequencer_status_url: $sequencer_status_url,
       storage_status_url: $storage_status_url,
+      sequencer_repair_rebuild_log: $sequencer_repair_rebuild_log,
+      storage_repair_rebuild_log: $storage_repair_rebuild_log,
       sequencer_status: $sequencer[0],
       storage_status: $storage[0]
     }
