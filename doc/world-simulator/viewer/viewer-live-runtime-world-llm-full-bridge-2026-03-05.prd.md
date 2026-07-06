@@ -6,7 +6,7 @@
 审计轮次: 5
 
 ## 1. Executive Summary
-- Problem Statement: runtime live 仍存在启发式 sidecar 与不完整事件/快照映射，导致“LLM 模式”与实际行为不一致、可观测性不足、回归风险不可控。优先级来源: 用户明确为 P0（真实 LLM 预期不一致）。对齐 `PRD-WORLD_SIMULATOR-016~018` 迁移主线作为阶段目标收口。
+- Problem Statement: runtime live 仍存在启发式 sidecar 与不完整事件/快照映射，导致“LLM 模式”与实际行为不一致、可观测性不足、回归风险不可控。优先级来源: 用户明确为 P0（真实 LLM 预期不一致）。本专题承接并收口已退役的 `PRD-WORLD_SIMULATOR-016~018` runtime-world migration 阶段目标；当前 `oasis7_viewer_live` 为 runtime/world only，不再使用旧 `--runtime-world` alias。
 - Proposed Solution: runtime live 以真实 `AgentRunner + LlmAgentBehavior` 取代启发式 sidecar，建立 runtime->shadow WorldKernel 观测面，扩展 viewer 协议以完整承载 runtime DomainEvent 与 WorldState 快照，LLM 失败统一硬失败并输出可诊断 DecisionTrace。
 - Success Criteria:
   - SC-1: runtime live llm 模式下不再调用任何启发式 sidecar 逻辑；所有决策均来自 `AgentRunner<LlmAgentBehavior<_>>`。
@@ -21,7 +21,7 @@
   - LLM 工程师：需要可诊断 DecisionTrace 与硬失败语义，避免隐式降级掩盖问题。
   - 回归测试人员：需要 100% 事件/快照覆盖与可自动验证的回归基线。
 - User Scenarios & Frequency:
-  - 日常联调：使用 `oasis7_viewer_live --runtime-world --llm` 验证 LLM 决策与 runtime 行为一致性。
+  - 日常联调：使用 `oasis7_viewer_live --llm` 验证 LLM 决策与 runtime 行为一致性。
   - 发布前回归：执行映射覆盖测试与 DecisionTrace 采证，确保无事件/快照缺口。
   - 故障排查：LLM 失败时通过 DecisionTrace 与结构化错误快速定位。
 - User Stories:

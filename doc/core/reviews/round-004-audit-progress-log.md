@@ -725,12 +725,12 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.project (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.project (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project (retired; see git history and issue 2046)` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `historical removed viewer live tick-driven doc archive: prd` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |

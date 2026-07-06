@@ -720,12 +720,12 @@
 - `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27.project.md`
 - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
 - `doc/world-simulator/viewer/viewer-live-runtime-world-llm-full-bridge-2026-03-05.project.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.project.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.project.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd.md`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project.md`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.prd (retired; see git history and issue 2046)`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.project (retired; see git history and issue 2046)`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd (retired; see git history and issue 2046)`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.project (retired; see git history and issue 2046)`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.prd (retired; see git history and issue 2046)`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.project (retired; see git history and issue 2046)`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.prd.md`
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md`
 - `historical removed viewer live tick-driven doc archive: prd`
