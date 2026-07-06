@@ -74,6 +74,43 @@ impl NodeExecutionHook for MismatchingRollbackExecutionHook {
     }
 }
 
+struct FailingCheckpointExportExecutionHook {
+    commits: Arc<Mutex<Vec<u64>>>,
+    restores: Arc<Mutex<Vec<(String, u64)>>>,
+}
+
+impl NodeExecutionHook for FailingCheckpointExportExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        self.commits
+            .lock()
+            .expect("record execution commits")
+            .push(context.height);
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+
+    fn restore_to_height(&mut self, world_id: &str, height: u64) -> Result<bool, String> {
+        self.restores
+            .lock()
+            .expect("record restore calls")
+            .push((world_id.to_string(), height));
+        Ok(true)
+    }
+
+    fn export_checkpoint_bundle(
+        &mut self,
+        height: u64,
+    ) -> Result<Option<NodeExecutionCheckpointBundle>, String> {
+        Err(format!("forced checkpoint export failure at height {height}"))
+    }
+}
+
 #[test]
 fn pos_engine_commits_single_validator_head() {
     let config = NodeConfig::new("node-a", "world-a", NodeRole::Observer).expect("config");
@@ -657,6 +694,104 @@ fn synced_replication_commit_executes_with_payload_node_id() {
     assert_eq!(contexts.len(), 1);
     assert_eq!(contexts[0].node_id, "node-a");
     assert_ne!(contexts[0].node_id, config.node_id);
+}
+
+#[test]
+fn local_proposer_rolls_back_execution_when_replication_checkpoint_export_fails() {
+    let world_id = "world-local-replication-rollback";
+    let dir = temp_dir("local-replication-rollback");
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(signed_pos_config_with_signer_seeds(
+            validators,
+            &[("node-a", 71)],
+        ))
+        .expect("pos config")
+        .with_auto_attest_all_validators(true)
+        .with_replication(signed_replication_config(dir.clone(), 71));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication = ReplicationRuntime::new(
+        config.replication.as_ref().expect("replication"),
+        config.node_id.as_str(),
+    )
+    .expect("replication runtime");
+    let mut first_hook = RecordingExecutionHook {
+        contexts: Arc::new(Mutex::new(Vec::new())),
+    };
+    engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            Some(&mut replication),
+            None,
+            None,
+            Vec::new(),
+            Some(&mut first_hook),
+        )
+        .expect("first tick should commit");
+    assert_eq!(engine.committed_height, 1);
+    assert_eq!(engine.last_execution_height, 1);
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        1
+    );
+
+    let commits = Arc::new(Mutex::new(Vec::new()));
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut failing_hook = FailingCheckpointExportExecutionHook {
+        commits: Arc::clone(&commits),
+        restores: Arc::clone(&restores),
+    };
+    let err = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            2_000,
+            None,
+            Some(&mut replication),
+            None,
+            None,
+            Vec::new(),
+            Some(&mut failing_hook),
+        )
+        .expect_err("replication checkpoint export failure should fail the tick");
+
+    assert!(
+        matches!(err, NodeError::Execution { ref reason } if reason.contains("forced checkpoint export failure at height 2")),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(commits.lock().expect("commits").as_slice(), &[2]);
+    assert_eq!(
+        restores.lock().expect("restores").as_slice(),
+        &[(config.world_id.clone(), 1)]
+    );
+    assert_eq!(engine.committed_height, 1);
+    assert_eq!(engine.last_execution_height, 1);
+    assert_eq!(
+        engine.last_execution_block_hash.as_deref(),
+        Some("exec-block-1")
+    );
+    assert_eq!(
+        engine.last_execution_state_root.as_deref(),
+        Some("exec-state-1")
+    );
+    assert!(engine.execution_binding_for_height(2).is_none());
+    assert_eq!(
+        replication
+            .latest_persisted_commit_height(world_id)
+            .expect("latest persisted height"),
+        1
+    );
+
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

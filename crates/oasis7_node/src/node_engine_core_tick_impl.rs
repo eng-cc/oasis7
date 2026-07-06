@@ -224,10 +224,13 @@ impl PosNodeEngine {
                 });
             }
         }
+        let previous_execution_height = self.last_execution_height;
+        let previous_execution_block_hash = self.last_execution_block_hash.clone();
+        let previous_execution_state_root = self.last_execution_state_root.clone();
         with_execution_hook(&mut execution_hook, |hook| {
             self.apply_committed_execution(node_id, world_id, now_ms, &decision, hook)
         })?;
-        with_execution_hook(&mut execution_hook, |hook| {
+        if let Err(err) = with_execution_hook(&mut execution_hook, |hook| {
             self.broadcast_local_replication(
                 gossip.as_deref(),
                 replication_network.as_deref(),
@@ -238,7 +241,18 @@ impl PosNodeEngine {
                 replication.as_deref_mut(),
                 hook,
             )
-        })?;
+        }) {
+            self.rollback_local_committed_execution_after_failure(
+                world_id,
+                decision.height,
+                previous_execution_height,
+                previous_execution_block_hash.as_deref(),
+                previous_execution_state_root.as_deref(),
+                execution_hook.as_deref_mut(),
+                &err,
+            )?;
+            return Err(err);
+        }
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {
@@ -249,7 +263,18 @@ impl PosNodeEngine {
                 self.record_finality_latency(latency_ms);
             }
         }
-        self.apply_decision(&decision)?;
+        if let Err(err) = self.apply_decision(&decision) {
+            self.rollback_local_committed_execution_after_failure(
+                world_id,
+                decision.height,
+                previous_execution_height,
+                previous_execution_block_hash.as_deref(),
+                previous_execution_state_root.as_deref(),
+                execution_hook.as_deref_mut(),
+                &err,
+            )?;
+            return Err(err);
+        }
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
         {
@@ -319,5 +344,45 @@ impl PosNodeEngine {
             consensus_snapshot: self.snapshot_from_decision(&decision),
             committed_action_batch,
         })
+    }
+
+    fn rollback_local_committed_execution_after_failure(
+        &mut self,
+        world_id: &str,
+        decision_height: u64,
+        previous_execution_height: u64,
+        previous_execution_block_hash: Option<&str>,
+        previous_execution_state_root: Option<&str>,
+        execution_hook: Option<&mut (dyn NodeExecutionHook + '_)>,
+        err: &NodeError,
+    ) -> Result<(), NodeError> {
+        if decision_height <= previous_execution_height
+            || self.last_execution_height < decision_height
+        {
+            return Ok(());
+        }
+        self.last_execution_height = previous_execution_height;
+        self.last_execution_block_hash = previous_execution_block_hash.map(str::to_string);
+        self.last_execution_state_root = previous_execution_state_root.map(str::to_string);
+        self.execution_bindings.remove(&decision_height);
+        if let Some(hook) = execution_hook {
+            let restored = hook.restore_to_height(world_id, previous_execution_height).map_err(
+                |restore_err| NodeError::Execution {
+                    reason: format!(
+                        "local committed height {} failed after execution: {}; rollback to height {} failed: {}",
+                        decision_height, err, previous_execution_height, restore_err
+                    ),
+                },
+            )?;
+            if previous_execution_height > 0 && !restored {
+                return Err(NodeError::Execution {
+                    reason: format!(
+                        "local committed height {} failed after execution: {}; rollback record for height {} is unavailable",
+                        decision_height, err, previous_execution_height
+                    ),
+                });
+            }
+        }
+        Ok(())
     }
 }
