@@ -478,6 +478,7 @@ fn reconcile_locations(
     width: f64,
     height: f64,
     animation_ms: f64,
+    rebuild_hit_regions: bool,
 ) {
     let mut active_ids = HashSet::new();
     let Some(render_state) = runtime.render_state.as_ref() else {
@@ -527,14 +528,16 @@ fn reconcile_locations(
                 .insert(location.id.clone(), entity);
         }
 
-        runtime.hit_regions.push(HitRegion {
-            kind: "location",
-            id: location.id.clone(),
-            left: canvas_x - LOCATION_HIT_HALF_SIZE,
-            top: canvas_y - LOCATION_HIT_HALF_SIZE,
-            right: canvas_x + LOCATION_HIT_HALF_SIZE,
-            bottom: canvas_y + LOCATION_HIT_HALF_SIZE,
-        });
+        if rebuild_hit_regions {
+            runtime.hit_regions.push(HitRegion {
+                kind: "location",
+                id: location.id.clone(),
+                left: canvas_x - LOCATION_HIT_HALF_SIZE,
+                top: canvas_y - LOCATION_HIT_HALF_SIZE,
+                right: canvas_x + LOCATION_HIT_HALF_SIZE,
+                bottom: canvas_y + LOCATION_HIT_HALF_SIZE,
+            });
+        }
     }
 
     despawn_stale_entities(commands, &mut runtime.location_entities, &active_ids);
@@ -546,6 +549,7 @@ fn reconcile_agents(
     width: f64,
     height: f64,
     animation_ms: f64,
+    rebuild_hit_regions: bool,
 ) {
     let Some(render_state) = runtime.render_state.as_ref() else {
         for (_, entity) in runtime.agent_entities.drain() {
@@ -603,14 +607,16 @@ fn reconcile_agents(
             runtime.agent_entities.insert(agent.id.clone(), entity);
         }
 
-        runtime.hit_regions.push(HitRegion {
-            kind: "agent",
-            id: agent.id.clone(),
-            left: canvas_x - AGENT_HIT_HALF_SIZE,
-            top: canvas_y - AGENT_HIT_HALF_SIZE,
-            right: canvas_x + AGENT_HIT_HALF_SIZE,
-            bottom: canvas_y + AGENT_HIT_HALF_SIZE,
-        });
+        if rebuild_hit_regions {
+            runtime.hit_regions.push(HitRegion {
+                kind: "agent",
+                id: agent.id.clone(),
+                left: canvas_x - AGENT_HIT_HALF_SIZE,
+                top: canvas_y - AGENT_HIT_HALF_SIZE,
+                right: canvas_x + AGENT_HIT_HALF_SIZE,
+                bottom: canvas_y + AGENT_HIT_HALF_SIZE,
+            });
+        }
     }
 
     despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
@@ -757,6 +763,8 @@ fn clear_runtime_visuals(commands: &mut Commands, runtime: &mut BevyRuntimeState
     }
     runtime.grid_layout = None;
     runtime.hit_regions.clear();
+    runtime.hit_region_cache_key = None;
+    runtime.hit_regions_dirty = true;
     runtime.hover_key = None;
 }
 
@@ -830,10 +838,17 @@ pub(crate) fn render_scene(
     let width = window.width() as f64;
     let height = window.height() as f64;
     let animation_ms = time.elapsed_secs_f64() * 1000.0;
-    runtime.hit_regions.clear();
 
     maybe_auto_fit_camera(&mut runtime, width, height);
     maybe_focus_selected_entity(&mut runtime, width, height);
+    let next_hit_region_cache_key = HitRegionCacheKey::new(&runtime, width, height);
+    let rebuild_hit_regions = runtime.hit_regions_dirty
+        || runtime.hit_region_cache_key != Some(next_hit_region_cache_key);
+    if rebuild_hit_regions {
+        runtime.hit_regions.clear();
+        runtime.hit_region_cache_key = Some(next_hit_region_cache_key);
+        runtime.hit_regions_dirty = false;
+    }
     reconcile_grid(
         &mut commands,
         &mut runtime,
@@ -843,8 +858,22 @@ pub(crate) fn render_scene(
     );
     reconcile_fragments(&mut commands, &mut runtime, width, height);
     reconcile_links(&mut commands, &mut runtime, width, height);
-    reconcile_locations(&mut commands, &mut runtime, width, height, animation_ms);
-    reconcile_agents(&mut commands, &mut runtime, width, height, animation_ms);
+    reconcile_locations(
+        &mut commands,
+        &mut runtime,
+        width,
+        height,
+        animation_ms,
+        rebuild_hit_regions,
+    );
+    reconcile_agents(
+        &mut commands,
+        &mut runtime,
+        width,
+        height,
+        animation_ms,
+        rebuild_hit_regions,
+    );
     reconcile_hotspots(&mut commands, &mut runtime, width, height, animation_ms);
 }
 

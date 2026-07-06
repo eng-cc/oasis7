@@ -389,6 +389,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     },
     update(nextRenderState) {
       lastRenderState = nextRenderState;
+      invalidateHitRegions();
       if (!mountedCanvas) {
         return { status: "detached" };
       }
