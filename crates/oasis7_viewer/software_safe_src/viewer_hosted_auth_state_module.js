@@ -91,8 +91,8 @@ export function createViewerHostedAuthStateModule({
           maskedLoginHint: auth.maskedLoginHint || null,
           deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
           releaseToken: auth.releaseToken || null,
-          issuedAtUnixMs: auth.issuedAtUnixMs || null,
-          sessionEpoch: auth.sessionEpoch || null,
+          issuedAtUnixMs: auth.issuedAtUnixMs ?? null,
+          sessionEpoch: auth.sessionEpoch ?? null,
         }),
       );
     } catch (_) {

@@ -99,4 +99,26 @@ describe("viewer hosted auth state module", () => {
       sessionEpoch: null,
     });
   });
+
+  it("preserves zero-valued hosted session metadata when persisting auth state", () => {
+    const module = createHostedAuthStateModule();
+
+    module.persistHostedPlayerSession({
+      available: true,
+      hostedAccountId: "hosted-account-1",
+      playerId: "hosted-player-1",
+      loginChannel: "email",
+      maskedLoginHint: "p***@example.test",
+      deviceSessionId: "device-session-1",
+      releaseToken: "release-token-1",
+      issuedAtUnixMs: 0,
+      sessionEpoch: 0,
+      source: "hosted_runtime_issue",
+    });
+
+    expect(JSON.parse(window.localStorage.getItem(hostedSessionStorageKey()))).toMatchObject({
+      issuedAtUnixMs: 0,
+      sessionEpoch: 0,
+    });
+  });
 });
