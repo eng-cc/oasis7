@@ -373,12 +373,12 @@
 - `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md`
 - `doc/testing/governance/wasm-build-determinism-guard.prd.md`
 - `doc/testing/governance/wasm-build-determinism-guard.project.md`
-- `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.prd.md`
-- `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.project.md`
-- `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.prd.md`
-- `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.project.md`
-- `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.prd.md`
-- `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.project.md`
+- `retired testing launcher launcher-chain-script-migration-2026-02-28 prd`
+- `retired testing launcher launcher-chain-script-migration-2026-02-28 project`
+- `retired testing launcher launcher-lifecycle-hardening-2026-03-01 prd`
+- `retired testing launcher launcher-lifecycle-hardening-2026-03-01 project`
+- `retired testing launcher launcher-viewer-auth-node-config-autowire-2026-03-02 prd`
+- `retired testing launcher launcher-viewer-auth-node-config-autowire-2026-03-02 project`
 - `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md`
 - `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md`
 - `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`

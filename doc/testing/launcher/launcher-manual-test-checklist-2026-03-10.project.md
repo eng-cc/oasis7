@@ -14,9 +14,8 @@
 - `doc/testing/project.md`
 - `doc/testing/prd.index.md`
 - `testing-manual.md`
-- `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.prd.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
-- `doc/devlog/README.md`
+- GitHub task issue evidence comments and git history for retired launcher full-usability closure audit samples
 
 ## 状态
 - 更新日期：2026-03-10

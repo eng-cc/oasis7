@@ -19,13 +19,13 @@
   - `shared-network-ecs-triad-chain-status-metrics-rollout` 已冻结本机 observer + 两台阿里云 ECS 的 same-window triad snapshot、最近 `10` 分钟 traffic window，以及 `/v1/chain/status` 新增 live contract 证据。
 
 ## 历史追溯索引
-本页不再按时间顺序手工追加完成项长表；历史 trace 仍保留在对应 topic `*.project.md`、证据文件与 `.pm/tasks/task_<32hex>.yaml` / `.execution.md` 中。
+本页不再按时间顺序手工追加完成项长表；历史 trace 仍保留在当前 topic `*.project.md`、证据文件、GitHub task issue evidence comments、git history 与迁移前 `.pm/tasks/task_<32hex>.*` 中。
 
 | 历史批次 / 专题 | 追溯入口 |
 | --- | --- |
-| 基础 testing PRD、S0~S10、证据包、趋势 baseline 与 strict schema 迁移 (`TASK-TESTING-001` 至 `TASK-TESTING-034`) | `doc/testing/prd.index.md` 的专题三件套清单；对应 `.pm/tasks/task_<32hex>.*` |
+| 基础 testing PRD、S0~S10、证据包、趋势 baseline 与 strict schema 迁移 (`TASK-TESTING-001` 至 `TASK-TESTING-034`) | `doc/testing/prd.index.md` 的专题三件套清单；GitHub task issue evidence comments、git history 与迁移前 `.pm/tasks/task_<32hex>.*` |
 | Archive / CI / wasm determinism / required-gate 保护批次 (`TASK-TESTING-035` 至 `TASK-TESTING-040`) | `doc/testing/ci/*.project.md`、`doc/testing/governance/*.project.md` |
-| Launcher / Web UI / release gate hardening 批次 (`TASK-TESTING-041` 至 `TASK-TESTING-065`) | `doc/testing/launcher/*.project.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`、相关 `.pm/tasks/task_<32hex>.*` |
+| Launcher / Web UI / release gate hardening 批次 (`TASK-TESTING-041` 至 `TASK-TESTING-065`) | 当前入口为 `testing-manual.md`、`doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md`、`doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md` 与 `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`；早期 launcher migration / lifecycle / auth autowire / full-usability closure 三件套已退役删除，追溯见 GitHub task issue evidence comments、git history 与迁移前 `.pm/tasks/task_<32hex>.*` |
 | 2026-03-02 / 2026-03-03 / 2026-03-06 专题任务映射 | `doc/testing/prd.index.md` 按文件名检索对应 `*.project.md`；旧 `SUBTASK-TESTING-*` 映射保留在专题 project 文档与 task evidence 中 |
 | Playability evidence stack / L4A-L4B / model visual review | `doc/testing/governance/playability-*.project.md`、`doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`、`doc/testing/templates/model-visual-review-card-template.md` |
 | Legacy shared-network rehearsal / hosted access / release evidence | `doc/testing/evidence/README.md` 先分流，再进入具体 evidence 文件 |
@@ -38,6 +38,7 @@
 - `starter-resource-genesis-for-empty-testnet-worlds` (Trace: .pm/tasks/task_656a707a4de145e0b1a8600160866889.yaml): Fresh testnet runtime snapshots now publish deterministic starter resource chunks from committed execution context, preserve starter resources after first Agent claim, and keep later committed heights schema-current without replaying genesis resource deltas.
 - `local-letai-playtest-flow-stability` (Trace: .pm/tasks/task_4af42b4abe9b4e2fb2c2cc1881ad3e74.yaml; Trace: .pm/tasks/task_43f78174f0904eaf95e3b99dde0509a7.yaml): 本地真实 LetAI provider-backed 试玩链路已收口为 wrapper-first / detached-safe / provider-backed chat 默认路径，补齐 auto-topup settlement retry、provider diagnostics、loopback proxy 稳定性、viewer loading/tick/chat 反馈与回归证据；并补强一键启动诊断、真实 UI 输入到 provider 回复的 Playwright 回归入口。
 - `testing-doc-default-surface-slimming` (Trace: .pm/tasks/task_0af93d9ebb8c45df8cf013e11840cc9b.yaml): 默认 testing 文档阅读面已压缩为当前执行窗口、历史追溯索引与 canonical redirect；Viewer perf smoke 当前态同步为 required-gate report-only scoped 行为。
+- `testing-launcher-legacy-triplet-retirement` (Trace: #2028 / task_9f54a9aeb788435a802bfaa7175f9fdc): 早期 launcher chain migration、lifecycle hardening、viewer auth/node config autowire 与 full-usability closure audit 四组三件套已退役删除；当前 launcher/playtest/Web UI 闭环入口收敛到 `testing-manual.md`、current launcher manual/checklist、bundle-first playtest topic、Web UI manual、GitHub task issue evidence comments 与 git history。
 - `engineering-code-quality-performance-baselines` (Trace: `.pm/tasks/task_35657c5f0a5543dda5d57f51fc4b8841.execution.md`): Viewer changed-path perf smoke 已接入 required-gate report-only scope；runtime module routing perf harness 已有首个 dev/release baseline。
 - `required-gate-ondemand-launcher-web-build` (Trace: `.pm/tasks/task_3778b0e747b249bc85b92b942a32b3fd.yaml`): launcher Web `trunk build` 已按 changed-path 注入 required gate，避免 release `build-web-dist` 才暴露编译错误。
 - `release-web-*` hardening 系列 (Trace examples: `.pm/tasks/task_b7097f476e674a429469a98d6ae36794.execution.md`、`.pm/tasks/task_bca86dc8b045420baf35b7e28414818c.execution.md`、`.pm/tasks/task_f59a3d14ebcd47dcacbee3a7aa725675.execution.md`): release Web gate 已收口 preflight shadow、独立端口、software-safe live-control 语义与 headed/headless evidence 边界。
