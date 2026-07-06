@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REAL_DU="$(command -v du)"
 
 TMPDIR="$(mktemp -d)"
 cleanup() {
@@ -18,12 +19,15 @@ OPEN_PR_WORKTREE="$TMPDIR/open-pr-task-worktree"
 BROKEN_WORKTREE="$TMPDIR/broken-worktree"
 PRUNABLE_WORKTREE="$TMPDIR/prunable-worktree"
 PRUNABLE_MAIN_WORKTREE="$TMPDIR/prunable-main-worktree"
+SHARED_TARGET="$TMPDIR/shared cargo target"
 
-mkdir -p "$TEST_REPO/.pm/tasks" "$TEST_REPO/.git" "$TMPDIR/bin" "$CURRENT_WORKTREE/scripts" "$CLEAN_WORKTREE/target" "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules" "$OPEN_PR_WORKTREE" "$BROKEN_WORKTREE"
+mkdir -p "$TEST_REPO/.pm/tasks" "$TEST_REPO/.git" "$TMPDIR/bin" "$CURRENT_WORKTREE/scripts" "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules" "$OPEN_PR_WORKTREE" "$BROKEN_WORKTREE" "$SHARED_TARGET"
 cp "$ROOT_DIR/scripts/worktree-gc-report.sh" "$CURRENT_WORKTREE/scripts/worktree-gc-report.sh"
 cp "$ROOT_DIR/scripts/worktree-harness-lib.sh" "$CURRENT_WORKTREE/scripts/worktree-harness-lib.sh"
 chmod +x "$CURRENT_WORKTREE/scripts/worktree-gc-report.sh"
-printf 'target-cache' > "$CLEAN_WORKTREE/target/sample.bin"
+printf 'target-cache' > "$SHARED_TARGET/sample.bin"
+ln -s "$SHARED_TARGET" "$CURRENT_WORKTREE/target"
+ln -s "$SHARED_TARGET" "$CLEAN_WORKTREE/target"
 printf 'node-cache' > "$CLEAN_WORKTREE/crates/oasis7_viewer/node_modules/sample.bin"
 
 cat > "$TEST_REPO/.pm/tasks/task_11111111111111111111111111111111.yaml" <<EOF
@@ -123,6 +127,16 @@ exit 1
 EOF
 chmod +x "$TMPDIR/bin/git"
 
+cat > "$TMPDIR/bin/du" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$#" -ge 2 && -n "${OASIS7_DU_CALL_LOG:-}" ]]; then
+  printf '%s\n' "${@: -1}" >> "$OASIS7_DU_CALL_LOG"
+fi
+exec "$OASIS7_REAL_DU" "$@"
+EOF
+chmod +x "$TMPDIR/bin/du"
+
 cat > "$TMPDIR/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -141,8 +155,8 @@ REPORT_FILE="$TMPDIR/worktree-gc-report.json"
 NO_FOOTPRINT_REPORT_FILE="$TMPDIR/worktree-gc-report-no-footprint.json"
 UNKNOWN_PR_STATE_REPORT_FILE="$TMPDIR/worktree-gc-report-unknown-pr-state.json"
 TIMEOUT_PR_STATE_REPORT_FILE="$TMPDIR/worktree-gc-report-timeout-pr-state.json"
-(cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json --footprint > "$REPORT_FILE")
-(cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$NO_FOOTPRINT_REPORT_FILE")
+(cd "$CURRENT_WORKTREE" && OASIS7_REAL_DU="$REAL_DU" OASIS7_DU_CALL_LOG="$TMPDIR/du-calls.log" PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json --footprint > "$REPORT_FILE")
+(cd "$CURRENT_WORKTREE" && OASIS7_REAL_DU="$REAL_DU" PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$NO_FOOTPRINT_REPORT_FILE")
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -150,7 +164,7 @@ set -euo pipefail
 exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
-(cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$UNKNOWN_PR_STATE_REPORT_FILE")
+(cd "$CURRENT_WORKTREE" && OASIS7_REAL_DU="$REAL_DU" PATH="$TMPDIR/bin:$PATH" ./scripts/worktree-gc-report.sh --json > "$UNKNOWN_PR_STATE_REPORT_FILE")
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
 #!/usr/bin/env bash
@@ -158,9 +172,9 @@ set -euo pipefail
 sleep 2
 EOF
 chmod +x "$TMPDIR/bin/gh"
-(cd "$CURRENT_WORKTREE" && PATH="$TMPDIR/bin:$PATH" WORKTREE_GC_REPORT_GH_TIMEOUT_SECONDS=0.1 ./scripts/worktree-gc-report.sh --json > "$TIMEOUT_PR_STATE_REPORT_FILE")
+(cd "$CURRENT_WORKTREE" && OASIS7_REAL_DU="$REAL_DU" PATH="$TMPDIR/bin:$PATH" WORKTREE_GC_REPORT_GH_TIMEOUT_SECONDS=0.1 ./scripts/worktree-gc-report.sh --json > "$TIMEOUT_PR_STATE_REPORT_FILE")
 
-python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$UNKNOWN_PR_STATE_REPORT_FILE" "$TEST_REPO" "$CURRENT_WORKTREE" "$CLEAN_WORKTREE" "$OPEN_PR_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" "$PRUNABLE_MAIN_WORKTREE" <<'PY'
+python3 - "$REPORT_FILE" "$NO_FOOTPRINT_REPORT_FILE" "$UNKNOWN_PR_STATE_REPORT_FILE" "$TEST_REPO" "$CURRENT_WORKTREE" "$CLEAN_WORKTREE" "$OPEN_PR_WORKTREE" "$BROKEN_WORKTREE" "$PRUNABLE_WORKTREE" "$PRUNABLE_MAIN_WORKTREE" "$SHARED_TARGET" "$TMPDIR/du-calls.log" <<'PY'
 from __future__ import annotations
 
 import json
@@ -178,6 +192,8 @@ open_pr_worktree = str(Path(sys.argv[7]).resolve())
 broken_worktree = str(Path(sys.argv[8]).resolve())
 prunable_worktree = str(Path(sys.argv[9]).resolve())
 prunable_main_worktree = str(Path(sys.argv[10]).resolve())
+shared_target = str(Path(sys.argv[11]).resolve())
+du_call_log = Path(sys.argv[12])
 
 payload = json.loads(report_path.read_text(encoding="utf-8"))
 no_footprint_payload = json.loads(no_footprint_report_path.read_text(encoding="utf-8"))
@@ -198,6 +214,19 @@ for key, value in expected_summary.items():
         raise SystemExit(f"unexpected summary {key}: {payload['summary']}")
 if not isinstance(payload["summary"].get("known_target_bytes"), int):
     raise SystemExit(f"expected target footprint summary: {payload['summary']}")
+if not isinstance(payload["summary"].get("known_shared_target_bytes"), int):
+    raise SystemExit(f"expected shared target footprint summary: {payload['summary']}")
+if payload["summary"]["known_shared_target_bytes"] <= 0:
+    raise SystemExit(f"expected shared target footprint bytes: {payload['summary']}")
+if payload["summary"].get("known_deduplicated_target_bytes") != payload["summary"]["known_shared_target_bytes"]:
+    raise SystemExit(f"expected deduplicated target bytes to match single shared target: {payload['summary']}")
+shared_target_du_calls = [
+    line
+    for line in du_call_log.read_text(encoding="utf-8").splitlines()
+    if str(Path(line).resolve()) == shared_target
+]
+if len(shared_target_du_calls) != 1:
+    raise SystemExit(f"expected shared target to be measured once, got {shared_target_du_calls}")
 if not isinstance(payload["summary"].get("known_viewer_node_modules_bytes"), int):
     raise SystemExit(f"unexpected summary: {payload['summary']}")
 
@@ -222,6 +251,12 @@ if clean_entry["pm_task_status"] != "done":
     raise SystemExit(f"expected done task for clean worktree: {clean_entry}")
 if not clean_entry["footprint"] or clean_entry["footprint"]["target_bytes"] <= 0:
     raise SystemExit(f"expected clean worktree target footprint: {clean_entry}")
+if clean_entry["footprint"]["target_is_symlink"] is not True:
+    raise SystemExit(f"expected clean worktree target symlink metadata: {clean_entry}")
+if clean_entry["footprint"]["target_resolved_path"] != shared_target:
+    raise SystemExit(f"expected clean worktree target resolved path: {clean_entry}")
+if clean_entry["footprint"]["target_bytes"] != payload["summary"]["known_shared_target_bytes"]:
+    raise SystemExit(f"expected shared target bytes to match single symlink target: {clean_entry}")
 if clean_entry["footprint"]["viewer_node_modules_bytes"] <= 0:
     raise SystemExit(f"expected clean worktree node_modules footprint: {clean_entry}")
 expected_remove = f"git -C '{repo_root}' worktree remove -f '{clean_worktree}'"

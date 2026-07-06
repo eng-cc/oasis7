@@ -4,10 +4,21 @@ set -euo pipefail
 repo_root="${OASIS7_STANDALONE_TOOL_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$repo_root"
 
+tracked_tool_file_set=$'\n'
 manifests=()
-while IFS= read -r manifest; do
-  manifests+=("$manifest")
-done < <(git ls-files "tools/**/Cargo.toml" | sort)
+lockfiles=()
+while IFS= read -r tracked_file; do
+  tracked_tool_file_set+="$tracked_file"$'\n'
+  case "$tracked_file" in
+    */Cargo.toml) manifests+=("$tracked_file") ;;
+    */Cargo.lock) lockfiles+=("$tracked_file") ;;
+  esac
+done < <(git ls-files "tools/**/Cargo.toml" "tools/**/Cargo.lock" | sort)
+
+is_tracked_tool_file() {
+  local needle="$1"
+  [[ "$tracked_tool_file_set" == *$'\n'"$needle"$'\n'* ]]
+}
 
 if [[ "${#manifests[@]}" -eq 0 ]]; then
   echo "error: no tracked standalone tool manifests found under tools/" >&2
@@ -21,7 +32,7 @@ for manifest in "${manifests[@]}"; do
     echo "error: standalone tool lockfile missing: $lockfile" >&2
     exit 1
   fi
-  if ! git ls-files --error-unmatch "$lockfile" >/dev/null 2>&1; then
+  if ! is_tracked_tool_file "$lockfile"; then
     echo "error: standalone tool lockfile is not tracked: $lockfile" >&2
     exit 1
   fi
@@ -34,12 +45,12 @@ for manifest in "${manifests[@]}"; do
   checked=$((checked + 1))
 done
 
-while IFS= read -r lockfile; do
+for lockfile in "${lockfiles[@]}"; do
   manifest="$(dirname "$lockfile")/Cargo.toml"
-  if ! git ls-files --error-unmatch "$manifest" >/dev/null 2>&1; then
+  if ! is_tracked_tool_file "$manifest"; then
     echo "error: standalone tool manifest missing for lockfile: $lockfile" >&2
     exit 1
   fi
-done < <(git ls-files "tools/**/Cargo.lock" | sort)
+done
 
 echo "ok: standalone tool lockfiles are locked and manifest-consistent ($checked manifests)"
