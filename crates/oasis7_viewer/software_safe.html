@@ -641,9 +641,37 @@
       }
       .feedback-card {
         border: 1px solid var(--border);
+        border-left: 3px solid rgba(148, 163, 184, 0.28);
         border-radius: 12px;
         padding: 12px;
-        background: rgba(255,255,255,0.03);
+        background:
+          linear-gradient(90deg, rgba(148, 163, 184, 0.04), transparent 42%),
+          rgba(255,255,255,0.03);
+      }
+      .feedback-card[data-feedback-stage="ack"],
+      .feedback-card[data-feedback-stage="sent"],
+      .feedback-card[data-feedback-stage="queued"] {
+        border-color: rgba(99, 179, 255, 0.22);
+        border-left-color: rgba(99, 179, 255, 0.68);
+        background:
+          linear-gradient(90deg, rgba(99, 179, 255, 0.1), transparent 46%),
+          rgba(8, 18, 24, 0.48);
+      }
+      .feedback-card[data-feedback-stage="completed"] {
+        border-color: rgba(110, 231, 183, 0.24);
+        border-left-color: rgba(110, 231, 183, 0.74);
+        background:
+          linear-gradient(90deg, rgba(110, 231, 183, 0.1), transparent 46%),
+          rgba(7, 23, 17, 0.46);
+      }
+      .feedback-card[data-feedback-stage="blocked"],
+      .feedback-card[data-feedback-stage="rejected"],
+      .feedback-card[data-feedback-stage="error"] {
+        border-color: rgba(229, 143, 118, 0.3);
+        border-left-color: rgba(229, 143, 118, 0.82);
+        background:
+          linear-gradient(90deg, rgba(229, 143, 118, 0.13), transparent 46%),
+          rgba(29, 10, 9, 0.5);
       }
       .feedback-summary {
         font-size: 14px;

@@ -478,8 +478,14 @@ function InlineHelpTip(props) {
 }
 
 function FeedbackCard(props) {
+  const feedbackStage = () => normalizedFeedbackStage(props.feedbackStage);
   return (
-    <div class="feedback-card">
+    <div
+      class="feedback-card"
+      data-feedback-stage={feedbackStage()}
+      role={props.liveRegion ? "status" : undefined}
+      aria-live={props.liveRegion ? "polite" : undefined}
+    >
       <div class="badge-row">
         <Badge class={props.display.badgeClass}>{props.display.label}</Badge>
         <Show when={props.display.code}>
@@ -495,6 +501,14 @@ function FeedbackCard(props) {
       </Show>
     </div>
   );
+}
+
+function normalizedFeedbackStage(stage) {
+  const value = String(stage || "").trim().toLowerCase();
+  if (["ack", "sent", "queued", "completed", "blocked", "rejected", "error"].includes(value)) {
+    return value;
+  }
+  return undefined;
 }
 
 function MetricCard(props) {
@@ -1631,6 +1645,16 @@ function StarterOcRequiredGate() {
                     </div>
                   </div>
                   <StarterOcGuide locale={locale()} />
+                  <Show when={submittedFeedback()}>
+                    {(feedback) => (
+                      <FeedbackCard
+                        feedback={feedback()}
+                        feedbackStage={feedback().stage}
+                        display={core.describeSemanticFeedback(feedback(), locale())}
+                        liveRegion
+                      />
+                    )}
+                  </Show>
                 </div>
               )}
             >
@@ -2851,8 +2875,15 @@ function WorldSummaryPanel() {
                   </EventCard>
                 )}
               </Show>
-              <Show when={gameplayActionFeedback()}>
-                {(feedback) => <FeedbackCard feedback={feedback()} display={gameplayActionFeedbackDisplay()} />}
+              <Show when={!starterOcGateOpen() && gameplayActionFeedback()}>
+                {(feedback) => (
+                  <FeedbackCard
+                    feedback={feedback()}
+                    feedbackStage={feedback().stage}
+                    display={gameplayActionFeedbackDisplay()}
+                    liveRegion
+                  />
+                )}
               </Show>
               <Show when={gameplay().recommendedAction}>
                 {(action) => (
