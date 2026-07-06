@@ -70,6 +70,24 @@ pub(super) fn reconcile_engine_with_persisted_replication(
             payload.execution_block_hash,
             payload.execution_state_root,
         )?;
+        if let Some(hook) = execution_hook.as_deref_mut() {
+            let restored = hook
+                .restore_to_height(world_id, latest_persisted_height)
+                .map_err(|reason| NodeError::Execution {
+                    reason: format!(
+                        "persisted replication reconcile rollback to height {} failed to restore execution head: {}",
+                        latest_persisted_height, reason
+                    ),
+                })?;
+            if !restored {
+                return Err(NodeError::Execution {
+                    reason: format!(
+                        "persisted replication reconcile rollback record for height {} is unavailable",
+                        latest_persisted_height
+                    ),
+                });
+            }
+        }
         return Ok(());
     }
     engine.replication_persisted_height = engine
