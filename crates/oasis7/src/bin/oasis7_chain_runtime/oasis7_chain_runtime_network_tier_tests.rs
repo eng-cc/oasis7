@@ -1087,6 +1087,7 @@ fn mainnet_validator_readiness_blocks_when_stake_mapping_is_unavailable() {
         &network_head,
         &p2p,
         &policy,
+        None,
         1_700_000_000_000,
     );
 
@@ -1151,6 +1152,7 @@ fn mainnet_sync_lag_stalls_after_policy_window() {
         &network_head,
         &public_p2p_status(),
         &policy,
+        None,
         1_700_000_020_000,
     );
 

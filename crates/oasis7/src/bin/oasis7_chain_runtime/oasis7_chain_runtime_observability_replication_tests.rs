@@ -64,6 +64,7 @@ fn build_chain_status_payload_zeroes_replication_gap_when_replication_disabled()
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
 

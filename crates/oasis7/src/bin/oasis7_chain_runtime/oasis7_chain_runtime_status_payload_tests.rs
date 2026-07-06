@@ -360,10 +360,146 @@ fn build_chain_status_payload_surfaces_runtime_perf_snapshot() {
 }
 
 #[test]
+fn build_chain_status_payload_warns_observability_for_runtime_perf_degradation() {
+    let runtime_perf = RuntimePerfSnapshot {
+        sample_window: 512,
+        tick: runtime_perf_series(31.5, 0),
+        decision: runtime_perf_series(24.2, 125_000),
+        action_execution: runtime_perf_series(14.8, 0),
+        callback: runtime_perf_series(3.1, 0),
+        llm_api: runtime_perf_series(980.0, 0),
+        health: RuntimePerfHealth::Warn,
+        bottleneck: RuntimePerfBottleneck::Decision,
+    };
+
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+    let alert = payload
+        .observability
+        .alerts
+        .iter()
+        .find(|alert| alert.code == "runtime_perf_degraded")
+        .expect("runtime perf observability alert");
+    assert_eq!(alert.severity, "warn");
+    assert!(alert.summary.contains("health=warn"));
+    assert!(alert.summary.contains("bottleneck=decision"));
+}
+
+#[test]
+fn build_chain_status_payload_marks_runtime_perf_critical_not_ready() {
+    let runtime_perf = RuntimePerfSnapshot {
+        sample_window: 512,
+        tick: runtime_perf_series(80.0, 250_000),
+        decision: runtime_perf_series(24.2, 0),
+        action_execution: runtime_perf_series(14.8, 0),
+        callback: runtime_perf_series(3.1, 0),
+        llm_api: runtime_perf_series(980.0, 0),
+        health: RuntimePerfHealth::Critical,
+        bottleneck: RuntimePerfBottleneck::Tick,
+    };
+
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+
+    assert_eq!(payload.observability.status, "critical");
+    assert!(!payload.observability.ready);
+    assert!(payload.observability.runtime_perf_available);
+    assert_eq!(payload.observability.runtime_perf_health, "critical");
+    assert_eq!(payload.observability.runtime_perf_bottleneck, "tick");
+    assert!(payload.observability.runtime_perf_degraded);
+    let alert = payload
+        .observability
+        .alerts
+        .iter()
+        .find(|alert| alert.code == "runtime_perf_degraded")
+        .expect("runtime perf observability alert");
+    assert_eq!(alert.severity, "critical");
+    assert!(alert.summary.contains("health=critical"));
+    assert!(alert.summary.contains("bottleneck=tick"));
+}
+
+#[test]
 fn build_chain_status_payload_marks_runtime_perf_unavailable_without_source() {
     let payload = build_minimal_status_payload(None);
 
     assert!(payload.runtime_perf.is_none());
+    assert!(!payload.observability.runtime_perf_available);
+    assert_eq!(payload.observability.runtime_perf_health, "unavailable");
+    assert_eq!(payload.observability.runtime_perf_bottleneck, "none");
+    assert!(!payload.observability.runtime_perf_degraded);
+    assert!(
+        payload
+            .observability
+            .alerts
+            .iter()
+            .all(|alert| alert.code != "runtime_perf_degraded")
+    );
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_requires_commit_samples() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot::default();
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing);
+
+    assert!(runtime_perf.is_none());
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 4,
+        p50_total_ms: Some(780),
+        p95_total_ms: Some(1_250),
+        max_total_ms: Some(1_250),
+        slow_count: 1,
+        last_slow_stage: Some("runtime_step".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    assert_eq!(
+        runtime_perf.bottleneck,
+        RuntimePerfBottleneck::ActionExecution
+    );
+    assert_eq!(runtime_perf.action_execution.samples_total, 4);
+    assert_eq!(runtime_perf.action_execution.budget_ms, 1_000.0);
+    assert_eq!(runtime_perf.action_execution.p50_ms, 780.0);
+    assert_eq!(runtime_perf.action_execution.p95_ms, 1_250.0);
+    assert_eq!(runtime_perf.action_execution.over_budget_total, 0);
+    assert_eq!(runtime_perf.action_execution.over_budget_ratio_ppm, 0);
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_marks_very_slow_commits_critical() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 4,
+        p50_total_ms: Some(1_500),
+        p95_total_ms: Some(2_500),
+        max_total_ms: Some(2_500),
+        slow_count: 4,
+        last_slow_stage: Some("runtime_step".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Critical);
+    assert_eq!(
+        runtime_perf.bottleneck,
+        RuntimePerfBottleneck::ActionExecution
+    );
+    assert_eq!(runtime_perf.action_execution.p95_ms, 2_500.0);
 }
 
 #[test]

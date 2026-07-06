@@ -119,6 +119,12 @@ pub(super) fn start_chain_status_server(
     })
 }
 
+fn build_chain_runtime_perf_snapshot() -> Option<oasis7::simulator::RuntimePerfSnapshot> {
+    super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(
+        &super::execution_bridge::snapshot_execution_bridge_commit_timing(),
+    )
+}
+
 fn run_chain_status_server_loop(
     listener: TcpListener,
     stop_rx: Receiver<()>,
@@ -391,7 +397,7 @@ fn handle_chain_status_connection(
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
                 build_chain_wasm_status(),
-                None,
+                build_chain_runtime_perf_snapshot(),
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
                 transactions,
                 replication_debug_status,

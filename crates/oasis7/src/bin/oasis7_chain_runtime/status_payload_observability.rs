@@ -1,12 +1,18 @@
 use std::collections::BTreeSet;
 
+use oasis7::simulator::{
+    RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,
+};
 use oasis7_node::NodeSnapshot;
 use serde::Serialize;
 
+use super::ExecutionBridgeCommitTimingSnapshot;
 use super::{
     ChainLivenessStatus, ChainNodeObservabilityAlert, ChainP2pStatus, ChainReadinessPolicyStatus,
     ChainReplicationTransportStability, TRANSPORT_STABILITY_MIN_SCORE,
 };
+
+const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainP2pPathObservabilityStatus {
@@ -35,6 +41,23 @@ pub(crate) struct ChainP2pPathTransitionStatus {
     pub(crate) from_kind: Option<String>,
     pub(crate) to_kind: Option<String>,
     pub(crate) age_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub(crate) struct ChainP2pTransportTransitionCounters {
+    pub(crate) direct_to_hole_punched: u64,
+    pub(crate) direct_to_relay_reserved: u64,
+    pub(crate) hole_punched_to_direct: u64,
+    pub(crate) hole_punched_to_relay_reserved: u64,
+    pub(crate) relay_reserved_to_direct: u64,
+    pub(crate) relay_reserved_to_hole_punched: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ChainP2pTransportTransition {
+    pub(crate) from_kind: Option<String>,
+    pub(crate) to_kind: Option<String>,
+    pub(crate) at_unix_ms: Option<i64>,
 }
 
 pub(crate) fn build_path_observability_status(
@@ -88,6 +111,109 @@ pub(crate) fn push_observability_alert(
         code: code.to_string(),
         summary,
     });
+}
+
+pub(crate) struct ChainRuntimePerfObservabilityStatus {
+    pub(crate) available: bool,
+    pub(crate) health: String,
+    pub(crate) bottleneck: String,
+    pub(crate) degraded: bool,
+}
+
+pub(crate) fn build_runtime_perf_observability_status(
+    runtime_perf: Option<&RuntimePerfSnapshot>,
+    alerts: &mut Vec<ChainNodeObservabilityAlert>,
+) -> ChainRuntimePerfObservabilityStatus {
+    let health = runtime_perf
+        .map(|snapshot| snapshot.health.as_str().to_string())
+        .unwrap_or_else(|| "unavailable".to_string());
+    let bottleneck = runtime_perf
+        .map(|snapshot| snapshot.bottleneck.as_str().to_string())
+        .unwrap_or_else(|| "none".to_string());
+    let degraded = runtime_perf
+        .map(|snapshot| {
+            matches!(
+                snapshot.health,
+                RuntimePerfHealth::Warn | RuntimePerfHealth::Critical
+            )
+        })
+        .unwrap_or(false);
+
+    if let Some(runtime_perf) = runtime_perf.filter(|_| degraded) {
+        let severity = if runtime_perf.health == RuntimePerfHealth::Critical {
+            "critical"
+        } else {
+            "warn"
+        };
+        push_observability_alert(
+            alerts,
+            severity,
+            "runtime_perf_degraded",
+            format!(
+                "runtime performance degraded: health={} bottleneck={} tick_p95_ms={:.2} decision_p95_ms={:.2} action_execution_p95_ms={:.2} callback_p95_ms={:.2}",
+                runtime_perf.health.as_str(),
+                runtime_perf.bottleneck.as_str(),
+                runtime_perf.tick.p95_ms,
+                runtime_perf.decision.p95_ms,
+                runtime_perf.action_execution.p95_ms,
+                runtime_perf.callback.p95_ms
+            ),
+        );
+    }
+
+    ChainRuntimePerfObservabilityStatus {
+        available: runtime_perf.is_some(),
+        health,
+        bottleneck,
+        degraded,
+    }
+}
+
+pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
+    timing: &ExecutionBridgeCommitTimingSnapshot,
+) -> Option<RuntimePerfSnapshot> {
+    if timing.recent_commit_count == 0 {
+        return None;
+    }
+    let p50_ms = timing.p50_total_ms.unwrap_or(0) as f64;
+    let p95_ms = timing.p95_total_ms.unwrap_or(0) as f64;
+    let max_ms = timing.max_total_ms.unwrap_or(0) as f64;
+    let health = if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS * 2.0 {
+        RuntimePerfHealth::Critical
+    } else if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
+        || max_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
+    {
+        RuntimePerfHealth::Warn
+    } else {
+        RuntimePerfHealth::Healthy
+    };
+    let samples_total = timing.recent_commit_count as u64;
+    let action_execution = RuntimePerfSeriesSnapshot {
+        samples_total,
+        samples_window: timing.recent_commit_count,
+        budget_ms: EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS,
+        last_ms: max_ms,
+        avg_ms: 0.0,
+        min_ms: 0.0,
+        max_ms,
+        p50_ms,
+        p95_ms,
+        p99_ms: max_ms,
+        over_budget_total: 0,
+        over_budget_ratio_ppm: 0,
+    };
+
+    Some(RuntimePerfSnapshot {
+        sample_window: timing.window_capacity,
+        action_execution,
+        health,
+        bottleneck: if health == RuntimePerfHealth::Healthy {
+            RuntimePerfBottleneck::None
+        } else {
+            RuntimePerfBottleneck::ActionExecution
+        },
+        ..RuntimePerfSnapshot::default()
+    })
 }
 
 pub(crate) fn push_local_chain_ahead_alert(

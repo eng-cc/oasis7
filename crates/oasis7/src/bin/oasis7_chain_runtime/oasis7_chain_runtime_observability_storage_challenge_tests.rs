@@ -101,6 +101,7 @@ fn build_chain_status_payload_marks_storage_challenge_network_degraded_not_ready
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         1_700_000_000_000,
     );
     let readiness = super::status_payload::build_readiness_status(&observability, policy.clone());

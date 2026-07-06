@@ -42,9 +42,11 @@ use status_payload_observability::{
     ChainP2pPathObservabilityStatus, build_path_observability_status,
 };
 pub(crate) use status_payload_observability::{
-    build_liveness_status, classify_transport_stability, observability_status_for_alerts,
-    observability_summary_for_alerts, push_local_chain_ahead_alert, push_observability_alert,
-    reachability_policy_ok,
+    ChainP2pTransportTransition, ChainP2pTransportTransitionCounters, build_liveness_status,
+    build_runtime_perf_observability_status,
+    build_runtime_perf_snapshot_from_execution_bridge_timing, classify_transport_stability,
+    observability_status_for_alerts, observability_summary_for_alerts,
+    push_local_chain_ahead_alert, push_observability_alert, reachability_policy_ok,
 };
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
@@ -82,23 +84,6 @@ pub(super) struct ChainP2pStatus {
     pub(super) deployment_mode: String,
     pub(super) node_role_claim: String,
     pub(super) rationale: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-pub(super) struct ChainP2pTransportTransitionCounters {
-    pub(super) direct_to_hole_punched: u64,
-    pub(super) direct_to_relay_reserved: u64,
-    pub(super) hole_punched_to_direct: u64,
-    pub(super) hole_punched_to_relay_reserved: u64,
-    pub(super) relay_reserved_to_direct: u64,
-    pub(super) relay_reserved_to_hole_punched: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(super) struct ChainP2pTransportTransition {
-    pub(super) from_kind: Option<String>,
-    pub(super) to_kind: Option<String>,
-    pub(super) at_unix_ms: Option<i64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -193,6 +178,10 @@ pub(super) struct ChainNodeObservabilityStatus {
     pub(super) recent_replication_error_count: usize,
     pub(super) storage_degraded: bool,
     pub(super) reward_runtime_degraded: bool,
+    pub(super) runtime_perf_available: bool,
+    pub(super) runtime_perf_health: String,
+    pub(super) runtime_perf_bottleneck: String,
+    pub(super) runtime_perf_degraded: bool,
     pub(super) alerts: Vec<ChainNodeObservabilityAlert>,
 }
 
@@ -471,6 +460,7 @@ pub(super) fn build_chain_node_observability_status(
     network_head: &ChainConsensusNetworkHeadStatus,
     p2p: &ChainP2pStatus,
     policy: &ChainReadinessPolicyStatus,
+    runtime_perf: Option<&RuntimePerfSnapshot>,
     observed_at_unix_ms: i64,
 ) -> ChainNodeObservabilityStatus {
     let connected_peer_count = replication.connected_peers.len();
@@ -857,6 +847,8 @@ pub(super) fn build_chain_node_observability_status(
             format!("reward runtime degraded: {reason}"),
         );
     }
+    let runtime_perf_observability =
+        build_runtime_perf_observability_status(runtime_perf, &mut alerts);
 
     let status = observability_status_for_alerts(alerts.as_slice());
     let ready = status != "critical"
@@ -899,6 +891,10 @@ pub(super) fn build_chain_node_observability_status(
         recent_replication_error_count,
         storage_degraded,
         reward_runtime_degraded,
+        runtime_perf_available: runtime_perf_observability.available,
+        runtime_perf_health: runtime_perf_observability.health,
+        runtime_perf_bottleneck: runtime_perf_observability.bottleneck,
+        runtime_perf_degraded: runtime_perf_observability.degraded,
         alerts,
     }
 }
@@ -950,6 +946,7 @@ pub(super) fn build_chain_status_payload(
         &network_head,
         &p2p,
         &readiness_policy,
+        runtime_perf.as_ref(),
         observed_at_unix_ms,
     );
     let consensus_participation_hold_reason = consensus_participation_hold_reason(

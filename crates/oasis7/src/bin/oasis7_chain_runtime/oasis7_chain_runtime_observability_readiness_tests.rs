@@ -56,6 +56,7 @@ fn build_chain_status_payload_allows_genesis_self_head_cold_start() {
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         observed_at_ms,
     );
     let readiness = super::status_payload::build_readiness_status(&observability, policy);
@@ -141,6 +142,7 @@ fn build_chain_status_payload_allows_clean_genesis_cold_start() {
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         observed_at_ms,
     );
     let readiness = super::status_payload::build_readiness_status(&observability, policy);
@@ -211,6 +213,7 @@ fn build_chain_status_payload_blocks_isolated_genesis_validator() {
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         observed_at_ms,
     );
     let readiness = super::status_payload::build_readiness_status(&observability, policy);
@@ -313,6 +316,7 @@ fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validat
         &network_head,
         &super::observability_tests::sample_observability_p2p_status(),
         &policy,
+        None,
         observed_at_ms,
     );
     let readiness = super::status_payload::build_readiness_status(&observability, policy);
