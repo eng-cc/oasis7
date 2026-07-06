@@ -61,6 +61,45 @@ function average(values) {
   return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
+function sortedNonNegativeNumbers(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return [];
+  }
+  const normalized = [];
+  for (const value of values) {
+    const number = asNumber(value, NaN);
+    if (Number.isFinite(number) && number >= 0) {
+      normalized.push(number);
+    }
+  }
+  normalized.sort((left, right) => left - right);
+  return normalized;
+}
+
+function normalizeLongTasks(longTasks) {
+  const items = [];
+  let totalMs = 0;
+  let maxMs = 0;
+  if (!Array.isArray(longTasks)) {
+    return { items, totalMs, maxMs };
+  }
+  for (const task of longTasks) {
+    const duration = round(asNumber(task?.duration, 0));
+    if (duration <= 0) {
+      continue;
+    }
+    const item = {
+      startTime: round(asNumber(task?.startTime, 0)),
+      duration,
+      name: String(task?.name || "longtask"),
+    };
+    items.push(item);
+    totalMs += duration;
+    maxMs = Math.max(maxMs, duration);
+  }
+  return { items, totalMs, maxMs };
+}
+
 function skipGate(id, label, threshold) {
   return {
     id,
@@ -132,21 +171,13 @@ export function summarizeViewerPerformance({
   browserConsole = [],
 } = {}) {
   const normalizedThresholds = normalizeViewerPerfThresholds(thresholds);
-  const frames = frameIntervals
-    .map((value) => asNumber(value, NaN))
-    .filter((value) => Number.isFinite(value) && value >= 0)
-    .sort((left, right) => left - right);
-  const interactions = interactionLatencies
-    .map((value) => asNumber(value, NaN))
-    .filter((value) => Number.isFinite(value) && value >= 0)
-    .sort((left, right) => left - right);
-  const longTaskItems = longTasks
-    .map((task) => ({
-      startTime: round(asNumber(task?.startTime, 0)),
-      duration: round(asNumber(task?.duration, 0)),
-      name: String(task?.name || "longtask"),
-    }))
-    .filter((task) => task.duration > 0);
+  const frames = sortedNonNegativeNumbers(frameIntervals);
+  const interactions = sortedNonNegativeNumbers(interactionLatencies);
+  const {
+    items: longTaskItems,
+    totalMs: longTaskTotalMs,
+    maxMs: longTaskMaxMs,
+  } = normalizeLongTasks(longTasks);
 
   const frameSamples = frames.length;
   const meanFrameMs = average(frames);
@@ -165,8 +196,6 @@ export function summarizeViewerPerformance({
       severeFrames += 1;
     }
   }
-  const longTaskTotalMs = longTaskItems.reduce((total, task) => total + task.duration, 0);
-
   const metrics = {
     durationMs: round(durationMs),
     sampleDurationMs: round(sampleWindowMs),
@@ -183,7 +212,7 @@ export function summarizeViewerPerformance({
     severeFramePct: frameSamples ? round((severeFrames / frameSamples) * 100) : null,
     longTaskCount: longTaskItems.length,
     longTaskTotalMs: round(longTaskTotalMs),
-    longTaskMaxMs: round(Math.max(0, ...longTaskItems.map((task) => task.duration))),
+    longTaskMaxMs: round(longTaskMaxMs),
     domContentLoadedMs: round(asNumber(domReadiness.domContentLoadedMs)),
     loadEventMs: round(asNumber(domReadiness.loadEventMs)),
     domInteractiveMs: round(asNumber(domReadiness.domInteractiveMs)),
