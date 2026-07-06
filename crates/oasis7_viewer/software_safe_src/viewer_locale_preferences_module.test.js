@@ -86,6 +86,21 @@ describe("viewer locale preferences module", () => {
     }
   });
 
+  it("keeps UI locale updates usable when history state cannot be rewritten", () => {
+    const module = createPreferencesModule();
+    const replaceStateSpy = vi.spyOn(window.history, "replaceState").mockImplementation(() => {
+      throw new Error("history state unavailable");
+    });
+
+    try {
+      expect(module.setViewerLocale("zh")).toBe("zh");
+      expect(document.documentElement.lang).toBe("zh-CN");
+      expect(window.localStorage.getItem("oasis7:viewer:ui-locale:viewer")).toBe("zh");
+    } finally {
+      replaceStateSpy.mockRestore();
+    }
+  });
+
   it("shares prompt override visibility across viewer entrypoint aliases", () => {
     setViewerPath("/viewer.html?test_api=1&connect=0");
     createPreferencesModule().setPromptOverridesVisible(true);

@@ -2440,10 +2440,13 @@ function createViewerLocalePreferencesModule({
     documentRef.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
   }
   function updateUiLocaleQuery(locale) {
-    const url = new URL(windowRef.location.href);
-    url.searchParams.set("locale", locale);
-    url.searchParams.delete("language");
-    windowRef.history.replaceState({}, "", url.toString());
+    try {
+      const url = new URL(windowRef.location.href);
+      url.searchParams.set("locale", locale);
+      url.searchParams.delete("language");
+      windowRef.history.replaceState({}, "", url.toString());
+    } catch (_) {
+    }
   }
   function setViewerLocale2(locale) {
     const normalized = normalizeUiLocale2(locale);
