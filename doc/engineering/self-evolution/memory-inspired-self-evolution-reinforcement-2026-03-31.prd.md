@@ -8,7 +8,7 @@
 - 对应标准执行入口: `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md`
 
 ## 1. Executive Summary
-- Problem Statement: 当前 `.pm/` 和长期 memory 主题已经冻结了文件真值和 `signal -> memory/task` 基础链路，但还缺少“外部 memory/reflective agent 方案如何限域借鉴”以及“会话/临时判断如何沉淀而不污染长期 memory”这两层规格。
+- Problem Statement: 当前 GitHub-backed task truth、workflow source-of-truth、repo-local `.pm` support layer 与长期 memory 主题已经冻结了分层真值和 `signal -> memory/task` 基础链路，但还缺少“外部 memory/reflective agent 方案如何限域借鉴”以及“会话/临时判断如何沉淀而不污染长期 memory”这两层规格。
 - Proposed Solution: 引入 `memoryOSS` 与《Hindsight》的结构化 borrowing topic，并新增 `working_memory` 与 transcript analysis 分层。oasis7 只借鉴记忆分类、预算化召回、namespace 隔离与会话到工作记忆的提炼链路；`.codex` transcript 只作为显式 opt-in 的 raw evidence 输入，必须先进入 `working_memory` 或 `signal`，不能直接改写长期 memory 或正式真值。
 - Success Criteria:
   - SC-1: 新专题明确区分 `memory_kind = fact | experience | summary | belief` 四类记忆，并给出与现有 `.pm/roles/*/memory/*.yaml` 的字段映射。
@@ -26,7 +26,7 @@
   - `qa_engineer`：需要保证 failure signature、回归模式与反思结论不会因“智能记忆”引入更多噪声。
   - `liveops_community`：需要把社区/事故模式沉淀为可追踪经验，而不是让 agent 私有会话状态吞掉外部反馈。
   - 当前 task owner：需要在一个 worktree 内保留“试过什么、为什么放弃、下一步验证什么”的过程记忆，而不把这些临时内容误升格为长期结论。
-  - 仓库治理维护者：需要保证 `.pm/` 仍是仓库内唯一运行态真值，不被外部 memory 产品或隐式会话状态替代。
+  - 仓库治理维护者：需要保证外部 memory 产品或隐式会话状态不会替代当前 GitHub-backed task truth、workflow source-of-truth 与 repo-local `.pm` support layer 的分层边界。
 - User Scenarios & Frequency:
   - 外部方案评估：每次考虑引入新 memory/agent 产品、论文思路或上下文工程机制时执行。
   - 工作流补强设计：每次要扩展 `workflow-report`、`memory-report`、`role-report` 的召回语义时执行。
@@ -87,7 +87,7 @@
 
 ## 4. Technical Specifications
 - Architecture Overview:
-  - 正式真值仍分层为 `doc/**` + `.pm/**`；本专题只扩展 `.pm` memory 与 workflow 的对象模型，不引入第二真值系统。
+  - 正式真值分层为 `doc/**` 规格、`doc/engineering/workflow/source-of-truth.md` workflow contract、GitHub Issue/Project task truth，以及 workflow source-of-truth 允许的 repo-local `.pm` support layer；本专题只扩展 memory / working_memory / reflection 的对象模型，不引入第二真值系统。
   - `memoryOSS` 提供的借鉴点仅限本地优先、显式 mode/namespace、预算化召回与 fail-open 工程习惯；不引入其产品形态作为正式依赖。
   - 《Hindsight》提供的借鉴点仅限 `fact/experience/summary/belief` 记忆分层，以及 `retain/recall/reflect` 闭环；不把论文实验结果直接等同于 oasis7 工程治理结论。
   - 原始会话与过程日志属于 `raw evidence`，先进入 task-scoped `working_memory`；Codex/engineering task 的 phase 1 raw evidence 默认优先直读 `~/.codex/session_index.jsonl` 与 `~/.codex/history.jsonl`，若 `history.jsonl` 未命中则回退到 `~/.codex/sessions/**/rollout-*.jsonl`，只有被提炼过的结论才进入 GitHub-backed reflection intake、candidate task 或长期 `memory`。
@@ -125,7 +125,7 @@
   - 同一 transcript 被重复抽取：若 `task_uid + source_ref + summary hash` 已存在 active `working_memory`，默认复用旧条目而不是重复创建。
   - 反思信号重复：若同一 `source_ref + candidate_topic + summary hash` 已存在未闭环记录，默认复用旧 signal/task，而不是再次创建。
   - 外部方案升级/失效：若 `memoryOSS` 或论文后续版本与现有 adopted 结论冲突，应新增 review task，旧结论走 superseded，不原地改写历史。
-  - 网络不可用：外部资料只作为专题决策输入，仓库运行态不依赖在线访问；离线时不得阻断既有 `.pm` 工作流。
+  - 网络不可用：外部资料只作为专题决策输入；离线时不得阻断既有 repo-local `.pm` support layer，但需要 GitHub task truth 的 lifecycle 操作仍应按 workflow source-of-truth 记录阻断或 fallback evidence。
 - Non-Functional Requirements:
   - NFR-MIR-1: Recall profile 在单次 `workflow-report` 运行内完成筛选，不引入额外网络依赖。
   - NFR-MIR-2: `belief` 类 active memory 的 `review_due_at` 填写率 100%。
@@ -168,7 +168,7 @@
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
-| DEC-MIR-001 | 借鉴外部方案的对象模型与工程习惯，但继续以 `.pm/` + `doc/` 为真值 | 直接接入 `memoryOSS` 或其他外部 memory 产品为运行态真值 | 当前优先级是可审计、可离线、可 worktree 隔离的治理链。 |
+| DEC-MIR-001 | 借鉴外部方案的对象模型与工程习惯，但继续以 GitHub-backed task truth、workflow source-of-truth、正式 `doc/**` 规格和 repo-local `.pm` support layer 分层承载 | 直接接入 `memoryOSS` 或其他外部 memory 产品为运行态真值 | 当前优先级是可审计、可离线、可 worktree 隔离的治理链。 |
 | DEC-MIR-002 | 采用 `fact/experience/summary/belief` 四类记忆作为补强方向 | 继续只保留单一 `summary` 语义 | 单一 summary 无法区分事实、经验、摘要与暂定判断。 |
 | DEC-MIR-003 | 反思结果先走 signal/owner review，再提升为 memory/task | 允许 agent 把 reflection 直接写入正式 memory 或 PRD | 直接写真值会绕过 owner、QA 与 stage 审计链。 |
 | DEC-MIR-004 | 召回必须预算化并按 phase/role/kind 控制 | 允许 agent 自由检索并全量注入历史记忆 | 无预算长上下文会放大噪声和矛盾记忆。 |
@@ -219,7 +219,7 @@
   - ✔ 是否定义数据验证方式：lint/report/smoke/决策记录检查已定义。
   - ✔ 是否定义回归影响范围：Traceability 表已覆盖。
 - 逻辑一致性（Consistency）:
-  - ✔ 是否存在逻辑冲突：未发现；本专题显式继承 `.pm` 真值边界。
+  - ✔ 是否存在逻辑冲突：未发现；本专题显式继承 GitHub-backed task truth、workflow source-of-truth 与 repo-local `.pm` support layer 的分层边界。
   - ✔ 是否存在目标与设计不匹配：目标直接映射到 memory kind、recall、reflection 三类补强。
   - ✔ 是否存在自相矛盾：未发现。
   - ✔ 是否与历史版本冲突：明确保持与 `self-evolution` 总专题、长期 memory 子专题兼容。
@@ -236,7 +236,7 @@
 - 文档树一致性与结构约束（Documentation Architecture）:
   - ✔ 本 PRD 是否明确归属于某个模块目录：`doc/engineering/self-evolution/`。
   - ✔ 是否符合文档树层级规范：属于 engineering/self-evolution 子专题。
-  - ✔ 是否重复定义已有模型：未重复改写原有 `.pm` 真值，只在其上定义增量补强。
+  - ✔ 是否重复定义已有模型：未重复改写既有分层真值，只在 memory / working_memory / reflection 对象模型上定义增量补强。
   - ✔ 是否引用已有定义，而不是重写：已引用 `self-evolution` 总专题与长期 memory 子专题。
   - ✔ 是否清晰标注跨模块依赖：已列明 `scripts/pm`、`.pm` 与外部参考边界。
   - ✔ 是否混合错误抽象层级：未把实现细节混入模块级 Why/What/Done 范围之外。

@@ -26,8 +26,8 @@
 ## 2026-04-24 季度复核快照
 - `bash ./scripts/doc-inventory-report.sh` 当前快照：
   - `doc/` Markdown 总量 `1764`
-  - `doc/devlog` 文件数 `57`
-  - 最大 Markdown / devlog 文件仍为 `doc/devlog/README.md`，`3288` 行
+  - retired `doc/devlog/2026-*.md` daily 文件数 `57`
+  - retired 最大 daily devlog 文件 `3288` 行；当前 `doc/devlog/README.md` 是 compact archive summary
   - 模块体量前三：`world-simulator=553`、`p2p=270`、`testing=180`
   - 热点子目录前三：`doc/world-simulator/viewer=297`、`doc/readme/governance=98`、`doc/world-simulator/launcher=86`
   - near-limit active docs at snapshot time：`doc/world-simulator/project.md=1000`、`doc/readme/project.md=978`、`doc/core/reviews/round-006-reviewed-files.md=932`、`doc/core/reviews/round-007-reviewed-files.md=906`
