@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use super::distributed_dht::{DistributedDht, ProviderRecord};
 use super::distributed_index_store::DistributedIndexStore;
 use super::error::WorldError;
+use super::provider_trim::trim_providers_by_recency;
 
 #[derive(Debug, Clone)]
 pub struct ProviderCacheConfig {
@@ -186,13 +187,8 @@ impl ProviderCache {
         Ok(())
     }
 
-    fn trim_providers(&self, mut providers: Vec<ProviderRecord>) -> Vec<ProviderRecord> {
-        if self.config.max_providers_per_content == 0 {
-            return providers;
-        }
-        providers.sort_by_key(|provider| std::cmp::Reverse(provider.last_seen_ms));
-        providers.truncate(self.config.max_providers_per_content);
-        providers
+    fn trim_providers(&self, providers: Vec<ProviderRecord>) -> Vec<ProviderRecord> {
+        trim_providers_by_recency(providers, self.config.max_providers_per_content)
     }
 }
 
