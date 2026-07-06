@@ -123,6 +123,8 @@ export function createViewerHostedAuthStateModule({
       ).trim();
       const issuedAtUnixMs = parsed?.issuedAtUnixMs ?? parsed?.issued_at_unix_ms ?? null;
       const sessionEpoch = parsed?.sessionEpoch ?? parsed?.session_epoch ?? null;
+      const normalizedIssuedAtUnixMs = normalizeOptionalFiniteNumber(issuedAtUnixMs);
+      const normalizedSessionEpoch = normalizeOptionalFiniteNumber(sessionEpoch);
       if (!playerId || !releaseToken) {
         clearHostedPlayerSession();
         return null;
@@ -136,8 +138,8 @@ export function createViewerHostedAuthStateModule({
           maskedLoginHint: maskedLoginHint || null,
           deviceSessionId: deviceSessionId || releaseToken,
           releaseToken,
-          issuedAtUnixMs,
-          sessionEpoch,
+          issuedAtUnixMs: normalizedIssuedAtUnixMs,
+          sessionEpoch: normalizedSessionEpoch,
         }),
       );
       return buildDefaultAuthState({
@@ -150,8 +152,8 @@ export function createViewerHostedAuthStateModule({
         releaseToken,
         source: "hosted_browser_storage",
         registrationStatus: "issued",
-        sessionEpoch: sessionEpoch == null ? null : Number(sessionEpoch),
-        issuedAtUnixMs: issuedAtUnixMs == null ? null : Number(issuedAtUnixMs),
+        sessionEpoch: normalizedSessionEpoch,
+        issuedAtUnixMs: normalizedIssuedAtUnixMs,
         runtimeStatus: "issued",
         error: null,
       });
@@ -159,6 +161,14 @@ export function createViewerHostedAuthStateModule({
       clearHostedPlayerSession();
       return null;
     }
+  }
+
+  function normalizeOptionalFiniteNumber(value) {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
   }
 
   function resolveViewerAuthState() {
