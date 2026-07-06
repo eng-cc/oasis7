@@ -2693,6 +2693,12 @@ describe("viewer web ui automation baseline", () => {
       confirmingDialog = screen.getByRole("dialog", { name: "Confirming OC Credit" });
       expect(confirmingDialog).toBeInTheDocument();
     });
+    expect(stagePanel.querySelector('[role="status"]')).toBeNull();
+    const feedbackStatus = within(confirmingDialog).getByRole("status");
+    expect(feedbackStatus).toHaveAttribute("aria-live", "polite");
+    expect(feedbackStatus).toHaveAttribute("data-feedback-stage", "ack");
+    expect(within(feedbackStatus).getByText("Gameplay action accepted")).toBeInTheDocument();
+    expect(within(feedbackStatus).getByText(/entered the runtime queue/i)).toBeInTheDocument();
     expect(within(confirmingDialog).getAllByText(/Starter budget/i).length).toBeGreaterThan(0);
     expect(within(confirmingDialog).getAllByText(/Unlock Agent chat/i).length).toBeGreaterThan(0);
     expect(within(confirmingDialog).getAllByText(/starter budget/i).length).toBeGreaterThan(0);

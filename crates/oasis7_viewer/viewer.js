@@ -9266,6 +9266,7 @@ function InlineHelpTip(props) {
   })();
 }
 function FeedbackCard(props) {
+  const feedbackStage = () => normalizedFeedbackStage(props.feedbackStage);
   return (() => {
     var _el$32 = _tmpl$13(), _el$33 = _el$32.firstChild, _el$34 = _el$33.nextSibling;
     insert(_el$33, createComponent(Badge, {
@@ -9311,8 +9312,26 @@ function FeedbackCard(props) {
         });
       }
     }), null);
+    createRenderEffect((_p$) => {
+      var _v$0 = feedbackStage(), _v$1 = props.liveRegion ? "status" : void 0, _v$10 = props.liveRegion ? "polite" : void 0;
+      _v$0 !== _p$.e && setAttribute(_el$32, "data-feedback-stage", _p$.e = _v$0);
+      _v$1 !== _p$.t && setAttribute(_el$32, "role", _p$.t = _v$1);
+      _v$10 !== _p$.a && setAttribute(_el$32, "aria-live", _p$.a = _v$10);
+      return _p$;
+    }, {
+      e: void 0,
+      t: void 0,
+      a: void 0
+    });
     return _el$32;
   })();
+}
+function normalizedFeedbackStage(stage) {
+  const value = String(stage || "").trim().toLowerCase();
+  if (["ack", "sent", "queued", "completed", "blocked", "rejected", "error"].includes(value)) {
+    return value;
+  }
+  return void 0;
 }
 function MetricCard(props) {
   return (() => {
@@ -9423,9 +9442,9 @@ function CalloutCard(props) {
     }), null);
     insert(_el$56, () => props.children);
     createRenderEffect((_p$) => {
-      var _v$0 = `callout ${props.variant === "warn" ? "callout--warn" : ""} ${props.class ?? ""}`, _v$1 = props.kind ?? "";
-      _v$0 !== _p$.e && className(_el$53, _p$.e = _v$0);
-      _v$1 !== _p$.t && setAttribute(_el$53, "data-callout-kind", _p$.t = _v$1);
+      var _v$11 = `callout ${props.variant === "warn" ? "callout--warn" : ""} ${props.class ?? ""}`, _v$12 = props.kind ?? "";
+      _v$11 !== _p$.e && className(_el$53, _p$.e = _v$11);
+      _v$12 !== _p$.t && setAttribute(_el$53, "data-callout-kind", _p$.t = _v$12);
       return _p$;
     }, {
       e: void 0,
@@ -9490,9 +9509,9 @@ function HostedLoginForm(props) {
             clearHostedLoginError();
           };
           createRenderEffect((_p$) => {
-            var _v$10 = props.codeId ?? "hosted-login-code", _v$11 = props.codeId ?? "hosted-login-code";
-            _v$10 !== _p$.e && setAttribute(_el$66, "for", _p$.e = _v$10);
-            _v$11 !== _p$.t && setAttribute(_el$67, "id", _p$.t = _v$11);
+            var _v$13 = props.codeId ?? "hosted-login-code", _v$14 = props.codeId ?? "hosted-login-code";
+            _v$13 !== _p$.e && setAttribute(_el$66, "for", _p$.e = _v$13);
+            _v$14 !== _p$.t && setAttribute(_el$67, "id", _p$.t = _v$14);
             return _p$;
           }, {
             e: void 0,
@@ -9540,10 +9559,10 @@ function HostedLoginForm(props) {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$12 = props.handleId ?? "hosted-login-handle", _v$13 = props.handleId ?? "hosted-login-handle", _v$14 = state.hostedLogin.startInFlight;
-      _v$12 !== _p$.e && setAttribute(_el$60, "for", _p$.e = _v$12);
-      _v$13 !== _p$.t && setAttribute(_el$61, "id", _p$.t = _v$13);
-      _v$14 !== _p$.a && (_el$63.disabled = _p$.a = _v$14);
+      var _v$15 = props.handleId ?? "hosted-login-handle", _v$16 = props.handleId ?? "hosted-login-handle", _v$17 = state.hostedLogin.startInFlight;
+      _v$15 !== _p$.e && setAttribute(_el$60, "for", _p$.e = _v$15);
+      _v$16 !== _p$.t && setAttribute(_el$61, "id", _p$.t = _v$16);
+      _v$17 !== _p$.a && (_el$63.disabled = _p$.a = _v$17);
       return _p$;
     }, {
       e: void 0,
@@ -9700,10 +9719,10 @@ function EmptyEntityRecoveryCard(props) {
           _el$84.$$click = () => renderGameplayAction(action());
           insert(_el$84, () => gameplayActionDisplayLabel(action(), locale()));
           createRenderEffect((_p$) => {
-            var _v$15 = gameplayActionButtonClass(action()), _v$16 = gameplayActionButtonBusyAttrs(action()), _v$17 = gameplayActionButtonDisabled(action(), gameplay(), locale());
-            _v$15 !== _p$.e && className(_el$84, _p$.e = _v$15);
-            _v$16 !== _p$.t && setAttribute(_el$84, "aria-busy", _p$.t = _v$16);
-            _v$17 !== _p$.a && (_el$84.disabled = _p$.a = _v$17);
+            var _v$18 = gameplayActionButtonClass(action()), _v$19 = gameplayActionButtonBusyAttrs(action()), _v$20 = gameplayActionButtonDisabled(action(), gameplay(), locale());
+            _v$18 !== _p$.e && className(_el$84, _p$.e = _v$18);
+            _v$19 !== _p$.t && setAttribute(_el$84, "aria-busy", _p$.t = _v$19);
+            _v$20 !== _p$.a && (_el$84.disabled = _p$.a = _v$20);
             return _p$;
           }, {
             e: void 0,
@@ -9740,9 +9759,9 @@ function ViewerEntryMenu() {
     }));
     insert(_el$95, () => viewerEntryUrls().softwareSafeUrl);
     createRenderEffect((_p$) => {
-      var _v$18 = locale() === "zh", _v$19 = locale() === "en";
-      _v$18 !== _p$.e && (_el$92.disabled = _p$.e = _v$18);
-      _v$19 !== _p$.t && (_el$93.disabled = _p$.t = _v$19);
+      var _v$21 = locale() === "zh", _v$22 = locale() === "en";
+      _v$21 !== _p$.e && (_el$92.disabled = _p$.e = _v$21);
+      _v$22 !== _p$.t && (_el$93.disabled = _p$.t = _v$22);
       return _p$;
     }, {
       e: void 0,
@@ -10152,10 +10171,10 @@ function StarterOcOnboardingPanel(props) {
             _el$112.$$click = () => renderGameplayAction(starterAction());
             insert(_el$112, () => gameplayActionDisplayLabel(starterAction(), locale()));
             createRenderEffect((_p$) => {
-              var _v$20 = gameplayActionButtonClass(starterAction()), _v$21 = gameplayActionButtonBusyAttrs(starterAction()), _v$22 = gameplayActionButtonDisabled(starterAction(), gameplay(), locale());
-              _v$20 !== _p$.e && className(_el$112, _p$.e = _v$20);
-              _v$21 !== _p$.t && setAttribute(_el$112, "aria-busy", _p$.t = _v$21);
-              _v$22 !== _p$.a && (_el$112.disabled = _p$.a = _v$22);
+              var _v$23 = gameplayActionButtonClass(starterAction()), _v$24 = gameplayActionButtonBusyAttrs(starterAction()), _v$25 = gameplayActionButtonDisabled(starterAction(), gameplay(), locale());
+              _v$23 !== _p$.e && className(_el$112, _p$.e = _v$23);
+              _v$24 !== _p$.t && setAttribute(_el$112, "aria-busy", _p$.t = _v$24);
+              _v$25 !== _p$.a && (_el$112.disabled = _p$.a = _v$25);
               return _p$;
             }, {
               e: void 0,
@@ -10343,6 +10362,23 @@ function StarterOcRequiredGate() {
                 return locale();
               }
             }), null);
+            insert(_el$122, createComponent(Show, {
+              get when() {
+                return submittedFeedback();
+              },
+              children: (feedback) => createComponent(FeedbackCard, {
+                get feedback() {
+                  return feedback();
+                },
+                get feedbackStage() {
+                  return feedback().stage;
+                },
+                get display() {
+                  return describeSemanticFeedback(feedback(), locale());
+                },
+                liveRegion: true
+              })
+            }), null);
             return _el$122;
           })();
         },
@@ -10385,10 +10421,10 @@ function StarterOcRequiredGate() {
           typeof _ref$4 === "function" ? use(_ref$4, _el$134) : primaryButtonRef = _el$134;
           insert(_el$134, () => gameplayActionDisplayLabel(nextAction(), locale(), creditConfirmed() ? tr(locale(), "开始第一次 Agent 聊天", "Start First Agent Chat") : pendingCredit() ? tr(locale(), "手动再确认一次", "Retry Confirmation") : gameplayActionButtonLabel(nextAction(), locale())));
           createRenderEffect((_p$) => {
-            var _v$23 = gameplayActionButtonClass(nextAction()), _v$24 = gameplayActionButtonBusyAttrs(nextAction()), _v$25 = gameplayActionButtonDisabled(nextAction(), gameplay(), locale());
-            _v$23 !== _p$.e && className(_el$134, _p$.e = _v$23);
-            _v$24 !== _p$.t && setAttribute(_el$134, "aria-busy", _p$.t = _v$24);
-            _v$25 !== _p$.a && (_el$134.disabled = _p$.a = _v$25);
+            var _v$26 = gameplayActionButtonClass(nextAction()), _v$27 = gameplayActionButtonBusyAttrs(nextAction()), _v$28 = gameplayActionButtonDisabled(nextAction(), gameplay(), locale());
+            _v$26 !== _p$.e && className(_el$134, _p$.e = _v$26);
+            _v$27 !== _p$.t && setAttribute(_el$134, "aria-busy", _p$.t = _v$27);
+            _v$28 !== _p$.a && (_el$134.disabled = _p$.a = _v$28);
             return _p$;
           }, {
             e: void 0,
@@ -10692,10 +10728,10 @@ function AgentClaimPanel(props) {
         };
         insert(_el$146, () => gameplayActionDisplayLabel(claimAction(), locale(), tr(locale(), "认领 Agent", "Claim Agent")));
         createRenderEffect((_p$) => {
-          var _v$26 = gameplayActionButtonClass(claimAction()), _v$27 = gameplayActionButtonBusyAttrs(claimAction()), _v$28 = Boolean(disabledReason()) || gameplayActionPendingFor(claimAction());
-          _v$26 !== _p$.e && className(_el$146, _p$.e = _v$26);
-          _v$27 !== _p$.t && setAttribute(_el$146, "aria-busy", _p$.t = _v$27);
-          _v$28 !== _p$.a && (_el$146.disabled = _p$.a = _v$28);
+          var _v$29 = gameplayActionButtonClass(claimAction()), _v$30 = gameplayActionButtonBusyAttrs(claimAction()), _v$31 = Boolean(disabledReason()) || gameplayActionPendingFor(claimAction());
+          _v$29 !== _p$.e && className(_el$146, _p$.e = _v$29);
+          _v$30 !== _p$.t && setAttribute(_el$146, "aria-busy", _p$.t = _v$30);
+          _v$31 !== _p$.a && (_el$146.disabled = _p$.a = _v$31);
           return _p$;
         }, {
           e: void 0,
@@ -10922,16 +10958,16 @@ function WorldStageHero() {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$29 = gameplaySummary()?.blockerKind || "ready", _v$30 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$31 = tr(locale(), "主要玩法动作", "Primary gameplay actions"), _v$32 = primaryRefreshLabel(), _v$33 = gameplayActionButtonClass(refreshSnapshotAction()), _v$34 = gameplayActionButtonBusyAttrs(refreshSnapshotAction()), _v$35 = gameplayActionPendingFor(refreshSnapshotAction()), _v$36 = primaryStepLabel(), _v$37 = tr(locale(), "移动端快速入口", "Mobile quick actions");
-      _v$29 !== _p$.e && setAttribute(_el$148, "data-stage-state", _p$.e = _v$29);
-      _v$30 !== _p$.t && className(_el$158, _p$.t = _v$30);
-      _v$31 !== _p$.a && setAttribute(_el$172, "aria-label", _p$.a = _v$31);
-      _v$32 !== _p$.o && setAttribute(_el$173, "aria-label", _p$.o = _v$32);
-      _v$33 !== _p$.i && className(_el$173, _p$.i = _v$33);
-      _v$34 !== _p$.n && setAttribute(_el$173, "aria-busy", _p$.n = _v$34);
-      _v$35 !== _p$.s && (_el$173.disabled = _p$.s = _v$35);
-      _v$36 !== _p$.h && setAttribute(_el$174, "aria-label", _p$.h = _v$36);
-      _v$37 !== _p$.r && setAttribute(_el$176, "aria-label", _p$.r = _v$37);
+      var _v$32 = gameplaySummary()?.blockerKind || "ready", _v$33 = gameplayStageToneClass(gameplaySummary()?.stageStatus), _v$34 = tr(locale(), "主要玩法动作", "Primary gameplay actions"), _v$35 = primaryRefreshLabel(), _v$36 = gameplayActionButtonClass(refreshSnapshotAction()), _v$37 = gameplayActionButtonBusyAttrs(refreshSnapshotAction()), _v$38 = gameplayActionPendingFor(refreshSnapshotAction()), _v$39 = primaryStepLabel(), _v$40 = tr(locale(), "移动端快速入口", "Mobile quick actions");
+      _v$32 !== _p$.e && setAttribute(_el$148, "data-stage-state", _p$.e = _v$32);
+      _v$33 !== _p$.t && className(_el$158, _p$.t = _v$33);
+      _v$34 !== _p$.a && setAttribute(_el$172, "aria-label", _p$.a = _v$34);
+      _v$35 !== _p$.o && setAttribute(_el$173, "aria-label", _p$.o = _v$35);
+      _v$36 !== _p$.i && className(_el$173, _p$.i = _v$36);
+      _v$37 !== _p$.n && setAttribute(_el$173, "aria-busy", _p$.n = _v$37);
+      _v$38 !== _p$.s && (_el$173.disabled = _p$.s = _v$38);
+      _v$39 !== _p$.h && setAttribute(_el$174, "aria-label", _p$.h = _v$39);
+      _v$40 !== _p$.r && setAttribute(_el$176, "aria-label", _p$.r = _v$40);
       return _p$;
     }, {
       e: void 0,
@@ -11050,10 +11086,10 @@ function TargetsPanel() {
             _el$199.$$click = () => renderGameplayAction(action());
             insert(_el$199, () => gameplayActionDisplayLabel(action(), locale()));
             createRenderEffect((_p$) => {
-              var _v$38 = gameplayActionButtonClass(action()), _v$39 = gameplayActionButtonBusyAttrs(action()), _v$40 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
-              _v$38 !== _p$.e && className(_el$199, _p$.e = _v$38);
-              _v$39 !== _p$.t && setAttribute(_el$199, "aria-busy", _p$.t = _v$39);
-              _v$40 !== _p$.a && (_el$199.disabled = _p$.a = _v$40);
+              var _v$41 = gameplayActionButtonClass(action()), _v$42 = gameplayActionButtonBusyAttrs(action()), _v$43 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
+              _v$41 !== _p$.e && className(_el$199, _p$.e = _v$41);
+              _v$42 !== _p$.t && setAttribute(_el$199, "aria-busy", _p$.t = _v$42);
+              _v$43 !== _p$.a && (_el$199.disabled = _p$.a = _v$43);
               return _p$;
             }, {
               e: void 0,
@@ -11133,11 +11169,11 @@ function TargetsPanel() {
               insert(_el$205, () => `${tr(locale(), "地点", "location")}=${agent.location_id} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(agent.resources)}`);
               insert(_el$206, () => status().detail);
               createRenderEffect((_p$) => {
-                var _v$41 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$42 = agent.id, _v$43 = status().kind, _v$44 = isSelectedTarget("agent", agent.id);
-                _v$41 !== _p$.e && setAttribute(_el$200, "data-testid", _p$.e = _v$41);
-                _v$42 !== _p$.t && setAttribute(_el$200, "data-select-id", _p$.t = _v$42);
-                _v$43 !== _p$.a && setAttribute(_el$200, "data-agent-session-status", _p$.a = _v$43);
-                _v$44 !== _p$.o && setAttribute(_el$200, "data-selected", _p$.o = _v$44);
+                var _v$44 = index() === 0 ? "viewer-playthrough-select-agent" : `viewer-select-agent-${agent.id}`, _v$45 = agent.id, _v$46 = status().kind, _v$47 = isSelectedTarget("agent", agent.id);
+                _v$44 !== _p$.e && setAttribute(_el$200, "data-testid", _p$.e = _v$44);
+                _v$45 !== _p$.t && setAttribute(_el$200, "data-select-id", _p$.t = _v$45);
+                _v$46 !== _p$.a && setAttribute(_el$200, "data-agent-session-status", _p$.a = _v$46);
+                _v$47 !== _p$.o && setAttribute(_el$200, "data-selected", _p$.o = _v$47);
                 return _p$;
               }, {
                 e: void 0,
@@ -11194,10 +11230,10 @@ function TargetsPanel() {
             }), null);
             insert(_el$211, () => `id=${location.id} · ${tr(locale(), "半径", "radius")}=${formatPhysicalDistanceCm(location.profile?.radius_cm, locale()) || "-"} · ${tr(locale(), "资源", "resources")}=${renderResourceSummary(location.resources)}`);
             createRenderEffect((_p$) => {
-              var _v$45 = `viewer-select-location-${location.id}`, _v$46 = location.id, _v$47 = isSelectedTarget("location", location.id);
-              _v$45 !== _p$.e && setAttribute(_el$207, "data-testid", _p$.e = _v$45);
-              _v$46 !== _p$.t && setAttribute(_el$207, "data-select-id", _p$.t = _v$46);
-              _v$47 !== _p$.a && setAttribute(_el$207, "data-selected", _p$.a = _v$47);
+              var _v$48 = `viewer-select-location-${location.id}`, _v$49 = location.id, _v$50 = isSelectedTarget("location", location.id);
+              _v$48 !== _p$.e && setAttribute(_el$207, "data-testid", _p$.e = _v$48);
+              _v$49 !== _p$.t && setAttribute(_el$207, "data-select-id", _p$.t = _v$49);
+              _v$50 !== _p$.a && setAttribute(_el$207, "data-selected", _p$.a = _v$50);
               return _p$;
             }, {
               e: void 0,
@@ -11915,15 +11951,19 @@ function WorldSummaryPanel() {
             })
           }), createComponent(Show, {
             get when() {
-              return gameplayActionFeedback();
+              return memo(() => !!!starterOcGateOpen())() && gameplayActionFeedback();
             },
             children: (feedback) => createComponent(FeedbackCard, {
               get feedback() {
                 return feedback();
               },
+              get feedbackStage() {
+                return feedback().stage;
+              },
               get display() {
                 return gameplayActionFeedbackDisplay();
-              }
+              },
+              liveRegion: true
             })
           }), createComponent(Show, {
             get when() {
@@ -11951,11 +11991,11 @@ function WorldSummaryPanel() {
                   _el$282.$$click = () => renderGameplayAction(action());
                   insert(_el$282, () => gameplayActionDisplayLabel(action(), locale()));
                   createRenderEffect((_p$) => {
-                    var _v$48 = gameplayActionTestId(action(), "recommended"), _v$49 = gameplayActionButtonClass(action()), _v$50 = gameplayActionButtonBusyAttrs(action()), _v$51 = gameplayActionButtonDisabled(action(), gameplay(), locale());
-                    _v$48 !== _p$.e && setAttribute(_el$282, "data-testid", _p$.e = _v$48);
-                    _v$49 !== _p$.t && className(_el$282, _p$.t = _v$49);
-                    _v$50 !== _p$.a && setAttribute(_el$282, "aria-busy", _p$.a = _v$50);
-                    _v$51 !== _p$.o && (_el$282.disabled = _p$.o = _v$51);
+                    var _v$51 = gameplayActionTestId(action(), "recommended"), _v$52 = gameplayActionButtonClass(action()), _v$53 = gameplayActionButtonBusyAttrs(action()), _v$54 = gameplayActionButtonDisabled(action(), gameplay(), locale());
+                    _v$51 !== _p$.e && setAttribute(_el$282, "data-testid", _p$.e = _v$51);
+                    _v$52 !== _p$.t && className(_el$282, _p$.t = _v$52);
+                    _v$53 !== _p$.a && setAttribute(_el$282, "aria-busy", _p$.a = _v$53);
+                    _v$54 !== _p$.o && (_el$282.disabled = _p$.o = _v$54);
                     return _p$;
                   }, {
                     e: void 0,
@@ -12069,11 +12109,11 @@ function WorldSummaryPanel() {
                           _el$285.$$click = () => renderGameplayAction(action);
                           insert(_el$285, () => gameplayActionDisplayLabel(action, locale()));
                           createRenderEffect((_p$) => {
-                            var _v$52 = gameplayActionTestId(action), _v$53 = gameplayActionButtonClass(action), _v$54 = gameplayActionButtonBusyAttrs(action), _v$55 = gameplayActionButtonDisabled(action, gameplay(), locale());
-                            _v$52 !== _p$.e && setAttribute(_el$285, "data-testid", _p$.e = _v$52);
-                            _v$53 !== _p$.t && className(_el$285, _p$.t = _v$53);
-                            _v$54 !== _p$.a && setAttribute(_el$285, "aria-busy", _p$.a = _v$54);
-                            _v$55 !== _p$.o && (_el$285.disabled = _p$.o = _v$55);
+                            var _v$55 = gameplayActionTestId(action), _v$56 = gameplayActionButtonClass(action), _v$57 = gameplayActionButtonBusyAttrs(action), _v$58 = gameplayActionButtonDisabled(action, gameplay(), locale());
+                            _v$55 !== _p$.e && setAttribute(_el$285, "data-testid", _p$.e = _v$55);
+                            _v$56 !== _p$.t && className(_el$285, _p$.t = _v$56);
+                            _v$57 !== _p$.a && setAttribute(_el$285, "aria-busy", _p$.a = _v$57);
+                            _v$58 !== _p$.o && (_el$285.disabled = _p$.o = _v$58);
                             return _p$;
                           }, {
                             e: void 0,
@@ -12092,11 +12132,11 @@ function WorldSummaryPanel() {
                           _el$287.$$click = () => renderGameplayAction(action);
                           insert(_el$287, () => gameplayActionDisplayLabel(action, locale()));
                           createRenderEffect((_p$) => {
-                            var _v$56 = gameplayActionTestId(action), _v$57 = gameplayActionButtonClass(action), _v$58 = gameplayActionButtonBusyAttrs(action), _v$59 = gameplayActionButtonDisabled(action, gameplay(), locale());
-                            _v$56 !== _p$.e && setAttribute(_el$287, "data-testid", _p$.e = _v$56);
-                            _v$57 !== _p$.t && className(_el$287, _p$.t = _v$57);
-                            _v$58 !== _p$.a && setAttribute(_el$287, "aria-busy", _p$.a = _v$58);
-                            _v$59 !== _p$.o && (_el$287.disabled = _p$.o = _v$59);
+                            var _v$59 = gameplayActionTestId(action), _v$60 = gameplayActionButtonClass(action), _v$61 = gameplayActionButtonBusyAttrs(action), _v$62 = gameplayActionButtonDisabled(action, gameplay(), locale());
+                            _v$59 !== _p$.e && setAttribute(_el$287, "data-testid", _p$.e = _v$59);
+                            _v$60 !== _p$.t && className(_el$287, _p$.t = _v$60);
+                            _v$61 !== _p$.a && setAttribute(_el$287, "aria-busy", _p$.a = _v$61);
+                            _v$62 !== _p$.o && (_el$287.disabled = _p$.o = _v$62);
                             return _p$;
                           }, {
                             e: void 0,
@@ -13019,10 +13059,10 @@ function InteractionPanel() {
           _el$334.$$click = () => renderGameplayAction(action());
           insert(_el$334, () => gameplayActionDisplayLabel(action(), locale()));
           createRenderEffect((_p$) => {
-            var _v$68 = gameplayActionButtonClass(action()), _v$69 = gameplayActionButtonBusyAttrs(action()), _v$70 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
-            _v$68 !== _p$.e && className(_el$334, _p$.e = _v$68);
-            _v$69 !== _p$.t && setAttribute(_el$334, "aria-busy", _p$.t = _v$69);
-            _v$70 !== _p$.a && (_el$334.disabled = _p$.a = _v$70);
+            var _v$71 = gameplayActionButtonClass(action()), _v$72 = gameplayActionButtonBusyAttrs(action()), _v$73 = gameplayActionButtonDisabled(action(), gameplaySummary(), locale());
+            _v$71 !== _p$.e && className(_el$334, _p$.e = _v$71);
+            _v$72 !== _p$.t && setAttribute(_el$334, "aria-busy", _p$.t = _v$72);
+            _v$73 !== _p$.a && (_el$334.disabled = _p$.a = _v$73);
             return _p$;
           }, {
             e: void 0,
@@ -13052,9 +13092,9 @@ function InteractionPanel() {
               state.chatDraft.dirty = true;
             };
             createRenderEffect((_p$) => {
-              var _v$60 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$61 = !chatControlsEnabled();
-              _v$60 !== _p$.e && setAttribute(_el$299, "placeholder", _p$.e = _v$60);
-              _v$61 !== _p$.t && (_el$299.disabled = _p$.t = _v$61);
+              var _v$63 = tr(locale(), "给当前选中的行动体发一条消息", "Send a message to the selected agent"), _v$64 = !chatControlsEnabled();
+              _v$63 !== _p$.e && setAttribute(_el$299, "placeholder", _p$.e = _v$63);
+              _v$64 !== _p$.t && (_el$299.disabled = _p$.t = _v$64);
               return _p$;
             }, {
               e: void 0,
@@ -13267,9 +13307,9 @@ function InteractionPanel() {
                 _el$324.$$click = () => sendPromptControl("apply", null);
                 insert(_el$324, () => tr(locale(), "应用提示词", "Apply Prompt"));
                 createRenderEffect((_p$) => {
-                  var _v$62 = !promptControlsEnabled(), _v$63 = !promptControlsEnabled();
-                  _v$62 !== _p$.e && (_el$323.disabled = _p$.e = _v$62);
-                  _v$63 !== _p$.t && (_el$324.disabled = _p$.t = _v$63);
+                  var _v$65 = !promptControlsEnabled(), _v$66 = !promptControlsEnabled();
+                  _v$65 !== _p$.e && (_el$323.disabled = _p$.e = _v$65);
+                  _v$66 !== _p$.t && (_el$324.disabled = _p$.t = _v$66);
                   return _p$;
                 }, {
                   e: void 0,
@@ -13291,9 +13331,9 @@ function InteractionPanel() {
                 };
                 insert(_el$329, () => tr(locale(), "回滚提示词", "Rollback Prompt"));
                 createRenderEffect((_p$) => {
-                  var _v$64 = !promptControlsEnabled(), _v$65 = !promptControlsEnabled();
-                  _v$64 !== _p$.e && (_el$328.disabled = _p$.e = _v$64);
-                  _v$65 !== _p$.t && (_el$329.disabled = _p$.t = _v$65);
+                  var _v$67 = !promptControlsEnabled(), _v$68 = !promptControlsEnabled();
+                  _v$67 !== _p$.e && (_el$328.disabled = _p$.e = _v$67);
+                  _v$68 !== _p$.t && (_el$329.disabled = _p$.t = _v$68);
                   return _p$;
                 }, {
                   e: void 0,
@@ -13397,9 +13437,9 @@ function InteractionPanel() {
         }
       }), null);
       createRenderEffect((_p$) => {
-        var _v$66 = agentId(), _v$67 = String(chatHistory().length);
-        _v$66 !== _p$.e && setAttribute(_el$293, "data-command-agent", _p$.e = _v$66);
-        _v$67 !== _p$.t && setAttribute(_el$293, "data-command-chat-history", _p$.t = _v$67);
+        var _v$69 = agentId(), _v$70 = String(chatHistory().length);
+        _v$69 !== _p$.e && setAttribute(_el$293, "data-command-agent", _p$.e = _v$69);
+        _v$70 !== _p$.t && setAttribute(_el$293, "data-command-chat-history", _p$.t = _v$70);
         return _p$;
       }, {
         e: void 0,
@@ -13579,9 +13619,9 @@ function AppShell() {
     insert(_el$349, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface."));
     insert(_el$350, createComponent(TargetsPanel, {}));
     createRenderEffect((_p$) => {
-      var _v$71 = starterOcGateOpen() ? "true" : void 0, _v$72 = starterOcGateOpen() ? true : void 0;
-      _v$71 !== _p$.e && setAttribute(_el$345, "aria-hidden", _p$.e = _v$71);
-      _v$72 !== _p$.t && (_el$345.inert = _p$.t = _v$72);
+      var _v$74 = starterOcGateOpen() ? "true" : void 0, _v$75 = starterOcGateOpen() ? true : void 0;
+      _v$74 !== _p$.e && setAttribute(_el$345, "aria-hidden", _p$.e = _v$74);
+      _v$75 !== _p$.t && (_el$345.inert = _p$.t = _v$75);
       return _p$;
     }, {
       e: void 0,
@@ -13613,9 +13653,9 @@ function AppShell() {
       }
     }), null);
     createRenderEffect((_p$) => {
-      var _v$73 = starterOcGateOpen() ? "true" : void 0, _v$74 = starterOcGateOpen() ? true : void 0;
-      _v$73 !== _p$.e && setAttribute(_el$351, "aria-hidden", _p$.e = _v$73);
-      _v$74 !== _p$.t && (_el$351.inert = _p$.t = _v$74);
+      var _v$76 = starterOcGateOpen() ? "true" : void 0, _v$77 = starterOcGateOpen() ? true : void 0;
+      _v$76 !== _p$.e && setAttribute(_el$351, "aria-hidden", _p$.e = _v$76);
+      _v$77 !== _p$.t && (_el$351.inert = _p$.t = _v$77);
       return _p$;
     }, {
       e: void 0,
@@ -13629,9 +13669,9 @@ function AppShell() {
     insert(_el$358, () => tr(locale(), "只有锁定目标后才进入这里。聊天优先，提示词与对象核查继续后置。", "Enter this column only after locking a target. Chat comes first; prompt controls and raw inspection stay behind it."));
     insert(_el$359, createComponent(DetailsPanel, {}));
     createRenderEffect((_p$) => {
-      var _v$75 = starterOcGateOpen() ? "true" : void 0, _v$76 = starterOcGateOpen() ? true : void 0;
-      _v$75 !== _p$.e && setAttribute(_el$354, "aria-hidden", _p$.e = _v$75);
-      _v$76 !== _p$.t && (_el$354.inert = _p$.t = _v$76);
+      var _v$78 = starterOcGateOpen() ? "true" : void 0, _v$79 = starterOcGateOpen() ? true : void 0;
+      _v$78 !== _p$.e && setAttribute(_el$354, "aria-hidden", _p$.e = _v$78);
+      _v$79 !== _p$.t && (_el$354.inert = _p$.t = _v$79);
       return _p$;
     }, {
       e: void 0,
