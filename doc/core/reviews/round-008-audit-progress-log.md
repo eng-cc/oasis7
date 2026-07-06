@@ -182,9 +182,9 @@
 
 
 | 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04.design (retired; see git history and issue 2046)` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.design (retired; see git history and issue 2046)` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05.design (retired; see git history and issue 2046)` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 08:50:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 117 个专题、剩余 248 个缺口 |
 
 

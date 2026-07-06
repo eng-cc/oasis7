@@ -210,9 +210,9 @@
 - `doc/world-simulator/viewer/viewer-live-full-event-driven-phase10-2026-02-27`
 - `doc/world-simulator/viewer/viewer-live-llm-event-driven-trigger-2026-02-26`
 - `doc/world-simulator/viewer/viewer-live-logical-time-interface-phase11-2026-02-27`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05`
-- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05`
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase1-2026-03-04` (retired; see git history and issue 2046)
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05` (retired; see git history and issue 2046)
+- `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase3-2026-03-05` (retired; see git history and issue 2046)
 - `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28`
 - `historical removed viewer live tick-driven doc archive`
 - `doc/world-simulator/viewer/viewer-location-depletion-visualization`

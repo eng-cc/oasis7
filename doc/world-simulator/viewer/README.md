@@ -68,13 +68,13 @@
 ### 4. runtime live / event-driven / control
 - 首读入口:
   - `viewer-live-full-event-driven-phase10-2026-02-27.prd.md`
-  - `viewer-live-runtime-world-migration-phase1-2026-03-04.prd.md`
   - `viewer-live-runtime-world-llm-full-bridge-2026-03-05.prd.md`
+  - `viewer-manual.manual.md`
 - 适合问题:
   - runtime live 现在哪些能力已经接管
   - event-driven 阶段的主文档是哪份
   - step/control/live playback 的现行边界是什么
-- 说明: `phase8/9` 已物理合并到主文档，当前不应再从旧阶段文件倒推现行口径。
+- 说明: `phase8/9` 已物理合并到主文档；runtime-world migration phase1/2/3 已退役删除，当前 `oasis7_viewer_live` 为 runtime/world only，不应再从旧阶段文件或旧 `--runtime-world` alias 倒推现行口径。
 
 ### 5. chat / prompt / right panel
 - 首读入口:
