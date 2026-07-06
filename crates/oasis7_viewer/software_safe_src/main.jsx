@@ -3064,7 +3064,7 @@ function WorldSummaryPanel() {
           </div>
           <div class="badge-row">
             <For each={diagnosticsSummaryBadges()}>
-              {(label) => <Badge>{label}</Badge>}
+              {(label) => <Badge class="badge badge--diagnostic">{label}</Badge>}
             </For>
           </div>
         </summary>
