@@ -855,9 +855,12 @@
       .pixel-world-command-cell--next[data-blocker-present="true"] {
         border-color: rgba(229, 143, 118, 0.54);
         background:
-          linear-gradient(135deg, rgba(229, 143, 118, 0.15), rgba(250, 204, 21, 0.07) 58%),
+          linear-gradient(135deg, rgba(229, 143, 118, 0.2), rgba(250, 204, 21, 0.06) 58%),
           rgba(24, 11, 9, 0.76);
-        box-shadow: var(--shadow-inset-stage), 0 12px 30px rgba(229, 143, 118, 0.1);
+        box-shadow:
+          var(--shadow-inset-stage),
+          0 0 0 1px rgba(229, 143, 118, 0.08),
+          0 14px 32px rgba(229, 143, 118, 0.12);
       }
       .pixel-world-command-cell--next:hover {
         border-color: rgba(250, 204, 21, 0.72);
@@ -890,6 +893,7 @@
         background: rgba(250, 204, 21, 0.76);
       }
       .pixel-world-command-cell--next[data-blocker-present="true"]::before {
+        width: 5px;
         background: var(--color-blocker-danger);
       }
       .pixel-world-command-cell--leverage {
@@ -1016,10 +1020,10 @@
         display: inline-flex;
         align-items: center;
         min-height: 20px;
-        padding: 2px 7px;
-        border: 1px solid rgba(229, 143, 118, 0.72);
+        padding: 3px 8px;
+        border: 1px solid rgba(229, 143, 118, 0.82);
         border-radius: 999px;
-        background: rgba(229, 143, 118, 0.16);
+        background: rgba(229, 143, 118, 0.22);
         color: #ffd8d0;
         font-size: 10px;
         font-weight: 800;
@@ -1069,9 +1073,10 @@
         color: #fff1b8;
       }
       .pixel-world-command-cell--next[data-blocker-present="true"] .pixel-world-command-cell__action {
-        border-color: rgba(229, 143, 118, 0.58);
+        border-color: rgba(229, 143, 118, 0.72);
         background:
-          linear-gradient(180deg, rgba(229, 143, 118, 0.18), rgba(250, 204, 21, 0.08));
+          linear-gradient(180deg, rgba(229, 143, 118, 0.22), rgba(250, 204, 21, 0.06));
+        color: #ffd8d0;
       }
       .pixel-world-command-cell--next[data-blocker-present="true"]:hover .pixel-world-command-cell__action,
       .pixel-world-command-cell--next[data-blocker-present="true"]:focus-visible .pixel-world-command-cell__action {
