@@ -2533,6 +2533,13 @@ describe("viewer web ui automation baseline", () => {
     expect(diagnosticsPanel).toBeTruthy();
     expect(diagnosticsPanel).toHaveClass("diagnostic-surface");
     expect(diagnosticsPanel).not.toHaveAttribute("open");
+    const summaryBadges = summary.querySelectorAll(".badge");
+    expect(summaryBadges.length).toBeGreaterThan(0);
+    summaryBadges.forEach((badge) => {
+      expect(badge).toHaveClass("badge--diagnostic");
+      expect(badge).not.toHaveClass("badge--good");
+      expect(badge).not.toHaveClass("badge--warn");
+    });
 
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(stagePanel).toBeTruthy();

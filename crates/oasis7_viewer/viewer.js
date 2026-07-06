@@ -12287,6 +12287,7 @@ function WorldSummaryPanel() {
         return diagnosticsSummaryBadges();
       },
       children: (label) => createComponent(Badge, {
+        "class": "badge badge--diagnostic",
         children: label
       })
     }));
