@@ -21,10 +21,13 @@
   - `public_testnet` readiness review 脚本
   - live-candidate lane scaffold
   - governed-bootstrap rehearsal evidence
+  - live `public_testnet` public RPC / explorer / guarded faucet / reset evidence
+  - formal all-pass 11-lane TSV / readiness verdict
+  - controlled `ready_for_live_candidate` evidence for the current packet
 - 当前仓库还不具备：
-  - live `public_testnet` public RPC/explorer/faucet/reset evidence
-  - formal all-pass lane TSV / readiness verdict
-  - `ready_for_live_candidate` 结论
+  - live public launch go-ahead
+  - public validator admission / onboarding
+  - mainnet or production OC settlement authorization
 - 本 runbook 不覆盖：
   - 真实 public testnet 部署细节实现
   - `mainnet` 激活
@@ -57,7 +60,7 @@
   - `producer_system_designer`
 
 ## 3. 硬阻断条件
-- manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或 governed-bootstrap evidence 尚未升级出 rehearsal 状态。
+- manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或当前 active readiness packet 未通过 all-pass controlled live-candidate review。
 - `release_candidate_bundle_ref` 不存在或不是当前候选版本真值。
 - live-candidate required lane 任一没有 owner 或 evidence ref。
 - 公开 RPC/explorer/faucet 仍是私网、单机 localhost 或 placeholder。
