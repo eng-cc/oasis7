@@ -45,12 +45,12 @@
 | LetAI provider bridge | `127.0.0.1:5841` | 本地 LLM provider endpoint |
 | viewer live WebSocket | `127.0.0.1:5011` | viewer 连接的 live bridge |
 | viewer live API | `127.0.0.1:5023` | viewer live side API |
-| static viewer | `127.0.0.1:4173` | 本地 `software_safe.html` 入口 |
+| static viewer | `127.0.0.1:4173` | 本地 `viewer.html` 入口；`software_safe.html` 仅为兼容 alias |
 
 本地入口 URL：
 
 ```text
-http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh
+http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh
 ```
 
 ## 4. 配套启动脚本
@@ -496,12 +496,12 @@ rtk python3 -m http.server 4173 \
   --directory crates/oasis7_viewer/dist
 ```
 
-若 `crates/oasis7_viewer/dist/software_safe.html` 不存在，不要 fallback 到 `crates/oasis7_viewer` 源目录；那会重新触发 pixel-world bindgen stub 路径。先构建/同步 dist 后再启动静态入口。
+若 `crates/oasis7_viewer/dist/viewer.html` 不存在，不要 fallback 到 `crates/oasis7_viewer` 源目录；那会重新触发 pixel-world bindgen stub 路径。先构建/同步 dist 后再启动静态入口；`dist/software_safe.html` 只用于兼容 alias 复核。
 
 确认入口可访问：
 
 ```bash
-rtk curl -sSI 'http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh' \
+rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh' \
   | sed -n '1,5p'
 ```
 
@@ -564,7 +564,7 @@ rtk ./scripts/provider-remote-https/provider-bridge-contract-smoke.sh \
 入口：
 
 ```bash
-rtk curl -sSI 'http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh' \
+rtk curl -sSI 'http://127.0.0.1:4173/viewer.html?ws=ws://127.0.0.1:5011&test_api=1&locale=zh' \
   | sed -n '1,5p'
 ```
 

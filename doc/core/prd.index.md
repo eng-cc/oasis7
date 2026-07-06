@@ -36,7 +36,7 @@
 
 ## 活跃补充文档
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`：下一轮跨模块优先级主入口，适合快速判断“接下来只做什么”。
-- `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`software_safe / pure_api` 与 execution lane 的正式 cross-module 契约。
+- `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`viewer / pure_api` 与 execution lane 的正式 cross-module 契约；`software_safe` 仅作为 `viewer` 兼容 alias。
 - `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`：统一持久大世界默认产品模型、legacy 术语清理、runtime/ops 兼容边界与后续 gate 计划。
 - 2026-03 版本候选 readiness / go-no-go 已降为审计留痕，按需从 `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md` 与 `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md` 进入。
 

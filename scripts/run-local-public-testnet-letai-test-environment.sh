@@ -842,8 +842,11 @@ start_static_viewer() {
   local log_path="$OUTPUT_DIR/static-viewer.log"
   log "starting static viewer on $STATIC_BIND:$STATIC_PORT; log=$log_path"
   local static_dir="$ROOT_DIR/crates/oasis7_viewer/dist"
+  if [[ ! -f "$static_dir/viewer.html" ]]; then
+    die "viewer dist is missing: $static_dir/viewer.html (build crates/oasis7_viewer before starting this test environment)"
+  fi
   if [[ ! -f "$static_dir/software_safe.html" ]]; then
-    die "viewer dist is missing: $static_dir/software_safe.html (build crates/oasis7_viewer before starting this test environment)"
+    die "viewer dist is missing compatibility alias: $static_dir/software_safe.html (build crates/oasis7_viewer before starting this test environment)"
   fi
   log "serving viewer static directory: $static_dir"
   submit_service "oasis7.local-public-testnet.static-viewer" "$log_path" \
@@ -851,11 +854,11 @@ start_static_viewer() {
     --bind "$STATIC_BIND" \
     --directory "$static_dir" \
     >"$OUTPUT_DIR/static-viewer.pid"
-  wait_for_http "http://$STATIC_BIND:$STATIC_PORT/software_safe.html" "static viewer"
+  wait_for_http "http://$STATIC_BIND:$STATIC_PORT/viewer.html" "static viewer"
 }
 
 viewer_first_user_smoke_url() {
-  printf 'http://%s:%s/software_safe.html?ws=ws://%s&test_api=1&locale=zh\n' \
+  printf 'http://%s:%s/viewer.html?ws=ws://%s&test_api=1&locale=zh\n' \
     "$STATIC_BIND" \
     "$STATIC_PORT" \
     "$VIEWER_WS_BIND"
@@ -901,7 +904,8 @@ print_summary() {
   if [[ -n "$pricing" ]]; then
     amount="$(first_pricing_amount "$pricing" 2>/dev/null || printf '<pricing-amount>')"
   fi
-  local viewer_url="http://$STATIC_BIND:$STATIC_PORT/software_safe.html?ws=ws://$VIEWER_WS_BIND&test_api=1&locale=zh"
+  local viewer_url="http://$STATIC_BIND:$STATIC_PORT/viewer.html?ws=ws://$VIEWER_WS_BIND&test_api=1&locale=zh"
+  local software_safe_compat_url="http://$STATIC_BIND:$STATIC_PORT/software_safe.html?ws=ws://$VIEWER_WS_BIND&test_api=1&locale=zh"
   local submit_base_url
   submit_base_url="$(chain_submit_base_url 2>/dev/null || printf '<invalid>')"
   cat <<EOF
@@ -917,6 +921,7 @@ Local public_testnet test environment plan:
   viewer_live_api: http://$VIEWER_API_BIND
   viewer_generated_world_dir: ${VIEWER_GENERATED_WORLD_DIR:-none}
   viewer_url: $viewer_url
+  viewer_software_safe_compat_url: $software_safe_compat_url
   logs: $OUTPUT_DIR
 
 EOF

@@ -55,7 +55,7 @@
   - AC-2: `gameplay` 主文档与 `game` 根 PRD/project 挂载 `PRD-GAME-012`，并给出 `TASK-GAME-061~065` 映射。
   - AC-3: 至少 1 个专题 project 明确写出每条 lane 的 owner role、test tier、验收命令与 done definition。
   - AC-4: 正式 `10-minute trust gate` 必须区分 active-LLM 正式游玩与 `--no-llm` debug/probe lane，避免口径回退到 observer-only 样本。
-  - AC-5: `software_safe` / headed Web/UI 中任一正式入口若仍存在 `control ack timed out without progress`、阶段回退伴随冻结、或主目标/后果不可读，则 `10-minute trust gate` 默认保持 `hold`。
+  - AC-5: `viewer` / headed Web/UI 中任一正式入口若仍存在 `control ack timed out without progress`、阶段回退伴随冻结、或主目标/后果不可读，则 `10-minute trust gate` 默认保持 `hold`；`software_safe` 仅作为 compat alias 复核。
   - AC-6: `first capability gate` 必须与 `10-minute trust gate` 分开记录 verdict；不能因为 10 分钟内尚未闭环首个持续能力，就直接把 trust verdict 判成失败。
   - AC-7: `first capability gate` 必须允许使用 `30` 分钟窗口或 `1~3` 次会话，并与 `PostOnboarding` 专题中“15~45 分钟有效操作内达成首个里程碑”的口径保持一致。
   - AC-8: 本专题必须给出“该砍什么 / 该补什么 / 两层门禁如何判定”三类裁决，而不是泛化成长期愿景。
@@ -95,7 +95,7 @@
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
   - `testing-manual.md`
 - Edge Cases & Error Handling:
-  - active-LLM lane 通过但 software_safe 正式入口仍失败：记为 `trust gate` blocker，不得只用标准 3D 路径冲淡最弱入口缺陷。
+  - active-LLM lane 通过但 `viewer` 正式入口仍失败：记为 `trust gate` blocker，不得只用标准 3D 路径冲淡最弱入口缺陷；`software_safe` 仅作为 compat alias 复核。
   - 工业链条能推进但主界面没有“阻塞/恢复/产出”语义：记为 `trust gate` 与 capability gate 之间的解释断裂，而不是纯 UI 瑕疵。
   - 首屏主目标存在但被历史 `AgentNotFound`、operator 面板或 raw snapshot 语义抢焦点：记为玩家身份失败。
   - `10-minute trust gate` 通过但 `first capability gate` 仍未闭环：允许 trust verdict 为 `continue_playing`，但 capability verdict 必须继续保持 `watch/hold`，不得混写成单一“已可玩/不可玩”。
@@ -108,12 +108,12 @@
   - NFR-RR-5: 所有结论继续遵守 `internal_playable_alpha_late` / `internal_only` claim envelope，不借体验改进任务扩大对外承诺。
   - NFR-RR-6: `TASK-GAME-076` 不得把 world activity、progress percent 或 first capability pass 单独当作 attraction pass；必须有玩家动机、决策密度、奖励/解锁或 agency/leverage 证据。
 - 2026-06-25 P0 control proof follow-up:
-  - `software_safe` 正式玩家入口需要把现有 `player_gameplay` 真值聚合成首局可读的 `Control Proof` surface，顺序固定为 `Player Intent -> World Consequence -> Recovery Move -> Next Move`。
+  - `viewer` 正式玩家入口需要把现有 `player_gameplay` 真值聚合成首局可读的 `Control Proof` surface，顺序固定为 `Player Intent -> World Consequence -> Recovery Move -> Next Move`；`software_safe` 仅作为 compat alias 复核。
   - 该 surface 只消费既有 `accepted_intent`、`execution_state`、`causality_*`、`last_world_change`、`next_step_hint`、recommended action 与 fallback/repair 语义；不得新增或伪造 runtime canonical truth。
   - `Control Proof` 是 `PRD-GAME-012` trust/control floor 的呈现层落点，用于降低玩家拼读成本，不替代 active-LLM trust sample、first capability gate 或 QA verdict。
 - 2026-06-25 P1/P2 continuation follow-up:
   - P1/P2 不塞进 10-minute trust gate 作为新判定项；它们作为 trust gate 之后的制作人可读延展，检查玩家是否拥有打断/重排/纠偏、首胜 leverage、anti-grind 与 mature-world repair/rebuild/pivot 继续路径。
-  - `software_safe` viewer 可以在现有 `player_gameplay` 字段存在时展示 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于让制作人快速判断“首局控制证明”之后是否形成可继续玩的中循环承接。
+  - `viewer` 可以在现有 `player_gameplay` 字段存在时展示 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于让制作人快速判断“首局控制证明”之后是否形成可继续玩的中循环承接；`software_safe` 仅作为 compat alias 复核。
 - Security & Privacy:
   - 本专题只调整玩法优先级、体验反馈与门禁口径，不新增玩家敏感数据采集。
 
@@ -137,7 +137,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-GAME-012 | `TASK-GAME-061` | `test_tier_required` | 文档治理检查、根入口/专题入口/任务映射/执行日志互链核验 | 两周优先级与跨角色 owner 一致性 |
-| PRD-GAME-012 | `TASK-GAME-062` | `test_tier_required` + `test_tier_full` | headed Web/UI 主路径复跑、software_safe 控制 floor 复核、控制成功率统计 | 首次控制可信度、正式入口稳定性 |
+| PRD-GAME-012 | `TASK-GAME-062` | `test_tier_required` + `test_tier_full` | headed Web/UI 主路径复跑、`viewer` 控制 floor 复核、`software_safe` compat alias 复核、控制成功率统计 | 首次控制可信度、正式入口稳定性 |
 | PRD-GAME-012 | `TASK-GAME-063` | `test_tier_required` | 工业引导卡组 A/B/C + `30` 分钟或 `1~3` 次会话 capability follow-up 样本 + branch-ready 人工复核 | `PostOnboarding` 后中循环承接与首个持续能力门 |
 | PRD-GAME-012 | `TASK-GAME-064` | `test_tier_required` | 首屏截图对比、Mission HUD/summary/toast/chatter 语义人工复核、噪音抢焦点评估 | 玩家身份、后果可见化、奖励节奏 |
 | PRD-GAME-012 | `TASK-GAME-065` | `test_tier_required` | `10-minute trust gate` 卡片、QA 汇总与 producer `continue_playing / hold` 决策，并与 capability verdict 分开记录 | trust verdict、正式入口可信度与后续 capability follow-up 方向 |
@@ -152,6 +152,6 @@
 | DEC-RR-001 | 两周内只做 5 条高优先级 retention lane | 同时继续扩大宏系统/高风险对抗/元进度新功能 | 当前主要矛盾是 10 分钟留存，不是功能面不够大。 |
 | DEC-RR-002 | active-LLM 样本作为正式 retention gate | 继续使用 `--no-llm` 作为正式可玩性结论 | 当前制作人口径已明确 no-LLM 仅保留 observer/debug。 |
 | DEC-RR-003 | 先修控制地板，再做首屏 polish 与中循环加厚 | 先做更漂亮的前端或更宏大的系统宣传 | 玩家信任先于审美放大；不稳定控制会吞掉所有包装收益。 |
-| DEC-RR-004 | 2026-04-09 当前切片先维持 `hold`，不继续累积 retention 样本 | 忽略 fresh `software_safe` floor blocker，继续拿旧 PASS 或 debug/probe 样本拼接 continue 结论 | fresh active-LLM rerun 已证明正式入口第一步仍会被 provider timeout 阻断；在 floor 未恢复前继续累计 10 分钟样本只会污染正式 gate。 |
+| DEC-RR-004 | 2026-04-09 当前切片先维持 `hold`，不继续累积 retention 样本 | 忽略 fresh `viewer` floor blocker，继续拿旧 PASS 或 debug/probe 样本拼接 continue 结论 | fresh active-LLM rerun 已证明正式入口第一步仍会被 provider timeout 阻断；在 floor 未恢复前继续累计 10 分钟样本只会污染正式 gate。 |
 | DEC-RR-005 | 把 `PRD-GAME-012` 的正式 verdict 拆成 `10-minute trust gate` 与 `first capability gate` 两层 | 继续要求单个 10 分钟样本同时证明“值得继续玩”与“首个持续能力已闭环” | `PostOnboarding` 专题要求首个能力里程碑可在 `15~45` 分钟或 `1~3` 次会话内达成；把它硬压进 10 分钟会导致 trust 与 capability 两类结论互相污染。 |
 | DEC-RR-006 | 新增 `TASK-GAME-076`，把 attraction / motivation density 从 progression pass 中拆出来单独验收 | 用 `trust gate = pass` 与 `first capability gate = pass` 直接推断前 10/30 分钟足够吸引 | 当前 pass evidence 证明能推进与能读懂，但用户与 gameplay slice 均指出它不足以证明“想继续玩”的动机曲线。 |

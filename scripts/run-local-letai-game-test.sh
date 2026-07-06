@@ -166,7 +166,7 @@ command_available() {
 }
 
 viewer_dist_ready() {
-  [[ -f "$VIEWER_DIST_DIR/index.html" || -f "$VIEWER_DIST_DIR/software_safe.html" ]]
+  [[ -f "$VIEWER_DIST_DIR/index.html" || -f "$VIEWER_DIST_DIR/viewer.html" ]]
 }
 
 bind_port() {

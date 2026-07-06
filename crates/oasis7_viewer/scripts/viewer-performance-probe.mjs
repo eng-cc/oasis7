@@ -120,7 +120,7 @@ function parseArgs(argv) {
 function usage() {
   return `Usage: node ./scripts/viewer-performance-probe.mjs [options]
 
-Measures the current software-safe viewer in a real browser with agent-browser.
+Measures the current canonical Viewer web entry in a real browser with agent-browser.
 
 Options:
   --profile <smoke|release>       Threshold/duration profile (default: smoke)
@@ -157,7 +157,7 @@ function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
   let rawPath = "";
   try {
-    rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/software_safe.html" : requestUrl.pathname);
+    rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/viewer.html" : requestUrl.pathname);
   } catch {
     response.writeHead(400);
     response.end("bad request");
@@ -477,7 +477,7 @@ const server = createServer(serveFile);
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
   closeBrowser();
   console.log(`opening viewer performance probe: ${url}`);

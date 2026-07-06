@@ -28,7 +28,7 @@
   - 维护约定
 - 推荐主题簇:
   - `manual-and-operator`: 手册、镜像、脚本化操作闭环
-  - `software-safe-web`: `software_safe`、Web 正式入口、fatal surfacing、semantic test API
+  - `viewer-web`: `viewer` canonical Web 正式入口、`software_safe` compat 边界、fatal surfacing、semantic test API
   - `runtime-live-control`: runtime live 接管、event-driven、step/control 相关主题
   - `chat-and-panel`: chat、prompt presets、right panel、输入桥接
   - `release-and-visual`: gameplay release、commercial release、visual gate、QA 闭环

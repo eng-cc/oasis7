@@ -52,7 +52,7 @@ env -u NO_COLOR ./scripts/run-viewer-web.sh --address 127.0.0.1 --port 4173
 command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
 mkdir -p output/playwright/viewer
 agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=software_safe&test_api=1"
+agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"
 agent-browser wait --load networkidle
 agent-browser snapshot -i
 agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)" | tee output/playwright/viewer/state.json
@@ -77,7 +77,7 @@ agent-browser close
 
 ## 最小通过标准
 - `snapshot -i` 可见交互树，主视区正常加载。
-- `state.json` 中 `renderMode=software_safe`。
+- `state.json` 中 `renderMode=viewer`（compat 专项可接受 `software_safe` alias）。
 - `connectionStatus=connected`，或页面显式返回可追溯 blocker。
 - 至少产出 1 张截图、1 份 console 日志、1 份状态快照。
 

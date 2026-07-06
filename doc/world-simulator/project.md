@@ -3,6 +3,7 @@
 ## 任务拆解（活跃面）
 - [ ] simulator-kernel-persistence-state-hardening (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 收口 `WorldKernel` snapshot/replay 的可恢复状态边界，补齐 `intel_ttl_ticks` 持久化与 legacy fallback 回归，并把进程内 cache/hook 重置语义显式固定在 persistence contract 内，避免恢复后行为配置静默漂移。 Trace: .pm/tasks/task_6780f8bf31a042dea2c929673ef8db40.yaml
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
+  - 当前命名注记：仓库现行 canonical Web/UI 名称已收口为 `viewer`，该旧任务 slug / title 中的 `software_safe` 仅作为 compat / historical tracker 保留，不再代表当前 formal mode taxonomy。
 
 ### 最近完成（保留一跳 Trace）
 - [x] local-only-world-playtest-startup (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 收敛本地大世界试玩脚本为 local-only 语义，修复 first Agent claim / starter OC pending 体验、链提交快照同步与 Viewer 本地世界措辞，并保留 testnet attach 为独立 runbook。 Trace: .pm/tasks/task_52ecb41a63a54808bad86bc9ffc77c15.yaml

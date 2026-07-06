@@ -6,8 +6,8 @@
 审计轮次: 4
 
 ## 1. Executive Summary
-- Problem Statement: `scripts/` 目录已经覆盖构建、测试、发布、站点、Viewer 和 runtime 诊断等多类脚本，但模块主文档尚未给出“哪些是主入口、哪些是 software-safe Web 当前真值”的一览。结果是开发者和 CI 很容易绕过稳定主入口，直接调用失效或历史脚本，造成用法漂移。
-- Proposed Solution: 建立脚本分层专题，按 `开发主入口 / CI 发布 / 站点治理 / 长跑回归 / software-safe Web 回归` 五层给出脚本清单，并为高频入口显式标注推荐主入口。
+- Problem Statement: `scripts/` 目录已经覆盖构建、测试、发布、站点、Viewer 和 runtime 诊断等多类脚本，但模块主文档尚未给出“哪些是主入口、哪些是 Viewer Web 当前真值、哪些只是 software-safe 兼容回归”的一览。结果是开发者和 CI 很容易绕过稳定主入口，直接调用失效或历史脚本，造成用法漂移。
+- Proposed Solution: 建立脚本分层专题，按 `开发主入口 / CI 发布 / 站点治理 / 长跑回归 / Viewer Web 主入口与 compat 回归` 五层给出脚本清单，并为高频入口显式标注推荐主入口。
 - Success Criteria:
   - SC-1: 至少覆盖当前根 `scripts/` 目录中的高频脚本，并按层归类。
   - SC-2: Viewer Web 当前清单只保留 `run-viewer-web.sh` 与 `viewer-primary-web-entry-regression.sh` / `viewer-software-safe-*` 回归脚本。
@@ -30,7 +30,7 @@
 - Critical User Flows:
   1. `识别需求类型 -> 查分层表 -> 先调用主入口脚本 -> 如失败再判断是否允许 fallback`
   2. `CI / 发布调用脚本 -> 依据脚本层级回溯 owner 与输入输出语义`
-  3. `执行 Viewer Web 验证 -> 先跑主入口 contract -> 再跑 software-safe gameplay/prompt-chat 回归`
+  3. `执行 Viewer Web 验证 -> 先跑 viewer canonical 主入口 contract -> 再跑 software-safe compat gameplay/prompt-chat 回归`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -41,7 +41,7 @@
   - AC-1: 专题文档明确列出脚本分层和主入口/ fallback 规则。
   - AC-2: 至少覆盖 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`viewer-primary-web-entry-regression.sh`、`viewer-software-safe-step-regression.sh`、`site-link-check.sh` 等高频脚本。
   - AC-3: `doc/scripts/prd.index.md` 与 `doc/scripts/project.md` 回写本专题引用。
-  - AC-4: Viewer Web 入口清单与 `AGENTS.md`、`testing-manual.md` 的 software-safe 单入口口径一致。
+  - AC-4: Viewer Web 入口清单与 `AGENTS.md`、`testing-manual.md` 的 `viewer` canonical 入口 + `software_safe` compat alias 口径一致。
 - Non-Goals:
   - 不在本轮为每个脚本补全参数契约细节。
   - 不修改脚本实现或返回码语义。
@@ -89,7 +89,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-SCRIPTS-LAYER-001 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 抽样检查分层表与高频脚本覆盖 | 开发/CI 找入口效率 |
-| PRD-SCRIPTS-LAYER-002 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查活跃入口不再引用已删 Viewer 工具 | software-safe Web 当前真值边界 |
+| PRD-SCRIPTS-LAYER-002 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查活跃入口不再引用已删 Viewer 工具 | Viewer Web 当前真值与 software-safe compat 边界 |
 | PRD-SCRIPTS-LAYER-003 | `TASK-SCRIPTS-002` / `SL-1` | `test_tier_required` | 检查 project/index 互链与任务回写 | scripts 模块治理入口一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

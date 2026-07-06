@@ -35,12 +35,12 @@
 | --- | --- | --- |
 | `issue-160-first-capability-closeout` | active-LLM formal sample 已把 trust gate 和 first capability gate 刷新为 pass；旧 `hold/not_run` 不再是当前 blocker。 | `doc/testing/evidence/issue-160-first-capability-closeout-2026-05-17.md`, GitHub task issue evidence comments |
 | `gameplay-high-risk-design-hardening` | bounded-response、anti-passive fallback、economic readability 与 mature-world anti-grind/anti-forced-dependency 约束已回写。 | GitHub task issue evidence comments |
-| `viewer-economic-readability-first-capability-surface` | `software_safe` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值。 | GitHub task issue evidence comments |
+| `viewer-economic-readability-first-capability-surface` | `viewer` 正式玩家 surface 已显式展示投入、产出、新用途、修复动作和下一步价值；旧 `software_safe` 命名仅作为 compat / historical evidence 入口保留。 | GitHub task issue evidence comments |
 | `agent-claim-slot-1-auto-starter-grant` | slot-1 启动金可由专用池自动补足并原子认领，仍保持首个 claim 非免费。 | GitHub task issue evidence comments |
 | `local-standalone-submit-flow` / `chain-side-manifest-delta-runtime-readiness` | PR #547 / `a39a8d224` 后，cold-start 已形成 `claim_first_agent -> claim_starter_oc -> first agent chat` 的资源与动作链路；该进展支持 PRD-GAME-002/011 的可验证语义和 chain resource readiness，但不改变当前阶段或 claim envelope。 | GitHub task issue evidence comments |
 | `game-design-goal-refresh-audit` | 本轮只做根 PRD / project / gameplay README / claim 专题的冷启动链路文档刷新，明确 starter OC 与 restricted starter claim balance 的边界，不升级阶段或 claim envelope。 | GitHub task issue evidence comments |
 | `game-small-player-lane-runtime-truth` | small-player lane / anti-grind runtime truth 已落到 canonical snapshot、runtime_live 派生和正向回归；这只证明 runtime/sample truth 可测，不直接升级 mature-world QA lane verdict。 | GitHub task issue evidence comments |
-| `ai-era-opening-game-viewer-surfaces` | P0/P1/P2 producer-readable viewer surfaces 已落到 `software_safe` Formal Gameplay Summary：控制证明、能动性动词、首个胜利/anti-grind、成熟世界承接和 replay snippet；这些仍是 viewer-derived evidence，不替代 runtime/agent/QA verdict。 | GitHub task issue evidence comments |
+| `ai-era-opening-game-viewer-surfaces` | P0/P1/P2 producer-readable viewer surfaces 已落到 `viewer` Formal Gameplay Summary：控制证明、能动性动词、首个胜利/anti-grind、成熟世界承接和 replay snippet；`software_safe` 仅作为 compat / historical evidence 入口保留，这些仍是 viewer-derived evidence，不替代 runtime/agent/QA verdict。 | GitHub task issue evidence comments |
 | `viewer-immersive-blue-gradient-line` / `immersive-command-panel-spacing` | 近期 player-facing viewer polish 已收口，不改变 game 根 PRD 的玩法承诺。 | GitHub task issue evidence comments |
 | `game-content-doc-trim-audit` | 根 PRD / project 已瘦身为 active gameplay baseline 与当前执行看板；专题细节、历史证据和执行流水改由专题 project、evidence 与 GitHub task issue evidence comments 承接。 | GitHub task issue evidence comments |
 

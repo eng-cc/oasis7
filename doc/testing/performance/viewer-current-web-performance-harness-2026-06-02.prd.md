@@ -3,7 +3,7 @@
 - 对应项目管理文档: `doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.project.md`
 
 ## 目标
-- Problem Statement: 当前 `crates/oasis7_viewer` software-safe Web viewer 使用时出现卡顿感，而历史 `viewer-owr4-stress` / `perf_probe` 入口已经不再是活跃实现，缺少可执行的当前 viewer 性能门禁。
+- Problem Statement: 当前 `crates/oasis7_viewer` canonical `viewer` Web 入口使用时出现卡顿感，而历史 `viewer-owr4-stress` / `perf_probe` 入口已经不再是活跃实现，缺少可执行的当前 viewer 性能门禁。
 - Proposed Solution: 新增 `scripts/viewer-performance-probe.sh` / `crates/oasis7_viewer/scripts/viewer-performance-probe.mjs`，使用 repo 既有 `agent-browser` 链路在真实浏览器里注入合成高密度快照，采集 rAF frame timing、FPS、Long Task、DOMContentLoaded/load event、DOM 规模与截图，并输出 JSON/Markdown gate 结果。
 - Success Criteria:
   - SC-1: harness 可从 repo root 和 `crates/oasis7_viewer` 两处启动。

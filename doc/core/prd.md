@@ -27,7 +27,7 @@
 - M2: 固化跨模块变更影响检查清单（设计/代码/测试/发布）。
 - M3: 建立 PRD-ID -> Task -> Test 追踪报表。
 - M4 (2026-03-10): 建立阶段收口优先级与跨角色执行口径，统一玩法 / runtime / testing / playability / headless 的发布前闭环目标。
-- M5 (2026-03-19): 冻结 `software_safe / pure_api` 双模式总契约，并明确其与 `execution lane` 的分层边界。
+- M5 (2026-03-19): 冻结 `viewer / pure_api` 双模式总契约，并明确其与 `execution lane` 的分层边界；`software_safe` 仅作为 Viewer Web 兼容 alias 保留。
 
 ## 风险
 - 模块并行演进过快时，全局总览可能滞后于真实实现。
@@ -44,7 +44,7 @@
   - SC-5: 当前阶段优先级（P0/P1/P2）在 core PRD 中有唯一口径，并能映射到对应模块任务与角色 owner。
   - SC-6: 发布前必须先完成玩法微循环、runtime 验收、testing 证据、playability 反馈四条 P0 闭环，缺任一项不得给出 go 结论。
   - SC-7: headless-runtime、自动化稳定性、文档一致性收口具备明确 P1 责任划分与交付标准。
-  - SC-8: `software_safe / pure_api` 双模式在 core 中具备唯一 taxonomy、claim envelope、mode/provider/lane 分层约束，其中 `software_safe` 是主要正式 Web 入口、`pure_api` 是一等公民 no-UI mode，且 `pure_api` formal gameplay 继续要求 active LLM access；`agent_direct_connect/provider_loopback_http` 仅保留为兼容 alias，agent provider 的当前正式配置模型必须拆成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，其中远程托管 bridge 可显式使用 `agent_provider_transport=remote_https`，`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
+  - SC-8: `viewer / pure_api` 双模式在 core 中具备唯一 taxonomy、claim envelope、mode/provider/lane 分层约束，其中 `viewer` 是主要正式 Web 入口、`software_safe` 仅作为兼容 alias / legacy implementation naming 保留，`pure_api` 是一等公民 no-UI mode，且 `pure_api` formal gameplay 继续要求 active LLM access；`agent_direct_connect/provider_loopback_http` 仅保留为兼容 alias，agent provider 的当前正式配置模型必须拆成 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，其中远程托管 bridge 可显式使用 `agent_provider_transport=remote_https`，`non-3D / 2D 优先` 只允许作为交付优先级或交互范围描述。
   - SC-9: core 活跃专题标题、Viewer 活跃手册与实际窗口/Web 标题对齐 `oasis7` 品牌；内部旧品牌兼容命名仅以实现说明形式保留，不得继续冒充公开标题。
   - SC-10: `engineering`、`scripts`、`world-runtime` 的历史专题标题在不改动内部实现标识的前提下完成 `oasis7` 品牌收口，减少 active/historical 入口里的旧品牌混用。
 
@@ -69,7 +69,7 @@
 - PRD-CORE-006: As a `producer_system_designer`, I want a formal version-candidate go/no-go entry after readiness reaches `ready`, so that release approval, residual risks, and role handoff are explicit and auditable.
 - PRD-CORE-007: As a 新协作者, I want `doc/README.md` to include the current public-preview reading path, so that I start from the right entry points.
 - PRD-CORE-008: As a `producer_system_designer`, I want the global docs hub synced with repo/site posture, so that navigation stays consistent.
-- PRD-CORE-009: As a `producer_system_designer`, I want one cross-module contract for `software_safe / pure_api`, so that release, QA, playability, and provider-backed lane terminology stay aligned.
+- PRD-CORE-009: As a `producer_system_designer`, I want one cross-module contract for `viewer / pure_api`, so that release, QA, playability, and provider-backed lane terminology stay aligned while `software_safe` remains a compatibility alias.
 - Critical User Flows:
   1. Flow-CORE-001: `读取模块地图 -> 识别改动所属模块 -> 定位上下游依赖 -> 形成影响面清单`
   2. Flow-CORE-002: `读取关键链路 -> 映射到模块 PRD-ID -> 对照测试分层 -> 输出发布风险判断`
@@ -77,7 +77,7 @@
   4. Flow-CORE-004: `评估当前项目状态 -> 划分 P0/P1/P2 -> 指定跨角色 owner / 输入 / 输出 / Done -> 回写对应模块 project`
   5. Flow-CORE-005: `收集玩法 / runtime / testing / playability / headless 证据 -> 对照阶段收口门禁 -> 形成 go / no-go 结论`
   6. Flow-CORE-006: `确认本轮 completed -> 汇总候选缺口 -> 划分 P0/P1/P2 -> 选定下一条执行主路径`
-  7. Flow-CORE-007: `判断结论属于 software_safe / pure_api 哪一模式 -> 若原文只写 non-3D/2D 优先则先回补真实 mode_id -> 绑定 execution lane 与 evidence -> 输出不越界的 claim`
+  7. Flow-CORE-007: `判断结论属于 viewer / pure_api 哪一模式 -> 若原文只写 software_safe、non-3D/2D 优先则先回补真实 canonical mode_id -> 绑定 execution lane 与 evidence -> 输出不越界的 claim`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -88,7 +88,7 @@
 | 跨角色证据矩阵 | 发起角色、接收角色、输入、产出物、回写位置、验证方式 | 发起方记录 GitHub task issue evidence comments / role review evidence，接收方确认责任边界，owner 回写正式 PRD / project / review evidence | `requested -> reviewed -> accepted -> verified` | 先按当前 GitHub-backed task owner 排序，再按发布风险高低排序 | 仅标准角色名可出现在证据矩阵与 role review evidence |
 | 发布收口门禁 | P0/P1/P2 状态、证据路径、阻断结论、例外说明、复审时间 | 汇总证据并输出 `go/no-go/conditional-go` | `not_ready -> conditionally_ready -> ready -> released` | 缺任一 P0 证据时强制 `not_ready` | 发布负责人给出结论，core owner 负责口径一致性 |
 | 下一轮优先级清单 | 优先级、主题、owner、输入、输出、进入条件 | 收口后排序并选定下一条执行主路径 | `candidate -> ranked -> selected -> planned` | 先看发布影响，再看闭环依赖，再看 owner 就绪度 | `producer_system_designer` 排序，`qa_engineer` 复核 |
-| 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims`、`gameplay_prerequisites` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `software_safe / pure_api` 两项；`non-3D / 2D 优先` 只能作优先级或范围描述；lane 只作附加维度；`pure_api` formal gameplay 默认要求 active LLM access | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |
+| 玩家访问模式契约 | `mode_id`、`claim_scope`、`fallback_target`、`execution_lane`、`forbidden_claims`、`gameplay_prerequisites` | 评审前先给结论绑定模式，再生成对外/QA 结论 | `unclassified -> bounded -> evidenced -> published` | 玩家访问模式只有 `viewer / pure_api` 两项；`software_safe` 是 `viewer` 的兼容 alias，不得作为新的 formal mode；`non-3D / 2D 优先` 只能作优先级或范围描述；lane 只作附加维度；`pure_api` formal gameplay 默认要求 active LLM access | `producer_system_designer` 冻结 taxonomy，模块 owner 联审 |
 - Acceptance Criteria:
   - AC-1: core PRD 包含模块职责矩阵。
   - AC-2: core PRD 包含至少 4 条关键端到端链路描述。
@@ -101,7 +101,7 @@
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
   - AC-10: `PRD-CORE-004` 可映射到 `doc/core/project.md` 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
-  - AC-12: `PRD-CORE-009` 必须把 `software_safe / pure_api` 与 `execution lane` 的边界写成唯一 taxonomy，并要求证据与 claim 显式绑定 mode；其中 `pure_api` formal gameplay 必须显式声明 active LLM prerequisite。
+  - AC-12: `PRD-CORE-009` 必须把 `viewer / pure_api` 与 `execution lane` 的边界写成唯一 taxonomy，并要求证据与 claim 显式绑定 mode；其中 `software_safe` 只能作为 `viewer` 兼容 alias，`pure_api` formal gameplay 必须显式声明 active LLM prerequisite。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
 - Non-Goals:
@@ -243,7 +243,7 @@
 | PRD-CORE-006 | TASK-CORE-022 | `test_tier_required` | 正式版本候选 go/no-go 记录、风险附注与角色交接抽样核验 | 版本候选正式裁决一致性 |
 | PRD-CORE-007 | TASK-CORE-023 | `test_tier_required` | `doc/README.md` 含根 README / site 阅读入口 | 全局导航准确性 |
 | PRD-CORE-008 | TASK-CORE-023 | `test_tier_required` | 更新时间与新阅读顺序存在 | 公开口径同步性 |
-| PRD-CORE-009 | TASK-CORE-028/049/050/051/052/053/055 | `test_tier_required` | 玩家访问模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `software_safe` 主 Web 入口定位、`pure_api` LLM-required/first-class no-UI 定位、provider-backed mode/lane 分层、结构化 provider taxonomy 收口与 `provider_loopback_http` / provider workspace 命名清理 | 项目级模式 taxonomy、claim 边界与 formal gameplay 分工一致性 |
+| PRD-CORE-009 | TASK-CORE-028/049/050/051/052/053/055 | `test_tier_required` | 玩家访问模式总契约专题存在、core 主入口/索引互链、文档治理检查通过，并完成 `viewer` 主 Web 入口定位、`software_safe` compat alias 边界、`pure_api` LLM-required/first-class no-UI 定位、provider-backed mode/lane 分层、结构化 provider taxonomy 收口与 `provider_loopback_http` / provider workspace 命名清理 | 项目级模式 taxonomy、claim 边界与 formal gameplay 分工一致性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
@@ -254,4 +254,4 @@
 | DEC-CORE-005 | 将“阶段收口优先级”纳入 core 主 PRD 统一管理，而不是散落在多个模块 project 的状态说明里 | 仅在各模块 project 中维护各自优先级 | 阶段优先级本质是跨模块发布策略，需要由 `producer_system_designer` 在 core 层统一裁剪与仲裁。 |
 | DEC-CORE-006 | 新一轮先冻结优先级清单，再启动第一优先级专题 | 主项目收口后直接随机挑模块继续推进 | 先统一排序，才能避免重新扩散资源。 |
 | DEC-CORE-007 | readiness 达到 `ready` 后必须再落正式 go/no-go 记录 | 将 readiness board 直接作为最终放行记录 | readiness 与正式裁决是两个层级，必须分开留痕。 |
-| DEC-CORE-008 | 将 `software_safe / pure_api` 定义为玩家访问模式，将 `player_parity / headless_agent` 定义为 execution lane，并将 `non-3D / 2D 优先` 限定为优先级或交互范围描述 | 继续把这些话术混写在不同专题中 | 玩家入口、执行方式、阶段优先级与无 UI 回归本质上属于不同抽象层，必须在 core 统一分层。 |
+| DEC-CORE-008 | 将 `viewer / pure_api` 定义为玩家访问模式，将 `software_safe` 限定为 `viewer` 兼容 alias，将 `player_parity / headless_agent` 定义为 execution lane，并将 `non-3D / 2D 优先` 限定为优先级或交互范围描述 | 继续把这些话术混写在不同专题中 | 玩家入口、执行方式、阶段优先级与无 UI 回归本质上属于不同抽象层，必须在 core 统一分层。 |

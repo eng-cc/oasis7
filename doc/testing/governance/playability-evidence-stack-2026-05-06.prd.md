@@ -45,7 +45,7 @@
 - Success Criteria:
   - SC-1: 专题文档明确声明“没有单一自动化方案能够保证游戏好玩”。
   - SC-2: 至少定义 `automation baseline / agent probe / telemetry & experiments / L4A synthetic / L4B embodied agent / limited preview live signals`，并为每层列出可证明与不可证明边界。
-  - SC-3: `software_safe`、`pure_api`、`--no-llm observer/debug only`、`run-producer-playtest.sh`、playability card、`player leverage` rubric，以及 limited preview 现有治理口径都被映射进同一套证据栈。
+  - SC-3: `viewer`、`pure_api`、`software_safe` compat alias、`--no-llm observer/debug only`、`run-producer-playtest.sh`、playability card、`player leverage` rubric，以及 limited preview 现有治理口径都被映射进同一套证据栈。
   - SC-4: 模块根入口 `doc/testing/prd.md` / `project.md` / `README.md` / `prd.index.md` 能把读者导向该专题。
   - SC-5: 专题文档明确声明“所有内部评审环节都可以优先由对应标准角色 subagent 补齐”，同时保留“这不等价于真实外部玩家验证”的硬边界。
   - SC-6: 专题文档明确声明 simulated player personas 与标准角色 subagents 属于 `L4A` 的核心输入，不新增正式角色，也不替代 `L4B` 或 `L5`。
@@ -107,7 +107,7 @@
   - `L4B` 是当前仓库内最强的正式内部判断层，可以表达“agent 实际继续游玩已被观察到”，并应尽量逼近真人评审效果；内部真人试玩如果存在，只能作为 `L4B` 的校准或反证。
 - Current oasis7 policy bindings:
   - active LLM access 才是正式游玩 lane；`--no-llm` 只允许记为 observer/debug。
-  - `software_safe` 与 `pure_api` 都属于 formal 玩家 surface，必须回答同一组 `snapshot.player_gameplay` 问题。
+  - `viewer` 与 `pure_api` 都属于 formal 玩家 surface，必须回答同一组 `snapshot.player_gameplay` 问题；`software_safe` 只作为 `viewer` 兼容 alias，不作为第三个 formal surface。
   - `world_activity_only=yes` 的样本不得支撑“玩家已有 meaningful participation”。
   - 即使自动化通过、世界时间推进，只要 `L4A/L4B/L5` 仍不能证明玩家拥有稳定杠杆和继续动机，就不能把项目升级成“已证明好玩”。
   - 对应标准角色的 subagent 可以补齐所有内部 synthetic 评审环节，形成 `L4A`，但不能被记作 `L4B`、`L5` 或真实外部玩家。
@@ -123,7 +123,7 @@
 
 ## 6. Acceptance Criteria
 - AC-1: 专题文档明确写出 `L4A/L4B/L5` 在内的证据栈与组合规则。
-- AC-2: 至少列出 `software_safe`、`pure_api`、`--no-llm`、`run-producer-playtest.sh`、playability card、`player leverage` rubric、limited preview 这 7 个现有锚点。
+- AC-2: 至少列出 `viewer`、`pure_api`、`software_safe` compat alias、`--no-llm`、`run-producer-playtest.sh`、playability card、`player leverage` rubric、limited preview 这些现有锚点。
 - AC-3: 明确声明“自动化只能保证没坏/可回归，不能单独保证好玩”。
 - AC-4: `doc/testing/prd.md` 与 `doc/testing/project.md` 映射该专题，并给出模块级追踪条目。
 - AC-5: `doc/testing/README.md` 与 `doc/testing/prd.index.md` 把“如何判断自动化是否足以支撑好玩结论”的读者导向该专题。
@@ -182,7 +182,7 @@
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-TESTING-PLAYABILITY-001 | `playability-evidence-stack-2026-05-06` / `PES-1` | `test_tier_required` | `rg` 检查证据层、自动化边界与组合规则 | testing/governance 玩法结论口径 |
-| PRD-TESTING-PLAYABILITY-002 | `playability-evidence-stack-2026-05-06` / `PES-1/2` | `test_tier_required` | 抽查 `software_safe` / `pure_api` / `--no-llm` / `player leverage` / limited preview 是否已映射 | formal surface 与门禁边界 |
+| PRD-TESTING-PLAYABILITY-002 | `playability-evidence-stack-2026-05-06` / `PES-1/2` | `test_tier_required` | 抽查 `viewer` / `pure_api` / `software_safe` compat alias / `--no-llm` / `player leverage` / limited preview 是否已映射 | formal surface 与门禁边界 |
 | PRD-TESTING-PLAYABILITY-003 | `playability-evidence-stack-2026-05-06` / `PES-1/2` | `test_tier_required` | 检查模块根入口、索引与专题互链 | 文档导航与追溯一致性 |
 | PRD-TESTING-PLAYABILITY-004 | `playability-evidence-stack-2026-05-06` / `PES-2/3` | `test_tier_required` | 抽样检查 project/README/prd.index/current window summary 是否同步 | 模块级治理执行力 |
 | PRD-TESTING-PLAYABILITY-005 | `playability-evidence-stack-2026-05-06` / `PES-3/4` | `test_tier_required` | 抽查标准角色 subagent 映射、非标准 `player` 限制与 L5 边界说明 | 多角色内部评审治理边界 |

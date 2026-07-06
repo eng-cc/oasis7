@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>software_safe compatibility first agent claim evidence</title>
+    <title>viewer first agent claim evidence</title>
     <style>
       html, body {
         margin: 0;
@@ -25,9 +25,9 @@
   </head>
   <body>
     <iframe
-      id="software-safe-frame"
-      src="./software_safe.html?test_api=1&connect=0"
-      title="software_safe compatibility first agent claim evidence"
+      id="viewer-frame"
+      src="./viewer.html?test_api=1&connect=0"
+      title="viewer first agent claim evidence"
     ></iframe>
     <script>
       const snapshot = {
@@ -82,7 +82,7 @@
         }
       };
 
-      const frame = document.getElementById("software-safe-frame");
+      const frame = document.getElementById("viewer-frame");
 
       function injectSnapshot() {
         const api = frame?.contentWindow?.__AW_TEST__;

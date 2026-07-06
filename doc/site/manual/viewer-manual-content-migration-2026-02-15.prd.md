@@ -12,9 +12,9 @@
 - 对应标准执行入口: `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md`
 
 ## 目标
-- 将分散在 `doc/world-simulator/viewer/viewer-*` 中与当前 `software_safe` Web 主入口相关的“用户可操作内容”并入 Viewer 使用手册。
+- 将分散在 `doc/world-simulator/viewer/viewer-*` 中与当前 `viewer` Web 主入口相关的“用户可操作内容”并入 Viewer 使用手册，并明确 `software_safe` 仅作为兼容 alias。
 - 形成单一入口：`doc/world-simulator/viewer/viewer-manual.manual.md`（中文基线）与 `site/doc/cn|en/viewer-manual.html`（站点发布版）。
-- 保持现有“Web 默认、`software_safe` 单入口”的闭环策略不变。
+- 保持现有“Web 默认、`viewer` 单入口 + `software_safe` compat alias”的闭环策略不变。
 
 ## 范围
 - 范围内

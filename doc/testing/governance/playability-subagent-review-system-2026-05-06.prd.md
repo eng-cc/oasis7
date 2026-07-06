@@ -78,7 +78,7 @@
 ## 4. Review Packet Contract
 - Required fields:
   - `change_scope`
-  - `formal_surfaces`: `software_safe` / `pure_api` / others
+  - `formal_surfaces`: `viewer` / `pure_api` / others; `software_safe` may appear only as the `viewer` compatibility alias
   - `target_claim`
   - `automated_evidence`
   - `playability_evidence`

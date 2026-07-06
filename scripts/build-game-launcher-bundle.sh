@@ -293,7 +293,7 @@ replace_file "$GOVERNANCE_REGISTRY_IMPORT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGI
 replace_file "$GOVERNANCE_REGISTRY_AUDIT_SRC" "$BUNDLE_BIN_DIR/$GOVERNANCE_REGISTRY_AUDIT_BIN_NAME"
 replace_file "$CLIENT_LAUNCHER_SRC" "$BUNDLE_BIN_DIR/$CLIENT_LAUNCHER_BIN_NAME"
 
-# 2) Prepare viewer web dist (software_safe static bundle by default).
+# 2) Prepare viewer web dist (viewer canonical static bundle, with software_safe compat alias).
 if [[ -n "$WEB_DIST_SOURCE" ]]; then
   run rm -rf "$BUNDLE_WEB_DIR"
   run mkdir -p "$BUNDLE_WEB_DIR"
