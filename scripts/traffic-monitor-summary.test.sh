@@ -47,6 +47,18 @@ assert network["successful_node_count"] == 2
 assert network["network_interface_available_node_count"] == 1
 assert network["partial_coverage"] is True
 assert network["missing_network_interface_nodes"] == ["sequencer_ecs", "storage_ecs"]
-assert "Network interface coverage: partial" in markdown
+warning = network["coverage_warning"]
+assert warning["code"] == "network_interface_partial_coverage"
+assert warning["severity"] == "warn"
+assert warning["skipped_unavailable_node_count"] == 1
+assert warning["interface_counter_missing_node_count"] == 1
+assert warning["missing_network_interface_node_count"] == 2
+assert warning["skipped_unavailable_nodes"] == ["storage_ecs"]
+assert warning["interface_counter_missing_nodes"] == ["sequencer_ecs"]
+assert "Network interface coverage warning: partial" in markdown
+assert "skipped_unavailable=`1`" in markdown
+assert "skipped_nodes=`storage_ecs`" in markdown
+assert "interface_counter_missing=`1`" in markdown
+assert "interface_counter_missing_nodes=`sequencer_ecs`" in markdown
 assert "missing=`sequencer_ecs, storage_ecs`" in markdown
 PY

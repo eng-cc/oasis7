@@ -733,6 +733,8 @@ def aggregate_node_network_distribution(nodes):
     expected_nodes = list(nodes.keys())
     successful_nodes = []
     missing_nodes = []
+    unavailable_nodes = []
+    interface_counter_missing_nodes = []
     total_network_bytes = 0
     total_payload_bytes = 0
     combined_rx_bps = 0.0
@@ -741,11 +743,13 @@ def aggregate_node_network_distribution(nodes):
     for label, node in nodes.items():
         if node.get("available") is not True:
             missing_nodes.append(label)
+            unavailable_nodes.append(label)
             continue
         successful_nodes.append(label)
         network = node.get("network_interface") or {}
         if network.get("available") is not True:
             missing_nodes.append(label)
+            interface_counter_missing_nodes.append(label)
             continue
         latest = node.get("latest") or {}
         total_network_bytes += int(network.get("total_bytes", 0))
@@ -775,12 +779,35 @@ def aggregate_node_network_distribution(nodes):
     )
     for row in rows:
         row["share_percent"] = share_percent(row["network_total_bytes"], total_network_bytes)
+    partial_coverage = len(missing_nodes) > 0
+    coverage_warning = None
+    if partial_coverage:
+        coverage_warning = {
+            "code": "network_interface_partial_coverage",
+            "severity": "warn",
+            "summary": (
+                "Network-interface aggregate excludes unavailable nodes or nodes "
+                "without interface counters; totals only cover interface-available nodes."
+            ),
+            "expected_node_count": len(expected_nodes),
+            "successful_node_count": len(successful_nodes),
+            "network_interface_available_node_count": len(rows),
+            "skipped_unavailable_node_count": len(unavailable_nodes),
+            "interface_counter_missing_node_count": len(interface_counter_missing_nodes),
+            "missing_network_interface_node_count": len(missing_nodes),
+            "missing_network_interface_nodes": sorted(missing_nodes),
+            "skipped_unavailable_nodes": sorted(unavailable_nodes),
+            "interface_counter_missing_nodes": sorted(interface_counter_missing_nodes),
+        }
     return {
         "expected_node_count": len(expected_nodes),
         "successful_node_count": len(successful_nodes),
         "network_interface_available_node_count": len(rows),
         "missing_network_interface_nodes": sorted(missing_nodes),
-        "partial_coverage": len(missing_nodes) > 0,
+        "skipped_unavailable_nodes": sorted(unavailable_nodes),
+        "interface_counter_missing_nodes": sorted(interface_counter_missing_nodes),
+        "partial_coverage": partial_coverage,
+        "coverage_warning": coverage_warning,
         "node_count": len(rows),
         "total_bytes": total_network_bytes,
         "payload_total_bytes": total_payload_bytes,
@@ -1086,8 +1113,32 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             )
         coverage_label = "partial" if aggregate_network.get("partial_coverage") else "complete"
         missing_nodes = ", ".join(aggregate_network.get("missing_network_interface_nodes") or [])
+        coverage_warning = aggregate_network.get("coverage_warning") or {}
+        skipped_unavailable = coverage_warning.get(
+            "skipped_unavailable_node_count",
+            len(aggregate_network.get("skipped_unavailable_nodes") or []),
+        )
+        interface_counter_missing = coverage_warning.get(
+            "interface_counter_missing_node_count",
+            len(aggregate_network.get("interface_counter_missing_nodes") or []),
+        )
+        skipped_unavailable_nodes = ", ".join(
+            coverage_warning.get("skipped_unavailable_nodes")
+            or aggregate_network.get("skipped_unavailable_nodes")
+            or []
+        )
+        interface_counter_missing_nodes = ", ".join(
+            coverage_warning.get("interface_counter_missing_nodes")
+            or aggregate_network.get("interface_counter_missing_nodes")
+            or []
+        )
+        coverage_prefix = (
+            "Network interface coverage warning"
+            if aggregate_network.get("partial_coverage")
+            else "Network interface coverage"
+        )
         lines.append(
-            f"- Network interface coverage: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` missing=`{missing_nodes or 'none'}`"
+            f"- {coverage_prefix}: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` skipped_unavailable=`{skipped_unavailable}` skipped_nodes=`{skipped_unavailable_nodes or 'none'}` interface_counter_missing=`{interface_counter_missing}` interface_counter_missing_nodes=`{interface_counter_missing_nodes or 'none'}` missing=`{missing_nodes or 'none'}`"
         )
         lines.extend(
             render_payload_distribution_block(

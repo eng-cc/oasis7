@@ -357,7 +357,7 @@ fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabl
 
     let config_a = NodeConfig::new("node-a", "world-sync-fallback-network", NodeRole::Sequencer)
         .expect("config a")
-        .with_tick_interval(Duration::from_millis(10))
+        .with_tick_interval(Duration::from_millis(50))
         .expect("tick a")
         .with_pos_validators(validators.clone())
         .expect("validators a")
@@ -365,7 +365,7 @@ fn runtime_gossip_tracks_peer_heads_when_replication_network_consensus_is_disabl
         .with_gossip_optional(addr_a, vec![addr_b]);
     let config_b = NodeConfig::new("node-b", "world-sync-fallback-network", NodeRole::Observer)
         .expect("config b")
-        .with_tick_interval(Duration::from_millis(10))
+        .with_tick_interval(Duration::from_millis(50))
         .expect("tick b")
         .with_pos_validators(validators)
         .expect("validators b")
