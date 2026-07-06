@@ -38,6 +38,7 @@ scope = [
     "crates/oasis7_viewer/software_safe.html",
     "crates/oasis7_viewer/viewer.js",
     "crates/oasis7_viewer/software_safe.js",
+    "crates/oasis7_viewer/viewer_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html",
     "crates/oasis7_viewer/package.json",
     "crates/oasis7_viewer/package-lock.json",

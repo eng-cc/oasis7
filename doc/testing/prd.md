@@ -33,9 +33,9 @@
   - SC-1: 关键改动路径均可映射到明确测试层级（S0~S10）。
   - SC-2: required/full 门禁持续可用且与手册口径一致；其中 PR `required-gate` 允许在保持稳定 check context 的前提下按 changed paths 剪裁无关重型组件，并在命中 `oasis7_client_launcher` / launcher shared runtime 路径时补跑 launcher Web `trunk build`；`full-support` 必须直接触达 workspace 内稳定可跑的 support crate 测试入口。
   - SC-3: Web UI 闭环与分布式长跑在发布流程中有可追溯证据，且明确区分 `Viewer(agent-browser)` 与 `launcher(GUI Agent first)` 两条驱动链路。
-    - SC-3A: `release-gate-web` 在 `renderMode=software_safe` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent。
+    - SC-3A: `release-gate-web` 在 `renderMode=viewer` 的主 Web 入口上，必须接受 `play/pause` 先返回 `queued` 的 live-control 契约，并以后续 `step` 收到 `completed_advanced` 且产出正向 world delta 作为 formal progress 判据，不再要求 `play` 立刻推进 tick 或强制选中 Agent；`renderMode=software_safe` 仅作为兼容 alias 覆盖。
     - SC-3B: 正式 gameplay evidence packet 必须显式区分 `player leverage` 与 `ambient world activity`，并回答“玩家做了什么、世界因此变了什么、这是否打开下一步决策”。
-    - SC-3C: `software_safe` 与 `pure_api` 这两个 formal 玩家 surface 必须能用同一份 `snapshot.player_gameplay` 事实源回答同一组核心问题：当前阶段、当前目标、进度、阻塞、下一步建议，以及最近一次关键世界变化；其中 `pure_api` 的 `parity_verified` 只适用于 active LLM access，no-LLM 只能记为 blocked/observer-debug。
+    - SC-3C: `viewer` 与 `pure_api` 这两个 formal 玩家 surface 必须能用同一份 `snapshot.player_gameplay` 事实源回答同一组核心问题：当前阶段、当前目标、进度、阻塞、下一步建议，以及最近一次关键世界变化；其中 `software_safe` 只作为 `viewer` 兼容 alias，`pure_api` 的 `parity_verified` 只适用于 active LLM access，no-LLM 只能记为 blocked/observer-debug。
   - SC-4: 测试任务 100% 映射 PRD-TESTING-ID。
   - SC-5: 活跃 testing 专题文档按批次完成人工迁移到 strict schema，并统一 `*.prd.md` / `*.project.md` 命名。
   - SC-6: builtin wasm（m1/m4/m5）hash 发布链路具备 changed-path scope planner、跨 runner 对账、required check 保护与本地只读校验策略。
@@ -99,7 +99,7 @@
 | 分层测试触发 | 改动类型、测试层级、命令集合、changed-path scope | 依据矩阵选择最小必跑集合；PR `required-gate` 先规划 `minimal / targeted / full` 再执行命中的重型组件，必要时追加 launcher Web `trunk build` | `planned -> scoped -> running -> passed/failed` | 默认先 `commit`，按风险升级到 `required`，发布加跑 `full`；docs-only / 无关元数据 PR 允许在 stable context 下退化为 governance/fmt-only；`oasis7_client_launcher` / launcher shared runtime 命中时 required-gate 追加 launcher Web 构建覆盖 | 开发者可执行，发布者可放行 |
 | Web UI 驱动分流 | `surface_type`、`driver`、`evidence_mode` | Viewer 页面通用闭环默认走 `agent-browser`；真实本地栈 + 玩家 UI 操作流程回归走 Playwright 实跑系列；`oasis7_web_launcher` 产品动作默认走 GUI Agent，页面仅做状态/字段校验 | `selected -> driven -> verified` | 先按 surface 分流，再决定是否补充 Canvas/页面采样；Playwright 实跑用例按 `PWT-###` 编号管理 | QA/发布与产品 owner 共同遵循 |
 | 模型视觉评审 | `visual_change_trigger`、`screenshot_set`、`expected_visual_contract`、`automated_evidence`、`verdict`、`confidence`、`human_escalation_needed` | 任何可视化相关代码、样式、资源或可见输出改动默认触发截图评审；对截图执行固定 rubric，输出 visual review card；`verdict=pass` 且 `confidence=high` 可替代 routine 人工视觉 review；`verdict=watch/block/human_escalation` 或 `confidence=low` 必须写明 owner action | `visual_change_detected -> captured -> model_reviewed -> pass/watch/block/escalated` | 先跑确定性测试，再让模型判断视觉；只有明确不影响任何可见 surface 的改动才能豁免且需记录理由；模型只替代截图/布局/可读性类人工 review，不替代 GitHub required review、发布放行、L5 真实玩家验证或对外 claim 审批 | `producer_system_designer` / `qa_engineer` 守边界，命中的 UI owner 处理 findings |
-| software_safe release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `software_safe` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
+| Viewer release 语义门禁 | `renderMode`、`lastControlFeedback.stage`、`deltaLogicalTime`、`deltaEventSeq` | `viewer` 下允许 `play/pause` 先返回 `queued`；formal progress 以后续 `step` 的 `completed_advanced` + 正向 world delta 判定；`software_safe` 仅作为 compat alias 覆盖 | `queued -> completed_advanced` 或 `queued -> blocked` | 主 Web 入口不再要求 `play` 立刻涨 tick，也不再强制 `selectedKind=agent`；若 `llm_required` 显式阻断则按 blocker 合约留痕 | QA/发布维护者维护 |
 | 证据包归档 | 命令、日志、截图、结论、责任人、`player_action`、`world_change_due_to_player`、`player_leverage_score`、`world_activity_only` | 执行后归档并建立索引 | `collecting -> archived -> reviewed` | 按版本与模块分层索引；若 `world_activity_only=yes`，则该样本不能直接支撑玩法放行 | 测试维护者负责最终校验 |
 | 缺陷回归闭环 | 缺陷ID、触发条件、修复提交、复测结论 | 缺陷关闭前必须绑定回归记录 | `opened -> fixed -> regressed -> closed` | 高风险缺陷优先回归 | QA/维护者可更新状态 |
 | 文档格式迁移 | 旧文档路径、约束点清单、目标命名 | 人工重写并更名，补全映射与验证证据 | `inventory -> migrated -> validated` | 先迁移活跃文档、后迁移归档文档 | 维护者审批迁移质量，贡献者执行 |
@@ -123,7 +123,7 @@
   - AC-7: `oasis7_web_launcher` / launcher Web 控制面必须显式标注 GUI Agent 优先，`agent-browser` 仅作为状态、字段与页面加载校验补充。
   - AC-8: 对前期工业引导体验的改动，必须能从 `testing-manual.md` 直接跳转到对应 required-tier 手动卡组。
   - AC-9: 同一 release workflow 内，Web release gate 与 `build-web-dist` 必须复用同一组 wasm/cargo cache，bundle 原生二进制构建默认收敛为单次 cargo 调用，避免重复 bootstrap。
-  - AC-9B: `release-gate-web` 的 `software_safe` 分支必须按当前 live-control 契约验收：`play/pause` 允许 `queued`，后续 `step` 必须收口为 `completed_advanced` 且 `deltaLogicalTime > 0` 或 `deltaEventSeq > 0`；缺失 world delta 时要给出显式失败签名，而不是把“未即时涨 tick / 未选中 Agent”误判成回归。
+  - AC-9B: `release-gate-web` 的 `viewer` 分支必须按当前 live-control 契约验收：`play/pause` 允许 `queued`，后续 `step` 必须收口为 `completed_advanced` 且 `deltaLogicalTime > 0` 或 `deltaEventSeq > 0`；`software_safe` 只作为 compat alias 复核；缺失 world delta 时要给出显式失败签名，而不是把“未即时涨 tick / 未选中 Agent”误判成回归。
   - AC-9A: release/package-native 触发前必须由 Linux required gate 显式扫描 tracked paths 的 Windows 兼容性，阻断会让 `windows-2022` checkout 直接失败的路径名。
   - AC-9C: release/package-native 触发前必须由 commit/required gate 显式扫描 release 关键 shell 脚本的 tracked mode 与 worktree 执行位，阻断会让 Linux runner 只在 `release-gate-web` / `package-native` 阶段暴露的 `Permission denied` 回归。
   - AC-9D: release gate 的任何显式 `--skip-*` 都必须提供非空 skip reason，并在 summary 中输出对应 claim boundary；带 skip 的结果不得支撑被跳过层级的完整 release coverage claim。

@@ -22,4 +22,4 @@
 ## 状态
 - 当前阶段：已完成（T0~T4）
 - 最近更新：2026-06-25
-- 说明：2026-06-25 follow-up 是呈现层强化，不改变 runtime action 语义、LLM 策略或 `PRD-GAME-012` gate verdict；`software_safe` 在 `Formal Gameplay Summary` 顶部新增 `Control Proof` surface，用既有 `player_gameplay` / feedback 派生 `Player Intent / World Consequence / Recovery Move / Next Move`，并追加 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation`、`Share Replay` 承接 P1/P2 制作人落点；这些 surface 均以 contract/UI 测试锁定，canonical truth 仍来自 runtime/player_gameplay，small-player lane 设计真值挂回 `PRD-GAME-015`。
+- 说明：2026-06-25 follow-up 是呈现层强化，不改变 runtime action 语义、LLM 策略或 `PRD-GAME-012` gate verdict；`viewer` 在 `Formal Gameplay Summary` 顶部新增 `Control Proof` surface，用既有 `player_gameplay` / feedback 派生 `Player Intent / World Consequence / Recovery Move / Next Move`，并追加 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation`、`Share Replay` 承接 P1/P2 制作人落点；`software_safe` 仅作为 compat alias 复核，这些 surface 均以 contract/UI 测试锁定，canonical truth 仍来自 runtime/player_gameplay，small-player lane 设计真值挂回 `PRD-GAME-015`。

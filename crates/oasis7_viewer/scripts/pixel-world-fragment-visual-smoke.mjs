@@ -60,7 +60,7 @@ function contentType(pathname) {
 
 function serveFile(request, response) {
   const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
-  const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/software_safe.html" : requestUrl.pathname);
+  const rawPath = decodeURIComponent(requestUrl.pathname === "/" ? "/viewer.html" : requestUrl.pathname);
   const normalized = normalize(rawPath).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = normalized.startsWith("/pixel-world-bridge/")
     ? resolve(viewerRoot, "dist", `.${normalized}`)
@@ -702,7 +702,7 @@ const server = createServer(serveFile);
 try {
   await new Promise((resolveServer) => server.listen(0, "127.0.0.1", resolveServer));
   const address = server.address();
-  const url = `http://127.0.0.1:${address.port}/software_safe.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
+  const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&t=${Date.now()}`;
 
   closeBrowser();
   console.log(`opening pixel-world viewer visual smoke: ${url}`);

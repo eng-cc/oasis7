@@ -21,11 +21,13 @@ printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer
 printf '<!doctype html>old dist\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe.html"
 printf 'console.log("dist viewer old");\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer.js"
 printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe.js"
+printf '<!doctype html>canonical claim evidence old\n' > "$tmp_repo/crates/oasis7_viewer/dist/viewer_first_agent_claim_evidence.html"
 printf '<!doctype html>claim evidence old\n' > "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html"
 printf 'console.log("viewer changed");\n' > "$tmp_repo/crates/oasis7_viewer/viewer.js"
 printf 'import "./viewer.js";\n' > "$tmp_repo/crates/oasis7_viewer/software_safe.js"
 printf '<!doctype html>viewer\n' > "$tmp_repo/crates/oasis7_viewer/viewer.html"
 cp "$tmp_repo/crates/oasis7_viewer/viewer.html" "$tmp_repo/crates/oasis7_viewer/software_safe.html"
+printf '<!doctype html>canonical claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html"
 printf '<!doctype html>claim evidence\n' > "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html"
 printf '{"name":"oasis7-viewer-ui","scripts":{"build:viewer":"echo ok","build:software-safe":"echo ok"}}\n' > "$tmp_repo/crates/oasis7_viewer/package.json"
 printf '{"lockfileVersion":3}\n' > "$tmp_repo/crates/oasis7_viewer/package-lock.json"
@@ -55,6 +57,7 @@ touch -d '2026-03-17 00:00:00' \
   "$tmp_repo/crates/oasis7_viewer/dist/software_safe.html" \
   "$tmp_repo/crates/oasis7_viewer/dist/viewer.js" \
   "$tmp_repo/crates/oasis7_viewer/dist/software_safe.js" \
+  "$tmp_repo/crates/oasis7_viewer/dist/viewer_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/dist/software_safe_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/pixel_world_bridge.js" \
   "$tmp_repo/crates/oasis7_viewer/dist/pixel-world-bridge/webgl2/pixel_world_bridge.js" \
@@ -65,6 +68,7 @@ touch -d '2026-03-17 00:00:00' \
   "$tmp_repo/crates/oasis7_viewer/software_safe.js" \
   "$tmp_repo/crates/oasis7_viewer/viewer.html" \
   "$tmp_repo/crates/oasis7_viewer/software_safe.html" \
+  "$tmp_repo/crates/oasis7_viewer/viewer_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/software_safe_first_agent_claim_evidence.html" \
   "$tmp_repo/crates/oasis7_viewer/favicon.ico"
 

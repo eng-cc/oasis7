@@ -27,7 +27,7 @@ Options:
   --target-claim <text>       Prefill packet `target_experience_claim`
   --target-l4-lane <lane>     L4A_only | L4A_then_L4B
                               (default: L4A_then_L4B)
-  --formal-surface <name>     Repeatable; defaults to `software_safe` + `pure_api`
+  --formal-surface <name>     Repeatable; defaults to `viewer` + `pure_api`
   --role <role_name>          Repeatable; defaults to all standard review roles
   --persona <persona_id>      Repeatable; defaults to all fixed personas
   --question <text>           Repeatable packet question
@@ -41,7 +41,7 @@ Options:
 
 Examples:
   ./scripts/prepare-playability-l4-review.sh
-  ./scripts/prepare-playability-l4-review.sh --with-l4a-stack --change-scope "software_safe onboarding followup"
+  ./scripts/prepare-playability-l4-review.sh --with-l4a-stack --change-scope "viewer onboarding followup"
   ./scripts/prepare-playability-l4-review.sh --role gameplay_designer --role qa_engineer --persona new_player_confused
 USAGE
 }
@@ -65,7 +65,7 @@ DEFAULT_PERSONAS=(
   chaos_tester
 )
 DEFAULT_FORMAL_SURFACES=(
-  software_safe
+  viewer
   pure_api
 )
 

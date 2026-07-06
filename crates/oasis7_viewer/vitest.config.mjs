@@ -14,7 +14,7 @@ export default defineConfig({
     ],
     environmentOptions: {
       jsdom: {
-        url: "http://127.0.0.1:4173/software_safe.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en",
+        url: "http://127.0.0.1:4173/viewer.html?test_api=1&connect=0&hosted_bootstrap=0&locale=en",
       },
     },
   },

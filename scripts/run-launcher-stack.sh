@@ -931,6 +931,8 @@ if [[ "$URL_WS_HOST" == "0.0.0.0" ]]; then
 fi
 
 GAME_URL="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=zh"
+VIEWER_URL_ZH="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=viewer&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=zh"
+VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=viewer&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=en"
 SOFTWARE_SAFE_VIEWER_URL_ZH="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=zh"
 SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mode=software_safe&ws=ws://${URL_WS_HOST}:${WEB_BRIDGE_PORT}&test_api=1&locale=en"
 
@@ -957,12 +959,14 @@ SOFTWARE_SAFE_VIEWER_URL_EN="http://${URL_VIEWER_HOST}:${VIEWER_PORT}/?render_mo
   echo "HOSTED_ACCOUNT_STORE_PATH=$HOSTED_ACCOUNT_STORE_PATH"
   echo "STACK_READY=1"
   echo "GAME_URL=$GAME_URL"
+  echo "VIEWER_URL_ZH=$VIEWER_URL_ZH"
+  echo "VIEWER_URL_EN=$VIEWER_URL_EN"
   echo "SOFTWARE_SAFE_VIEWER_URL_ZH=$SOFTWARE_SAFE_VIEWER_URL_ZH"
   echo "SOFTWARE_SAFE_VIEWER_URL_EN=$SOFTWARE_SAFE_VIEWER_URL_EN"
 } >"$META_FILE"
 
 if [[ "$JSON_READY" == "1" ]]; then
-  python3 - "$RUN_ID" "$OUTPUT_DIR" "$LAUNCHER_PID" "$LIVE_BIND_ADDR" "$WEB_BRIDGE_ADDR" "$VIEWER_HOST" "$VIEWER_PORT" "$CHAIN_ENABLED" "$CHAIN_NODE_ID" "$CHAIN_STATUS_BIND_ADDR" "$LAUNCH_MODE" "$LAUNCH_CMD" "$BUNDLE_DIR" "$GAME_URL" "$SOFTWARE_SAFE_VIEWER_URL_ZH" "$SOFTWARE_SAFE_VIEWER_URL_EN" "$META_FILE" <<'PY'
+  python3 - "$RUN_ID" "$OUTPUT_DIR" "$LAUNCHER_PID" "$LIVE_BIND_ADDR" "$WEB_BRIDGE_ADDR" "$VIEWER_HOST" "$VIEWER_PORT" "$CHAIN_ENABLED" "$CHAIN_NODE_ID" "$CHAIN_STATUS_BIND_ADDR" "$LAUNCH_MODE" "$LAUNCH_CMD" "$BUNDLE_DIR" "$GAME_URL" "$VIEWER_URL_ZH" "$VIEWER_URL_EN" "$SOFTWARE_SAFE_VIEWER_URL_ZH" "$SOFTWARE_SAFE_VIEWER_URL_EN" "$META_FILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -983,9 +987,11 @@ payload = {
     "launch_cmd": sys.argv[12],
     "bundle_dir": sys.argv[13],
     "game_url": sys.argv[14],
-    "software_safe_viewer_url_zh": sys.argv[15],
-    "software_safe_viewer_url_en": sys.argv[16],
-    "meta_file": sys.argv[17],
+    "viewer_url_zh": sys.argv[15],
+    "viewer_url_en": sys.argv[16],
+    "software_safe_compat_viewer_url_zh": sys.argv[17],
+    "software_safe_compat_viewer_url_en": sys.argv[18],
+    "meta_file": sys.argv[19],
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -997,8 +1003,10 @@ Game test stack is ready.
 - Launcher: $LAUNCH_CMD
 - Bundle dir: ${BUNDLE_DIR:-disabled}
 - URL: $GAME_URL
-- Software-safe URL (zh): $SOFTWARE_SAFE_VIEWER_URL_ZH
-- Software-safe URL (en): $SOFTWARE_SAFE_VIEWER_URL_EN
+- Viewer URL (zh): $VIEWER_URL_ZH
+- Viewer URL (en): $VIEWER_URL_EN
+- Software-safe compat URL (zh): $SOFTWARE_SAFE_VIEWER_URL_ZH
+- Software-safe compat URL (en): $SOFTWARE_SAFE_VIEWER_URL_EN
 - Logs: $OUTPUT_DIR
 - Chain enabled: $CHAIN_ENABLED
 - Chain node id: ${CHAIN_NODE_ID:-disabled}

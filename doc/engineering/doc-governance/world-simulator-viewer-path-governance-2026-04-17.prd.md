@@ -18,17 +18,17 @@
 ## 2. User Experience & Functionality
 - User Personas:
   - 项目经理 / `producer_system_designer`: 需要在高密度路径里快速判断“先看哪里”，而不是把子目录当文件仓库顺扫。
-  - `viewer_engineer` / `qa_engineer`: 需要先进入操作手册、`software_safe` 主入口或 runtime live 主题，而不是在大量 Viewer 专题里凭文件名猜测。
+  - `viewer_engineer` / `qa_engineer`: 需要先进入操作手册、`viewer` canonical 主入口、`software_safe` compat 边界或 runtime live 主题，而不是在大量 Viewer 专题里凭文件名猜测。
   - 文档治理评审者: 需要识别 `viewer/` 的主要阅读簇，判断哪些是活跃入口，哪些只是保留可检索性。
 - User Scenarios & Frequency:
   - 查看 Viewer 操作或 Web 闭环: 高频，几乎每次 Viewer 验证都可能触发。
-  - 判断 `software_safe` / runtime live / 3D hold 的现行口径: 中高频，在玩法边界、对外口径或 QA 闭环中触发。
+  - 判断 `viewer` / `software_safe` compat / runtime live / 3D hold 的现行口径: 中高频，在玩法边界、对外口径或 QA 闭环中触发。
   - 追溯 Viewer 历史专题: 低频，但需要一个稳定的定向检索入口，而不是平铺浏览。
 - User Stories:
   - PRD-ENGINEERING-027: As a 项目经理/Viewer owner, I want a canonical `doc/world-simulator/viewer/` path entrypoint, so that I can navigate the largest hotspot path by intent instead of scanning nearly 300 files blindly.
 - Critical User Flows:
   1. Flow-VPG-001:
-     `进入 doc/world-simulator/viewer/README.md -> 根据“操作手册 / software_safe / runtime live / chat&panel / release&visual / 3D hold”选择簇 -> 再进入对应专题`
+     `进入 doc/world-simulator/viewer/README.md -> 根据“操作手册 / viewer canonical + software_safe compat / runtime live / chat&panel / release&visual / 3D hold”选择簇 -> 再进入对应专题`
   2. Flow-VPG-002:
      `从 doc/world-simulator/README.md 进入 Viewer 热点子域 -> 命中 viewer/README.md -> 再决定看 manual 还是 prd.index`
   3. Flow-VPG-003:

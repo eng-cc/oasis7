@@ -18,7 +18,7 @@
 | commit baseline / required 套件 | `scripts/ci-tests.sh` | `scripts/pre-commit.sh` | 无 | 日常本地提交默认走 `./scripts/ci-tests.sh commit`（由 `scripts/pre-commit.sh` 调用）；需要补跑较重 runtime/simulator shard 或进入 PR/CI required gate 时，再显式执行 `./scripts/ci-tests.sh required`。 |
 | 站点文档治理 | `scripts/doc-governance-check.sh` | `scripts/site-manual-sync-check.sh` | 无 | 先检查文档治理，再做站点专项。 |
 | 本地游戏验证 | `scripts/worktree-harness.sh` | `scripts/run-launcher-stack.sh` | 无 | worktree harness 负责隔离端口、bundle、日志与浏览器 session；`run-launcher-stack.sh` 是底层 bootstrap。 |
-| Viewer Web 验证 | `scripts/run-viewer-web.sh` | `scripts/viewer-primary-web-entry-regression.sh` / `scripts/viewer-software-safe-step-regression.sh` / `scripts/viewer-software-safe-chat-regression.sh` | 无 | 当前仓库只保留 software-safe Web 链路。 |
+| Viewer Web 验证 | `scripts/run-viewer-web.sh` | `scripts/viewer-primary-web-entry-regression.sh` / `scripts/viewer-software-safe-step-regression.sh` / `scripts/viewer-software-safe-chat-regression.sh` | 无 | 当前仓库只保留 `viewer` canonical Web 链路；`software_safe` 只作为 compat / legacy regression 命名保留。 |
 
 ### 2. 发布 / 打包主入口
 | 需求类型 | 推荐主入口 | 辅助入口 | fallback | 说明 |
@@ -43,7 +43,7 @@
 ### 5. 当前 Viewer Web 回归
 | 脚本 | 触发条件 | 作用 | 产物要求 |
 | --- | --- | --- | --- |
-| `scripts/viewer-primary-web-entry-regression.sh` | 核对 Web 主入口 contract | 校验 `/` 与 `render_mode=auto` 均进入 `software_safe` | 状态快照、截图、summary |
+| `scripts/viewer-primary-web-entry-regression.sh` | 核对 Web 主入口 contract | 校验 `/` 与 `render_mode=auto` 均进入 `viewer` canonical 入口 | 状态快照、截图、summary |
 | `scripts/viewer-software-safe-step-regression.sh` | 核对实时推进或 blocker | 校验连接、选中 Agent、实时推进或显式 blocker | state/summary/browser log |
 | `scripts/viewer-software-safe-chat-regression.sh` | 核对 prompt/chat/rollback | 校验 apply/rollback/chat ack 与消息流 | state/summary/browser log |
 

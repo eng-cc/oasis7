@@ -30,7 +30,7 @@
 
 | 根任务 | 发起角色 | 接收角色 | 输入 | 期望输出 |
 | --- | --- | --- | --- | --- |
-| `TASK-GAME-062` | `producer_system_designer` | `viewer_engineer` | 最近 playability 卡片、`software_safe` 阻断事实、首连/控制 floor 指标 | 正式入口稳定性收口与回归证据 |
+| `TASK-GAME-062` | `producer_system_designer` | `viewer_engineer` | 最近 playability 卡片、`viewer` 阻断事实、首连/控制 floor 指标；`software_safe` 仅作为 compat alias 复核 | 正式入口稳定性收口与回归证据 |
 | `TASK-GAME-063` | `producer_system_designer` | `runtime_engineer` | 工业引导卡组、`PostOnboarding` 阶段口径、M4 工业链目标 | 首个持续能力 canonical 状态、事件与恢复逻辑 |
 | `TASK-GAME-064` | `producer_system_designer` | `viewer_engineer` | 首屏主目标优先级、噪音样本、当前奖励反馈缺口 | 主界面信息层级与反馈可见化收口 |
 | `TASK-GAME-065` | `producer_system_designer` | `qa_engineer` | active-LLM 正式 lane 定义、debug lane 边界、阶段当前真值 | `10-minute trust gate` 的 `continue_playing / hold` 裁决，以及与 capability verdict 分开的归档 |
@@ -64,7 +64,7 @@
   - `git diff --check`
 - `TASK-GAME-065` / 10 分钟 trust gate
   - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
-  - `software_safe` floor：至少 1 轮正式入口复核
+  - `viewer` floor：至少 1 轮正式入口复核；`software_safe` 仅作为 compat alias 复核
   - 回写 `doc/playability_test_result/card_*.md` 与 QA trust verdict，并单列 capability verdict 现状
 - `TASK-GAME-076` / 前 10/30 分钟吸引力
   - 设计拆解: `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md#task-game-076-0-30-分钟吸引力玩法脚本`
@@ -120,7 +120,7 @@
   - [x] 工业成长反馈不再主要依赖库存/产量上涨
 - `TASK-GAME-065`
   - [x] QA 已区分 active-LLM 正式 lane 与 debug/probe lane
-  - [x] `software_safe` formal floor 已在 real-main-config rerun 中恢复
+  - [x] `viewer` formal floor 已在 real-main-config rerun 中恢复；`software_safe` 仅作为 compat / historical evidence 入口保留
   - [x] 历史 `10-minute trust gate = hold` 裁决已保留为 baseline，不再作为当前 blocker
   - [x] fresh formal truth 已更新为 `trust gate = pass`、`first capability gate = pass`；更宽的 release / liveops 边界仍需独立复核
 - `TASK-GAME-076`
@@ -163,7 +163,7 @@
 - 下一任务: `first-10-30-minute-attraction-hardening` / `TASK-GAME-076` required tier 已收口；后续只在改动 runtime/viewer/agent 或需要真实玩家留存判断时复跑 live/provider playtest。当前 required pass 不等同于生产 provider 放行或真实玩家留存结论。
 
 - 2026-06-25 P0 control proof follow-up:
-  - 已把制作人落点“首局 KPI 从世界活着改为玩家控制被证明”落到 `software_safe` 正式入口：`buildGameplaySummary()` 聚合 `controlProof`，`WorldSummaryPanel()` 在 `Formal Gameplay Summary` 顶部显示 `Control Proof` 卡片。
+  - 已把制作人落点“首局 KPI 从世界活着改为玩家控制被证明”落到 `viewer` 正式入口：`buildGameplaySummary()` 聚合 `controlProof`，`WorldSummaryPanel()` 在 `Formal Gameplay Summary` 顶部显示 `Control Proof` 卡片；`software_safe` 仅作为 compat alias 复核。
   - 本切片只强化 viewer summary 与 UI hierarchy；canonical truth 仍来自 runtime `player_gameplay` / feedback 字段，不能把该卡片单独包装成 `10-minute trust gate` 或 `first capability gate` 新 verdict。
   - 对应测试：`rtk node crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`、`rtk npm run test:ui -- software_safe_src/main.test.jsx`。
 - 2026-06-25 P1/P2 continuation follow-up:

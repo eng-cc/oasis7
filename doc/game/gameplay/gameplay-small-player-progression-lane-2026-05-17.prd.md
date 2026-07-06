@@ -117,7 +117,7 @@
   - NFR-SPL-5: 本专题不得改写当前 `limited playable technical preview` claim envelope，也不得用来替代 `PRD-GAME-012` 的 trust/capability 样本。
   - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力或局部影响类型，则必须升级为 grind 风险。
 - 2026-06-25 P1/P2 viewer follow-up:
-  - `software_safe` 正式玩家入口在 `Formal Gameplay Summary` 中新增 `Agency Moves`、`First Win & Anti-Grind` 与 `Mature-World Continuation` surface，分别承接 P1 的打断/重排/纠偏、首个工业胜利/anti-grind leverage，以及 P2 的 mature-world repair/rebuild/pivot 与 share replay。
+  - `viewer` 正式玩家入口在 `Formal Gameplay Summary` 中新增 `Agency Moves`、`First Win & Anti-Grind` 与 `Mature-World Continuation` surface，分别承接 P1 的打断/重排/纠偏、首个工业胜利/anti-grind leverage，以及 P2 的 mature-world repair/rebuild/pivot 与 share replay；`software_safe` 仅作为 compat alias 复核。
   - 该 surface 只消费或派生既有 `player_gameplay` 字段：`can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result`、`first_win_goal_id`、`player_action`、`world_change_due_to_player`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`repair_available`、`rebuild_available`、`pivot_available`、`recovery_path_*`。
   - 本 follow-up 是 viewer / producer-readable surface alignment，不替代 `runtime-small-player-lane-state-contract`、agent specialization contract 或 QA mature-world sample verdict。
 - Security & Privacy:
