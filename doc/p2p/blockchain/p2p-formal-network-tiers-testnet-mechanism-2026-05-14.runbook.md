@@ -11,8 +11,8 @@
 - Review Roles:
   - `qa_engineer`
   - `liveops_community`
-- Scope: formal `public_testnet` 从 skeleton / governed-bootstrap rehearsal 进入 `ready_for_live_candidate` 前的最小执行闭环
-- Current Verdict: `block` / governed-bootstrap rehearsal / not `ready_for_live_candidate`
+- Scope: formal `public_testnet` 从 skeleton / governed-bootstrap rehearsal 进入 controlled `ready_for_live_candidate` 前的最小执行闭环
+- Current Verdict: controlled `ready_for_live_candidate` evidence is present for the current 11-lane packet; not a public launch, mainnet, production OC settlement, or public validator admission claim.
 
 ## 1. 适用范围
 - 本 runbook 只定义 formal `public_testnet` 的 live-candidate checklist。
@@ -21,10 +21,13 @@
   - `public_testnet` readiness review 脚本
   - live-candidate lane scaffold
   - governed-bootstrap rehearsal evidence
+  - live `public_testnet` public RPC / explorer / guarded faucet / reset evidence
+  - formal all-pass 11-lane TSV / readiness verdict
+  - controlled `ready_for_live_candidate` evidence for the current packet
 - 当前仓库还不具备：
-  - live `public_testnet` public RPC/explorer/faucet/reset evidence
-  - formal all-pass lane TSV / readiness verdict
-  - `ready_for_live_candidate` 结论
+  - live public launch go-ahead
+  - public validator admission / onboarding
+  - mainnet or production OC settlement authorization
 - 本 runbook 不覆盖：
   - 真实 public testnet 部署细节实现
   - `mainnet` 激活
@@ -57,7 +60,7 @@
   - `producer_system_designer`
 
 ## 3. 硬阻断条件
-- manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或 governed-bootstrap evidence 尚未升级出 rehearsal 状态。
+- manifest 仍是 `example.invalid`、template ref、`specified_skeleton_only` 占位输出，或当前 active readiness packet 未通过 all-pass controlled live-candidate review。
 - `release_candidate_bundle_ref` 不存在或不是当前候选版本真值。
 - live-candidate required lane 任一没有 owner 或 evidence ref。
 - 公开 RPC/explorer/faucet 仍是私网、单机 localhost 或 placeholder。
@@ -169,7 +172,7 @@
 - `./scripts/doc-governance-check.sh`
 - `git diff --check`
 
-## 7. 当前缺口（2026-07-03）
+## 7. 当前状态（2026-07-06）
 - 历史 `specified_skeleton_only` 只能说明早期 skeleton 状态；当前还必须同时参考候选输入与 governed-bootstrap 证据集：
   - `doc/testing/evidence/public-testnet-live-candidate-manifest-2026-05-22.json`
   - `doc/testing/evidence/public-testnet-live-candidate-lanes-2026-05-22.tsv`
@@ -179,16 +182,41 @@
   - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.md`
   - `doc/testing/evidence/public-testnet-public-surface-freshness-2026-07-03.md`
   - `doc/testing/evidence/public-testnet-governed-reset-policy-announcement-2026-07-03.md`
-  - `doc/testing/evidence/public-testnet-faucet-recovery-blocker-2026-07-04.md`
-- 当前仍不能宣称 `ready_for_live_candidate`：
-  - governed bootstrap manifest 仍是 `status=rehearsal`
-  - required-lane readiness 现在已有正式 11-lane TSV，但汇总结果仍为 `block`
-  - 当前 11 条 required lanes 中 `public_rpc_ready`、`explorer_public_ready`、`reset_policy_announced`、`claims_boundary_review` 是 `pass`；`faucet_guard_ready`、`runtime_bootstrap`、`world_resource_provenance_ready`、`provider_resource_provenance_ready`、`resource_delta_replay_ready`、`api_viewer_projection_ready`、`same_world_hosted_entry_ready` 仍是 `block`
-  - fresh public sample 证明 RPC / explorer 正在推进到 governed `public_testnet` 高度 `1083`，但 faucet endpoint 连续连接失败，所以 `public faucet is open` 仍是禁止口径
-  - 2026-07-04 已新增 repo-owned faucet recovery package/runbook（`scripts/public-testnet-faucet/` 与 `doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md`），但这只补齐 operator 恢复路径；在 fresh `/`、`/healthz`、guarded `/claim` 与 cooldown 证据通过前，`faucet_guard_ready` 仍是 `block`
-  - live status 暴露的 `network_tier.required_gates` 仍是旧 7-lane set；repo manifest/readiness contract 已是 11-lane set，后续部署面仍需 realign
+  - `doc/testing/evidence/public-testnet-faucet-guard-ready-2026-07-05.md`
+  - `doc/testing/evidence/public-testnet-runtime-world-resource-closure-2026-07-05.md`
+  - `doc/testing/evidence/public-testnet-provider-resource-provenance-2026-07-05.md`
+  - `doc/testing/evidence/public-testnet-resource-delta-replay-2026-07-05.md`
+  - `doc/testing/evidence/public-testnet-api-viewer-projection-2026-07-05.json`
+  - `doc/testing/evidence/public-testnet-same-world-hosted-entry-2026-07-05.json`
+  - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`
+- 当前 11 条 required lanes 已全部 `pass`：
+  - `public_rpc_ready`
+  - `explorer_public_ready`
+  - `faucet_guard_ready`
+  - `reset_policy_announced`
+  - `runtime_bootstrap`
+  - `world_resource_provenance_ready`
+  - `provider_resource_provenance_ready`
+  - `resource_delta_replay_ready`
+  - `api_viewer_projection_ready`
+  - `same_world_hosted_entry_ready`
+  - `claims_boundary_review`
+- 当前 canonical readiness 命令：
+  - `./scripts/network-tier-public-testnet-readiness.sh --manifest doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json --lanes-tsv doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
+- 2026-07-06 fresh verification output:
+  - `missing_required_lanes=[]`
+  - `blocking_lanes=[]`
+  - `partial_lanes=[]`
+  - `manifest_blockers=[]`
+  - `gate_result=pass`
+  - `readiness_verdict=ready_for_live_candidate`
+  - `live_candidate_allowed=true`
+- 该结论只允许 controlled / resettable / non-mainnet `public_testnet` live-candidate 口径；它不等于 live public launch、mainnet readiness、production OC settlement、public validator admission/open onboarding、full light-client security 或 multi-client consensus equivalence。
+  - governed-bootstrap manifest 仍记录 `status="rehearsal"`；这不阻止当前脚本给出 controlled `ready_for_live_candidate`，但禁止把结论扩写为 public launch、mainnet 或 no-reset release。
+  - bundle provenance 仍记录 `git_worktree_dirty=true`；更高 release tier 或对外发布前应重新生成 clean bundle。
+  - guarded faucet 只证明 testnet faucet 的 root/health/guarded claim/cooldown/transfer confirmation；不得扩写为无限制 public faucet、durable anti-abuse、TLS/WAF 或 production-grade faucet 运营保证。
   - `chain_proof_evidence_ready` 与 `external_verifier_light_client_lite_ready` 都是 optional / non-promotional evidence lanes；它们可提高 auditability，但不能替代 public RPC、explorer、faucet、same-world hosted entry 等 required lanes
-  - 只要任一 lane 仍是 `partial` / `block`，或 evidence 仍是 template / placeholder / private-only ref，就不得升级为 `ready_for_live_candidate`
+  - 后续若任一 lane 变成 `partial` / `block`，或 evidence 变成 template / placeholder / private-only ref，就必须降回 `block` / `partial`，不得继续沿用本轮 `ready_for_live_candidate` 结论。
 - 当前 governed-bootstrap manifest 的 `promotion_policy.required_gates` 已同步到 11 条 active required lanes；`shared_devnet_pass` 只保留为 legacy/rehearsal provenance，不再作为目标 `public_testnet` 的 active required gate。
 - 当前 example manifest 仍只能作为 skeleton/template 使用：
   - `network_id=oasis7-public-testnet-example`
@@ -198,12 +226,15 @@
 ## 8. 对外口径边界
 - 现在允许说：
   - `formal public_testnet mechanism is documented`
-  - `current governed bootstrap evidence is rehearsal / not ready_for_live_candidate`
+  - `current required-lane packet is complete`
+  - `all 11 formal public_testnet required lanes have pass evidence`
+  - `controlled public_testnet live-candidate claim is allowed by the script-generated readiness review`
+  - `the public_testnet remains resettable, non-mainnet, and guarded-faucet bounded`
   - `legacy shared_devnet evidence is not a target test environment`
   - `WorldHeadProofV1 can be externally verified as light-client-lite sampled evidence when the optional verifier lane passes`
 - 现在不允许说：
   - `live public testnet is already online`
-  - `public faucet is open`
+  - `unrestricted public faucet is open`
   - `public validator admission is open`
   - `mainnet-like OC settlement is available`
   - `full light client security or multi-client consensus equivalence is proven`
@@ -217,7 +248,9 @@
 
 ## 10. 收口标准
 - 只有当 required-lane TSV 全部为 `pass`，且 evidence 都不是 template / placeholder / private-only ref，`public_testnet` readiness review 才允许输出 `ready_for_live_candidate`。
-- 在此之前，producer / QA / liveops 必须继续维持：
-  - `not_ready_for_live_candidate`
-  - `rehearsal_or_skeleton_only`
+- 在 public launch、mainnet 或 validator admission 另行通过前，producer / QA / liveops 必须继续维持：
+  - `controlled_ready_for_live_candidate_only`
+  - `resettable_non_mainnet_public_testnet`
   - `do_not_claim_live_public_testnet`
+  - `do_not_claim_public_validator_admission`
+  - `do_not_claim_mainnet_or_production_oc_settlement`
