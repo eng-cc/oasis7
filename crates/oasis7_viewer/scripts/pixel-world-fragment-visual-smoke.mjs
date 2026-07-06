@@ -364,6 +364,25 @@ function visualProbeScript() {
         locationZ: zIndexOf(location),
         agentZ: zIndexOf(agent),
       };
+      const nextMoveCard = document.querySelector(".pixel-world-command-cell--next");
+      const nextMoveRectBeforeFocus = rectOf(nextMoveCard);
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      nextMoveCard.focus({ preventScroll: true });
+      await waitFor(() => document.activeElement === nextMoveCard);
+      const nextMoveFocusedStyle = getComputedStyle(nextMoveCard);
+      const nextMoveRectAfterFocus = rectOf(nextMoveCard);
+      const nextMoveFocus = {
+        active: document.activeElement === nextMoveCard,
+        outlineStyle: nextMoveFocusedStyle.outlineStyle,
+        outlineColor: nextMoveFocusedStyle.outlineColor,
+        outlineWidth: nextMoveFocusedStyle.outlineWidth,
+        boxShadow: nextMoveFocusedStyle.boxShadow,
+        rectBefore: nextMoveRectBeforeFocus,
+        rectAfter: nextMoveRectAfterFocus,
+        layoutStable:
+          nextMoveRectBeforeFocus.width === nextMoveRectAfterFocus.width
+          && nextMoveRectBeforeFocus.height === nextMoveRectAfterFocus.height,
+      };
 
       return JSON.stringify({
         ready,
@@ -384,6 +403,7 @@ function visualProbeScript() {
             locationBehindAgent: layerOrder.locationZ < layerOrder.agentZ,
           },
           actionReceipt: receiptOf(),
+          nextMoveFocus,
           badges: badges(),
         },
       });
@@ -707,6 +727,10 @@ try {
   assert(summary.rendered.actionReceipt?.present === "false", "rendered hierarchy fixture should start from an honest no-receipt state", summary.rendered);
   assert(summary.rendered.actionReceipt?.confidence === "none", "no-receipt fixture should not claim action receipt confidence", summary.rendered);
   assert(summary.rendered.actionReceipt?.meta === null, "no-receipt fixture should not show receipt metadata", summary.rendered);
+  assert(summary.rendered.nextMoveFocus?.active === true, "next move command cell did not receive keyboard focus", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.outlineStyle !== "none", "next move focus state is not visibly outlined", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.outlineWidth !== "0px", "next move focus outline has no measurable width", summary.rendered.nextMoveFocus);
+  assert(summary.rendered.nextMoveFocus?.layoutStable === true, "next move focus state caused layout shift", summary.rendered.nextMoveFocus);
   assert(summary.rendered.maxFragmentWidth > 0, "fragment marker boxes did not render with a measurable size", summary.rendered);
   assert(summary.rendered.maxFragmentWidth < summary.rendered.agentRect.width, "fragment blocks are not visually quieter than the agent marker", summary.rendered);
 
