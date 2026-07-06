@@ -470,12 +470,12 @@
 | 2026-03-06 12:14:03 +0800 | codex | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md` | pass | - | 项目任务与回归产物链路清晰，未见新增命令可执行性问题。 |
 | 2026-03-06 12:14:29 +0800 | codex | `doc/testing/governance/wasm-build-determinism-guard.prd.md` | pass | - | 构建护栏规则与 `sync --check` 验证链定义清晰，未见命令可执行性问题。 |
 | 2026-03-06 12:14:55 +0800 | codex | `doc/testing/governance/wasm-build-determinism-guard.project.md` | pass | - | 项目任务与护栏落点可追溯，未见 D4 新增风险。 |
-| 2026-03-06 12:15:19 +0800 | codex | `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.prd.md` | pass | - | 启动迁移与 fail-fast 边界定义清晰，未发现不可执行命令口径问题。 |
-| 2026-03-06 12:15:49 +0800 | codex | `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.project.md` | pass | - | 迁移任务与脚本依赖链路可追溯，未见 D4 新增问题。 |
-| 2026-03-06 12:16:14 +0800 | codex | `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.prd.md` | pass | - | 最小验收命令均可执行且与仓库 cargo 口径一致。 |
-| 2026-03-06 12:16:38 +0800 | codex | `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.project.md` | pass | - | 任务拆解覆盖生命周期硬化主链路，审计未见命令可执行性问题。 |
-| 2026-03-06 12:17:03 +0800 | codex | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.prd.md` | pass | - | 鉴权来源优先级与回退路径定义清晰，未发现 D4 命令可执行性问题。 |
-| 2026-03-06 12:18:25 +0800 | codex | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.project.md` | pass | - | 任务映射与依赖边界完整，未发现 D4 级命令问题。 |
+| 2026-03-06 12:15:19 +0800 | codex | `retired testing launcher launcher-chain-script-migration-2026-02-28 prd` | pass | - | 启动迁移与 fail-fast 边界定义清晰，未发现不可执行命令口径问题。 |
+| 2026-03-06 12:15:49 +0800 | codex | `retired testing launcher launcher-chain-script-migration-2026-02-28 project` | pass | - | 迁移任务与脚本依赖链路可追溯，未见 D4 新增问题。 |
+| 2026-03-06 12:16:14 +0800 | codex | `retired testing launcher launcher-lifecycle-hardening-2026-03-01 prd` | pass | - | 最小验收命令均可执行且与仓库 cargo 口径一致。 |
+| 2026-03-06 12:16:38 +0800 | codex | `retired testing launcher launcher-lifecycle-hardening-2026-03-01 project` | pass | - | 任务拆解覆盖生命周期硬化主链路，审计未见命令可执行性问题。 |
+| 2026-03-06 12:17:03 +0800 | codex | `retired testing launcher launcher-viewer-auth-node-config-autowire-2026-03-02 prd` | pass | - | 鉴权来源优先级与回退路径定义清晰，未发现 D4 命令可执行性问题。 |
+| 2026-03-06 12:18:25 +0800 | codex | `retired testing launcher launcher-viewer-auth-node-config-autowire-2026-03-02 project` | pass | - | 任务映射与依赖边界完整，未发现 D4 级命令问题。 |
 | 2026-03-06 12:19:00 +0800 | codex | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md` | issue_open | I4-002 | 任务描述直接写 `cargo check`，未对齐仓库约定的 `env -u RUSTC_WRAPPER cargo ...` 可执行口径。 |
 | 2026-03-06 12:19:34 +0800 | codex | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md` | pass | - | 迁移后的脚本入口与采样字段口径明确，未发现不可执行命令写法。 |
 | 2026-03-06 12:20:04 +0800 | codex | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.project.md` | pass | - | 项目拆解与脚本依赖对齐，未发现 D4 命令可执行性问题。 |

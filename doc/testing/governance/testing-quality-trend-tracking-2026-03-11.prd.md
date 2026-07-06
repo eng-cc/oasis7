@@ -28,7 +28,7 @@
   - PRD-TESTING-TREND-002: As a `producer_system_designer`, I want a baseline report with traffic-light thresholds, so that I can judge whether current stage quality is improving.
   - PRD-TESTING-TREND-003: As a 模块 owner, I want each trend sample linked back to evidence docs, so that I can reproduce why a metric went red.
 - Critical User Flows:
-  1. `任务收口 -> 读取 evidence / project / devlog -> 归档为一个 trend sample`
+  1. `任务收口 -> 读取 evidence / project / GitHub task issue evidence comments -> 归档为一个 trend sample`
   2. `计算首次通过率 / 阶段内逃逸率 / 修复时长 -> 输出红黄绿状态 -> 回写 baseline`
   3. `阶段评审读取 baseline -> 追溯异常样本 -> 决定是否加测或阻断`
 - Functional Specification Matrix:
@@ -42,7 +42,7 @@
 - Acceptance Criteria:
   - AC-1: 新专题文档明确三项指标定义、阈值与采集源。
   - AC-2: `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md` 给出首份 baseline，至少 3 个样本。
-  - AC-3: 每个样本都能回溯到已有 evidence / project / devlog 文档。
+  - AC-3: 每个样本都能回溯到已有 evidence / project 文档、GitHub task issue evidence comments 或 git history。
   - AC-4: `doc/testing/project.md` 将 `TASK-TESTING-004` 标记完成并指向专题文档。
 - Non-Goals:
   - 不在本轮实现自动采集脚本或可视化面板。
@@ -54,13 +54,13 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 本专题以现有 `testing` 证据包、专题项目文档与 devlog 为唯一数据源；`qa_engineer` 手工整理 trend samples，按固定公式生成 baseline 报告。
+- Architecture Overview: 本专题以现有 `testing` 证据包、专题项目文档、GitHub task issue evidence comments 与 git history 为数据源；`qa_engineer` 手工整理 trend samples，按固定公式生成 baseline 报告。
 - Integration Points:
   - `doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
   - `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`
-  - `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.project.md`
+  - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
+  - GitHub task issue evidence comments and git history for retired launcher usability samples
   - `doc/testing/project.md`
-  - `doc/devlog/YYYY-MM-DD.md`
 - Edge Cases & Error Handling:
   - 样本只有最终结论、缺失首次结论：标记 `incomplete_sample`，不得纳入首次通过率分子。
   - 问题在同日发现并修复：修复时长记 `0d`，但仍计入逃逸率。

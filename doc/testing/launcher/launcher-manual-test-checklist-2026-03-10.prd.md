@@ -66,7 +66,7 @@
   - `crates/oasis7/src/bin/oasis7_web_launcher.rs`
   - `crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`
   - `crates/oasis7_client_launcher/src/main.rs`
-  - `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.prd.md`
+  - GitHub task issue evidence comments and git history for retired launcher full-usability closure audit samples
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `testing-manual.md`
   - `scripts/run-local-letai-game-test.sh`（本地真实 LetAI provider-backed 试玩）

@@ -15,9 +15,9 @@
 - `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md`
 - `doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
 - `doc/world-runtime/evidence/runtime-storage-gate-sample-2026-03-10.md`
-- `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.project.md`
 - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`
 - `doc/testing/governance/qa-to-producer-task-testing-004-trend-baseline-2026-03-11.md`
+- GitHub task issue evidence comments and git history for retired launcher usability samples
 
 ## 状态
 - 更新日期：2026-03-11

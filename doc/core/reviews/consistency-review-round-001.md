@@ -72,7 +72,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
   - `doc/p2p/distributed/distributed-hard-split-phase7.prd.md`
   - `doc/scripts/precommit/pre-commit.prd.md`
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
-  - `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.prd.md`
+  - `retired testing launcher launcher-lifecycle-hardening-2026-03-01 prd`
   - `doc/playability_test_result/game-test.prd.md`
   - `doc/readme/governance/readme-resource-model-layering.prd.md`
   - `doc/game/gameplay/gameplay-engineering-architecture.md`

@@ -46,8 +46,8 @@
 - `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.prd.md`
 - `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.prd.md`
 - `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.prd.md`
-- `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.prd.md`
-- `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.project.md`
+- `retired testing launcher launcher-lifecycle-hardening-2026-03-01 prd`
+- `retired testing launcher launcher-lifecycle-hardening-2026-03-01 project`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
 - `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md`
 - `doc/world-runtime/governance/audit-export.md`

@@ -481,6 +481,7 @@
 - [x] viewer-project-legacy-entry-deletion (PRD-ENGINEERING-021/025) [test_tier_required]: 删除孤立 Viewer project 旧入口壳，将当前 task metadata 引用收敛到 canonical `doc/world-simulator/viewer/README.md` Viewer 子域 landing page，并同步收紧 module-root markdown allowlist。 Trace: .pm/tasks/task_71a578da05dd454b821b43299eda45ca.yaml
 - [x] engineering-doc-legacy-governance (PRD-ENGINEERING-021/025) [test_tier_required]: 收口工程治理入口和文档存量治理专题中仍把当前治理追溯导向 `.pm` execution log / `.pm Trace` 的旧语义，将 active evidence sink 重新对齐到 GitHub task issue evidence comments，并保留历史 `.pm/tasks/...` trace 只作归档追溯。 Trace: #1779 (task_0e63f13de6084483b844e62fc47b6fc4)
 - [x] game-closed-beta-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/game/gameplay/` TASK-GAME-029~032 closed beta 一次性 role handoff briefs，将当前 runtime / viewer / QA / liveops 追溯入口收敛到 closed beta 专题 project、正式 evidence surfaces、gameplay 子域 README、game PRD index 与 GitHub task issue evidence comments。 Trace: #1989 (task_63fc40b853514c0c960aad368b36aa7c)
+- [x] testing-launcher-legacy-triplet-retirement (PRD-ENGINEERING-021/025/PRD-TESTING) [test_tier_required]: 按 repository health slice 处理 `testing` module density `action_required` 中的旧 launcher 三件套，删除 chain migration、lifecycle hardening、viewer auth/node config autowire 与 full-usability closure audit 四组已完成旧专题，将当前 launcher/playtest/Web UI 闭环入口收敛到 `testing-manual.md`、current launcher manual/checklist、bundle-first playtest topic、Web UI manual、GitHub task issue evidence comments 与 git history。 Trace: #2028 (task_9f54a9aeb788435a802bfaa7175f9fdc)
 - [x] manifest-diff-ordered-key-merge-performance (PRD-ENGINEERING/GOVERNANCE) [test_tier_required]: 优化 runtime manifest diff 的 JSON object key 合并路径，用有序双迭代替代每层 collect/sort/dedup，并用 ops-order regression 固定 base-only、target-only 与 nested both-present patch 顺序。 Trace: .pm/tasks/task_24271b58c442494cba84b80a8b9f0332.yaml
 
 ## File Structure / Affected Paths
@@ -542,10 +543,10 @@
 - `doc/*/README.md`
 
 ## 状态
-- 更新日期: 2026-07-02
+- 更新日期: 2026-07-06
 - 当前状态: active
-- 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none；后续 repository health 巡检应按 module density / hotspot `action_required` 结果做 bounded 分类判断，先分级再切 focused follow-up，避免回到已收口的 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列。
-- 最新完成: `world-runtime-root-handoff-retire`（已删除 `doc/world-runtime` 根目录 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 一次性 role handoff 文档，并将追溯入口收敛到正式 evidence、runtime storage topic project、core review 记录与 GitHub task issue evidence comments。）
+- 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算仍显示 module density / hotspot `action_required`；后续 repository health 巡检应继续按热点分类结果，为 `doc/world-simulator/launcher`、`doc/testing/evidence` 或其他选中热点单独切 focused follow-up，避免回到已收口的 near-limit project 状态区队列。
+- 最新完成: `testing-launcher-legacy-triplet-retirement`（已删除 `doc/testing/launcher` 早期 launcher chain migration / lifecycle hardening / viewer auth-node config autowire / full-usability closure audit 四组三件套，并将当前 launcher/playtest/Web UI 闭环入口收敛到 `testing-manual.md`、current launcher manual/checklist、bundle-first playtest topic、Web UI manual、GitHub task issue evidence comments 与 git history。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。

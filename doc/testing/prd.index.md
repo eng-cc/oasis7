@@ -66,6 +66,8 @@
 ## 专题清单（含历史完成项，按文件名精确检索）
 本表用于互链可达性和 traceability，不代表每一行都是默认首读或当前活跃执行面；已完成的规划三件套应先读其 redirect / historical status，再进入当前 canonical 手册或 topic 文档。
 
+2026-07-06 governance note: 早期 launcher chain migration、lifecycle hardening、viewer auth/node config autowire 与 full usability closure audit 四组三件套已退役删除；当前 launcher / playtest / Web UI 闭环入口保留在 `testing-manual.md`、`doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`、`doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`、Web UI manual、GitHub task issue evidence comments 与 git history。
+
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.project.md` |
@@ -85,12 +87,8 @@
 | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` |
 | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md` |
 | `doc/testing/governance/wasm-build-determinism-guard.prd.md` | `doc/testing/governance/wasm-build-determinism-guard.design.md` | `doc/testing/governance/wasm-build-determinism-guard.project.md` |
-| `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.prd.md` | `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.design.md` | `doc/testing/launcher/launcher-chain-script-migration-2026-02-28.project.md` |
 | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.design.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md` |
-| `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.prd.md` | `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.design.md` | `doc/testing/launcher/launcher-full-usability-closure-audit-2026-03-08.project.md` |
-| `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.prd.md` | `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.design.md` | `doc/testing/launcher/launcher-lifecycle-hardening-2026-03-01.project.md` |
 | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.design.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md` |
-| `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.prd.md` | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.design.md` | `doc/testing/launcher/launcher-viewer-auth-node-config-autowire-2026-03-02.project.md` |
 | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.design.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md` |
 | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.design.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.project.md` |
 | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.project.md` |
