@@ -1,11 +1,11 @@
 # `testing/evidence` 热点子域入口
 
-更新时间: 2026-06-13
+更新时间: 2026-07-06
 
 ## 从这里开始
 - 想确认 release readiness、candidate/trust gate 或 release 证据包：先读 `release-evidence-bundle-task-game-018-2026-03-10.md`、`closed-beta-candidate-release-gate-2026-03-22.md` 或 `gameplay-ten-minute-trust-gate-2026-04-09.md`
 - 想确认 hosted access、浏览器鉴权、web surface 或滥用矩阵：先读 `hosted-world-browser-auth-surface-2026-03-26.md`、`hosted-world-abuse-suite-matrix-2026-03-27.md` 或 `mainchain-token-signed-transfer-web-validation-2026-03-23.md`
-- 想确认 public-testnet readiness evidence、claims boundary、triad rollout 或 legacy shared-network rehearsal：先读 `public-testnet-claims-boundary-review-2026-05-21.md`、`public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`、`shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md` 或 `p2p-mixed-topology-validation-matrix-2026-04-07.md`
+- 想确认 public-testnet readiness evidence、claims boundary、triad rollout 或 legacy shared-network rehearsal：先读 `public-testnet-current-required-lanes-2026-07-03.md`、`public-testnet-claims-boundary-review-2026-07-06.md`、`public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`、`p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`、`shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md` 或 `p2p-mixed-topology-validation-matrix-2026-04-07.md`
 - 想确认治理演练、live world drill 或 finality 证据：先读 `governance-registry-live-world-drill-finality-2026-03-24.md`、`governance-registry-live-world-drill-foundation-ops-2026-03-24.md` 或 `governance-registry-clone-world-drill-foundation-ops-2026-03-24.md`
 - 想确认 claim/restricted grant、token allocation audit 或质量基线：先读 `game-agent-claim-abuse-matrix-2026-03-27.md`、`token-genesis-allocation-audit-template-2026-03-22.md` 或 `testing-quality-trend-baseline-2026-03-11.md`
 - 想确认 provider recertification、software-safe web entry、pure-api parity、headless smoke 或 launcher UX：先读 `provider-agent-dual-mode-recertification-evidence-2026-04-07.md`、`software-safe-primary-web-entry-evidence-2026-04-07.md` 或 `post-onboarding-headless-smoke-2026-03-19.md`
@@ -47,8 +47,9 @@
 
 ### 3. Public-testnet readiness evidence、triad rollout 与 legacy rehearsal
 - 首读入口:
+  - `public-testnet-current-required-lanes-2026-07-03.md`
+  - `public-testnet-claims-boundary-review-2026-07-06.md`
   - `public-testnet-live-candidate-endpoint-deploy-2026-05-19.md`
-  - `public-testnet-claims-boundary-review-2026-05-21.md`
   - `p2p-real-env-triad-current-version-full-game-nodes-2026-05-16.md`
   - `shared-network-ecs-triad-chain-status-metrics-rollout-2026-04-23.md`
   - `p2p-real-env-triad-snapshot-2026-04-07.md`
@@ -62,6 +63,7 @@
   - mixed-topology、observer gap sync 或 blob root cause 在哪组 evidence
   - legacy shared-network ECS triad 与 shared-devnet 相关留痕怎么进入
 - 归档边界:
+  - `public-testnet-claims-boundary-review-2026-05-21.md` 是旧 live-candidate packet 的 historical claims-boundary evidence；当前 claims boundary 以 `public-testnet-claims-boundary-review-2026-07-06.md` 为首读入口。
   - `public-testnet-live-candidate-lanes-2026-05-21.tsv` 与 2026-05-22 live-candidate bundle / manifest / bootstrap-peers / lanes 文件保留为 public-testnet 演进链证据；当前 readiness 结论仍以 formal `public_testnet` runbook、正式 lanes TSV 与 `network-tier-public-testnet-readiness.sh` 汇总为准。
   - shared-network / shared-devnet 文件只作为 legacy rehearsal provenance，不作为当前 test 环境、formal `public_testnet` readiness、`mainnet` readiness 或公开统一大世界上线证据。
   - `archive/visual-cleanup-2026-06-14/manifest.md` 记录从 active evidence path 移出的历史 visual evidence；这些文件只作为追溯归档，不作为当前 release / viewer / gameplay 首读证据。
