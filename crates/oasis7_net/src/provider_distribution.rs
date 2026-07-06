@@ -36,7 +36,7 @@ pub fn audit_provider_distribution(
         });
     }
 
-    let required_hashes = normalize_required_hashes(content_hashes);
+    let required_hashes = normalized_required_hashes(content_hashes);
     if required_hashes.is_empty() {
         return Err(WorldError::DistributedValidationFailed {
             reason: "provider distribution audit requires at least one content hash".to_string(),
@@ -87,10 +87,9 @@ pub fn audit_provider_distribution(
     })
 }
 
-fn normalize_required_hashes(content_hashes: &[String]) -> Vec<String> {
-    let mut unique = BTreeSet::new();
-    for content_hash in content_hashes {
-        unique.insert(content_hash.clone());
-    }
-    unique.into_iter().collect()
+fn normalized_required_hashes(content_hashes: &[String]) -> BTreeSet<&str> {
+    content_hashes
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>()
 }
