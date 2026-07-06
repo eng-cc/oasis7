@@ -577,11 +577,11 @@ def build_workflow_checklist(
             )
         add(
             "write-execution-log",
-            "先回写当前 task execution log，再做 signal / memory / backlog 的结构化收口。",
+            "先把当前任务收口证据写入 GitHub task issue evidence comments；迁移前 task execution log 只作历史追溯，再做 reflection / memory / backlog 的结构化收口。",
         )
         add(
             "extract-memory",
-            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 signal、working_memory 或 memory 候选，而不是只写 execution log。",
+            "执行记忆抽取三问：这条结论是否跨任务复用、是否能避免其他 owner 重复踩坑、是否会影响 PRD/实现/测试/对外口径；任一为 yes 时，至少生成 GitHub-backed reflection intake、working_memory 或 memory 候选，而不是只写 task evidence。",
         )
         if task_context is not None and working_memory_entries == 0:
             add(
@@ -621,12 +621,12 @@ def build_workflow_checklist(
         if role in {"qa_engineer", "liveops_community"} or pending_signals > 0:
             add(
                 "promote-signals",
-                "把新增的高价值 QA / liveops / incident 结论提升到 GitHub-backed reflection intake，而不是只留在 task execution log。",
+                "把新增的高价值 QA / liveops / incident 结论提升到 GitHub-backed reflection intake，而不是只留在当前 task evidence。",
                 command=f"./scripts/pm/promote-signal.sh ... --role-hint {role}",
             )
         add(
             "sync-backlog",
-            "把本轮任务状态迁移回 backlog / task registry，避免 `.pm` 与实际执行脱节。",
+            "把本轮任务状态同步回 GitHub Project / mapping-backed PM view，避免本地 `.pm` 支撑视图与实际执行脱节。",
             command="./scripts/pm/move-task.sh --task-uid <TASK-UID> --to-status <candidate|committed|blocked|ready|pr_watch|done|deferred>",
         )
         add(

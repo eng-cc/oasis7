@@ -35,7 +35,7 @@
 | Surface | Page paths | Design evidence | Status |
 | --- | --- | --- | --- |
 | Viewer software-safe page | `crates/oasis7_viewer/software_safe.html` | `doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md`, `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md` | Covered |
-| Launcher app shell | `crates/oasis7_client_launcher/index.html` | `doc/world-simulator/launcher/*design.md`; launcher Image2/native screenshot workflow evidence in `.pm/tasks/task_54647d0add024a98b801d3736700ff22.execution.md` | Covered |
+| Launcher app shell | `crates/oasis7_client_launcher/index.html` | `doc/world-simulator/launcher/*design.md`; launcher Image2/native screenshot workflow evidence in GitHub issue/task `task_54647d0add024a98b801d3736700ff22`, with retired pre-migration `.pm/tasks/*` evidence available only through `.pm/github-project-sync/task-archive.jsonl` | Covered |
 
 ## Explicit Fixture / Evidence Classification
 
@@ -48,4 +48,4 @@
 This index is file/discovery based. It does not prove that implementation pixels
 match design targets. For page changes, capture real desktop/mobile browser
 screenshots, compare against the linked Image2 targets, and record gap notes in
-the owning design draft or task execution log.
+the owning design draft or GitHub task issue evidence comments.
