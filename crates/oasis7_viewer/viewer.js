@@ -2240,13 +2240,15 @@ function createViewerHostedAuthStateModule({
       }
       const parsed = JSON.parse(raw);
       const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
-      const playerId = String(parsed?.playerId || "").trim();
+      const playerId = String(parsed?.playerId || parsed?.player_id || "").trim();
       const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
       const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
-      const releaseToken = String(parsed?.releaseToken || "").trim();
+      const releaseToken = String(parsed?.releaseToken || parsed?.release_token || "").trim();
       const deviceSessionId = String(
-        parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || ""
+        parsed?.deviceSessionId || parsed?.device_session_id || parsed?.releaseToken || parsed?.release_token || ""
       ).trim();
+      const issuedAtUnixMs = parsed?.issuedAtUnixMs ?? parsed?.issued_at_unix_ms ?? null;
+      const sessionEpoch = parsed?.sessionEpoch ?? parsed?.session_epoch ?? null;
       if (!playerId || !releaseToken) {
         clearHostedPlayerSession2();
         return null;
@@ -2260,8 +2262,8 @@ function createViewerHostedAuthStateModule({
           maskedLoginHint: maskedLoginHint || null,
           deviceSessionId: deviceSessionId || releaseToken,
           releaseToken,
-          issuedAtUnixMs: parsed?.issuedAtUnixMs ?? null,
-          sessionEpoch: parsed?.sessionEpoch ?? null
+          issuedAtUnixMs,
+          sessionEpoch
         })
       );
       return buildDefaultAuthState({
@@ -2274,8 +2276,8 @@ function createViewerHostedAuthStateModule({
         releaseToken,
         source: "hosted_browser_storage",
         registrationStatus: "issued",
-        sessionEpoch: parsed?.sessionEpoch == null ? null : Number(parsed.sessionEpoch),
-        issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? null : Number(parsed.issuedAtUnixMs),
+        sessionEpoch: sessionEpoch == null ? null : Number(sessionEpoch),
+        issuedAtUnixMs: issuedAtUnixMs == null ? null : Number(issuedAtUnixMs),
         runtimeStatus: "issued",
         error: null
       });
