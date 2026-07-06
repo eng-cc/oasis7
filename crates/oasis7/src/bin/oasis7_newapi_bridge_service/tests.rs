@@ -15,6 +15,8 @@ use super::model::{
 use super::service::{BridgePricingRuleConfig, BridgeService, BridgeServiceConfig};
 use super::store::BridgeStateStore;
 use super::{dispatch_request, parse_cli_options};
+#[path = "access_observability_tests.rs"]
+mod access_observability_tests;
 #[path = "deposit_token_tests.rs"]
 mod deposit_token_tests;
 #[path = "tests_support.rs"]
@@ -311,6 +313,77 @@ fn reconcile_provisions_letai_user_project_token_and_marks_reconciled() {
         Some("token-key-000001")
     );
     assert_eq!(letai_server.recorded_topup_requests().len(), 1);
+}
+
+#[test]
+fn health_reports_last_reconcile_success_observability() {
+    let chain_server = MockChainServer::spawn();
+    let letai_server = MockLetaiServer::spawn();
+    let test_service = test_service_with_endpoints(
+        "reconcile-observability-success",
+        900,
+        Some(chain_server.base_url.clone()),
+        Some(letai_server.base_url.clone()),
+        1,
+        None,
+    );
+    issue_default_route(&test_service);
+    chain_server.set_state(MockChainState {
+        committed_height: 10,
+        txs: Vec::new(),
+    });
+
+    test_service
+        .service
+        .reconcile_once(6_000)
+        .expect("reconcile succeeds");
+
+    let health = test_service.service.health(7_000);
+    let reconcile = health
+        .last_reconcile
+        .expect("health exposes last reconcile observability");
+    assert_eq!(reconcile.started_at_unix_ms, Some(6_000));
+    assert!(reconcile.finished_at_unix_ms.unwrap_or_default() >= 6_000);
+    assert!(reconcile.duration_ms.is_some());
+    assert_eq!(reconcile.ok, Some(true));
+    assert_eq!(reconcile.error_code.as_deref(), None);
+    assert_eq!(reconcile.error_message.as_deref(), None);
+}
+
+#[test]
+fn health_reports_last_reconcile_failure_observability() {
+    let test_service = test_service("reconcile-observability-failure", 900);
+    issue_default_route(&test_service);
+
+    let err = test_service
+        .service
+        .reconcile_once(6_000)
+        .expect_err("missing chain config");
+    assert_eq!(err.code, "chain_explorer_not_configured");
+
+    let health = test_service.service.health(7_000);
+    let reconcile = health
+        .last_reconcile
+        .expect("health exposes failed reconcile observability");
+    assert_eq!(reconcile.started_at_unix_ms, Some(6_000));
+    assert!(reconcile.finished_at_unix_ms.unwrap_or_default() >= 6_000);
+    assert!(reconcile.duration_ms.is_some());
+    assert_eq!(reconcile.ok, Some(false));
+    assert_eq!(
+        reconcile.error_code.as_deref(),
+        Some("chain_explorer_not_configured")
+    );
+    assert!(
+        !reconcile
+            .error_message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("--chain-base-url")
+    );
+    assert_eq!(
+        reconcile.error_message.as_deref(),
+        Some("reconcile failed with error code chain_explorer_not_configured")
+    );
 }
 
 #[test]
