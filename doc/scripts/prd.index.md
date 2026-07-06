@@ -16,7 +16,6 @@
 | `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md` | `doc/scripts/wasm/builtin-wasm-nightly-build-std.design.md` | `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md` |
 | `doc/scripts/governance/script-entry-layering-2026-03-11.prd.md` | `doc/scripts/governance/script-entry-layering-2026-03-11.design.md` | `doc/scripts/governance/script-entry-layering-2026-03-11.project.md` |
 | `doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md` | `doc/scripts/governance/script-parameter-contracts-2026-03-11.design.md` | `doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md` |
-| `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md` | `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.design.md` | `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.project.md` |
 | `doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md` | `doc/scripts/governance/worktree-isolated-harness-2026-03-27.design.md` | `doc/scripts/governance/worktree-isolated-harness-2026-03-27.project.md` |
 | `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md` | `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.design.md` | `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.project.md` |
 | `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md` | `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.design.md` | `doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.project.md` |

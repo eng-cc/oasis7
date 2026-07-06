@@ -23,14 +23,11 @@
     - `rg -n "ci-tests.sh|release-gate.sh|build-game-launcher-bundle.sh|run-viewer-web.sh|site-link-check.sh|skip-|dry-run" doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SCRIPTS-004 (PRD-SCRIPTS-003) [test_tier_required]: 建立脚本稳定性趋势跟踪指标。
+  - 当前语义收敛: 后续治理已退役一次性趋势专题三件套和 runtime->QA brief，当前历史基线只保留 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`。
   - 产物文件:
-    - `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
-    - `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.design.md`
-    - `doc/scripts/governance/script-stability-trend-tracking-2026-03-11.project.md`
     - `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
-    - `doc/scripts/governance/runtime-to-qa-task-scripts-004-stability-trend-2026-03-11.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "主入口覆盖率|参数契约覆盖率|fallback 围栏覆盖率|100%|0d" doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md doc/scripts/governance/script-stability-trend-tracking-2026-03-11.prd.md`
+    - `rg -n "主入口覆盖率|参数契约覆盖率|fallback 围栏覆盖率|100%|0d" doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-SCRIPTS-005 (PRD-SCRIPTS-001/002/003) [test_tier_required]: 对齐 strict PRD schema，补齐关键流程/规格矩阵/边界异常/NFR/验证与决策记录。
 - [x] TASK-SCRIPTS-006 (PRD-SCRIPTS-001) [test_tier_required]: 同步 `doc/scripts/README.md` 的模块入口索引，补齐近期专题、模块职责与根目录收口口径。
@@ -494,5 +491,5 @@
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 模块进展补充（2026-03-11）: 已新增 scripts 分层专题，明确 `ci-tests.sh`、`release-gate.sh`、`run-viewer-web.sh` 等主入口；旧 `capture-viewer-frame.sh` fallback 围栏已随仓库清退移除。
 - 模块进展补充（2026-03-11 / contracts）: 已新增高频脚本参数契约专题，冻结 `ci-tests.sh`、`release-gate.sh`、`build-game-launcher-bundle.sh`、`run-viewer-web.sh`、`site-link-check.sh` 的最小调用、默认值与失败语义。
-- 模块进展补充（2026-03-11 / trend）: 已新增 scripts 稳定性趋势专题与 baseline，建立主入口覆盖率、参数契约覆盖率、fallback 围栏覆盖率、治理修复时长四项指标。
+- 模块进展补充（2026-03-11 / trend）: 已新增 scripts 稳定性趋势 baseline，建立主入口覆盖率、参数契约覆盖率、fallback 围栏覆盖率、治理修复时长四项指标；一次性趋势专题三件套与 runtime->QA brief 已退役，历史基线见 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`。
 - 说明: 本文档仅维护 scripts 模块设计执行状态；历史过程摘要见 `doc/devlog/README.md`，当前任务执行证据以 GitHub task issue evidence comments 为准。

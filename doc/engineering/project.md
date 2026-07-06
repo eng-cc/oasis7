@@ -6,6 +6,8 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
+- [x] core-release-candidate-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 core 首读/活跃索引的 2026-03 release-candidate readiness / version / go-no-go 根目录三件套，将历史候选证据收敛到 `doc/core/reviews/*` 审计留痕、git history 与 GitHub task issue evidence comments，并同步收紧 core README、PRD index、project 状态和 module-root allowlist。 Trace: #2066 (task_e56d696bddcb4d2baa173b02e4631921)
+
 - [x] self-evolution-file-based-pm-pointer-prd-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已压缩为历史锚点且仍保留旧 `.pm/tasks` / `.pm/inbox/signals.jsonl` 语义提示的 file-based self-evolution historical pointer PRD，将当前规则入口收敛到 workflow source-of-truth，将仍有效的 repo-local memory / working_memory / stage-gate object-model 背景收敛到同名 design 文档。 Trace: #2042 (task_44d20868aeb9433d9fbfa7bea4177d60)
 
 - [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
