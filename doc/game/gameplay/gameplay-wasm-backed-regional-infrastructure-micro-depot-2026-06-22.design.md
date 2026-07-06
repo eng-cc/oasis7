@@ -2,7 +2,7 @@
 
 - 对应需求文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md`
-- 对应任务日志: `.pm/tasks/task_3c55fc4c17ea44aa850adf7a6a4463f4.execution.md`
+- 对应任务证据: GitHub issue / task `task_3c55fc4c17ea44aa850adf7a6a4463f4`；退役前 `.pm/tasks/*` execution log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯
 - 关联玩法真值:
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
   - `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
