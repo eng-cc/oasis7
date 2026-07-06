@@ -549,7 +549,7 @@ fn load_json_snapshot_if_newer_chain_resource_context(
         return Ok(None);
     }
     let json_snapshot = Snapshot::load_json(snapshot_path)?;
-    if !chain_resource_manifest_is_bound(&json_snapshot.chain_resource_manifest) {
+    if !chain_resource_manifest_has_external_context(&json_snapshot.chain_resource_manifest) {
         return Ok(None);
     }
     if !chain_resource_manifest_is_bound(&distfs_snapshot.chain_resource_manifest) {
@@ -575,6 +575,13 @@ fn load_json_snapshot_if_newer_chain_resource_context(
 
 fn chain_resource_manifest_is_bound(manifest: &super::super::ChainResourceManifest) -> bool {
     manifest.is_schema_current() && manifest.world_id != "unbound" && manifest.chain_id != "unbound"
+}
+
+fn chain_resource_manifest_has_external_context(
+    manifest: &super::super::ChainResourceManifest,
+) -> bool {
+    chain_resource_manifest_is_bound(manifest)
+        && !(manifest.world_id == DISTFS_WORLD_ID_FALLBACK && manifest.chain_id == "runtime-chain")
 }
 
 fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result<(), WorldError> {
