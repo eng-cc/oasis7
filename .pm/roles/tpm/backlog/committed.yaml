@@ -1,4 +1,21 @@
 version: 1
 role: tpm
 status: committed
-tasks: []
+tasks:
+  - task_uid: task_f7ed2407364b466b930d8f1633f4f111
+    title: "Add state resource receipt proof contract"
+    module: p2p
+    priority: P1
+    source_signal: ""
+    related_prd:
+      - PRD-P2P-031
+    acceptance:
+      - "Define a minimal state/resource/receipt proof contract that binds concrete resource/query/receipt evidence to an already committed world head or state root."
+      - "Add verifier coverage or validation tests for positive and fail-closed negative cases without claiming full light-client, mainnet, or multi-client equivalence."
+      - "Update benchmark/project/runbook docs with the new bounded proof status and remaining gaps."
+    handoff_to:
+      - runtime_engineer
+      - qa_engineer
+      - blockchain_ops_engineer
+    status: committed
+    task_path: https://github.com/eng-cc/oasis7/issues/2069

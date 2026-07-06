@@ -592,6 +592,288 @@ def validate_chain_proof_evidence_pass_evidence(raw: str, evidence: pathlib.Path
     return blockers
 
 
+def validate_state_resource_receipt_proof_pass_evidence(
+    raw: str,
+    evidence: pathlib.Path,
+    manifest_path: pathlib.Path,
+    manifest_ref: str,
+    manifest_data: dict,
+) -> list[str]:
+    lane = "state_resource_receipt_proof_ready"
+    blockers: list[str] = []
+    try:
+        data = json.loads(evidence.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"{lane} evidence must be JSON: {raw} ({exc})"]
+
+    if data.get("evidence_schema") != "oasis7.state_resource_receipt_proof_evidence.v1":
+        blockers.append(f"{lane} evidence_schema mismatch: {raw}")
+    if data.get("status") != "pass":
+        blockers.append(f"{lane} status must be pass: {raw}")
+    if data.get("proof_contract") != "WorldStateReceiptProofV1":
+        blockers.append(f"{lane} proof_contract must be WorldStateReceiptProofV1: {raw}")
+    if data.get("claim_boundary") != "state_resource_receipt_inclusion_evidence_only_not_full_light_client_or_mainnet_readiness":
+        blockers.append(f"{lane} claim_boundary mismatch: {raw}")
+    if data.get("independent_process") is not True:
+        blockers.append(f"{lane} independent_process must be true: {raw}")
+    for key in ("implementation_ref", "command_ref", "state_receipt_proof_ref", "state_receipt_proof_hash"):
+        if not str(data.get(key) or "").strip():
+            blockers.append(f"{lane} {key} missing: {raw}")
+
+    network_tier = data.get("network_tier")
+    if not isinstance(network_tier, dict):
+        blockers.append(f"{lane} network_tier object missing: {raw}")
+    else:
+        if network_tier.get("tier") != "public_testnet":
+            blockers.append(f"{lane} network_tier.tier must be public_testnet: {raw}")
+        if network_tier.get("network_id") != manifest_data.get("network_id"):
+            blockers.append(f"{lane} network_tier.network_id must match manifest: {raw}")
+        if network_tier.get("chain_id") != manifest_data.get("chain_id"):
+            blockers.append(f"{lane} network_tier.chain_id must match manifest: {raw}")
+        for key in ("network_id", "chain_id", "world_id"):
+            if not str(network_tier.get(key) or "").strip():
+                blockers.append(f"{lane} network_tier.{key} missing: {raw}")
+
+    expected_refs = [
+        ("manifest_ref", manifest_ref, manifest_path),
+        ("genesis_ref", manifest_data["runtime_refs"]["genesis_ref"], resolve_ref(manifest_data["runtime_refs"]["genesis_ref"])),
+        ("bootstrap_peer_ref", manifest_data["runtime_refs"]["bootstrap_peer_ref"], resolve_ref(manifest_data["runtime_refs"]["bootstrap_peer_ref"])),
+    ]
+    for key, expected_raw, expected_resolved in expected_refs:
+        actual = str(data.get(key) or "").strip()
+        if not actual:
+            blockers.append(f"{lane} {key} missing: {raw}")
+        elif not ref_matches(actual, expected_raw, expected_resolved):
+            blockers.append(f"{lane} {key} must match manifest: {raw}")
+
+    expected_rpc_ref = str(manifest_data.get("endpoint_policy", {}).get("rpc_ref") or "").strip()
+    rpc_ref = str(data.get("rpc_ref") or "").strip()
+    status_endpoint_ref = str(data.get("status_endpoint_ref") or "").strip()
+    if not rpc_ref and not status_endpoint_ref:
+        blockers.append(f"{lane} rpc_ref or status_endpoint_ref missing: {raw}")
+    if rpc_ref and rpc_ref != expected_rpc_ref:
+        blockers.append(f"{lane} rpc_ref must match manifest endpoint_policy.rpc_ref: {raw}")
+
+    observed_head = data.get("observed_head")
+    observed_height = 0
+    observed_state_root = ""
+    observed_receipts_root = ""
+    if not isinstance(observed_head, dict):
+        blockers.append(f"{lane} observed_head object missing: {raw}")
+    else:
+        try:
+            observed_height = int(observed_head.get("height") or 0)
+        except (TypeError, ValueError):
+            observed_height = 0
+        if observed_height <= 0:
+            blockers.append(f"{lane} observed_head.height must be positive: {raw}")
+        for key in ("hash", "state_root", "receipts_root"):
+            if not str(observed_head.get(key) or "").strip():
+                blockers.append(f"{lane} observed_head.{key} missing: {raw}")
+        observed_state_root = str(observed_head.get("state_root") or "").strip()
+        observed_receipts_root = str(observed_head.get("receipts_root") or "").strip()
+
+    verifier = data.get("external_verifier")
+    proof_kind = ""
+    proof_status = ""
+    root_hash = ""
+    verifier_subject = None
+    if not isinstance(verifier, dict):
+        blockers.append(f"{lane} external_verifier object missing: {raw}")
+    else:
+        if verifier.get("schema_version") != "oasis7.world_state_receipt_proof_verifier.v1":
+            blockers.append(f"{lane} external_verifier.schema_version mismatch: {raw}")
+        if verifier.get("status") != "pass":
+            blockers.append(f"{lane} external_verifier.status must be pass: {raw}")
+        if verifier.get("proof_contract") != "WorldStateReceiptProofV1":
+            blockers.append(f"{lane} external_verifier.proof_contract must be WorldStateReceiptProofV1: {raw}")
+        if verifier.get("hash_domain") != "oasis7.world_state_receipt_proof.v1":
+            blockers.append(f"{lane} external_verifier.hash_domain mismatch: {raw}")
+        if verifier.get("claim_boundary") != "state_resource_receipt_inclusion_evidence_only_not_full_light_client_or_mainnet_readiness":
+            blockers.append(f"{lane} external_verifier.claim_boundary mismatch: {raw}")
+        if str(verifier.get("proof_ref") or "").strip() != str(data.get("state_receipt_proof_ref") or "").strip():
+            blockers.append(f"{lane} external_verifier.proof_ref must match evidence state_receipt_proof_ref: {raw}")
+        if str(verifier.get("proof_hash") or "").strip() != str(data.get("state_receipt_proof_hash") or "").strip():
+            blockers.append(f"{lane} external_verifier.proof_hash must match evidence state_receipt_proof_hash: {raw}")
+        if str(verifier.get("world_id") or "").strip() != str(network_tier.get("world_id") if isinstance(network_tier, dict) else "").strip():
+            blockers.append(f"{lane} external_verifier.world_id must match network_tier.world_id: {raw}")
+        try:
+            verifier_height = int(verifier.get("height") or 0)
+        except (TypeError, ValueError):
+            verifier_height = 0
+        if observed_height and verifier_height != observed_height:
+            blockers.append(f"{lane} external_verifier.height must match observed_head.height: {raw}")
+        head = verifier.get("head")
+        if not isinstance(head, dict):
+            blockers.append(f"{lane} external_verifier.head object missing: {raw}")
+        else:
+            if str(head.get("block_hash") or "").strip() != str(observed_head.get("hash") if isinstance(observed_head, dict) else "").strip():
+                blockers.append(f"{lane} external_verifier.head.block_hash must match observed_head.hash: {raw}")
+            if observed_state_root and str(head.get("state_root") or "").strip() != observed_state_root:
+                blockers.append(f"{lane} external_verifier.head.state_root must match observed_head.state_root: {raw}")
+            if observed_receipts_root and str(head.get("receipts_root") or "").strip() != observed_receipts_root:
+                blockers.append(f"{lane} external_verifier.head.receipts_root must match observed_head.receipts_root: {raw}")
+        proof_kind = str(verifier.get("proof_kind") or "").strip()
+        root_hash = str(verifier.get("root_hash") or "").strip()
+        if proof_kind not in {"resource_state", "query_result", "receipt"}:
+            blockers.append(f"{lane} external_verifier.proof_kind unsupported: {raw}")
+        proof_status = str(verifier.get("proof_status") or "").strip()
+        if proof_kind in {"resource_state", "query_result"}:
+            if proof_status not in {"included", "absent"}:
+                blockers.append(f"{lane} external_verifier.proof_status must be included or absent for state/query proofs: {raw}")
+        elif proof_kind == "receipt" and proof_status != "included":
+            blockers.append(f"{lane} external_verifier.proof_status must be included for receipt proofs: {raw}")
+        verifier_subject = verifier.get("subject")
+        if not isinstance(verifier_subject, dict):
+            blockers.append(f"{lane} external_verifier.subject object missing: {raw}")
+        if proof_kind in {"resource_state", "query_result"} and observed_state_root and root_hash != observed_state_root:
+            blockers.append(f"{lane} external_verifier.root_hash must match observed_head.state_root for state/query proofs: {raw}")
+        if proof_kind == "receipt" and observed_receipts_root and root_hash != observed_receipts_root:
+            blockers.append(f"{lane} external_verifier.root_hash must match observed_head.receipts_root for receipt proofs: {raw}")
+        for key in ("head_proof_hash", "root_hash", "leaf_hash"):
+            if not str(verifier.get(key) or "").strip():
+                blockers.append(f"{lane} external_verifier.{key} missing: {raw}")
+        if int(verifier.get("proof_path_nodes") or 0) <= 0:
+            blockers.append(f"{lane} external_verifier.proof_path_nodes must be positive: {raw}")
+        verifier_denials = verifier.get("does_not_claim")
+        if not isinstance(verifier_denials, list):
+            blockers.append(f"{lane} external_verifier.does_not_claim must be an array: {raw}")
+        else:
+            required_verifier_denials = {
+                "mainnet-grade finality",
+                "full light client",
+                "validator-set finality",
+                "DA sampling",
+                "multi-client consensus equivalence",
+                "live runtime arbitrary state proof availability",
+            }
+            missing_verifier_denials = sorted(required_verifier_denials.difference(set(verifier_denials)))
+            if missing_verifier_denials:
+                blockers.append(
+                    f"{lane} external_verifier.does_not_claim missing: "
+                    + ",".join(missing_verifier_denials)
+                    + f": {raw}"
+                )
+
+    proof_targets = data.get("proof_targets")
+    if not isinstance(proof_targets, dict):
+        blockers.append(f"{lane} proof_targets object missing: {raw}")
+    else:
+        state_or_query = proof_targets.get("state_or_query")
+        if proof_kind in {"resource_state", "query_result"} and not isinstance(state_or_query, dict):
+            blockers.append(f"{lane} proof_targets.state_or_query object missing: {raw}")
+        elif isinstance(state_or_query, dict):
+            for key in ("proof_kind", "namespace", "root_hash", "leaf_hash", "proof_status"):
+                if not str(state_or_query.get(key) or "").strip():
+                    blockers.append(f"{lane} proof_targets.state_or_query.{key} missing: {raw}")
+            target_kind = str(state_or_query.get("proof_kind") or "").strip()
+            if target_kind not in {"resource_state", "query_result"}:
+                blockers.append(f"{lane} proof_targets.state_or_query.proof_kind unsupported: {raw}")
+            target_status = str(state_or_query.get("proof_status") or "").strip()
+            if target_status not in {"included", "absent"}:
+                blockers.append(f"{lane} proof_targets.state_or_query.proof_status unsupported: {raw}")
+            if target_kind == "resource_state" and not str(state_or_query.get("resource_id") or "").strip():
+                blockers.append(f"{lane} proof_targets.state_or_query.resource_id missing: {raw}")
+            if target_kind == "query_result" and not str(state_or_query.get("query_id") or "").strip():
+                blockers.append(f"{lane} proof_targets.state_or_query.query_id missing: {raw}")
+            if observed_state_root and str(state_or_query.get("root_hash") or "").strip() != observed_state_root:
+                blockers.append(f"{lane} proof_targets.state_or_query.root_hash must match observed_head.state_root: {raw}")
+            if proof_kind in {"resource_state", "query_result"}:
+                if str(state_or_query.get("proof_kind") or "").strip() != proof_kind:
+                    blockers.append(f"{lane} proof_targets.state_or_query.proof_kind must match external_verifier.proof_kind: {raw}")
+                if root_hash and str(state_or_query.get("root_hash") or "").strip() != root_hash:
+                    blockers.append(f"{lane} proof_targets.state_or_query.root_hash must match external_verifier.root_hash: {raw}")
+                if str(verifier.get("leaf_hash") or "").strip() and str(state_or_query.get("leaf_hash") or "").strip() != str(verifier.get("leaf_hash") or "").strip():
+                    blockers.append(f"{lane} proof_targets.state_or_query.leaf_hash must match external_verifier.leaf_hash: {raw}")
+                if proof_status and target_status and target_status != proof_status:
+                    blockers.append(f"{lane} proof_targets.state_or_query.proof_status must match external_verifier.proof_status: {raw}")
+                if isinstance(verifier_subject, dict):
+                    if str(state_or_query.get("namespace") or "").strip() != str(verifier_subject.get("namespace") or "").strip():
+                        blockers.append(f"{lane} proof_targets.state_or_query.namespace must match external_verifier.subject.namespace: {raw}")
+                    if proof_kind == "resource_state" and str(state_or_query.get("resource_id") or "").strip() != str(verifier_subject.get("resource_id") or "").strip():
+                        blockers.append(f"{lane} proof_targets.state_or_query.resource_id must match external_verifier.subject.resource_id: {raw}")
+                    if proof_kind == "query_result":
+                        for key in ("query_id", "query_hash"):
+                            if str(state_or_query.get(key) or "").strip() != str(verifier_subject.get(key) or "").strip():
+                                blockers.append(f"{lane} proof_targets.state_or_query.{key} must match external_verifier.subject.{key}: {raw}")
+        resource = proof_targets.get("resource")
+        resource_content_required = proof_kind == "resource_state" and proof_status != "absent"
+        if resource_content_required and not isinstance(resource, dict):
+            blockers.append(f"{lane} proof_targets.resource object missing: {raw}")
+        elif isinstance(resource, dict):
+            for key in ("resource_manifest_ref", "resource_delta_ref", "content_hash", "commit_hash"):
+                if not str(resource.get(key) or "").strip():
+                    blockers.append(f"{lane} proof_targets.resource.{key} missing: {raw}")
+            try:
+                commit_height = int(resource.get("commit_height") or 0)
+            except (TypeError, ValueError):
+                commit_height = 0
+            if commit_height <= 0:
+                blockers.append(f"{lane} proof_targets.resource.commit_height must be positive: {raw}")
+            if observed_height and commit_height != observed_height:
+                blockers.append(f"{lane} proof_targets.resource.commit_height must match observed_head.height: {raw}")
+            if str(resource.get("commit_hash") or "").strip() != str(observed_head.get("hash") if isinstance(observed_head, dict) else "").strip():
+                blockers.append(f"{lane} proof_targets.resource.commit_hash must match observed_head.hash: {raw}")
+        receipt = proof_targets.get("receipt")
+        if proof_kind == "receipt" and not isinstance(receipt, dict):
+            blockers.append(f"{lane} proof_targets.receipt object missing: {raw}")
+        elif isinstance(receipt, dict):
+            for key in ("action_id", "receipt_hash", "execution_status", "result_hash", "root_hash", "leaf_hash"):
+                if not str(receipt.get(key) or "").strip():
+                    blockers.append(f"{lane} proof_targets.receipt.{key} missing: {raw}")
+            if observed_receipts_root and str(receipt.get("root_hash") or "").strip() != observed_receipts_root:
+                blockers.append(f"{lane} proof_targets.receipt.root_hash must match observed_head.receipts_root: {raw}")
+            if proof_kind == "receipt":
+                if root_hash and str(receipt.get("root_hash") or "").strip() != root_hash:
+                    blockers.append(f"{lane} proof_targets.receipt.root_hash must match external_verifier.root_hash: {raw}")
+                if str(verifier.get("leaf_hash") or "").strip() and str(receipt.get("leaf_hash") or "").strip() != str(verifier.get("leaf_hash") or "").strip():
+                    blockers.append(f"{lane} proof_targets.receipt.leaf_hash must match external_verifier.leaf_hash: {raw}")
+                if isinstance(verifier_subject, dict):
+                    subject_map = {
+                        "action_id": "action_id",
+                        "receipt_hash": "receipt_hash",
+                        "execution_status": "status",
+                        "result_hash": "result_hash",
+                    }
+                    for target_key, subject_key in subject_map.items():
+                        if str(receipt.get(target_key) or "").strip() != str(verifier_subject.get(subject_key) or "").strip():
+                            blockers.append(f"{lane} proof_targets.receipt.{target_key} must match external_verifier.subject.{subject_key}: {raw}")
+
+    for key in (
+        "node_db_access_used",
+        "manual_checkpoint_or_data_copy_used",
+        "privileged_internal_api_used",
+    ):
+        if data.get(key) is not False:
+            blockers.append(f"{lane} {key} must be false: {raw}")
+
+    does_not_claim = data.get("does_not_claim")
+    if not isinstance(does_not_claim, list):
+        blockers.append(f"{lane} does_not_claim must be an array: {raw}")
+    else:
+        required_denials = {
+            "ready_for_live_candidate",
+            "mainnet-grade",
+            "full light client security",
+            "validator-set finality",
+            "multi-client consensus equivalence",
+            "production OC settlement",
+            "live runtime arbitrary state proof availability",
+        }
+        missing_denials = sorted(required_denials.difference(set(does_not_claim)))
+        if missing_denials:
+            blockers.append(
+                f"{lane} does_not_claim missing: "
+                + ",".join(missing_denials)
+                + f": {raw}"
+            )
+
+    residual_risk = data.get("residual_risk")
+    if not isinstance(residual_risk, list) or not residual_risk:
+        blockers.append(f"{lane} residual_risk must be a non-empty array: {raw}")
+    return blockers
+
+
 def validate_external_verifier_light_client_lite_pass_evidence(
     raw: str,
     evidence: pathlib.Path,
@@ -1096,6 +1378,12 @@ if lanes_tsv_arg:
                 )
                 if chain_proof_blockers:
                     raise SystemExit("; ".join(chain_proof_blockers))
+            if lane_id == "state_resource_receipt_proof_ready" and status == "pass":
+                state_receipt_blockers = validate_state_resource_receipt_proof_pass_evidence(
+                    evidence_path, evidence, manifest_path, sys.argv[1], data
+                )
+                if state_receipt_blockers:
+                    raise SystemExit("; ".join(state_receipt_blockers))
             if lane_id == "external_verifier_light_client_lite_ready" and status == "pass":
                 verifier_blockers = validate_external_verifier_light_client_lite_pass_evidence(
                     evidence_path, evidence, manifest_path, sys.argv[1], data

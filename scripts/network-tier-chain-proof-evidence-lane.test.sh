@@ -9,9 +9,14 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 valid_evidence="$TMPDIR/chain-proof-evidence-valid.json"
 valid_external_verifier_evidence="$TMPDIR/external-verifier-light-client-lite-valid.json"
+valid_state_receipt_evidence="$TMPDIR/state-resource-receipt-proof-valid.json"
+valid_state_receipt_absence_evidence="$TMPDIR/state-resource-receipt-proof-absence-valid.json"
 lanes="$TMPDIR/lanes.tsv"
+absence_lanes="$TMPDIR/lanes-state-receipt-absence.tsv"
 out_dir="$TMPDIR/readiness"
+absence_out_dir="$TMPDIR/readiness-state-receipt-absence"
 summary="$TMPDIR/summary.json"
+absence_summary="$TMPDIR/summary-state-receipt-absence.json"
 stderr="$TMPDIR/stderr.txt"
 
 cat >"$valid_evidence" <<'JSON'
@@ -76,6 +81,7 @@ JSON
 cat >"$lanes" <<EOF
 chain_proof_evidence_ready	blockchain_ops_engineer	pass	$valid_evidence	optional proof lane must not promote public_testnet readiness by itself
 external_verifier_light_client_lite_ready	blockchain_ops_engineer	pass	$valid_external_verifier_evidence	optional external verifier lane must not promote public_testnet readiness by itself
+state_resource_receipt_proof_ready	blockchain_ops_engineer	pass	$valid_state_receipt_evidence	optional state/resource/receipt proof lane must not promote public_testnet readiness by itself
 EOF
 
 cat >"$valid_external_verifier_evidence" <<'JSON'
@@ -153,24 +159,162 @@ cat >"$valid_external_verifier_evidence" <<'JSON'
 }
 JSON
 
+cat >"$valid_state_receipt_evidence" <<'JSON'
+{
+  "evidence_schema": "oasis7.state_resource_receipt_proof_evidence.v1",
+  "status": "pass",
+  "proof_contract": "WorldStateReceiptProofV1",
+  "claim_boundary": "state_resource_receipt_inclusion_evidence_only_not_full_light_client_or_mainnet_readiness",
+  "observed_at_unix_ms": 1772467200000,
+  "independent_process": true,
+  "implementation_ref": "crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs",
+  "command_ref": "cargo run -p oasis7_proto --bin oasis7_world_head_proof_verify -- --state-receipt-proof proof.json --proof-ref state-receipt-proof-ref-42 --expect-hash state-receipt-proof-hash-42 --json",
+  "network_tier": {
+    "tier": "public_testnet",
+    "status": "rehearsal",
+    "chain_id": "oasis7-public-testnet-example",
+    "network_id": "oasis7-public-testnet-example",
+    "world_id": "world-a"
+  },
+  "manifest_ref": "doc/testing/templates/network-tier-public-testnet.example.json",
+  "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
+  "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt",
+  "rpc_ref": "https://public-testnet.example.invalid/rpc",
+  "observed_head": {
+    "height": 42,
+    "hash": "block-hash-42",
+    "state_root": "state-root-42",
+    "receipts_root": "receipts-root-42"
+  },
+  "state_receipt_proof_ref": "state-receipt-proof-ref-42",
+  "state_receipt_proof_hash": "state-receipt-proof-hash-42",
+  "proof_targets": {
+    "state_or_query": {
+      "proof_kind": "resource_state",
+      "namespace": "inventory",
+      "resource_id": "agent-1/bag",
+      "query_id": "",
+      "root_hash": "state-root-42",
+      "leaf_hash": "leaf-hash-42",
+      "proof_status": "included"
+    },
+    "resource": {
+      "resource_manifest_ref": "resource-manifest-ref-42",
+      "resource_delta_ref": "resource-delta-ref-42",
+      "content_hash": "resource-content-hash-42",
+      "commit_height": 42,
+      "commit_hash": "block-hash-42"
+    }
+  },
+  "external_verifier": {
+    "schema_version": "oasis7.world_state_receipt_proof_verifier.v1",
+    "status": "pass",
+    "proof_contract": "WorldStateReceiptProofV1",
+    "hash_domain": "oasis7.world_state_receipt_proof.v1",
+    "claim_boundary": "state_resource_receipt_inclusion_evidence_only_not_full_light_client_or_mainnet_readiness",
+    "proof_ref": "state-receipt-proof-ref-42",
+    "proof_hash": "state-receipt-proof-hash-42",
+    "head_proof_hash": "head-proof-hash-42",
+    "world_id": "world-a",
+    "height": 42,
+    "proof_kind": "resource_state",
+    "proof_status": "included",
+    "subject": {
+      "subject_kind": "resource_state",
+      "namespace": "inventory",
+      "resource_id": "agent-1/bag",
+      "value_hash": "resource-value-hash-42",
+      "value_codec": "cbor"
+    },
+    "root_hash": "state-root-42",
+    "leaf_hash": "leaf-hash-42",
+    "proof_path_nodes": 2,
+    "head": {
+      "block_hash": "block-hash-42",
+      "state_root": "state-root-42",
+      "receipts_root": "receipts-root-42"
+    },
+    "does_not_claim": [
+      "mainnet-grade finality",
+      "full light client",
+      "validator-set finality",
+      "DA sampling",
+      "multi-client consensus equivalence",
+      "live runtime arbitrary state proof availability"
+    ]
+  },
+  "node_db_access_used": false,
+  "manual_checkpoint_or_data_copy_used": false,
+  "privileged_internal_api_used": false,
+  "does_not_claim": [
+    "ready_for_live_candidate",
+    "mainnet-grade",
+    "full light client security",
+    "validator-set finality",
+    "multi-client consensus equivalence",
+    "production OC settlement",
+    "live runtime arbitrary state proof availability"
+  ],
+  "residual_risk": [
+    "sampled state/resource/receipt proof evidence does not prove full light-client security"
+  ]
+}
+JSON
+
+python3 - "$valid_state_receipt_evidence" "$valid_state_receipt_absence_evidence" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+data["proof_targets"]["state_or_query"]["proof_status"] = "absent"
+data["proof_targets"]["state_or_query"]["resource_id"] = "agent-1/missing-slot"
+data["proof_targets"].pop("resource", None)
+data["external_verifier"]["proof_status"] = "absent"
+data["external_verifier"]["subject"] = {
+    "subject_kind": "resource_state",
+    "namespace": "inventory",
+    "resource_id": "agent-1/missing-slot",
+    "value_hash": "",
+    "value_codec": "",
+    "absence_marker_hash": "resource-absence-marker-42"
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(data, indent=2), encoding="utf-8")
+PY
+
 ./scripts/network-tier-public-testnet-readiness.sh \
   --manifest doc/testing/templates/network-tier-public-testnet.example.json \
   --lanes-tsv "$lanes" \
   --out-dir "$out_dir" >"$summary"
 
-python3 - "$summary" "$valid_evidence" <<'PY'
+cat >"$absence_lanes" <<EOF
+state_resource_receipt_proof_ready	blockchain_ops_engineer	pass	$valid_state_receipt_absence_evidence	optional absence proof lane must not require missing resource content
+EOF
+
+./scripts/network-tier-public-testnet-readiness.sh \
+  --manifest doc/testing/templates/network-tier-public-testnet.example.json \
+  --lanes-tsv "$absence_lanes" \
+  --out-dir "$absence_out_dir" >"$absence_summary"
+
+python3 - "$summary" "$absence_summary" "$valid_evidence" "$valid_state_receipt_absence_evidence" <<'PY'
 import json
 import pathlib
 import sys
 
 summary = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-evidence = str(pathlib.Path(sys.argv[2]).resolve())
+absence_summary = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+evidence = str(pathlib.Path(sys.argv[3]).resolve())
+absence_evidence = str(pathlib.Path(sys.argv[4]).resolve())
 ignored = summary.get("ignored_lanes", [])
 if summary.get("readiness_verdict") == "ready_for_live_candidate":
     raise SystemExit("optional chain proof lane must not promote readiness")
 if summary.get("live_candidate_allowed") is not False:
     raise SystemExit("optional chain proof lane must keep live_candidate_allowed=false")
-for optional_lane in ("chain_proof_evidence_ready", "external_verifier_light_client_lite_ready"):
+for optional_lane in (
+    "chain_proof_evidence_ready",
+    "external_verifier_light_client_lite_ready",
+    "state_resource_receipt_proof_ready",
+):
     if optional_lane in summary.get("required_lanes", []):
         raise SystemExit(f"{optional_lane} must not be required for public_testnet promotion")
 matches = [lane for lane in ignored if lane.get("lane_id") == "chain_proof_evidence_ready"]
@@ -183,7 +327,119 @@ external_matches = [
 ]
 if len(external_matches) != 1:
     raise SystemExit(f"expected one ignored external verifier lane, got {ignored}")
+state_receipt_matches = [
+    lane for lane in ignored if lane.get("lane_id") == "state_resource_receipt_proof_ready"
+]
+if len(state_receipt_matches) != 1:
+    raise SystemExit(f"expected one ignored state/resource/receipt proof lane, got {ignored}")
+absence_ignored = absence_summary.get("ignored_lanes", [])
+absence_matches = [
+    lane for lane in absence_ignored if lane.get("lane_id") == "state_resource_receipt_proof_ready"
+]
+if len(absence_matches) != 1:
+    raise SystemExit(f"expected one ignored absence state/resource proof lane, got {absence_ignored}")
+if absence_matches[0].get("resolved_evidence_path") != absence_evidence:
+    raise SystemExit(
+        f"expected resolved absence evidence path {absence_evidence}, got {absence_matches[0]}"
+    )
+if absence_summary.get("readiness_verdict") == "ready_for_live_candidate":
+    raise SystemExit("optional absence proof lane must not promote readiness")
 PY
+
+run_invalid_state_receipt_case() {
+  local case_name=$1
+  local expected_error=$2
+  local invalid_evidence="$TMPDIR/state-resource-receipt-proof-invalid-$case_name.json"
+  python3 - "$valid_state_receipt_evidence" "$invalid_evidence" "$case_name" <<'PY'
+import json
+import pathlib
+import sys
+
+data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+case_name = sys.argv[3]
+
+if case_name == "missing_proof_ref":
+    data["state_receipt_proof_ref"] = ""
+elif case_name == "verifier_hash_mismatch":
+    data["external_verifier"]["proof_hash"] = "wrong-proof-hash"
+elif case_name == "hash_domain_mismatch":
+    data["external_verifier"]["hash_domain"] = "wrong-domain"
+elif case_name == "state_root_mismatch":
+    data["external_verifier"]["root_hash"] = "wrong-state-root"
+elif case_name == "unsupported_proof_kind":
+    data["external_verifier"]["proof_kind"] = "bogus"
+elif case_name == "head_block_hash_mismatch":
+    data["external_verifier"]["head"]["block_hash"] = "wrong-block-hash"
+elif case_name == "empty_proof_targets":
+    data["proof_targets"]["state_or_query"] = {}
+    data["proof_targets"]["resource"] = {}
+elif case_name == "resource_commit_mismatch":
+    data["proof_targets"]["resource"]["commit_hash"] = "wrong-commit-hash"
+elif case_name == "state_target_subject_mismatch":
+    data["proof_targets"]["state_or_query"]["resource_id"] = "agent-2/bag"
+elif case_name == "state_target_status_mismatch":
+    data["external_verifier"]["proof_status"] = "absent"
+elif case_name == "receipt_action_mismatch":
+    data["external_verifier"]["proof_kind"] = "receipt"
+    data["external_verifier"]["root_hash"] = "receipts-root-42"
+    data["external_verifier"]["leaf_hash"] = "receipt-leaf-hash-42"
+    data["external_verifier"]["subject"] = {
+        "subject_kind": "receipt",
+        "action_id": "wrong-action-42",
+        "receipt_hash": "receipt-hash-42",
+        "status": "committed",
+        "result_hash": "receipt-result-hash-42"
+    }
+    data["proof_targets"] = {
+        "receipt": {
+            "action_id": "action-42",
+            "receipt_hash": "receipt-hash-42",
+            "execution_status": "committed",
+            "result_hash": "receipt-result-hash-42",
+            "root_hash": "receipts-root-42",
+            "leaf_hash": "receipt-leaf-hash-42"
+        }
+    }
+elif case_name == "db_access":
+    data["node_db_access_used"] = True
+elif case_name == "missing_denials":
+    data["does_not_claim"] = ["ready_for_live_candidate"]
+else:
+    raise SystemExit(f"unknown invalid state receipt case: {case_name}")
+
+pathlib.Path(sys.argv[2]).write_text(json.dumps(data, indent=2), encoding="utf-8")
+PY
+  local invalid_lanes="$TMPDIR/lanes-state-receipt-invalid-$case_name.tsv"
+  cat >"$invalid_lanes" <<EOF
+state_resource_receipt_proof_ready	blockchain_ops_engineer	pass	$invalid_evidence	invalid state/resource/receipt proof lane must fail closed
+EOF
+  if ./scripts/network-tier-public-testnet-readiness.sh \
+    --manifest doc/testing/templates/network-tier-public-testnet.example.json \
+    --lanes-tsv "$invalid_lanes" \
+    --out-dir "$TMPDIR/readiness-invalid-state-receipt-$case_name" >"$TMPDIR/invalid-state-receipt-$case_name.json" 2>"$stderr"; then
+    echo "expected invalid state/resource/receipt proof case to fail: $case_name" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected_error" "$stderr"; then
+    echo "expected error '$expected_error' for state/resource/receipt case '$case_name'" >&2
+    cat "$stderr" >&2
+    exit 1
+  fi
+}
+
+run_invalid_state_receipt_case "missing_proof_ref" "state_resource_receipt_proof_ready state_receipt_proof_ref missing"
+run_invalid_state_receipt_case "verifier_hash_mismatch" "state_resource_receipt_proof_ready external_verifier.proof_hash must match evidence state_receipt_proof_hash"
+run_invalid_state_receipt_case "hash_domain_mismatch" "state_resource_receipt_proof_ready external_verifier.hash_domain mismatch"
+run_invalid_state_receipt_case "state_root_mismatch" "state_resource_receipt_proof_ready external_verifier.root_hash must match observed_head.state_root"
+run_invalid_state_receipt_case "unsupported_proof_kind" "state_resource_receipt_proof_ready external_verifier.proof_kind unsupported"
+run_invalid_state_receipt_case "head_block_hash_mismatch" "state_resource_receipt_proof_ready external_verifier.head.block_hash must match observed_head.hash"
+run_invalid_state_receipt_case "empty_proof_targets" "state_resource_receipt_proof_ready proof_targets.state_or_query.proof_kind missing"
+run_invalid_state_receipt_case "resource_commit_mismatch" "state_resource_receipt_proof_ready proof_targets.resource.commit_hash must match observed_head.hash"
+run_invalid_state_receipt_case "state_target_subject_mismatch" "state_resource_receipt_proof_ready proof_targets.state_or_query.resource_id must match external_verifier.subject.resource_id"
+run_invalid_state_receipt_case "state_target_status_mismatch" "state_resource_receipt_proof_ready proof_targets.state_or_query.proof_status must match external_verifier.proof_status"
+run_invalid_state_receipt_case "receipt_action_mismatch" "state_resource_receipt_proof_ready proof_targets.receipt.action_id must match external_verifier.subject.action_id"
+run_invalid_state_receipt_case "db_access" "state_resource_receipt_proof_ready node_db_access_used must be false"
+run_invalid_state_receipt_case "missing_denials" "state_resource_receipt_proof_ready does_not_claim missing"
 
 run_invalid_case() {
   local case_name=$1
