@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 #[path = "service_letai.rs"]
 mod service_letai;
@@ -12,8 +13,10 @@ use super::model::{
     BridgeHealthResponse, BridgeLedgerEntry, BridgeLedgerState, BridgeReconcileResponse,
     CreateDepositRouteRequest, CreateDepositRouteResponse, DepositRoute, DepositRouteStatus,
     LetaiProjectBinding, OperatorReviewRequest, OperatorReviewResponse,
+    ReconcileObservabilityState,
 };
 use super::store::{BridgeStateStore, StoreMutateError};
+use tracing::{info, warn};
 
 const ROUTE_TYPE_OPERATOR_ASSIGNED_ACCOUNT: &str = "operator_assigned_account";
 
@@ -44,6 +47,7 @@ pub(super) struct BridgeServiceConfig {
 pub(super) struct BridgeService {
     store: Arc<BridgeStateStore>,
     config: BridgeServiceConfig,
+    reconcile_observability: Arc<Mutex<Option<ReconcileObservabilityState>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,7 +109,11 @@ impl BridgeServiceError {
 
 impl BridgeService {
     pub(super) fn new(store: Arc<BridgeStateStore>, config: BridgeServiceConfig) -> Self {
-        Self { store, config }
+        Self {
+            store,
+            config,
+            reconcile_observability: Arc::new(Mutex::new(None)),
+        }
     }
 
     pub(super) fn health(&self, now_unix_ms: i64) -> BridgeHealthResponse {
@@ -126,6 +134,7 @@ impl BridgeService {
             ok: true,
             service: "oasis7_newapi_bridge_service".to_string(),
             observed_at_unix_ms: now_unix_ms,
+            last_reconcile: self.last_reconcile_observability(),
             binding_count: snapshot.bindings.len(),
             active_binding_count,
             project_binding_count: snapshot.project_bindings.len(),
@@ -351,6 +360,53 @@ impl BridgeService {
         &self,
         now_unix_ms: i64,
     ) -> Result<BridgeReconcileResponse, BridgeServiceError> {
+        let started = Instant::now();
+        self.record_reconcile_started(now_unix_ms);
+        let result = self.reconcile_once_inner(now_unix_ms);
+        let duration_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+        let finished_at_unix_ms = now_unix_ms.saturating_add(duration_ms as i64);
+        match &result {
+            Ok(response) => {
+                self.record_reconcile_finished(now_unix_ms, finished_at_unix_ms, duration_ms, None);
+                info!(
+                    started_at_unix_ms = now_unix_ms,
+                    finished_at_unix_ms,
+                    duration_ms,
+                    latest_committed_height = response.latest_committed_height,
+                    scanned_route_count = response.scanned_route_count,
+                    observed_new_deposit_count = response.observed_new_deposit_count,
+                    updated_deposit_count = response.updated_deposit_count,
+                    reconciled_credit_count = response.reconciled_credit_count,
+                    manual_review_count = response.manual_review_count,
+                    failed_credit_count = response.failed_credit_count,
+                    "newapi bridge reconcile completed"
+                );
+            }
+            Err(err) => {
+                self.record_reconcile_finished(
+                    now_unix_ms,
+                    finished_at_unix_ms,
+                    duration_ms,
+                    Some(err),
+                );
+                warn!(
+                    started_at_unix_ms = now_unix_ms,
+                    finished_at_unix_ms,
+                    duration_ms,
+                    status_code = err.status_code,
+                    error_code = err.code,
+                    error_message = %err.message,
+                    "newapi bridge reconcile failed"
+                );
+            }
+        }
+        result
+    }
+
+    fn reconcile_once_inner(
+        &self,
+        now_unix_ms: i64,
+    ) -> Result<BridgeReconcileResponse, BridgeServiceError> {
         self.store
             .mutate(|state| {
                 expire_routes(state.routes.as_mut_slice(), now_unix_ms);
@@ -414,6 +470,42 @@ impl BridgeService {
                 .filter(|entry| entry.state == BridgeLedgerState::Failed)
                 .count(),
         })
+    }
+
+    fn last_reconcile_observability(&self) -> Option<ReconcileObservabilityState> {
+        self.reconcile_observability
+            .lock()
+            .ok()
+            .and_then(|state| state.clone())
+    }
+
+    fn record_reconcile_started(&self, started_at_unix_ms: i64) {
+        if let Ok(mut state) = self.reconcile_observability.lock() {
+            let mut next = ReconcileObservabilityState::empty();
+            next.started_at_unix_ms = Some(started_at_unix_ms);
+            *state = Some(next);
+        }
+    }
+
+    fn record_reconcile_finished(
+        &self,
+        started_at_unix_ms: i64,
+        finished_at_unix_ms: i64,
+        duration_ms: u64,
+        error: Option<&BridgeServiceError>,
+    ) {
+        if let Ok(mut state) = self.reconcile_observability.lock() {
+            let mut next = ReconcileObservabilityState::empty();
+            next.started_at_unix_ms = Some(started_at_unix_ms);
+            next.finished_at_unix_ms = Some(finished_at_unix_ms);
+            next.duration_ms = Some(duration_ms);
+            next.ok = Some(error.is_none());
+            if let Some(error) = error {
+                next.error_code = Some(error.code.to_string());
+                next.error_message = Some(redacted_reconcile_error_summary(error.code));
+            }
+            *state = Some(next);
+        }
     }
 
     pub(super) fn apply_operator_review(
@@ -849,6 +941,10 @@ fn normalize_optional(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn redacted_reconcile_error_summary(error_code: &str) -> String {
+    format!("reconcile failed with error code {error_code}")
 }
 
 fn expire_routes(routes: &mut [DepositRoute], now_unix_ms: i64) {

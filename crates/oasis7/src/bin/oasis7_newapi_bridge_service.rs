@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use oasis7::observability::{emit_stderr_or_event, init_tracing, resolve_trace_session_id};
 use serde::Serialize;
@@ -84,6 +84,21 @@ impl Default for CliOptions {
 struct EncodedResponse {
     status_code: u16,
     body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HttpAccessMetadata {
+    method: String,
+    path: String,
+    status_code: u16,
+    elapsed_ms: Option<u64>,
+    error_code: Option<String>,
+}
+
+#[derive(Debug)]
+struct ObservedResponse {
+    response: EncodedResponse,
+    access: HttpAccessMetadata,
 }
 
 fn main() {
@@ -355,6 +370,7 @@ fn print_help() {
 }
 
 fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(), String> {
+    let started = Instant::now();
     let request = match read_http_request(&mut stream) {
         Ok(request) => request,
         Err(err) => {
@@ -362,6 +378,13 @@ fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(
                 400,
                 &json!({"ok": false, "error": {"code": "bad_request", "message": err}}),
             )?;
+            emit_http_access_event(HttpAccessMetadata {
+                method: "unknown".to_string(),
+                path: "<malformed_request>".to_string(),
+                status_code: response.status_code,
+                elapsed_ms: Some(elapsed_ms(started)),
+                error_code: Some("bad_request".to_string()),
+            });
             return write_http_response(
                 &mut stream,
                 response.status_code,
@@ -371,7 +394,10 @@ fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(
             );
         }
     };
-    let response = dispatch_request(service, request)?;
+    let mut observed = dispatch_request_observed(service, request)?;
+    observed.access.elapsed_ms = Some(elapsed_ms(started));
+    emit_http_access_event(observed.access.clone());
+    let response = observed.response;
     write_http_response(
         &mut stream,
         response.status_code,
@@ -382,6 +408,34 @@ fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(
 }
 
 fn dispatch_request(
+    service: &BridgeService,
+    request: HttpRequest,
+) -> Result<EncodedResponse, String> {
+    Ok(dispatch_request_observed(service, request)?.response)
+}
+
+fn dispatch_request_observed(
+    service: &BridgeService,
+    request: HttpRequest,
+) -> Result<ObservedResponse, String> {
+    let started = Instant::now();
+    let method = request.method.clone();
+    let path = safe_access_path(request.path.as_str());
+    let response = dispatch_request_inner(service, request)?;
+    let error_code = response_error_code(response.body.as_slice());
+    Ok(ObservedResponse {
+        access: HttpAccessMetadata {
+            method,
+            path,
+            status_code: response.status_code,
+            elapsed_ms: Some(elapsed_ms(started)),
+            error_code,
+        },
+        response,
+    })
+}
+
+fn dispatch_request_inner(
     service: &BridgeService,
     request: HttpRequest,
 ) -> Result<EncodedResponse, String> {
@@ -493,6 +547,58 @@ fn dispatch_request(
                 }
             }),
         ),
+    }
+}
+
+fn safe_access_path(raw_path: &str) -> String {
+    let path = raw_path.split('?').next().unwrap_or(raw_path).trim();
+    if path.starts_with("/v1/bridge/operator/review/") {
+        return "/v1/bridge/operator/review/:bridge_deposit_id".to_string();
+    }
+    match path {
+        "/health"
+        | "/v1/bridge/health"
+        | "/v1/bridge/bind"
+        | "/v1/bridge/deposit-route"
+        | "/v1/bridge/reconcile"
+        | "/v1/bridge/operator/review" => path.to_string(),
+        "" => "/".to_string(),
+        _ => "/<unknown>".to_string(),
+    }
+}
+
+fn response_error_code(body: &[u8]) -> Option<String> {
+    let payload = serde_json::from_slice::<serde_json::Value>(body).ok()?;
+    payload
+        .get("error")
+        .and_then(|error| error.get("code"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+fn elapsed_ms(started: Instant) -> u64 {
+    started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64
+}
+
+fn emit_http_access_event(access: HttpAccessMetadata) {
+    if access.status_code >= 400 {
+        tracing::warn!(
+            method = %access.method,
+            path = %access.path,
+            status_code = access.status_code,
+            elapsed_ms = access.elapsed_ms,
+            error_code = access.error_code.as_deref().unwrap_or(""),
+            "newapi bridge http request completed"
+        );
+    } else {
+        tracing::info!(
+            method = %access.method,
+            path = %access.path,
+            status_code = access.status_code,
+            elapsed_ms = access.elapsed_ms,
+            error_code = access.error_code.as_deref().unwrap_or(""),
+            "newapi bridge http request completed"
+        );
     }
 }
 

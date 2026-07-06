@@ -262,10 +262,35 @@ pub(super) struct OperatorReviewResponse {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(super) struct ReconcileObservabilityState {
+    pub(super) started_at_unix_ms: Option<i64>,
+    pub(super) finished_at_unix_ms: Option<i64>,
+    pub(super) duration_ms: Option<u64>,
+    pub(super) ok: Option<bool>,
+    pub(super) error_code: Option<String>,
+    pub(super) error_message: Option<String>,
+}
+
+impl ReconcileObservabilityState {
+    pub(super) fn empty() -> Self {
+        Self {
+            started_at_unix_ms: None,
+            finished_at_unix_ms: None,
+            duration_ms: None,
+            ok: None,
+            error_code: None,
+            error_message: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub(super) struct BridgeHealthResponse {
     pub(super) ok: bool,
     pub(super) service: String,
     pub(super) observed_at_unix_ms: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) last_reconcile: Option<ReconcileObservabilityState>,
     pub(super) binding_count: usize,
     pub(super) active_binding_count: usize,
     pub(super) project_binding_count: usize,
