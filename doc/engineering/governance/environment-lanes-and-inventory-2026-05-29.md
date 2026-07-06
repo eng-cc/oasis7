@@ -9,11 +9,12 @@
   - `runtime_engineer`
   - `liveops_community`
 - Scope: 项目级 `test/prod` 环境分层、hosted-login 云上清单、testnet/mainnet 口径边界、上线与回归流程的双环境要求
-- Last Verified: 2026-05-29 Asia/Shanghai
+- Last Verified: 2026-07-06 Asia/Shanghai
 - Related Runtime Evidence:
-  - `.pm/tasks/task_a0282b0e2c51476590c5de733f0d45ef.execution.md`
   - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
+  - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
+  - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`
 
 ## 1. 适用范围
 这份文档是项目级环境真值入口，用于回答三类问题：
@@ -30,7 +31,7 @@
 | 项目环境 | 标准名 | 自动归入的别名 / 子系统术语 | 用途 | 当前可声明状态 | 禁止口径 |
 | --- | --- | --- | --- | --- | --- |
 | 本地环境 | `local` | `dev`, `local_dev`, `local_devnet`, `file backend`, `localhost`, `trusted_local_only` local-only playtest, launcher provider `local` / `local-mock` | 开发反馈、单机 smoke、本地 playtest、结构验证 | 可用于本地开发和 CI/PR 前验证；可随时重置 | 不得说成外部测试环境、线上服务、正式数据或公开网络 |
-| 测试环境 | `test` | `test`, `staging`, `public_testnet`, `testnet`, hosted-login test, launcher provider `test`, Testnet Packages | 上线前验证、受控测试用户、operator 演练、可重置 public testnet rehearsal | hosted-login test 已有独立部署；`public_testnet` 已有 rehearsal / governed-bootstrap 证据，但仍不是 `ready_for_live_candidate`；`shared_devnet` 不再作为目标 test 子环境 | 不得把 legacy `shared_devnet` 叫成 `public_testnet`；不得把 `public_testnet` 叫成 `mainnet`；不得把 skeleton / rehearsal / partial 说成 live |
+| 测试环境 | `test` | `test`, `staging`, `public_testnet`, `testnet`, hosted-login test, launcher provider `test`, Testnet Packages | 上线前验证、受控测试用户、operator 演练、可重置 public testnet rehearsal | hosted-login test 已有独立部署；`public_testnet` 当前 11 条 formal required lanes 全 pass，可声明 controlled / resettable / non-mainnet `ready_for_live_candidate`；`shared_devnet` 不再作为目标 test 子环境 | 不得把 legacy `shared_devnet` 叫成 `public_testnet`；不得把 `public_testnet` 叫成 `mainnet`、public launch、no-reset release 或 production OC settlement；不得把 skeleton / rehearsal / partial 说成 live candidate |
 | 正式环境 | `production` | `prod`, `production`, `mainnet`, hosted-login prod, launcher provider `prod`, production release | 正式服务的内部运维边界；未来才承接真实玩家或正式网络入口 | 暂时还没有面向用户的正式环境；hosted-login prod 只是账号服务 production lane；`mainnet` 目前仍是 skeleton / readiness 目标，不是 live mainnet | 不得对普通用户宣称 production 环境已开放；不得使用 faucet / resettable / placeholder endpoint / local file backend；不得宣称 `mainnet_live` 或 `production_oc_settlement` |
 
 强制解释：
@@ -48,7 +49,7 @@
 | `dev/local`、`local_devnet`、`local` 混用 | 全部归入项目 `local` 环境；只用于开发反馈、本地 smoke、本地 playtest | `testing-manual.md` 本地开发态约定；本文件三套环境总览 |
 | `test`、`staging`、`testnet` 混用 | 统一归入项目 `test` 环境；具体子系统必须再说明是 hosted-login test、public_testnet 还是 provider test lane | 本文件 Hosted Login 环境矩阵与 Network Tier 矩阵 |
 | `shared_devnet` 被误读成目标测试环境 | `shared_devnet` 不再作为目标 test 子环境；历史 references 只按 legacy/rehearsal 资产处理，不替代 `public_testnet` | 用户决策 2026-06-14；P2P formal network tier docs |
-| `public_testnet` 被误读成正式网或 live candidate | `public_testnet` 是 test 环境下的可重置、有 guard 测试网络术语；当前标准口径为 `test environment / public_testnet rehearsal / not ready_for_live_candidate` | `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` |
+| `public_testnet` 被误读成正式网或 public launch | `public_testnet` 是 test 环境下的可重置、有 guard 测试网络术语；当前标准口径为 controlled / resettable / non-mainnet `ready_for_live_candidate`，不等于 public launch、mainnet、production OC settlement、public validator admission 或 no-reset release | `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`; `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md` |
 | hosted-login prod 被误读成面向用户的正式环境 | hosted-login prod 只表示账号/登录服务 production lane 已部署；当前暂时还没有面向用户的正式环境，也不代表 mainnet、生产 signer/custody 或 production OC settlement 已完成 | 用户决策 2026-06-14；本文件 Hosted Login 环境矩阵；P2P mainnet readiness docs |
 | launcher provider `prod` 被误读成整项目 production ready | provider `prod` 只是 LLM/provider remote lane；当前不能据此宣称面向用户的正式环境已开放 | `scripts/run-launcher-stack.sh --agent-provider-lane` |
 | `hosted_public_join` 被误读成环境名 | 它是接入模式，不是环境；在 local/test/production 中都必须显式说明所在环境和数据/secret lane | hosted-public-join managed identity docs |
@@ -60,7 +61,7 @@
 | 子系统 / 维度 | local | test | production |
 | --- | --- | --- | --- |
 | Hosted Login / Account | local file backend、本地 SMTP/OTP smoke、local hosted account smoke | `oasis7-hosted-login-test.service`、`/etc/oasis7/hosted-login-test.env`、测试 Tablestore 表 | `oasis7-hosted-login-prod.service`、`/etc/oasis7/hosted-login-prod.env`、正式 Tablestore 表 |
-| Network tier | `local_devnet` / local observer / local-only node | `public_testnet` rehearsal / governed-bootstrap evidence；`public_testnet` 当前不是 `ready_for_live_candidate`；`shared_devnet` 为 legacy/rehearsal 资产 | `mainnet` skeleton / readiness target；未过 gate 前不是 live |
+| Network tier | `local_devnet` / local observer / local-only node | `public_testnet` governed-bootstrap evidence + 当前 11-lane all-pass controlled `ready_for_live_candidate`；`shared_devnet` 为 legacy/rehearsal 资产 | `mainnet` skeleton / readiness target；未过 gate 前不是 live |
 | Launcher provider lane | `local`, `local-mock` | `test` with explicit remote URL / test provider secret | `prod` with production provider URL/secret |
 | Deployment mode | `trusted_local_only` only with explicit local playtest allow; `hosted_public_join` local smoke is allowed | `hosted_public_join` with test account store, SMTP, strong-auth/custody secrets; 若用于 testnet 大世界测试，必须证明接入面指向健康 synced `public_testnet` 节点 world state | no user-facing production mode yet; production deployment mode remains future-gated |
 | Data / state | temporary local files, reset anytime | resettable test tables/buckets/worlds, no prod secret reuse | non-reset production tables/buckets/worlds, audited migration/backup/rollback |
@@ -104,8 +105,8 @@
 | `39.104.204.172` | 邮箱登录正式环境；同时承载若干测试网络节点服务 | `oasis7-hosted-login-prod.service`，enabled + active | 同机还有 testnet sequencer / triad sequencer / faucet 类服务；这些不等于 mainnet | `http://39.104.204.172:4373/` 返回 `200` |
 
 说明：
-1. 主机上存在 testnet/triad 服务，不自动意味着 `public_testnet` 已达到 live candidate，也不意味着 mainnet 已上线。
-2. `public_testnet` readiness 仍以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 的 six-lane checklist 为准。
+1. 主机上存在 testnet/triad 服务，不自动意味着 `public_testnet` 当前 11-lane packet 仍然新鲜，也不意味着 mainnet 已上线。
+2. `public_testnet` readiness 以 `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` 的 11 条 required lanes 与 `scripts/network-tier-public-testnet-readiness.sh` 输出为准。
 3. hosted-login 的 test/prod 两套已经分开部署，但仍建议补完整 `login/complete` 自动 smoke，以便把 OTP 收件箱验证也纳入日常 gate。
 
 ### 7.1 当前 public_testnet operator 节点清单
@@ -173,7 +174,7 @@ Hosted-login 形态接入 testnet 大世界的追加验证：
 | --- | --- | --- | --- |
 | `local_dev` | 本地或单机开发验证 | 可用于开发反馈，不可对外声明 | `testing-manual.md` |
 | `shared_devnet` | legacy 共享开发网络 / release train 前置环境 | 不再作为目标环境；历史证据只可作为 legacy rehearsal evidence | `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md` |
-| `public_testnet` | 面向外部测试者、可重置、有 faucet guard 的测试网络 | 已有 rehearsal / governed-bootstrap 证据；只有 six-lane 全 pass 后才可声明 `ready_for_live_candidate` | `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` |
+| `public_testnet` | 面向外部测试者、可重置、有 faucet guard 的测试网络 | 当前 11 条 formal required lanes 全 pass，可声明 controlled / resettable / non-mainnet `ready_for_live_candidate`；不得扩写为 public launch、mainnet、production OC settlement、public validator admission 或 no-reset release | `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md` |
 | `mainnet` | 正式网络，非可随意重置的生产语义 | 未有 mainnet gate 前不得声明 | `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md` |
 
 `testnet -> mainnet` promotion 必须至少证明：
