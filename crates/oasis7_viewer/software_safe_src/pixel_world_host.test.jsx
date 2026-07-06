@@ -440,6 +440,9 @@ describe("pixel world host", () => {
     expect(html).not.toContain(".panel--stage .panel__body {");
     expect(html).toMatch(/\.pixel-world-focus-hud__cell--tick\s*\{[^}]*grid-column:\s*3;/s);
     expect(html).toMatch(/\.pixel-world-focus-hud__cell--tick strong,[\s\S]*?\.pixel-world-focus-hud__cell--tick em\s*\{[^}]*white-space:\s*nowrap;/s);
+    expect(html).toMatch(/\.pixel-world-focus-hud__cell--blocker::after,[\s\S]*?\.pixel-world-focus-hud__cell--receipt::after\s*\{[^}]*width:\s*3px;/s);
+    expect(html).toMatch(/\.pixel-world-focus-hud__cell--blocker\[data-blocker-present="true"\]::after\s*\{[^}]*background:\s*var\(--bad\);/s);
+    expect(html).toMatch(/\.pixel-world-focus-hud__cell--receipt\[data-hud-priority="receipt"\]::after\s*\{[^}]*background:\s*var\(--good\);/s);
     expect(html).toMatch(/\.pixel-world-focus-rail\s*\{[^}]*top:\s*112px;/s);
     expect(html).toContain("max-height: min(42vh, 340px);");
     expect(html).toContain(".pixel-world-focus-command-tray");

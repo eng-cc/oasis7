@@ -1193,6 +1193,8 @@
       }
       .pixel-world-focus-hud__identity,
       .pixel-world-focus-hud__cell {
+        position: relative;
+        overflow: hidden;
         min-height: 46px;
         padding: 8px 10px;
         display: flex;
@@ -1219,6 +1221,16 @@
       .pixel-world-focus-hud__cell--blocker,
       .pixel-world-focus-hud__cell--receipt {
         min-height: 52px;
+        padding-left: 16px;
+      }
+      .pixel-world-focus-hud__cell--blocker::after,
+      .pixel-world-focus-hud__cell--receipt::after {
+        content: "";
+        position: absolute;
+        inset: 8px auto 8px 7px;
+        width: 3px;
+        border-radius: 999px;
+        opacity: 0.92;
       }
       .pixel-world-focus-hud__cell--blocker { grid-column: 4; grid-row: 1; }
       .pixel-world-focus-hud__cell--receipt { grid-column: 5; grid-row: 1; }
@@ -1254,17 +1266,35 @@
       .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"] {
         border-color: rgba(248, 113, 113, 0.38);
         background:
+          linear-gradient(90deg, rgba(248, 113, 113, 0.16), transparent 42%),
           linear-gradient(180deg, rgba(248, 113, 113, 0.12), transparent 72%),
           rgba(18, 8, 7, 0.72);
+        box-shadow:
+          inset 0 0 0 1px rgba(248, 113, 113, 0.08),
+          var(--shadow-inset-stage),
+          0 16px 38px rgba(0, 0, 0, 0.22);
       }
       .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"] strong {
         color: var(--bad);
       }
+      .pixel-world-focus-hud__cell--blocker[data-blocker-present="true"]::after {
+        background: var(--bad);
+        box-shadow: 0 0 18px rgba(248, 113, 113, 0.5);
+      }
       .pixel-world-focus-hud__cell--receipt[data-hud-priority="receipt"] {
         border-color: rgba(126, 211, 166, 0.32);
         background:
+          linear-gradient(90deg, rgba(126, 211, 166, 0.14), transparent 42%),
           linear-gradient(180deg, rgba(126, 211, 166, 0.1), transparent 70%),
           rgba(7, 14, 11, 0.72);
+        box-shadow:
+          inset 0 0 0 1px rgba(126, 211, 166, 0.08),
+          var(--shadow-inset-stage),
+          0 16px 38px rgba(0, 0, 0, 0.22);
+      }
+      .pixel-world-focus-hud__cell--receipt[data-hud-priority="receipt"]::after {
+        background: var(--good);
+        box-shadow: 0 0 18px rgba(126, 211, 166, 0.42);
       }
       .pixel-world-focus-hud__cell--receipt[data-receipt-confidence="world_delta"] strong,
       .pixel-world-focus-hud__cell--receipt[data-receipt-confidence="accepted_intent"] strong {
@@ -2486,7 +2516,7 @@
           justify-content: flex-start;
           align-items: center;
           gap: 8px;
-          padding: 5px 8px;
+          padding: 5px 8px 5px 16px;
         }
         .pixel-world-focus-hud__cell--receipt {
           grid-column: 1 / -1;
@@ -2496,7 +2526,7 @@
           justify-content: flex-start;
           align-items: center;
           gap: 8px;
-          padding: 5px 8px;
+          padding: 5px 8px 5px 16px;
         }
         .pixel-world-focus-hud__cell--blocker strong,
         .pixel-world-focus-hud__cell--receipt strong,
