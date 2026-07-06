@@ -391,6 +391,7 @@ fn handle_chain_status_connection(
                 snapshot_metrics(&reward_runtime_metrics),
                 storage_metrics::snapshot_storage_metrics(&storage_metrics),
                 build_chain_wasm_status(),
+                None,
                 build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
                 transactions,
                 replication_debug_status,

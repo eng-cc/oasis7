@@ -730,6 +730,9 @@ def aggregate_node_payload_distribution(nodes):
 
 def aggregate_node_network_distribution(nodes):
     rows = []
+    expected_nodes = list(nodes.keys())
+    successful_nodes = []
+    missing_nodes = []
     total_network_bytes = 0
     total_payload_bytes = 0
     combined_rx_bps = 0.0
@@ -737,9 +740,12 @@ def aggregate_node_network_distribution(nodes):
     combined_total_bps = 0.0
     for label, node in nodes.items():
         if node.get("available") is not True:
+            missing_nodes.append(label)
             continue
+        successful_nodes.append(label)
         network = node.get("network_interface") or {}
         if network.get("available") is not True:
+            missing_nodes.append(label)
             continue
         latest = node.get("latest") or {}
         total_network_bytes += int(network.get("total_bytes", 0))
@@ -770,6 +776,11 @@ def aggregate_node_network_distribution(nodes):
     for row in rows:
         row["share_percent"] = share_percent(row["network_total_bytes"], total_network_bytes)
     return {
+        "expected_node_count": len(expected_nodes),
+        "successful_node_count": len(successful_nodes),
+        "network_interface_available_node_count": len(rows),
+        "missing_network_interface_nodes": sorted(missing_nodes),
+        "partial_coverage": len(missing_nodes) > 0,
         "node_count": len(rows),
         "total_bytes": total_network_bytes,
         "payload_total_bytes": total_payload_bytes,
@@ -1065,9 +1076,19 @@ def render_triad_markdown(summary, history_path, generated_at, labels):
             ]
         )
         if aggregate_network.get("node_count", 0) > 0:
-            lines.append(
-                f"- Total network interface bytes across all nodes: `{fmt_bytes(aggregate_network['total_bytes'])}`, payload share `{aggregate_network['payload_share_percent']:.2f}%`, combined rx `{fmt_bps(aggregate_network['combined_rx_bps'])}`, combined tx `{fmt_bps(aggregate_network['combined_tx_bps'])}`"
+            total_scope = (
+                "nodes with network interface data"
+                if aggregate_network.get("partial_coverage")
+                else "all nodes"
             )
+            lines.append(
+                f"- Total network interface bytes across {total_scope}: `{fmt_bytes(aggregate_network['total_bytes'])}`, payload share `{aggregate_network['payload_share_percent']:.2f}%`, combined rx `{fmt_bps(aggregate_network['combined_rx_bps'])}`, combined tx `{fmt_bps(aggregate_network['combined_tx_bps'])}`"
+            )
+        coverage_label = "partial" if aggregate_network.get("partial_coverage") else "complete"
+        missing_nodes = ", ".join(aggregate_network.get("missing_network_interface_nodes") or [])
+        lines.append(
+            f"- Network interface coverage: {coverage_label}; expected=`{aggregate_network.get('expected_node_count', 0)}` successful=`{aggregate_network.get('successful_node_count', 0)}` interface_available=`{aggregate_network.get('network_interface_available_node_count', 0)}` missing=`{missing_nodes or 'none'}`"
+        )
         lines.extend(
             render_payload_distribution_block(
                 "Node payload distribution", aggregate.get("node_payload_distribution")
@@ -1242,7 +1263,7 @@ def main():
         labels = args.label or ["local_node", "sequencer_ecs", "storage_ecs"]
         records_by_label = {label: [] for label in labels}
         for record in records:
-            label = record.get("label")
+            label = record.get("label") or record.get("node_label")
             if label in records_by_label:
                 records_by_label[label].append(record)
 

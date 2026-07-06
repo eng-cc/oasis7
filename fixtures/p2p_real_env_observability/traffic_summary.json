@@ -11,6 +11,17 @@
         "payload_bytes": 769446,
         "share_percent": 98.57
       }
+    },
+    "network_interface": {
+      "expected_node_count": 3,
+      "successful_node_count": 2,
+      "network_interface_available_node_count": 1,
+      "missing_network_interface_nodes": [
+        "local_node",
+        "storage_ecs"
+      ],
+      "partial_coverage": true,
+      "node_count": 1
     }
   },
   "nodes": {

@@ -2,6 +2,7 @@ use std::path::Path;
 
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
+use oasis7::simulator::RuntimePerfSnapshot;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, NodeNetworkPolicy, NodeReachabilityAutoDetection, NodeSnapshot,
     NodeUserModeRecommendation,
@@ -126,6 +127,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) reward_runtime: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     pub(super) storage: storage_metrics::StorageMetricsSnapshot,
     pub(super) wasm: ChainWasmStatus,
+    pub(super) runtime_perf: Option<RuntimePerfSnapshot>,
     pub(super) traffic: ChainTrafficStatus,
     pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     pub(super) replication: super::ChainReplicationDebugStatus,
@@ -915,6 +917,7 @@ pub(super) fn build_chain_status_payload(
     reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
     storage_metrics: storage_metrics::StorageMetricsSnapshot,
     wasm: ChainWasmStatus,
+    runtime_perf: Option<RuntimePerfSnapshot>,
     traffic: ChainTrafficStatus,
     transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     replication: super::ChainReplicationDebugStatus,
@@ -1185,6 +1188,7 @@ pub(super) fn build_chain_status_payload(
         reward_runtime: reward_runtime_metrics,
         storage: storage_metrics,
         wasm,
+        runtime_perf,
         traffic,
         transactions,
         replication,
