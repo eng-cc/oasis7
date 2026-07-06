@@ -251,6 +251,7 @@ max_lag_p95=""
 max_distfs_failure_ratio=""
 prewarm=1
 dry_run=0
+self_test_field_extraction=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -424,6 +425,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       dry_run=1
+      shift
+      ;;
+    --self-test-field-extraction)
+      self_test_field_extraction=1
       shift
       ;;
     -h|--help)
@@ -1406,6 +1411,80 @@ append_topology_timeline_sample() {
     ] | @csv' >> "$timeline_csv"
 }
 
+extract_status_poll_fields() {
+  local status_json=$1
+  local status_fd
+  exec {status_fd}< <(
+    jq -j '[
+      .observed_at_unix_ms // 0,
+      .consensus.epoch // 0,
+      .consensus.committed_height // 0,
+      .consensus.network_committed_height // 0,
+      .running // false,
+      .consensus.known_peer_heads // 0,
+      .consensus.last_block_hash // "",
+      .consensus.last_execution_height // 0,
+      .consensus.last_execution_block_hash // "",
+      .consensus.last_execution_state_root // "",
+      .last_error // "",
+      .reward_runtime.metrics_available // false,
+      .reward_runtime.last_error // "",
+      .reward_runtime.distfs_total_checks // 0,
+      .reward_runtime.distfs_failed_checks // 0,
+      .reward_runtime.settlement_apply_attempts_total // 0,
+      .reward_runtime.settlement_apply_failures_total // 0,
+      .reward_runtime.cumulative_minted_record_count // 0,
+      .reward_runtime.invariant_ok // true
+    ][] | tostring, "\u0000"' <<< "$status_json"
+  )
+  IFS= read -r -d '' observed_at_unix_ms <&"$status_fd"
+  IFS= read -r -d '' epoch_index <&"$status_fd"
+  IFS= read -r -d '' committed_height <&"$status_fd"
+  IFS= read -r -d '' network_committed_height <&"$status_fd"
+  IFS= read -r -d '' running <&"$status_fd"
+  IFS= read -r -d '' known_peer_heads <&"$status_fd"
+  IFS= read -r -d '' last_block_hash <&"$status_fd"
+  IFS= read -r -d '' last_execution_height <&"$status_fd"
+  IFS= read -r -d '' last_execution_block_hash <&"$status_fd"
+  IFS= read -r -d '' last_execution_state_root <&"$status_fd"
+  IFS= read -r -d '' last_error <&"$status_fd"
+  IFS= read -r -d '' rr_metrics_available <&"$status_fd"
+  IFS= read -r -d '' rr_last_error <&"$status_fd"
+  IFS= read -r -d '' rr_distfs_total_checks <&"$status_fd"
+  IFS= read -r -d '' rr_distfs_failed_checks <&"$status_fd"
+  IFS= read -r -d '' rr_settlement_apply_attempts <&"$status_fd"
+  IFS= read -r -d '' rr_settlement_apply_failures <&"$status_fd"
+  IFS= read -r -d '' rr_minted_cumulative_count <&"$status_fd"
+  IFS= read -r -d '' rr_invariant_ok <&"$status_fd"
+  exec {status_fd}<&-
+  observed_at_unix_ms=$(safe_int "$observed_at_unix_ms")
+  epoch_index=$(safe_int "$epoch_index")
+  committed_height=$(safe_int "$committed_height")
+  network_committed_height=$(safe_int "$network_committed_height")
+  known_peer_heads=$(safe_int "$known_peer_heads")
+  last_execution_height=$(safe_int "$last_execution_height")
+  rr_distfs_total_checks=$(safe_int "$rr_distfs_total_checks")
+  rr_distfs_failed_checks=$(safe_int "$rr_distfs_failed_checks")
+  rr_settlement_apply_attempts=$(safe_int "$rr_settlement_apply_attempts")
+  rr_settlement_apply_failures=$(safe_int "$rr_settlement_apply_failures")
+  rr_minted_cumulative_count=$(safe_int "$rr_minted_cumulative_count")
+}
+
+extract_balance_poll_fields() {
+  local balances_json=$1
+  local balance_fd
+  exec {balance_fd}< <(
+    jq -j '[
+      .reward_mint_record_count // 0,
+      .load_error // ""
+    ][] | tostring, "\u0000"' <<< "$balances_json"
+  )
+  IFS= read -r -d '' reward_mint_record_count <&"$balance_fd"
+  IFS= read -r -d '' balance_load_error <&"$balance_fd"
+  exec {balance_fd}<&-
+  reward_mint_record_count=$(safe_int "$reward_mint_record_count")
+}
+
 poll_topology_node_once() {
   local topology=$1
   local node_name=$2
@@ -1446,33 +1525,14 @@ poll_topology_node_once() {
   local rr_invariant_ok="true"
 
   if [[ "$status_ok" -eq 1 ]]; then
-    observed_at_unix_ms=$(safe_int "$(jq -r '.observed_at_unix_ms // 0' <<< "$status_json")")
-    epoch_index=$(safe_int "$(jq -r '.consensus.epoch // 0' <<< "$status_json")")
-    committed_height=$(safe_int "$(jq -r '.consensus.committed_height // 0' <<< "$status_json")")
-    network_committed_height=$(safe_int "$(jq -r '.consensus.network_committed_height // 0' <<< "$status_json")")
-    running=$(jq -r '.running // false' <<< "$status_json")
-    known_peer_heads=$(safe_int "$(jq -r '.consensus.known_peer_heads // 0' <<< "$status_json")")
-    last_block_hash=$(jq -r '.consensus.last_block_hash // empty' <<< "$status_json")
-    last_execution_height=$(safe_int "$(jq -r '.consensus.last_execution_height // 0' <<< "$status_json")")
-    last_execution_block_hash=$(jq -r '.consensus.last_execution_block_hash // empty' <<< "$status_json")
-    last_execution_state_root=$(jq -r '.consensus.last_execution_state_root // empty' <<< "$status_json")
-    last_error=$(jq -r '.last_error // empty' <<< "$status_json")
-    rr_metrics_available=$(jq -r '.reward_runtime.metrics_available // false' <<< "$status_json")
-    rr_last_error=$(jq -r '.reward_runtime.last_error // empty' <<< "$status_json")
-    rr_distfs_total_checks=$(safe_int "$(jq -r '.reward_runtime.distfs_total_checks // 0' <<< "$status_json")")
-    rr_distfs_failed_checks=$(safe_int "$(jq -r '.reward_runtime.distfs_failed_checks // 0' <<< "$status_json")")
-    rr_settlement_apply_attempts=$(safe_int "$(jq -r '.reward_runtime.settlement_apply_attempts_total // 0' <<< "$status_json")")
-    rr_settlement_apply_failures=$(safe_int "$(jq -r '.reward_runtime.settlement_apply_failures_total // 0' <<< "$status_json")")
-    rr_minted_cumulative_count=$(safe_int "$(jq -r '.reward_runtime.cumulative_minted_record_count // 0' <<< "$status_json")")
-    rr_invariant_ok=$(jq -r '.reward_runtime.invariant_ok // true' <<< "$status_json")
+    extract_status_poll_fields "$status_json"
   fi
 
   local reward_mint_record_count balance_load_error
   reward_mint_record_count=0
   balance_load_error=""
   if [[ "$balances_ok" -eq 1 ]]; then
-    reward_mint_record_count=$(safe_int "$(jq -r '.reward_mint_record_count // 0' <<< "$balances_json")")
-    balance_load_error=$(jq -r '.load_error // empty' <<< "$balances_json")
+    extract_balance_poll_fields "$balances_json"
   fi
   local effective_minted_record_count=$reward_mint_record_count
   if (( rr_minted_cumulative_count > effective_minted_record_count )); then
@@ -1618,6 +1678,76 @@ poll_topology_all_nodes() {
     poll_topology_node_once "$topology" "$node_name"
   done
 }
+
+run_field_extraction_self_test() {
+  local observed_at_unix_ms epoch_index committed_height network_committed_height running known_peer_heads last_error
+  local last_block_hash last_execution_height last_execution_block_hash last_execution_state_root
+  local rr_metrics_available rr_last_error rr_distfs_total_checks rr_distfs_failed_checks
+  local rr_settlement_apply_attempts rr_settlement_apply_failures rr_minted_cumulative_count rr_invariant_ok
+  local reward_mint_record_count balance_load_error
+  local status_json balances_json
+
+  status_json=$(
+    jq -n '{
+      observed_at_unix_ms: "not-an-int",
+      running: null,
+      consensus: {
+        epoch: 7,
+        committed_height: "bad-height",
+        network_committed_height: 11,
+        known_peer_heads: 2,
+        last_block_hash: "block-hash",
+        last_execution_height: 9,
+        last_execution_block_hash: "exec-block",
+        last_execution_state_root: "state-root"
+      },
+      last_error: "line1\nline2",
+      reward_runtime: {
+        metrics_available: true,
+        last_error: "rr-line1\nrr-line2",
+        distfs_total_checks: 5,
+        distfs_failed_checks: "bad-count",
+        settlement_apply_attempts_total: 8,
+        settlement_apply_failures_total: 1,
+        cumulative_minted_record_count: 13,
+        invariant_ok: false
+      }
+    }'
+  )
+  balances_json=$(
+    jq -n '{
+      reward_mint_record_count: "bad-minted",
+      load_error: "balance-line1\nbalance-line2"
+    }'
+  )
+
+  extract_status_poll_fields "$status_json"
+  extract_balance_poll_fields "$balances_json"
+
+  [[ "$observed_at_unix_ms" == "0" ]] || { echo "field self-test failed: observed_at_unix_ms=$observed_at_unix_ms" >&2; exit 2; }
+  [[ "$epoch_index" == "7" ]] || { echo "field self-test failed: epoch_index=$epoch_index" >&2; exit 2; }
+  [[ "$committed_height" == "0" ]] || { echo "field self-test failed: committed_height=$committed_height" >&2; exit 2; }
+  [[ "$network_committed_height" == "11" ]] || { echo "field self-test failed: network_committed_height=$network_committed_height" >&2; exit 2; }
+  [[ "$running" == "false" ]] || { echo "field self-test failed: running=$running" >&2; exit 2; }
+  [[ "$known_peer_heads" == "2" ]] || { echo "field self-test failed: known_peer_heads=$known_peer_heads" >&2; exit 2; }
+  [[ "$last_error" == $'line1\nline2' ]] || { echo "field self-test failed: last_error boundary" >&2; exit 2; }
+  [[ "$rr_metrics_available" == "true" ]] || { echo "field self-test failed: rr_metrics_available=$rr_metrics_available" >&2; exit 2; }
+  [[ "$rr_last_error" == $'rr-line1\nrr-line2' ]] || { echo "field self-test failed: rr_last_error boundary" >&2; exit 2; }
+  [[ "$rr_distfs_total_checks" == "5" ]] || { echo "field self-test failed: rr_distfs_total_checks=$rr_distfs_total_checks" >&2; exit 2; }
+  [[ "$rr_distfs_failed_checks" == "0" ]] || { echo "field self-test failed: rr_distfs_failed_checks=$rr_distfs_failed_checks" >&2; exit 2; }
+  [[ "$rr_settlement_apply_attempts" == "8" ]] || { echo "field self-test failed: rr_settlement_apply_attempts=$rr_settlement_apply_attempts" >&2; exit 2; }
+  [[ "$rr_settlement_apply_failures" == "1" ]] || { echo "field self-test failed: rr_settlement_apply_failures=$rr_settlement_apply_failures" >&2; exit 2; }
+  [[ "$rr_minted_cumulative_count" == "13" ]] || { echo "field self-test failed: rr_minted_cumulative_count=$rr_minted_cumulative_count" >&2; exit 2; }
+  [[ "$rr_invariant_ok" == "true" ]] || { echo "field self-test failed: rr_invariant_ok=$rr_invariant_ok" >&2; exit 2; }
+  [[ "$reward_mint_record_count" == "0" ]] || { echo "field self-test failed: reward_mint_record_count=$reward_mint_record_count" >&2; exit 2; }
+  [[ "$balance_load_error" == $'balance-line1\nbalance-line2' ]] || { echo "field self-test failed: balance_load_error boundary" >&2; exit 2; }
+  echo "p2p longrun field extraction self-test passed"
+}
+
+if [[ "$self_test_field_extraction" -eq 1 ]]; then
+  run_field_extraction_self_test
+  exit 0
+fi
 
 compute_topology_lag_p95() {
   local lag_count
