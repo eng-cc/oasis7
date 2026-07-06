@@ -353,30 +353,37 @@ impl TransferTracker {
     }
 
     fn metrics_status(&self, now_ms: i64) -> ChainTransferMetricsStatus {
-        let counters = self.lifecycle_counters();
-        let oldest_inflight_age_ms = self
-            .by_action_id
-            .values()
-            .filter(|item| {
-                matches!(
-                    item.status,
-                    TransferLifecycleStatus::Accepted | TransferLifecycleStatus::Pending
-                )
-            })
-            .filter_map(|item| nonnegative_elapsed_ms(now_ms, item.submitted_at_unix_ms))
-            .max();
-        let confirmed_latencies = self
-            .by_action_id
-            .values()
-            .filter(|item| {
-                item.status == TransferLifecycleStatus::Confirmed
-                    && item.updated_at_unix_ms > item.submitted_at_unix_ms
-            })
-            .map(|item| {
-                item.updated_at_unix_ms
-                    .saturating_sub(item.submitted_at_unix_ms)
-            })
-            .collect::<Vec<_>>();
+        let mut counters = TransferLifecycleCounters::default();
+        let mut oldest_inflight_age_ms = None;
+        let mut confirmed_latencies = Vec::new();
+
+        for item in self.by_action_id.values() {
+            counters.total += 1;
+            match item.status {
+                TransferLifecycleStatus::Accepted => {
+                    counters.accepted += 1;
+                    oldest_inflight_age_ms = oldest_inflight_age_ms
+                        .max(nonnegative_elapsed_ms(now_ms, item.submitted_at_unix_ms));
+                }
+                TransferLifecycleStatus::Pending => {
+                    counters.pending += 1;
+                    oldest_inflight_age_ms = oldest_inflight_age_ms
+                        .max(nonnegative_elapsed_ms(now_ms, item.submitted_at_unix_ms));
+                }
+                TransferLifecycleStatus::Confirmed => {
+                    counters.confirmed += 1;
+                    if item.updated_at_unix_ms > item.submitted_at_unix_ms {
+                        confirmed_latencies.push(
+                            item.updated_at_unix_ms
+                                .saturating_sub(item.submitted_at_unix_ms),
+                        );
+                    }
+                }
+                TransferLifecycleStatus::Failed => counters.failed += 1,
+                TransferLifecycleStatus::Timeout => counters.timeout += 1,
+            }
+        }
+
         let inflight_count = counters.accepted.saturating_add(counters.pending);
         ChainTransferMetricsStatus {
             tracked_records: counters.total,

@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -61,7 +61,7 @@ impl ChainGameplaySubmitResponse {
 
 #[derive(Debug, Default)]
 struct GameplayNonceTracker {
-    by_player: BTreeMap<String, VecDeque<u64>>,
+    by_player: BTreeMap<String, HashSet<u64>>,
     order: VecDeque<(String, u64)>,
 }
 
@@ -71,13 +71,12 @@ impl GameplayNonceTracker {
             return Err("auth nonce must be greater than zero".to_string());
         }
         let history = self.by_player.entry(player_id.to_string()).or_default();
-        if history.iter().any(|existing| *existing == nonce) {
+        if !history.insert(nonce) {
             return Err(format!(
                 "auth nonce replay detected for player {} nonce {}",
                 player_id, nonce
             ));
         }
-        history.push_back(nonce);
         self.order.push_back((player_id.to_string(), nonce));
         self.prune();
         Ok(())
@@ -90,9 +89,7 @@ impl GameplayNonceTracker {
             };
             let mut remove_player = false;
             if let Some(history) = self.by_player.get_mut(player_id.as_str()) {
-                if let Some(index) = history.iter().position(|existing| *existing == nonce) {
-                    history.remove(index);
-                }
+                history.remove(&nonce);
                 remove_player = history.is_empty();
             }
             if remove_player {

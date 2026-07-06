@@ -84,19 +84,33 @@ impl ModuleArtifactIdentity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct BoundedLruCache<V> {
     capacity: usize,
     cache: BTreeMap<String, V>,
-    lru: VecDeque<String>,
+    recent_by_key: BTreeMap<String, u128>,
+    keys_by_recent: BTreeMap<u128, String>,
+    next_recent: u128,
 }
+
+impl<V: PartialEq> PartialEq for BoundedLruCache<V> {
+    fn eq(&self, other: &Self) -> bool {
+        self.capacity == other.capacity
+            && self.cache == other.cache
+            && self.lru_keys().eq(other.lru_keys())
+    }
+}
+
+impl<V: Eq> Eq for BoundedLruCache<V> {}
 
 impl<V> BoundedLruCache<V> {
     pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
             cache: BTreeMap::new(),
-            lru: VecDeque::new(),
+            recent_by_key: BTreeMap::new(),
+            keys_by_recent: BTreeMap::new(),
+            next_recent: 0,
         }
     }
 
@@ -124,26 +138,33 @@ impl<V> BoundedLruCache<V> {
     }
 
     pub fn lru_keys(&self) -> impl Iterator<Item = &str> {
-        self.lru.iter().map(String::as_str)
+        self.keys_by_recent.values().map(String::as_str)
     }
 
     fn touch(&mut self, key: &str) {
-        if self.lru.back().is_some_and(|recent| recent.as_str() == key) {
+        if !self.cache.contains_key(key) {
             return;
         }
-        self.lru.retain(|entry| entry != key);
-        self.lru.push_back(key.to_string());
+        let recent = self.next_recent;
+        self.next_recent = self.next_recent.saturating_add(1);
+        if let Some(previous_recent) = self.recent_by_key.insert(key.to_string(), recent) {
+            self.keys_by_recent.remove(&previous_recent);
+        }
+        self.keys_by_recent.insert(recent, key.to_string());
     }
 
     fn prune(&mut self) {
         if self.capacity == 0 {
             self.cache.clear();
-            self.lru.clear();
+            self.recent_by_key.clear();
+            self.keys_by_recent.clear();
             return;
         }
         while self.cache.len() > self.capacity {
-            if let Some(evicted) = self.lru.pop_front() {
+            if let Some((recent, evicted)) = self.keys_by_recent.pop_first() {
                 self.cache.remove(&evicted);
+                self.recent_by_key.remove(&evicted);
+                debug_assert!(!self.keys_by_recent.contains_key(&recent));
             } else {
                 break;
             }
@@ -743,6 +764,20 @@ mod tests {
         assert!(cache.get("a").is_none());
         assert!(cache.get("b").is_some());
         assert!(cache.get("c").is_some());
+    }
+
+    #[test]
+    fn bounded_lru_cache_equality_ignores_internal_recency_clock() {
+        let mut baseline = BoundedLruCache::new(2);
+        baseline.insert("a".to_string(), 1u8);
+        baseline.insert("b".to_string(), 2u8);
+
+        let mut refreshed_mru = BoundedLruCache::new(2);
+        refreshed_mru.insert("a".to_string(), 1u8);
+        refreshed_mru.insert("b".to_string(), 2u8);
+        assert_eq!(refreshed_mru.get_cloned("b"), Some(2));
+
+        assert_eq!(baseline, refreshed_mru);
     }
 
     #[test]
