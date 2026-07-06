@@ -240,6 +240,19 @@ def runtime_perf_tick_peak(samples, path):
             values.append(value)
     return max(values) if values else None
 
+def runtime_perf_tick_coverage_sample_count(samples):
+    count = 0
+    for sample in samples:
+        tick = nested_get(sample, ("runtime_perf", "tick"), {})
+        if not isinstance(tick, dict):
+            continue
+        samples_total = tick.get("samples_total", 0)
+        if isinstance(samples_total, bool):
+            continue
+        if isinstance(samples_total, (int, float)) and samples_total > 0:
+            count += 1
+    return count
+
 for provider in providers:
     sample_files = sorted((out_dir / "samples" / provider).glob("sample_*/summary/*.json"))
     samples = [json.loads(path.read_text()) for path in sample_files]
@@ -256,6 +269,10 @@ for provider in providers:
     context_drift_count = sum(s.get("context_drift_count", 0) for s in valid_samples)
     runtime_perf_tick_p95_ms_peak = runtime_perf_tick_peak(valid_samples, ("runtime_perf", "tick", "p95_ms"))
     runtime_perf_tick_over_budget_ratio_ppm_peak = runtime_perf_tick_peak(valid_samples, ("runtime_perf", "tick", "over_budget_ratio_ppm"))
+    runtime_perf_tick_coverage_sample_count_value = runtime_perf_tick_coverage_sample_count(valid_samples)
+    warnings = []
+    if valid_samples and runtime_perf_tick_coverage_sample_count_value == 0:
+      warnings.append("runtime_perf_missing")
     error_codes = {}
     for sample in samples:
       for code, count in sample.get("error_counts", {}).items():
@@ -290,10 +307,12 @@ for provider in providers:
       "context_drift_count": context_drift_count,
       "runtime_perf": {
         "tick": {
+          "coverage_sample_count": runtime_perf_tick_coverage_sample_count_value,
           "p95_ms_peak": runtime_perf_tick_p95_ms_peak,
           "over_budget_ratio_ppm_peak": runtime_perf_tick_over_budget_ratio_ppm_peak,
         },
       },
+      "warnings": warnings,
       "benchmark_status": benchmark_status,
       "error_counts": error_codes,
       "provider_version": valid_samples[0]["provider_version"] if valid_samples else "unknown",
@@ -323,8 +342,10 @@ with combined_csv.open("w", newline="") as handle:
       "trace_completeness",
       "recoverable_error_resolution_rate",
       "context_drift_count",
+      "runtime_perf.tick.coverage_sample_count",
       "runtime_perf.tick.p95_ms_peak",
       "runtime_perf.tick.over_budget_ratio_ppm_peak",
+      "warnings",
       "benchmark_status",
     ]
     builtin = aggregate.get("builtin", {})
@@ -336,6 +357,10 @@ with combined_csv.open("w", newline="") as handle:
             gap = right - left
         else:
             gap = "compare_manually"
+        if isinstance(left, list):
+            left = ";".join(str(item) for item in left)
+        if isinstance(right, list):
+            right = ";".join(str(item) for item in right)
         writer.writerow([metric, left, right, gap])
 
 failures_md = summary_dir / "failures.md"

@@ -15,13 +15,16 @@
   },
   "nodes": {
     "local_node": {
-      "available": true,
+      "available": false,
       "latest": {
         "role": "observer",
-        "last_error": null
+        "last_error": null,
+        "latest_fetch_error": "curl_failed"
       },
       "window": {
-        "covered_minutes": 10.0
+        "covered_minutes": 0.0,
+        "full_window_covered": false,
+        "sample_count_successful": 0
       },
       "traffic": {
         "udp_gossip": {

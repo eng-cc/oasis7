@@ -495,6 +495,8 @@ def summarize_wasm(raw_status: dict, wasm_summary: dict) -> dict:
     alerts = []
     if latest_wasm.get("metrics_available") is False:
         alerts.append("wasm_metrics_unavailable")
+    if latest_wasm.get("metrics_available") is True and wasm_window.get("available") is False:
+        alerts.append("wasm_window_unavailable")
     if degraded_reason and degraded_reason not in IGNORED_WASM_DEGRADED_REASONS:
         alerts.append("wasm_degraded")
     if wasm_window.get("window_reset_detected") is True:
@@ -519,6 +521,7 @@ def summarize_wasm(raw_status: dict, wasm_summary: dict) -> dict:
         "metrics_available": latest_wasm.get("metrics_available"),
         "degraded_reason": degraded_reason,
         "window_available": wasm_window.get("available"),
+        "window_notes": wasm_window.get("notes"),
         "window_reset_detected": wasm_window.get("window_reset_detected"),
         "top_hotspot": wasm_window.get("top_hotspot"),
         "build_metrics_available": build.get("metrics_available"),
@@ -532,11 +535,13 @@ def summarize_wasm(raw_status: dict, wasm_summary: dict) -> dict:
 
 def summarize_traffic_control_plane(traffic_node: dict) -> dict:
     latest_traffic = traffic_node.get("latest") or {}
+    traffic_window = traffic_node.get("window") or {}
     traffic = traffic_node.get("traffic") or {}
     libp2p = traffic.get("libp2p_replication") or {}
     udp = traffic.get("udp_gossip") or {}
     control_plane = libp2p.get("control_plane") or {}
-    covered_minutes = (traffic_node.get("window") or {}).get("covered_minutes")
+    covered_minutes = traffic_window.get("covered_minutes")
+    sample_count_successful = traffic_window.get("sample_count_successful")
     payload_total_bytes = safe_int(libp2p.get("total_payload_bytes")) + safe_int(udp.get("total_payload_bytes"))
     libp2p_wire_bytes = libp2p.get("total_wire_bytes")
     control_plane_wire_bytes = control_plane.get("total_wire_bytes")
@@ -547,8 +552,14 @@ def summarize_traffic_control_plane(traffic_node: dict) -> dict:
     if covered_minutes not in (None, 0):
         control_plane_events_per_minute = round(float(control_plane_total_events or 0) / float(covered_minutes), 2)
     alerts = []
+    if traffic_node.get("available") is False:
+        alerts.append("traffic_monitor_unavailable")
     if latest_traffic.get("last_error"):
         alerts.append("traffic_monitor_error")
+    if sample_count_successful == 0 or (sample_count_successful is None and covered_minutes == 0):
+        alerts.append("traffic_samples_missing")
+    if traffic_window.get("full_window_covered") is False:
+        alerts.append("traffic_window_uncovered")
     if safe_int(control_plane_total_events) >= 100:
         alerts.append("control_plane_events_high")
     if (control_plane_wire_ratio or 0.0) >= 0.6:
@@ -567,7 +578,10 @@ def summarize_traffic_control_plane(traffic_node: dict) -> dict:
         "wire_over_payload_ratio": wire_over_payload_ratio,
         "control_plane_events_per_minute": control_plane_events_per_minute,
         "window_covered_minutes": covered_minutes,
+        "window_full_covered": traffic_window.get("full_window_covered"),
+        "sample_count_successful": sample_count_successful,
         "last_error": latest_traffic.get("last_error"),
+        "latest_fetch_error": latest_traffic.get("latest_fetch_error"),
     }
 
 
