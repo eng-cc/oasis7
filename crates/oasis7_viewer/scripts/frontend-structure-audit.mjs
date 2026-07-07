@@ -11,6 +11,8 @@ const compatBundlePath = resolve(viewerRoot, "software_safe.js");
 const viewerDistDir = resolve(viewerRoot, "dist");
 const distViewerBundlePath = resolve(viewerDistDir, "viewer.js");
 const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
+const canonicalBundlePath = resolve(viewerRoot, "viewer.js");
+const canonicalBundleBanner = "// Generated canonical Viewer bundle; source truth lives in ./software_safe_src/.\n";
 
 const PRODUCTION_SOURCE_LINE_LIMIT = 1200;
 const TEST_SOURCE_LINE_LIMIT = 1600;
@@ -136,9 +138,10 @@ async function validateLineThresholds() {
 
 async function validateCanonicalCompatContracts() {
   const failures = [];
-  const [canonicalHtml, compatHtml, compatBundle] = await Promise.all([
+  const [canonicalHtml, compatHtml, canonicalBundle, compatBundle] = await Promise.all([
     readFile(canonicalHtmlPath, "utf8"),
     readFile(compatHtmlPath, "utf8"),
+    readFile(canonicalBundlePath, "utf8"),
     readFile(compatBundlePath, "utf8"),
   ]);
 
@@ -147,6 +150,9 @@ async function validateCanonicalCompatContracts() {
   }
   if (!canonicalHtml.includes('<script type="module" src="./viewer.js"></script>')) {
     failures.push("viewer.html must reference canonical viewer.js bundle");
+  }
+  if (!canonicalBundle.startsWith(canonicalBundleBanner)) {
+    failures.push("viewer.js must carry the generated canonical bundle banner");
   }
   assert.equal(
     compatBundle,
@@ -172,7 +178,7 @@ async function validateGeneratedRuntimeContracts() {
   }
 
   const [canonicalBundle, distBundle] = await Promise.all([
-    readFile(resolve(viewerRoot, "viewer.js"), "utf8"),
+    readFile(canonicalBundlePath, "utf8"),
     readFile(distViewerBundlePath, "utf8").catch(() => null),
   ]);
   if (distBundle == null) {

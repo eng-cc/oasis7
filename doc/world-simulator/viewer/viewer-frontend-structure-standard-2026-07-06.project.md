@@ -10,7 +10,7 @@
 - [ ] viewer-frontend-tooling-gate-evaluation (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 评估是否引入 ESLint/Prettier 或现有 formatter/lint wrapper 来自动化 JS/JSX/HTML 结构卫生；必须先给出规则集合、CI 成本和存量修复策略。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
 - [ ] viewer-legacy-core-facade-burndown-next-slice (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 下次触碰 `legacy_core.js` 时按本标准继续抽离一个 coherent boundary，并记录 before/after line counts、owner 与验证命令。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
 - [ ] viewer-main-jsx-component-boundary-next-slice (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 下次触碰 `main.jsx` 大型 UI surface 时，优先抽离一个 named widget/feature component 或 display model helper，并补对应 UI/narrow test。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
-- [ ] viewer-frontend-structure-audit-gate (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 用 `npm --prefix crates/oasis7_viewer run test:frontend-structure` 固化 source/generated/compat taxonomy、line-threshold debt registry、canonical -> compat contract 与 dist runtime artifact 存在时的 finalize-managed 形态；新增超阈值或债务增长必须拆分或记录 owner-tagged exemption。 Trace: #2131 (task_1c130fa1bc0a40e9b205af0bd72a773f)
+- [x] viewer-frontend-structure-audit-gate (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 用 `npm --prefix crates/oasis7_viewer run test:frontend-structure` 固化 source/generated/compat taxonomy、line-threshold debt registry、canonical -> compat contract 与 dist runtime artifact 存在时的 finalize-managed 形态；新增超阈值或债务增长必须拆分或记录 owner-tagged exemption。 Trace: #2131 (task_1c130fa1bc0a40e9b205af0bd72a773f)
 
 ## 当前任务证据
 - 用户问题: 当前前端 `js/html/jsx` 是否缺少拆分和抽象规范；随后要求搜索外部备选并拼一套 Viewer 标准。
@@ -46,6 +46,6 @@
 
 ## 状态
 - 更新日期: 2026-07-07
-- 当前状态: baseline_standard_added_and_review_clean
-- 当前任务: `task_15caf5a4ca0c4924967c388b0d510954`
-- 下一任务: 若该标准在 review 中通过，后续按 project 中的 tooling gate、legacy_core facade burn-down、main.jsx component boundary slices 进入独立 GitHub-backed tasks。
+- 当前状态: baseline_standard_and_audit_gate_active
+- 当前任务: `task_83cf644a36ba4044812827ad49b597d5`
+- 下一任务: 后续按 project 中的 tooling gate、legacy_core facade burn-down、main.jsx component boundary slices 进入独立 GitHub-backed tasks。

@@ -18,6 +18,7 @@ const finalCompatBundlePath = resolve(viewerRoot, "software_safe.js");
 const pixelWorldRuntimeDir = resolve(viewerDistDir, "pixel-world-bridge");
 const pixelWorldRuntimeSelectorSourcePath = resolve(softwareSafeSrcDir, "pixel_world_runtime_module_selector.js");
 const pixelWorldRuntimeModulePath = resolve(pixelWorldRuntimeDir, "pixel_world_bridge.js");
+const canonicalBundleBanner = "// Generated canonical Viewer bundle; source truth lives in ./software_safe_src/.\n";
 const pixelWorldCompiledWasmPath = resolve(
   workspaceRoot,
   "target",
@@ -134,6 +135,13 @@ function compatBundleContents() {
   ].join("\n");
 }
 
+async function canonicalBundleContents() {
+  const bundle = await readFile(builtBundlePath, "utf8");
+  return bundle.startsWith(canonicalBundleBanner)
+    ? bundle
+    : `${canonicalBundleBanner}${bundle}`;
+}
+
 async function buildPixelWorldRuntimeVariant({ featureName, backendDirName }) {
   await runChecked("env", [
     "-u",
@@ -174,10 +182,11 @@ const emittedFiles = (await listFilesRecursively(tempOutDir))
 if (emittedFiles.length !== 1 || emittedFiles[0] !== "viewer.js") {
   throw new Error(`unexpected viewer canonical bundle outputs: ${emittedFiles.join(", ") || "(none)"}`);
 }
-await copyFile(builtBundlePath, finalCanonicalBundlePath);
+const canonicalBundle = await canonicalBundleContents();
+await writeFile(finalCanonicalBundlePath, canonicalBundle, "utf8");
 await copyFile(canonicalHtmlPath, compatHtmlPath);
 await mkdir(viewerDistDir, { recursive: true });
-await copyFile(builtBundlePath, finalDistBundlePath);
+await writeFile(finalDistBundlePath, canonicalBundle, "utf8");
 await writeFile(finalCompatBundlePath, compatBundleContents(), "utf8");
 await rm(pixelWorldRuntimeDir, { recursive: true, force: true });
 await mkdir(pixelWorldRuntimeDir, { recursive: true });
