@@ -1,4 +1,19 @@
 version: 1
 role: tpm
 status: committed
-tasks: []
+tasks:
+  - task_uid: task_1c130fa1bc0a40e9b205af0bd72a773f
+    title: "Govern frontend standards issues"
+    module: viewer
+    priority: P2
+    source_signal: ""
+    related_prd: []
+    acceptance:
+      - "Identify frontend code that violates repository standards and record role-owned findings."
+      - "Apply scoped governance fixes without changing unrelated product behavior."
+      - "Run relevant frontend/governance verification before PR prep."
+    handoff_to:
+      - repository_health_engineer
+      - viewer_engineer
+    status: committed
+    task_path: https://github.com/eng-cc/oasis7/issues/2131

@@ -10,6 +10,7 @@
 - [ ] viewer-frontend-tooling-gate-evaluation (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 评估是否引入 ESLint/Prettier 或现有 formatter/lint wrapper 来自动化 JS/JSX/HTML 结构卫生；必须先给出规则集合、CI 成本和存量修复策略。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
 - [ ] viewer-legacy-core-facade-burndown-next-slice (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 下次触碰 `legacy_core.js` 时按本标准继续抽离一个 coherent boundary，并记录 before/after line counts、owner 与验证命令。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
 - [ ] viewer-main-jsx-component-boundary-next-slice (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 下次触碰 `main.jsx` 大型 UI surface 时，优先抽离一个 named widget/feature component 或 display model helper，并补对应 UI/narrow test。 Trace: #2119 (task_15caf5a4ca0c4924967c388b0d510954)
+- [ ] viewer-frontend-structure-audit-gate (PRD-WORLD_SIMULATOR-046) [test_tier_required]: 用 `npm --prefix crates/oasis7_viewer run test:frontend-structure` 固化 source/generated/compat taxonomy、line-threshold debt registry、canonical -> compat contract 与 dist runtime artifact 存在时的 finalize-managed 形态；新增超阈值或债务增长必须拆分或记录 owner-tagged exemption。 Trace: #2131 (task_1c130fa1bc0a40e9b205af0bd72a773f)
 
 ## 当前任务证据
 - 用户问题: 当前前端 `js/html/jsx` 是否缺少拆分和抽象规范；随后要求搜索外部备选并拼一套 Viewer 标准。
@@ -28,6 +29,11 @@
   - `repository_health_engineer`: no conflict with `viewer-web-single-source-build-truth` or Rust governance; P1 same PRD heading issue, fixed; P2 evidence writeback gap, addressed in this project evidence section.
   - `qa_engineer`: verification matrix is testable for docs-only baseline; stale doc-governance blocker and untracked-file whitespace coverage findings were fixed and reverified.
   - 2026-07-07 optimization pass: normalized PRD headings/table labels, removed stale section-number references, refreshed README metadata, and aligned task acceptance with the implemented standard scope.
+- #2131 frontend governance audit:
+  - Mechanical scan found current owner-tagged structure debt in `viewer.html`, `software_safe_src/gameplay_attraction_scenario.js`, `software_safe_src/legacy_core.js`, `software_safe_src/main.jsx`, `software_safe_src/main.test.jsx`, `software_safe_src/pixel_world_host.jsx`, and `software_safe_src/viewer_feedback_module.js`.
+  - Added `crates/oasis7_viewer/scripts/frontend-structure-audit.mjs` and package script `test:frontend-structure` so future Viewer frontend changes can verify known debt caps, stale exemptions, canonical -> compat artifact direction, and generated runtime shape when `dist/` exists.
+  - Wired `test:frontend-structure` into the Viewer software-safe required-gate path in `scripts/ci-tests.sh`, so scoped Viewer CI runs fail on unregistered threshold drift instead of relying on manual local invocation.
+  - `software_safe.js` remains a generated compat alias to `viewer.js`; `software_safe.html` must remain a byte-for-byte compat copy of `viewer.html`.
 
 ## 依赖
 - `doc/world-simulator/viewer/viewer-web-single-source-build-truth-2026-05-19.{prd,design,project}.md`
