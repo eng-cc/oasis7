@@ -478,7 +478,7 @@ impl PosNodeEngine {
                     ),
                 },
             )?;
-            if previous_execution_height > 0 && !restored {
+            if !restored {
                 return Err(NodeError::Execution {
                     reason: format!(
                         "local committed height {} failed after execution: {}; rollback record for height {} is unavailable",

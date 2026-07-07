@@ -1052,9 +1052,15 @@ fn runtime_network_replication_fetch_handlers_serve_commit_and_blob() {
                 )));
 
             runtime_a.start().expect("start a");
-            thread::sleep(Duration::from_millis(180));
+            let committed = wait_until(Instant::now() + Duration::from_secs(2), || {
+                runtime_a.snapshot().consensus.committed_height >= 1
+            });
             let snapshot = runtime_a.snapshot();
-            assert!(snapshot.consensus.committed_height >= 1);
+            assert!(
+                committed,
+                "runtime did not commit height 1 before fetch-handler check: committed={} last_error={:?}",
+                snapshot.consensus.committed_height, snapshot.last_error
+            );
             let target_height = snapshot.consensus.committed_height;
 
             let fetch_commit_request =

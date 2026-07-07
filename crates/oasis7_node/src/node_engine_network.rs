@@ -433,15 +433,17 @@ impl PosNodeEngine {
         };
         if let Err(err) = apply_result {
             let peer_mismatch = execution_error_is_peer_mismatch(&err);
-            self.rollback_synced_execution_after_failure(
-                world_id,
-                payload.height,
-                previous_execution_height,
-                previous_execution_block_hash.as_deref(),
-                previous_execution_state_root.as_deref(),
-                execution_hook.as_deref_mut(),
-                &err,
-            )?;
+            if peer_mismatch || execution_error_is_invalid_hook_result(&err) {
+                self.rollback_synced_execution_after_failure(
+                    world_id,
+                    payload.height,
+                    previous_execution_height,
+                    previous_execution_block_hash.as_deref(),
+                    previous_execution_state_root.as_deref(),
+                    execution_hook.as_deref_mut(),
+                    &err,
+                )?;
+            }
             if !peer_mismatch {
                 return Err(err);
             }
@@ -516,7 +518,7 @@ impl PosNodeEngine {
                     ),
                 },
             )?;
-            if previous_execution_height > 0 && !restored {
+            if !restored {
                 return Err(NodeError::Replication {
                     reason: format!(
                         "synced replication height {} execution hash validation failed: {}; rollback record for height {} is unavailable",
@@ -1073,6 +1075,16 @@ fn execution_error_is_peer_mismatch(err: &NodeError) -> bool {
         err,
         NodeError::Execution { reason }
             if reason.contains("execution hook returned peer mismatch")
+    )
+}
+
+fn execution_error_is_invalid_hook_result(err: &NodeError) -> bool {
+    matches!(
+        err,
+        NodeError::Execution { reason }
+            if reason.starts_with("execution hook returned mismatched height")
+                || reason.starts_with("execution hook returned empty execution_block_hash")
+                || reason.starts_with("execution hook returned empty execution_state_root")
     )
 }
 

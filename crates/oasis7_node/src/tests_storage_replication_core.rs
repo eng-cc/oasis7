@@ -3,6 +3,7 @@ use super::*;
 struct FailingCheckpointExportHook {
     commits: Arc<Mutex<Vec<u64>>>,
     restores: Arc<Mutex<Vec<(String, u64)>>>,
+    restore_result: bool,
 }
 
 impl NodeExecutionHook for FailingCheckpointExportHook {
@@ -26,7 +27,7 @@ impl NodeExecutionHook for FailingCheckpointExportHook {
             .lock()
             .expect("record restores")
             .push((world_id.to_string(), height));
-        Ok(true)
+        Ok(self.restore_result)
     }
 
     fn export_checkpoint_bundle(
@@ -444,6 +445,7 @@ fn proposer_tick_rolls_back_local_execution_when_replication_export_fails() {
     let mut execution_hook = FailingCheckpointExportHook {
         commits: Arc::clone(&commits),
         restores: Arc::clone(&restores),
+        restore_result: true,
     };
 
     let err = engine
@@ -462,6 +464,73 @@ fn proposer_tick_rolls_back_local_execution_when_replication_export_fails() {
 
     assert!(
         format!("{err:?}").contains("injected checkpoint export failure at height 1"),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(commits.lock().expect("commits").as_slice(), &[1]);
+    assert_eq!(
+        restores.lock().expect("restores").as_slice(),
+        &[(world_id.to_string(), 0)]
+    );
+    assert_eq!(engine.last_execution_height, 0);
+    assert_eq!(engine.last_execution_block_hash, None);
+    assert_eq!(engine.last_execution_state_root, None);
+    assert_eq!(engine.committed_height, 0);
+    assert_eq!(engine.replication_persisted_height, 0);
+    assert!(
+        replication
+            .load_commit_message_by_height(world_id, 1)
+            .expect("load commit message")
+            .is_none()
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn proposer_tick_fails_closed_when_initial_execution_rollback_record_is_missing() {
+    let world_id = "world-local-replication-rollback-missing-zero";
+    let dir = temp_dir("local-replication-rollback-missing-zero");
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-a", 62)]);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_replication(signed_replication_config(dir.clone(), 62));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication = ReplicationRuntime::new(
+        config.replication.as_ref().expect("replication"),
+        "node-a",
+    )
+    .expect("replication runtime");
+    let commits = Arc::new(Mutex::new(Vec::new()));
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut execution_hook = FailingCheckpointExportHook {
+        commits: Arc::clone(&commits),
+        restores: Arc::clone(&restores),
+        restore_result: false,
+    };
+
+    let err = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            Some(&mut replication),
+            None,
+            None,
+            Vec::new(),
+            Some(&mut execution_hook),
+        )
+        .expect_err("missing initial rollback record should fail closed");
+
+    let err_text = format!("{err:?}");
+    assert!(
+        err_text.contains("rollback record for height 0 is unavailable"),
         "unexpected error: {err:?}"
     );
     assert_eq!(commits.lock().expect("commits").as_slice(), &[1]);
