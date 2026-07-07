@@ -5,6 +5,7 @@ import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
+  LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
 
@@ -2089,7 +2090,7 @@ function WorldStageHero() {
     if (source === "hosted_browser_storage" || source === "hosted_player_session_issue") {
       return tr(locale(), "邮箱登录身份", "Hosted Account Identity");
     }
-    if (source === "local_test_api_ephemeral" || source === "legacy_viewer_auth_bootstrap") {
+    if (source === "local_test_api_ephemeral" || source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
       return tr(locale(), "本地测试身份", "Local Test Identity");
     }
     return authSurface().currentTier || tr(locale(), "玩家身份", "Player Identity");
@@ -3036,7 +3037,7 @@ function WorldSummaryPanel() {
           >
             <HostedLoginForm locale={locale()} />
           </Show>
-          <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
+          <Show when={state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}>
             <div class="toolbar">
               <button
                 data-auth-action="logout"
@@ -3151,7 +3152,7 @@ function WorldSummaryPanel() {
             <Badge>{state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle"}</Badge>
           </div>
           <div class="toolbar">
-            <Show when={state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap"}>
+            <Show when={state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}>
               <button
                 data-auth-action="logout"
                 onClick={() => {
