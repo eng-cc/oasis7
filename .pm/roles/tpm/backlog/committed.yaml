@@ -2,18 +2,17 @@ version: 1
 role: tpm
 status: committed
 tasks:
-  - task_uid: task_1c130fa1bc0a40e9b205af0bd72a773f
-    title: "Govern frontend standards issues"
-    module: viewer
+  - task_uid: task_0e03ee90334b4541ac77fef372214b7f
+    title: "治理旧文档语义收敛"
+    module: engineering
     priority: P2
     source_signal: ""
     related_prd: []
     acceptance:
-      - "Identify frontend code that violates repository standards and record role-owned findings."
-      - "Apply scoped governance fixes without changing unrelated product behavior."
-      - "Run relevant frontend/governance verification before PR prep."
+      - "由 repository_health_engineer 找出下一个旧文档/旧语义治理点并记录证据"
+      - "合并收敛仍有当前价值的旧文档语义，删除或退役无当前价值的旧文档入口"
+      - "通过 doc governance 与 diff 检查"
     handoff_to:
       - repository_health_engineer
-      - viewer_engineer
     status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/2131
+    task_path: https://github.com/eng-cc/oasis7/issues/2135

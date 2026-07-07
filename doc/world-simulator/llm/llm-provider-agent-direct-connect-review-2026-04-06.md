@@ -35,7 +35,7 @@
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7_client_launcher/src/launcher_core.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
-  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
 - 设计目标:
   - `player_parity` lane 已贯通 runtime live / `oasis7_game_launcher` / `oasis7` / launcher 主链路。
 - 当前实现:
@@ -54,7 +54,7 @@
   - `crates/oasis7/src/simulator/decision_provider.rs`
   - `crates/oasis7/src/viewer/runtime_live/llm_sidecar.rs`
   - `crates/oasis7/src/viewer/runtime_live/mapping.rs`
-  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+  - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md`
 - 设计目标:
   - 双轨模式共享动作 contract，但观测表达必须分层；`player_parity` 只能拿玩家可感知压缩视图，`headless_agent` 可拿结构化局部拓扑与提示信息。
 - 当前实现:
@@ -72,7 +72,7 @@
   - `crates/oasis7_client_launcher/src/main.rs`
   - `crates/oasis7/src/bin/oasis7_game_launcher.rs`
   - `crates/oasis7/src/bin/oasis7_provider_parity_bench.rs`
-  - `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+  - `doc/world-simulator/llm/provider-agent-dual-mode-recertification-2026-04-07.md`
 - 设计目标:
   - local HTTP provider 错误应可恢复，不得因默认参数过于保守而稳定制造假超时。
 - 当前实现:

@@ -10,6 +10,8 @@
 
 - [x] live-design-evidence-legacy-task-log-convergence (PRD-ENGINEERING-021/025/030) [test_tier_required]: 收敛仍在活跃设计/覆盖文档中直接暴露退役 `.pm/tasks/*.execution.md` 的旧证据入口，把 current-facing task evidence 统一回 GitHub issue / `task_uid`，退役 task log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯；本轮不删除仍承担当前入口职责的活文档。 Trace: #2106 (task_5f92b597c8ae44728045398d024f0bee)
 
+- [x] testing-provider-dual-mode-blocker-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 `doc/testing` 模块根部已 resolved 但仍被入口称为“当前 QA 阻断”的 provider dual-mode T4 blocker 留痕，将当前 testing 阻断入口收敛到 `doc/testing/project.md`，将 dual-mode 历史/复签语义收敛到 world-simulator LLM 专题 project 与复签 evidence，并同步收紧 module-root allowlist。 Trace: #2135 (task_0e03ee90334b4541ac77fef372214b7f)
+
 - [x] viewer-release-immersion-phase-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 `world-simulator/viewer` active 索引的 release immersion phase2~7 旧阶段三件套，将当前 release / 体验收口入口统一到 `viewer-gameplay-release-experience-overhaul` 主文档、viewer 子域 README、world-simulator 索引、core review logs、git history 与 GitHub task issue evidence comments。 Trace: #2083 (task_6dfd332bab5b4fff93237390aec200ac)
 
 - [x] self-evolution-file-based-pm-pointer-prd-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已压缩为历史锚点且仍保留旧 `.pm/tasks` / `.pm/inbox/signals.jsonl` 语义提示的 file-based self-evolution historical pointer PRD，将当前规则入口收敛到 workflow source-of-truth，将仍有效的 repo-local memory / working_memory / stage-gate object-model 背景收敛到同名 design 文档。 Trace: #2042 (task_44d20868aeb9433d9fbfa7bea4177d60)

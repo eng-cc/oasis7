@@ -8,7 +8,7 @@
 - 模块 PRD：`doc/testing/prd.md`
 - 模块设计总览：`doc/testing/design.md`
 - 模块标准执行入口：`doc/testing/project.md`
-- 当前 QA 阻断摘要：`doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`
+- 当前 QA 阻断与活跃覆盖缺口：`doc/testing/project.md`
 
 ## 首读分流
 - 想先回答 testing 模块覆盖哪些测试层级、证据与门禁边界：先读 `doc/testing/prd.md`
@@ -49,7 +49,7 @@
 - `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`：Playwright 实跑测试系列入口，用于管理真实本地栈、真实 UI 输入和后续玩家操作流程矩阵，不并入下方模块 PRD 三件套长表。
 - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`：截图加模型视觉评审 SOP，用于替代 routine 人工视觉 review，不并入下方模块 PRD 三件套长表。
 - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`：按 surface 汇总现有性能覆盖、当前缺口、建议补测和建议 tier 的速查表。
-- `doc/testing/provider-dual-mode-t4-blocker-2026-03-16.md`：当前 QA 阻断摘要，适合在判断 provider 双模式收口风险时定向进入。
+- Provider dual-mode 历史 blocker 已收敛到 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 与复签 evidence；当前 testing 阻断只从 `doc/testing/project.md` 进入。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
