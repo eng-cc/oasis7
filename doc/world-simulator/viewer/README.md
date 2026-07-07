@@ -1,11 +1,12 @@
 # `world-simulator/viewer` 热点子域入口
 
-更新时间: 2026-07-03
+更新时间: 2026-07-07
 
 ## 从这里开始
 - 想确认 Viewer / player-facing surface 的整体视觉方向、层级、pixel-world 可读性与视觉评审 gate：先读 `viewer-visual-design-spec-2026-06-05.design.md`；涉及本轮 image2 视觉目标、首屏总体设计与分模块落地时继续读 `viewer-page-module-design-2026-06-18.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时继续读 `viewer-brand-system-2026-06-05.design.md`
 - 想执行 Viewer、走 Web 闭环、看命令或手工步骤：先读 `viewer-manual.manual.md`
 - 想确认正式浏览器主入口、`viewer` / `software_safe` 兼容边界或弱机/CI 默认路径：先读 `viewer-web-software-safe-mode-2026-03-16.prd.md`
+- 想确认 Viewer 前端 `js/html/jsx` 文件何时拆分、怎么抽组件/模块、generated artifact 与 compat alias 怎么评审：先读 `viewer-frontend-structure-standard-2026-07-06.prd.md`
 - 想确认 `legacy_core.js` 拆分边界、`viewer.js` / `software_safe.js` canonical/compat 关系，或 `pixel-world-bridge` generated runtime 真值：先读 `viewer-web-single-source-build-truth-2026-05-19.prd.md`
 - 想确认 pixel-world 稀疏快照下的 agent 派生坐标、关系线与 rendered DOM 定位：先读 `viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
 - 想确认 pixel-world Fragment terrain、Location 逻辑锚点与缩放 LOD 分层：先读 `viewer-pixel-world-fragment-lod-2026-05-27.prd.md`

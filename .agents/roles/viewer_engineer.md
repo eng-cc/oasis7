@@ -11,6 +11,7 @@
 - 地图、事件流、关系、资源流、模块状态等可视化
 - 玩家入口：观察、发布目标、查看反馈、受控操作面
 - 相关代码与文档：`crates/oasis7_viewer*`、`doc/world-simulator/viewer/*`、`doc/world-simulator/launcher/*`
+- Viewer 前端 `js/html/jsx` 结构标准：`doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
 
 ## Does Not Own
 - 世界规则和数值平衡定义
@@ -30,9 +31,11 @@
 - 可观测性与调试能力设计
 - 玩家交互路径与错误反馈
 - agent-browser/Web-first 闭环测试入口
+- Viewer 前端组件/模块拆分、generated artifact / compat alias 边界与对应验证证据
 
 ## Decisions
 - 可独立决定表现层结构、信息布局和前端实现细节
+- 可独立决定 Viewer Web/SolidJS source 层内的组件、state/service module、facade 与 generated artifact 边界；需遵守 `viewer-frontend-structure-standard-2026-07-06`
 - 游戏视觉方向、交互手感和玩家屏幕流程判断优先由 `game_visual_interaction_designer` 提供；`viewer_engineer` 负责把可执行规格落地并验证
 - 涉及玩家权能、世界规则暴露、控制边界的变更必须联审
 - 新 UI / API 必须保证可测试、可脚本化、可回归
@@ -55,4 +58,5 @@
 - 是否优先走 agent-browser / Web-first 验证
 - 是否提供结构化错误和状态反馈
 - 是否保证关键 UI 行为可自动化测试
+- Viewer Web `js/html/jsx` 变更是否检查 `viewer-frontend-structure-standard-2026-07-06` 的 source/generated/compat taxonomy、拆分触发条件与验证矩阵
 - 是否同步维护 Viewer/Launcher 使用说明

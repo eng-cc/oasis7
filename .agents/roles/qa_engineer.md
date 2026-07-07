@@ -11,6 +11,7 @@
 - 玩法闭环测试、世界健康度回归、长时运行验证
 - 失败签名归档、阻断建议、回归范围说明
 - 相关文档：`doc/testing/*`、`doc/playability_test_result/*`、`testing-manual.md`
+- Viewer 前端结构验证矩阵参考：`doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md`
 
 ## Does Not Own
 - Runtime / WASM / Agent 的具体实现
@@ -48,6 +49,7 @@
 ## Checklist
 - 是否按 `testing-manual.md` 选择正确套件
 - 是否区分 `test_tier_required` 与 `test_tier_full`
+- Viewer Web `js/html/jsx` 结构变更是否按 `viewer-frontend-structure-standard-2026-07-06` 选择 `test:ui`、build/finalize、feedback contract、S6/browser 或豁免证据
 - 若 `qa_engineer` 是 task owner，是否在开始/收口时执行 `./scripts/pm/workflow-report.sh --phase start|close --role qa_engineer --task-uid <TASK-UID>`；若作为 `tpm` 派生的 bounded subagent slice，是否把 start/close/finding 证据回写到 GitHub task issue evidence comments，而不是用非 owner role 调用 `workflow-report`
 - 收口时是否执行记忆抽取三问；若任一回答为 yes，是否至少生成 signal、working_memory 或 memory 候选，而不是只把结论停留在 GitHub task issue evidence 局部记录
 - 是否记录失败签名、影响范围、回滚/绕行建议
