@@ -1,3 +1,4 @@
+// Generated canonical Viewer bundle; source truth lives in ./software_safe_src/.
 const IS_DEV = false;
 const equalFn = (a, b) => a === b;
 const $PROXY = /* @__PURE__ */ Symbol("solid-proxy");
