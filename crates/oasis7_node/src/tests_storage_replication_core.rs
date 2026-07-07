@@ -38,6 +38,50 @@ impl NodeExecutionHook for FailingCheckpointExportHook {
     }
 }
 
+#[derive(Clone)]
+struct CommitPublishFailingNetwork {
+    inner: TestInMemoryNetwork,
+    fail_topic: String,
+}
+
+impl CommitPublishFailingNetwork {
+    fn new(world_id: &str) -> Self {
+        Self {
+            inner: TestInMemoryNetwork::default(),
+            fail_topic: super::network_bridge::default_consensus_commit_topic(world_id),
+        }
+    }
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for CommitPublishFailingNetwork
+{
+    fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), WorldError> {
+        if topic == self.fail_topic {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "injected consensus commit publish failure".to_string(),
+            });
+        }
+        self.inner.publish(topic, payload)
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        self.inner.subscribe(topic)
+    }
+
+    fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        self.inner.request(protocol, payload)
+    }
+
+    fn register_handler(
+        &self,
+        protocol: &str,
+        handler: oasis7_proto::distributed_net::NetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        self.inner.register_handler(protocol, handler)
+    }
+}
+
 #[test]
 fn non_proposer_committed_decision_does_not_persist_local_replication() {
     let world_id = "world-non-proposer-replication-guard";
@@ -551,4 +595,61 @@ fn proposer_tick_fails_closed_when_initial_execution_rollback_record_is_missing(
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn proposer_tick_keeps_consensus_and_execution_aligned_when_post_apply_commit_publish_fails() {
+    let world_id = "world-post-apply-commit-publish-failure";
+    let validators = vec![PosValidator {
+        validator_id: "node-a".to_string(),
+        stake: 100,
+    }];
+    let pos_config = signed_pos_config_with_signer_seeds(validators, &[("node-a", 63)]);
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let network: Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync> =
+        Arc::new(CommitPublishFailingNetwork::new(world_id));
+    let handle = NodeReplicationNetworkHandle::new(network);
+    let mut consensus_endpoint =
+        ConsensusNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("consensus endpoint");
+    let commits = Arc::new(Mutex::new(Vec::new()));
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut execution_hook = FailingCheckpointExportHook {
+        commits: Arc::clone(&commits),
+        restores: Arc::clone(&restores),
+        restore_result: true,
+    };
+
+    let err = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            1_000,
+            None,
+            None,
+            None,
+            Some(&mut consensus_endpoint),
+            Vec::new(),
+            Some(&mut execution_hook),
+        )
+        .expect_err("commit publish failure should fail the tick");
+
+    assert!(
+        format!("{err:?}").contains("injected consensus commit publish failure"),
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(commits.lock().expect("commits").as_slice(), &[1]);
+    assert!(
+        restores.lock().expect("restores").is_empty(),
+        "post-apply publish failure must not roll execution back after consensus advanced"
+    );
+    assert_eq!(engine.committed_height, 1);
+    assert_eq!(engine.last_execution_height, 1);
+    assert_eq!(engine.next_height, 2);
+    assert_eq!(engine.last_execution_block_hash.as_deref(), Some("exec-block-1"));
+    assert_eq!(engine.last_execution_state_root.as_deref(), Some("exec-state-1"));
 }

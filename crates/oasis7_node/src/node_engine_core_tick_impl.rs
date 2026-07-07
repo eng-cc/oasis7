@@ -287,15 +287,6 @@ impl PosNodeEngine {
             if let Err(err) =
                 self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)
             {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
             if let Err(err) = self.broadcast_replicated_commit_head_network(
@@ -305,15 +296,6 @@ impl PosNodeEngine {
                 now_ms,
                 replication.as_deref(),
             ) {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
         }
@@ -321,15 +303,6 @@ impl PosNodeEngine {
             if let Err(err) =
                 self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)
             {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
             if let Err(err) = self.broadcast_replicated_commit_head_gossip(
@@ -339,15 +312,6 @@ impl PosNodeEngine {
                 now_ms,
                 replication.as_deref(),
             ) {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
         }
@@ -359,15 +323,6 @@ impl PosNodeEngine {
                 replication.as_deref_mut(),
                 current_slot,
             ) {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
         }
@@ -375,15 +330,6 @@ impl PosNodeEngine {
             if let Err(err) =
                 self.ingest_consensus_network_messages(endpoint, world_id, current_slot)
             {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
         }
@@ -397,15 +343,6 @@ impl PosNodeEngine {
                     hook,
                 )
             }) {
-                self.rollback_local_committed_execution_after_failure(
-                    world_id,
-                    decision.height,
-                    previous_execution_height,
-                    previous_execution_block_hash.as_deref(),
-                    previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
-                    &err,
-                )?;
                 return Err(err);
             }
         }
@@ -419,15 +356,18 @@ impl PosNodeEngine {
                     decision.height, self.committed_height, self.last_execution_height
                 ),
             };
-            self.rollback_local_committed_execution_after_failure(
-                world_id,
-                decision.height,
-                previous_execution_height,
-                previous_execution_block_hash.as_deref(),
-                previous_execution_state_root.as_deref(),
-                execution_hook.as_deref_mut(),
-                &err,
-            )?;
+            if self.committed_height < decision.height {
+                self.rollback_local_committed_execution_after_failure(
+                    world_id,
+                    decision.height,
+                    previous_execution_height,
+                    previous_execution_block_hash.as_deref(),
+                    previous_execution_state_root.as_deref(),
+                    execution_hook.as_deref_mut(),
+                    &err,
+                )?;
+            }
+            return Err(err);
         }
         let committed_action_batch = if matches!(decision.status, PosConsensusStatus::Committed)
             && !decision.committed_actions.is_empty()
