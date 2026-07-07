@@ -1,4 +1,7 @@
-import { isHostedPublicJoinDeploymentMode } from "./software_safe_constants.js";
+import {
+  LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  isHostedPublicJoinDeploymentMode,
+} from "./software_safe_constants.js";
 
 export function createViewerAuthSurfaceModule({
   getSearchParams,
@@ -37,7 +40,7 @@ export function createViewerAuthSurfaceModule({
   function authDeploymentHint(auth) {
     const hostedMode = String(state.hostedAccess?.deployment_mode || "").trim();
     if (isHostedPublicJoinDeploymentMode(hostedMode)) {
-      if (auth.available && auth.source === "legacy_viewer_auth_bootstrap") {
+      if (auth.available && auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
         return "hosted_public_join_contract_with_legacy_bootstrap";
       }
       return auth.available
@@ -75,7 +78,7 @@ export function createViewerAuthSurfaceModule({
 
   function guestSessionReason(auth, deploymentHint) {
     if (auth.available) {
-      return auth.source === "legacy_viewer_auth_bootstrap"
+      return auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
         ? "guest session has already been superseded by the current preview player auth lane"
         : "guest session has already been superseded by a hosted-issued player identity";
     }
@@ -87,7 +90,7 @@ export function createViewerAuthSurfaceModule({
 
   function playerSessionReason(auth, deploymentHint) {
     if (auth.available) {
-      if (auth.source === "legacy_viewer_auth_bootstrap") {
+      if (auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
         return "player interaction is currently unlocked through legacy viewer auth bootstrap in trusted preview mode";
       }
       if (auth.registrationStatus === "registered") {
@@ -261,8 +264,8 @@ export function createViewerAuthSurfaceModule({
     const currentTier = state.auth.available ? "player_session" : "guest_session";
     const source = state.hostedAccess
       ? state.auth.available
-        ? state.auth.source === "legacy_viewer_auth_bootstrap"
-          ? "legacy_viewer_auth_bootstrap+hosted_access_hint"
+        ? state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
+          ? `${LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}+hosted_access_hint`
           : "hosted_player_issue+browser_local_device_session"
         : "hosted_access_hint"
       : state.auth.available
@@ -287,7 +290,7 @@ export function createViewerAuthSurfaceModule({
           id: "player_session",
           label: "player_session",
           status: state.auth.available
-            ? state.auth.source === "legacy_viewer_auth_bootstrap"
+            ? state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
               ? "active_legacy_preview"
               : state.auth.registrationStatus === "registered"
                 ? "active_hosted_session"
@@ -309,7 +312,7 @@ export function createViewerAuthSurfaceModule({
         strong_auth_actions: mainTokenTransferCapability,
       },
       reconnect: state.auth.available
-        ? state.auth.source === "legacy_viewer_auth_bootstrap"
+        ? state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE
           ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap"
           : state.auth.registrationStatus === "registered"
             ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first"

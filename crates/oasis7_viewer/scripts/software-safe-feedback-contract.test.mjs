@@ -3,7 +3,10 @@ import {
   buildTaskGame076ScenarioSnapshot,
   TASK_GAME_076_BEATS,
 } from "../software_safe_src/gameplay_attraction_scenario.js";
-import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "../software_safe_src/software_safe_constants.js";
+import {
+  HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
+  LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+} from "../software_safe_src/software_safe_constants.js";
 
 globalThis.window = {
   location: { search: "?test_api=1", href: "http://127.0.0.1:4173/software_safe.html?ws=ws://127.0.0.1:5011&test_api=1", pathname: "/software_safe.html" },
@@ -270,7 +273,7 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
     publicKey: "legacy1234efgh5678",
     privateKey: "priv-legacy",
     releaseToken: "release-legacy",
-    source: "legacy_viewer_auth_bootstrap",
+    source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
     registrationStatus: "registered",
     runtimeStatus: "registered",
     boundAgentId: "agent-0",

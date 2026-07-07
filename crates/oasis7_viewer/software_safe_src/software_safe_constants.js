@@ -7,6 +7,7 @@ export const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
 export const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 export const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 export const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
+export const LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE = "legacy_viewer_auth_bootstrap";
 export const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
 export const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
 export const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";

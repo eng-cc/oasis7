@@ -737,6 +737,7 @@ const VIEWER_PLAYER_ID_KEY = "OASIS7_VIEWER_PLAYER_ID";
 const VIEWER_AUTH_PUBLIC_KEY = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_SIGNATURE_PREFIX = "awviewauth:v1:";
+const LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE = "legacy_viewer_auth_bootstrap";
 const HOSTED_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.hosted_player_session.v1";
 const UI_LOCALE_STORAGE_PREFIX = "oasis7.viewer.locale.v1";
 const PROMPT_OVERRIDES_VISIBILITY_STORAGE_PREFIX = "oasis7.viewer.prompt_overrides_visible.v1";
@@ -796,7 +797,7 @@ function createViewerAuthSurfaceModule({
   function authDeploymentHint(auth) {
     const hostedMode = String(state2.hostedAccess?.deployment_mode || "").trim();
     if (isHostedPublicJoinDeploymentMode(hostedMode)) {
-      if (auth.available && auth.source === "legacy_viewer_auth_bootstrap") {
+      if (auth.available && auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
         return "hosted_public_join_contract_with_legacy_bootstrap";
       }
       return auth.available ? "hosted_public_join_contract_with_browser_session" : "hosted_public_join_contract";
@@ -827,7 +828,7 @@ function createViewerAuthSurfaceModule({
   }
   function guestSessionReason(auth, deploymentHint) {
     if (auth.available) {
-      return auth.source === "legacy_viewer_auth_bootstrap" ? "guest session has already been superseded by the current preview player auth lane" : "guest session has already been superseded by a hosted-issued player identity";
+      return auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? "guest session has already been superseded by the current preview player auth lane" : "guest session has already been superseded by a hosted-issued player identity";
     }
     if (isHostedPublicJoinHint(deploymentHint)) {
       return auth.error || "this browser is still guest-only; hosted public join must complete hosted account login before low-risk interaction unlocks";
@@ -836,7 +837,7 @@ function createViewerAuthSurfaceModule({
   }
   function playerSessionReason(auth, deploymentHint) {
     if (auth.available) {
-      if (auth.source === "legacy_viewer_auth_bootstrap") {
+      if (auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
         return "player interaction is currently unlocked through legacy viewer auth bootstrap in trusted preview mode";
       }
       if (auth.registrationStatus === "registered") {
@@ -993,7 +994,7 @@ function createViewerAuthSurfaceModule({
     const mainTokenTransferCapability = buildSemanticCapability2("main_token_transfer");
     const strongAuthTier = buildStrongAuthTier();
     const currentTier = state2.auth.available ? "player_session" : "guest_session";
-    const source = state2.hostedAccess ? state2.auth.available ? state2.auth.source === "legacy_viewer_auth_bootstrap" ? "legacy_viewer_auth_bootstrap+hosted_access_hint" : "hosted_player_issue+browser_local_device_session" : "hosted_access_hint" : state2.auth.available ? state2.auth.source : "guest_only";
+    const source = state2.hostedAccess ? state2.auth.available ? state2.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? `${LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE}+hosted_access_hint` : "hosted_player_issue+browser_local_device_session" : "hosted_access_hint" : state2.auth.available ? state2.auth.source : "guest_only";
     return {
       deploymentHint,
       source,
@@ -1009,7 +1010,7 @@ function createViewerAuthSurfaceModule({
         {
           id: "player_session",
           label: "player_session",
-          status: state2.auth.available ? state2.auth.source === "legacy_viewer_auth_bootstrap" ? "active_legacy_preview" : state2.auth.registrationStatus === "registered" ? "active_hosted_session" : "issued_pending_register" : "not_issued",
+          status: state2.auth.available ? state2.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? "active_legacy_preview" : state2.auth.registrationStatus === "registered" ? "active_hosted_session" : "issued_pending_register" : "not_issued",
           reason: playerSessionReason(state2.auth, deploymentHint)
         },
         {
@@ -1025,7 +1026,7 @@ function createViewerAuthSurfaceModule({
         main_token_transfer: mainTokenTransferCapability,
         strong_auth_actions: mainTokenTransferCapability
       },
-      reconnect: state2.auth.available ? state2.auth.source === "legacy_viewer_auth_bootstrap" ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap" : state2.auth.registrationStatus === "registered" ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first" : "hosted device session is persisted locally, but runtime player-session restore is still pending this page load" : isHostedPublicJoinHint(deploymentHint) ? buildHostedRecoveryHint2("en")?.detail || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync" : "page reload is possible once viewer auth bootstrap or hosted account login succeeds"
+      reconnect: state2.auth.available ? state2.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? "reconnect still depends on the current preview bootstrap; hosted player-session reconnect/release is available only after switching away from legacy bootstrap" : state2.auth.registrationStatus === "registered" ? "page reload will reuse the hosted device session, mint a fresh browser session key, and attempt reconnect_sync first" : "hosted device session is persisted locally, but runtime player-session restore is still pending this page load" : isHostedPublicJoinHint(deploymentHint) ? buildHostedRecoveryHint2("en")?.detail || "hosted public join recovers by acquiring a player_session first, then re-registering it through reconnect_sync" : "page reload is possible once viewer auth bootstrap or hosted account login succeeds"
     };
   }
   function buildHostedActionMatrixView2() {
@@ -2195,7 +2196,7 @@ function createViewerHostedAuthStateModule({
       playerId,
       publicKey,
       privateKey,
-      source: "legacy_viewer_auth_bootstrap",
+      source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
       registrationStatus: "registered",
       sessionEpoch: 1,
       runtimeStatus: "legacy_preview",
@@ -2206,7 +2207,7 @@ function createViewerHostedAuthStateModule({
     return `${hostedPlayerSessionStoragePrefix}:${initialWsUrl2()}`;
   }
   function persistHostedPlayerSession2(auth) {
-    if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
+    if (!auth?.available || !auth?.playerId || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
       return;
     }
     try {
@@ -3365,7 +3366,7 @@ function resetHostedLoginChallenge() {
   resetHostedLoginChallenge$1(state.hostedLogin);
 }
 async function ensureHostedAuthSigningKey(auth = state.auth) {
-  if (!auth?.available || auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!auth?.available || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return auth;
   }
   if (authHasSigningKeyMaterial(auth)) {
@@ -3403,7 +3404,7 @@ async function refreshHostedAdmissionState() {
 async function refreshHostedPlayerLease() {
   const playerId = String(state.auth.playerId || "").trim();
   const releaseToken = String(state.auth.releaseToken || "").trim();
-  if (!playerId || !releaseToken || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!playerId || !releaseToken || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return null;
   }
   try {
@@ -3435,7 +3436,7 @@ function stopHostedSessionRefreshLoop() {
   }
 }
 function syncHostedSessionRefreshLoop() {
-  const shouldRun = state.connectionStatus === "connected" && state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap" && state.auth.registrationStatus === "registered" && !!state.auth.releaseToken;
+  const shouldRun = state.connectionStatus === "connected" && state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE && state.auth.registrationStatus === "registered" && !!state.auth.releaseToken;
   if (!shouldRun) {
     stopHostedSessionRefreshLoop();
     return;
@@ -4559,7 +4560,7 @@ function adoptCurrentPlayerBindingFromSnapshot(snapshot) {
   state.auth.registrationStatus = "registered";
   state.auth.runtimeStatus = "registered";
   state.auth.error = null;
-  if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
+  if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     persistHostedPlayerSession(state.auth);
   }
 }
@@ -4805,7 +4806,7 @@ async function buildGameplayActionAuthProof(request, auth) {
   };
 }
 function canAutoIssueHostedPlayerSession() {
-  return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) && state.auth.source !== "legacy_viewer_auth_bootstrap";
+  return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
 }
 function isLoopbackHostname(raw) {
   const value = String(raw || "").trim().toLowerCase();
@@ -5076,7 +5077,7 @@ async function requestHostedStrongAuthGrant(actionId, agentId) {
   return payload.grant;
 }
 async function sendReconnectSync() {
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return;
   }
   const auth = await ensureHostedAuthSigningKey(state.auth);
@@ -5098,7 +5099,7 @@ async function sendReconnectSync() {
   });
 }
 function probeHostedRuntimeSession() {
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || state.connectionStatus !== "connected" || state.auth.registrationStatus !== "registered") {
+  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || state.connectionStatus !== "connected" || state.auth.registrationStatus !== "registered") {
     return;
   }
   state.auth.syncInFlight = true;
@@ -5118,7 +5119,7 @@ function probeHostedRuntimeSession() {
 async function releaseHostedPlayerSlot() {
   const playerId = String(state.auth.playerId || "").trim();
   const releaseToken = String(state.auth.releaseToken || "").trim();
-  if (!playerId || !releaseToken || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!playerId || !releaseToken || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return { ok: false, skipped: true };
   }
   const query = `player_id=${encodeURIComponent(playerId)}&release_token=${encodeURIComponent(releaseToken)}`;
@@ -5166,7 +5167,7 @@ function resetHostedPlayerAuthState(errorMessage = null, revocationMeta = null) 
   void refreshHostedAdmissionState().then(() => render());
 }
 async function logoutHostedPlayerSession() {
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return { ok: false, reason: "hosted browser session is unavailable" };
   }
   const revokeRequest = {
@@ -5196,7 +5197,7 @@ async function logoutHostedPlayerSession() {
   return { ok: true };
 }
 function syncHostedPlayerSessionOnConnect() {
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap" || state.auth.syncInFlight) {
+  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE || state.auth.syncInFlight) {
     return;
   }
   void sendReconnectSync();
@@ -5265,9 +5266,9 @@ function expirePendingSessionRegisterWaiterForTest() {
 }
 async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
   clearHostedRuntimeSyncTimer();
-  const auth = state.auth.source === "legacy_viewer_auth_bootstrap" ? state.auth : await ensureHostedAuthSigningKey(state.auth);
+  const auth = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? state.auth : await ensureHostedAuthSigningKey(state.auth);
   const normalizedRequestedAgentId = String(requestedAgentId || "").trim() || null;
-  if (state.auth.source !== "legacy_viewer_auth_bootstrap") {
+  if (state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     state.auth.registrationStatus = "registering";
     state.auth.syncInFlight = true;
     state.auth.recoveryErrorCode = null;
@@ -6129,7 +6130,7 @@ function adoptHostedRecoveryAck(ack) {
     return;
   }
   clearHostedRuntimeSyncTimer();
-  const usesLegacyPreviewBootstrap = state.auth.source === "legacy_viewer_auth_bootstrap";
+  const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
   const previousRequestedAgentId = state.auth.pendingRequestedAgentId;
   const nextBoundAgentId = ack.agent_id || state.auth.boundAgentId || null;
@@ -6191,7 +6192,7 @@ function adoptHostedRecoveryAck(ack) {
   }
 }
 async function recoverHostedSessionFromError(error) {
-  if (!canAutoIssueHostedPlayerSession() && !state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!canAutoIssueHostedPlayerSession() && !state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     return;
   }
   const code = String(error?.code || "").trim();
@@ -6285,7 +6286,7 @@ function handleAuthoritativeRecoveryError(error) {
     });
     return;
   }
-  if (!state.auth.available || state.auth.source === "legacy_viewer_auth_bootstrap") {
+  if (!state.auth.available || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
     clearPendingSessionRegisterWaiter(error?.message || error?.code || "authoritative recovery failed");
     return;
   }
@@ -6405,7 +6406,7 @@ function attachSocket(ws) {
   ws.addEventListener("close", () => {
     state.connectionStatus = "connecting";
     clearHostedRuntimeSyncTimer();
-    if (state.auth.available && state.auth.source !== "legacy_viewer_auth_bootstrap") {
+    if (state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
       state.auth.syncInFlight = false;
       state.auth.runtimeStatus = "disconnected";
     }
@@ -10833,7 +10834,7 @@ function WorldStageHero() {
     if (source === "hosted_browser_storage" || source === "hosted_player_session_issue") {
       return tr(locale(), "邮箱登录身份", "Hosted Account Identity");
     }
-    if (source === "local_test_api_ephemeral" || source === "legacy_viewer_auth_bootstrap") {
+    if (source === "local_test_api_ephemeral" || source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
       return tr(locale(), "本地测试身份", "Local Test Identity");
     }
     return authSurface().currentTier || tr(locale(), "玩家身份", "Player Identity");
@@ -12268,7 +12269,7 @@ function WorldSummaryPanel() {
               }
             }), createComponent(Show, {
               get when() {
-                return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
+                return memo(() => !!state$1.auth.available)() && state$1.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
               },
               get children() {
                 var _el$219 = _tmpl$44(), _el$220 = _el$219.firstChild;
@@ -12494,7 +12495,7 @@ function WorldSummaryPanel() {
     }), null);
     insert(_el$230, createComponent(Show, {
       get when() {
-        return memo(() => !!state$1.auth.available)() && state$1.auth.source !== "legacy_viewer_auth_bootstrap";
+        return memo(() => !!state$1.auth.available)() && state$1.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
       },
       get children() {
         var _el$231 = _tmpl$45();

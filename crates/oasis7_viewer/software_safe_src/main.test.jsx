@@ -1,7 +1,10 @@
 import { fireEvent, screen, waitFor, within } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTaskGame076ScenarioSnapshot } from "./gameplay_attraction_scenario.js";
-import { HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE } from "./software_safe_constants.js";
+import {
+  HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
+  LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+} from "./software_safe_constants.js";
 import { buildAuthEnvelope } from "./viewer_auth_crypto.js";
 
 vi.mock("./pixel_world_host.jsx", () => ({
@@ -1808,7 +1811,7 @@ describe("viewer web ui automation baseline", () => {
           playerId: "local-test-player-bound",
           publicKey: "09".repeat(32),
           privateKey: "07".repeat(32),
-          source: "legacy_viewer_auth_bootstrap",
+          source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
           registrationStatus: "registered",
           runtimeStatus: "registered",
           boundAgentId: "agent-0",
@@ -1899,7 +1902,7 @@ describe("viewer web ui automation baseline", () => {
           playerId: "local-test-player-bound",
           publicKey: "09".repeat(32),
           privateKey: "07".repeat(32),
-          source: "legacy_viewer_auth_bootstrap",
+          source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
           registrationStatus: "registered",
           runtimeStatus: "registered",
           boundAgentId: "agent-0",
@@ -1999,7 +2002,7 @@ describe("viewer web ui automation baseline", () => {
           playerId: "local-test-player-bound",
           publicKey: "09".repeat(32),
           privateKey: "07".repeat(32),
-          source: "legacy_viewer_auth_bootstrap",
+          source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
           registrationStatus: "registered",
           runtimeStatus: "registered",
           boundAgentId: "agent-0",

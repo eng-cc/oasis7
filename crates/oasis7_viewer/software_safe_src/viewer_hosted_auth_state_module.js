@@ -1,3 +1,5 @@
+import { LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE } from "./software_safe_constants.js";
+
 function buildDefaultAuthState(overrides = {}) {
   return {
     available: false,
@@ -65,7 +67,7 @@ export function createViewerHostedAuthStateModule({
       playerId,
       publicKey,
       privateKey,
-      source: "legacy_viewer_auth_bootstrap",
+      source: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
       registrationStatus: "registered",
       sessionEpoch: 1,
       runtimeStatus: "legacy_preview",
@@ -78,7 +80,7 @@ export function createViewerHostedAuthStateModule({
   }
 
   function persistHostedPlayerSession(auth) {
-    if (!auth?.available || !auth?.playerId || auth.source === "legacy_viewer_auth_bootstrap") {
+    if (!auth?.available || !auth?.playerId || auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
       return;
     }
     try {
