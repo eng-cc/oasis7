@@ -321,12 +321,16 @@ cat >"$valid_finality_evidence" <<'JSON'
     "consensus_approver_subset_checked": true,
     "ed25519_signature_verification_checked": true,
     "validator_set_transition_execution_checked": true,
+    "validator_set_transition_governance_checked": true,
+    "trusted_governance_anchor_checked": false,
+    "governance_set_hash": "",
+    "governance_certificate_count": 0,
     "validator_set_transition_count": 0
   },
   "transition_sample": {
     "transition_result": "no_transition_in_sample",
     "transition_count": 0,
-    "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance"
+    "reason": "bounded transition governance certificate, execution, and finality semantics are verified when present"
   },
   "fork_or_reorg_cases": [
     "conflicting_head_rejected_or_recorded",
@@ -339,7 +343,7 @@ cat >"$valid_finality_evidence" <<'JSON'
     "status": "pass",
     "verifier_mode": "validator_set_finality",
     "proof_contract": "WorldFinalityProofV1",
-    "hash_domain": "oasis7.world_finality_proof.v1",
+    "hash_domain": "oasis7.world_finality_proof.v2",
     "claim_boundary": "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness",
     "proof_ref": "finality-proof-ref-42",
     "proof_hash": "finality-proof-hash-42",
@@ -366,6 +370,10 @@ cat >"$valid_finality_evidence" <<'JSON'
       "consensus_approver_subset_checked": true,
       "ed25519_signature_verification_checked": true,
       "validator_set_transition_execution_checked": true,
+      "validator_set_transition_governance_checked": true,
+      "trusted_governance_anchor_checked": false,
+      "governance_set_hash": "",
+      "governance_certificate_count": 0,
       "validator_set_transition_count": 0
     },
     "head": {
@@ -376,7 +384,6 @@ cat >"$valid_finality_evidence" <<'JSON'
     "does_not_claim": [
       "mainnet-grade finality",
       "full light client",
-      "trust-minimized validator-set transition governance",
       "DA sampling",
       "multi-client consensus equivalence",
       "public validator onboarding open"
@@ -388,7 +395,6 @@ cat >"$valid_finality_evidence" <<'JSON'
   "does_not_claim": [
     "full light client security",
     "mainnet-grade finality",
-    "trust-minimized validator transition",
     "public validator onboarding open",
     "permissionless validator onboarding",
     "DA sampling",
@@ -398,7 +404,7 @@ cat >"$valid_finality_evidence" <<'JSON'
   ],
   "residual_risk": [
     "same implementation family verifier",
-    "signature evidence hash is not live signature verification"
+    "bounded transition governance remains same-family verifier evidence"
   ]
 }
 JSON
@@ -410,9 +416,15 @@ import sys
 
 data = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 data["finality_sample"]["validator_set_transition_count"] = 1
-data["transition_sample"]["transition_result"] = "bounded_transition_execution_checked"
+data["finality_sample"]["trusted_governance_anchor_checked"] = True
+data["finality_sample"]["governance_set_hash"] = "governance-set-hash-42"
+data["finality_sample"]["governance_certificate_count"] = 1
+data["transition_sample"]["transition_result"] = "bounded_governance_authenticated_transition_checked"
 data["transition_sample"]["transition_count"] = 1
 data["external_verifier"]["finality"]["validator_set_transition_count"] = 1
+data["external_verifier"]["finality"]["trusted_governance_anchor_checked"] = True
+data["external_verifier"]["finality"]["governance_set_hash"] = "governance-set-hash-42"
+data["external_verifier"]["finality"]["governance_certificate_count"] = 1
 pathlib.Path(sys.argv[2]).write_text(json.dumps(data, indent=2), encoding="utf-8")
 PY
 
@@ -653,8 +665,21 @@ elif case_name == "signature_not_checked":
     data["finality_sample"]["ed25519_signature_verification_checked"] = False
 elif case_name == "transition_not_checked":
     data["finality_sample"]["validator_set_transition_execution_checked"] = False
+elif case_name == "transition_governance_not_checked":
+    data["finality_sample"]["validator_set_transition_governance_checked"] = False
+elif case_name == "transition_governance_anchor_not_checked":
+    data["finality_sample"]["validator_set_transition_count"] = 1
+    data["finality_sample"]["trusted_governance_anchor_checked"] = False
+    data["finality_sample"]["governance_set_hash"] = "governance-set-hash-42"
+    data["finality_sample"]["governance_certificate_count"] = 1
+    data["external_verifier"]["finality"]["validator_set_transition_count"] = 1
+    data["external_verifier"]["finality"]["trusted_governance_anchor_checked"] = False
+    data["external_verifier"]["finality"]["governance_set_hash"] = "governance-set-hash-42"
+    data["external_verifier"]["finality"]["governance_certificate_count"] = 1
 elif case_name == "external_signature_mismatch":
     data["external_verifier"]["finality"]["ed25519_signature_verification_checked"] = False
+elif case_name == "external_transition_governance_mismatch":
+    data["external_verifier"]["finality"]["validator_set_transition_governance_checked"] = False
 elif case_name == "external_transition_count_mismatch":
     data["external_verifier"]["finality"]["validator_set_transition_count"] = 1
 elif case_name == "external_missing_denials":
@@ -663,6 +688,16 @@ elif case_name == "db_access":
     data["node_db_access_used"] = True
 elif case_name == "missing_denials":
     data["does_not_claim"] = ["ready_for_live_candidate"]
+elif case_name == "missing_live_launch_denial":
+    data["does_not_claim"] = [
+        "full light client security",
+        "mainnet-grade finality",
+        "public validator onboarding open",
+        "permissionless validator onboarding",
+        "DA sampling",
+        "multi-client consensus equivalence",
+        "ready_for_live_candidate"
+    ]
 else:
     raise SystemExit(f"unknown invalid finality case: {case_name}")
 
@@ -693,11 +728,15 @@ run_invalid_finality_case "validator_set_hash_mismatch" "validator_finality_proo
 run_invalid_finality_case "threshold_not_checked" "validator_finality_proof_ready finality_sample.stake_threshold_checked must be true"
 run_invalid_finality_case "signature_not_checked" "validator_finality_proof_ready finality_sample.ed25519_signature_verification_checked must be true"
 run_invalid_finality_case "transition_not_checked" "validator_finality_proof_ready finality_sample.validator_set_transition_execution_checked must be true"
+run_invalid_finality_case "transition_governance_not_checked" "validator_finality_proof_ready finality_sample.validator_set_transition_governance_checked must be true"
+run_invalid_finality_case "transition_governance_anchor_not_checked" "validator_finality_proof_ready finality_sample.trusted_governance_anchor_checked must be true when transitions are present"
 run_invalid_finality_case "external_signature_mismatch" "validator_finality_proof_ready external_verifier.finality.ed25519_signature_verification_checked must match finality_sample"
+run_invalid_finality_case "external_transition_governance_mismatch" "validator_finality_proof_ready external_verifier.finality.validator_set_transition_governance_checked must match finality_sample"
 run_invalid_finality_case "external_transition_count_mismatch" "validator_finality_proof_ready external_verifier.finality.validator_set_transition_count must match finality_sample"
 run_invalid_finality_case "external_missing_denials" "validator_finality_proof_ready external_verifier.does_not_claim missing"
 run_invalid_finality_case "db_access" "validator_finality_proof_ready node_db_access_used must be false"
 run_invalid_finality_case "missing_denials" "validator_finality_proof_ready does_not_claim missing"
+run_invalid_finality_case "missing_live_launch_denial" "validator_finality_proof_ready does_not_claim missing: live public launch"
 
 run_invalid_case() {
   local case_name=$1

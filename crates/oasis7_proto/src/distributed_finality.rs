@@ -7,13 +7,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::distributed::WorldHeadProofV1;
 
-pub const WORLD_FINALITY_PROOF_V1_SCHEMA: u16 = 1;
-pub const WORLD_FINALITY_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_finality_proof.v1";
+pub const WORLD_FINALITY_PROOF_V1_SCHEMA: u16 = 2;
+pub const WORLD_FINALITY_PROOF_HASH_DOMAIN_V1: &str = "oasis7.world_finality_proof.v2";
 pub const WORLD_FINALITY_VALIDATOR_SET_HASH_DOMAIN_V1: &str =
     "oasis7.world_finality_validator_set.v1";
+pub const WORLD_FINALITY_GOVERNANCE_SET_HASH_DOMAIN_V1: &str =
+    "oasis7.world_finality_governance_set.v1";
 pub const WORLD_FINALITY_VOTE_SIGNING_DOMAIN_V1: &str = "oasis7.world_finality_vote.v1";
 pub const WORLD_FINALITY_VALIDATOR_SET_TRANSITION_SIGNING_DOMAIN_V1: &str =
     "oasis7.world_finality_validator_set_transition.v1";
+pub const WORLD_FINALITY_VALIDATOR_SET_TRANSITION_GOVERNANCE_SIGNING_DOMAIN_V1: &str =
+    "oasis7.world_finality_validator_set_transition_governance.v1";
 pub const WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1: &str =
     "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness";
 
@@ -81,6 +85,39 @@ pub struct WorldFinalityValidatorSetTransitionApprovalV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFinalityGovernanceSignerV1 {
+    pub signer_id: String,
+    pub stake_weight: u64,
+    pub governance_public_key: String,
+    pub activation_height: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_height: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFinalityValidatorSetTransitionGovernanceApprovalV1 {
+    pub signer_id: String,
+    pub governance_set_hash: String,
+    pub from_validator_set_hash: String,
+    pub to_validator_set_hash: String,
+    pub to_validator_set_activation_height: u64,
+    pub transition_height: u64,
+    pub transition_block_hash: String,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorldFinalityValidatorSetTransitionGovernanceCertificateV1 {
+    pub governance_set_id: String,
+    pub governance_set_activation_height: u64,
+    pub governance_threshold_bps: u64,
+    pub governance_set_hash: String,
+    pub governance_signers: Vec<WorldFinalityGovernanceSignerV1>,
+    pub governance_approvals: Vec<WorldFinalityValidatorSetTransitionGovernanceApprovalV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorldFinalityValidatorSetTransitionV1 {
     pub from_validator_set_id: String,
     pub from_validator_set_hash: String,
@@ -92,6 +129,8 @@ pub struct WorldFinalityValidatorSetTransitionV1 {
     pub transition_height: u64,
     pub transition_block_hash: String,
     pub approvals: Vec<WorldFinalityValidatorSetTransitionApprovalV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_certificate: Option<WorldFinalityValidatorSetTransitionGovernanceCertificateV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,6 +158,12 @@ pub struct WorldFinalityProofV1 {
 }
 
 impl WorldFinalityValidatorV1 {
+    fn is_active_at(&self, height: u64) -> bool {
+        self.activation_height <= height && self.exit_height.is_none_or(|exit| height < exit)
+    }
+}
+
+impl WorldFinalityGovernanceSignerV1 {
     fn is_active_at(&self, height: u64) -> bool {
         self.activation_height <= height && self.exit_height.is_none_or(|exit| height < exit)
     }
@@ -329,6 +374,29 @@ pub fn world_finality_validator_set_transition_signing_payload(
     ))
 }
 
+pub fn world_finality_validator_set_transition_governance_signing_payload(
+    signer_id: &str,
+    world_id: &str,
+    governance_set_hash: &str,
+    from_validator_set_hash: &str,
+    to_validator_set_hash: &str,
+    to_validator_set_activation_height: u64,
+    transition_height: u64,
+    transition_block_hash: &str,
+) -> Result<Vec<u8>, serde_cbor::Error> {
+    serde_cbor::to_vec(&(
+        WORLD_FINALITY_VALIDATOR_SET_TRANSITION_GOVERNANCE_SIGNING_DOMAIN_V1,
+        signer_id,
+        world_id,
+        governance_set_hash,
+        from_validator_set_hash,
+        to_validator_set_hash,
+        to_validator_set_activation_height,
+        transition_height,
+        transition_block_hash,
+    ))
+}
+
 #[derive(Debug, Clone)]
 struct ActiveFinalityValidatorSet {
     validator_set_id: String,
@@ -353,6 +421,23 @@ pub fn compute_world_finality_validator_set_hash(
         validators,
     ))
     .map_err(|err| format!("encode world finality validator set: {err}"))
+}
+
+pub fn compute_world_finality_governance_set_hash(
+    governance_set_id: &str,
+    activation_height: u64,
+    governance_threshold_bps: u64,
+    governance_signers: &[WorldFinalityGovernanceSignerV1],
+) -> Result<String, String> {
+    validate_governance_signer_set(governance_signers)?;
+    canonical_blake3_hex(&(
+        WORLD_FINALITY_GOVERNANCE_SET_HASH_DOMAIN_V1,
+        governance_set_id,
+        activation_height,
+        governance_threshold_bps,
+        governance_signers,
+    ))
+    .map_err(|err| format!("encode world finality governance signer set: {err}"))
 }
 
 fn validate_validator_set(validators: &[WorldFinalityValidatorV1]) -> Result<(), String> {
@@ -387,6 +472,49 @@ fn validate_validator_set(validators: &[WorldFinalityValidatorV1]) -> Result<(),
             if exit_height <= validator.activation_height {
                 return Err(format!(
                     "validators[{index}].exit_height must be greater than activation_height"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_governance_signer_set(
+    governance_signers: &[WorldFinalityGovernanceSignerV1],
+) -> Result<(), String> {
+    if governance_signers.is_empty() {
+        return Err("governance_signers must not be empty".to_string());
+    }
+    let mut ids = BTreeSet::new();
+    let mut signer_keys = BTreeSet::new();
+    for (index, signer) in governance_signers.iter().enumerate() {
+        require_non_empty(
+            format!("governance_signers[{index}].signer_id").as_str(),
+            &signer.signer_id,
+        )?;
+        if !ids.insert(signer.signer_id.as_str()) {
+            return Err(format!(
+                "governance_signers[{index}].signer_id duplicates an earlier signer"
+            ));
+        }
+        require_non_empty(
+            format!("governance_signers[{index}].governance_public_key").as_str(),
+            &signer.governance_public_key,
+        )?;
+        if !signer_keys.insert(signer.governance_public_key.as_str()) {
+            return Err(format!(
+                "governance_signers[{index}].governance_public_key duplicates an earlier signer"
+            ));
+        }
+        if signer.stake_weight == 0 {
+            return Err(format!(
+                "governance_signers[{index}].stake_weight must be positive"
+            ));
+        }
+        if let Some(exit_height) = signer.exit_height {
+            if exit_height <= signer.activation_height {
+                return Err(format!(
+                    "governance_signers[{index}].exit_height must be greater than activation_height"
                 ));
             }
         }
@@ -456,6 +584,7 @@ fn validate_validator_set_transitions(
             index,
             transition,
             &current,
+            proof.world_id.as_str(),
             committed_blocks,
             consensus_approvers_by_height,
         )?;
@@ -483,6 +612,7 @@ fn validate_single_validator_set_transition(
     index: usize,
     transition: &WorldFinalityValidatorSetTransitionV1,
     current: &ActiveFinalityValidatorSet,
+    world_id: &str,
     committed_blocks: &BTreeMap<u64, (String, String)>,
     consensus_approvers_by_height: &BTreeMap<u64, Vec<String>>,
 ) -> Result<(), String> {
@@ -560,7 +690,140 @@ fn validate_single_validator_set_transition(
         consensus_approvers.as_slice(),
         current.quorum_threshold_bps,
         current.validators.as_slice(),
-    )
+    )?;
+    validate_transition_governance_certificate(index, transition, world_id)
+}
+
+fn validate_transition_governance_certificate(
+    transition_index: usize,
+    transition: &WorldFinalityValidatorSetTransitionV1,
+    world_id: &str,
+) -> Result<(), String> {
+    let certificate = transition.governance_certificate.as_ref().ok_or_else(|| {
+        format!(
+            "validator_set_transitions[{transition_index}].governance_certificate required for trust-minimized transition governance"
+        )
+    })?;
+    require_non_empty(
+        format!(
+            "validator_set_transitions[{transition_index}].governance_certificate.governance_set_id"
+        )
+        .as_str(),
+        &certificate.governance_set_id,
+    )?;
+    if certificate.governance_set_activation_height > transition.transition_height {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate.governance_set_activation_height must be <= transition_height"
+        ));
+    }
+    if !(5_001..=10_000).contains(&certificate.governance_threshold_bps) {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate.governance_threshold_bps must be in 5001..=10000"
+        ));
+    }
+    let computed_hash = compute_world_finality_governance_set_hash(
+        certificate.governance_set_id.as_str(),
+        certificate.governance_set_activation_height,
+        certificate.governance_threshold_bps,
+        certificate.governance_signers.as_slice(),
+    )?;
+    if certificate.governance_set_hash != computed_hash {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate.governance_set_hash mismatch"
+        ));
+    }
+    if certificate.governance_approvals.is_empty() {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals must not be empty"
+        ));
+    }
+    let governance_signers_by_id = certificate
+        .governance_signers
+        .iter()
+        .map(|signer| (signer.signer_id.as_str(), signer))
+        .collect::<BTreeMap<_, _>>();
+    let mut seen_approvers = BTreeSet::new();
+    let mut signed_stake = 0_u128;
+    for (index, approval) in certificate.governance_approvals.iter().enumerate() {
+        require_non_empty(
+            format!(
+                "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals[{index}].signer_id"
+            )
+            .as_str(),
+            &approval.signer_id,
+        )?;
+        if !seen_approvers.insert(approval.signer_id.as_str()) {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals[{index}] duplicate signer"
+            ));
+        }
+        if approval.governance_set_hash != certificate.governance_set_hash
+            || approval.from_validator_set_hash != transition.from_validator_set_hash
+            || approval.to_validator_set_hash != transition.to_validator_set_hash
+            || approval.to_validator_set_activation_height
+                != transition.to_validator_set_activation_height
+            || approval.transition_height != transition.transition_height
+            || approval.transition_block_hash != transition.transition_block_hash
+        {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals[{index}] target mismatch"
+            ));
+        }
+        let signer = governance_signers_by_id
+            .get(approval.signer_id.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals[{index}] signer not in governance set"
+                )
+            })?;
+        if !signer.is_active_at(transition.transition_height) {
+            return Err(format!(
+                "validator_set_transitions[{transition_index}].governance_certificate.governance_approvals[{index}] signer not active"
+            ));
+        }
+        if approval.signature_scheme != "ed25519" {
+            return Err(format!(
+                "unsupported transition governance approval signature_scheme: {}",
+                approval.signature_scheme
+            ));
+        }
+        let payload = world_finality_validator_set_transition_governance_signing_payload(
+            approval.signer_id.as_str(),
+            world_id,
+            approval.governance_set_hash.as_str(),
+            approval.from_validator_set_hash.as_str(),
+            approval.to_validator_set_hash.as_str(),
+            approval.to_validator_set_activation_height,
+            approval.transition_height,
+            approval.transition_block_hash.as_str(),
+        )
+        .map_err(|err| format!("encode transition governance approval signing payload: {err}"))?;
+        verify_ed25519_signature(
+            signer.governance_public_key.as_str(),
+            approval.signature_hex.as_str(),
+            payload.as_slice(),
+            "transition governance approval signature",
+        )?;
+        signed_stake += u128::from(signer.stake_weight);
+    }
+    let total_stake = certificate
+        .governance_signers
+        .iter()
+        .filter(|signer| signer.is_active_at(transition.transition_height))
+        .map(|signer| u128::from(signer.stake_weight))
+        .sum::<u128>();
+    if total_stake == 0 {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate has no active governance stake"
+        ));
+    }
+    if signed_stake * 10_000 < total_stake * u128::from(certificate.governance_threshold_bps) {
+        return Err(format!(
+            "validator_set_transitions[{transition_index}].governance_certificate approval stake below threshold: signed={signed_stake} total={total_stake} threshold_bps={}",
+            certificate.governance_threshold_bps
+        ));
+    }
+    Ok(())
 }
 
 fn validate_transition_approvals(

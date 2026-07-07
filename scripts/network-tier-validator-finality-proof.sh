@@ -15,13 +15,15 @@ Usage:
     --sample-started-at <iso8601> \
     --sample-ended-at <iso8601> \
     --out <evidence.json> \
+    [--expect-governance-set-hash <hash>] \
     [--status-endpoint-ref <ref>]
 
 Purpose:
   Verify a bounded WorldFinalityProofV1 artifact from an external process and
-  emit optional validator-set/finality/fork-misbehavior evidence. This does not
-  claim full light-client security, trust-minimized validator transition,
-  public validator onboarding, or mainnet-grade finality.
+  emit optional validator-set/finality/fork-misbehavior evidence with bounded
+  governance-authenticated validator-set transition checks. This does not claim
+  full light-client security, public validator onboarding, or mainnet-grade
+  finality.
 USAGE
 }
 
@@ -32,6 +34,7 @@ expect_to_height=""
 sample_started_at=""
 sample_ended_at=""
 status_endpoint_ref=""
+expect_governance_set_hash=""
 out=""
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +65,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --status-endpoint-ref)
       status_endpoint_ref=${2:-}
+      shift 2
+      ;;
+    --expect-governance-set-hash)
+      expect_governance_set_hash=${2:-}
       shift 2
       ;;
     --out)
@@ -102,12 +109,19 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 verifier_summary="$tmpdir/finality-verifier-summary.json"
 
+verifier_args=(
+  --finality-proof "$finality_proof"
+  --format json
+  --expect-world-id "$world_id"
+  --expect-height "$expect_to_height"
+)
+if [[ -n "$expect_governance_set_hash" ]]; then
+  verifier_args+=(--expect-governance-set-hash "$expect_governance_set_hash")
+fi
+verifier_args+=(--json)
+
 cargo run -p oasis7_proto --quiet --bin oasis7_world_head_proof_verify -- \
-  --finality-proof "$finality_proof" \
-  --format json \
-  --expect-world-id "$world_id" \
-  --expect-height "$expect_to_height" \
-  --json >"$verifier_summary"
+  "${verifier_args[@]}" >"$verifier_summary"
 
 python3 - \
   "$manifest" \
@@ -157,17 +171,24 @@ finality = verifier.get("finality") or {}
 head = verifier.get("head") or {}
 trusted_anchor = verifier.get("trusted_anchor") or {}
 
+command_parts = [
+    "cargo run -p oasis7_proto --bin oasis7_world_head_proof_verify --",
+    "--finality-proof <proof.json>",
+    "--format json",
+    f"--expect-world-id {world_id}",
+    f"--expect-height {expect_to_height}",
+]
+if verifier.get("finality", {}).get("trusted_governance_anchor_checked") is True:
+    command_parts.append("--expect-governance-set-hash <governance-set-hash>")
+command_parts.append("--json")
+
 evidence = {
     "evidence_schema": "oasis7.validator_finality_proof.v1",
     "status": "pass",
     "verifier_mode": "validator_set_finality",
     "independent_process": True,
     "implementation_ref": "crates/oasis7_proto/src/bin/oasis7_world_head_proof_verify.rs",
-    "command_ref": (
-        "cargo run -p oasis7_proto --bin oasis7_world_head_proof_verify -- "
-        "--finality-proof <proof.json> --format json "
-        f"--expect-world-id {world_id} --expect-height {expect_to_height} --json"
-    ),
+    "command_ref": " ".join(command_parts),
     "network_tier": {
         "tier": "public_testnet",
         "status": manifest.get("status") or "",
@@ -200,12 +221,12 @@ evidence = {
     "finality_sample": finality,
     "transition_sample": {
         "transition_result": (
-            "bounded_transition_execution_checked"
+            "bounded_governance_authenticated_transition_checked"
             if int(finality.get("validator_set_transition_count") or 0) > 0
             else "no_transition_in_sample"
         ),
         "transition_count": int(finality.get("validator_set_transition_count") or 0),
-        "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance",
+        "reason": "bounded transition governance certificate, execution, and finality semantics are verified when present",
     },
     "fork_or_reorg_cases": [
         "conflicting_head_rejected_or_recorded",
@@ -225,7 +246,6 @@ evidence = {
     "does_not_claim": [
         "full light client security",
         "mainnet-grade finality",
-        "trust-minimized validator transition",
         "public validator onboarding open",
         "permissionless validator onboarding",
         "DA sampling",
@@ -235,7 +255,7 @@ evidence = {
     ],
     "residual_risk": [
         "same implementation family verifier; no independent client parity",
-        "bounded transition execution is same-family verifier evidence, not trust-minimized validator governance",
+        "bounded transition governance remains same-family verifier evidence, not full light-client or multi-client equivalence",
     ],
 }
 

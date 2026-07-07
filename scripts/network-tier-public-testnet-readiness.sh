@@ -1409,6 +1409,11 @@ def validate_validator_finality_proof_pass_evidence(
             "consensus_approver_subset_checked",
             "ed25519_signature_verification_checked",
             "validator_set_transition_execution_checked",
+            "validator_set_transition_governance_checked",
+            "trusted_governance_anchor_checked",
+            "governance_set_hash",
+            "governance_certificate_count",
+            "validator_set_transition_count",
         ):
             if key not in finality_sample:
                 blockers.append(f"{lane} finality_sample.{key} missing: {raw}")
@@ -1418,6 +1423,7 @@ def validate_validator_finality_proof_pass_evidence(
             "consensus_approver_subset_checked",
             "ed25519_signature_verification_checked",
             "validator_set_transition_execution_checked",
+            "validator_set_transition_governance_checked",
         ):
             if finality_sample.get(key) is not True:
                 blockers.append(f"{lane} finality_sample.{key} must be true: {raw}")
@@ -1425,6 +1431,20 @@ def validate_validator_finality_proof_pass_evidence(
             blockers.append(f"{lane} finality_sample.commitment_count must be positive: {raw}")
         if int(finality_sample.get("vote_count") or 0) <= 0:
             blockers.append(f"{lane} finality_sample.vote_count must be positive: {raw}")
+        transition_count = int(finality_sample.get("validator_set_transition_count") or 0)
+        governance_certificate_count = int(finality_sample.get("governance_certificate_count") or 0)
+        if transition_count > 0:
+            if finality_sample.get("trusted_governance_anchor_checked") is not True:
+                blockers.append(f"{lane} finality_sample.trusted_governance_anchor_checked must be true when transitions are present: {raw}")
+            if not str(finality_sample.get("governance_set_hash") or "").strip():
+                blockers.append(f"{lane} finality_sample.governance_set_hash missing when transitions are present: {raw}")
+            if governance_certificate_count != transition_count:
+                blockers.append(f"{lane} finality_sample.governance_certificate_count must match validator_set_transition_count: {raw}")
+        else:
+            if finality_sample.get("trusted_governance_anchor_checked") is not False:
+                blockers.append(f"{lane} finality_sample.trusted_governance_anchor_checked must be false when no transitions are present: {raw}")
+            if governance_certificate_count != 0:
+                blockers.append(f"{lane} finality_sample.governance_certificate_count must be 0 when no transitions are present: {raw}")
 
     if data.get("misbehavior_result") not in {"none_observed", "rejected", "evidence_recorded"}:
         blockers.append(f"{lane} misbehavior_result unsupported: {raw}")
@@ -1478,6 +1498,10 @@ def validate_validator_finality_proof_pass_evidence(
                 "consensus_approver_subset_checked",
                 "ed25519_signature_verification_checked",
                 "validator_set_transition_execution_checked",
+                "validator_set_transition_governance_checked",
+                "trusted_governance_anchor_checked",
+                "governance_set_hash",
+                "governance_certificate_count",
                 "validator_set_transition_count",
             ):
                 if verifier_finality.get(key) != finality_sample.get(key):
@@ -1491,7 +1515,6 @@ def validate_validator_finality_proof_pass_evidence(
             verifier_required_denials = {
                 "mainnet-grade finality",
                 "full light client",
-                "trust-minimized validator-set transition governance",
                 "DA sampling",
                 "multi-client consensus equivalence",
                 "public validator onboarding open",
@@ -1521,12 +1544,12 @@ def validate_validator_finality_proof_pass_evidence(
         required_denials = {
             "full light client security",
             "mainnet-grade finality",
-            "trust-minimized validator transition",
             "public validator onboarding open",
             "permissionless validator onboarding",
             "DA sampling",
             "multi-client consensus equivalence",
             "ready_for_live_candidate",
+            "live public launch",
         }
         missing_denials = sorted(required_denials.difference(set(does_not_claim)))
         if missing_denials:

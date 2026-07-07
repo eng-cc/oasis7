@@ -11,6 +11,15 @@ use oasis7_proto::distributed::{
     WorldFinalityValidatorV1, WorldFinalityVoteV1, WorldHeadAnnounce, WorldHeadProofV1,
     compute_world_finality_validator_set_hash, world_finality_vote_signing_payload,
 };
+#[cfg(test)]
+use oasis7_proto::distributed::{
+    WorldFinalityGovernanceSignerV1, WorldFinalityValidatorSetTransitionApprovalV1,
+    WorldFinalityValidatorSetTransitionGovernanceApprovalV1,
+    WorldFinalityValidatorSetTransitionGovernanceCertificateV1,
+    WorldFinalityValidatorSetTransitionV1, compute_world_finality_governance_set_hash,
+    world_finality_validator_set_transition_governance_signing_payload,
+    world_finality_validator_set_transition_signing_payload,
+};
 use serde::Serialize;
 use serde_json::json;
 
@@ -27,12 +36,34 @@ fn sample_validator_keys() -> Vec<(&'static str, SigningKey)> {
     ]
 }
 
+#[cfg(test)]
+fn sample_governance_keys() -> Vec<(&'static str, SigningKey)> {
+    vec![
+        ("governance-a", SigningKey::from_bytes(&[11_u8; 32])),
+        ("governance-b", SigningKey::from_bytes(&[12_u8; 32])),
+        ("governance-c", SigningKey::from_bytes(&[13_u8; 32])),
+    ]
+}
+
 fn sample_public_key_hex(keys: &[(&'static str, SigningKey)], validator_id: &str) -> String {
     let key = keys
         .iter()
         .find(|(id, _)| *id == validator_id)
         .map(|(_, key)| key)
         .expect("sample validator key");
+    hex::encode(key.verifying_key().to_bytes())
+}
+
+#[cfg(test)]
+fn sample_governance_public_key_hex(
+    keys: &[(&'static str, SigningKey)],
+    signer_id: &str,
+) -> String {
+    let key = keys
+        .iter()
+        .find(|(id, _)| *id == signer_id)
+        .map(|(_, key)| key)
+        .expect("sample governance key");
     hex::encode(key.verifying_key().to_bytes())
 }
 
@@ -72,6 +103,7 @@ pub(crate) fn verify_finality_proof_path(
     expect_hash: Option<&str>,
     expect_world_id: Option<&str>,
     expect_height: Option<u64>,
+    expect_governance_set_hash: Option<&str>,
     proof_ref: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let bytes =
@@ -108,6 +140,36 @@ pub(crate) fn verify_finality_proof_path(
             ));
         }
     }
+    let transition_governance_hashes = proof
+        .validator_set_transitions
+        .iter()
+        .map(|transition| {
+            transition
+                .governance_certificate
+                .as_ref()
+                .map(|certificate| certificate.governance_set_hash.clone())
+                .ok_or_else(|| {
+                    "finality proof transition missing governance certificate after validation"
+                        .to_string()
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let transition_governance_anchor_checked = if transition_governance_hashes.is_empty() {
+        false
+    } else {
+        let expected = expect_governance_set_hash.ok_or_else(|| {
+            "finality proof transition requires --expect-governance-set-hash trusted anchor"
+                .to_string()
+        })?;
+        for governance_set_hash in &transition_governance_hashes {
+            if governance_set_hash != expected {
+                return Err(format!(
+                    "finality proof governance set hash mismatch: expected={expected} actual={governance_set_hash}"
+                ));
+            }
+        }
+        true
+    };
     let head = proof
         .head_proofs
         .last()
@@ -150,6 +212,10 @@ pub(crate) fn verify_finality_proof_path(
             "consensus_approver_subset_checked": true,
             "ed25519_signature_verification_checked": true,
             "validator_set_transition_execution_checked": true,
+            "validator_set_transition_governance_checked": true,
+            "trusted_governance_anchor_checked": transition_governance_anchor_checked,
+            "governance_set_hash": transition_governance_hashes.last().cloned().unwrap_or_default(),
+            "governance_certificate_count": transition_governance_hashes.len(),
             "validator_set_transition_count": proof.validator_set_transitions.len()
         },
         "head": {
@@ -160,7 +226,6 @@ pub(crate) fn verify_finality_proof_path(
         "does_not_claim": [
             "mainnet-grade finality",
             "full light client",
-            "trust-minimized validator-set transition governance",
             "DA sampling",
             "multi-client consensus equivalence",
             "public validator onboarding open"
@@ -265,6 +330,177 @@ pub(crate) fn sample_world_finality_proof() -> WorldFinalityProofV1 {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn sample_world_finality_transition_proof() -> WorldFinalityProofV1 {
+    let mut proof = sample_world_finality_proof();
+    let validator_keys = sample_validator_keys();
+    let to_validators = vec![
+        WorldFinalityValidatorV1 {
+            validator_id: "validator-a".to_string(),
+            stake_weight: 34,
+            finality_signer_public_key: sample_public_key_hex(&validator_keys, "validator-a"),
+            activation_height: 42,
+            exit_height: None,
+        },
+        WorldFinalityValidatorV1 {
+            validator_id: "validator-b".to_string(),
+            stake_weight: 33,
+            finality_signer_public_key: sample_public_key_hex(&validator_keys, "validator-b"),
+            activation_height: 42,
+            exit_height: None,
+        },
+        WorldFinalityValidatorV1 {
+            validator_id: "validator-c".to_string(),
+            stake_weight: 33,
+            finality_signer_public_key: sample_public_key_hex(&validator_keys, "validator-c"),
+            activation_height: 42,
+            exit_height: None,
+        },
+    ];
+    let to_validator_set_hash =
+        compute_world_finality_validator_set_hash("sample-set-2", 42, 6_667, &to_validators)
+            .expect("to validator set hash");
+    let mut transition = WorldFinalityValidatorSetTransitionV1 {
+        from_validator_set_id: proof.validator_set_id.clone(),
+        from_validator_set_hash: proof.validator_set_hash.clone(),
+        to_validator_set_id: "sample-set-2".to_string(),
+        to_validator_set_activation_height: 42,
+        to_quorum_threshold_bps: 6_667,
+        to_validator_set_hash: to_validator_set_hash.clone(),
+        to_validators,
+        transition_height: 41,
+        transition_block_hash: proof.head_proofs[1].head.block_hash.clone(),
+        approvals: vec![],
+        governance_certificate: None,
+    };
+    transition.approvals = ["validator-a", "validator-b"]
+        .into_iter()
+        .map(|validator_id| {
+            let key = validator_keys
+                .iter()
+                .find(|(id, _)| *id == validator_id)
+                .map(|(_, key)| key)
+                .expect("sample validator key");
+            let payload = world_finality_validator_set_transition_signing_payload(
+                validator_id,
+                transition.from_validator_set_hash.as_str(),
+                transition.to_validator_set_hash.as_str(),
+                transition.to_validator_set_activation_height,
+                transition.transition_height,
+                transition.transition_block_hash.as_str(),
+            )
+            .expect("transition signing payload");
+            WorldFinalityValidatorSetTransitionApprovalV1 {
+                validator_id: validator_id.to_string(),
+                from_validator_set_hash: transition.from_validator_set_hash.clone(),
+                to_validator_set_hash: transition.to_validator_set_hash.clone(),
+                to_validator_set_activation_height: transition.to_validator_set_activation_height,
+                transition_height: transition.transition_height,
+                transition_block_hash: transition.transition_block_hash.clone(),
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(key.sign(payload.as_slice()).to_bytes()),
+            }
+        })
+        .collect();
+    let governance_keys = sample_governance_keys();
+    let governance_signers = vec![
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-a".to_string(),
+            stake_weight: 34,
+            governance_public_key: sample_governance_public_key_hex(
+                &governance_keys,
+                "governance-a",
+            ),
+            activation_height: 1,
+            exit_height: None,
+        },
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-b".to_string(),
+            stake_weight: 33,
+            governance_public_key: sample_governance_public_key_hex(
+                &governance_keys,
+                "governance-b",
+            ),
+            activation_height: 1,
+            exit_height: None,
+        },
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-c".to_string(),
+            stake_weight: 33,
+            governance_public_key: sample_governance_public_key_hex(
+                &governance_keys,
+                "governance-c",
+            ),
+            activation_height: 1,
+            exit_height: None,
+        },
+    ];
+    let governance_set_hash = compute_world_finality_governance_set_hash(
+        "sample-governance-set-1",
+        1,
+        6_667,
+        &governance_signers,
+    )
+    .expect("governance set hash");
+    let governance_approvals = ["governance-a", "governance-b"]
+        .into_iter()
+        .map(|signer_id| {
+            let key = governance_keys
+                .iter()
+                .find(|(id, _)| *id == signer_id)
+                .map(|(_, key)| key)
+                .expect("sample governance key");
+            let payload = world_finality_validator_set_transition_governance_signing_payload(
+                signer_id,
+                proof.world_id.as_str(),
+                governance_set_hash.as_str(),
+                transition.from_validator_set_hash.as_str(),
+                transition.to_validator_set_hash.as_str(),
+                transition.to_validator_set_activation_height,
+                transition.transition_height,
+                transition.transition_block_hash.as_str(),
+            )
+            .expect("transition governance signing payload");
+            WorldFinalityValidatorSetTransitionGovernanceApprovalV1 {
+                signer_id: signer_id.to_string(),
+                governance_set_hash: governance_set_hash.clone(),
+                from_validator_set_hash: transition.from_validator_set_hash.clone(),
+                to_validator_set_hash: transition.to_validator_set_hash.clone(),
+                to_validator_set_activation_height: transition.to_validator_set_activation_height,
+                transition_height: transition.transition_height,
+                transition_block_hash: transition.transition_block_hash.clone(),
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(key.sign(payload.as_slice()).to_bytes()),
+            }
+        })
+        .collect();
+    transition.governance_certificate =
+        Some(WorldFinalityValidatorSetTransitionGovernanceCertificateV1 {
+            governance_set_id: "sample-governance-set-1".to_string(),
+            governance_set_activation_height: 1,
+            governance_threshold_bps: 6_667,
+            governance_set_hash,
+            governance_signers,
+            governance_approvals,
+        });
+    proof.validator_set_transitions = vec![transition];
+    proof.finality_commitments[2].validator_set_hash = to_validator_set_hash;
+    proof.finality_commitments[2].votes = vec![
+        sample_signed_finality_vote(
+            &validator_keys,
+            "validator-a",
+            &proof.finality_commitments[2],
+        ),
+        sample_signed_finality_vote(
+            &validator_keys,
+            "validator-b",
+            &proof.finality_commitments[2],
+        ),
+    ];
+    proof.misbehavior_evidence[0].height = 40;
+    proof
+}
+
 fn sample_world_head_proof_at(height: u64, prev_block_hash: &str) -> WorldHeadProofV1 {
     let state_root = format!("state-root-{height}");
     let action_root = format!("action-root-{height}");
@@ -341,3 +577,102 @@ fn sample_world_head_proof_at(height: u64, prev_block_hash: &str) -> WorldHeadPr
 
 #[allow(dead_code)]
 fn _assert_path_buf_send_sync(_: PathBuf) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_json(path: &Path, proof: &WorldFinalityProofV1) {
+        fs::write(
+            path,
+            serde_json::to_vec_pretty(proof).expect("encode finality proof json"),
+        )
+        .expect("write finality proof json");
+    }
+
+    #[test]
+    fn verifies_transition_against_trusted_governance_anchor() {
+        let proof = sample_world_finality_transition_proof();
+        let governance_set_hash = proof.validator_set_transitions[0]
+            .governance_certificate
+            .as_ref()
+            .expect("governance certificate")
+            .governance_set_hash
+            .clone();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-transition-governance.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let summary = verify_finality_proof_path(
+            &proof_path,
+            "json",
+            None,
+            Some("world-a"),
+            Some(42),
+            Some(governance_set_hash.as_str()),
+            Some("finality-transition-proof-ref-42".to_string()),
+        )
+        .expect("verify transition finality proof");
+        let _ = fs::remove_file(&proof_path);
+        assert_eq!(summary["status"], "pass");
+        assert_eq!(summary["proof_ref"], "finality-transition-proof-ref-42");
+        assert_eq!(summary["finality"]["validator_set_transition_count"], 1);
+        assert_eq!(
+            summary["finality"]["trusted_governance_anchor_checked"],
+            true
+        );
+        assert_eq!(
+            summary["finality"]["governance_set_hash"],
+            governance_set_hash
+        );
+        assert_eq!(summary["finality"]["governance_certificate_count"], 1);
+    }
+
+    #[test]
+    fn rejects_transition_without_trusted_governance_anchor() {
+        let proof = sample_world_finality_transition_proof();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-transition-missing-governance-anchor.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let err = verify_finality_proof_path(
+            &proof_path,
+            "json",
+            None,
+            Some("world-a"),
+            Some(42),
+            None,
+            None,
+        )
+        .expect_err("missing governance anchor rejected");
+        let _ = fs::remove_file(&proof_path);
+        assert!(
+            err.contains("requires --expect-governance-set-hash trusted anchor"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn rejects_transition_governance_anchor_mismatch() {
+        let proof = sample_world_finality_transition_proof();
+        let proof_path = std::env::temp_dir().join(format!(
+            "oasis7-finality-proof-{}-transition-governance-anchor-mismatch.json",
+            std::process::id()
+        ));
+        write_json(&proof_path, &proof);
+        let err = verify_finality_proof_path(
+            &proof_path,
+            "json",
+            None,
+            Some("world-a"),
+            Some(42),
+            Some("wrong-governance-set-hash"),
+            None,
+        )
+        .expect_err("governance anchor mismatch rejected");
+        let _ = fs::remove_file(&proof_path);
+        assert!(err.contains("governance set hash mismatch"), "{err}");
+    }
+}
