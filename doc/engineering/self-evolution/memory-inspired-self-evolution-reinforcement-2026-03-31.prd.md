@@ -176,7 +176,7 @@
 | DEC-MIR-006 | 将会话/过程记忆先落到 task-scoped `working_memory` | 直接把 transcript 或中间推理写入长期 memory | 过程认知变化快、噪声高，主要服务当前任务。 |
 | DEC-MIR-007 | Codex/engineering task 的 phase 1 允许读取本地 `.codex` transcript，但默认必须显式指定 `session_id`；只有显式 `--allow-auto-session` 才允许自动解析 | 继续把“读取当前/最近 live session”当成默认收口路径；或先要求 wrapper artifact 作为唯一 transcript 来源 | 当前环境已有可读本地 transcript，但 live session 自读仍需显式 opt-in 才能避免自污染和审计歧义。 |
 
-## PRD 自审（按 `.agents/skills/prd/check.md`）
+## PRD 自审（按 `skills/prd/check.md`）
 - 目标与背景（Why 层）:
   - ✔ 是否明确说明本期解决什么问题：已明确当前缺的是“外部记忆/反思方案借鉴边界”，而不是再造一份 memory 功能说明。
   - ✔ 是否定义成功指标（可量化）：SC-1~SC-7 与 NFR-MIR-1~8 已量化字段完整率、预算化约束、working_memory 清理与 review 覆盖率。

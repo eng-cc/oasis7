@@ -17,7 +17,7 @@
 - `doc/playability_test_result/game-test.prd.md`（用户锁定，不修改）
 - `doc/playability_test_result/playability_test_card.md`
 - `doc/playability_test_result/README.md`
-- `.agents/skills/agent-browser/SKILL.md`
+- `skills/agent-browser/SKILL.md`
 - `.codex/skills/playwright/SKILL.md`
 - `scripts/worktree-harness.sh`
 - `scripts/run-launcher-stack.sh`

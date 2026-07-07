@@ -480,7 +480,7 @@
 - `scripts/`
 - `doc/scripts/precommit/pre-commit.prd.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-05-26

@@ -67,8 +67,8 @@ Rejected as defaults:
 - role owner for professional conclusions: `.agents/roles/game_visual_interaction_designer.md`
 - implementation handoff owner: `.agents/roles/viewer_engineer.md`
 - verification handoff owner: `.agents/roles/qa_engineer.md`
-- browser loop skill: `.agents/skills/agent-browser/SKILL.md`
-- visual companion skill: `.agents/skills/gpt-image-2/SKILL.md`
+- browser loop skill: `skills/agent-browser/SKILL.md`
+- visual companion skill: `skills/gpt-image-2/SKILL.md`
 - workflow evidence sink: GitHub task issue evidence comments
 
 ## Known Failure Modes

@@ -1,9 +1,16 @@
 # Local Skill Surface
 
-`.agents/skills/` 只收两类本地 surface：
+`.agents/skills/` is the default-loadable local skill surface. It only keeps
+entrypoints that should be discoverable as active repo-owned workflow skills:
 
 - repo-owned workflow / helper / governance skill
-- 明确场景专属、且与 oasis7 当前仓库有稳定绑定的 skill
+
+Root `skills/` is the non-default specialist library surface for professional
+method skills. Role cards may reference these skills as methods for bounded
+professional slices, but they should not become automatic default triggers. A
+`skills/<name>/SKILL.md` file is library material unless source-of-truth and a
+new `.agents/skills/<name>/SKILL.md` wrapper promote it back into the default
+surface.
 
 不要把下面这些内容直接塞进本地 skill：
 
@@ -25,6 +32,18 @@
 - 完全 generic，且仓库没有 repo-specific 增量
 - 可以直接靠脚本或 lint 自动强制的机械规则
 
+## Default vs Library Surfaces
+
+- Keep default workflow gates under `.agents/skills/<name>/SKILL.md`.
+- Keep professional method skills under `skills/<name>/` and reference them
+  from role cards or slice contracts.
+- Do not rely on root `skills/` material for automatic workflow routing. TPM
+  must explicitly opt in through task evidence or promote it back through a
+  source-of-truth-first change.
+- When moving a default skill into the library, update this README,
+  `doc/engineering/workflow/source-of-truth.md`, role cards, and any scripts
+  that referenced the old `.agents/skills` path.
+
 ## Authoring Entry Points
 
 - 触发 skill：`.agents/skills/writing-repo-owned-skills/SKILL.md`
@@ -32,11 +51,25 @@
 - 自检清单：`.agents/skills/checklists/skill-authoring-checklist.md`
 - 静态校验：`./scripts/lint-skills.sh`
 
-## Domain-Specific Entry Points
+## Professional Skill Library
 
-- 中文长篇背景叙事与世界观资产编排：`.agents/skills/epic-story-orchestrator-zh/SKILL.md`
-- 游戏玩家交互流程、状态反馈、输入/控制、错误恢复和可访问性审查：`.agents/skills/game-interaction-design/SKILL.md`
-- 游戏 UI 视觉层级、可读性、截图审查和 visual reference workflow：`.agents/skills/game-visual-design/SKILL.md`
+- 中文长篇背景叙事与世界观资产编排：`skills/epic-story-orchestrator-zh/SKILL.md`
+- 产品/规划文档：`skills/prd/SKILL.md`
+- 游戏架构规划：`skills/game-architect/SKILL.md`
+- 游戏设计理论：`skills/game-design-theory/SKILL.md`
+- 玩法机制：`skills/gameplay-mechanics/SKILL.md`
+- 关卡设计：`skills/level-design/SKILL.md`
+- 游戏玩家交互流程、状态反馈、输入/控制、错误恢复和可访问性审查：`skills/game-interaction-design/SKILL.md`
+- 游戏 UI 视觉层级、可读性、截图审查和 visual reference workflow：`skills/game-visual-design/SKILL.md`
+- 浏览器闭环：`skills/agent-browser/SKILL.md`
+- GPT Image 2 / visual companion：`skills/gpt-image-2/SKILL.md`
+- 中文文本自然化：`skills/humanizer-zh/SKILL.md`
+- LiveOps / channel copy：`skills/content-creation/SKILL.md`
+- 性能优化：`skills/optimization-performance/SKILL.md`
+- 内存治理：`skills/memory-management/SKILL.md`
+- 粒子 / VFX：`skills/particle-systems/SKILL.md`
+- 同步算法：`skills/synchronization-algorithms/SKILL.md`
+- 非默认渠道内容参考：`skills/xiaohongshu-note-analyzer/SKILL.md`
 
 ## Workflow Execution Entry Points
 
@@ -59,6 +92,10 @@ GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-trut
 
 Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist; default context delivery is full-thread/full-history fork, with explicit context packets only as delivery supplement/fallback.
 
+Non-default specialist library material under root `skills/` is opt-in
+reference material. It can support a professional slice, but it is not a default
+trigger and must not be treated as active task truth without task evidence.
+
 ## Bounded Borrowing From `writing-skills`
 
 当前只借以下部分：
@@ -75,6 +112,9 @@ Specialist skills are domain-triggered through TPM routing or professional subag
 - entrypoint 中列出的 supporting files 必须真实存在。
 - `scripts/` 下的 placeholder helper 必须被 `SKILL.md` 或直接引用的 reference 明确承接；未被承接的 placeholder helper 进入 skill-surface 退役候选，不作为“存在即保留”的默认资产。`assets/`、`templates/` 与重型 reference material 的治理仍按对应 skill entrypoint 和专题 follow-up 单独裁定。
 - 核心 workflow skill 必须保留 `Known Failure Modes`，把反复踩过的流程坑写进入口。
+- Root `skills/` library entries should keep valid frontmatter when they use
+  `SKILL.md`, but they are checked as library material and are not required to
+  satisfy default workflow-gate expectations.
 - 修改本地 skill surface 后运行 `./scripts/lint-skills.sh`。
 
 当前不直接引入：

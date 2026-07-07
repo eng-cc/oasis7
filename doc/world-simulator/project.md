@@ -65,7 +65,7 @@
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-mainnet-grade-rebuild-2026-04-18.{prd,design,project}.md`
 - `doc/world-simulator/kernel/power-storage-complete-removal-2026-03-06.prd.md`
 - `doc/world-simulator/launcher/game-client-launcher-i18n-required-config-2026-03-02.prd.md`
-- `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02.prd.md`、`.agents/skills/prd/check.md`
+- `doc/world-simulator/launcher/game-client-launcher-feedback-distributed-submit-2026-03-02.prd.md`、`skills/prd/check.md`
 - `crates/oasis7/src/bin/{oasis7_chain_runtime.rs,oasis7_game_launcher.rs,oasis7_web_launcher.rs}`、`crates/oasis7/src/bin/oasis7_web_launcher/gui_agent_api.rs`、`crates/oasis7/src/bin/oasis7_chain_runtime/{transfer_submit_api.rs,transfer_submit_api_tests.rs}`
 - `crates/oasis7_launcher_ui/src/lib.rs`
 - `crates/oasis7_client_launcher/src/{main.rs,main_app_shell.rs,app_process.rs,app_process_web.rs,explorer_window.rs,explorer_window_view.rs}`

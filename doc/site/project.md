@@ -172,7 +172,7 @@
 - `doc/site/github-pages/`
 - `doc/site/manual/`
 - `doc/readme/prd.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-05-26

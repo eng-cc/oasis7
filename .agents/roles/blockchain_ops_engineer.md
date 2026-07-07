@@ -47,7 +47,7 @@
 
 ## Recommended Skills
 - 主技能：`executing-project-tasks`、`systematic-debugging`，用于节点运行面排障、部署修复与演练闭环。
-- 常复用技能：`verification-before-completion`、`agent-browser`，用于 fresh 运行核验、面向状态页面/控制台的辅助检查。
+- 常复用技能：`verification-before-completion`、`skills/agent-browser`，用于 fresh 运行核验、面向状态页面/控制台的辅助检查。
 - 使用约定：角色决定 owner，技能决定方法；涉及 runtime 机制本体或 release blocking 结论时，仍需联动 `runtime_engineer` / `qa_engineer`，而不是越权代判。
 
 ## Checklist

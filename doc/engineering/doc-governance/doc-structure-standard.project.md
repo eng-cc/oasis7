@@ -22,7 +22,7 @@
 - `doc/engineering/README.md`
 - `doc/README.md`
 - `scripts/doc-governance-check.sh`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 当前阶段：已完成（T0~T5）

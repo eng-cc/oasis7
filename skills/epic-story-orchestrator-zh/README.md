@@ -28,13 +28,13 @@
 ## 本地验证
 
 ```bash
-bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh
+bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh
 ```
 
 
 ## 严格校验
 
 ```bash
-python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py
-RUN_PM_LINT=1 bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh
+python3 skills/epic-story-orchestrator-zh/tests/validate_writeback.py
+RUN_PM_LINT=1 bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh
 ```

@@ -1,6 +1,6 @@
 ---
 name: writing-repo-owned-skills
-description: Use when creating a new skill under .agents/skills, replacing an upstream skill with repository-owned guidance, or editing a local skill whose trigger wording, helper references, or governance links may drift.
+description: Use when creating or moving a repo-owned skill surface under .agents/skills or skills, replacing upstream guidance, or editing trigger wording, helper references, or governance links.
 ---
 
 # Writing Repo-Owned Skills
@@ -12,6 +12,7 @@ description: Use when creating a new skill under .agents/skills, replacing an up
 Use this skill when:
 
 - adding a new local skill under `.agents/skills/`
+- adding or moving non-default specialist library material under root `skills/`
 - localizing part of an upstream skill into repo-owned guidance
 - editing an existing local skill that references repo paths, commands, helpers, or workflow truth
 
@@ -30,8 +31,9 @@ If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a h
 ## Authoring Workflow
 
 1. Decide the surface:
-   - repo-owned workflow / helper
-   - scenario-specific specialist capability
+   - default-loadable repo-owned workflow / helper under `.agents/skills/`
+   - non-default specialist library/archive material under root `skills/`
+   - source-of-truth-promoted specialist wrapper under `.agents/skills/`
    - bounded replacement of an upstream skill
 2. Start from:
    - `.agents/skills/templates/SKILL.template.md`
@@ -47,6 +49,10 @@ If the content would be better owned by `AGENTS.md`, `prd.md`, `project.md`, a h
    - guardrails
 5. Add supporting files only for heavy reference or reusable tools.
 6. If the skill changes recommended practice, also update the relevant governance or role docs.
+7. If moving a default-loadable skill into root `skills/`, update
+   `doc/engineering/workflow/source-of-truth.md`, `.agents/skills/README.md`,
+   role cards, and any hard-coded script paths before deleting the old
+   `.agents/skills` entrypoint.
 
 ## Bounded Borrowing From Upstream `writing-skills`
 
@@ -69,6 +75,8 @@ Do not directly borrow:
 - authoring entrypoint: `.agents/skills/README.md`
 - template: `.agents/skills/templates/SKILL.template.md`
 - checklist: `.agents/skills/checklists/skill-authoring-checklist.md`
+- default-loadable skill surface: `.agents/skills/*/SKILL.md`
+- non-default specialist library surface: `skills/*/SKILL.md`
 - governance topics:
   - `doc/engineering/self-evolution/skill-surface-replacement-governance-2026-05-19.prd.md`
   - `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md`

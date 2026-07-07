@@ -113,6 +113,8 @@ checks = [
             "writing-repo-owned-skills",
             "### 1.2 Specialist Skill Reachability",
             "Specialist skills are not mandatory workflow phases.",
+            "Only `.agents/skills/*/SKILL.md` entries are default skill entrypoints.",
+            "non-default specialist library material for professional method skills",
             "route, TODOs, and downstream handoff must still be recorded",
             "mandatory context checklist",
             "identity and authority",
@@ -341,7 +343,9 @@ checks = [
             ".agents/skills/systematic-debugging/SKILL.md",
             ".agents/skills/receiving-code-review/SKILL.md",
             ".agents/skills/writing-repo-owned-skills/SKILL.md",
+            "Root `skills/` is the non-default specialist library surface",
             "Specialist skills are domain-triggered through TPM routing",
+            "Non-default specialist library material under root `skills/` is opt-in",
             "只读/聊天请求也默认进入 task/worktree bootstrap",
         ],
     ),
@@ -378,7 +382,7 @@ checks = [
         ],
     ),
     (
-        root / ".agents/skills/prd/SKILL.md",
+        root / "skills/prd/SKILL.md",
         [
             "## Oasis7 Workflow Binding",
             "this skill is a specialist planning surface, not a standalone workflow",
@@ -386,7 +390,7 @@ checks = [
         ],
     ),
     (
-        root / ".agents/skills/game-architect/SKILL.md",
+        root / "skills/game-architect/SKILL.md",
         [
             "## Oasis7 Workflow Binding",
             "not a second project workflow",
@@ -460,6 +464,9 @@ surfaces = {
     ".agents/skills/repo-owned-workflow-router/SKILL.md": (
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md"
     ).read_text(encoding="utf-8"),
+    ".agents/skills/README.md": (
+        root / ".agents/skills/README.md"
+    ).read_text(encoding="utf-8"),
     "doc/engineering/workflow/source-of-truth.md": (
         root / "doc/engineering/workflow/source-of-truth.md"
     ).read_text(encoding="utf-8"),
@@ -490,11 +497,11 @@ surfaces = {
     ".agents/skills/writing-repo-owned-skills/SKILL.md": (
         root / ".agents/skills/writing-repo-owned-skills/SKILL.md"
     ).read_text(encoding="utf-8"),
-    ".agents/skills/prd/SKILL.md": (
-        root / ".agents/skills/prd/SKILL.md"
+    "skills/prd/SKILL.md": (
+        root / "skills/prd/SKILL.md"
     ).read_text(encoding="utf-8"),
-    ".agents/skills/game-architect/SKILL.md": (
-        root / ".agents/skills/game-architect/SKILL.md"
+    "skills/game-architect/SKILL.md": (
+        root / "skills/game-architect/SKILL.md"
     ).read_text(encoding="utf-8"),
     "scripts/pm/capture-todo.sh": (
         root / "scripts/pm/capture-todo.sh"
@@ -723,8 +730,20 @@ scenarios = [
         "required_markers": [
             "### 1.2 Specialist Skill Reachability",
             "Specialist skills are not mandatory workflow phases.",
+            "Only `.agents/skills/*/SKILL.md` entries are default skill entrypoints.",
+            "skills/gameplay-mechanics",
             "If a specialist skill is used, TPM must still bind it to the same owner",
             "the specialist role owns the professional conclusion",
+        ],
+    },
+    {
+        "id": "root_skills_are_non_default_library_material",
+        "expected_route": "TPM opts into root skills library material explicitly instead of treating it as a default trigger",
+        "surface": ".agents/skills/README.md",
+        "required_markers": [
+            "Root `skills/` is the non-default specialist library surface",
+            "Do not rely on root `skills/` material for automatic workflow routing.",
+            "Non-default specialist library material under root `skills/` is opt-in",
         ],
     },
     {
@@ -742,7 +761,7 @@ scenarios = [
     {
         "id": "specialist_planning_skills_bind_back_to_tpm_pm_truth",
         "expected_route": "prd/game-architect may supplement planning but not replace TPM/GitHub-backed task truth",
-        "surface": ".agents/skills/prd/SKILL.md",
+        "surface": "skills/prd/SKILL.md",
         "required_markers": [
             "this skill is a specialist planning surface, not a standalone workflow",
             "Record the PRD route, TODOs, and downstream handoff in GitHub task issue evidence comments.",
@@ -752,7 +771,7 @@ scenarios = [
     {
         "id": "game_architect_binds_back_to_tpm_pm_truth",
         "expected_route": "game-architect docs remain supplemental architecture planning",
-        "surface": ".agents/skills/game-architect/SKILL.md",
+        "surface": "skills/game-architect/SKILL.md",
         "required_markers": [
             "this skill is a specialist architecture-planning surface, not a second project workflow",
             "record the route, TODOs, and downstream execution handoff in GitHub task issue evidence comments",

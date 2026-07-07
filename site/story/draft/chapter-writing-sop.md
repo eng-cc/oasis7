@@ -307,7 +307,7 @@ subagent 默认只读，不直接改正文。每个审稿切片必须返回：
 
 卷级最终验证：
 
-- 运行 `git diff --check`、`./scripts/doc-governance-check.sh`、`./scripts/pm/lint.sh` 和 `bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh`。
+- 运行 `git diff --check`、`./scripts/doc-governance-check.sh`、`./scripts/pm/lint.sh` 和 `bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh`。
 - 根据本卷风险补充 focused scan，例如稳定量产、盛大开幕、发布会、首秀、完整工业自给、KPI、PIP、班味、摸鱼、牛马，以及已修过的旧句。
 - 最终记录必须写回 `site/story/reviews/editorial-notes.md` 和当前 `.pm` execution log。
 - 进入下一卷 / 下一章前，明确列出保留的 P2、禁止带回的旧表述、下一卷开头应轻轻回收的物件和关系状态。
@@ -328,8 +328,8 @@ subagent 默认只读，不直接改正文。每个审稿切片必须返回：
 修改正文、SOP 或审稿记录后，至少运行：
 
 ```bash
-python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py <changed-story-files>
+python3 skills/epic-story-orchestrator-zh/tests/validate_writeback.py <changed-story-files>
 git diff --check -- site/story
 ./scripts/doc-governance-check.sh
-bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh
+bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh
 ```

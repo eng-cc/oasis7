@@ -359,7 +359,7 @@
 - `AGENTS.md`
 - `doc/README.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 - 各模块 `doc/<module>/prd.md` 与 `doc/<module>/project.md`
 
 - 模块进展补充（2026-03-10）: 已新增 `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`，将 `TASK-GAME-018` 接入 core 阶段收口评审；当前 gameplay/playability/testing/runtime 已完成 task 级互链；更大候选总评仍只剩 runtime footprint/GC/soak 联合验证待持续补齐。

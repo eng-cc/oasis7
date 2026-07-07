@@ -54,8 +54,8 @@
 - 跨模块冲突已有 owner 与裁决记录
 
 ## Recommended Skills
-- 主技能：`prd`、`game-architect`，用于定义 Why/What/Done、拆清规则边界与验收口径。
-- 常复用技能：`game-design-theory`、`humanizer-zh`、`writing-repo-owned-skills`，用于做玩法判断、文档压缩、中文口径收口，以及新增/改写本地 skill surface 时保持 repo truth。
+- 主技能：`skills/prd`、`skills/game-architect`，用于定义 Why/What/Done、拆清规则边界与验收口径。
+- 常复用技能：`skills/game-design-theory`、`skills/epic-story-orchestrator-zh`、`skills/humanizer-zh`、`writing-repo-owned-skills`，用于做玩法判断、世界观/叙事资产编排、文档压缩、中文口径收口，以及新增/改写本地 skill surface 时保持 repo truth。
 - 使用约定：角色决定 owner，技能决定方法；可借用其他技能提升产出，但不得替代本职责卡中的 owner 边界与完成定义。
 
 ## Checklist

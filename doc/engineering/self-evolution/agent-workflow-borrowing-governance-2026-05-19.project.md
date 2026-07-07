@@ -50,7 +50,7 @@
 
 ## File Structure / Affected Paths
 - 主要改动路径: `AGENTS.md`、`.agents/roles/templates/*.md`、`.agents/skills/{default-workflow-bootstrap,bounded-brainstorming,executing-project-tasks,repo-owned-workflow-router,requesting-repo-owned-review,tdd-test-writer,README.md}`、`scripts/pm/{workflow-behavior-eval.sh,pm_store.py,pm_store_task_lint.py,required-tier-smoke.sh,memory-regression-smoke.sh,codex-working-memory-smoke.sh}`、`doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.{prd,design,project}.md`、`doc/engineering/project.md`、`doc/world-simulator/{project.md,viewer/viewer-web-entry-visual-redesign-2026-05-12.project.md}`
-- 只读依赖: `.agents/skills/prd/SKILL.md`、`.agents/skills/prd/check.md`
+- 只读依赖: `skills/prd/SKILL.md`、`skills/prd/check.md`
 - 验证入口: `./scripts/pm/lint.sh`、`./scripts/doc-governance-check.sh`、`git diff --check`
 - 正式回写面: `agent-workflow-borrowing-governance-2026-05-19.{prd,project}.md`、`doc/engineering/project.md`
 

@@ -255,12 +255,12 @@ required_review_roles_from_paths() {
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     case "$path" in
-      doc/engineering/workflow/*|.agents/skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
+      doc/engineering/workflow/*|.agents/skills/*|skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
         roles="$(append_unique_token "$roles" "repository_health_engineer")"
         ;;
     esac
     case "$path" in
-      doc/engineering/workflow/*|.agents/skills/*|doc/core/*|doc/core/**/*|doc/game/*|doc/game/**/*|doc/*prd*|doc/**/*prd*|doc/*project*|doc/**/*project*|doc/*acceptance*|doc/**/*acceptance*)
+      doc/engineering/workflow/*|.agents/skills/*|skills/*|doc/core/*|doc/core/**/*|doc/game/*|doc/game/**/*|doc/*prd*|doc/**/*prd*|doc/*project*|doc/**/*project*|doc/*acceptance*|doc/**/*acceptance*)
         roles="$(append_unique_token "$roles" "producer_system_designer")"
         ;;
     esac

@@ -410,6 +410,8 @@ assert_roles_for_path "doc/engineering/workflow/source-of-truth.md" "producer_sy
 assert_roles_for_path ".github/workflows/rust.yml" "repository_health_engineer" "yes"
 assert_roles_for_path "scripts/ci-tests.sh" "repository_health_engineer" "yes"
 assert_roles_for_path "scripts/plan-rust-required-scope.sh" "repository_health_engineer" "yes"
+assert_roles_for_path "skills/prd/SKILL.md" "repository_health_engineer"
+assert_roles_for_path "skills/prd/SKILL.md" "producer_system_designer"
 assert_roles_for_path "doc/core/economy.md" "producer_system_designer"
 assert_roles_for_path "doc/game/rules.md" "producer_system_designer"
 assert_roles_for_path "doc/world-runtime/checkpoints.md" "runtime_engineer"

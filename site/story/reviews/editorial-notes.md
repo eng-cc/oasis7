@@ -1255,7 +1255,7 @@ SOP v0.2 更适合第二章及后续章节使用。后续开写新章时，应�
 
 ### 最终验证
 
-- 验证命令: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py && git diff --check -- site/story && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh"`
+- 验证命令: `./scripts/pm/claim-ready.sh --claim-type task_complete --verify-command "python3 skills/epic-story-orchestrator-zh/tests/validate_writeback.py && git diff --check -- site/story && ./scripts/doc-governance-check.sh && ./scripts/pm/lint.sh && bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh"`
 - 当前状态: 已通过最终验证（2026-06-02 17:53:42 CST）。
 
 ## 2026-06-02 第二卷 Agent 归零与修宪路线设计

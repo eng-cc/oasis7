@@ -171,7 +171,7 @@
 | DEC-MEM-005 | 按角色冻结 `topic` allowlist 与允许的 `promotion_reason` 范围 | 继续只靠 owner 临场判断决定什么能进 memory | 先冻结语义边界，才能减少“写什么都不对”的犹豫和漂移。 |
 | DEC-MEM-006 | close phase 强制执行统一记忆抽取三问 | 继续把“是否沉淀 memory”留给 owner 自行想起 | checklist 不显式暴露，长期 memory 就不会成为默认工作流。 |
 
-## PRD 自审（按 `.agents/skills/prd/check.md`）
+## PRD 自审（按 `skills/prd/check.md`）
 - 目标与背景（Why 层）:
   - ✔ 明确说明本期解决“长期 memory 若不单独建模会退化”的问题。
   - ✔ 成功指标可量化，覆盖字段完整率、superseded 链和冲突误放过率。
