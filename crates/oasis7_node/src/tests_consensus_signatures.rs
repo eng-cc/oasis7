@@ -28,6 +28,8 @@ mod pos_engine_guardrails_tests;
 mod pos_signature_and_runtime_tests;
 #[path = "tests_runtime_replica_maintenance.rs"]
 mod runtime_replica_maintenance_tests;
+#[path = "tests_synced_execution_rollback.rs"]
+mod synced_execution_rollback_tests;
 
 fn multi_validators() -> Vec<PosValidator> {
     vec![

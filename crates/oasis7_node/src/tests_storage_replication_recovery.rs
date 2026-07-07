@@ -1,5 +1,30 @@
 use super::*;
 
+struct RecordingRestoreExecutionHook {
+    restores: Arc<Mutex<Vec<(String, u64)>>>,
+}
+
+impl NodeExecutionHook for RecordingRestoreExecutionHook {
+    fn on_commit(
+        &mut self,
+        context: NodeExecutionCommitContext,
+    ) -> Result<NodeExecutionCommitResult, String> {
+        Ok(NodeExecutionCommitResult {
+            execution_height: context.height,
+            execution_block_hash: format!("exec-block-{}", context.height),
+            execution_state_root: format!("exec-state-{}", context.height),
+        })
+    }
+
+    fn restore_to_height(&mut self, world_id: &str, height: u64) -> Result<bool, String> {
+        self.restores
+            .lock()
+            .expect("record restore calls")
+            .push((world_id.to_string(), height));
+        Ok(true)
+    }
+}
+
 #[test]
 fn remote_apply_bootstraps_midstream_writer_without_overwriting_local_guard() {
     let world_id = "world-remote-apply-midstream-writer";
@@ -443,11 +468,15 @@ fn restart_reconcile_rolls_back_unreplicated_committed_head() {
         .expect("refresh persisted height");
     assert_eq!(engine.replication_persisted_height, 3);
 
+    let restores = Arc::new(Mutex::new(Vec::new()));
+    let mut hook = RecordingRestoreExecutionHook {
+        restores: Arc::clone(&restores),
+    };
     super::replication_state_reconcile::reconcile_engine_with_persisted_replication(
         &mut engine,
         &replication,
         world_id,
-        None,
+        Some(&mut hook),
     )
     .expect("reconcile");
     let payload = last_payload.expect("last payload");
@@ -466,6 +495,10 @@ fn restart_reconcile_rolls_back_unreplicated_committed_head() {
     assert_eq!(
         engine.last_execution_state_root.as_deref(),
         payload.execution_state_root.as_deref()
+    );
+    assert_eq!(
+        restores.lock().expect("restore calls").as_slice(),
+        &[(world_id.to_string(), 3)]
     );
     assert_eq!(engine.last_replication_gap_sync_blocked_height, None);
 

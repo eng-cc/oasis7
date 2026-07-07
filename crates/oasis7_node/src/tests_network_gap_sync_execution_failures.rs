@@ -14,6 +14,10 @@ impl NodeExecutionHook for FailExecutionHook {
             context.height
         ))
     }
+
+    fn restore_to_height(&mut self, _world_id: &str, _height: u64) -> Result<bool, String> {
+        Ok(true)
+    }
 }
 
 struct PassthroughExecutionHook;

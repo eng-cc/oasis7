@@ -516,7 +516,7 @@ impl PosNodeEngine {
                     ),
                 },
             )?;
-            if previous_execution_height > 0 && !restored {
+            if !restored {
                 return Err(NodeError::Replication {
                     reason: format!(
                         "synced replication height {} execution hash validation failed: {}; rollback record for height {} is unavailable",
