@@ -2,17 +2,17 @@ version: 1
 role: tpm
 status: committed
 tasks:
-  - task_uid: task_0e03ee90334b4541ac77fef372214b7f
-    title: "治理旧文档语义收敛"
+  - task_uid: task_09b54d3030324d97bb904de198063225
+    title: "skill defaults role map"
     module: engineering
     priority: P2
     source_signal: ""
     related_prd: []
     acceptance:
-      - "由 repository_health_engineer 找出下一个旧文档/旧语义治理点并记录证据"
-      - "合并收敛仍有当前价值的旧文档语义，删除或退役无当前价值的旧文档入口"
-      - "通过 doc governance 与 diff 检查"
-    handoff_to:
-      - repository_health_engineer
+      - "Summarize default-loaded workflow skills and whether all skills have role ownership."
+      - "Split default-loadable workflow skill entrypoints from non-default professional skill library material."
+      - "Move professional method skills under root skills/ and update role-card references."
+      - "Update skill lint/eval governance so both skill surfaces are checked."
+    handoff_to: []
     status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/2135
+    task_path: https://github.com/eng-cc/oasis7/issues/2138

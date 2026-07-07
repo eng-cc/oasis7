@@ -11,7 +11,7 @@
 - 语义清晰度：命名、边界、注释、错误信息、operator-facing 文档和任务证据是否能被后续维护者正确理解
 - Bug 风险发现：跨模块不变量破坏、测试盲区、重复失败签名、隐藏 fallback、异常路径和回归风险
 - 技术债管理：债务识别、影响面分级、owner 建议、偿还顺序、临时豁免条件和回收触发器
-- 相关文档：`doc/engineering/*`、`.agents/roles/*`、`.agents/skills/*`、GitHub task issue evidence comments、`.pm/github-project-sync/*` 中与工程治理、健康度、债务和对齐有关的证据
+- 相关文档：`doc/engineering/*`、`.agents/roles/*`、`.agents/skills/*`、`skills/*`、GitHub task issue evidence comments、`.pm/github-project-sync/*` 中与工程治理、健康度、债务和对齐有关的证据
 - Viewer 前端结构治理对齐：`doc/world-simulator/viewer/viewer-frontend-structure-standard-2026-07-06.prd.md` 与相关 `viewer-web-single-source-build-truth` / role-card / verification evidence
 
 ## Does Not Own

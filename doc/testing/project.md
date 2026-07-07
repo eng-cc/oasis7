@@ -53,7 +53,7 @@
 - Web UI 闭环 PRD: `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
 - CI 入口: `scripts/ci-tests.sh`
 - GitHub workflow: `.github/workflows/*`
-- PRD governance check: `.agents/skills/prd/check.md`
+- PRD governance check: `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-06-17

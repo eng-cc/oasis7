@@ -53,7 +53,7 @@
 - `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md`
 - `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.prd.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-03-30

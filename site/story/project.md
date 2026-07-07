@@ -6,7 +6,7 @@
   - Trace: .pm/tasks/task_04e8e24fe8ea4fd69d6a0888b4bd587f.yaml
   - 范围：`site/story/index.html` 自动加载正文章节 markdown，移除旧资料分区，并将第一卷 `CH-001` 到 `CH-036` 整理为阅读版 v1.0-rc。
   - 产物文件：`site/story/index.html`、`site/assets/app.js`、`site/assets/styles.css`、`site/story/releases/volume-01-reading-version.md`、`site/story/draft/volume-01-chapter-001.md` 到 `site/story/draft/volume-01-chapter-004.md`。
-  - 验收命令：`git diff --check && ./scripts/doc-governance-check.sh && python3 .agents/skills/epic-story-orchestrator-zh/tests/validate_writeback.py && bash .agents/skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/workflow-lint.sh --task-uid task_04e8e24fe8ea4fd69d6a0888b4bd587f --phase current`。
+  - 验收命令：`git diff --check && ./scripts/doc-governance-check.sh && python3 skills/epic-story-orchestrator-zh/tests/validate_writeback.py && bash skills/epic-story-orchestrator-zh/tests/run_smoke.sh && ./scripts/pm/workflow-lint.sh --task-uid task_04e8e24fe8ea4fd69d6a0888b4bd587f --phase current`。
 - [x] STORY-VOLUME-004-CHAPTER-01-CARDS: 第四卷第一章正式章级卡。
   - Trace: .pm/tasks/task_5119bcacf5d444a8a5cdadb102f190f7.yaml
   - 范围：`TL-159` 到 `TL-166` / `CH-159` 到 `CH-166`。

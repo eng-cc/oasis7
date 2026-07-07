@@ -51,7 +51,7 @@
 - `doc/playability_test_result/game-test.prd.md`
 - `doc/playability_test_result/*.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-04-28

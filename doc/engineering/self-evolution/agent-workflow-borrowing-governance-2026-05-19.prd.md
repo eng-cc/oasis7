@@ -241,7 +241,7 @@ Current governance note (2026-07-06): 本专题仍保留 2026-05 外部 workflow
 | DEC-AWB-014 | 将 `requesting-code-review` 落成 bounded repo-owned review-request surface，只在高风险 local diff/claim risk 场景启用，并强制回写 findings/no-findings/residual-risk | 继续维持 adopted 但无本地落点，或照搬 upstream 的 every-task reviewer-dispatch ritual | 当前缺的是真正可回放的 review request sink，而不是再造一条 universal local review 主链。 |
 | DEC-AWB-015 | 新增 repo-owned `default-workflow-bootstrap` 作为本地默认入口，但只负责建立 task/worktree/doc 真值并转交给 router | 继续把 bootstrap 体验散落在 `AGENTS.md` 文案里，或直接恢复外部 `using-superpowers` 入口语义 | 当前真正缺的是“新任务先建立正确 repo-owned 真值再路由”的统一入口，而不是回退成外部 bootstrap。 |
 
-## PRD 自审（按 `.agents/skills/prd/check.md`）
+## PRD 自审（按 `skills/prd/check.md`）
 - 目标与背景（Why 层）:
   - ✔ 是否明确说明本期解决什么问题：已明确“外部 workflow 借鉴边界不清”这一治理缺口。
   - ✔ 是否定义成功指标：SC-1~SC-10 已量化 adopted/rejected/deferred、repo-owned mapping 和边界约束。

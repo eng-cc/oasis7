@@ -42,8 +42,8 @@
 - 文档、测试、代码三者追溯一致
 
 ## Recommended Skills
-- 主技能：`optimization-performance`、`memory-management`，用于执行器性能、资源计费与宿主资源治理。
-- 常复用技能：`tdd-test-writer`、`prd`，用于 ABI 契约回归、兼容矩阵与平台说明文档收口。
+- 主技能：`skills/optimization-performance`、`skills/memory-management`，用于执行器性能、资源计费与宿主资源治理。
+- 常复用技能：`tdd-test-writer`、`skills/prd`，用于 ABI 契约回归、兼容矩阵与平台说明文档收口。
 - 使用约定：当前暂无完全专属的 WASM 平台技能；角色决定 owner，技能决定方法，涉及 ABI/权限/共识格式时仍以本职责卡的决策边界为准。
 
 ## Checklist

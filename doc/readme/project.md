@@ -26,7 +26,7 @@
 ## 依赖
 - `doc/readme/prd.index.md`、`README.md`、`world-rule.md`、`testing-manual.md`
 - `doc/readme/gap/`、`doc/readme/production/`、`doc/readme/governance/`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-07-04

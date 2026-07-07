@@ -42,8 +42,8 @@
 - 行为接口与 runtime / viewer 文档一致
 
 ## Recommended Skills
-- 主技能：`gameplay-mechanics`、`tdd-test-writer`，用于把行为回路落成可验证的规则与测试契约。
-- 常复用技能：`game-design-theory`、`agent-browser`，用于行为目标设计、可解释性验证与 Web 闭环观测。
+- 主技能：`skills/gameplay-mechanics`、`tdd-test-writer`，用于把行为回路落成可验证的规则与测试契约。
+- 常复用技能：`skills/game-design-theory`、`skills/agent-browser`，用于行为目标设计、可解释性验证与 Web 闭环观测。
 - 使用约定：当前暂无完全同名专属技能；角色决定 owner，技能决定方法，涉及玩家承诺、runtime 动作语义或 Viewer 入口时仍需按职责卡联动对应 owner。
 
 ## Checklist

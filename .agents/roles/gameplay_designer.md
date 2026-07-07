@@ -53,8 +53,8 @@
 - 若输出驱动实现，已经给出工程角色可执行的 brief 和 QA 可验证的验收点
 
 ## Recommended Skills
-- 主技能：`game-design-theory`、`gameplay-mechanics`、`level-design`，用于分析核心循环、玩家动机、平衡与关卡/资源压力。
-- 常复用技能：`bounded-brainstorming`、`humanizer-zh`，用于在方向未冻结时做有界方案比较和中文口径收束。
+- 主技能：`skills/game-design-theory`、`skills/gameplay-mechanics`、`skills/level-design`，用于分析核心循环、玩家动机、平衡与关卡/资源压力。
+- 常复用技能：`bounded-brainstorming`、`skills/humanizer-zh`，用于在方向未冻结时做有界方案比较和中文口径收束。
 - 使用约定：角色决定 owner，技能决定方法；玩法方案不能替代版本目标裁决、视觉表达判断或 QA 放行判断。
 
 ## Checklist

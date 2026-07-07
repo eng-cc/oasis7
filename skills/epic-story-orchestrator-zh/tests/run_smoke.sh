@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-skill_root=".agents/skills/epic-story-orchestrator-zh"
+skill_root="skills/epic-story-orchestrator-zh"
 
 for p in \
   "$skill_root/SKILL.md" \

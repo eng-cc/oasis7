@@ -42,8 +42,8 @@
 - 改动能追溯到对应 PRD-ID / 任务 / 测试
 
 ## Recommended Skills
-- 主技能：`gameplay-mechanics`、`synchronization-algorithms`，用于落地规则执行闭环、状态推进与一致性设计。
-- 常复用技能：`optimization-performance`、`memory-management`、`tdd-test-writer`，用于长时稳定性、性能治理与回归门禁。
+- 主技能：`skills/gameplay-mechanics`、`skills/synchronization-algorithms`，用于落地规则执行闭环、状态推进与一致性设计。
+- 常复用技能：`skills/optimization-performance`、`skills/memory-management`、`tdd-test-writer`，用于长时稳定性、性能治理与回归门禁。
 - 使用约定：角色决定 owner，技能决定方法；当任务跨到规则定义或模块 ABI 时，仍需按 Inputs/Decisions 触发联审而不是靠技能替代协作。
 
 ## Checklist

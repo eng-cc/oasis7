@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import re
 
-p = Path('.agents/skills/epic-story-orchestrator-zh/tests/fixtures/writeback.sample.json')
+p = Path('skills/epic-story-orchestrator-zh/tests/fixtures/writeback.sample.json')
 data = json.loads(p.read_text(encoding='utf-8'))
 
 required = [

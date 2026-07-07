@@ -11,7 +11,8 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(".agents/skills")
+DEFAULT_ROOT = Path(".agents/skills")
+LIBRARY_ROOT = Path("skills")
 MAX_ENTRYPOINT_LINES = 300
 CORE_SKILLS_REQUIRING_FAILURE_MODES = {
     "default-workflow-bootstrap",
@@ -70,11 +71,13 @@ def referenced_supporting_paths(body: str) -> list[str]:
 
 
 failures: list[str] = []
-skill_files = sorted(ROOT.glob("*/SKILL.md"))
-if not skill_files:
+default_skill_files = sorted(DEFAULT_ROOT.glob("*/SKILL.md"))
+library_skill_files = sorted(LIBRARY_ROOT.glob("*/SKILL.md")) if LIBRARY_ROOT.exists() else []
+
+if not default_skill_files:
     failures.append("no skill entrypoints found under .agents/skills/*/SKILL.md")
 
-for path in skill_files:
+def check_skill_file(path: Path, *, default_loadable: bool) -> None:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     skill_name = path.parent.name
@@ -82,7 +85,7 @@ for path in skill_files:
         fields, body = parse_frontmatter(text, path)
     except ValueError as exc:
         failures.append(str(exc))
-        continue
+        return
 
     declared_name = fields.get("name", "")
     description = " ".join(fields.get("description", "").split())
@@ -101,7 +104,7 @@ for path in skill_files:
         failures.append(f"{path}: missing '## When to Use'")
     if "## Guardrails" not in body:
         failures.append(f"{path}: missing '## Guardrails'")
-    if skill_name in CORE_SKILLS_REQUIRING_FAILURE_MODES and "## Known Failure Modes" not in body:
+    if default_loadable and skill_name in CORE_SKILLS_REQUIRING_FAILURE_MODES and "## Known Failure Modes" not in body:
         failures.append(f"{path}: core workflow skill must include '## Known Failure Modes'")
 
     for relative in referenced_supporting_paths(body):
@@ -109,11 +112,22 @@ for path in skill_files:
         if not target.exists():
             failures.append(f"{path}: Supporting Files entry does not exist: {relative}")
 
+
+for path in default_skill_files:
+    check_skill_file(path, default_loadable=True)
+
+for path in library_skill_files:
+    check_skill_file(path, default_loadable=False)
+
 if failures:
     print("lint-skills: FAIL", file=sys.stderr)
     for failure in failures:
         print(f"- {failure}", file=sys.stderr)
     sys.exit(1)
 
-print(f"lint-skills: OK ({len(skill_files)} skill entrypoints checked)")
+print(
+    "lint-skills: OK "
+    f"({len(default_skill_files)} default skill entrypoints, "
+    f"{len(library_skill_files)} library skill entries checked)"
+)
 PY

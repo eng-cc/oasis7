@@ -364,7 +364,7 @@
 - [x] tpm-orchestrator-role (PRD-ENGINEERING-021/031/PRD-ENGINEERING-AWB-006) [test_tier_required]: 新增 `tpm` 作为默认主 Agent / orchestrator / canonical integrator，并将 `producer_system_designer` 与其他专业角色收口为 TPM 派生的 bounded subagent slice。 Trace: .pm/tasks/task_be2454e6bc47441d9383f7509e381b96.yaml
 - [x] tpm-role-boundary (PRD-ENGINEERING-021/031) [test_tier_required]: 将 `tpm` 进一步收紧为 workflow coordinator / integrator only，明确 TPM 不承担专业分析、实现、验证判断、评审判断或对外口径，所有专业结论必须来自对应 bounded subagent slice。 Trace: .pm/tasks/task_855aa2a0a0a84db7a5a3395f222730dc.yaml
 
-  Convergence note: 上述 `superpowers-*`、`default-workflow-bootstrap` 与 `standard-worktree-flow` 行保留为历史完成记录；当前入口语义已由 `doc/engineering/workflow/source-of-truth.md` 与根 `AGENTS.md` 接管，规则是所有用户请求先绑定标准 task worktree 与 GitHub-backed task truth，`tpm` 只做 workflow coordinator / integrator，专业结论必须来自对应 bounded subagent slice。本段不得作为 `.pm` task truth 或旧 trivial/non-trivial 分流的当前依据。
+  Convergence note: 上述 `superpowers-*`、`default-workflow-bootstrap` 与 `standard-worktree-flow` 行保留为历史完成记录；当前入口语义已由 `doc/engineering/workflow/source-of-truth.md` 与根 `AGENTS.md` 接管，规则是所有用户请求先绑定标准 task worktree 与 GitHub-backed task truth，`tpm` 只做 workflow coordinator / integrator，专业结论必须来自对应 bounded subagent slice。本段不得作为 `.pm` task truth 或旧 trivial/non-trivial 分流的当前依据。2026-07-07 后，默认 skill entrypoint 限定在 `.agents/skills/`，root `skills/` 只作为非默认专业 library/reference。
 - [x] quarterly-doc-inventory-review-followup (PRD-ENGINEERING-021/025) [test_tier_required]: 执行 `scripts/doc-inventory-report.sh` 季度复核，固定当前 `doc/` 体量快照，并把工程治理“下一任务”从泛化的季度复核 placeholder 改判为 near-limit active project docs 拆分优先，避免继续悬空停留在 review-only 状态。 Trace: .pm/tasks/task_1104ff9bb9114aaa85c445785950a939.yaml
 - [x] skill-replacement-rationalization (PRD-ENGINEERING-032) [test_tier_required]: 冻结当前 `.agents/skills/` inventory 的 keep/replace/retire/defer 矩阵，并退役 `documentation-writer`、`frontend-ui-ux`、`game-changing-features` 三个低耦合 skill surface，同步回写角色卡、活跃文档与 engineering 根入口。 Trace: .pm/tasks/task_de7dbd97ffdb485eb4a869cc8ac0673a.yaml
 - [x] skill-usefulness-governance (PRD-ENGINEERING-032) [test_tier_required]: 收口当前 repo-owned skill usefulness audit，退役 `asset-optimization` / `audio-systems` / `monetization-systems` 泛化镜像，窄化 `content-creation` / `prd` / `game-design-theory` / `synchronization-algorithms`，并把保留的 domain-triggered skill 绑定到角色边界与 source-of-truth。 Trace: .pm/tasks/task_382d3fe8d9cc4e2fa60e0425072cf644.yaml
@@ -506,7 +506,7 @@
 - `.agents/roles/templates/*.md`
 - `doc/scripts/precommit/pre-commit.prd.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 - `doc/engineering/*.md`
 - historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs 与 git history，当前规则入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`）
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`

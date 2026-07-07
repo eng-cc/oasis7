@@ -1,7 +1,7 @@
 # Engineering Workflow Source of Truth
 
-Version: **v1.5.5**
-Last Updated: **2026-07-05**
+Version: **v1.5.6**
+Last Updated: **2026-07-07**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -60,10 +60,17 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 ### 1.2 Specialist Skill Reachability
 Specialist skills are not mandatory workflow phases. They become reachable through TPM routing or professional subagent slice planning when the task domain matches their trigger.
 
-- Product/planning docs: `prd`, `game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in GitHub task issue evidence comments.
-- Game/domain implementation: `game-design-theory`, `gameplay-mechanics`, `level-design`, `particle-systems`, `optimization-performance`, `memory-management`, `synchronization-algorithms`.
-- Narrative/community/content: `epic-story-orchestrator-zh`, `content-creation`, `humanizer-zh`.
-- Browser/visual/content tools: `agent-browser`, `gpt-image-2`, `xiaohongshu-note-analyzer`.
+The repository has two skill-like surfaces:
+
+- `.agents/skills/`: default-loadable repo-owned workflow skill entrypoints. Keep workflow gates here.
+- `skills/`: non-default specialist library material for professional method skills. Role cards and slice contracts may reference these skills, but they do not automatically trigger.
+
+Only `.agents/skills/*/SKILL.md` entries are default skill entrypoints. Material under `skills/` may preserve `SKILL.md`-style structure for provenance and linting, but it is not part of the default workflow trigger set unless a `.agents/skills` wrapper or source-of-truth update explicitly promotes it back.
+
+- Product/planning docs: `skills/prd`, `skills/game-architect`; these may create planning artifacts, but the route, TODOs, and downstream handoff must still be recorded in GitHub task issue evidence comments.
+- Game/domain implementation: `skills/game-design-theory`, `skills/gameplay-mechanics`, `skills/level-design`, `skills/particle-systems`, `skills/optimization-performance`, `skills/memory-management`, `skills/synchronization-algorithms`.
+- Narrative/community/content: `skills/epic-story-orchestrator-zh`, `skills/content-creation`, `skills/humanizer-zh`, `skills/xiaohongshu-note-analyzer`.
+- Browser/visual/content tools: `skills/agent-browser`, `skills/gpt-image-2`.
 - Visual companion / Image2 target workflows are optional evidence, not universal gates. They may be used inside an existing task/worktree as visual target and screenshot-comparison evidence, but cannot replace implementation, real native/browser screenshots, interaction smoke, QA evidence, or PR review. Screenshot-only previews count as stable visual-comparison evidence, not real interaction coverage.
 
 If a specialist skill is used, TPM must still bind it to the same owner, GitHub-backed task, canonical worktree, and PR chain through the subagent slice contract. TPM may route to specialist skills, but the specialist role owns the professional conclusion.
@@ -482,6 +489,14 @@ Deterministic script contract:
   replace it.
 
 ## 7. Change Log
+- **v1.5.6 (2026-07-07)**
+  - Split skill-like content into default-loadable `.agents/skills/*/SKILL.md`
+    entrypoints and non-default root `skills/` specialist library/archive
+    material.
+  - Moved professional method skills out of the default `.agents/skills`
+    trigger surface and into role-card-referenced `skills/` library entries.
+  - Required source-of-truth promotion before any root `skills/` library
+    material becomes a default `.agents/skills` trigger again.
 - **v1.5.4 (2026-07-01)**
   - Made task-scoped GitHub Project audit copy-pasteable with
     `github-project-workflow.sh audit --task-uid <TASK-UID> --json`, backed by

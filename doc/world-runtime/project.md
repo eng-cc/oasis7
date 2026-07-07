@@ -721,7 +721,7 @@
 - `tools/wasm_build_suite/src/lib.rs`
 - `doc/world-runtime/governance/governance-events.md`
 - `testing-manual.md`
-- `.agents/skills/prd/check.md`
+- `skills/prd/check.md`
 
 ## 状态
 - 更新日期: 2026-05-26
