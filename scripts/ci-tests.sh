@@ -172,6 +172,7 @@ run_newapi_bridge_service_accounting_tests() {
 }
 
 run_oasis7_viewer_software_safe_feedback_contract_tests() {
+  run npm --prefix crates/oasis7_viewer run test:frontend-structure
   run npm --prefix crates/oasis7_viewer run test:feedback-contract
   run ./scripts/copy-viewer-web-dist.test.sh
   run ./scripts/agent-browser-viewer-dist-freshness-test.sh

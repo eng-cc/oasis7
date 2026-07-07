@@ -32,6 +32,7 @@
 - #2131 frontend governance audit:
   - Mechanical scan found current owner-tagged structure debt in `viewer.html`, `software_safe_src/gameplay_attraction_scenario.js`, `software_safe_src/legacy_core.js`, `software_safe_src/main.jsx`, `software_safe_src/main.test.jsx`, `software_safe_src/pixel_world_host.jsx`, and `software_safe_src/viewer_feedback_module.js`.
   - Added `crates/oasis7_viewer/scripts/frontend-structure-audit.mjs` and package script `test:frontend-structure` so future Viewer frontend changes can verify known debt caps, stale exemptions, canonical -> compat artifact direction, and generated runtime shape when `dist/` exists.
+  - Wired `test:frontend-structure` into the Viewer software-safe required-gate path in `scripts/ci-tests.sh`, so scoped Viewer CI runs fail on unregistered threshold drift instead of relying on manual local invocation.
   - `software_safe.js` remains a generated compat alias to `viewer.js`; `software_safe.html` must remain a byte-for-byte compat copy of `viewer.html`.
 
 ## 依赖
