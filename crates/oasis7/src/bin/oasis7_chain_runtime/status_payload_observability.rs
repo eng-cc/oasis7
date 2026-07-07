@@ -13,6 +13,7 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
+const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 4;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainP2pPathObservabilityStatus {
@@ -178,7 +179,10 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     let p50_ms = timing.p50_total_ms.unwrap_or(0) as f64;
     let p95_ms = timing.p95_total_ms.unwrap_or(0) as f64;
     let max_ms = timing.max_total_ms.unwrap_or(0) as f64;
-    let health = if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS * 2.0 {
+    let samples_total = timing.recent_commit_count as u64;
+    let health = if samples_total >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES
+        && p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS * 2.0
+    {
         RuntimePerfHealth::Critical
     } else if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
         || max_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
@@ -187,7 +191,6 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     } else {
         RuntimePerfHealth::Healthy
     };
-    let samples_total = timing.recent_commit_count as u64;
     let action_execution = RuntimePerfSeriesSnapshot {
         samples_total,
         samples_window: timing.recent_commit_count,
