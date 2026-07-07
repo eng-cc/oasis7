@@ -3,12 +3,11 @@
 Purpose: record one bounded `WorldFinalityProofV1` external verifier sample for
 validator-set hash, stake threshold, finality-vote target binding, and
 fork/misbehavior evidence, live Ed25519 finality vote verification, and bounded
-validator-set transition execution semantics. This is optional, non-promotional
-evidence.
+validator-set transition execution plus governance-certificate semantics. This
+is optional, non-promotional evidence.
 
-It does not claim full light-client security, trust-minimized validator
-governance/transition security, public validator onboarding, or mainnet-grade
-finality.
+It does not claim full light-client security, public validator onboarding,
+multi-client equivalence, or mainnet-grade finality.
 
 | Field | Expected value |
 | --- | --- |
@@ -75,12 +74,16 @@ finality.
     "consensus_approver_subset_checked": true,
     "ed25519_signature_verification_checked": true,
     "validator_set_transition_execution_checked": true,
+    "validator_set_transition_governance_checked": true,
+    "trusted_governance_anchor_checked": false,
+    "governance_set_hash": "",
+    "governance_certificate_count": 0,
     "validator_set_transition_count": 0
   },
   "transition_sample": {
     "transition_result": "no_transition_in_sample",
     "transition_count": 0,
-    "reason": "bounded transition semantics are verified when present; not trust-minimized validator governance"
+    "reason": "bounded transition governance certificate, execution, and finality semantics are verified when present"
   },
   "fork_or_reorg_cases": [
     "conflicting_head_rejected_or_recorded",
@@ -93,7 +96,7 @@ finality.
     "status": "pass",
     "verifier_mode": "validator_set_finality",
     "proof_contract": "WorldFinalityProofV1",
-    "hash_domain": "oasis7.world_finality_proof.v1",
+    "hash_domain": "oasis7.world_finality_proof.v2",
     "claim_boundary": "validator_set_finality_evidence_only_not_full_light_client_or_mainnet_readiness",
     "proof_ref": "proof.json",
     "proof_hash": "replace-with-verifier-proof-hash",
@@ -111,6 +114,10 @@ finality.
       "consensus_approver_subset_checked": true,
       "ed25519_signature_verification_checked": true,
       "validator_set_transition_execution_checked": true,
+      "validator_set_transition_governance_checked": true,
+      "trusted_governance_anchor_checked": false,
+      "governance_set_hash": "",
+      "governance_certificate_count": 0,
       "validator_set_transition_count": 0
     },
     "head": {
@@ -121,7 +128,6 @@ finality.
     "does_not_claim": [
       "mainnet-grade finality",
       "full light client",
-      "trust-minimized validator-set transition governance",
       "DA sampling",
       "multi-client consensus equivalence",
       "public validator onboarding open"
@@ -133,7 +139,6 @@ finality.
   "does_not_claim": [
     "full light client security",
     "mainnet-grade finality",
-    "trust-minimized validator transition",
     "public validator onboarding open",
     "permissionless validator onboarding",
     "DA sampling",
@@ -143,7 +148,7 @@ finality.
   ],
   "residual_risk": [
     "same implementation family verifier; no independent client parity",
-    "bounded transition execution is same-family verifier evidence, not trust-minimized validator governance"
+    "bounded transition governance remains same-family verifier evidence, not full light-client or multi-client equivalence"
   ]
 }
 ```

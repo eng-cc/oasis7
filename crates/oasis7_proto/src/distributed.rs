@@ -157,13 +157,19 @@ pub const WORLD_HEAD_PROOF_CLAIM_BOUNDARY_V1: &str =
     "head_execution_checkpoint_evidence_only_not_light_client_or_mainnet_readiness";
 
 pub use crate::distributed_finality::{
-    WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1, WORLD_FINALITY_PROOF_HASH_DOMAIN_V1,
-    WORLD_FINALITY_PROOF_V1_SCHEMA, WORLD_FINALITY_VALIDATOR_SET_HASH_DOMAIN_V1,
+    WORLD_FINALITY_GOVERNANCE_SET_HASH_DOMAIN_V1, WORLD_FINALITY_PROOF_CLAIM_BOUNDARY_V1,
+    WORLD_FINALITY_PROOF_HASH_DOMAIN_V1, WORLD_FINALITY_PROOF_V1_SCHEMA,
+    WORLD_FINALITY_VALIDATOR_SET_HASH_DOMAIN_V1,
+    WORLD_FINALITY_VALIDATOR_SET_TRANSITION_GOVERNANCE_SIGNING_DOMAIN_V1,
     WORLD_FINALITY_VALIDATOR_SET_TRANSITION_SIGNING_DOMAIN_V1,
     WORLD_FINALITY_VOTE_SIGNING_DOMAIN_V1, WorldFinalityCommitmentV1,
-    WorldFinalityMisbehaviorEvidenceV1, WorldFinalityProofV1,
-    WorldFinalityValidatorSetTransitionApprovalV1, WorldFinalityValidatorSetTransitionV1,
-    WorldFinalityValidatorV1, WorldFinalityVoteV1, compute_world_finality_validator_set_hash,
+    WorldFinalityGovernanceSignerV1, WorldFinalityMisbehaviorEvidenceV1, WorldFinalityProofV1,
+    WorldFinalityValidatorSetTransitionApprovalV1,
+    WorldFinalityValidatorSetTransitionGovernanceApprovalV1,
+    WorldFinalityValidatorSetTransitionGovernanceCertificateV1,
+    WorldFinalityValidatorSetTransitionV1, WorldFinalityValidatorV1, WorldFinalityVoteV1,
+    compute_world_finality_governance_set_hash, compute_world_finality_validator_set_hash,
+    world_finality_validator_set_transition_governance_signing_payload,
     world_finality_validator_set_transition_signing_payload, world_finality_vote_signing_payload,
 };
 pub use crate::distributed_state_receipt::{

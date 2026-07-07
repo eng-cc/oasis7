@@ -67,6 +67,7 @@ struct Args {
     expect_from_height: Option<u64>,
     expect_to_height: Option<u64>,
     expect_anchor_hash: Option<String>,
+    expect_governance_set_hash: Option<String>,
     write_sample_json: Option<PathBuf>,
     write_sample_window_json: Option<PathBuf>,
     write_sample_state_receipt_json: Option<PathBuf>,
@@ -75,7 +76,7 @@ struct Args {
 }
 
 fn usage() -> &'static str {
-    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>|--state-receipt-proof <path>|--finality-proof <path>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--write-sample-state-receipt-json <path>] [--write-sample-finality-json <path>] [--json]"
+    "Usage: oasis7_world_head_proof_verify (--proof <path>|--proof-window <manifest.json>|--state-receipt-proof <path>|--finality-proof <path>) [--format cbor|json] [--expect-hash <hash>] [--expect-world-id <id>] [--expect-height <height>] [--expect-from-height <height>] [--expect-to-height <height>] [--expect-anchor-hash <hash>] [--expect-governance-set-hash <hash>] [--write-sample-json <path>] [--write-sample-window-json <dir>] [--write-sample-state-receipt-json <path>] [--write-sample-finality-json <path>] [--json]"
 }
 
 fn parse_args<I>(args: I) -> Result<Args, String>
@@ -94,6 +95,7 @@ where
     let mut expect_from_height = None;
     let mut expect_to_height = None;
     let mut expect_anchor_hash = None;
+    let mut expect_governance_set_hash = None;
     let mut write_sample_json = None;
     let mut write_sample_window_json = None;
     let mut write_sample_state_receipt_json = None;
@@ -188,6 +190,12 @@ where
                         .ok_or_else(|| "--expect-anchor-hash requires a value".to_string())?,
                 );
             }
+            "--expect-governance-set-hash" => {
+                expect_governance_set_hash =
+                    Some(iter.next().ok_or_else(|| {
+                        "--expect-governance-set-hash requires a value".to_string()
+                    })?);
+            }
             "--write-sample-json" => {
                 write_sample_json =
                     Some(PathBuf::from(iter.next().ok_or_else(|| {
@@ -234,6 +242,7 @@ where
             expect_from_height,
             expect_to_height,
             expect_anchor_hash,
+            expect_governance_set_hash,
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
@@ -255,6 +264,7 @@ where
             expect_from_height,
             expect_to_height,
             expect_anchor_hash,
+            expect_governance_set_hash,
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
@@ -276,6 +286,7 @@ where
             expect_from_height,
             expect_to_height,
             expect_anchor_hash,
+            expect_governance_set_hash,
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
@@ -297,6 +308,7 @@ where
             expect_from_height,
             expect_to_height,
             expect_anchor_hash,
+            expect_governance_set_hash,
             write_sample_json,
             write_sample_window_json,
             write_sample_state_receipt_json,
@@ -347,6 +359,7 @@ where
         expect_from_height,
         expect_to_height,
         expect_anchor_hash,
+        expect_governance_set_hash,
         write_sample_json,
         write_sample_window_json,
         write_sample_state_receipt_json,
@@ -411,6 +424,7 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
             args.expect_hash.as_deref(),
             args.expect_world_id.as_deref(),
             args.expect_height,
+            args.expect_governance_set_hash.as_deref(),
             args.proof_ref,
         );
     }
@@ -514,6 +528,7 @@ mod tests {
             expect_from_height: None,
             expect_to_height: None,
             expect_anchor_hash: None,
+            expect_governance_set_hash: None,
             write_sample_json: None,
             write_sample_window_json: None,
             write_sample_state_receipt_json: None,

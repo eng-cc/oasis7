@@ -17,6 +17,16 @@ fn validator_keys() -> BTreeMap<&'static str, SigningKey> {
     .collect()
 }
 
+fn governance_keys() -> BTreeMap<&'static str, SigningKey> {
+    [
+        ("governance-a", SigningKey::from_bytes(&[11_u8; 32])),
+        ("governance-b", SigningKey::from_bytes(&[12_u8; 32])),
+        ("governance-c", SigningKey::from_bytes(&[13_u8; 32])),
+    ]
+    .into_iter()
+    .collect()
+}
+
 fn public_key_hex(key: &SigningKey) -> String {
     hex::encode(key.verifying_key().to_bytes())
 }
@@ -207,6 +217,20 @@ fn world_finality_proof_v1_validates_contract_and_hash() {
 }
 
 #[test]
+fn world_finality_proof_v1_rejects_legacy_schema_after_governance_requirement() {
+    let mut proof = sample_valid_finality_proof();
+    proof.schema_version = 1;
+
+    let err = proof
+        .validate_contract()
+        .expect_err("legacy schema rejected after governance requirement");
+    assert!(
+        err.contains("unsupported world finality proof schema: 1"),
+        "{err}"
+    );
+}
+
+#[test]
 fn world_finality_proof_v1_rejects_below_stake_threshold() {
     let mut proof = sample_valid_finality_proof();
     for commitment in &mut proof.finality_commitments {
@@ -354,6 +378,7 @@ fn add_sample_validator_set_transition(proof: &mut WorldFinalityProofV1) {
         transition_height: 41,
         transition_block_hash: proof.head_proofs[1].head.block_hash.clone(),
         approvals: vec![],
+        governance_certificate: None,
     };
     transition.approvals = ["validator-a", "validator-b"]
         .into_iter()
@@ -379,6 +404,7 @@ fn add_sample_validator_set_transition(proof: &mut WorldFinalityProofV1) {
             }
         })
         .collect();
+    add_sample_governance_certificate(&mut transition);
     proof.validator_set_transitions = vec![transition];
     proof.finality_commitments[2].validator_set_hash = to_validator_set_hash;
     proof.finality_commitments[2].votes = vec![
@@ -395,6 +421,115 @@ fn add_sample_validator_set_transition(proof: &mut WorldFinalityProofV1) {
     ];
 }
 
+fn add_sample_governance_certificate(transition: &mut WorldFinalityValidatorSetTransitionV1) {
+    let keys = governance_keys();
+    let governance_signers = vec![
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-a".to_string(),
+            stake_weight: 34,
+            governance_public_key: public_key_hex(&keys["governance-a"]),
+            activation_height: 1,
+            exit_height: None,
+        },
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-b".to_string(),
+            stake_weight: 33,
+            governance_public_key: public_key_hex(&keys["governance-b"]),
+            activation_height: 1,
+            exit_height: None,
+        },
+        WorldFinalityGovernanceSignerV1 {
+            signer_id: "governance-c".to_string(),
+            stake_weight: 33,
+            governance_public_key: public_key_hex(&keys["governance-c"]),
+            activation_height: 1,
+            exit_height: None,
+        },
+    ];
+    let governance_set_hash = compute_world_finality_governance_set_hash(
+        "sample-governance-set-1",
+        1,
+        6_667,
+        &governance_signers,
+    )
+    .expect("governance set hash");
+    let governance_approvals = ["governance-a", "governance-b"]
+        .into_iter()
+        .map(|signer_id| {
+            let payload = world_finality_validator_set_transition_governance_signing_payload(
+                signer_id,
+                "world-a",
+                governance_set_hash.as_str(),
+                transition.from_validator_set_hash.as_str(),
+                transition.to_validator_set_hash.as_str(),
+                transition.to_validator_set_activation_height,
+                transition.transition_height,
+                transition.transition_block_hash.as_str(),
+            )
+            .expect("transition governance signing payload");
+            WorldFinalityValidatorSetTransitionGovernanceApprovalV1 {
+                signer_id: signer_id.to_string(),
+                governance_set_hash: governance_set_hash.clone(),
+                from_validator_set_hash: transition.from_validator_set_hash.clone(),
+                to_validator_set_hash: transition.to_validator_set_hash.clone(),
+                to_validator_set_activation_height: transition.to_validator_set_activation_height,
+                transition_height: transition.transition_height,
+                transition_block_hash: transition.transition_block_hash.clone(),
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(keys[signer_id].sign(payload.as_slice()).to_bytes()),
+            }
+        })
+        .collect();
+    transition.governance_certificate =
+        Some(WorldFinalityValidatorSetTransitionGovernanceCertificateV1 {
+            governance_set_id: "sample-governance-set-1".to_string(),
+            governance_set_activation_height: 1,
+            governance_threshold_bps: 6_667,
+            governance_set_hash,
+            governance_signers,
+            governance_approvals,
+        });
+}
+
+fn resign_governance_approvals(transition: &mut WorldFinalityValidatorSetTransitionV1) {
+    let keys = governance_keys();
+    let certificate = transition
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_set_hash = compute_world_finality_governance_set_hash(
+        certificate.governance_set_id.as_str(),
+        certificate.governance_set_activation_height,
+        certificate.governance_threshold_bps,
+        certificate.governance_signers.as_slice(),
+    )
+    .expect("governance set hash");
+    for approval in &mut certificate.governance_approvals {
+        approval.governance_set_hash = certificate.governance_set_hash.clone();
+        approval.from_validator_set_hash = transition.from_validator_set_hash.clone();
+        approval.to_validator_set_hash = transition.to_validator_set_hash.clone();
+        approval.to_validator_set_activation_height = transition.to_validator_set_activation_height;
+        approval.transition_height = transition.transition_height;
+        approval.transition_block_hash = transition.transition_block_hash.clone();
+        let payload = world_finality_validator_set_transition_governance_signing_payload(
+            approval.signer_id.as_str(),
+            "world-a",
+            approval.governance_set_hash.as_str(),
+            approval.from_validator_set_hash.as_str(),
+            approval.to_validator_set_hash.as_str(),
+            approval.to_validator_set_activation_height,
+            approval.transition_height,
+            approval.transition_block_hash.as_str(),
+        )
+        .expect("transition governance signing payload");
+        approval.signature_hex = hex::encode(
+            keys[approval.signer_id.as_str()]
+                .sign(payload.as_slice())
+                .to_bytes(),
+        );
+    }
+}
+
 #[test]
 fn world_finality_proof_v1_executes_validator_set_transition() {
     let mut proof = sample_valid_finality_proof();
@@ -408,6 +543,133 @@ fn world_finality_proof_v1_executes_validator_set_transition() {
     proof
         .validate_contract()
         .expect("transition proof should validate");
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_transition_without_governance_certificate() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    proof.validator_set_transitions[0].governance_certificate = None;
+
+    let err = proof
+        .validate_contract()
+        .expect_err("missing transition governance certificate rejected");
+    assert!(err.contains("governance_certificate required"), "{err}");
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_transition_governance_signature_tamper() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let certificate = proof.validator_set_transitions[0]
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_approvals[0].signature_hex =
+        certificate.governance_approvals[1].signature_hex.clone();
+
+    let err = proof
+        .validate_contract()
+        .expect_err("tampered transition governance approval signature rejected");
+    assert!(
+        err.contains("transition governance approval signature verification failed"),
+        "{err}"
+    );
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_transition_governance_below_threshold() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let certificate = proof.validator_set_transitions[0]
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_approvals.pop();
+
+    let err = proof
+        .validate_contract()
+        .expect_err("below-threshold transition governance approval rejected");
+    assert!(
+        err.contains("governance_certificate approval stake below threshold"),
+        "{err}"
+    );
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_duplicate_transition_governance_approval() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let certificate = proof.validator_set_transitions[0]
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate
+        .governance_approvals
+        .push(certificate.governance_approvals[0].clone());
+
+    let err = proof
+        .validate_contract()
+        .expect_err("duplicate transition governance approval rejected");
+    assert!(err.contains("duplicate signer"), "{err}");
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_transition_governance_target_mismatch() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let certificate = proof.validator_set_transitions[0]
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_approvals[0].to_validator_set_hash =
+        "wrong-transition-target".to_string();
+
+    let err = proof
+        .validate_contract()
+        .expect_err("transition governance target mismatch rejected");
+    assert!(err.contains("target mismatch"), "{err}");
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_transition_governance_signer_not_in_set() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let certificate = proof.validator_set_transitions[0]
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_approvals[0].signer_id = "governance-x".to_string();
+
+    let err = proof
+        .validate_contract()
+        .expect_err("transition governance signer outside set rejected");
+    assert!(err.contains("signer not in governance set"), "{err}");
+}
+
+#[test]
+fn world_finality_proof_v1_rejects_inactive_transition_governance_signer() {
+    let mut proof = sample_valid_finality_proof();
+    add_sample_validator_set_transition(&mut proof);
+    proof.misbehavior_evidence[0].height = 40;
+    let transition = &mut proof.validator_set_transitions[0];
+    let certificate = transition
+        .governance_certificate
+        .as_mut()
+        .expect("governance certificate");
+    certificate.governance_signers[0].exit_height = Some(transition.transition_height);
+    resign_governance_approvals(transition);
+
+    let err = proof
+        .validate_contract()
+        .expect_err("inactive transition governance signer rejected");
+    assert!(err.contains("signer not active"), "{err}");
 }
 
 #[test]
@@ -490,6 +752,7 @@ fn world_finality_proof_v1_rejects_out_of_order_validator_set_transitions() {
         transition_height: 40,
         transition_block_hash: proof.head_proofs[0].head.block_hash.clone(),
         approvals: vec![],
+        governance_certificate: None,
     };
     earlier_transition.approvals = ["validator-a", "validator-b"]
         .into_iter()
@@ -516,6 +779,7 @@ fn world_finality_proof_v1_rejects_out_of_order_validator_set_transitions() {
             }
         })
         .collect();
+    add_sample_governance_certificate(&mut earlier_transition);
     proof.validator_set_transitions = vec![later_transition, earlier_transition];
 
     let err = proof
@@ -594,6 +858,7 @@ fn world_finality_proof_v1_rejects_transition_hash_tamper() {
         transition_height: 41,
         transition_block_hash: proof.head_proofs[1].head.block_hash.clone(),
         approvals: vec![],
+        governance_certificate: None,
     }];
 
     let err = proof
