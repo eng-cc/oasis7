@@ -20,6 +20,7 @@
 - [x] devlog-summary-retire-followup (PRD-ENGINEERING-026) [test_tier_required]: 将 `doc/devlog/README.md` 升级为 compact archive summary，删除 57 份 `doc/devlog/2026-*.md` 日文件，并收敛具体日文件引用到 summary 入口。 Trace: .pm/tasks/task_eebbcc11039940dcbc99c540a15ece03.yaml
 - [x] simulation-cleanup-governance-aftercare (PRD-ENGINEERING-021/025) [test_tier_required]: 将 world-simulator 旧全量审读清单从 active reading truth 降格为 historical snapshot，并把仿真模拟 demo/bin 退役候选转成 replacement-evidence follow-up signals；当前不直接删除 active simulator code/docs。 Trace: .pm/tasks/task_41b18b1a7fef4d7b95e5d51aac64974f.yaml
 - [x] historical-doc-skill-surface-governance (PRD-ENGINEERING-025/032) [test_tier_required]: 收口 stale-file 抽样后的治理落地，把历史 project/handoff/evidence 与 skill placeholder 表面纳入 batch compaction/retirement 口径，并先退役一个未被入口承接的 `gameplay-mechanics` placeholder helper。 Trace: .pm/tasks/task_ba86c4d2de4349a8941ef5bfafe15d74.yaml
+- [x] doc-legacy-semantics-convergence (PRD-ENGINEERING-025) [test_tier_required]: 按 `doc-inventory-report` 的 hotspot / `action_required` 结果继续做旧语义收敛；本轮选择 `doc/game/gameplay` 中未被索引承接、只剩自引用的一次性 `MLF008` viewer-to-QA handoff brief，删除旧 handoff 文件，并把 gameplay README / PRD index 的补充材料数量与“一次性 handoff 退役”口径回写到当前入口。 Trace: #2118 (task_29a5b7f217ba47b785a80b3c85aa37fb)
 
 2026-07-04 aftercare：`devlog-history-compaction` 一次性专题三件套已退役删除；当前 `doc/devlog` 入口收敛到 `doc/devlog/README.md` compact archive summary，任务执行证据以 GitHub task issue evidence comments、GitHub Project fields 与 workflow source-of-truth 为准。
 
@@ -44,6 +45,7 @@
 2026-05-27 补充：`doc/devlog` 已从“README 导航 57 个日文件”推进到“README 摘要替代 + 日文件退役”；后续不再新增 daily devlog。2026-07-02 追认：GitHub Project-backed workflow 迁移后，当前执行证据 canonical sink 为 GitHub task issue evidence comments；历史 `.pm/tasks/*.execution.md` 只作为退役前追溯层。
 2026-06-19 补充：stale-file 抽样后的后续治理先按低风险 skill-surface aftercare 落地；历史 project/handoff/evidence 的批量压缩仍应保留索引 backlink、归档位置、保留例外和验证命令，不做随机单删。
 2026-06-25 补充：最新 `scripts/doc-inventory-report.sh` 复算显示 near-limit active docs 为 none，首批 project 状态区 aftercare 已收口；当前下一步不再回到 `doc/world-simulator/project.md` / `doc/readme/project.md` 队列，而应先按 module density / hotspot `action_required` 做 bounded 分类判断，再为 `doc/world-simulator/viewer`、`doc/world-simulator/launcher`、`doc/game/gameplay` 或其他热点单独创建 focused follow-up。Trace: .pm/tasks/task_7f7faa364b6c44d2b5e9448beaf87ccb.yaml
+2026-07-06 补充：本轮 `doc-inventory-report` 仍显示 `world-simulator` / `p2p` / `testing` 为 action_required 模块，但 `doc/game/gameplay` 存在一个更低风险的旧语义删除点：一次性 `MLF008` viewer-to-QA handoff brief 仅自引用，且当前追溯已由 gameplay project、evidence surfaces、core review logs 与 GitHub task issue evidence comments 承接；已删除该 handoff 文件并回写 gameplay README / PRD index。
 
 ## 依赖
 - `doc/engineering/prd.md`

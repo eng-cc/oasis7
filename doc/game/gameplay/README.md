@@ -1,6 +1,6 @@
 # `game/gameplay` 热点子域入口
 
-更新时间: 2026-07-05
+更新时间: 2026-07-06
 
 ## 从这里开始
 - 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
@@ -20,9 +20,9 @@
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
 ## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-07-05）:
-  - `doc/game/gameplay/`: 79 份 Markdown
-  - `doc/game/`: 84 份 Markdown
+- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-07-06）:
+  - `doc/game/gameplay/`: 78 份 Markdown
+  - `doc/game/`: 83 份 Markdown
 - 该子域已经达到热点阈值；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
 
 ## 首读主题簇
@@ -80,7 +80,7 @@
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`。
-- runbook、evidence、checklist、handoff 和历史执行补充材料继续保留可检索性，但默认不作为首读入口；旧 limited-preview 与 closed-beta role handoff briefs 已退役删除，TASK-GAME-029~032 当前追溯通过 closed beta 专题 project、runtime / viewer / QA / liveops evidence surfaces 与 GitHub task issue evidence comments，TASK-GAME-036/037 当前追溯通过 limited preview 专题 project、round-1 execution record 与 QA gate evidence。
+- runbook、evidence、checklist 和必要的历史执行补充材料继续保留可检索性，但默认不作为首读入口；一次性 role handoff brief 在对应 project / evidence / GitHub task issue evidence comments 已能追溯后应退役删除。旧 MLF008 viewer-to-QA handoff、limited-preview 与 closed-beta role handoff briefs 已退役删除；TASK-GAME-018 当前追溯通过 micro-loop topic project / evidence surfaces / core review logs / GitHub task issue evidence comments，TASK-GAME-029~032 当前追溯通过 closed beta 专题 project、runtime / viewer / QA / liveops evidence surfaces 与 GitHub task issue evidence comments，TASK-GAME-036/037 当前追溯通过 limited preview 专题 project、round-1 execution record 与 QA gate evidence。
 - 如果问题需要玩法正确性、平衡、release 放行或对外口径结论，本页只提供文档入口；结论必须回到 `gameplay_designer`、`qa_engineer` 或 `liveops_community` 对应任务证据。
 - 历史专题不因出现在本页附近而重新成为当前真值；当前判断以模块 PRD/project、活跃专题、正式 evidence surfaces 与 GitHub task issue evidence comments 为准。
 

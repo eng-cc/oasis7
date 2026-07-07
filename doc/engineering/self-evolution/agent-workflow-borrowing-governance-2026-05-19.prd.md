@@ -7,7 +7,7 @@
 
 - 对应标准执行入口: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md`
 
-Current governance note (2026-07-01): 本专题仍保留 2026-05 外部 workflow 借鉴裁决，但其中的运行态任务真值已随工程工作流迁移为 GitHub-backed task truth：`task_uid` + GitHub task issue evidence comments + GitHub Project fields 为权威面；本地 `.pm` task 文件、execution log 与 archive 只作为历史/迁移/脚本桥接语义出现，不再是当前首读任务真值。
+Current governance note (2026-07-06): 本专题仍保留 2026-05 外部 workflow 借鉴裁决，但不再作为当前 backlog 或 workflow 入口。现行规则以 `doc/engineering/workflow/source-of-truth.md` 和根 `AGENTS.md` 为准：`tpm` 只做 workflow coordinator / integrator，专业角色通过 bounded subagent slice 产出专业结论；所有用户请求先绑定标准 task worktree 与 GitHub-backed task truth。历史本地 `.pm` task 文件、execution log 与 archive 只作为迁移/审计/脚本桥接语义出现。
 
 ## 1. Executive Summary
 - Problem Statement: 外部 agent workflow repo 已提供成套的 planning、TDD、subagent、visual companion 与 closeout 语义；若 oasis7 不把哪些模式可变成默认、哪些仍必须拒绝写成正式规则冻结下来，默认编排、owner/task 真值和 review 边界会继续漂移。
@@ -193,10 +193,10 @@ Current governance note (2026-07-01): 本专题仍保留 2026-05 外部 workflow
     - `brainstorming` -> bounded brainstorming contract
     - `using-superpowers` 的 process-skill routing order -> repo-owned workflow router
     - `using-superpowers` 的“默认先进入正确流程”体验 -> repo-owned default workflow bootstrap
-  - 剩余 follow-up:
-    - workflow enforcement audit follow-up：把 helper 输出升级为 task truth evidence，并让底层 `done` 状态迁移直接拒绝无 fresh verification evidence 的 closeout
-    - Viewer visual companion pilot：仅在下一轮结构/视觉专题里验证 optional ideation 收益，并要求 IA / wireframe / layout compare artifact 与 formal writeback
-    - repo-owned review-request surface：只对 high-risk local diff 启用，验证 review packet、return contract 与 formal sink 不会漂成第二条正式 review 主链
+  - 历史 follow-up 处置:
+    - workflow enforcement audit follow-up 已被当前 GitHub-backed task truth 与 source-of-truth evidence sink 取代；不得继续把 `.pm/tasks/*.yaml` 写成当前任务真值。
+    - Viewer visual companion pilot 仅作为未来 Viewer 结构/视觉专题的 optional technique；不得从本文直接当作 active task truth 启动。
+    - repo-owned review-request surface 已由 `requesting-repo-owned-review` 与 pre-PR local role review evidence packet 吸收。
   - Deferred reopen:
     - multi-harness workflow packaging：仅在 repo-owned behavior/eval 稳定后重开
 - Technical Risks:
