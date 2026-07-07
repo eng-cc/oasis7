@@ -142,6 +142,14 @@ impl PosNodeEngine {
                 }
             }
         }
+        self.rebroadcast_replicated_commit_head(
+            consensus_network.as_deref(),
+            gossip,
+            node_id,
+            world_id,
+            now_ms,
+            replication.as_deref(),
+        )?;
         let hold_for_replication_probe = if let Some(endpoint) = replication_network.as_ref() {
             with_execution_hook(&mut execution_hook, |hook| {
                 self.maybe_hold_proposal_for_replication_successor_probe(
@@ -289,15 +297,6 @@ impl PosNodeEngine {
             {
                 return Err(err);
             }
-            if let Err(err) = self.broadcast_replicated_commit_head_network(
-                endpoint,
-                node_id,
-                world_id,
-                now_ms,
-                replication.as_deref(),
-            ) {
-                return Err(err);
-            }
         }
         if let Some(endpoint) = gossip.as_ref() {
             if let Err(err) =
@@ -305,16 +304,15 @@ impl PosNodeEngine {
             {
                 return Err(err);
             }
-            if let Err(err) = self.broadcast_replicated_commit_head_gossip(
-                endpoint,
-                node_id,
-                world_id,
-                now_ms,
-                replication.as_deref(),
-            ) {
-                return Err(err);
-            }
         }
+        self.rebroadcast_replicated_commit_head(
+            consensus_network.as_deref(),
+            gossip,
+            node_id,
+            world_id,
+            now_ms,
+            replication.as_deref(),
+        )?;
         if let Some(endpoint) = gossip.as_ref() {
             if let Err(err) = self.ingest_peer_messages(
                 endpoint,
@@ -390,6 +388,36 @@ impl PosNodeEngine {
             consensus_snapshot: self.snapshot_from_decision(&decision),
             committed_action_batch,
         })
+    }
+
+    fn rebroadcast_replicated_commit_head(
+        &mut self,
+        consensus_network: Option<&ConsensusNetworkEndpoint>,
+        gossip: Option<&GossipEndpoint>,
+        node_id: &str,
+        world_id: &str,
+        now_ms: i64,
+        replication: Option<&ReplicationRuntime>,
+    ) -> Result<(), NodeError> {
+        if let Some(endpoint) = consensus_network {
+            self.broadcast_replicated_commit_head_network(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication,
+            )?;
+        }
+        if let Some(endpoint) = gossip {
+            self.broadcast_replicated_commit_head_gossip(
+                endpoint,
+                node_id,
+                world_id,
+                now_ms,
+                replication,
+            )?;
+        }
+        Ok(())
     }
 
     fn rollback_local_committed_execution_after_failure(

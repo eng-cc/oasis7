@@ -106,6 +106,137 @@ fn replicated_commit_head_network_rebroadcast_is_independent_from_local_commit_b
 }
 
 #[test]
+fn tick_rebroadcasts_replicated_commit_head_before_remote_commit_hold() {
+    let world_id = "world-replicated-head-before-remote-hold";
+    let dir = temp_dir("replicated-head-before-remote-hold");
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![
+            PosValidator {
+                validator_id: "node-a".to_string(),
+                stake: 100,
+            },
+            PosValidator {
+                validator_id: "node-b".to_string(),
+                stake: 100,
+            },
+        ],
+        &[("node-a", 93), ("node-b", 94)],
+    );
+    let config = NodeConfig::new("node-a", world_id, NodeRole::Storage)
+        .expect("config")
+        .with_pos_config(pos_config)
+        .expect("pos config")
+        .with_network_policy(NodeNetworkPolicy {
+            deployment_mode: oasis7_proto::distributed_dht::PeerDeploymentMode::Private,
+            node_role_claim: oasis7_proto::distributed_dht::PeerNodeRole::ValidatorCore,
+        })
+        .expect("validator-core policy")
+        .with_replication(signed_replication_config(dir.clone(), 93));
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    let mut replication =
+        ReplicationRuntime::new(config.replication.as_ref().expect("replication"), "node-a")
+            .expect("replication runtime");
+    let replicated_decision = PosDecision {
+        height: 3,
+        slot: 3,
+        epoch: 0,
+        proposer_id: "node-b".to_string(),
+        status: PosConsensusStatus::Committed,
+        block_hash: "replicated-held-block-3".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        approved_stake: 200,
+        rejected_stake: 0,
+        required_stake: 134,
+        total_stake: 200,
+    };
+    replication
+        .build_local_commit_message(
+            "node-b",
+            world_id,
+            4_403,
+            &replicated_decision,
+            Some("replicated-held-exec-block-3"),
+            Some("replicated-held-exec-state-3"),
+        )
+        .expect("build replicated commit")
+        .expect("replicated commit");
+    engine.committed_height = 3;
+    engine.replication_persisted_height = 3;
+    engine.last_committed_block_hash = Some("replicated-held-block-3".to_string());
+    engine.remember_execution_binding(
+        3,
+        "replicated-held-exec-block-3".to_string(),
+        "replicated-held-exec-state-3".to_string(),
+    );
+    engine.pending = Some(NodePosPendingProposal {
+        height: 4,
+        slot: 4,
+        epoch: 0,
+        opened_at_ms: 4_900,
+        proposer_id: "node-b".to_string(),
+        block_hash: "remote-block-4".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        attestations: BTreeMap::new(),
+        approved_stake: 200,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Committed,
+    });
+
+    let network = Arc::new(TestInMemoryNetwork::default());
+    let handle = NodeReplicationNetworkHandle::new(network.clone());
+    let mut endpoint =
+        ConsensusNetworkEndpoint::new(&handle, world_id, false, &config.network_policy)
+            .expect("consensus endpoint");
+
+    let tick = engine
+        .tick(
+            "node-a",
+            world_id,
+            5_500,
+            None,
+            Some(&mut replication),
+            None,
+            Some(&mut endpoint),
+            Vec::new(),
+            None,
+        )
+        .expect("tick should hold remote commit without matching replication");
+
+    assert_eq!(tick.consensus_snapshot.committed_height, 3);
+    assert_eq!(
+        engine.last_inbound_timing_reject_reason.as_deref(),
+        Some("drop remote committed height 4 without matching persisted replication commit")
+    );
+
+    let commit_topic = super::network_bridge::default_consensus_commit_topic(world_id);
+    let commits = network
+        .retained
+        .lock()
+        .expect("lock retained")
+        .get(commit_topic.as_str())
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|payload| serde_json::from_slice::<GossipCommitMessage>(payload).ok())
+        .map(|commit| (commit.node_id, commit.height, commit.block_hash))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        commits,
+        vec![(
+            "node-a".to_string(),
+            3,
+            "replicated-held-block-3".to_string()
+        )],
+        "storage must refresh its latest replicated head even when the current remote proposal is held"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn replicated_commit_head_network_rebroadcast_rejects_same_height_conflict() {
     let world_id = "world-replicated-head-conflict";
     let dir = temp_dir("replicated-head-conflict");

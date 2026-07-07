@@ -478,6 +478,32 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
 }
 
 #[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_commits_warn() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 3,
+        p50_total_ms: Some(544),
+        p95_total_ms: Some(3_388),
+        max_total_ms: Some(3_388),
+        slow_count: 1,
+        last_slow_stage: Some("retention".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    assert_eq!(
+        runtime_perf.bottleneck,
+        RuntimePerfBottleneck::ActionExecution
+    );
+    assert_eq!(runtime_perf.action_execution.samples_total, 3);
+    assert_eq!(runtime_perf.action_execution.p95_ms, 3_388.0);
+}
+
+#[test]
 fn runtime_perf_snapshot_from_execution_bridge_timing_marks_very_slow_commits_critical() {
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
         window_capacity: 128,
