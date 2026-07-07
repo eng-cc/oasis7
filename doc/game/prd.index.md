@@ -1,7 +1,7 @@
 # game PRD 文件级索引
 审计轮次: 12
 
-更新时间：2026-07-05
+更新时间：2026-07-06
 
 ## 入口
 - 模块 PRD：`doc/game/prd.md`
@@ -23,18 +23,18 @@
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
 
-## 密度快照（2026-07-05）
-- `doc/game/`：84 份文件
-- `doc/game/gameplay/`：79 份文件
+## 密度快照（2026-07-06）
+- `doc/game/`：83 份文件
+- `doc/game/gameplay/`：78 份文件
 - `doc/game/gameplay/` 正式专题三件套：66 份文件
-- `doc/game/gameplay/` 补充材料：12 份文件
+- `doc/game/gameplay/` 补充材料：11 份文件
 - 模块根入口：5 份文件
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
 | `gameplay/` 正式专题三件套 | 66 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同、mature-world 小玩家承接与可编程区域设施 |
-| `gameplay/` 补充材料 | 12 | runbook、evidence、checklist 与跨角色执行留痕 |
+| `gameplay/` 补充材料 | 11 | runbook、evidence、checklist 与跨角色执行留痕 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
@@ -52,7 +52,7 @@
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫所有 gameplay 专题三件套与补充材料。
-- runbook、evidence、checklist 与 handoff 继续保留可检索性，但默认不与主专题三件套同屏平铺成长名单。
+- runbook、evidence、checklist 与仍承担当前追溯职责的补充材料继续保留可检索性，但默认不与主专题三件套同屏平铺成长名单；一次性 handoff brief 若已被 topic project / evidence / GitHub task issue evidence comments 覆盖，应退役删除。
 - 完整活跃专题清单与补充入口继续保留在下方，用于精确文件名检索和互链可达性。
 
 ## 覆盖规则
