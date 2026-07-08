@@ -3,6 +3,7 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] site-github-pages-cta-microtopic-deletion (PRD-SITE-003/PRD-ENGINEERING-025) [test_tier_required]: 删除已降格为历史压缩且由当前首页叙事、下载链路与 project 台账承接的 `github-pages-hero-cta-simplify-2026-02-26` 一次性 CTA 三件套；当前追溯收敛到 `doc/site/project.md`、`doc/site/prd.index.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、站点文件、GitHub task issue evidence comments 与 git history。 Trace: #2174 (task_5a8f6c879c1347b98e9cc2764ea372b0)
 - [x] historical-doc-governance-slimdown-round (PRD-SITE-003) [test_tier_required]: 对 `doc/site` 与 `doc/readme` 中已完成且只承担历史证据职责的专题三件套做索引曝光瘦身，保留原路径、互链和治理状态块，同时把当前读者路由回 active site/readme/gap/public-status 入口。 Trace: .pm/tasks/task_fc499abed90742caa7c1a66166f7d926.yaml
   - 产物文件:
     - `doc/site/README.md`
@@ -115,7 +116,7 @@
     - `git diff --check`
 - [x] TASK-SITE-018 (PRD-SITE-008) [test_tier_required]: 收口 `doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径，统一使用 `oasis7_viewer` / `crates/oasis7*` 口径。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
+    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SITE-019 (PRD-SITE-002/003) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，明确 `doc/site/README.md`、公开 docs hub、手册镜像策略与仓库权威手册的职责边界。

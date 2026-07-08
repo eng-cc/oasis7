@@ -280,8 +280,8 @@
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:55:49 +0800 | codex | site github-pages hero CTA simplify PRD (retired/deleted) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题；该一次性 CTA 三件套后续已退役删除。 |
+| 2026-03-06 11:55:49 +0800 | codex | site github-pages hero CTA simplify project (retired/deleted) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题；该一次性 CTA 三件套后续已退役删除。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-pointer-interaction.prd.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
