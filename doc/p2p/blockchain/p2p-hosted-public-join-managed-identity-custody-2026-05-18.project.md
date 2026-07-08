@@ -6,6 +6,8 @@
 审计轮次: 1
 
 ## 任务拆解（含 PRD-ID 映射）
+> 治理说明：历史 `.pm` task execution logs 只作为退役前迁移/审计追溯层；当前任务执行证据统一以 GitHub task issue evidence comments 与 `task_uid` / issue trace 为准。活跃项目页的产物文件与验证命令不再把退役 task execution log 当作当前证据输入。
+
 - [x] hosted-managed-identity-doc-freeze (PRD-P2P-029) [test_tier_required]: 冻结 `hosted_public_join` 的托管身份、托管密钥、邮箱登录、自托管升级和 trust boundary 文档真值，并回写模块入口映射。 Trace: .pm/tasks/task_fd98df36264944238538dea896ce4ce0.yaml
 - [x] hosted-browser-device-session-recovery (PRD-P2P-029) [test_tier_required]: 清退 `hosted_public_join` 浏览器 `localStorage privateKey` 持久化，引入 `device_session_id` contract，并把 hosted player-session 恢复链路改成“持久化 device session handle + 页内临时 Ed25519 会话 key”。 Trace: .pm/tasks/task_584da7818a9d42e6aae5894512413102.yaml
   - 产物文件:
@@ -16,7 +18,6 @@
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
     - `doc/p2p/project.md`
-    - `.pm/tasks/task_584da7818a9d42e6aae5894512413102.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_player_session_ -- --nocapture`
     - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
@@ -38,7 +39,6 @@
     - `crates/oasis7_viewer/scripts/software-safe-feedback-contract.test.mjs`
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
     - `doc/p2p/project.md`
-    - `.pm/tasks/task_b837ca5ee1b34439a9c581ad6ab87a64.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_ -- --nocapture`
     - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
@@ -58,7 +58,6 @@
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.design.md`
     - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
     - `doc/p2p/project.md`
-    - `.pm/tasks/task_8cccaa2362df47eab30b9eb52b7ddf6c.execution.md`
   - 验收命令 (`test_tier_required`):
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_account_identity -- --nocapture`
     - `env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_game_launcher hosted_ -- --nocapture`
@@ -71,7 +70,6 @@
       - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
       - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
       - `doc/p2p/project.md`
-      - `.pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
     - 只读依赖:
       - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
       - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_store_backend.rs`
@@ -83,11 +81,11 @@
     2. 将 operator runbook 收口为分环境最小配置、禁止 shortcut 和 promotion gate。
        - 验证命令: `rg -n "5B\. 分环境执行清单|dev 环境|staging 环境|production 环境|promotion gate" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
        - 预期结果: runbook 能回答“测试环境和正式环境怎么分、不能混什么、升生产前要验什么”。
-    3. 同步模块 project 与 execution log，保留 task trace 和 fresh verification 入口。
-       - 验证命令: `rg -n "hosted-account-env-tiering|task_ad5cbac95aa54e26a9fa7d7558380750" doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
-       - 预期结果: 模块追踪和 task 过程可回溯。
+    3. 同步模块 project 与 task trace / current evidence sink，保留 fresh verification 入口。
+       - 验证命令: `rg -n "hosted-account-env-tiering|task_ad5cbac95aa54e26a9fa7d7558380750|GitHub task issue evidence comments|task_uid" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md | rg -v "验证命令:"`
+       - 预期结果: 模块追踪、`task_uid` trace 与当前 evidence sink 口径可回溯。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md .pm/tasks/task_ad5cbac95aa54e26a9fa7d7558380750.execution.md`
+    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md && rg -n "GitHub task issue evidence comments|task_uid" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md | rg -v "验证命令:"`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 新增 repo-owned `scripts/hosted-account-staging-smoke.sh`，把 hosted account 的本地 required smoke 与 staging `smtp + store continuity` live smoke 收成同一条自动化入口，并把命令统一回写到 operator runbook 与模块 project。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
@@ -98,7 +96,6 @@
       - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
       - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
       - `doc/p2p/project.md`
-      - `.pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.execution.md`
     - 只读依赖:
       - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
       - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
