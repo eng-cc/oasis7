@@ -20,6 +20,31 @@ pub struct ObserveSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct FailedObserveSummary {
+    pub schema_version: u32,
+    pub generated_at_unix_ms: i64,
+    pub spec_path: String,
+    pub module_id: String,
+    pub manifest_path: String,
+    pub packaged_wasm_path: String,
+    pub build_metadata_path: String,
+    pub build_receipt_path: String,
+    pub wasm_hash_sha256: String,
+    pub build_timing: BuildTimingSnapshot,
+    pub failure: ObserveFailureSummary,
+    pub case_results: Vec<CaseResultSummary>,
+    pub router_probe_results: Vec<RouterProbeResultSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ObserveFailureSummary {
+    pub stage: String,
+    pub name: String,
+    pub run_index: u32,
+    pub error: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct CaseResultSummary {
     pub name: String,
     pub repeat: u32,

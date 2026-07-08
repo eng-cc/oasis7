@@ -2,8 +2,9 @@ mod report;
 mod spec;
 
 pub use report::{
-    CaseActualSummary, CaseResultSummary, ExecutorMetricsDelta, ObserveSummary, PerfStats,
-    RouterMetricsDelta, RouterProbeResultSummary, render_markdown,
+    CaseActualSummary, CaseResultSummary, ExecutorMetricsDelta, FailedObserveSummary,
+    ObserveFailureSummary, ObserveSummary, PerfStats, RouterMetricsDelta, RouterProbeResultSummary,
+    render_markdown,
 };
 pub use spec::{
     CaseExpectationSpec, CaseRequestSpec, ExpectedEmitSpec, ModuleObserveSpec, ObserveCaseSpec,
@@ -31,7 +32,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tools_wasm_build_suite::{BuildRequest, run_build};
+use tools_wasm_build_suite::{BuildOutput, BuildRequest, BuildTimingSnapshot, run_build};
 
 #[derive(Debug, Clone)]
 pub struct ObserveRunRequest {
@@ -45,6 +46,67 @@ pub struct ObserveRunOutput {
     pub summary_json_path: PathBuf,
     pub summary_md_path: PathBuf,
     pub summary: ObserveSummary,
+}
+
+struct ObserveStepError {
+    message: String,
+    failure: Option<ObserveFailureSummary>,
+    case_result: Option<CaseResultSummary>,
+    router_probe_result: Option<RouterProbeResultSummary>,
+}
+
+impl ObserveStepError {
+    fn fatal_at(stage: &str, name: &str, run_index: u32, message: String) -> Self {
+        Self {
+            failure: Some(ObserveFailureSummary {
+                stage: stage.to_string(),
+                name: name.to_string(),
+                run_index,
+                error: message.clone(),
+            }),
+            message,
+            case_result: None,
+            router_probe_result: None,
+        }
+    }
+
+    fn case_validation(
+        name: &str,
+        run_index: u32,
+        message: String,
+        case_result: CaseResultSummary,
+    ) -> Self {
+        Self {
+            failure: Some(ObserveFailureSummary {
+                stage: "case".to_string(),
+                name: name.to_string(),
+                run_index,
+                error: message.clone(),
+            }),
+            message,
+            case_result: Some(case_result),
+            router_probe_result: None,
+        }
+    }
+
+    fn router_probe_validation(
+        name: &str,
+        run_index: u32,
+        message: String,
+        router_probe_result: RouterProbeResultSummary,
+    ) -> Self {
+        Self {
+            failure: Some(ObserveFailureSummary {
+                stage: "router_probe".to_string(),
+                name: name.to_string(),
+                run_index,
+                error: message.clone(),
+            }),
+            message,
+            case_result: None,
+            router_probe_result: Some(router_probe_result),
+        }
+    }
 }
 
 pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, String> {
@@ -102,35 +164,58 @@ pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, Stri
             // Observe fixtures validate cold-start module behavior too, so keep
             // a looser per-call budget than the runtime default to avoid false
             // timeouts on the first compile+execute path.
-            max_call_ms: 10_000,
+            max_call_ms: 60_000,
             ..WasmExecutorConfig::default()
         },
         metrics.clone(),
     )
     .map_err(|err| format!("initialize wasm executor failed: {err}"))?;
 
-    let case_results = spec
-        .cases
-        .iter()
-        .enumerate()
-        .map(|(index, case)| {
-            run_case(
-                &spec,
-                &mut executor,
-                &metrics,
-                wasm_hash_sha256.as_str(),
-                wasm_bytes.clone(),
-                case,
-                index,
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut case_results = Vec::new();
+    for (index, case) in spec.cases.iter().enumerate() {
+        match run_case(
+            &spec,
+            &mut executor,
+            &metrics,
+            wasm_hash_sha256.as_str(),
+            wasm_bytes.clone(),
+            case,
+            index,
+        ) {
+            Ok(result) => case_results.push(result),
+            Err(err) => {
+                return write_failed_summary_and_return_error(
+                    &out_dir,
+                    &spec,
+                    &build_output,
+                    wasm_hash_sha256,
+                    build_timing,
+                    case_results,
+                    Vec::new(),
+                    err,
+                );
+            }
+        }
+    }
 
-    let router_probe_results = spec
-        .router_probes
-        .iter()
-        .map(|probe| run_router_probe(&spec, probe))
-        .collect::<Result<Vec<_>, _>>()?;
+    let mut router_probe_results = Vec::new();
+    for probe in &spec.router_probes {
+        match run_router_probe(&spec, probe) {
+            Ok(result) => router_probe_results.push(result),
+            Err(err) => {
+                return write_failed_summary_and_return_error(
+                    &out_dir,
+                    &spec,
+                    &build_output,
+                    wasm_hash_sha256,
+                    build_timing,
+                    case_results,
+                    router_probe_results,
+                    err,
+                );
+            }
+        }
+    }
 
     let summary = ObserveSummary {
         schema_version: spec.schema_version,
@@ -179,6 +264,63 @@ pub fn run_observe(request: &ObserveRunRequest) -> Result<ObserveRunOutput, Stri
     })
 }
 
+fn write_failed_summary_and_return_error(
+    out_dir: &Path,
+    spec: &ResolvedModuleObserveSpec,
+    build_output: &BuildOutput,
+    wasm_hash_sha256: String,
+    build_timing: BuildTimingSnapshot,
+    mut case_results: Vec<CaseResultSummary>,
+    mut router_probe_results: Vec<RouterProbeResultSummary>,
+    err: ObserveStepError,
+) -> Result<ObserveRunOutput, String> {
+    let original_error = err.message;
+    let Some(failure) = err.failure else {
+        return Err(original_error);
+    };
+
+    if let Some(case_result) = err.case_result {
+        case_results.push(case_result);
+    }
+    if let Some(router_probe_result) = err.router_probe_result {
+        router_probe_results.push(router_probe_result);
+    }
+
+    let failed_summary = FailedObserveSummary {
+        schema_version: spec.schema_version,
+        generated_at_unix_ms: now_unix_ms(),
+        spec_path: spec.spec_path.to_string_lossy().to_string(),
+        module_id: spec.module.module_id.clone(),
+        manifest_path: spec.module.manifest_path.to_string_lossy().to_string(),
+        packaged_wasm_path: build_output
+            .packaged_wasm_path
+            .to_string_lossy()
+            .to_string(),
+        build_metadata_path: build_output.metadata_path.to_string_lossy().to_string(),
+        build_receipt_path: build_output.receipt_path.to_string_lossy().to_string(),
+        wasm_hash_sha256,
+        build_timing,
+        failure,
+        case_results,
+        router_probe_results,
+    };
+    let failed_summary_json_path = out_dir.join("failed_summary.json");
+    fs::write(
+        &failed_summary_json_path,
+        serde_json::to_string_pretty(&failed_summary)
+            .map_err(|err| format!("serialize failed observe summary failed: {err}"))?
+            + "\n",
+    )
+    .map_err(|err| {
+        format!(
+            "{original_error}; additionally write failed summary json {} failed: {err}",
+            failed_summary_json_path.display()
+        )
+    })?;
+
+    Err(original_error)
+}
+
 fn run_case(
     spec: &ResolvedModuleObserveSpec,
     executor: &mut WasmExecutor,
@@ -187,7 +329,7 @@ fn run_case(
     wasm_bytes: Arc<[u8]>,
     case: &ObserveCaseSpec,
     index: usize,
-) -> Result<CaseResultSummary, String> {
+) -> Result<CaseResultSummary, ObserveStepError> {
     let executor_before = snapshot_wasm_executor_metrics(metrics);
     let router_before = snapshot_global_wasm_router_metrics();
     let mut last_output: Option<ModuleOutput> = None;
@@ -202,42 +344,152 @@ fn run_case(
             case,
             index,
             run_index,
-        )?;
+        )
+        .map_err(|err| {
+            ObserveStepError::fatal_at("case_request", &case.name, run_index + 1, err)
+        })?;
         let started = Instant::now();
         let result = executor.call(&request);
         samples.push(elapsed_ms(started));
         match result {
             Ok(output) => {
-                validate_case(case, Some(&output), None).map_err(|err| {
-                    format!(
+                if let Err(err) = validate_case(case, Some(&output), None) {
+                    let message = format!(
                         "case {} run {} validation failed: {err}",
                         case.name,
                         run_index + 1
-                    )
-                })?;
+                    );
+                    let case_result = build_case_result_summary_lossy(
+                        spec,
+                        case,
+                        metrics,
+                        &executor_before,
+                        &router_before,
+                        &samples,
+                        Some(output),
+                        None,
+                    );
+                    return Err(ObserveStepError::case_validation(
+                        &case.name,
+                        run_index + 1,
+                        message,
+                        case_result,
+                    ));
+                }
                 last_failure = None;
                 last_output = Some(output);
             }
             Err(failure) => {
-                validate_case(case, None, Some(&failure)).map_err(|err| {
-                    format!(
+                if let Err(err) = validate_case(case, None, Some(&failure)) {
+                    let message = format!(
                         "case {} run {} validation failed: {err}",
                         case.name,
                         run_index + 1
-                    )
-                })?;
+                    );
+                    let case_result = build_case_result_summary_lossy(
+                        spec,
+                        case,
+                        metrics,
+                        &executor_before,
+                        &router_before,
+                        &samples,
+                        None,
+                        Some(failure),
+                    );
+                    return Err(ObserveStepError::case_validation(
+                        &case.name,
+                        run_index + 1,
+                        message,
+                        case_result,
+                    ));
+                }
                 last_output = None;
                 last_failure = Some(failure);
             }
         }
     }
 
+    build_case_result_summary(
+        spec,
+        case,
+        metrics,
+        &executor_before,
+        &router_before,
+        &samples,
+        last_output,
+        last_failure,
+    )
+    .map_err(|err| {
+        ObserveStepError::fatal_at(
+            "case_summary",
+            &case.name,
+            case.repeat,
+            format!("case {} actual summary failed: {err}", case.name),
+        )
+    })
+}
+
+fn build_case_result_summary(
+    spec: &ResolvedModuleObserveSpec,
+    case: &ObserveCaseSpec,
+    metrics: &oasis7_wasm_executor::SharedWasmExecutorMetrics,
+    executor_before: &WasmExecutorMetricsSnapshot,
+    router_before: &WasmRouterMetricsSnapshot,
+    samples: &[u64],
+    output: Option<ModuleOutput>,
+    failure: Option<ModuleCallFailure>,
+) -> Result<CaseResultSummary, String> {
     let executor_after = snapshot_wasm_executor_metrics(metrics);
     let router_after = snapshot_global_wasm_router_metrics();
-    let perf = PerfStats::from_samples(&samples);
-    let actual = summarize_case_actual(last_output, last_failure)?;
+    let perf = PerfStats::from_samples(samples);
+    let actual = summarize_case_actual(output.as_ref(), failure.as_ref())?;
 
-    Ok(CaseResultSummary {
+    Ok(case_result_summary(
+        spec,
+        case,
+        perf,
+        diff_executor_metrics(executor_before, &executor_after),
+        diff_router_metrics(router_before, &router_after),
+        actual,
+    ))
+}
+
+fn build_case_result_summary_lossy(
+    spec: &ResolvedModuleObserveSpec,
+    case: &ObserveCaseSpec,
+    metrics: &oasis7_wasm_executor::SharedWasmExecutorMetrics,
+    executor_before: &WasmExecutorMetricsSnapshot,
+    router_before: &WasmRouterMetricsSnapshot,
+    samples: &[u64],
+    output: Option<ModuleOutput>,
+    failure: Option<ModuleCallFailure>,
+) -> CaseResultSummary {
+    let executor_after = snapshot_wasm_executor_metrics(metrics);
+    let router_after = snapshot_global_wasm_router_metrics();
+    let perf = PerfStats::from_samples(samples);
+    let actual = summarize_case_actual(output.as_ref(), failure.as_ref()).unwrap_or_else(|err| {
+        summarize_case_actual_failure(output.as_ref(), failure.as_ref(), err)
+    });
+
+    case_result_summary(
+        spec,
+        case,
+        perf,
+        diff_executor_metrics(executor_before, &executor_after),
+        diff_router_metrics(router_before, &router_after),
+        actual,
+    )
+}
+
+fn case_result_summary(
+    spec: &ResolvedModuleObserveSpec,
+    case: &ObserveCaseSpec,
+    perf: PerfStats,
+    executor_delta: ExecutorMetricsDelta,
+    router_delta: RouterMetricsDelta,
+    actual: report::CaseActualSummary,
+) -> CaseResultSummary {
+    CaseResultSummary {
         name: case.name.clone(),
         repeat: case.repeat,
         request_entrypoint: case
@@ -246,20 +498,26 @@ fn run_case(
             .clone()
             .unwrap_or_else(|| spec.module.entrypoint.clone()),
         perf,
-        executor_delta: diff_executor_metrics(&executor_before, &executor_after),
-        router_delta: diff_router_metrics(&router_before, &router_after),
+        executor_delta,
+        router_delta,
         actual,
-    })
+    }
 }
 
 fn run_router_probe(
     spec: &ResolvedModuleObserveSpec,
     probe: &RouterProbeSpec,
-) -> Result<RouterProbeResultSummary, String> {
+) -> Result<RouterProbeResultSummary, ObserveStepError> {
     let prepared = if probe.use_prepared {
         Some(
-            prepare_subscriptions(&spec.subscriptions, &spec.module.module_id)
-                .map_err(|err| format!("prepare router subscriptions failed: {err}"))?,
+            prepare_subscriptions(&spec.subscriptions, &spec.module.module_id).map_err(|err| {
+                ObserveStepError::fatal_at(
+                    "router_probe_prepare",
+                    &probe.name,
+                    0,
+                    format!("prepare router subscriptions failed: {err}"),
+                )
+            })?,
         )
     } else {
         None
@@ -304,11 +562,26 @@ fn run_router_probe(
         };
         samples.push(elapsed_ms(started));
         if current_match != probe.expect_match {
-            return Err(format!(
+            let message = format!(
                 "router probe {} run {} expected match={} got={current_match}",
                 probe.name,
                 run_index + 1,
                 probe.expect_match
+            );
+            let router_after = snapshot_global_wasm_router_metrics();
+            let router_probe_result = RouterProbeResultSummary {
+                name: probe.name.clone(),
+                repeat: probe.repeat,
+                use_prepared: probe.use_prepared,
+                matched: current_match,
+                perf: PerfStats::from_samples(&samples),
+                router_delta: diff_router_metrics(&router_before, &router_after),
+            };
+            return Err(ObserveStepError::router_probe_validation(
+                &probe.name,
+                run_index + 1,
+                message,
+                router_probe_result,
             ));
         }
         matched = current_match;
@@ -526,8 +799,8 @@ fn validate_case(
 }
 
 fn summarize_case_actual(
-    output: Option<ModuleOutput>,
-    failure: Option<ModuleCallFailure>,
+    output: Option<&ModuleOutput>,
+    failure: Option<&ModuleCallFailure>,
 ) -> Result<report::CaseActualSummary, String> {
     match (output, failure) {
         (Some(output), None) => {
@@ -560,7 +833,7 @@ fn summarize_case_actual(
         (None, Some(failure)) => Ok(report::CaseActualSummary {
             success: false,
             failure_code: Some(module_call_failure_code_label(&failure.code).to_string()),
-            failure_detail: Some(failure.detail),
+            failure_detail: Some(failure.detail.clone()),
             emit_count: 0,
             effect_count: 0,
             tick_lifecycle: None,
@@ -568,6 +841,58 @@ fn summarize_case_actual(
             emits: Vec::new(),
         }),
         _ => Err("case execution ended without output or failure".to_string()),
+    }
+}
+
+fn summarize_case_actual_failure(
+    output: Option<&ModuleOutput>,
+    failure: Option<&ModuleCallFailure>,
+    summary_error: String,
+) -> report::CaseActualSummary {
+    match (output, failure) {
+        (Some(output), None) => {
+            let emits = output
+                .emits
+                .iter()
+                .map(|emit| ActualEmitSummary {
+                    kind: emit.kind.clone(),
+                    payload_json: emit.payload.clone(),
+                })
+                .collect::<Vec<_>>();
+            report::CaseActualSummary {
+                success: true,
+                failure_code: Some("observe_actual_summary_failed".to_string()),
+                failure_detail: Some(summary_error),
+                emit_count: emits.len(),
+                effect_count: output.effects.len(),
+                tick_lifecycle: None,
+                new_state_json: None,
+                emits,
+            }
+        }
+        (None, Some(failure)) => report::CaseActualSummary {
+            success: false,
+            failure_code: Some(module_call_failure_code_label(&failure.code).to_string()),
+            failure_detail: Some(format!(
+                "{}; actual summary failed: {summary_error}",
+                failure.detail
+            )),
+            emit_count: 0,
+            effect_count: 0,
+            tick_lifecycle: None,
+            new_state_json: None,
+            emits: Vec::new(),
+        },
+        _ => report::CaseActualSummary {
+            success: false,
+            failure_code: Some("observe_actual_summary_failed".to_string()),
+            failure_detail: Some(summary_error),
+            emit_count: 0,
+            effect_count: 0,
+            tick_lifecycle: None,
+            new_state_json: None,
+            emits: Vec::new(),
+        },
     }
 }
 
