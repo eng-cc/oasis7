@@ -37,16 +37,16 @@
 - 维护 manual 子域下的静态文档站与 Viewer 手册镜像策略。
 - 承接公开“技术预览 / not playable yet / diagnostics only”口径与仓库 canonical 文档之间的一致性。
 
-## 热点子域导航（2026-06-23 快照）
+## 热点子域导航（2026-07-08 快照）
 - `github-pages/` 当前默认活跃专题三件套（48）：公开首页、下载链路、质量门禁、内容同步与公开叙事边界。
-- `github-pages/` 历史压缩专题三件套（3）：已完成且仅承担追溯职责的 CTA 微专题。
+- `github-pages/` 已退役删除旧专题（2 个专题）：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
 - `manual/` 正式专题三件套（6）：静态文档站与 Viewer 手册镜像策略。
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
 - 公开 HTML 入口（仓库外显层）：`site/index.html`、`site/en/index.html`、`site/doc/{cn,en}/index.html`、`site/doc/{cn,en}/viewer-manual.html`。
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 
 ## 高密度提示
-- `doc/site/` 当前共有 66 份文件，其中 `doc/site/github-pages/` 占 53 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
+- `doc/site/` 当前共有 63 份文件，其中 `doc/site/github-pages/` 占 50 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/site/prd.index.md`；需要公开 docs hub、下载页或手册镜像时，再按 `site/**` 的公开页面定向进入。
 
 ## 共享约定

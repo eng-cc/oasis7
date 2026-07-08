@@ -323,8 +323,8 @@
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`
 - `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md`
-- `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.prd.md`
-- `doc/site/github-pages/github-pages-hero-cta-simplify-2026-02-26.project.md`
+- site github-pages hero CTA simplify PRD (retired/deleted)
+- site github-pages hero CTA simplify project (retired/deleted)
 - `doc/site/github-pages/github-pages-hero-motion-layer.prd.md`
 - `doc/site/github-pages/github-pages-hero-motion-layer.project.md`
 - `doc/site/github-pages/github-pages-hero-pointer-interaction.prd.md`
