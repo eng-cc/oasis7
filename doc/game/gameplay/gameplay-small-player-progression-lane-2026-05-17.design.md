@@ -53,6 +53,50 @@
   - `rebuild`: 更换据点或重新建立同类小规模能力。
   - `pivot`: 改做另一条专业化角色，而不是继续硬顶当前失败链。
 
+### 7. Agent Specialization Contract
+- Agent 行为合同优先作为文档合同收口；它不先新增 runtime 权限、claim 旁路或 release claim。
+- Agent 在 mature-world small-player lane 中消费 `player_gameplay` 已有字段，尤其是：
+  - `small_player_lane_id`
+  - `leverage_class`
+  - `same_loop_repeat_count`
+  - `grind_only_flag`
+  - `major_power_dependency_status`
+  - `recovery_path_kind`
+  - `recovery_path_detail`
+  - `requires_major_power_sponsorship`
+  - `repair_available` / `rebuild_available` / `pivot_available`
+- Agent 推荐专业化或恢复时，面向玩家的解释必须回答：
+  - 我建议你做什么；
+  - 为什么这仍属于独立 small-player lane；
+  - 失败代价和恢复范围是什么；
+  - 卡住时如何 `repair / rebuild / pivot`；
+  - 是否强制依附 major power。
+- Agent-facing 摘要后续实现时应暴露：
+  - `selected_specialization_id`
+  - `specialization_reason`
+  - `preferred_next_action_class`
+  - `dependency_boundary`
+  - `recovery_escalation_reason`
+
+### 8. Agent Decision Order
+- 默认顺序：
+  1. `local_operator`: 直到首个稳定世界变化可见。
+  2. `recovery_operator`: 修复 blocked line、补齐缺口、保持局部能力韧性。
+  3. `conversion_specialist`: 把区域富余输入转成区域有用的中间品或制成品。
+  4. `regional_service_runner`: 提供 upkeep / supply / repair / logistics 服务，形成短周期 return hook。
+- 若 `major_power_dependency_status=independent_path_available` 或 `sponsor_helpful_not_required`，Agent 必须先给本地 `repair / rebuild / pivot`，再考虑 sponsor / alliance / governance。
+- 若 `requires_major_power_sponsorship=no`，Agent 不得把 sponsor 或 major-power dependency 写成必需步骤。
+- 若 `same_loop_repeat_count >= 3` 且 `leverage_class=throughput_only` 或 `unclassified`，Agent 必须停止强化同一生产循环，转向专业化、恢复或新的区域用途。
+- 若 `recovery_path_kind=repair_rebuild_or_pivot`，`wait / wait_ticks` 默认不是有效恢复，除非存在明确 cooldown 或外部依赖。
+- major-power escalation 只允许作为 `voluntary_escalation`，或 runtime 已标记 `major_power_dependency_status=forced` 时的有因升级。
+
+### 9. Agent Anti-Drift Checks
+- blocker: `requires_major_power_sponsorship=no` 时，Agent 把 join alliance / sponsor / patron / major power 写成必需。
+- blocker: `grind_only_flag=true` 后，Agent 继续重复 throughput-only 生产。
+- blocker: `local_operator` 后第一专业化直接跳到 global governance、alliance leadership、war 或 major-power membership。
+- watch: 可恢复失败或 full recipe coverage 后，Agent 仍输出无原因的 `wait / wait_ticks`。
+- watch: `specialization_reason` 缺少 `player_action`、`world_change_due_to_player` 或 `return_hook`。
+
 ## 与现有专题的边界
 - `PRD-GAME-007`
   - 管 `PostOnboarding` 从 onboarding 过渡到 first capability。
@@ -79,6 +123,7 @@
   - 把 lane、首个胜利、区域价值与恢复路径做成显式 surface。
 - `agent_engineer`
   - 对齐 specialization / recovery / org-independence 行为合同，避免默认把玩家推向依附。
+  - 后续若进入代码实现，负责把 `selected_specialization_id`、`specialization_reason`、`dependency_boundary` 等字段落到 prompt、trace 或 snapshot。
 - `qa_engineer`
   - 建立 mature-world small-player matrix，阻断 `world_activity_only` 误报。
 
@@ -86,13 +131,14 @@
 1. `small-player-progression-contract-freeze`: 冻结专题并回挂根入口、主文档、索引、execution log。
 2. `runtime-small-player-lane-state-contract`: 下沉 lane state / checkpoint / recovery truth。
 3. `viewer-small-player-lane-surface-alignment`: 收口 headed Web/UI 与 pure API 承接 surface。
-4. `agent-small-player-specialization-contract`: 对齐专业化、恢复与 org-independence contract。
+4. `agent-small-player-specialization-contract`: 对齐专业化、恢复与 org-independence contract；文档合同完成后仍需 QA fresh mature-world sample 才能升级 lane verdict。
 5. `qa-small-player-progression-matrix`: 建立 mature-world 小玩家矩阵与 blocker 签名。
 
 ## 验证口径
 - required:
   - 文档互链与任务映射。
   - lane、player leverage、recovery 与 limited-scope influence 边界可 grep、可对账。
+  - Agent 合同中的 specialization / recovery / org-independence、decision order 与 anti-drift blocker 可 grep、可对账。
   - headed Web/UI 与 pure API 至少能表达当前小玩家 lane 的主语义。
 - full:
   - mature-world playability 样本复核。

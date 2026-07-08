@@ -48,6 +48,7 @@
 | small-player lane contract | `lane_id`、`entry_gate`、`requires_major_power_alignment`、`first_win_definition`、`mature_world_value_definition` | 不要求立即加入组织；系统在达成 `first capability` 后显式进入 lane | `not_eligible -> eligible -> active -> specialized -> regionally_useful` | 先完成首个持续能力，再进入小玩家 lane；不得把 onboarding 与 mature-world lane 混写 | `producer_system_designer` 冻结；runtime/viewer/agent/QA 依合同实施 |
 | protected first industrial win | `first_win_goal_id`、`player_action`、`world_change_due_to_player`、`player_leverage_verdict`、`blast_radius_class`、`recovery_cost_class` | 玩家完成 1 次低爆炸半径、可恢复、对世界有可见变化的工业胜利 | `not_started -> executing -> first_win_complete -> stabilized` | “受保护”优先指低战略体量、低爆炸半径和可恢复路径，不等于高风险模块或治理免疫 | 任何正式放行结论都必须回答 leverage，而不是 world activity |
 | specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色 | `unselected -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/高风险对抗 | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
+| agent specialization behavior contract | `selected_specialization_id`、`specialization_reason`、`preferred_next_action_class`、`dependency_boundary`、`recovery_escalation_reason` | Agent 在推荐专业化、恢复或升级时，必须说明建议、独立性边界、失败代价和下一步；不得静默把小玩家推向 major-power dependency | `observe_lane -> recommend_local_path -> repair/rebuild/pivot -> voluntary_escalation/forced_dependency` | `local_operator` 维持到首个稳定世界变化可见；稳定后优先 `recovery_operator` / `conversion_specialist` / `regional_service_runner`；若 `same_loop_repeat_count >= 3` 且 leverage 仍为 `throughput_only` / `unclassified`，停止强化同一生产循环 | `agent_engineer` 负责行为合同；major-power escalation 只有 voluntary 或 runtime 标记 forced 时允许 |
 | limited-scope regional influence | `influence_surface_id`、`influence_scope`、`influence_cap`、`expires_on_inactivity`、`converts_to_global_governance` | 玩家通过区域性持续贡献获得有限影响力或优先级 | `locked -> visible -> earned -> decays_on_inactivity` | 区域影响力必须小于 global governance / alliance leadership；默认随停摆或长期闲置衰减 | 不得直接等价为 global vote power、主链治理权或 major-power membership |
 | recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
 | anti-grind leverage progression | `leverage_class`、`new_option_unlocked`、`regional_dependency_reduced`、`same_loop_repeat_count`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位或新恢复弹性，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
@@ -62,6 +63,7 @@
   - AC-6: 文档必须定义 recoverable failure path；当玩家遭遇停机、claim 丢失、局部竞争失败或区域压力时，不得要求“只能投靠大组织”作为唯一继续路径。
   - AC-7: `player leverage != world activity` 的约束必须进入本专题完成定义；任何 lane `pass` 都必须回答 `player_action / world_change_due_to_player / return_hook`。
   - AC-7A: 任一阶段 checkpoint 都必须回答“玩家获得了什么新的 leverage class”；如果答案只剩“产量更高/库存更多”，而没有新区域用途、新恢复弹性、新议价位或新选择空间，则该 checkpoint 不能判定为 lane success。
+  - AC-7B: `agent-small-player-specialization-contract` 必须要求 Agent 在每次推荐专业化或恢复路径时回答：建议玩家做什么、为什么仍是独立小玩家路线、失败代价是什么、卡住时如何 `repair / rebuild / pivot`、是否强制依附 major power。
   - AC-8: 本专题必须显式声明不改变当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 写成当前 stage 或 preview claim envelope 的升级依据。
   - AC-9: `game` 根 PRD / project、`gameplay` 主文档、`README`、`prd.index` 与当前 task execution log 必须能互链到 `PRD-GAME-015`。
   - AC-10: 至少拆出 `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`agent_engineer`、`qa_engineer` 五类后续任务，并给出 `test_tier_required` / `test_tier_full` 验收方向。
@@ -79,6 +81,7 @@
   - limited preview / trust gate / capability gate 的现有 formal evidence。
 - Evaluation Strategy:
   - 以 `player leverage`、`return_hook`、`major_power_dependency_status` 与 `recoverable failure` 四条线评估，而不是只看“世界是否还在活跃”或“玩家是否已经看到很多系统”。
+  - Agent 行为评估以 `specialization / recovery / org-independence` 为主轴：当 `player_gameplay` 已显示独立恢复或局部专业化路径时，Agent 不得把 sponsor / alliance / major power 写成默认必需步骤；当 runtime 标记 `forced` 时，Agent 必须说明原因并保留边界。
 
 ## 4. Technical Specifications
 
@@ -88,6 +91,22 @@
   - viewer / pure API 负责把“你当前属于哪条小玩家 lane、刚刚赢了什么、为什么仍然值得继续”做成显式 surface。
   - agent contract 负责把 specialization / recovery 偏好写进可解释行动面，而不是默认把玩家推向 major-power dependency。
   - QA / playability evidence 负责阻断 `world_activity_only` 误报，并确认这条 lane 在 mature world 中仍成立。
+- Agent Small-Player Specialization Contract:
+  - Owner role: `agent_engineer`。
+  - Scope: `PostOnboarding / first capability` 之后的 mature-world small-player Agent 行为；这是行为边界合同，不是 claim/economy/stage 升级。
+  - 消费字段: `player_gameplay.small_player_lane_id`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`recovery_path_kind`、`recovery_path_detail`、`requires_major_power_sponsorship`、`repair_available`、`rebuild_available`、`pivot_available`。
+  - 应暴露或保留的 Agent-facing 摘要: `selected_specialization_id`、`specialization_reason`、`preferred_next_action_class`、`dependency_boundary`、`recovery_escalation_reason`；若 guardrail 将 `wait / wait_ticks / invalid schedule` 改写为恢复或持续生产动作，必须保留 `decision_rewrite` receipt。
+  - 默认专业化偏好:
+    - `local_operator`: 首个稳定世界变化可见前的默认主线。
+    - `recovery_operator`: 修复 blocked line、补齐缺口、维持局部能力韧性。
+    - `conversion_specialist`: 将区域富余输入转成区域有用的中间品或制成品。
+    - `regional_service_runner`: 提供 upkeep / supply / repair / logistics 服务，形成短周期 return hook。
+  - 决策约束:
+    - 当 `major_power_dependency_status` 为 `independent_path_available` 或 `sponsor_helpful_not_required` 时，Agent 必须先推荐本地 `repair / rebuild / pivot`，再考虑 sponsor / alliance / governance。
+    - 当 `requires_major_power_sponsorship=no` 时，Agent 不得把 sponsorship 表述为必需。
+    - 当 `same_loop_repeat_count >= 3` 且 `leverage_class` 仍为 `throughput_only` 或 `unclassified` 时，Agent 必须停止强化同一生产循环，转向专业化、恢复或新的区域用途。
+    - 当 `recovery_path_kind=repair_rebuild_or_pivot` 时，`wait / wait_ticks` 默认无效，除非存在明确 cooldown 或外部依赖。
+    - major-power escalation 只允许作为 `voluntary_escalation`，或在 runtime 标记 `major_power_dependency_status=forced` 时作为有原因的升级路径。
 - Integration Points:
   - `doc/game/prd.md`
   - `doc/game/project.md`
@@ -107,6 +126,7 @@
   - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
   - 世界很活跃，但玩家没有造成明确世界变化：必须标记 `world_activity_only=yes`，且不得把该样本判为 lane success。
   - 玩家主动加入大型组织：允许，但文档必须说明这属于 voluntary escalation，而不是 lane 的强制前提。
+  - Agent 推荐加入大型组织、接受 sponsor 或 alliance dependency：若 `requires_major_power_sponsorship=no`，判定为 blocker；若是玩家自愿升级，必须标记为 `voluntary_escalation`，并说明这不是 small-player lane entry requirement。
   - 玩家失去首个 claim 或 starter industrial node：必须至少保留一条小规模 rebuild / pivot path，而不是把失败等同于“重新开号”。
   - 区域性影响力被误写成 global governance：判定为 scope drift，必须回退。
 - Non-Functional Requirements:
@@ -116,6 +136,7 @@
   - NFR-SPL-4: `limited-scope regional influence` 100% 必须与 global governance / alliance leadership 分开定义，不得偷渡成更强权力口径。
   - NFR-SPL-5: 本专题不得改写当前 `limited playable technical preview` claim envelope，也不得用来替代 `PRD-GAME-012` 的 trust/capability 样本。
   - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力或局部影响类型，则必须升级为 grind 风险。
+  - NFR-SPL-7: Agent 行为合同不得把 global governance、alliance leadership、war 或 major-power membership 作为 `local_operator` 后的默认第一专业化；这些只能作为自愿升级或 forced dependency 说明。
 - 2026-06-25 P1/P2 viewer follow-up:
   - `viewer` 正式玩家入口在 `Formal Gameplay Summary` 中新增 `Agency Moves`、`First Win & Anti-Grind` 与 `Mature-World Continuation` surface，分别承接 P1 的打断/重排/纠偏、首个工业胜利/anti-grind leverage，以及 P2 的 mature-world repair/rebuild/pivot 与 share replay；`software_safe` 仅作为 compat alias 复核。
   - 该 surface 只消费或派生既有 `player_gameplay` 字段：`can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result`、`first_win_goal_id`、`player_action`、`world_change_due_to_player`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`repair_available`、`rebuild_available`、`pivot_available`、`recovery_path_*`。
