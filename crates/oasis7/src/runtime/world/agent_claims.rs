@@ -45,13 +45,14 @@ impl World {
         }
 
         let mut emitted = Vec::new();
-        let mut target_agent_ids = self.state.agent_claims.keys().cloned().collect::<Vec<_>>();
-        target_agent_ids.sort();
+        let claims = self
+            .state
+            .agent_claims
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
 
-        for target_agent_id in target_agent_ids {
-            let Some(claim) = self.state.agent_claims.get(&target_agent_id).cloned() else {
-                continue;
-            };
+        for claim in claims {
             self.process_agent_claim_epoch(current_epoch, &claim, &mut emitted)?;
         }
 

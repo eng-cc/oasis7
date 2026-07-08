@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::distributed_dht::{DistributedDht, ProviderRecord};
@@ -395,14 +396,16 @@ fn collect_global_candidates(
 fn dedupe_providers(providers: Vec<ProviderRecord>) -> Vec<ProviderRecord> {
     let mut by_id: BTreeMap<String, ProviderRecord> = BTreeMap::new();
     for record in providers {
-        by_id
-            .entry(record.provider_id.clone())
-            .and_modify(|existing| {
-                if record.last_seen_ms > existing.last_seen_ms {
-                    *existing = record.clone();
+        match by_id.entry(record.provider_id.clone()) {
+            Entry::Occupied(mut entry) => {
+                if record.last_seen_ms > entry.get().last_seen_ms {
+                    *entry.get_mut() = record;
                 }
-            })
-            .or_insert(record);
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(record);
+            }
+        }
     }
     by_id.into_values().collect()
 }
@@ -636,6 +639,24 @@ mod tests {
                 .any(|task| task.content_hash == "hash-b")
         );
         assert!(plan.rebalance_tasks.is_empty());
+    }
+
+    #[test]
+    fn dedupe_providers_keeps_latest_record_without_reordering_ids() {
+        let deduped = dedupe_providers(vec![
+            provider_seen("peer-b", Some(300), 100),
+            provider_seen("peer-a", Some(300), 400),
+            provider_seen("peer-b", Some(300), 500),
+            provider_seen("peer-a", Some(300), 200),
+        ]);
+
+        assert_eq!(
+            deduped
+                .iter()
+                .map(|record| (record.provider_id.as_str(), record.last_seen_ms))
+                .collect::<Vec<_>>(),
+            vec![("peer-a", 400), ("peer-b", 500)]
+        );
     }
 
     #[test]
