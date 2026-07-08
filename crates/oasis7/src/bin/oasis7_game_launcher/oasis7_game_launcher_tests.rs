@@ -623,27 +623,16 @@ fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
 }
 
 #[test]
-fn build_viewer_live_command_wires_auto_play_flag() {
+fn build_viewer_live_command_wires_auto_play_flags() {
     let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-    assert!(args.iter().any(|arg| arg == "--auto-play"));
-}
+    assert!(command.get_args().any(|arg| arg == "--auto-play"));
 
-#[test]
-fn build_viewer_live_command_wires_no_auto_play_flag() {
     let mut options = CliOptions::default();
     options.auto_play = false;
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-    assert!(args.iter().any(|arg| arg == "--no-auto-play"));
-    assert!(!args.iter().any(|arg| arg == "--auto-play"));
+    assert!(command.get_args().any(|arg| arg == "--no-auto-play"));
+    assert!(!command.get_args().any(|arg| arg == "--auto-play"));
 }
 
 #[test]
