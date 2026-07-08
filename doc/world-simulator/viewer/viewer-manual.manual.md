@@ -29,7 +29,7 @@
 ```
 
 - 该入口负责 LetAI token config 规范化、默认 Rust direct `127.0.0.1:5841` provider bridge、Rust bridge chat probe/provider contract smoke 与 launcher/runtime/viewer 启动。
-- 日常手工试玩只用 `--local-world-playtest`。该 preset 固化以下易错项：`--startup-profile playtest`、`--provider-smoke-mode skip`、`--reuse-existing-build`、`--detach`、`--no-auto-play`、viewer/web/live 端口 `48420/48421/48422`、`--json-ready`，以及 wrapper 默认的本地 standalone chain。
+- 日常手工试玩只用 `--local-world-playtest`。该 preset 固化以下易错项：`--startup-profile playtest`、`--provider-smoke-mode skip`、`--reuse-existing-build`、`--detach`、默认 `--auto-play`、viewer/web/live 端口 `48420/48421/48422`、`--json-ready`，以及 wrapper 默认的本地 standalone chain。若需要复现暂停态或手动 Play 调试，可显式传 `--no-auto-play`。
 - 启动后等 `<output-dir>/launcher/session.meta` 出现 `STACK_READY=1`，再打开其中 `GAME_URL`。默认日常 URL 形如 `http://127.0.0.1:48420/?ws=ws://127.0.0.1:48421&test_api=1&locale=zh`。
 - 需要冷构建、严格 provider smoke 或换端口时，再显式展开参数；例如第一次构建可去掉 `--local-world-playtest` 或去掉 `--reuse-existing-build`，临时换 HTTP 端口可在末尾透传 `-- --viewer-port 4174 --json-ready`。
 - 默认 chain-enabled 路径会启动 launcher-managed chain runtime，并通过 `--chain-local-standalone-test` 保持本地 submit -> commit -> snapshot 闭环可在单节点试玩栈内完成。该路径只有在 `output/chain-runtime/<node-id>/reward-runtime-execution-world/snapshot.json` 与 `journal.json` 都出现后，才算 chain-enabled 本地世界就绪。

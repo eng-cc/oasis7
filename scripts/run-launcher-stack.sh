@@ -12,7 +12,7 @@ VIEWER_PORT="4173"
 LIVE_BIND_ADDR="127.0.0.1:5023"
 WEB_BRIDGE_ADDR="127.0.0.1:5011"
 ENABLE_LLM="1"
-AUTO_PLAY="${OASIS7_RUNTIME_AUTO_PLAY:-0}"
+AUTO_PLAY="${OASIS7_RUNTIME_AUTO_PLAY:-1}"
 SCENARIO=""
 ALLOW_DEBUG_SCENARIO="0"
 VIEWER_STATIC_DIR="web"
@@ -125,7 +125,8 @@ Options:
                            headless_agent (default) or player_parity
   --with-llm               Enable LLM mode (default: enabled; required for gameplay)
   --no-llm                 Negative-path only; this launcher stack now fails fast without LLM
-  --auto-play              Start gameplay/world progression on viewer connection
+  --auto-play              Start gameplay/world progression on viewer connection (default)
+  --no-auto-play           Keep gameplay/world paused until explicit Play actions
   --print-agent-provider-config
                            Print resolved provider config as JSON and exit
   -h, --help               Show this help
@@ -279,6 +280,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --auto-play)
       AUTO_PLAY="1"
+      shift
+      ;;
+    --no-auto-play)
+      AUTO_PLAY="0"
       shift
       ;;
     -h|--help)
@@ -788,6 +793,8 @@ fi
 WORLD_ARGS+=(--with-llm)
 if [[ "$AUTO_PLAY" == "1" ]]; then
   WORLD_ARGS+=(--auto-play)
+else
+  WORLD_ARGS+=(--no-auto-play)
 fi
 WORLD_ARGS+=(
   --agent-decision-source "$AGENT_DECISION_SOURCE"

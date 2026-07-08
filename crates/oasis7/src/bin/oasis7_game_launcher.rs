@@ -207,7 +207,7 @@ impl Default for CliOptions {
             viewer_port: DEFAULT_VIEWER_PORT,
             viewer_static_dir: DEFAULT_VIEWER_STATIC_DIR.to_string(),
             with_llm: true,
-            auto_play: false,
+            auto_play: true,
             allow_debug_scenario: false,
             generated_world_dir: String::new(),
             agent_decision_source: PROVIDER_BACKED_DECISION_SOURCE.to_string(),
