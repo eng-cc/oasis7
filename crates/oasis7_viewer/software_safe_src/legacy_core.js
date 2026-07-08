@@ -1142,11 +1142,7 @@ function scheduleInitialSnapshotRetry() {
 }
 
 function gameplayActionByProtocolAction(protocolAction) {
-  const actions = state.snapshot?.player_gameplay?.available_actions;
-  if (!Array.isArray(actions)) {
-    return null;
-  }
-  return actions.find((action) => action?.protocol_action === protocolAction) || null;
+  return normalizedGameplayActions().find((action) => gameplayProtocolAction(action) === protocolAction) || null;
 }
 
 function viewerControlGate(normalizedAction) {
@@ -1162,7 +1158,7 @@ function viewerControlGate(normalizedAction) {
     return null;
   }
   const gameplayAction = gameplayActionByProtocolAction(protocolAction);
-  const disabledReason = String(gameplayAction?.disabled_reason || "").trim();
+  const disabledReason = String(gameplayAction?.disabled_reason || gameplayAction?.disabledReason || "").trim();
   if (!disabledReason) {
     return null;
   }
