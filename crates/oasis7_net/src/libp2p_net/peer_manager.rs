@@ -446,7 +446,6 @@ mod tests {
     use crate::proto_dht::{
         PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
     };
-    use crate::proto_net::NetworkLane;
     use libp2p::Multiaddr;
 
     use super::super::transport_paths::{
@@ -470,11 +469,7 @@ mod tests {
                 hole_punch_addrs: Vec::new(),
                 relay_addrs: Vec::new(),
                 discovery_sources,
-                capability_lanes: vec![
-                    NetworkLane::Sync,
-                    NetworkLane::BlobState,
-                    NetworkLane::Control,
-                ],
+                capability_lanes: PeerNodeRole::FullStorage.default_capability_lanes(),
                 source_operator: None,
                 source_asn: None,
                 published_at_ms: 0,
