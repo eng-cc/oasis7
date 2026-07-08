@@ -3,7 +3,7 @@
 审计轮次: 9
 
 ## 入口
-- 评审列表：`doc/ui_review_result/ui_review_list.md`
+- 当前样本池状态：本 README
 - 评分模板来源：`doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`
 
 ## 定位结论
@@ -17,11 +17,11 @@
 - 仅保留当前活跃轮次样本，不承担长期归档职责。
 
 ## 当前内容
-- `ui_review_list.md`：UI 评审条目列表与待处理入口。
-- 当前无活跃评审卡片；旧 `UI-20260306-115029` 样本卡已退役删除，长期视觉规则以 Viewer 视觉规范为准。
+- 当前无活跃评审卡片；旧 `UI-20260306-115029` 样本卡与空列表已退役删除，长期视觉规则以 Viewer 视觉规范为准。
+- 新增活跃样本时，直接在本目录新增评审卡片并更新本 README 的当前样本池状态；不再长期保留空列表文件。
 
 ## 维护约定
-- 新增 UI 评审卡后，需同步更新 `ui_review_list.md` 与本目录说明。
+- 新增 UI 评审卡后，需同步更新本 README 的当前样本池状态与对应卡片入口。
 - 正式评审口径以 `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md` 为准；历史打分卡只作为旧样本来源，不再作为当前权威。
 - 历史卡片不在本目录长期归档；如需长期沉淀，应由所属模块专题文档或 GitHub task issue evidence comments 承接。
 - 进入条件：当前轮次需要保留可评分的 UI/视觉样本卡。

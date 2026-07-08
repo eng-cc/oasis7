@@ -28,7 +28,7 @@
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
 - 跨模块模式 taxonomy: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
-- UI 视觉评审列表: `doc/ui_review_result/ui_review_list.md`
+- UI 视觉短期样本池: `doc/ui_review_result/README.md`
 - 常用 active supporting docs:
   - `doc/world-simulator/viewer/README.md`
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
