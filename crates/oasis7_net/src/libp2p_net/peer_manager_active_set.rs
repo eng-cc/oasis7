@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use libp2p::PeerId;
-use oasis7_proto::distributed_dht::SignedPeerRecord;
+use oasis7_proto::distributed_dht::{PeerNodeRole, SignedPeerRecord};
 
 use super::peer_manager::{
     PeerManagerHealthStatus, PeerManagerPolicy, discovery_source_label, exceeds_share_limit,
@@ -25,14 +25,16 @@ impl ActivePeerSetStats {
         discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
         active_transport_paths: &HashMap<PeerId, TransportPath>,
     ) -> Self {
-        let mut stats = Self {
-            active_peer_count: active_transport_paths.len(),
-            ..Self::default()
-        };
+        let mut stats = Self::default();
 
         for (peer_id, active_path) in active_transport_paths {
+            let record = discovered_peer_records.get(peer_id);
+            if !peer_record_counts_toward_share_limits(record) {
+                continue;
+            }
+            stats.active_peer_count = stats.active_peer_count.saturating_add(1);
             stats.note_active_path(active_path);
-            if let Some(record) = discovered_peer_records.get(peer_id) {
+            if let Some(record) = record {
                 stats.note_record(record);
             }
         }
@@ -45,6 +47,9 @@ impl ActivePeerSetStats {
         record: &SignedPeerRecord,
         active_path: &TransportPath,
     ) {
+        if !peer_record_counts_toward_share_limits(Some(record)) {
+            return;
+        }
         self.active_peer_count = self.active_peer_count.saturating_add(1);
         self.note_active_path(active_path);
         self.note_record(record);
@@ -86,6 +91,7 @@ pub(super) struct ActivePeerCandidate {
     pub source_operator: Option<String>,
     pub source_asn: Option<String>,
     pub relay_reserved: bool,
+    pub counts_toward_share_limits: bool,
 }
 
 impl ActivePeerCandidate {
@@ -105,6 +111,7 @@ impl ActivePeerCandidate {
             source_operator: normalized_source_label(record.record.source_operator.as_deref()),
             source_asn: normalized_source_label(record.record.source_asn.as_deref()),
             relay_reserved: matches!(active_path.kind, TransportPathKind::RelayReserved),
+            counts_toward_share_limits: peer_record_counts_toward_share_limits(Some(record)),
         }
     }
 }
@@ -114,7 +121,11 @@ pub(super) fn candidate_status_with_active_set(
     active_set_stats: &ActivePeerSetStats,
     policy: &PeerManagerPolicy,
 ) -> PeerManagerHealthStatus {
-    let projected_active_peer_count = active_set_stats.active_peer_count.saturating_add(1);
+    let projected_active_peer_count = if candidate.counts_toward_share_limits {
+        active_set_stats.active_peer_count.saturating_add(1)
+    } else {
+        active_set_stats.active_peer_count
+    };
     let mut has_issue = candidate.discovery_source_labels.len() < policy.min_peer_discovery_sources;
     let mut hard_block = false;
 
@@ -128,39 +139,41 @@ pub(super) fn candidate_status_with_active_set(
         has_issue = true;
     }
 
-    if let Some(bucket) = candidate.ipv4_subnet_bucket.as_deref() {
-        let projected_bucket_count = active_set_stats
-            .ipv4_subnet_counts
-            .get(bucket)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        if let Some(limit) = policy.max_ipv4_subnet_active_peers {
-            if projected_bucket_count > limit {
+    if candidate.counts_toward_share_limits {
+        if let Some(bucket) = candidate.ipv4_subnet_bucket.as_deref() {
+            let projected_bucket_count = active_set_stats
+                .ipv4_subnet_counts
+                .get(bucket)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(1);
+            if let Some(limit) = policy.max_ipv4_subnet_active_peers {
+                if projected_bucket_count > limit {
+                    hard_block = true;
+                }
+            } else if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && meets_or_exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.block_ipv4_subnet_share_per_mille,
+                )
+            {
                 hard_block = true;
+            } else if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.max_ipv4_subnet_share_per_mille,
+                )
+            {
+                has_issue = true;
             }
-        } else if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && meets_or_exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.block_ipv4_subnet_share_per_mille,
-            )
-        {
-            hard_block = true;
-        } else if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.max_ipv4_subnet_share_per_mille,
-            )
-        {
-            has_issue = true;
         }
     }
 
-    if candidate.relay_reserved {
+    if candidate.counts_toward_share_limits && candidate.relay_reserved {
         let projected_relayed_active_peers =
             active_set_stats.relayed_active_peers.saturating_add(1);
         if exceeds_share_limit(
@@ -199,59 +212,63 @@ pub(super) fn candidate_status_with_active_set(
         }
     }
 
-    if let Some(source_operator) = candidate.source_operator.as_deref() {
-        let projected_bucket_count = active_set_stats
-            .operator_counts
-            .get(source_operator)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && meets_or_exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.block_operator_share_per_mille,
-            )
-        {
-            hard_block = true;
-        } else if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.max_operator_share_per_mille,
-            )
-        {
-            has_issue = true;
+    if candidate.counts_toward_share_limits {
+        if let Some(source_operator) = candidate.source_operator.as_deref() {
+            let projected_bucket_count = active_set_stats
+                .operator_counts
+                .get(source_operator)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(1);
+            if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && meets_or_exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.block_operator_share_per_mille,
+                )
+            {
+                hard_block = true;
+            } else if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.max_operator_share_per_mille,
+                )
+            {
+                has_issue = true;
+            }
         }
     }
 
-    if let Some(source_asn) = candidate.source_asn.as_deref() {
-        let projected_bucket_count = active_set_stats
-            .asn_counts
-            .get(source_asn)
-            .copied()
-            .unwrap_or(0)
-            .saturating_add(1);
-        if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && meets_or_exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.block_asn_share_per_mille,
-            )
-        {
-            hard_block = true;
-        } else if policy.applies_share_limits(projected_active_peer_count)
-            && projected_bucket_count >= 2
-            && exceeds_share_limit(
-                projected_bucket_count,
-                projected_active_peer_count,
-                policy.max_asn_share_per_mille,
-            )
-        {
-            has_issue = true;
+    if candidate.counts_toward_share_limits {
+        if let Some(source_asn) = candidate.source_asn.as_deref() {
+            let projected_bucket_count = active_set_stats
+                .asn_counts
+                .get(source_asn)
+                .copied()
+                .unwrap_or(0)
+                .saturating_add(1);
+            if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && meets_or_exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.block_asn_share_per_mille,
+                )
+            {
+                hard_block = true;
+            } else if policy.applies_share_limits(projected_active_peer_count)
+                && projected_bucket_count >= 2
+                && exceeds_share_limit(
+                    projected_bucket_count,
+                    projected_active_peer_count,
+                    policy.max_asn_share_per_mille,
+                )
+            {
+                has_issue = true;
+            }
         }
     }
 
@@ -269,6 +286,9 @@ pub(super) fn candidate_would_degrade_admitted_peers(
     active_set_stats: &ActivePeerSetStats,
     policy: &PeerManagerPolicy,
 ) -> bool {
+    if !candidate.counts_toward_share_limits {
+        return false;
+    }
     let projected_active_peer_count = active_set_stats.active_peer_count.saturating_add(1);
 
     if let Some(bucket) = candidate.ipv4_subnet_bucket.as_deref() {
@@ -385,4 +405,11 @@ pub(super) fn candidate_would_degrade_admitted_peers(
     }
 
     false
+}
+
+fn peer_record_counts_toward_share_limits(record: Option<&SignedPeerRecord>) -> bool {
+    !matches!(
+        record.and_then(|record| record.record.parsed_node_role().ok()),
+        Some(PeerNodeRole::ObserverLight)
+    )
 }

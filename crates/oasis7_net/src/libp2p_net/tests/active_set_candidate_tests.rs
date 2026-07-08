@@ -63,6 +63,94 @@ fn active_set_candidate_status_flags_bucket_overflow_without_full_recompute() {
 }
 
 #[test]
+fn active_set_candidate_observer_light_does_not_degrade_provider_share_limits() {
+    let first_key = Keypair::generate_ed25519();
+    let second_key = Keypair::generate_ed25519();
+    let third_key = Keypair::generate_ed25519();
+    let observer_key = Keypair::generate_ed25519();
+    let first_peer = PeerId::from(first_key.public());
+    let second_peer = PeerId::from(second_key.public());
+    let third_peer = PeerId::from(third_key.public());
+    let observer_peer = PeerId::from(observer_key.public());
+    let discovery_sources = vec![
+        crate::dht::PeerDiscoverySource::Dht,
+        crate::dht::PeerDiscoverySource::Rendezvous,
+    ];
+    let mut observer_record =
+        signed_discovery_peer_record(&observer_key, discovery_sources.clone(), 4);
+    observer_record.record.node_role = PeerNodeRole::ObserverLight.as_str().to_string();
+    observer_record.record.capability_lanes =
+        PeerNodeRole::ObserverLight.default_capability_lanes();
+
+    let stats = ActivePeerSetStats::new(
+        &HashMap::from([
+            (
+                first_peer,
+                signed_discovery_peer_record(&first_key, discovery_sources.clone(), 1),
+            ),
+            (
+                second_peer,
+                signed_discovery_peer_record(&second_key, discovery_sources.clone(), 2),
+            ),
+            (
+                third_peer,
+                signed_discovery_peer_record(&third_key, discovery_sources, 3),
+            ),
+        ]),
+        &HashMap::from([
+            (
+                first_peer,
+                active_transport_path_from_endpoint(
+                    &HashMap::new(),
+                    first_peer,
+                    &"/ip4/10.0.0.1/udp/4101/quic-v1"
+                        .parse()
+                        .expect("first endpoint"),
+                ),
+            ),
+            (
+                second_peer,
+                active_transport_path_from_endpoint(
+                    &HashMap::new(),
+                    second_peer,
+                    &"/ip4/10.0.0.2/udp/4102/quic-v1"
+                        .parse()
+                        .expect("second endpoint"),
+                ),
+            ),
+            (
+                third_peer,
+                active_transport_path_from_endpoint(
+                    &HashMap::new(),
+                    third_peer,
+                    &"/ip4/10.20.30.40/udp/4103/quic-v1"
+                        .parse()
+                        .expect("third endpoint"),
+                ),
+            ),
+        ]),
+    );
+    let observer_path = active_transport_path_from_endpoint(
+        &HashMap::new(),
+        observer_peer,
+        &"/ip4/10.0.0.89/udp/4104/quic-v1"
+            .parse()
+            .expect("observer endpoint"),
+    );
+    let candidate = ActivePeerCandidate::from_record_and_path(&observer_record, &observer_path);
+
+    assert_eq!(
+        candidate_status_with_active_set(&candidate, &stats, &PeerManagerPolicy::default()),
+        PeerManagerHealthStatus::Active
+    );
+    assert!(!candidate_would_degrade_admitted_peers(
+        &candidate,
+        &stats,
+        &PeerManagerPolicy::default(),
+    ));
+}
+
+#[test]
 fn active_set_candidate_count_limit_allows_third_and_blocks_fourth_subnet_peer() {
     let candidate = ActivePeerCandidate {
         discovery_source_labels: BTreeSet::from(["dht", "rendezvous"]),
@@ -71,6 +159,7 @@ fn active_set_candidate_count_limit_allows_third_and_blocks_fourth_subnet_peer()
         source_operator: None,
         source_asn: None,
         relay_reserved: false,
+        counts_toward_share_limits: true,
     };
     let policy = PeerManagerPolicy {
         max_ipv4_subnet_active_peers: Some(3),
@@ -171,6 +260,7 @@ fn active_set_candidate_status_counts_unique_candidate_discovery_sources() {
         source_operator: None,
         source_asn: None,
         relay_reserved: false,
+        counts_toward_share_limits: true,
     };
 
     assert_eq!(
@@ -192,6 +282,7 @@ fn active_set_candidate_status_projects_unique_active_discovery_source_union() {
         source_operator: None,
         source_asn: None,
         relay_reserved: false,
+        counts_toward_share_limits: true,
     };
     let active_set_stats = ActivePeerSetStats {
         active_peer_count: 1,
