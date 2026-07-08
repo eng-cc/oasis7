@@ -58,7 +58,7 @@
   - `rg -n "cost|input|output|value|repair|next step|first capability|regional" crates/oasis7_viewer crates/oasis7/src/bin/oasis7_pure_api_client.rs`
   - headed Web/UI 与 pure API 人工复核首个持续能力和 mature-world lane 的价值表达
 - `agent-small-player-specialization-contract` / agent contract
-  - `rg -n "Agent Small-Player Specialization Contract|selected_specialization_id|specialization_reason|dependency_boundary|repair / rebuild / pivot|voluntary_escalation|grind_only_flag|requires_major_power_sponsorship" doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md`
+  - `rg -n "Agent Small-Player Specialization Contract|selected_specialization_id|specialization_reason|dependency_boundary|repair / rebuild / pivot|voluntary_escalation|grind_only_flag|requires_major_power_sponsorship" doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md`
   - `rg -n "specialization|recovery|override|reprioritize|claim|regional|major_power|grind_only" doc/world-simulator/llm crates/oasis7/src/simulator crates/oasis7/src/viewer/runtime_live`
   - `git diff --check`
 - `qa-control-feeling-and-anti-grind-matrix` / QA matrix
