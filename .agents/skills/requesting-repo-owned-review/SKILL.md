@@ -92,12 +92,12 @@ The formal path is:
 ## YYYY-MM-DD HH:MM:SS CST / <role_name>
 - Review Trigger: pre-PR local role review
 - Review Scope: <paths / diff summary>
-- Review Package: <path or n/a with reason>
+- Review Package: <repo-relative/scratch-relative path or n/a with reason>
 - Review Roles: <comma-separated roles>
 - Review Question: <what must this review confirm or challenge>
 - Evidence Available: <tests / docs / screenshots / logs>
 - Expected Return Contract: <findings | no_findings | scope/spec compliance verdict | role quality/risk verdict | residual_risk>
-- Slice Ledger: <path or n/a with reason>
+- Slice Ledger: <repo-relative/scratch-relative path or n/a with reason>
 - Formal Sink: GitHub task issue evidence comments
 ```
 
@@ -109,12 +109,12 @@ role reviews and addressing findings:
 ```markdown
 - Pre-PR Local Role Review: passed
 - Task UID: <task_uid>
-- Source Worktree: <absolute path>
+- Source Worktree: <task worktree name or repo-relative worktree hint; avoid local absolute paths in GitHub issue evidence>
 - Source Branch: <branch>
 - Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>
 - Comparison Ref: <base ref>
 - Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>
-- Review Package: <path to review package or n/a with reason>
+- Review Package: <repo-relative/scratch-relative path to review package or n/a with reason>
 - Role Selection Basis: <changed paths + task slice history + explicit includes/skips>
 - Review Roles: <comma-separated roles>
 - Review Evidence: <per-role section or handoff refs>
@@ -127,7 +127,7 @@ role reviews and addressing findings:
 - Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>
 - LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>
 - Residual Risk: <text>
-- Slice Ledger: <path to slice ledger or n/a with reason>
+- Slice Ledger: <repo-relative/scratch-relative path to slice ledger or n/a with reason>
 ```
 
 For small workflow/docs-only diffs, `./scripts/pm/record-pre-pr-review.sh` may

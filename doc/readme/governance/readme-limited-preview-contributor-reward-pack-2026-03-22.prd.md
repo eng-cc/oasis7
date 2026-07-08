@@ -70,7 +70,6 @@
   - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`
   - `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md`
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
-  - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
   - `scripts/readme-reward-pr-intake-import.py`
 - Edge Cases & Error Handling:
   - 多人重复提交同一 bug：只给首个高质量提交 full 分，后续重复只保留低分或不计分。

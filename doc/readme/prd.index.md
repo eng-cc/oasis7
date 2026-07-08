@@ -98,7 +98,12 @@
 | `doc/readme/gap/readme-gap3-install-target-infrastructure.prd.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` | 已完成 README gap3 模块安装目标语义增量专题；当前 gap 主入口由 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` 承接，本文只保留历史追溯 |
 | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.design.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md` | 2026-03-11 版本候选实例已不是当前 product-authorized release lane；一次性 brief 输出文件已删除，后续 release communication 从 template 专题与根 `README.md` 当前状态进入 |
 | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.project.md` | 2026-03-11 announcement draft 是一次性候选底稿，不代表当前正式公告；一次性 draft 输出文件已删除，后续 announcement/changelog 从 template 专题进入 |
-| `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.design.md` | `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.project.md` | closed-beta-candidate 不是当前公开状态；根 `README.md` 明确当前不是 closed beta。本文保留为 claim-control 历史 runbook，等待后续术语替换后再评估删除 |
+
+## 已退役删除专题
+| 专题 | 当前承接 | 删除理由 |
+| --- | --- | --- |
+| 2026-03-22 closed-beta candidate runbook triplet | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 与 `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露活跃操作面语义，已收敛为 limited preview invite / execution 入口 |
+| 2026-03-22 closed-beta candidate feedback / incident templates | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 的 signal bucket、claim drift、producer summary 字段 | 旧模板命名继续暗示 closed beta candidate 当前可操作；保留历史 evidence，不保留当前 template surface |
 
 ## Material / Execution / SOP 补充入口
 | 文档路径 | 类型 | 用途 |

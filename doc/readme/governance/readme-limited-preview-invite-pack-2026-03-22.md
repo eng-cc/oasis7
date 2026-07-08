@@ -75,10 +75,40 @@ Mark `claim drift = yes` if the external statement implies any of the following:
 
 If `claim drift = yes`:
 1. Correct the statement in the same monitoring window.
-2. Log it in the feedback template.
+2. Log it in the current signal log row below.
 3. If high-visibility or repeated, open an incident row and escalate to `producer_system_designer`.
 
-## 6. Producer Summary Template
+## 6. Current Signal Log Row
+Use this row for each valid signal before linking the final evidence in GitHub task issue comments.
+
+| Field | Value |
+| --- | --- |
+| Round ID | `LTP-20260322-R1` |
+| Source | issue / PR / channel link |
+| Candidate Evidence | candidate tag/date and gate or lane link |
+| Bucket | `Blocking` / `Opportunity` / `Idea` |
+| Severity | `P0` / `P1` / `P2` / `P3` |
+| Claim Drift | `yes` / `no` |
+| Owner | role or GitHub handle |
+| Response | correction, triage note, or owner reply link |
+| Next Action | issue / PR / owner follow-up / no-op with reason |
+
+## 7. Current Incident Row
+Use this row when a signal is high-visibility, repeated, blocking, or cannot be corrected in the same monitoring window.
+
+| Field | Value |
+| --- | --- |
+| Round ID | `LTP-20260322-R1` |
+| Incident ID | `LTP-YYYYMMDD-NN` |
+| Trigger | claim drift / blocking path / channel failure / repeated confusion |
+| Evidence | link or command output summary |
+| Severity | `P0` / `P1` / `P2` / `P3` |
+| Immediate Action | correction, pause, owner page, or escalation |
+| Escalation Path | role / issue / PR |
+| Three-Hour Owner Push | owner ping or explicit n/a |
+| Follow-up | closure link or next review window |
+
+## 8. Producer Summary Template
 Use this at `T+24h`.
 
 | Field | Value |
@@ -92,14 +122,14 @@ Use this at `T+24h`.
 | Highest Risk | one-line summary |
 | Recommendation | `continue` / `hold` / `reassess` |
 
-## 7. Stop Conditions
+## 9. Stop Conditions
 Pause the round and escalate immediately if:
 - a high-visibility thread frames the round as `closed beta` or `public launch` and cannot be corrected promptly
 - a `Blocking` issue proves a candidate path is not actually usable
 - repeated claim drift suggests the current callout wording is still too loose
 
-## 8. Completion Definition
+## 10. Completion Definition
 - 1 controlled builder-facing callout is prepared and approved for use.
 - Monitoring windows and correction rules are fixed before posting.
-- Feedback / incident templates can capture every signal with `Round ID`, bucket, owner, and next action.
+- Current signal / incident rows can capture every signal with source, candidate evidence, severity, owner, response, escalation, and next action.
 - Producer can read one summary row and decide `continue / hold / reassess`.

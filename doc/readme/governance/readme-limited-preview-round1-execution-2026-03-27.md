@@ -14,7 +14,6 @@
 - Published Thread: `https://github.com/eng-cc/oasis7/issues/48`
 - Source Docs:
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
-  - `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
   - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`
 
 ## Approved Callout
@@ -70,5 +69,5 @@
 ## Monitoring Conditions
 - Use `issue #48` as the primary round-1 signal surface.
 - Keep `limited playable technical preview` wording unchanged in maintainer replies.
-- Log the first 3 valid signals into the feedback / incident templates with `Round ID`, bucket, owner, and next action.
+- Log the first 3 valid signals into `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` current signal / incident rows with source, candidate evidence, severity, owner, response, escalation, and next action.
 - Once at least one gate-relevant signal lands, hand off to `qa_engineer` for `TASK-GAME-037`.

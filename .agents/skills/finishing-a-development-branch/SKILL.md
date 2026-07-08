@@ -66,12 +66,12 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 ```markdown
 - Pre-PR Local Role Review: passed
 - Task UID: <task_uid>
-- Source Worktree: <absolute path>
+- Source Worktree: <task worktree name or repo-relative worktree hint; avoid local absolute paths in GitHub issue evidence>
 - Source Branch: <branch>
 - Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files>
 - Comparison Ref: <base ref>
 - Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>
-- Review Package: <path to review package or n/a with reason>
+- Review Package: <repo-relative/scratch-relative path to review package or n/a with reason>
 - Role Selection Basis: <changed paths + task slice history + explicit includes/skips>
 - Review Roles: <comma-separated roles>
 - Review Evidence: <per-role section or handoff refs>
@@ -84,7 +84,7 @@ The pre-PR local role review packet is recorded before final closeout/commit and
 - Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>
 - LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>
 - Residual Risk: <text>
-- Slice Ledger: <path to slice ledger or n/a with reason>
+- Slice Ledger: <repo-relative/scratch-relative path to slice ledger or n/a with reason>
 ```
 
 For small workflow/docs-only diffs, `./scripts/pm/record-pre-pr-review.sh` can

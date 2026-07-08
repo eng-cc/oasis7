@@ -639,7 +639,7 @@ def github_issue_for_worktree(source_worktree: Path) -> dict[str, object] | None
             except (subprocess.CalledProcessError, json.JSONDecodeError):
                 continue
             fields = parse_issue_body_fields(str(issue.get("body") or ""))
-            if fields.get("worktree_hint") != str(source_worktree):
+            if not worktree_hint_matches(fields.get("worktree_hint"), source_worktree):
                 continue
             task_uid = fields.get("task_uid") or ""
             if not task_uid_re.fullmatch(task_uid):
@@ -826,7 +826,6 @@ if not blocks:
 required = {
     "Pre-PR Local Role Review": "passed",
     "Task UID": task_uid,
-    "Source Worktree": str(source_worktree),
     "Source Branch": source_branch,
     "Comparison Ref": comparison_ref,
 }
@@ -837,6 +836,12 @@ selected_block = blocks[-1]
 for key, expected in required.items():
     if parse_field(selected_block, key) != expected:
         missing.append(f"{key}: {expected}")
+
+source_worktree_field = parse_field(selected_block, "Source Worktree")
+if not source_worktree_field:
+    missing.append("Source Worktree")
+elif not worktree_hint_matches(source_worktree_field, source_worktree):
+    missing.append(f"Source Worktree: {source_worktree.name} or repo-relative worktree hint")
 
 reviewed_source_head = parse_field(selected_block, "Source Head")
 if not reviewed_source_head:

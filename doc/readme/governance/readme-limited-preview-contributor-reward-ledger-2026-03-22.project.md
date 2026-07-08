@@ -19,7 +19,7 @@
 ## 依赖
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
 - `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.md`
-- `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
+- `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
 - `doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.project.md`
 - `doc/devlog/README.md`
 

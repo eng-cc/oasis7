@@ -24,8 +24,8 @@ Options:
   --residual-risk <text>       Residual risk.
   --finding-disposition <text> Review Findings Disposition value (default: no_findings).
   --reviewed-paths <text>      Reviewed Changed Paths value (default: git diff --name-only origin/main...HEAD).
-  --review-package <text>      Review Package value (default: n/a; small docs/workflow diff).
-  --slice-ledger <text>        Slice Ledger value (default: n/a; small docs/workflow diff).
+  --review-package <text>      Review Package value; use repo-relative/scratch-relative paths or n/a.
+  --slice-ledger <text>        Slice Ledger value; use repo-relative/scratch-relative paths or n/a.
   --visual-evidence <text>     Visual Evidence value.
   --wasm-evidence <text>       WASM Evidence value.
   --ops-evidence <text>        Ops Evidence value.
@@ -43,6 +43,25 @@ USAGE
 die() {
   echo "error: $*" >&2
   exit 1
+}
+
+sanitize_evidence_path_field() {
+  local label="$1"
+  local value="$2"
+
+  if [[ "$value" == /* ]]; then
+    case "$value" in
+      "$ROOT_DIR"/*)
+        printf '%s\n' "${value#"$ROOT_DIR"/}"
+        ;;
+      *)
+        die "$label must not expose a local absolute path in GitHub issue evidence; use a repo-relative path or n/a"
+        ;;
+    esac
+    return
+  fi
+
+  printf '%s\n' "$value"
 }
 
 TASK_UID=""
@@ -126,6 +145,8 @@ fi
 if [[ -z "$ROLE_BASIS" ]]; then
   ROLE_BASIS="changed paths, task history, verification claim, and explicit adjacent-role skips"
 fi
+REVIEW_PACKAGE="$(sanitize_evidence_path_field "Review Package" "$REVIEW_PACKAGE")"
+SLICE_LEDGER="$(sanitize_evidence_path_field "Slice Ledger" "$SLICE_LEDGER")"
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'
 from __future__ import annotations
@@ -180,11 +201,12 @@ PY
 fi
 
 TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+SOURCE_WORKTREE_LABEL="$(basename "$PWD")"
 PACKET="$(cat <<EOF
 ## $TIMESTAMP / tpm
 - Pre-PR Local Role Review: passed
 - Task UID: $TASK_UID
-- Source Worktree: $PWD
+- Source Worktree: $SOURCE_WORKTREE_LABEL
 - Source Branch: $SOURCE_BRANCH
 - Source Head: $SOURCE_HEAD
 - Comparison Ref: $COMPARISON_REF

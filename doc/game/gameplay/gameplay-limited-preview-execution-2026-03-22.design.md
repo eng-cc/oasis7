@@ -17,10 +17,8 @@
 ## 3. 关键接口 / 入口
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`
-- `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
+- `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
-- `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
-- `doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`
 
 ## 4. 约束与边界
 - 阶段仍是 `internal_playable_alpha_late`，本专题不自动升级阶段。

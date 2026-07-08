@@ -607,7 +607,7 @@ cat > "$GITHUB_ISSUE_VIEW_JSON" <<EOF
 {
   "comments": [
     {
-      "body": "## 2026-06-03 00:00:00 CST / tpm\n- Pre-PR Local Role Review: passed\n- Task UID: $TASK_UID\n- Source Worktree: $GITHUB_FALLBACK_WORKTREE\n- Source Branch: $SMOKE_BRANCH\n- Source Head: $GITHUB_FALLBACK_HEAD\n- Comparison Ref: refs/remotes/origin/main\n- Reviewed Changed Paths: doc/engineering/project.md\n- Review Package: n/a; GitHub-backed smoke fixture\n- Role Selection Basis: GitHub-backed PM issue comment path smoke; roles producer_system_designer,repository_health_engineer,qa_engineer.\n- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer\n- Review Evidence: producer_system_designer: no_findings; repository_health_engineer: no_findings; qa_engineer: no_findings\n- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\n- Review Findings Disposition: no_findings\n- Finding Disposition Evidence: GitHub issue comment smoke evidence\n- Verification Matrix: GitHub-backed preflight -> prepare-task-pr --json -> observed\n- Visual Evidence: n/a; no visible surface\n- WASM Evidence: n/a; no WASM surface\n- Ops Evidence: n/a; no ops surface\n- LiveOps Evidence: n/a; no liveops surface\n- Residual Risk: fixture residual risk\n- Slice Ledger: n/a; smoke fixture\n"
+      "body": "## 2026-06-03 00:00:00 CST / tpm\n- Pre-PR Local Role Review: passed\n- Task UID: $TASK_UID\n- Source Worktree: github-fallback-root\n- Source Branch: $SMOKE_BRANCH\n- Source Head: $GITHUB_FALLBACK_HEAD\n- Comparison Ref: refs/remotes/origin/main\n- Reviewed Changed Paths: doc/engineering/project.md\n- Review Package: n/a; GitHub-backed smoke fixture\n- Role Selection Basis: GitHub-backed PM issue comment path smoke; roles producer_system_designer,repository_health_engineer,qa_engineer.\n- Review Roles: producer_system_designer,repository_health_engineer,qa_engineer\n- Review Evidence: producer_system_designer: no_findings; repository_health_engineer: no_findings; qa_engineer: no_findings\n- Review Verdicts: producer_system_designer scope/spec compliance=approved; role quality/risk=approved; repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\n- Review Findings Disposition: no_findings\n- Finding Disposition Evidence: GitHub issue comment smoke evidence\n- Verification Matrix: GitHub-backed preflight -> prepare-task-pr --json -> observed\n- Visual Evidence: n/a; no visible surface\n- WASM Evidence: n/a; no WASM surface\n- Ops Evidence: n/a; no ops surface\n- LiveOps Evidence: n/a; no liveops surface\n- Residual Risk: fixture residual risk\n- Slice Ledger: n/a; smoke fixture\n"
     }
   ]
 }
@@ -718,7 +718,7 @@ expected_branch = sys.argv[3]
 review = payload["pre_pr_local_role_review"]
 missing = set(review["missing_markers"])
 expected = {
-    f"Source Worktree: {expected_worktree}",
+    "Source Worktree: " + Path(expected_worktree).name + " or repo-relative worktree hint",
     f"Source Branch: {expected_branch}",
     "Comparison Ref: refs/remotes/origin/main",
 }
@@ -750,7 +750,7 @@ cat > "$NO_CACHE_ISSUE_LIST" <<'EOF'
 EOF
 cat > "$NO_CACHE_ISSUE_BODY" <<EOF
 {
-  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`$SMOKE_WORKTREE_CANONICAL\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
+  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`smoke-worktree\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
   "number": 123,
   "title": "GitHub-backed no-cache fixture",
   "url": "https://github.com/example/oasis7/issues/123"
@@ -766,14 +766,14 @@ cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
       "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
     },
     {
-      "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: $SMOKE_WORKTREE_CANONICAL\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: n/a; smoke fixture\\n"
+      "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: smoke-worktree\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: n/a; smoke fixture\\n"
     }
   ]
 }
 EOF
 cat > "$NO_CACHE_ISSUE_FULL" <<EOF
 {
-  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`$SMOKE_WORKTREE_CANONICAL\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
+  "body": "<!-- oasis7-pm-task -->\\ntask_uid: $TASK_UID\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: \`tpm\`\\n- module: \`engineering\`\\n- status: \`ready\`\\n- priority: \`P3\`\\n- worktree_hint: \`smoke-worktree\`\\n\\nSource refs:\\n- \`doc/engineering/project.md\`\\n\\nAcceptance:\\n- no-cache prepare-task-pr fixture\\n",
   "comments": [
     {
       "url": "https://github.com/example/oasis7/issues/123#issuecomment-1",

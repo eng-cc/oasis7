@@ -62,9 +62,7 @@
 ## 3. AI System Requirements (If Applicable)
 
 - Tool Requirements:
-  - `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
-  - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
-  - `doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`
+  - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`
 - Evaluation Strategy:
   - 用“外放是否受控”“误导性说法是否被及时纠偏”“信号是否可回流”“QA 是否仍维持 gate 守门有效”四条线共同评估，不以曝光量或互动量作为成功主指标。
@@ -81,10 +79,8 @@
   - `doc/game/project.md`
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
   - `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`
-  - `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
+  - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
   - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
-  - `doc/playability_test_result/templates/closed-beta-candidate-feedback-log-guide-2026-03-22.md`
-  - `doc/playability_test_result/templates/closed-beta-candidate-incident-templates-2026-03-22.md`
 - Edge Cases & Error Handling:
   - 外部讨论将当前状态误解为“大范围公开可玩”：必须立即纠偏，并以 claim drift 记录。
   - 首批反馈不足 3 条：允许延长 1 轮观察窗口，但不得伪造“反馈充足”结论。

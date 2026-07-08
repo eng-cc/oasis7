@@ -81,6 +81,8 @@ git -C "$TEST_REPO" checkout -- README.md
   --finding-disposition-evidence "smoke evidence" \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
+  --review-package "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-packages/smoke.diff" \
+  --slice-ledger "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" \
   --visual-evidence "screenshot/model review: smoke visual evidence" \
   --ops-evidence "readiness/rollback/runbook/operator evidence: smoke ops evidence" \
   --liveops-evidence "messaging/release-note/player/community evidence: smoke liveops evidence" \
@@ -88,11 +90,34 @@ git -C "$TEST_REPO" checkout -- README.md
   --print-only >"$TMPDIR/packet.out"
 
 grep -q "Pre-PR Local Role Review: passed" "$TMPDIR/packet.out"
+grep -q "Source Worktree: repo" "$TMPDIR/packet.out"
+if grep -q "$TEST_REPO" "$TMPDIR/packet.out"; then
+  echo "packet should not expose the local absolute worktree path" >&2
+  exit 1
+fi
+grep -q "Review Package: .pm/scratch/task_11111111111111111111111111111111/review-packages/smoke.diff" "$TMPDIR/packet.out"
+grep -q "Slice Ledger: .pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$TMPDIR/packet.out"
 grep -q "Reviewed Changed Paths: README.md" "$TMPDIR/packet.out"
 grep -q "Finding Disposition Evidence: smoke evidence" "$TMPDIR/packet.out"
 grep -q "Visual Evidence: screenshot/model review: smoke visual evidence" "$TMPDIR/packet.out"
 grep -q "Ops Evidence: readiness/rollback/runbook/operator evidence: smoke ops evidence" "$TMPDIR/packet.out"
 grep -q "LiveOps Evidence: messaging/release-note/player/community evidence: smoke liveops evidence" "$TMPDIR/packet.out"
+
+if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+  --task-uid task_11111111111111111111111111111111 \
+  --roles repository_health_engineer \
+  --review-evidence "repository_health_engineer: no_findings; smoke" \
+  --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+  --finding-disposition-evidence "smoke evidence" \
+  --verification "helper -> smoke -> observed" \
+  --residual-risk "fixture risk" \
+  --review-package "/tmp/non-repo-review-package.diff" \
+  --comparison-ref refs/heads/base \
+  --print-only >"$TMPDIR/reject.out" 2>"$TMPDIR/reject.err"; then
+  echo "expected external absolute review package path to be rejected" >&2
+  exit 1
+fi
+grep -q "Review Package must not expose a local absolute path" "$TMPDIR/reject.err"
 
 TEST_GH_LOG="$TMPDIR/gh.log" PATH="$TMPDIR/bin:$PATH" "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --task-uid task_11111111111111111111111111111111 \

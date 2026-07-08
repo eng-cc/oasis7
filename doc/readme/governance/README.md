@@ -89,14 +89,13 @@
 - 追溯入口:
   - `readme-release-candidate-communication-brief-2026-03-11.prd.md`
   - `readme-release-announcement-draft-2026-03-11.prd.md`
-  - `readme-closed-beta-candidate-runbook-2026-03-22.prd.md`
 - 适合问题:
   - 2026-03-11 版本候选实例当时如何生成 release brief / announcement draft
-  - closed-beta-candidate 预备 runbook 当时如何守住 technical preview 禁语
+  - 旧 closed-beta-candidate 预备 runbook 如何被并入当前 limited preview invite / execution 入口
 - 当前边界:
   - 这些是历史实例或预备 runbook，不再作为默认活跃首读入口。
   - 当前公开状态以根 `../../../README.md` 为准：limited playable technical preview；不是 closed beta、public launch 或正式玩家发布。
-  - release communication 后续复用从模板专题进入；closed-beta 术语替换前保留原 runbook 供 claim-control 追溯，不删除。
+  - release communication 后续复用从模板专题进入；旧 closed-beta runbook 与 playability 模板已退役删除，claim-control 当前从 `readme-limited-preview-invite-pack-2026-03-22.md` 与 `readme-limited-preview-round1-execution-2026-03-27.md` 进入。
 
 ### 5. 小红书与外宣激励
 - 首读入口:
