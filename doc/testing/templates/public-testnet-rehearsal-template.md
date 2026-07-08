@@ -54,3 +54,7 @@
 ## Follow-up
 - readiness_review_command:
   - `./scripts/network-tier-public-testnet-readiness.sh --manifest <manifest> --lanes-tsv <lanes.tsv>`
+- release_train_drill_command:
+  - `./scripts/public-testnet-release-train-drill.sh --manifest <manifest> --lanes-tsv <lanes.tsv> --runtime-build-ref <runtime-artifact> --world-snapshot-ref <world-snapshot> --governance-manifest-ref <governance-manifest> --rehearsal-lanes-tsv <public_testnet_rehearsal-lanes.tsv>`
+- local_gate_smoke_command:
+  - `./scripts/public-testnet-release-train-drill.sh --smoke --out-dir .tmp/public-testnet-release-train-drill-smoke`
