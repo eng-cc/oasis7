@@ -34,9 +34,8 @@ fn regex_cache() -> &'static RegexCache {
 
 fn parsed_subscription_filters(
     filters_value: &JsonValue,
-) -> Result<Arc<SubscriptionFilters>, serde_json::Error> {
-    let parsed = SubscriptionFilters::deserialize(filters_value)?;
-    Ok(Arc::new(parsed))
+) -> Result<SubscriptionFilters, serde_json::Error> {
+    SubscriptionFilters::deserialize(filters_value)
 }
 
 fn cached_regex(pattern: &str) -> Result<Arc<regex::Regex>, regex::Error> {
