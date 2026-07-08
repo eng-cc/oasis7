@@ -116,6 +116,58 @@ fn recompute_excludes_observer_light_from_subnet_share_limits() {
 }
 
 #[test]
+fn recompute_uses_observer_light_discovery_sources_for_active_set_health() {
+    let provider = PeerId::random();
+    let observer = PeerId::random();
+    let discovered = HashMap::from([
+        (
+            provider,
+            sample_record_with_role(
+                provider,
+                PeerNodeRole::FullStorage,
+                vec![PeerDiscoverySource::Dht],
+            ),
+        ),
+        (
+            observer,
+            sample_record_with_role(
+                observer,
+                PeerNodeRole::ObserverLight,
+                vec![PeerDiscoverySource::Rendezvous],
+            ),
+        ),
+    ]);
+    let active = HashMap::from([
+        (
+            provider,
+            direct_path(provider, "/ip4/10.0.0.1/udp/4101/quic-v1"),
+        ),
+        (
+            observer,
+            direct_path(observer, "/ip4/10.0.0.89/udp/4104/quic-v1"),
+        ),
+    ]);
+    let policy = PeerManagerPolicy {
+        min_peer_discovery_sources: 1,
+        min_active_discovery_sources: 2,
+        ..PeerManagerPolicy::default()
+    };
+
+    let healths = recompute_peer_manager_healths(&discovered, &active, &policy);
+    for peer in [provider, observer] {
+        assert_eq!(healths[&peer].status, PeerManagerHealthStatus::Active);
+        assert!(
+            !healths[&peer].issues.iter().any(|issue| matches!(
+                issue,
+                PeerManagerHealthIssue::InsufficientActiveDiscoverySources { .. }
+            )),
+            "observer-light discovery sources should count toward active-set health: {:?}",
+            healths[&peer].issues
+        );
+    }
+}
+
+#[test]
 fn recompute_still_blocks_provider_subnet_concentration() {
     let peers = [
         PeerId::random(),

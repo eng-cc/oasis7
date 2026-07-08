@@ -151,6 +151,63 @@ fn active_set_candidate_observer_light_does_not_degrade_provider_share_limits() 
 }
 
 #[test]
+fn active_set_stats_keep_observer_light_discovery_sources() {
+    let provider_key = Keypair::generate_ed25519();
+    let observer_key = Keypair::generate_ed25519();
+    let provider_peer = PeerId::from(provider_key.public());
+    let observer_peer = PeerId::from(observer_key.public());
+    let provider_record =
+        signed_discovery_peer_record(&provider_key, vec![crate::dht::PeerDiscoverySource::Dht], 1);
+    let mut observer_record = signed_discovery_peer_record(
+        &observer_key,
+        vec![crate::dht::PeerDiscoverySource::Rendezvous],
+        2,
+    );
+    observer_record.record.node_role = PeerNodeRole::ObserverLight.as_str().to_string();
+    observer_record.record.capability_lanes =
+        PeerNodeRole::ObserverLight.default_capability_lanes();
+
+    let stats = ActivePeerSetStats::new(
+        &HashMap::from([
+            (provider_peer, provider_record),
+            (observer_peer, observer_record),
+        ]),
+        &HashMap::from([
+            (
+                provider_peer,
+                active_transport_path_from_endpoint(
+                    &HashMap::new(),
+                    provider_peer,
+                    &"/ip4/10.0.0.1/udp/4101/quic-v1"
+                        .parse()
+                        .expect("provider endpoint"),
+                ),
+            ),
+            (
+                observer_peer,
+                active_transport_path_from_endpoint(
+                    &HashMap::new(),
+                    observer_peer,
+                    &"/ip4/10.0.0.89/udp/4104/quic-v1"
+                        .parse()
+                        .expect("observer endpoint"),
+                ),
+            ),
+        ]),
+    );
+
+    assert_eq!(stats.active_peer_count, 1);
+    assert_eq!(
+        stats.active_discovery_sources,
+        BTreeSet::from(["dht", "rendezvous"])
+    );
+    assert_eq!(
+        stats.ipv4_subnet_counts,
+        HashMap::from([("10.0.0".to_string(), 1)])
+    );
+}
+
+#[test]
 fn active_set_candidate_count_limit_allows_third_and_blocks_fourth_subnet_peer() {
     let candidate = ActivePeerCandidate {
         discovery_source_labels: BTreeSet::from(["dht", "rendezvous"]),

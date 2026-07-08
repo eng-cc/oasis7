@@ -29,13 +29,16 @@ impl ActivePeerSetStats {
 
         for (peer_id, active_path) in active_transport_paths {
             let record = discovered_peer_records.get(peer_id);
+            if let Some(record) = record {
+                stats.note_record_discovery_sources(record);
+            }
             if !peer_record_counts_toward_share_limits(record) {
                 continue;
             }
             stats.active_peer_count = stats.active_peer_count.saturating_add(1);
             stats.note_active_path(active_path);
             if let Some(record) = record {
-                stats.note_record(record);
+                stats.note_record_share_limits(record);
             }
         }
 
@@ -47,19 +50,23 @@ impl ActivePeerSetStats {
         record: &SignedPeerRecord,
         active_path: &TransportPath,
     ) {
+        self.note_record_discovery_sources(record);
         if !peer_record_counts_toward_share_limits(Some(record)) {
             return;
         }
         self.active_peer_count = self.active_peer_count.saturating_add(1);
         self.note_active_path(active_path);
-        self.note_record(record);
+        self.note_record_share_limits(record);
     }
 
-    fn note_record(&mut self, record: &SignedPeerRecord) {
+    fn note_record_discovery_sources(&mut self, record: &SignedPeerRecord) {
         for source in &record.record.discovery_sources {
             self.active_discovery_sources
                 .insert(discovery_source_label(*source));
         }
+    }
+
+    fn note_record_share_limits(&mut self, record: &SignedPeerRecord) {
         if let Some(source_operator) =
             normalized_source_label(record.record.source_operator.as_deref())
         {
