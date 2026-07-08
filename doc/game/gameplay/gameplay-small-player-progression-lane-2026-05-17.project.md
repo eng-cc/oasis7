@@ -16,7 +16,7 @@
 | `runtime-small-player-lane-state-contract` | `runtime_engineer` | `completed` | 已由 `game-small-player-lane-runtime-truth` 下沉 small-player lane / anti-grind runtime truth、持久化 backfill、viewer runtime_live 派生与正向回归；QA mature-world verdict 仍未因此自动升级。 Trace: `.pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml` |
 | `viewer-economic-readability-first-capability-surface` | `viewer_engineer` | `completed` | 已在 headed Web/UI 正式玩家入口新增 `Capability Economics` surface，明确展示 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`，并用 UI/summary 定向测试回归首个持续能力与 small-player lane 的经济可读性。 |
 | `viewer-small-player-lane-surface-alignment` | `viewer_engineer` | `partial` | Headed Web/UI 已新增 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 和 `Share Replay` surface；pure API / runtime canonical lane truth 仍按后续任务收口。 |
-| `agent-small-player-specialization-contract` | `agent_engineer` | `planned` | 对齐 specialization / recovery / org-independence 行为合同，避免默认把玩家推向 major-power dependency。 |
+| `agent-small-player-specialization-contract` | `agent_engineer` | `completed` | 已补齐文档优先的 agent specialization / recovery / org-independence 行为合同：Agent 默认支持 `local_operator -> regional specialist -> limited-scope regional influence`，优先 `repair / rebuild / pivot`，并把 sponsor / alliance / major-power dependency 限定为 voluntary escalation 或 runtime 标记 forced dependency。Trace: GitHub #2161 / `task_ff27a79466864c0a963ad30ede44a2b3` |
 | `qa-control-feeling-and-anti-grind-matrix` | `qa_engineer` | `completed` | 已建立跨专题矩阵，用 `player leverage` / `world_activity_only` / `grind_only` / `silent wait` blocker 联审 lane 是否真的成立，并明确 `grind_only` / `forced dependency` 当前仍为 `watch`。 |
 | `qa-mature-world-small-player-fresh-sample` | `qa_engineer` | `todo` | 在 runtime lane truth、viewer lane surface 与 agent specialization contract 完成后，重新采集 mature-world 小玩家样本；只有 `grind_only` 与 `forced_major_power_dependency` 从 `watch` 收口后，才能把 small-player lane 判为 `pass`。 |
 
@@ -58,7 +58,8 @@
   - `rg -n "cost|input|output|value|repair|next step|first capability|regional" crates/oasis7_viewer crates/oasis7/src/bin/oasis7_pure_api_client.rs`
   - headed Web/UI 与 pure API 人工复核首个持续能力和 mature-world lane 的价值表达
 - `agent-small-player-specialization-contract` / agent contract
-  - `rg -n "specialization|recovery|override|reprioritize|claim|regional" doc/world-simulator/llm crates/oasis7/src/simulator`
+  - `rg -n "Agent Small-Player Specialization Contract|selected_specialization_id|specialization_reason|dependency_boundary|repair / rebuild / pivot|voluntary_escalation|grind_only_flag|requires_major_power_sponsorship" doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md`
+  - `rg -n "specialization|recovery|override|reprioritize|claim|regional|major_power|grind_only" doc/world-simulator/llm crates/oasis7/src/simulator crates/oasis7/src/viewer/runtime_live`
   - `git diff --check`
 - `qa-control-feeling-and-anti-grind-matrix` / QA matrix
   - `player leverage` / `world_activity_only` 抽样
@@ -83,8 +84,8 @@
   - [x] 玩家能直接读懂首个持续能力与 mature-world lane 的 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
   - [x] 工业成长不再只剩库存/产量上涨，而能回答“为什么现在值得继续”
 - `agent-small-player-specialization-contract`
-  - [ ] specialization / recovery / org-independence contract 已对齐
-  - [ ] agent 不再静默把小玩家推向依附 major power
+  - [x] specialization / recovery / org-independence contract 已对齐
+  - [x] agent 不再静默把小玩家推向依附 major power 的文档合同已固化；后续代码实现需把 `selected_specialization_id`、`specialization_reason`、`dependency_boundary` 等字段落到 prompt、trace 或 snapshot
 - `qa-control-feeling-and-anti-grind-matrix`
   - [x] `player leverage != world activity`、`grind_only` 与 `forced dependency` 的 blocker 签名已固化
   - [x] mature-world 小玩家矩阵已建立并给出 pass/watch/block 结论
@@ -105,12 +106,13 @@
 
 ## 状态
 
-- 更新日期: 2026-06-25
+- 更新日期: 2026-07-08
 - 当前状态: in_progress
 - 当前 owner: `producer_system_designer`
-- 下一任务: `agent-small-player-specialization-contract` / `qa-mature-world-small-player-fresh-sample`
+- 下一任务: `qa-mature-world-small-player-fresh-sample`
 - 说明:
-  - 本专题当前已完成合同冻结与 runtime truth follow-up，但不等于 viewer/pure API parity、agent specialization 或 QA mature-world verdict 已全部落地。
+  - 本专题当前已完成合同冻结、runtime truth follow-up 与 agent specialization 文档合同；但不等于 viewer/pure API parity、agent 代码字段实现或 QA mature-world verdict 已全部落地。
+  - 2026-07-08 follow-up: `agent-small-player-specialization-contract` 已定义为文档优先的 Agent 行为合同，不改变 claim/economy/stage/release 口径；合同要求 Agent 消费 `player_gameplay` 小玩家字段，优先 `repair / rebuild / pivot`，并把 major-power sponsorship 限定为 voluntary escalation 或 runtime forced dependency。
   - 2026-06-25 follow-up: `software_safe` viewer 已把 P1/P2 制作人落点呈现为 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，并由 `software-safe-feedback-contract.test.mjs` / `main.test.jsx` 锁定；该变更只消费或派生既有 `player_gameplay` 字段，不宣称 runtime canonical lane truth、agent 行为或 QA mature-world verdict 已完成。
   - 本专题不改写当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 当作 stage / preview claim envelope 升级依据。
   - 高风险设计修补后，viewer / QA follow-up 优先新增的是经济可读性与 anti-grind/blocker matrix，而不是继续扩大高风险对抗/治理展示面。
