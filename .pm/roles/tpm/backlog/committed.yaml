@@ -1,17 +1,4 @@
 version: 1
 role: tpm
 status: committed
-tasks:
-  - task_uid: task_e4842194c83046ec90b12384e0f567fc
-    title: "Polish viewer visual microinteraction"
-    module: viewer
-    priority: P2
-    source_signal: ""
-    related_prd: []
-    acceptance:
-      - "Game visual interaction designer identifies one small player-visible viewer visual or interaction polish opportunity."
-      - "Implement the smallest scoped optimization with evidence and verification."
-    handoff_to:
-      - game_visual_interaction_designer
-    status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/2158
+tasks: []

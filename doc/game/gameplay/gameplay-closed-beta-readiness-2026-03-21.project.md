@@ -38,7 +38,7 @@
   - `TASK-GAMEPLAY-CB-003` 已交付 `doc/playability_test_result/card_2026_03_22_15_56_13.md` 与 `output/playwright/playability/closed-beta-20260322/post-onboarding-20260322-155613/`：同候选 headed Web/UI rerun 已 `pass`，且 `AgentNotFound` 历史噪音不再占据右侧 chatter 焦点。
   - `TASK-GAMEPLAY-CB-004` 已补齐同候选 pure API / no-UI rerun：`output/playwright/playability/pure-api-required-20260322-183650/`、`output/playwright/playability/pure-api-full-20260322-183750/` 与 `output/playwright/playability/post-onboarding-headless-20260322-183832/` 均已 `pass`，统一 gate 的剩余 blocker 已收敛到 trend baseline。
   - `TASK-GAMEPLAY-CB-004` 已进一步刷新最近 7 天 trend baseline 到 `first-pass=100% / escape=0% / fix-time=0d`，统一 QA gate 现已转为 `pass`，并可交 `producer_system_designer` 做阶段评审。
-  - `TASK-GAMEPLAY-CB-005` 已交付 `doc/readme/governance/readme-closed-beta-candidate-runbook-2026-03-22.{prd,design,project}.md`、`doc/playability_test_result/templates/closed-beta-candidate-{feedback-log-guide,incident-templates}-2026-03-22.md`，并把 `technical preview` 口径边界回写到 `readme` 模块正式追踪。
+  - `TASK-GAMEPLAY-CB-005` 曾交付 closed-beta-candidate runbook 与 playability 模板；这些旧操作面已退役删除，当前 claim-control 与信号回流从 `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 与 `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` 进入。
 - 阻断条件:
   - 若统一 release gate 尚未建立，则不得使用 `closed beta` 口径。
   - 若 trend baseline 未达标，则不得把当前阶段从 `internal_playable_alpha_late` 提升到 `closed_beta_candidate`。

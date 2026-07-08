@@ -443,12 +443,12 @@ Deterministic script contract:
 - `scripts/prepare-task-pr.sh --create` must refuse to create the PR unless the GitHub issue evidence comments contain a passed pre-PR local role review packet for the source worktree. The packet marker is:
   - `Pre-PR Local Role Review: passed`
   - `Task UID: <task_uid>`
-  - `Source Worktree: <absolute path>`
+  - `Source Worktree: <task worktree name or repo-relative worktree hint; avoid local absolute paths in GitHub issue evidence>`
   - `Source Branch: <branch>`
   - `Source Head: <reviewed git sha; must be current source head or an ancestor whose later changes are only the task review evidence files or generated PM task registry/backlog views>`
   - `Comparison Ref: <base ref>`
   - `Reviewed Changed Paths: <semicolon-separated paths or diff summary ref>`
-  - `Review Package: <path to review package or n/a with reason>`
+  - `Review Package: <repo-relative/scratch-relative path to review package or n/a with reason>`
   - `Role Selection Basis: <changed paths + task slice history + explicit includes/skips>`
   - `Review Roles: <comma-separated roles>`
   - `Review Evidence: <per-role section or handoff refs>`
@@ -461,8 +461,8 @@ Deterministic script contract:
   - `Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>`
   - `LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>`
   - `Residual Risk: <text>`
-  - `Slice Ledger: <path to slice ledger or n/a with reason>`
-- Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; GitHub issue evidence comments record only the path and summary. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
+  - `Slice Ledger: <repo-relative/scratch-relative path to slice ledger or n/a with reason>`
+- Pre-PR local role review should use file-based review packages for non-trivial diffs. `./scripts/pm/review-package.sh --base <ref> --head <ref> --task-uid <TASK-UID>` writes the commit list, stat summary, and contextual diff under ignored `.pm/scratch/<TASK-UID>/review-packages/`; GitHub issue evidence comments record only repo-relative/scratch-relative paths and summary, not machine-local absolute paths. Use `n/a` only when the diff is empty or the review target is not a git diff, and record the reason.
 - For small workflow/docs-only diffs, TPM may use `scripts/pm/record-pre-pr-review.sh` or an equivalent packet generator to avoid hand-copy errors, but the generated packet must still record role-selection basis, explicit `n/a` exemption reasons, observed verification, and residual risk.
 - Pre-PR local role review verdicts must distinguish scope/spec compliance from role quality/risk for each reviewer role. The role remains the professional owner; this dual-verdict structure is a packet format, not permission to replace involved-role review with a generic reviewer.
 - Long multi-slice tasks should maintain a lightweight slice ledger with `./scripts/pm/slice-ledger.sh --task-uid <TASK-UID> ...`. The ledger is an ignored JSONL resume map for slice status, artifact paths, verdicts, residual risk, and next action. GitHub task issue evidence comments remain canonical task truth and must link to the ledger rather than relying on it as the only sink. When a review dispatch needs more roles than the current subagent runtime can run concurrently, TPM must batch the roles, record batch order and priority, record timeout/no-payload policy before dispatch, and distinguish partial results from all-role completion.

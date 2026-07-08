@@ -34,7 +34,7 @@
   - SC-2: 对外入口链接有效性检查持续通过。
 - SC-3: 术语与架构描述变更在 1 个工作日内同步到 README 体系。
 - SC-4: readme 相关变更全部具备 PRD-ID 与 GitHub task issue evidence 追踪。
-- SC-5: Closed beta candidate 的 liveops runbook与模板能直接维持 `limited playable technical preview` 口径，并服务 `prg-game-009` 的 evidence gate。
+- SC-5: Limited preview invite pack 与 current signal / incident rows 能直接维持 `limited playable technical preview` 口径，并服务 `PRD-GAME-009` 的 evidence gate。
 - SC-6: limited preview 贡献奖励流程必须具备可直接复用的 round ledger 模板，能够承接评分、审批、发放记录与归档。
 - SC-7: 小红书博主 / 微信公众号激励流程必须把宣传方视作生态参与者与受益者，并以内容质量、事实准确性、讨论转化和生态回流作为绿洲币激励依据，固定映射 `300 / 800 / 1500 OC` 档位，而不是按播放量粗放买量。
 - SC-8: 根 README、世界规则入口与站点首页的公开定位在 1 个任务内完成“系统/引擎 -> 游戏”同步，不再出现对外首屏主语分叉。
@@ -66,7 +66,7 @@
 - PRD-README-014: As a 仓库访客, I want the repo root and public entry docs to use the canonical `oasis7` brand while still explaining legacy internal identifiers, so that I do not confuse project branding with crate/bin compatibility names.
 - PRD-README-015: As a `liveops_community`, I want a Moltbook liveops runbook for post-publish checks, replies, and signal triage, so that day-2 channel operations do not fall back to unsafe improvisation.
 - PRD-README-016: As a `liveops_community`, I want a first-week Moltbook operating template layered onto the runbook, so that the first 7 days of channel activity have a concrete daily rhythm instead of generic SOP only.
-- PRD-README-017: As a `liveops_community`, I want a closed beta candidate runbook plus feedback/incident templates, so that recruitment, feedback, and incident signals stay within the technical preview envelope while still feeding the unified release gate.
+- PRD-README-017: As a `liveops_community`, I want a limited preview invite pack plus signal/incident fields, so that recruitment, feedback, and incident signals stay within the technical preview envelope while still feeding the unified release gate.
 - PRD-README-018: As a `liveops_community`, I want real Moltbook execution lessons written back into the runbook, so that future posts can reuse what triggered discussion and avoid what triggered spam.
 - PRD-README-019: As a `liveops_community`, I want a controlled limited preview execution pack, so that the first invite-only builder round can run with fixed callout copy, monitoring slots, signal buckets, and producer-facing summary fields.
 - PRD-README-020: As a `liveops_community`, I want an early contributor reward pack for limited preview, so that reward eligibility, evidence fields, score bands, and forbidden phrases stay contribution-based and do not depend on invite-only or play-to-earn framing.
@@ -151,7 +151,7 @@
   - AC-7: `doc/readme/governance/**` 中仍作为当前公开口径使用的项目名必须统一写为 `oasis7`；旧 `oasis7` 仅允许保留在历史证据、兼容说明或外部原文引用中。
 - AC-8: 若第三方渠道进入持续运营阶段，必须补齐独立 runbook，明确巡检入口、回复边界、升级路径与 GitHub task issue evidence 回写方式。
 - AC-9: 若渠道进入首周冷启动执行阶段，runbook 必须补齐 day1-day7 模板，明确每天的主动作、检查窗口、回复目标与记录重点。
-- AC-10: 已新建 `closed beta candidate` runbook与 incident template，供招募/反馈/事故信号在 `limited playable technical preview` claim envelope 内沟通并可直接回流 unified release gate。
+- AC-10: 已将旧 `closed beta candidate` runbook 与 incident template 收敛到 `readme-limited-preview-invite-pack-2026-03-22.md`，供招募/反馈/事故信号在 `limited playable technical preview` claim envelope 内沟通并可直接回流 unified release gate。
   - AC-11: Moltbook runbook 至少记录一轮真实执行后的“有效讨论钩子”和“高风险 spam 触发模式”，并明确下一轮如何调整。
 - AC-12: 若团队进入 `limited playable technical preview` 的 invite-only 执行阶段，必须补齐受控执行包，明确 callout 文案、巡检窗口、信号分桶、claim drift 纠偏与 producer 摘要字段。
 - AC-13: 若团队决定在 limited preview 阶段使用 early contributor reward，必须补齐独立操作包，明确 `Reward Account` 作为执行字段、评分模板、证据字段、审阅链、禁语与“无固定 token/point 汇率”边界；若贡献来源是 GitHub PR，则必须提供可选 intake block 收集 `Reward Account`。
@@ -259,7 +259,7 @@
 | PRD-README-014 | TASK-README-018/019/020 | `test_tier_required` | 根 README、公开入口文档与 `doc/readme/governance/**` 的历史标题/当前公开口径统一为 `oasis7`，并显式区分内部兼容命名 | 仓库首页认知、公开品牌一致性 |
 | PRD-README-015 | TASK-README-024 | `test_tier_required` | Moltbook runbook 明确发帖前、发帖后 24h、常规日与周复盘动作，并包含回复边界、升级路径与 GitHub task issue evidence 回写要求 | 第三方渠道持续运营一致性 |
 | PRD-README-016 | TASK-README-025 | `test_tier_required` | Moltbook runbook 追加 day1-day7 首周模板，覆盖主帖节奏、检查窗口、回复目标与日志重点 | 第三方渠道冷启动执行性 |
-| PRD-README-017 | TASK-README-026 | `test_tier_required` | Closed beta candidate runbook + incident templates cover recruitment, feedback, and incident guardrails | Closed beta candidate recruiting/feedback/technical preview messaging |
+| PRD-README-017 | TASK-README-026 | `test_tier_required` | Limited preview invite pack current signal / incident rows cover recruitment, feedback, claim drift, and incident guardrails | Limited preview recruiting/feedback/technical preview messaging |
 | PRD-README-018 | TASK-README-027 | `test_tier_required` | Moltbook runbook 回写真实运营经验，明确哪些内容设计更易引发讨论、哪些自评动作更易触发 spam | 第三方渠道运营复用性与风控 |
 | PRD-README-019 | TASK-README-029 | `test_tier_required` | invite-only limited preview execution pack 明确 callout copy、check slots、signal buckets、summary fields | 受控预览执行性与回流一致性 |
 | PRD-README-020 | TASK-README-030/067/068/069/070/073 | `test_tier_required` | early contributor reward pack 明确 `Reward Account` 字段边界、评分模板、证据字段、奖励建议分级、普通 merged PR `<=150 OC` ceiling、PR intake import 路径、merged PR round scan 与禁语清单 | limited preview 贡献奖励执行性与对外口径安全性 |
@@ -310,7 +310,7 @@
 | DEC-RM-013 | 对外品牌统一为 `oasis7`，内部 crate/bin 暂保留兼容命名 | 同一轮同时重命名全部 crate/bin/script/env 标识 | 先统一用户可见品牌与下载入口，避免把品牌收口与大规模兼容迁移耦合。 |
 | DEC-RM-014 | 将 Moltbook 日常运营动作沉淀为独立 runbook，而不是继续扩写角色卡 | 把巡检、回复、升级细节继续堆进角色卡或推广方案 | 角色卡应保持稳定职责边界；执行细节更适合 runbook 持续演进。 |
 | DEC-RM-015 | 在已有 Moltbook runbook 内补首周运营模板，而不是再拆一份平行文档 | 单独再建一份“week-one playbook” | 首周模板属于 runbook 的执行层细化，放在同一文档更利于维护与回查。 |
-| DEC-RM-016 | 新增 `PRD-README-017` 作为 closed beta candidate runbook专题 | 继续把 closed beta 运营信号写回 devlog / single thread | 独立 runbook 强制维持 `technical preview` 口径，避免提前升级 release claim。 |
+| DEC-RM-016 | 将 `PRD-README-017` 收敛为 limited preview invite pack | 继续保留旧 closed-beta 操作面作为当前入口 | 当前公开状态不是 closed beta；invite pack 继续强制维持 `technical preview` 口径，避免提前升级 release claim。 |
 | DEC-RM-017 | 将 Moltbook 实战复盘写回现有 runbook | 只在 devlog 留一次性记录 | runbook 才是后续运营会重复翻看的入口。 |
 | DEC-RM-018 | 为 invite-only limited preview 新增独立执行包 | 继续只靠 handoff 和零散 devlog 驱动首轮外放 | 首轮 limited preview 需要固定文案、巡检窗口、分桶与摘要字段，才能避免执行漂移。 |
 | DEC-RM-019 | 早期奖励模板只输出贡献评分与奖励建议档位，不公开固定 token 数额或 point 汇率 | 直接把 token 发放表做成外部宣传文案 | 当前阶段仍是 `limited playable technical preview`，需要避免过度金融化与过度承诺。 |
