@@ -31,6 +31,8 @@ pub(super) fn build_oasis7_viewer_live_command(
     }
     if options.auto_play {
         command.arg("--auto-play");
+    } else {
+        command.arg("--no-auto-play");
     }
     if options.allow_debug_scenario {
         command.arg("--allow-debug-scenario");

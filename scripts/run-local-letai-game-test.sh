@@ -22,7 +22,7 @@ CHAT_PROBE_BACKEND="${OASIS7_LETAI_CHAT_PROBE_BACKEND:-rust-bridge}"
 SKIP_BRIDGE_SMOKE="0"
 ENSURE_TOKEN_CONFIG="1"
 CHAT_ECHO="0"
-AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-0}"
+AUTO_PLAY="${OASIS7_LOCAL_LETAI_AUTO_PLAY:-1}"
 DEPLOYMENT_MODE="${OASIS7_LOCAL_LETAI_DEPLOYMENT_MODE:-trusted_local_only}"
 BRIDGE_SMOKE_ATTEMPTS="2"
 BRIDGE_AUTO_TOPUP_USD="${OASIS7_LETAI_AUTO_TOPUP_USD:-0.1}"
@@ -66,9 +66,9 @@ For a local environment attached to formal public_testnet world state, use:
   ./scripts/run-local-public-testnet-letai-test-environment.sh
 
 Common options:
-  --local-world-playtest    Daily manual local-only world preset. Implies
+  --local-world-playtest    Daily local-only world preset. Implies
                               playtest startup, provider smoke skip, reuse build,
-                              detach, manual Play, ports 48420/48421/48422,
+                              detach, auto-play, ports 48420/48421/48422,
                               --json-ready, and local standalone chain mode.
   --config <path>           LetAI config file (default: $OASIS7_LETAI_CONFIG_PATH,
                               /Users/scc/Documents/keys/letai.txt, then token-local fallback)
@@ -113,8 +113,8 @@ Advanced/debug/compatibility options:
   --no-ensure-token-config    Use --config directly; do not generate token config from platform key
   --chat-echo                 Enable local receipt-only chat echo for low-level debugging
   --no-chat-echo              Keep provider-backed agent chat disabled (default)
-  --auto-play                 Start gameplay/world progression on viewer connection
-  --no-auto-play              Require manual Play before gameplay/world progression (default)
+  --auto-play                 Start gameplay/world progression on viewer connection (default)
+  --no-auto-play              Require manual Play before gameplay/world progression
   --deployment-mode <mode>    Launcher deployment mode (default: trusted_local_only)
   --hosted-public-join        Legacy compatibility only; hosted-public-join/testnet attach uses a different runbook
   --chat-probe-backend <name> rust-bridge|legacy-cli|none (default: rust-bridge)
@@ -585,7 +585,6 @@ if [[ "$LOCAL_WORLD_PLAYTEST_PRESET" == "1" ]]; then
   if [[ "$DRY_RUN_LAUNCH" == "0" ]]; then
     DETACH="1"
   fi
-  AUTO_PLAY="0"
   CHAT_ECHO="0"
   append_launcher_arg_default --viewer-port 48420
   append_launcher_arg_default --web-bind 127.0.0.1:48421
@@ -940,6 +939,8 @@ if [[ "$DEPLOYMENT_MODE" == "trusted_local_only" ]]; then
 fi
 if [[ "$AUTO_PLAY" == "1" ]]; then
   LAUNCHER_MODE_ARGS+=(--auto-play)
+else
+  LAUNCHER_MODE_ARGS+=(--no-auto-play)
 fi
 LAUNCHER_CMD=(
   "$ROOT_DIR/scripts/run-launcher-stack.sh"

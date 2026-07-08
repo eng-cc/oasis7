@@ -46,7 +46,7 @@ impl Default for CliOptions {
             chain_status_bind: None,
             chain_submit_bind: None,
             chain_link_policy: ChainLinkPolicy::Enforcing,
-            auto_play: false,
+            auto_play: true,
             allow_debug_scenario: false,
             agent_chat_echo: oasis7::viewer::runtime_agent_chat_echo_enabled_from_env(),
             generated_world_dir: None,
@@ -197,6 +197,9 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
             }
             "--auto-play" => {
                 options.auto_play = true;
+            }
+            "--no-auto-play" => {
+                options.auto_play = false;
             }
             "--allow-debug-scenario" => {
                 options.allow_debug_scenario = true;
@@ -381,7 +384,8 @@ Options:\n\
   --chain-submit-bind <addr> broadcast chain-linked gameplay actions to a submit-capable endpoint (defaults to chain-status-bind)\n\
   --chain-link-policy <mode> chain sync policy: enforcing|shadow (default: enforcing)\n\
   --deployment-mode <mode>  trusted_local_only|hosted_public_join (default: {DEFAULT_DEPLOYMENT_MODE})\n\
-  --auto-play               advance gameplay/world on each connected session without pressing Play\n\
+  --auto-play               advance gameplay/world on each connected session without pressing Play (default)\n\
+  --no-auto-play            keep gameplay/world paused until explicit Play actions\n\
   --allow-debug-scenario    allow seeded debug scenarios such as llm_bootstrap\n\
   --agent-chat-echo         accept provider-backed local QA chat with an echo event\n\
   --generated-world-dir <dir> initialize viewer from generated-world/generated-scenario-world and provenance\n\
@@ -417,7 +421,7 @@ mod tests {
         assert_eq!(options.chain_status_bind, None);
         assert_eq!(options.chain_submit_bind, None);
         assert_eq!(options.chain_link_policy, ChainLinkPolicy::Enforcing);
-        assert!(!options.auto_play);
+        assert!(options.auto_play);
         assert!(!options.allow_debug_scenario);
         assert_eq!(options.generated_world_dir, None);
     }
@@ -468,6 +472,12 @@ mod tests {
     fn parse_options_supports_no_web_bind() {
         let options = parse_options(["--no-web-bind"].into_iter()).expect("no web bind");
         assert_eq!(options.web_bind_addr, None);
+    }
+
+    #[test]
+    fn parse_options_supports_no_auto_play() {
+        let options = parse_options(["--no-auto-play"].into_iter()).expect("no auto play");
+        assert!(!options.auto_play);
     }
 
     #[test]

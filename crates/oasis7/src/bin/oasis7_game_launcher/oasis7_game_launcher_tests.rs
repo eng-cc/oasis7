@@ -73,6 +73,7 @@ fn parse_options_defaults() {
     assert_eq!(options.live_bind, DEFAULT_LIVE_BIND);
     assert_eq!(options.deployment_mode, DEFAULT_DEPLOYMENT_MODE);
     assert!(options.with_llm);
+    assert!(options.auto_play);
     assert!(!options.allow_debug_scenario);
     assert_eq!(options.generated_world_dir, "");
     assert_eq!(
@@ -145,6 +146,12 @@ fn parse_options_defaults() {
     assert_eq!(options.chain_world_id, None);
     assert!(!options.chain_local_standalone_test);
     assert!(!options.chain_node_auto_attest_all_validators);
+}
+
+#[test]
+fn parse_options_supports_no_auto_play() {
+    let options = parse_options(["--no-auto-play"].into_iter()).expect("parse should succeed");
+    assert!(!options.auto_play);
 }
 
 #[test]
@@ -616,15 +623,16 @@ fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
 }
 
 #[test]
-fn build_viewer_live_command_wires_auto_play_flag() {
-    let mut options = CliOptions::default();
-    options.auto_play = true;
+fn build_viewer_live_command_wires_auto_play_flags() {
+    let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-    assert!(args.iter().any(|arg| arg == "--auto-play"));
+    assert!(command.get_args().any(|arg| arg == "--auto-play"));
+
+    let mut options = CliOptions::default();
+    options.auto_play = false;
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    assert!(command.get_args().any(|arg| arg == "--no-auto-play"));
+    assert!(!command.get_args().any(|arg| arg == "--auto-play"));
 }
 
 #[test]

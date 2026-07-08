@@ -48,6 +48,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
             "--auto-play" => {
                 options.auto_play = true;
             }
+            "--no-auto-play" => {
+                options.auto_play = false;
+            }
             "--allow-debug-scenario" => {
                 options.allow_debug_scenario = true;
             }
@@ -550,7 +553,8 @@ Options:\n\
   --chain-node-no-auto-attest-all\n\
                                disable local auto-attestation (default)\n\
   --with-llm                   enable llm mode (default; required for gameplay)\n\
-  --auto-play                  start oasis7_viewer_live gameplay/world progression on connect\n\
+  --auto-play                  start oasis7_viewer_live gameplay/world progression on connect (default)\n\
+  --no-auto-play               keep oasis7_viewer_live gameplay/world paused until explicit Play actions\n\
   --allow-debug-scenario       allow seeded debug scenarios such as llm_bootstrap\n\
   --agent-decision-source <src>\n\
                                agent decision source: builtin_llm|provider_backed\n\
