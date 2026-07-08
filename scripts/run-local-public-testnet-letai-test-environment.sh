@@ -823,6 +823,7 @@ start_viewer_live() {
       --chain-status-bind "$chain_status_bind" \
       --chain-submit-bind "$chain_submit_bind_value" \
       --chain-link-policy enforcing \
+      --no-auto-play \
       --llm \
       "${generated_world_args[@]}" \
     >"$OUTPUT_DIR/viewer-live.pid"

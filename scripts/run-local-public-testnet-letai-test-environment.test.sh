@@ -208,6 +208,7 @@ assert_contains "$world_resource_fail_out" "world_resource_failed_gates=['world_
 assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "stop_stale_viewer_live_services"
 assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "oasis7.local-public-testnet.viewer-live-clean"
 assert_contains scripts/run-local-public-testnet-letai-test-environment.sh '[[ "$REUSE_EXISTING" == "1" ]]'
+assert_contains scripts/run-local-public-testnet-letai-test-environment.sh "--no-auto-play"
 python3 - <<'PY'
 from pathlib import Path
 source = Path("scripts/run-local-public-testnet-letai-test-environment.sh").read_text()
