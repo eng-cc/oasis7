@@ -2,17 +2,16 @@ version: 1
 role: tpm
 status: committed
 tasks:
-  - task_uid: task_09b54d3030324d97bb904de198063225
-    title: "skill defaults role map"
-    module: engineering
+  - task_uid: task_e4842194c83046ec90b12384e0f567fc
+    title: "Polish viewer visual microinteraction"
+    module: viewer
     priority: P2
     source_signal: ""
     related_prd: []
     acceptance:
-      - "Summarize default-loaded workflow skills and whether all skills have role ownership."
-      - "Split default-loadable workflow skill entrypoints from non-default professional skill library material."
-      - "Move professional method skills under root skills/ and update role-card references."
-      - "Update skill lint/eval governance so both skill surfaces are checked."
-    handoff_to: []
+      - "Game visual interaction designer identifies one small player-visible viewer visual or interaction polish opportunity."
+      - "Implement the smallest scoped optimization with evidence and verification."
+    handoff_to:
+      - game_visual_interaction_designer
     status: committed
-    task_path: https://github.com/eng-cc/oasis7/issues/2138
+    task_path: https://github.com/eng-cc/oasis7/issues/2158
