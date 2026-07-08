@@ -1128,6 +1128,65 @@ function createViewerAuthSurfaceModule({
     resolveHostedAccessHint: resolveHostedAccessHint2
   };
 }
+function actionField(action, snakeKey, camelKey) {
+  return action?.[snakeKey] ?? action?.[camelKey] ?? null;
+}
+function executeKindForAction(actionId, protocolAction) {
+  if (protocolAction === "request_snapshot" || protocolAction === "world.request_snapshot") return "request_snapshot";
+  if (protocolAction === "live_control.step") return "step";
+  if (protocolAction === "live_control.play") return "play";
+  if (protocolAction === "agent_chat") return "agent_chat";
+  if (protocolAction !== "gameplay_action.submit") return "unsupported";
+  if (actionId === "claim_first_agent") return "claim_first_agent";
+  if (actionId === "claim_starter_oc") return "claim_starter_oc";
+  return "gameplay_action";
+}
+function normalizeViewerAvailableActionFields(action) {
+  const actionId = actionField(action, "action_id", "actionId");
+  const protocolAction = actionField(action, "protocol_action", "protocolAction");
+  const targetAgentId = actionField(action, "target_agent_id", "targetAgentId");
+  const disabledReason = actionField(action, "disabled_reason", "disabledReason");
+  return {
+    actionId,
+    label: action?.label || null,
+    protocolAction,
+    targetAgentId,
+    disabledReason
+  };
+}
+function normalizeViewerAvailableActions({
+  gameplay,
+  locale,
+  localeText: localeText2,
+  agentExists,
+  emptyEntityBlocker,
+  firstAgentClaimSyncPending
+}) {
+  const rawActions = Array.isArray(gameplay?.available_actions) ? gameplay.available_actions : Array.isArray(gameplay?.availableActions) ? gameplay.availableActions : [];
+  return rawActions.map((action) => {
+    const {
+      actionId,
+      label,
+      protocolAction,
+      targetAgentId,
+      disabledReason
+    } = normalizeViewerAvailableActionFields(action);
+    const starterOcMissingAgentReason = actionId === "claim_starter_oc" && !agentExists(targetAgentId) ? localeText2(
+      locale,
+      "第一个 Agent 认领已提交，正在等待 committed 快照创建 Agent；请先推进或刷新一次。",
+      "First Agent claim submitted; waiting for the committed snapshot to create the Agent. Advance or refresh once first."
+    ) : null;
+    const shouldKeepRuntimeDisabledReason = protocolAction === "request_snapshot" || protocolAction === "world.request_snapshot" || firstAgentClaimSyncPending && protocolAction === "live_control.step" || firstAgentClaimSyncPending && protocolAction === "live_control.play" || actionId === "claim_first_agent" || actionId === "claim_starter_oc";
+    return {
+      actionId,
+      label,
+      protocolAction,
+      targetAgentId,
+      disabledReason: shouldKeepRuntimeDisabledReason ? disabledReason || starterOcMissingAgentReason || null : disabledReason || emptyEntityBlocker?.disabledReason || null,
+      executeKind: executeKindForAction(actionId, protocolAction)
+    };
+  });
+}
 function createViewerFeedbackModule({
   clone: clone2,
   feedbackBadgeClass: feedbackBadgeClass2,
@@ -1587,21 +1646,14 @@ function createViewerFeedbackModule({
     const resumeNextStep = gameplay.resume_next_step || null;
     const agentExists = (agentId) => Boolean(String(agentId || "").trim() && modelAgents[String(agentId || "").trim()]);
     const firstAgentClaimSyncPending = emptyEntityBlocker && state2.lastGameplayActionFeedback?.action === "claim_first_agent" && state2.lastGameplayActionFeedback?.accepted !== false && state2.lastGameplayActionFeedback?.stage !== "error";
-    let availableActions = Array.isArray(gameplay.available_actions) ? gameplay.available_actions.map((action) => {
-      const starterOcMissingAgentReason = action?.action_id === "claim_starter_oc" && !agentExists(action?.target_agent_id) ? localeText2(
-        locale,
-        "第一个 Agent 认领已提交，正在等待 committed 快照创建 Agent；请先推进或刷新一次。",
-        "First Agent claim submitted; waiting for the committed snapshot to create the Agent. Advance or refresh once first."
-      ) : null;
-      return {
-        actionId: action?.action_id || null,
-        label: action?.label || null,
-        protocolAction: action?.protocol_action || null,
-        targetAgentId: action?.target_agent_id || null,
-        disabledReason: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.step" || firstAgentClaimSyncPending && action?.protocol_action === "live_control.play" || action?.action_id === "claim_first_agent" || action?.action_id === "claim_starter_oc" ? action?.disabled_reason || starterOcMissingAgentReason || null : action?.disabled_reason || emptyEntityBlocker?.disabledReason || null,
-        executeKind: action?.protocol_action === "request_snapshot" || action?.protocol_action === "world.request_snapshot" ? "request_snapshot" : action?.protocol_action === "live_control.step" ? "step" : action?.protocol_action === "live_control.play" ? "play" : action?.protocol_action === "gameplay_action.submit" ? action?.action_id === "claim_first_agent" ? "claim_first_agent" : action?.action_id === "claim_starter_oc" ? "claim_starter_oc" : "gameplay_action" : action?.protocol_action === "agent_chat" ? "agent_chat" : "unsupported"
-      };
-    }) : [];
+    let availableActions = normalizeViewerAvailableActions({
+      gameplay,
+      locale,
+      localeText: localeText2,
+      agentExists,
+      emptyEntityBlocker,
+      firstAgentClaimSyncPending
+    });
     const runtimeRecentFeedback = gameplay.recent_feedback && typeof gameplay.recent_feedback === "object" ? {
       source: "runtime",
       action: gameplay.recent_feedback.action || null,
@@ -4115,11 +4167,7 @@ function scheduleInitialSnapshotRetry() {
   }, retryDelay);
 }
 function gameplayActionByProtocolAction(protocolAction) {
-  const actions = state.snapshot?.player_gameplay?.available_actions;
-  if (!Array.isArray(actions)) {
-    return null;
-  }
-  return actions.find((action) => action?.protocol_action === protocolAction) || null;
+  return normalizedGameplayActions().find((action) => gameplayProtocolAction(action) === protocolAction) || null;
 }
 function viewerControlGate(normalizedAction) {
   const protocolAction = state.controlProfile === "live" ? normalizedAction === "play" ? "live_control.play" : normalizedAction === "step" ? "live_control.step" : null : null;
@@ -4127,7 +4175,7 @@ function viewerControlGate(normalizedAction) {
     return null;
   }
   const gameplayAction = gameplayActionByProtocolAction(protocolAction);
-  const disabledReason = String(gameplayAction?.disabled_reason || "").trim();
+  const disabledReason = String(gameplayAction?.disabled_reason || gameplayAction?.disabledReason || "").trim();
   if (!disabledReason) {
     return null;
   }
