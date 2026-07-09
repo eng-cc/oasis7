@@ -31,15 +31,17 @@ WASM proposes, runtime validates / applies / signs.
 1. 玩家看到区域阻塞，例如 `supply_missing` 导致 repair quote 高成本或高风险。
 2. 系统建议部署 `micro_depot`。
 3. 玩家查看 canonical quote：部署成本、upkeep、覆盖范围、预期收益、仍然存在的 blocker。
-4. 玩家确认安装，消耗 starter funding / claim budget，并占用局部设施压力。
-5. Runtime 调用 `micro_depot.wasm` 评估后续 repair / logistics quote。
-6. Runtime 校验 proposal，生成 before / after preview。
-7. 玩家执行行动，receipt 说明 depot 对本次行动的贡献。
+4. 玩家查看最小 ROI 条：预计覆盖的后续 blocker 数、break-even uses、upkeep horizon、低使用率警告和推荐理由。
+5. 玩家确认安装，消耗 starter funding / claim budget，并占用局部设施压力。
+6. Runtime 调用 `micro_depot.wasm` 评估后续 repair / logistics quote。
+7. Runtime 校验 proposal，生成 before / after preview。
+8. 玩家执行行动，receipt 说明 depot 对本次行动的贡献。
 
 玩家应该能回答：
 
 - 我为什么需要这个 depot？
 - 它花了什么？
+- 大概要用几次、覆盖多少后续 blocker，才抵过 install + upkeep？
 - 它改变了哪一次 repair / logistics 行动？
 - 还有什么 blocker 没解决？
 
@@ -78,7 +80,7 @@ WASM proposes, runtime validates / applies / signs.
 regional pressure card
   -> repair/logistics blocker explanation
   -> suggested intervention: deploy micro_depot
-  -> install quote + upkeep + service radius preview
+  -> install quote + upkeep + service radius preview + coarse ROI strip
   -> player confirms
   -> MicroDepotInstalled receipt
   -> subsequent repair/logistics service preview and receipt
@@ -89,6 +91,7 @@ regional pressure card
 - `micro_depot` 是区域专业化阶段的第一个可编程基础设施，不是新手建造物。
 - 没有区域 blocker、没有稳定 claim、没有可读 receipt 时，不应出现部署入口。
 - 玩家只看到“部署建议 / quote / receipt / upkeep 状态”，不直接接触 WASM 内部规则。
+- 如果预计使用次数低于 break-even uses，仍可允许玩家安装，但必须给出低使用率警告和推荐/不推荐理由，避免设施变成默认必点税或无脑 buff。
 - 如果用于 onboarding，只能作为后续目标预告，不能作为首轮必做任务。
 
 ## 4. Facility Taxonomy

@@ -4,6 +4,20 @@
 - [ ] simulator-kernel-persistence-state-hardening (PRD-WORLD_SIMULATOR-002/003) [test_tier_required]: 收口 `WorldKernel` snapshot/replay 的可恢复状态边界，补齐 `intel_ttl_ticks` 持久化与 legacy fallback 回归，并把进程内 cache/hook 重置语义显式固定在 persistence contract 内，避免恢复后行为配置静默漂移。 Trace: .pm/tasks/task_6780f8bf31a042dea2c929673ef8db40.yaml
 - [ ] software-safe-playability-unblock (PRD-WORLD_SIMULATOR-039) [test_tier_required]: 让 `software_safe` formal summary 将 canonical `available_actions` 重新暴露为可执行入口，并在 gameplay summary 与空实体快照并存时显式标记 `runtime_snapshot_empty_entities` blocker。 Trace: .pm/tasks/task_1c5ac527bed54e969b737137fc998ab8.yaml
   - 当前命名注记：仓库现行 canonical Web/UI 名称已收口为 `viewer`，该旧任务 slug / title 中的 `software_safe` 仅作为 compat / historical tracker 保留，不再代表当前 formal mode taxonomy。
+  - gameplay 回指：`available_actions` 暴露不是单纯 UI/debug 字段问题；它归属 PRD-GAME-004 micro-loop 下一步动机与 blocker 可读性，见 `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md` 与 GitHub #2166。
+  - gameplay 回指：M4 `ScheduleRecipe` 维护 sink 与本地稀缺延迟需要排程前 `schedule_quote`，属于 PRD-GAME-012 后果可见化 / first capability 可读性，见 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`、M4 两份 PRD 与 GitHub #2166。
+  - gameplay 回指：M4 `TransferMaterial` 需要 `logistics_transfer_quote` / `transfer_impact_preview` 解释调运到达收益、损耗、ETA、优先级理由、吞吐占用和产线阻塞变化，属于 PRD-GAME-012 工业物流可读性，见 M4 material logistics / P0 bottleneck logistics PRD 与 GitHub #2166。
+  - gameplay 回指：M4 `ProductValidated` 需要 `product_validation_quote` / `validation_unlock_preview` 解释验证后的能力解锁、阶段推进、可交易性和下一步用途，属于 PRD-GAME-012 首个制成品 / 工业产品可读性，见 M4 playability / P3 profile chain PRD 与 GitHub #2166。
+  - gameplay 回指：M4 / kernel 电力恢复需要 `power_survival_quote` / `energy_recovery_preview` 解释买电、采集辐射或等待发电后的补电量、成本、runway、下一步动作可负担性和防停机收益，属于 PRD-GAME-012 能源稳定 / 首条稳定产线可读性，见 M4 power system、Location 电力池下线 / radiation plant、LLM factory strategy PRD 与 GitHub #2166。
+  - gameplay 回指：M4 `SellPower` 需要 `power_sale_quote` / `energy_liquidity_preview` 解释售电收入、售电后剩余 runway、下一动作可负担性和产线停机风险，属于 PRD-GAME-012 能源稳定 / 工业经济可读性，见 M4 power system PRD/design 与 GitHub #2166。
+  - gameplay 回指：scenario `FragmentsReplenished` / 运行期 frag 补种需要 `resource_replenishment_quote` / `fragment_refill_preview` 解释下一次补种 tick、预计补种量、等待成本、第一工业目标关联，以及等待、换 frag/chunk 或切材料路线的推荐，属于 PRD-GAME-012 缺料恢复 / 首条稳定产线可读性，见 frag resource balance、chunked fragment generation PRD 与 GitHub #2166。
+  - gameplay 回指：kernel `PublishSocialFact` / `ChallengeSocialFact` / `DeclareSocialEdge` 需要 `social_fact_impact_quote` / `relationship_consequence_preview` 解释影响对象、可见社交表面、合作机会变化、黑名单/争议风险和治理/claim 关联，属于 PRD-GAME-014 社交策略动作后果可读性，见 social fact ledger PRD/design 与 GitHub #2166。
+  - gameplay 回指：gameplay governance `OpenGovernanceProposal` / `CastGovernanceVote` 需要 `governance_vote_quote` / `proposal_outcome_preview` 解释剩余时间、quorum/pass 缺口、玩家票权影响、通过后世界变化和失败/冷却代价，属于 PRD-GAME-014 治理动作后果可读性，见 gameplay war-politics baseline、layer lifecycle closure PRD/design 与 GitHub #2166。
+  - gameplay 回指：gameplay war `DeclareWar` 需要 `war_declaration_quote` / `conflict_outcome_preview` 解释宣战胜算、推荐强度、冲突窗口占用、结算风险和谈判/补强/等待等替代行动，属于 PRD-GAME-014 战争策略动作后果可读性，见 gameplay war-politics baseline、war/governance/crisis/meta closure PRD/design 与 GitHub #2166。
+  - gameplay 回指：M4 高负载工厂折旧需要维护 runway、停机/critical 临界点和推荐维护动作，属于 PRD-GAME-012 首条稳定产线可读性，见 M4 维护压力 / playability PRD 与 GitHub #2166。
+  - gameplay 回指：M4 `market_quotes` 需要 `market_quote_decision_preview` 解释本地采购 vs 外部调运、税费/运输成本主因和下一步降本动作，属于 PRD-GAME-012 工业经济可读性，见 M4 P2 market/governance PRD 与 GitHub #2166。
+  - gameplay 回指：`RefineCompound` 需要 `refine_quote` / `refine_preview` 解释电力机会成本、hardware 产出和第一工业目标缺口变化，属于 PRD-GAME-012 首个工厂/制成品可读性，见 chunked fragment / LLM 工业采矿 / LLM 工厂策略 PRD 与 GitHub #2166。
+  - gameplay 回指：首局推荐 starter frag 需要材质预期、可达性理由和第一工业目标关联，属于 PRD-GAME-012 / first industrial goal readability，见 scenario/viewer 三份 PRD 与 GitHub #2166。
 
 ### 最近完成（保留一跳 Trace）
 - [x] local-only-world-playtest-startup (PRD-WORLD_SIMULATOR-039/046) [test_tier_required]: 收敛本地大世界试玩脚本为 local-only 语义，修复 first Agent claim / starter OC pending 体验、链提交快照同步与 Viewer 本地世界措辞，并保留 testnet attach 为独立 runbook。 Trace: .pm/tasks/task_52ecb41a63a54808bad86bc9ffc77c15.yaml

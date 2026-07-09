@@ -14,6 +14,7 @@
 ## 现状基线（与当前实现对齐）
 - 内建资源已收敛为 `Electricity`、`Data`，产业语义通过材料字符串与模块定义承载。
 - M4 已具备基础闭环：工厂建造、配方排产、产物校验、账本入账。
+- 产物校验不能只作为 `ProductValidated` 成功日志；玩家需要知道该产品验证后解锁了什么能力、推进哪个阶段、下一步最值得如何使用。
 - 多账本与物流约束已存在：`world/agent/site/factory` 账本、在途延迟、运损、并发上限。
 - 治理与经济基础已存在：供需电价、税费、电费、合约与声誉反刷。
 
@@ -125,6 +126,19 @@
 - 保持现有动作主路径：`BuildFactoryWithModule`、`ScheduleRecipeWithModule`、`ValidateProductWithModule`、`TransferMaterial`。
 - 保持现有事件主路径：`Factory*`、`Recipe*`、`ProductValidated`、`MaterialTransit*`。
 - 增量原则：优先新增可选字段与旁路观测，避免破坏旧模块。
+- 玩家侧 `product_validation_quote` / `validation_unlock_preview` 合同：
+  - `product_id`
+  - `role_tag`: `survival / scale / explore / governance`
+  - `unlock_stage_before`
+  - `unlock_stage_after`
+  - `tradable`
+  - `capability_unlocked`
+  - `next_use_case`
+  - `stage_progress_delta`
+  - `recommended_next_action`
+  - `validation_value_class`: `capability_unlock / trade_value / stage_progress / low_immediate_value`
+- Edge case: 若 `ValidateProductWithModule` / `ProductValidated` 能确认产物有效，但玩家看不到能力解锁、阶段推进或下一步用途，标记为 `product_validation_preview_missing`。
+- Acceptance: 玩家校验产品前后，至少能看懂“这个产品验证成功后解锁什么能力、推进哪个阶段、下一步最值得怎么用”。
 
 ### 3) 运输优先级（建议最小改动）
 - `TransferMaterial` 增加可选 `priority`：`standard` / `urgent`。
@@ -164,10 +178,13 @@
 - 行为漂移风险：旧策略在新瓶颈下可能表现退化。
 - 兼容风险：历史模块未提供新增档案字段。
 - 可观测性风险：若指标定义不统一，难以评估改动收益。
+- 可读性风险：产物校验若只记录成功，会把首个制成品降级成日志事件，而不是能力解锁。
 
 缓解策略：
 - 采用“先观测后强约束”的渐进落地。
 - 新字段尽量可选并提供默认语义。
+- `validation_unlock_preview` 只解释已有产物档案、阶段状态与下一步用途，不新增完整成就系统、科技树或产品目录重做。
+- 不重平衡产品链、配方、阶段门槛，不改变 runtime ABI 或 viewer 实现。
 - 每个里程碑绑定 required/full 测试与回放验证。
 
 ## 6. Validation & Decision Record

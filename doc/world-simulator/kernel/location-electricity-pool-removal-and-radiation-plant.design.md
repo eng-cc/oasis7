@@ -11,11 +11,13 @@
 - 动作约束层：`DrawPower`、`StorePower` 直接拒绝，`BuyPower`、`SellPower` 仅允许 owner 间转移。
 - 建造联动层：`BuildFactory(factory.power.radiation.mk1)` 同步注册 `PowerPlant`，继承工厂 owner 与 location。
 - 发电入账层：`process_power_generation_tick` 将产电计入 owner 库存，不再写回 Location。
+- 电力恢复可读性层：辐射发电、`harvest_radiation` 或等待发电作为恢复路径时，通过 `energy_recovery_preview` 解释补电收益、runway、下一步动作可负担性和防停机原因。
 - 提示同步层：LLM `factory_kind` 可选集合与测试场景保持一致更新。
 
 ## 3. 关键接口 / 入口
 - `Action::BuildFactory`
 - `process_power_generation_tick`
+- `energy_recovery_preview` / `power_survival_quote`: `recovery_action`、`power_gain_estimate`、`price_or_time_cost`、`power_state_before/after`、`survival_runway_ticks`、`next_action_affordability`、`shutdown_avoidance_reason`、`recommended_power_action`
 - `crates/oasis7/src/simulator/kernel/actions.rs`
 - `crates/oasis7/src/simulator/kernel/power.rs`
 - `crates/oasis7/src/simulator/init.rs`
@@ -25,6 +27,7 @@
 - 初始化阶段必须清洗历史 Location 电力库存，避免旧状态混入新模型。
 - 运行时任何 Location 电力入账路径都应拒绝或旁路，不能留下双轨语义。
 - 辐射电厂只补齐建造与发电闭环，不在本阶段扩展完整电力模块重构。
+- 电力恢复预览只解释 owner 侧补电后的玩家取舍，不恢复 Location 电力池，不重新启用 `DrawPower` / `StorePower` / `PowerStorage` 玩法，也不新增完整电力市场 UI。
 - 旧回放若依赖 Location 电力池，需要通过兼容判定或明确拒绝，不静默吞错。
 
 ## 5. 设计演进计划

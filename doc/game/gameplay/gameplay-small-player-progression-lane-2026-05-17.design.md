@@ -39,6 +39,17 @@
   - `recovery-operator`: 擅长恢复停机、补齐缺口、保持局部韧性。
   - `conversion-specialist`: 把局部丰富原料转成区域更紧缺的中间品或制成品。
   - `regional-service-runner`: 提供局部 upkeep / 补给 / 维护类服务，形成稳定 return hook。
+- 专业化选择前必须展示 `specialization_entry_quote` / `first_delivery_preview`：
+  - `specialization_id`
+  - `target_local_demand_id`
+  - `first_output_preview`
+  - `estimated_delivery_ticks`
+  - `required_inputs`
+  - `switch_cost_class`
+  - `leverage_class_unlocked`
+  - `regional_usefulness_reason`
+  - `return_hook_after_delivery`
+- 若专业化推荐缺少第一单本地需求、交付产出或 leverage 解锁说明，标记 `specialization_delivery_preview_missing`；这表示选择可读性不足，不代表要新增完整职业系统。
 
 ### 5. Limited-Scope Regional Influence
 - 小玩家路线必须在 mature world 中拥有“局部有用”的后果，而不是只能赚钱或存活。
@@ -96,6 +107,7 @@
 - blocker: `local_operator` 后第一专业化直接跳到 global governance、alliance leadership、war 或 major-power membership。
 - watch: 可恢复失败或 full recipe coverage 后，Agent 仍输出无原因的 `wait / wait_ticks`。
 - watch: `specialization_reason` 缺少 `player_action`、`world_change_due_to_player` 或 `return_hook`。
+- watch: `specialization_entry_quote` 缺少 `target_local_demand_id`、`first_output_preview`、`estimated_delivery_ticks` 或 `leverage_class_unlocked`，导致玩家只看到专业化标签。
 
 ## 与现有专题的边界
 - `PRD-GAME-007`

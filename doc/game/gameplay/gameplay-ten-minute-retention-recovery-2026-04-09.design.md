@@ -84,10 +84,10 @@
 | 追加时间 | 新小环节 | 玩家问题 | 玩家动词 | 系统反馈 / surface | 奖励与动机 | 失败 / 恢复 | 需要的 gameplay truth | QA / 自动化验收 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `6-8m` | 任务诊断校准 | 我现在卡在哪，先动哪一步最划算？ | choose diagnosis focus: resource / risk / output | `Diagnosis Focus` 立刻显示瓶颈原因、影响范围、推荐下一步 | 玩家不是盲点按钮，而是在掌控系统 | 选错焦点给低收益诊断，但返还更明确推荐 | `diagnosis_choices[]`、`selected_diagnosis`、`diagnosis_expected_benefit`、`diagnosis_risk` | 点击诊断焦点后 `selected_diagnosis` 存在，`recommendedActions` 更新，`effectivePlayMinutes >= 21` |
-| `10-13m` | 资源换路线 / 路线承诺 | 我要快产出，还是稳风险？ | choose route: accelerate / stabilize | `Route Tradeoff` 更新产出预测、风险条、稳定加成，并明确后续会影响委托成本、事故风险、回访目标 | 第一次轻量 build choice，形成 ownership，并让选择跨 beat 生效 | 风险过高触发 warning，不失败，提供回退到稳态 | `route_tradeoff.mode`、`route_commitment_id`、`output_delta`、`risk_delta`、`stability_delta`、`affected_future_beats[]`、`next_commission_modifier`、`incident_risk_modifier`、`rollback_available` | 点击路线取舍后，后续至少 2 个 beat 的 `micro_commission` / `incident_recovery` / `return_package` 受影响；否则标记 `route_tradeoff_fake_choice` |
+| `10-13m` | 资源换路线 / 路线承诺 | 我要快产出，还是稳风险？ | choose route: accelerate / stabilize | `Route Tradeoff` 更新产出预测、风险条、稳定加成，并明确后续会影响委托成本、事故风险、回访目标；若可回退，必须说明回退窗口、代价、保留收益和失去收益 | 第一次轻量 build choice，形成 ownership，并让选择跨 beat 生效 | 风险过高触发 warning，不失败，提供回退到稳态；回退不能只显示布尔值 | `route_tradeoff.mode`、`route_commitment_id`、`output_delta`、`risk_delta`、`stability_delta`、`affected_future_beats[]`、`next_commission_modifier`、`incident_risk_modifier`、`rollback_available`、`rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit`、`rollback_lost_benefit` | 点击路线取舍后，后续至少 2 个 beat 的 `micro_commission` / `incident_recovery` / `return_package` 受影响；否则标记 `route_tradeoff_fake_choice`；若 `rollback_available=true` 但缺少窗口/代价说明，标记 `route_rollback_quote_missing` |
 | `13-16m` | 微型生产委托 / 可截图成果 | 我能不能让 agent 帮我完成一个小目标？ | issue micro commission: collect / organize / convert | `Micro Commission` 显示 agent 执行步骤、消耗、完成物，并生成成果卡 | 第一个可命名小成果，如 `Starter Batch: Alloy Plate x3`，可交付到本地需求 | 条件不足进入“补材料”恢复动作 | `micro_commission.status`、`requirement`、`steps[]`、`reward_id`、`output_item_id`、`output_display_name`、`batch_size`、`assigned_local_demand_id`、`screenshot_caption`、`delivery_status` | 完成委托后 summary/DOM 同时包含成果名、需求方、交付状态；UI-click flow 要能触达成果卡或交付 CTA |
 | `16-19m` | 小事故修复 / 路线后果兑现 | 系统出问题了，我能救回来吗？ | choose repair: quick patch / root-cause fix | `Incident Recovery` 显示事故原因、修复进度、残留风险，并说明它如何来自前一条路线选择 | 失败不是死路，而是玩法；路线风险第一次被兑现 | 快速补丁保进度但留风险；根因排查慢一点但解锁稳定加成 | `incident_recovery.incident_id`、`cause`、`triggered_by_route`、`route_consequence_text`、`repair_options[]`、`selected_repair`、`residual_risk`、`repaired_capability_delta`、`residual_risk_after_repair` | `accelerate` 和 `stabilize` 两条路径的 `route_consequence_text` / `repair_options` / `residual_risk` 必须不同 |
-| `21-24m` | 邻近机会探测 / 本局选择生成机会 | 下一块可扩展内容是什么？ | scan direction: market / facility / companion | `Opportunity Scan` 出现 2 个未来 hook，其中 1 个可立即推进，并说明来源于 route / output / repair choice | 把 30 分钟后的目标提前种下，同时证明本局选择会生成机会 | 收益低时给情报碎片并推荐另一路 | `opportunity_scan.direction`、`generated_from[]`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason` | `generated_from` 至少引用 `route_commitment_id` / `output_item_id` / `selected_repair` 之一；`immediate_action_id` 不能是静态常量 |
+| `21-24m` | 邻近机会探测 / 本局选择生成机会 | 下一块可扩展内容是什么？ | scan direction: market / facility / companion | `Opportunity Scan` 出现 2 个未来 hook，其中 1 个可立即推进，并说明来源于 route / output / repair choice；被推迟/丢弃的 hook 也必须说明价值、未就绪原因、解锁前提和回访时机 | 把 30 分钟后的目标提前种下，同时证明本局选择会生成机会；玩家能理解自己是在取舍而不是被系统单向路由 | 收益低时给情报碎片并推荐另一路；被推迟 hook 不能只消失或只给内部 reason | `opportunity_scan.direction`、`generated_from[]`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason`、`hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition`、`revisit_timing_hint`、`value_vs_immediate_action` | `generated_from` 至少引用 `route_commitment_id` / `output_item_id` / `selected_repair` 之一；`immediate_action_id` 不能是静态常量；若存在未推荐 hook 但缺少推迟/丢弃取舍说明，标记 `opportunity_discard_reason_missing` |
 | `26-30m` | 回访封装 / 第二局差异承诺 | 我今天带走了什么，下次回来干嘛？ | choose achievement card + next-session goal | `Return Package` 生成今日成果、未解锁目标、下次第一步，并引用本局选择记忆 | 明确 small player value：成果、身份、下次动机；第二局不是同一个模板 | 进度不足时生成 recovery plan，而不是空结算 | `return_package.earned_summary`、`choice_memory[]`、`next_session_goal`、`first_action_on_return`、`unlocked_variant`、`why_this_goal`、`recovery_plan` | 至少两条路线产生不同 `next_session_goal` 和 `first_action_on_return`；summary writer 必须报告 `choice_memory` / route branch regression |
 
 #### 最小 gameplay truth 字段
@@ -97,11 +97,10 @@
 - `onboarding_content_volume.completed_content_beats[]`
 - `diagnosis_choices[]`: `id`、`label`、`target`、`expected_benefit`、`risk`
 - `selected_diagnosis`
-- `route_tradeoff`: `mode`、`output_delta`、`risk_delta`、`stability_delta`
-- `route_tradeoff`: `mode`、`route_commitment_id`、`output_delta`、`risk_delta`、`stability_delta`、`affected_future_beats[]`、`next_commission_modifier`、`incident_risk_modifier`
+- `route_tradeoff`: `mode`、`route_commitment_id`、`output_delta`、`risk_delta`、`stability_delta`、`affected_future_beats[]`、`next_commission_modifier`、`incident_risk_modifier`、`rollback_available`、`rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit`、`rollback_lost_benefit`
 - `micro_commission`: `status`、`requirement`、`steps[]`、`reward_id`、`output_item_id`、`output_display_name`、`batch_size`、`assigned_local_demand_id`、`screenshot_caption`、`delivery_status`
 - `incident_recovery`: `incident_id`、`cause`、`triggered_by_route`、`route_consequence_text`、`repair_options[]`、`selected_repair`、`residual_risk`、`repaired_capability_delta`、`residual_risk_after_repair`
-- `opportunity_scan`: `direction`、`generated_from[]`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason`
+- `opportunity_scan`: `direction`、`generated_from[]`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason`、`hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition`、`revisit_timing_hint`、`value_vs_immediate_action`
 - `return_package`: `earned_summary`、`choice_memory[]`、`next_session_goal`、`first_action_on_return`、`unlocked_variant`、`why_this_goal`
 - `content_volume_card.status`: `content_volume_pass | content_volume_weak`
 - `content_volume_card.missing_reasons[]`
@@ -119,8 +118,10 @@
 
 - 目标不是继续堆分钟数，而是把 `content_volume_pass` 从“可跑完的 30 分钟”升级为“玩家能感觉自己的选择改变了后续局面”。
 - `route_tradeoff.mode` 不能只改即时数值，必须改变后续至少 2 个 beat，例如委托成本、事故风险或回访目标。
+- `route_tradeoff.rollback_available` 不能只作为布尔值；当路线仍可回退时，玩家必须知道回退截止 beat、回退成本、保留收益和失去收益。
 - `micro_commission.reward_id` 不能只是 ID，必须形成玩家可见、可截图、可交付的成果卡。
 - `local_demand_id` / `contribution_target_id` 不能只证明字段存在，必须出现在成果交付和回访总结中。
+- `opportunity_scan` 不能只把一个 hook 推荐为立即动作；被推迟/丢弃的 hook 必须回答“为什么不是现在、缺什么、什么时候回来、相对立即动作差在哪里”。
 - `world_change_due_to_player` 必须引用玩家具体选择和具体后果，不能是泛化“世界发生变化”文案。
 - `next_session_goal` 不能固定模板，必须由本局路线、成果或修复选择派生。
 
@@ -128,8 +129,10 @@
 - `second_run_design_card.status=second_run_hook_pass`
 - `route_branch_regression.status=pass`
 - `route_tradeoff.affected_future_beats.length >= 2`
+- `route_tradeoff.rollback_available=false` 或同时存在 `rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit`、`rollback_lost_benefit`
 - `micro_commission.output_display_name`、`assigned_local_demand_id`、`screenshot_caption`、`delivery_status != unassigned`
 - `opportunity_scan.generated_from[]` 至少引用本局选择之一
+- `opportunity_scan.hooks[]` 若包含未选/未推荐 hook，必须有 `hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition`、`revisit_timing_hint`
 - `return_package.choice_memory[]`、`unlocked_variant`、`why_this_goal`
 - `accelerate` 与 `stabilize` 两条路径的 `next_session_goal`、`first_action_on_return`、`incident_recovery.route_consequence_text` 必须不同
 

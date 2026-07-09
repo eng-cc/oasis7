@@ -80,7 +80,7 @@
 
 | Surface | Required fields / signals | Player verb | State transition | Rule / computation boundary | Owner |
 | --- | --- | --- | --- | --- | --- |
-| Install quote | `install_cost`, `upkeep_per_epoch`, `service_radius_cm`, `supported_resource_kinds`, `expected_effect`, `remaining_blockers` | inspect quote, deploy | `suggested -> quoted -> installed / rejected` | Quote must come from runtime, not Viewer guesswork | `runtime_engineer` + `viewer_engineer` |
+| Install quote | `install_cost`, `upkeep_per_epoch`, `service_radius_cm`, `supported_resource_kinds`, `expected_effect`, `remaining_blockers`, `expected_future_blockers_covered`, `break_even_uses`, `upkeep_horizon_epochs`, `low_use_warning`, `recommendation_reason` | inspect quote, compare ROI, deploy | `suggested -> quoted -> installed / rejected` | Quote must come from runtime, not Viewer guesswork; ROI fields are coarse gameplay guidance, not final economic tuning | `runtime_engineer` + `viewer_engineer` + `gameplay_designer` |
 | Facility state | `facility_id`, `owner_claim_id`, `location_id`, `status`, `module_id`, `wasm_hash`, `last_receipt_id` | inspect depot, pay upkeep, reclaim | `active -> upkeep_grace -> suspended -> reclaimed` | One `owner_claim_id + location_id` active micro_depot; status must be replay-safe | `runtime_engineer` |
 | WASM proposal | `proposal_hash`, `effect_delta`, `explanation_code`, `consumed_resource_classes` | service repair/logistics | `not_applicable / blocked / applicable` | WASM cannot mint resources, mutate ownership, bypass upkeep, or write canonical world state | `wasm_platform_engineer` + `runtime_engineer` |
 | Service preview | before/after cost, risk, wait, route, repair/logistics outcome | compare before/after, confirm service | `previewed -> applied / blocked` | Runtime caps all deltas and validates resource mutation / permission before applying | `runtime_engineer` |
@@ -95,6 +95,7 @@
   - AC-6: Failure/recovery covers unpaid upkeep, out of range, unsupported resource, missing regional blocker receipt, duplicate facility, insufficient funds, permission denial, and reclaim.
   - AC-7: Every applied service records module id/version/hash, schema version and proposal hash for replay/audit.
   - AC-8: QA smoke proves one repair/logistics action becomes measurably cheaper, faster, or less risky because of depot, and the player can identify remaining blocker.
+  - AC-9: Install quote must include a minimal ROI strip: expected future blockers covered, break-even uses, upkeep horizon, low-use warning and recommendation reason; if the player can only see one before/after quote improvement, the depot is not yet a strategic facility choice.
 - Non-Goals:
   - No block placement, digging, terraforming, free-build construction, or direct embodied control.
   - No arbitrary player-uploaded WASM in MVP; only repo-authored allowlisted module hashes.
@@ -129,12 +130,14 @@
   - Out of range: proposal returns not applicable; UI must show distance/radius explanation and next valid target when known.
   - Unsupported resource: proposal is blocked; UI must name unsupported resource class without suggesting arbitrary resource minting.
   - Insufficient funds: quote remains visible but install/action cannot proceed; restricted starter funding cannot become infinite facility subsidy.
+  - Low expected use: if the regional pressure card predicts fewer follow-up blockers than `break_even_uses`, install remains possible only with a low-use warning and an explicit recommendation reason; the UI must not present the depot as an always-correct buff.
   - Unknown module hash or schema mismatch: runtime refuses proposal and records module evidence blocker.
 - Non-Functional Requirements:
   - NFR-MD-1: Given identical input snapshot and module hash, proposal hash must be byte-identical.
   - NFR-MD-2: 100% of applied depot services must emit module hash, proposal hash, before/after quote, world change summary and receipt id.
   - NFR-MD-3: 100% of player-facing previews must include remaining blocker or next useful action.
   - NFR-MD-4: Any formal playability or release claim must cite QA/playtest evidence; this PRD alone is not release evidence.
+  - NFR-MD-5: 100% of install quotes must expose a coarse break-even judgment; missing ROI fields are a gameplay readability regression, even when before/after service preview works.
 - Security & Privacy:
   - WASM has no wall clock, network, filesystem, host escape, nondeterministic RNG, ownership mutation, resource minting or canonical state write authority.
   - Runtime preserves funding provenance and rejects restricted starter fund transfer or scope bypass.
@@ -177,3 +180,4 @@
 | DEC-MD-003 | WASM proposes, runtime validates/applies/signs | Let WASM mutate canonical state or account balances | Determinism, replay, security and auditability require runtime authority. |
 | DEC-MD-004 | MVP only allows repo-authored allowlisted module hash | Allow arbitrary player-uploaded WASM | Arbitrary upload would move the slice from gameplay facility to security/governance platform work. |
 | DEC-MD-005 | Depot affects one bounded repair/logistics quote and receipt | Treat depot as global buff or governance power | Bounded quote contribution preserves small-player regional leverage without global power creep. |
+| DEC-MD-006 | Install quote includes coarse ROI guidance: expected future blockers, break-even uses, upkeep horizon, low-use warning and recommendation reason | Only show install/upkeep plus one before/after service improvement | 2026-07-08 gameplay slice flagged that without break-even guidance, a depot can feel like a tax or an always-correct buff rather than a regional specialization choice. |

@@ -201,6 +201,47 @@ enum PowerAction {
 }
 ```
 
+#### 玩家侧电力恢复预览
+
+当 Agent 处于 `LowPower`、`Critical`、`Shutdown` 邻近状态，或策略层建议通过 `BuyPower`、`harvest_radiation`、等待发电恢复电力时，玩家侧必须能读取 `power_survival_quote` / `energy_recovery_preview`：
+
+- `agent_id`
+- `current_power_level`
+- `power_state_before`
+- `recovery_action`: `buy_power` / `harvest_radiation` / `wait_for_generation`
+- `power_gain_estimate`
+- `price_or_time_cost`
+- `power_state_after`
+- `survival_runway_ticks`
+- `next_action_affordability`
+- `shutdown_avoidance_reason`
+- `recommended_power_action`
+
+Edge case: 若系统推荐补电、采集辐射或等待发电，但玩家看不到恢复后的 runway、状态变化、下一步动作可负担性或防停机原因，标记为 `power_survival_quote_missing`。该缺口属于电力恢复可读性问题，不改变电力消耗、发电、价格、阈值、runtime ABI 或 `BuyPower` / `SellPower` / `harvest_radiation` 动作语义。
+
+验收口径：玩家在执行买电、采集辐射或等待发电前，应能看懂“补多少电、花什么成本、能撑多久、是否足够完成当前下一步、是否能避免或解除停机”。
+
+#### 玩家侧售电机会成本预览
+
+当玩家准备通过 `SellPower` 将电力变现时，玩家侧必须能读取 `power_sale_quote` / `energy_liquidity_preview`，用于判断短期现金流是否会牺牲当前产线、移动、采矿、排程或维护窗口的稳定性：
+
+- `agent_id`
+- `current_power_level`
+- `power_state_before`
+- `sale_amount`
+- `price_per_pu`
+- `expected_revenue`
+- `power_state_after_sale`
+- `remaining_runway_ticks`
+- `next_action_affordability_after_sale`
+- `production_interrupt_risk`
+- `recommended_sale_action`: `sell_full` / `sell_partial` / `defer_sale` / `buy_or_wait_first`
+- `why_sale_is_safe_or_risky`
+
+Edge case: 若玩家准备 `SellPower`，但看不到售电后剩余电力、可行动 runway、下一步动作是否仍可负担或产线停机风险，标记为 `power_sale_quote_missing`。该缺口属于售电机会成本可读性问题，不改变电价、电力消耗、发电效率、电力阈值、runtime ABI、Location 电力池或 `PowerStorage` 语义。
+
+验收口径：玩家在执行售电前，应能看懂“卖多少电、赚多少、卖完还能撑多久、是否会影响当前产线/下一动作、系统建议全卖/少卖/暂缓的理由”。
+
 ## 接口设计
 
 ### WorldKernel 扩展

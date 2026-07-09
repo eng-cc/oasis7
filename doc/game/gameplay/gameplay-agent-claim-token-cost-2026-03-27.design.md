@@ -30,6 +30,12 @@
   - `activation fee`: 非退款，立即拆到 burn / treasury。
   - `claim bond`: 锁定后可在 release / reclaim 时按规则退款或 slash。
   - `upkeep`: 每个 epoch 结算一次，持续表达“占有这个 agent 就要持续承担成本”。
+- 报价必须把持续成本换算成玩家可读 runway：
+  - `upfront cost`: activation fee + claim bond + first upkeep。
+  - `recurring upkeep`: 每个 epoch 的持续成本。
+  - `runway`: 扣除 upfront 后，当前 eligible balance 还能覆盖多少个完整 upkeep epoch。
+  - `reclaim risk`: 低 runway 时预计进入 grace / forced reclaim 的风险提示。
+  - `recommended top-up or wait`: 若 runway 低于阈值，提示先补足余额、等待收入或暂缓扩张。
 - runtime v1 暂定默认值（用于 canonical 实现与测试，不等于最终平衡定价承诺）：
   - `base activation fee = 100`
   - `base claim bond = 200`
@@ -81,7 +87,8 @@
 - `runtime_engineer`
   - 负责 claim 状态机、受限 bucket 账本、原子扣费、epoch 结算、refund / slash provenance 和事件。
 - `viewer_engineer`
-  - 负责 quote、restricted/liquid 余额拆分、funding mix、upkeep deadline、cooldown、idle risk、cap 阻断原因和 refund 预估的表达。
+  - 负责 quote、restricted/liquid 余额拆分、funding mix、upkeep deadline、cooldown、idle risk、cap 阻断原因、refund 预估与 upkeep runway 的表达。
+  - Claim quote 最小条必须包含 `upfront cost / recurring upkeep / runway / reclaim risk / recommended top-up or wait`，避免玩家把可支付 upfront 误读为可长期持有。
 - `qa_engineer`
   - 负责并发争抢、受限余额发放、欠费、闲置、多槽位、refund provenance、transfer guard、审计字段和 UI/API parity 的 required/full 验收。
 - `producer_system_designer`

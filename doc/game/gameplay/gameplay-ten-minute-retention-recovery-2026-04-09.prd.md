@@ -45,9 +45,11 @@
 | --- | --- | --- | --- | --- | --- |
 | 首次控制地板 | `first_control_success`、`ttfc_ms`、`control_hit_rate`、`requires_manual_recover` | headed Web/UI 主路径 `play/step/select` | `blocked -> unstable -> stable` | 首次成功率优先于平均成功率；任何手动恢复都记为失败样本 | `viewer_engineer` / `runtime_engineer` 共同 owner，`qa_engineer` 复核 |
 | 10 分钟信任门 | `first_control_success`、`goal_clarity`、`consequence_readability`、`replay_intent`、`lane` | 汇总 active-LLM 正式 10 分钟样本并输出 trust verdict | `draft -> watch -> continue_playing / hold` | 先验证“控制可信 + 主目标可读 + 愿意继续”；不得单靠 capability 未闭环就判失败 | `qa_engineer` owner，`producer_system_designer` 最终裁决 |
-| 首个持续能力门 | `capability_goal_id`、`capability_progress_percent`、`factory_ready`、`first_product`、`blocked_reason`、`resumed`、`branch_offer` | 在后续 `30` 分钟或 `1~3` 次会话中跟踪首条能力链是否闭环 | `not_started -> industrial_bootstrap -> resilient_production -> branch_ready / blocked` | 必须先有持续产能，再给扩产/治理/协作分支；不得用单条 10 分钟样本替代 | `producer_system_designer` 冻结口径，`runtime_engineer` / `viewer_engineer` 落地，`qa_engineer` 复核 |
+| 首个持续能力门 | `capability_goal_id`、`capability_progress_percent`、`factory_ready`、`first_product`、`blocked_reason`、`resumed`、`branch_offer`、`route_label`、`immediate_gain`、`future_beat_changed`、`risk_or_lockin`、`next_session_hook`、`rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit`、`rollback_lost_benefit` | 在后续 `30` 分钟或 `1~3` 次会话中跟踪首条能力链是否闭环，并复核分支选择是否具备最小承诺条和回退 quote | `not_started -> industrial_bootstrap -> resilient_production -> branch_ready / blocked` | 必须先有持续产能，再给扩产/治理/协作分支；不得用单条 10 分钟样本替代；`branch_offer` 不能只有方向标签；若路线可回退，必须说明回退窗口、代价和收益保留/损失 | `producer_system_designer` 冻结口径，`runtime_engineer` / `viewer_engineer` 落地，`qa_engineer` 复核 |
+| 邻近机会取舍 | `opportunity_scan.direction`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason`、`hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition`、`revisit_timing_hint`、`value_vs_immediate_action` | 玩家扫描 market / facility / companion 等方向后，看到一个可立即推进的 hook，同时看懂另一个 hook 为什么被推迟或丢弃 | `hidden_options -> scanned -> immediate_or_deferred` | `Opportunity Scan` 至少解释一个未推荐 hook 的价值、未就绪原因、解锁前提和回访时机；不得只给单一推荐动作 | `gameplay_designer` owner，`viewer_engineer` / `qa_engineer` 复核 |
 | 首屏噪音治理 | `primary_goal_visible`、`noise_competes_with_goal`、`player_identity_clarity` | 默认首屏仅突出主目标与下一步 | `toolish -> noisy_playable -> player_focused` | 当前目标相关信息优先于历史噪音、operator/debug 信息 | `viewer_engineer` owner |
 | 后果可见化 | `accepted`、`executing`、`produced_or_resumed`、`cost_or_blocker` | 主 HUD / toast / chatter 反馈 | `implicit -> readable -> motivating` | 先解释关键代价与结果，再展示次要日志 | `viewer_engineer` owner，`agent_engineer` 配合语义 |
+| 生产排程报价 | `schedule_quote`、`base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class`、`recommended_pre_step` | 玩家确认 `ScheduleRecipe` 前展示预计耗时、维护消耗、折旧压力和可缓解动作 | `hidden_cost -> quoted -> confirmed_or_prepared` | 只要会触发非零维护 sink 或本地稀缺额外 tick，就先给 quote；执行后 receipt 不能替代提交前判断 | `gameplay_designer` owner，`runtime_engineer` / `viewer_engineer` 落地 |
 | 前 10/30 分钟吸引力 | `hook_score`、`replay_intent`、`meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`biggest_boredom_point`、`effective_play_minutes`、`player_operation_count` | 对 deterministic-provider-backed、fresh active-LLM 或 headed UI 样本打 attraction / motivation / content-volume card，并记录 `progression_pass_but_attraction_weak` 或 `content_volume_weak` | `untested -> attraction_watch -> content_volume_weak / attraction_pass / attraction_weak` | 不复判 `trustGateResult=pass`；target coverage 和 motivation density 通过后，仍需 `content_volume_card` 达标才能声称前 30 分钟内容量足够 | `gameplay_designer` owner，`qa_engineer` 协作样本卡 |
 
 - Acceptance Criteria:
@@ -61,6 +63,9 @@
   - AC-8: 本专题必须给出“该砍什么 / 该补什么 / 两层门禁如何判定”三类裁决，而不是泛化成长期愿景。
   - AC-9: execution log、根入口与专题 project 的当前阶段判断必须继续保持 `internal_playable_alpha_late`，不借本专题提前放宽 `closed beta` 口径。
   - AC-10: `TASK-GAME-076` 样本必须回答“我为什么想继续”而不只是“系统是否继续推进”；若只有进度推进、没有新选择/奖励/回访理由，必须标记 `progression_pass_but_attraction_weak` 并路由到对应 PRD/topic；若动机密度通过但有效内容量不足，必须标记 `content_volume_weak`，不得声称前 30 分钟已足够。
+  - AC-11: `first capability gate` 进入 `branch_ready` 时，`branch_offer` 必须能回答“选这条路线会改变什么”；若缺少即时收益、后续节拍变化、风险/锁定或下次会话 hook，capability follow-up 只能记为 `branch_commitment_missing`。
+  - AC-12: 当 `route_tradeoff` 影响后续至少 2 个 beat 且 `rollback_available=true` 时，确认前必须显示 `rollback_deadline_beat / rollback_cost_summary / rollback_kept_benefit / rollback_lost_benefit`；否则标记 `route_rollback_quote_missing`，不得把“可回退”当作已解释风险。
+  - AC-13: `Opportunity Scan` 若展示 2 个未来 hook 并推荐其中 1 个立即动作，至少 1 个未推荐 hook 必须展示 `hook_value_summary / hook_readiness_state / defer_reason / unlock_precondition / revisit_timing_hint`；若玩家只看到推荐结果而看不到取舍理由，记为 `opportunity_discard_reason_missing`。
 - Non-Goals:
   - 不在本专题中新增宏系统、高风险对抗、元进度的大范围新功能。
   - 不把 Prompt Ops / operator-only 能力重新包装成默认玩家主路径。
@@ -99,6 +104,9 @@
   - 工业链条能推进但主界面没有“阻塞/恢复/产出”语义：记为 `trust gate` 与 capability gate 之间的解释断裂，而不是纯 UI 瑕疵。
   - 首屏主目标存在但被历史 `AgentNotFound`、operator 面板或 raw snapshot 语义抢焦点：记为玩家身份失败。
   - `10-minute trust gate` 通过但 `first capability gate` 仍未闭环：允许 trust verdict 为 `continue_playing`，但 capability verdict 必须继续保持 `watch/hold`，不得混写成单一“已可玩/不可玩”。
+  - `first capability gate` 已到 `branch_ready` 但分支只给方向名称：记为 `branch_commitment_missing`，不得直接推断 replay intent 或中循环承接已成立。
+  - `route_tradeoff.rollback_available=true` 但缺少回退截止 beat、回退成本、保留收益或失去收益：记为 `route_rollback_quote_missing`，不得用泛化“可回退”文案降低玩家试错风险感。
+  - `Opportunity Scan` 有 `hooks[]` 和 `immediate_action_id`，但未说明未推荐 hook 的价值、未就绪原因、解锁前提或回访时机：记为 `opportunity_discard_reason_missing`，不得把系统推荐误写成玩家取舍。
   - `--no-llm` 工业调试链路通过但 active-LLM 正式样本失败：正式 trust gate 仍为 `hold`。
 - Non-Functional Requirements:
   - NFR-RR-1: `10-minute trust gate` 的 active-LLM 样本必须在 fresh bundle 本地可复跑。
@@ -107,6 +115,8 @@
   - NFR-RR-4: 每条 lane 及两层 gate 的结论必须在同日回写到 task execution log 与对应 PRD/project。
   - NFR-RR-5: 所有结论继续遵守 `internal_playable_alpha_late` / `internal_only` claim envelope，不借体验改进任务扩大对外承诺。
   - NFR-RR-6: `TASK-GAME-076` 不得把 world activity、progress percent 或 first capability pass 单独当作 attraction pass；必须有玩家动机、决策密度、奖励/解锁或 agency/leverage 证据。
+  - NFR-RR-7: `route_tradeoff` 的回退可读性覆盖率必须为 `100%`；任一可回退路线都不能只展示 `rollback_available` 布尔值。
+  - NFR-RR-8: `Opportunity Scan` 的未推荐 hook 取舍说明覆盖率必须为 `100%`；至少在本次 scan 内被推迟/丢弃的 hook 不能只存在于内部字段。
 - 2026-06-25 P0 control proof follow-up:
   - `viewer` 正式玩家入口需要把现有 `player_gameplay` 真值聚合成首局可读的 `Control Proof` surface，顺序固定为 `Player Intent -> World Consequence -> Recovery Move -> Next Move`；`software_safe` 仅作为 compat alias 复核。
   - 该 surface 只消费既有 `accepted_intent`、`execution_state`、`causality_*`、`last_world_change`、`next_step_hint`、recommended action 与 fallback/repair 语义；不得新增或伪造 runtime canonical truth。
@@ -114,6 +124,15 @@
 - 2026-06-25 P1/P2 continuation follow-up:
   - P1/P2 不塞进 10-minute trust gate 作为新判定项；它们作为 trust gate 之后的制作人可读延展，检查玩家是否拥有打断/重排/纠偏、首胜 leverage、anti-grind 与 mature-world repair/rebuild/pivot 继续路径。
   - `viewer` 可以在现有 `player_gameplay` 字段存在时展示 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于让制作人快速判断“首局控制证明”之后是否形成可继续玩的中循环承接；`software_safe` 仅作为 compat alias 复核。
+- 2026-07-09 production scheduling quote follow-up:
+  - `ScheduleRecipe` 若会触发 `maintenance_sink` 扣减、本地稀缺 `+1/+2 ticks` 或高负载折旧压力，玩家确认前需要看到 `schedule_quote`，至少包含 `base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class` 和 `recommended_pre_step`。
+  - 若代价只在提交后 receipt/log 中出现，样本应标记 `schedule_quote_missing`；该问题归入后果可见化和 first capability chain readability，不改变 M4 runtime 参数。
+- 2026-07-09 route rollback quote follow-up:
+  - `route_tradeoff` 若声明 `rollback_available=true`，玩家确认路线前需要看到 `rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit` 和 `rollback_lost_benefit`。
+  - 该合同只解释路线试错边界，不新增完整 respec/meta-progression，不重新平衡 `accelerate / stabilize` 对委托、事故或回访目标的影响。
+- 2026-07-09 opportunity scan discard-reason follow-up:
+  - `Opportunity Scan` 推荐一个立即动作时，被推迟/丢弃的 hook 也需要玩家可读取舍条，至少包含 `hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition` 和 `revisit_timing_hint`。
+  - 该合同只解释扫描结果的取舍，不新增完整动态 quest tree，不改变 opportunity generation 或 hook 排序算法。
 - Security & Privacy:
   - 本专题只调整玩法优先级、体验反馈与门禁口径，不新增玩家敏感数据采集。
 

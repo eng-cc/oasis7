@@ -15,6 +15,7 @@
   - SC-3: headed Web/UI 与 pure API 都能直接回答 4 个问题：`我刚刚让系统做什么`、`系统是否接受了`、`为什么当前这样推进/没推进`、`我现在最有效的下一步是什么`。
   - SC-4: future UX / runtime / agent contract 变更可以被 QA 按本专题直接判定为 `strengthens / preserves / weakens control-feeling`，而不是只看 smoke 是否还能跑。
   - SC-5: 本专题不改变 `PRD-GAME-012` 当前正式 verdict；它负责定义 trust/capability 修复所依赖的“控制感合同”，而不是替代 active-LLM 留存验证本身。
+  - SC-6: 若 agent 使用长期记忆影响当前行动，玩家必须能看到“记住了什么 / 来自哪里 / 为什么影响当前行动 / 如何纠正”的最小可读合同。
 
 ## 2. User Experience & Functionality
 
@@ -40,7 +41,8 @@
   2. Flow-CFC-002: `执行中出现等待/阻塞/改道 -> 系统把当前状态归类为 executing / blocked / overridden / completed_no_progress 之一 -> 玩家读懂主因果`
   3. Flow-CFC-003: `玩家对当前方向不满意 -> 使用 interrupt / reprioritize / focus goal / change target -> 系统在同一语义面上反馈新旧意图交接`
   4. Flow-CFC-004: `玩家中断会话后返回 -> 系统恢复最近 accepted intent、当前主阻塞、最近可见后果与下一步建议 -> 玩家无需翻 raw history 即可继续`
-  5. Flow-CFC-005: `QA 评审某项 UX/runtime/agent 变更 -> 对照 guarantees 判断该改动是增强、保持还是削弱 control-feeling -> 输出 blocker 或 pass`
+  5. Flow-CFC-005: `agent 基于长期记忆继续行动 -> 系统展示记忆摘要、来源、当前用途与纠正提示 -> 玩家判断是否继续、修正或重排`
+  6. Flow-CFC-006: `QA 评审某项 UX/runtime/agent 变更 -> 对照 guarantees 判断该改动是增强、保持还是削弱 control-feeling -> 输出 blocker 或 pass`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -51,6 +53,7 @@
 | 可打断与重排保证 | `can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result` | 提供 `focus goal`、重新选目标、重新提交 prompt/动作等显式重排入口；不允许只剩“等 AI 自己继续” | `continuing -> interrupt_requested -> reprioritized / resume_required` | 当前主阻塞若持续存在且玩家可采取更高收益动作，应优先暴露 reprioritize hook | 正式玩家可对自己的主意图重排；不允许越权改动其他玩家/组织控制面 |
 | 后果可读性保证 | `cost_summary`、`progress_delta`、`world_change_summary`、`next_step_hint` | 每次关键动作后必须给出“付出了什么 / 世界改变了什么 / 下一步最该做什么” | `opaque -> readable -> decision_ready` | 当前主目标相关的成本、产出、阻塞、恢复优先于调试日志与次级事件 | 玩家可读；系统生成，owner 冻结字段语义 |
 | 恢复与续玩保证 | `resume_anchor`、`last_accepted_intent`、`primary_blocker`、`resume_next_step` | 玩家重连或回流时，直接恢复当前 agency surface，不要求先读原始事件流 | `fresh_session -> resumed -> replanned` | 优先恢复主目标链最近一次 accepted intent；若旧意图已失效，必须显式写出失效原因 | 已认证玩家可恢复自己的续玩面板/API 字段 |
+| 长期记忆可读与纠正保证 | `memory_summary`、`memory_source_event`、`used_for_current_decision`、`player_correction_hint`、`memory_confidence_or_staleness` | 当 agent 引用长期记忆影响当前行动时，展示脱敏摘要、来源、当前用途和纠正提示；允许玩家通过新消息、重排意图或忽略提示来修正 | `memory_hidden -> memory_referenced -> corrected/ignored/reconfirmed` | 当前决策实际引用的记忆优先；过期或低置信记忆必须标记 staleness，不得伪装成确定事实 | 玩家只能看见自己可访问 agent / session 的脱敏记忆摘要；不得暴露私有 prompt 全文、内部 trace 或其他玩家记忆 |
 
 - Acceptance Criteria:
   - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
@@ -64,11 +67,13 @@
   - AC-8: 本专题必须给出未来 UX/runtime/agent 变更的判据：增强型变更至少强化 1 条 guarantee 且不削弱其余 guarantee；任何削弱 accepted intent、主因果、重排入口或续玩恢复的变更都必须经 `producer_system_designer` 显式裁决。
   - AC-9: 本专题完成后，`game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 必须互链到 `PRD-GAME-014` 与 `TASK-GAME-071~075`。
   - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
+  - AC-11: 若 agent 当前行动引用长期记忆，headed Web/UI 与 pure API 至少必须能回答 `记住了什么 / 来自哪里 / 影响当前哪一步 / 玩家如何纠正`；若只能看到 agent 自行行动或原始日志，判定为 agency weakened。
 - Non-Goals:
   - 不把 oasis7 改成第一人称直接操作或逐块建造游戏。
   - 不在本专题中直接修复 active-LLM provider、runtime freeze 或 capability gate 本身；这些仍由对应实现任务负责。
   - 不把“更多按钮”误当作 control-feeling 改善；本专题关注的是 agency 合同，而不是动作数量膨胀。
   - 不要求 v1 引入复杂概率预览、未来分支树模拟器或完整 plan diff 可视化。
+  - 不要求 v1 做完整记忆编辑器、向量检索、外部记忆 backend 或全量遗忘权治理；本专题只要求最小可读摘要与纠正提示。
 
 ## 3. AI System Requirements (If Applicable)
 
@@ -110,6 +115,8 @@
   - world 有变化，但当前主目标没有任何 progress/cost/next-step 解释：不得把“世界活着”视为 control-feeling pass。
   - pure API 能读到 stage/goal，却读不到 accepted intent 或 interruption hook：判定为 parity 不完整，不得宣称 API 也满足 control-feeling 合同。
   - 玩家重连后只能从 raw history 猜测最近状态，而没有恢复锚点：判定为 resume guarantee 失败。
+  - agent 基于长期记忆行动，但玩家看不到记忆摘要、来源或当前用途：判定为 memory-driven agency break。
+  - agent 基于过期或错误记忆继续行动，但没有纠正提示：判定为 `memory_correction_missing`，不得把长期记忆包装成续玩增强。
   - 系统提供过多 operator/debug 语义，淹没当前主意图与主因果：判定为 presentation-level control-feeling regression。
   - active-LLM lane 因 provider 问题卡死时，不得用 deterministic `--no-llm` 样本代替本专题正式验收；debug lane 只能帮助定位哪条 guarantee 先失效。
 - Non-Functional Requirements:
@@ -119,8 +126,10 @@
   - NFR-CFC-4: control-feeling 合同验证必须可在 fresh bundle 本地复跑，并能区分 formal active-LLM lane 与 debug/probe lane。
   - NFR-CFC-5: 本专题下所有 follow-up 结论必须继续遵守当前 claim envelope，不得借“控制感合同已定义”扩大对外承诺。
   - NFR-CFC-6: 在正式玩家 surface 上，单个 accepted intent 不得连续经历两次无 fallback 的静默等待周期；若第一次弱反馈后仍无有效推进，第二次必须升级为 `reprioritize`、`repair` 或 `fallback_ready`。
+  - NFR-CFC-7: 长期记忆影响当前 agent 行动时，玩家可读记忆摘要覆盖率必须为 `100%`；摘要可以脱敏和压缩，但不得只存在于内部 trace。
 - Security & Privacy:
   - 本专题不新增玩家隐私采集；accepted intent 与 resume anchor 只要求表达 canonical 玩家状态，不要求暴露私有 prompt 全文或实现内部 trace。
+  - 长期记忆可读性只要求脱敏摘要、来源类型和当前用途；不得暴露私有 prompt 全文、内部 chain trace 或其他玩家私有记忆。
 
 ## 5. Risks & Roadmap
 
@@ -155,3 +164,4 @@
 | DEC-CFC-002 | 把 accepted intent、主因果、打断重排、续玩恢复列为 agency 地板 | 只要求“世界在动”或“有 next_step 提示” | 玩家真正缺的不是更多世界变化，而是缺“这是我造成的、我现在能改什么”的稳定心智模型。 |
 | DEC-CFC-003 | 本专题承接 `PRD-GAME-012` 第 4 条 lane，但不替代 trust/capability gate | 直接把 issue #164 写成 retention gate verdict 本身 | control-feeling 是 formal gate 的前置合同，不是 gate 结果本身；混写会再次污染 verdict 语义。 |
 | DEC-CFC-004 | 继续坚持间接控制主路线，通过更强的 agency surface 解决“像旁观 AI”的问题 | 直接把产品方向改成更多 direct control 或 embodied 操作 | 当前主问题是间接控制表达不够完整，而不是缺一套完全不同的直接控制产品方向。 |
+| DEC-CFC-005 | 将长期记忆纳入 control-feeling 地板，要求玩家可读摘要、来源、当前用途和纠正提示 | 只做长期记忆持久化 roundtrip，或暴露完整 prompt/log 让玩家自行判断 | 记忆会改变 agent 行动；玩家需要理解和修正其影响，但不应被迫阅读隐私敏感或过长的内部 trace。 |

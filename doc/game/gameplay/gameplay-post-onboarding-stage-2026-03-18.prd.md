@@ -11,7 +11,7 @@
 
 - 在首次行动闭环完成后，为玩家提供正式的 `PostOnboarding` 阶段，而不是停留在一次性总结提示。
 - 将玩家目标从“学会发出一次行动”切换为“建立持续运转的组织能力”。
-- 以工业成长为默认第一主线，并在首个持续能力里程碑后显式展开治理 / 协作 / 扩张分支。
+- 以工业成长为默认第一主线，并在首个持续能力里程碑后显式展开治理 / 协作 / 扩张分支；分支必须说明选择该路线会改变什么，而不是只给方向标签。
 
 ### 0.2 范围
 
@@ -60,7 +60,7 @@
   - SC-2: 系统必须生成 1 个主目标和最多 2 个次级机会，且主目标 100% 具备显式状态 `active / blocked / completed` 之一。
   - SC-3: 主目标卡必须同时展示进度、阻塞原因和建议下一步；阻塞原因至少覆盖 `缺电 / 缺料 / 物流阻塞 / 治理限制 / 危机或协作中断` 五类。
   - SC-4: 第一阶段主目标应能在 1~3 次会话或 15~45 分钟有效操作内达成首个里程碑，不能直接跳到数周级长循环目标。
-  - SC-5: 玩家达成首个持续能力里程碑后，系统必须切换到 `branch_ready`，并显式提示至少一个中循环方向（生产扩张 / 治理影响 / 协作恢复）。
+  - SC-5: 玩家达成首个持续能力里程碑后，系统必须切换到 `branch_ready`，并显式提示至少一个中循环方向（生产扩张 / 治理影响 / 协作恢复）及对应承诺条：即时收益、后续节拍变化、风险/锁定和下次会话 hook。
 
 ## 2. User Experience & Functionality
 
@@ -82,7 +82,7 @@
   1. Flow-POD-001: `完成首次行动反馈 -> 系统判定 first-session complete -> 弹出 PostOnboarding 阶段卡 -> 激活主目标卡`
   2. Flow-POD-002: `玩家查看主目标 -> 阅读进度 / 阻塞 / 下一步 -> 执行相关操作 -> 目标状态更新为 active / blocked / completed`
   3. Flow-POD-003: `主目标被阻塞 -> 系统展示阻塞分类与建议修复动作 -> 玩家处理阻塞 -> 目标恢复 active`
-  4. Flow-POD-004: `达成首个持续能力里程碑 -> 阶段状态切换为 branch_ready -> 系统展示生产 / 治理 / 协作方向建议`
+  4. Flow-POD-004: `达成首个持续能力里程碑 -> 阶段状态切换为 branch_ready -> 系统展示生产 / 治理 / 协作方向建议 -> 玩家理解选择路线会改变什么`
   5. Flow-POD-005: `玩家中途离开 -> 下次进入世界 -> 恢复当前阶段目标、最近阻塞和下一步建议`
 - Functional Specification Matrix:
 
@@ -92,7 +92,7 @@
 | 主目标卡 | `goal_id`、`goal_type`、`goal_title`、`target_condition`、`current_progress`、`blocker_primary`、`next_step_hint` | 允许聚焦、展开详情、定位相关面板；不提供手动 reroll | `candidate -> active -> blocked -> completed -> handed_off` | v1 默认 `工业持续能力 > 生产恢复 > 交易/协作 > 治理/扩张`；同分时优先离当前状态最近的目标 | 玩家只读查看；系统根据世界状态选择 |
 | 次级机会卡 | `goal_id`、`goal_type`、`why_now`、`risk_level` | 点击可查看，不替代主目标 | `hidden -> visible -> expired/selected` | 最多 2 个；用于提示后续方向，不覆盖主目标 | 玩家只读查看 |
 | 阻塞反馈 | `blocker_type`、`blocker_reason`、`affected_target`、`suggested_fix` | 点击后展开原因与建议下一步 | `none -> flagged -> resolved` | 仅保留 1 个主阻塞，其余收纳到详情区 | 所有玩家可见；由系统计算 |
-| 阶段完成与分支提示 | `milestone_id`、`milestone_result`、`branch_recommendations` | 展示“你已建立第一项持续能力”；可查看推荐分支 | `active -> milestone_completed -> branch_ready` | 完成首个持续能力里程碑后触发；默认推荐 1~3 条中循环方向 | 所有玩家可见；系统自动生成 |
+| 阶段完成与分支提示 | `milestone_id`、`milestone_result`、`branch_recommendations`、`route_label`、`immediate_gain`、`future_beat_changed`、`risk_or_lockin`、`next_session_hook` | 展示“你已建立第一项持续能力”；可查看推荐分支与每条路线的最小承诺条 | `active -> milestone_completed -> branch_ready` | 完成首个持续能力里程碑后触发；默认推荐 1~3 条中循环方向；标签不能替代路线后果说明 | 所有玩家可见；系统自动生成 |
 
 - Acceptance Criteria:
   - AC-1: `FirstSessionLoop` 完成后必须出现正式阶段切换，而不是仅保留静态 “continue” 提示。
@@ -103,6 +103,7 @@
   - AC-6: 玩家离开并回到世界后，必须能恢复当前阶段与最近一次主目标状态。
   - AC-7: 达成首个持续能力里程碑后，系统必须显式显示至少一个中循环方向，不允许重新回到“无目标自由漂浮”。
   - AC-8: `#46` 的回归验证必须具备 `test_tier_required` 的 Viewer / Web 证据与 playability 卡片引用。
+  - AC-9: `branch_ready` 的 1~3 条推荐分支必须各自给出 `route_label / immediate_gain / future_beat_changed / risk_or_lockin / next_session_hook`；只有“扩产 / 治理 / 协作”标签而无后果说明时不得验收通过。
 - Non-Goals:
   - 不做任意数量的动态分支树。
   - 不做完全个性化的 LLM 任务生成。
@@ -138,6 +139,7 @@
   - 玩家忽略主目标：系统允许自由探索，但必须保留可重新聚焦的主目标卡，不因收起而永久消失。
   - 会话中断后恢复：重新进入时必须恢复 `stage_id / goal_id / blocker_primary / next_step_hint`。
   - 危机 / 协作中断导致主目标不可达：切换为 `blocked`，并优先给出“保全 / 恢复”型下一步建议，而不是继续催促原目标。
+  - 分支只有方向标签：若 `branch_ready` 只展示生产扩张 / 治理影响 / 协作恢复等名称，而没有即时收益、后续节拍变化、风险/锁定和下次会话 hook，记为 `branch_commitment_missing`，不得当作中循环承接完成。
   - AgentNotFound 历史噪音：虽然 `RejectReason::AgentNotFound` 会留在历史聊天/控制拒绝中，这类噪音不得重复占据 Action Status 标题或右侧聊天区焦点，以便首次进入 `PostOnboarding` 时视线优先落在主目标与进度。
 - Non-Functional Requirements:
   - NFR-POD-1: `FirstSessionLoop` 完成到 `PostOnboarding` 主目标首次可见的延迟目标为 P95 <= 1 秒（本地 Viewer 会话）。
@@ -146,6 +148,7 @@
   - NFR-POD-4: `PostOnboarding` 不能隐藏现有自由操作入口；系统给目标，但不锁死玩家。
   - NFR-POD-5: `#46` 回归验证在 `test_tier_required` 中必须可复跑，并具备至少 1 条 Web 证据和 1 张 playability 卡片。
   - NFR-POD-6: 相关变更在 1 个工作日内同步回写 `game` 根 PRD / project / 索引。
+  - NFR-POD-7: `branch_ready` 首次出现时，100% 推荐分支必须具备最小承诺条；v1 不要求动态 quest tree，但要求玩家能比较“选这条路线会改变什么”。
 - Security & Privacy:
   - 本期仅消费已有世界状态和事件快照，不新增账号级敏感数据采集。
   - 目标推荐不得绕过 runtime 权限边界，不得生成超出当前系统实际可执行能力的承诺。
@@ -176,3 +179,4 @@
 | DEC-POD-001 | 新增独立 `PostOnboarding` 阶段 | 继续沿用 onboarding 结束后的静态提示 | 静态提示不能形成正式阶段切换，也无法承接 mid-loop。 |
 | DEC-POD-002 | 首个主目标默认工业 / 持续能力优先 | 直接把治理 / 对抗 / 长循环目标抛给新玩家 | 工业成长是当前最早可感知、最可验证的组织能力闭环。 |
 | DEC-POD-003 | v1 采用规则型目标选择器 | 直接用 LLM 生成动态任务 | 规则型更稳定、可测试，也更适合先关闭 `#46` 的产品缺口。 |
+| DEC-POD-004 | `branch_ready` 使用最小承诺条表达 1~3 条分支 | 只展示“扩产 / 治理 / 协作”等方向名称，或直接做完整动态任务树 | 方向标签不能形成战略承诺感；完整 quest tree 超出 v1 范围，最小承诺条能先支撑比较与回访动机。 |

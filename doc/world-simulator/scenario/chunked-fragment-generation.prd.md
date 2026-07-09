@@ -189,6 +189,11 @@
 - `snapshot.version=2` / `journal.version=2` 允许迁移到当前版本 `v3`（CG6），并补齐 `chunk_generation_schema_version` 默认值。
 - 其他未知版本保持拒绝加载，避免无声破坏账本一致性。
 
+#### 资源恢复预览约束（与 FRB4 对齐）
+- `FragmentsReplenished` 作为运行期恢复事件时，不应只作为 replay / 后台账本事件存在；当玩家面临 chunk/frag 资源不足、目标 frag 采空或第一工业目标缺料时，玩家侧应能读取 `resource_replenishment_quote` / `fragment_refill_preview`。
+- 预览必须把 `remaining_by_element` / `remaining_by_compound` 的粗粒度状态、下一次补种 tick、预计补种数量、等待成本和当前工业目标关联转换为玩家选择：等待当前 chunk、移动到其他 frag/chunk，或切换替代材料路线。
+- 若动作或策略推荐等待补种，但缺少 `next_replenish_tick`、`estimated_replenished_frag_count`、`next_industrial_goal_relevance` 或 `recommended_resource_action`，标记为 `resource_replenishment_quote_missing`；该缺口不改变生成即定量、采集扣减、回放校验或资源守恒规则。
+
 ### 经济资源映射契约（与 M4 对齐，CG8 落地）
 为接入现有 `electricity/hardware/data` 三类核心资源，先落地“化合物质量 -> hardware”的最小闭环：
 
@@ -196,18 +201,31 @@
 - `CompoundRefined`（事件）：输出 `electricity_cost + hardware_output`。
 - `electricity` 作为加工消耗项；`hardware` 作为加工产物。
 - `data` 与高级工艺链（`ManufactureHardware/SynthesizeData`）留到后续迭代。
+- 玩家侧提交前应能读取 `refine_quote` / `refine_preview`，解释本次精炼消耗多少电力、产出多少硬件、是否足以推进首个工厂/制成品目标；不得只在执行后事件里暴露扣电与产出。
 
 参数与公式：
 - `WorldConfig.economy.refine_electricity_cost_per_kg`（默认 `2`）
 - `WorldConfig.economy.refine_hardware_yield_ppm`（默认 `1000`）
 - `electricity_cost = ceil(compound_mass_g / 1000) * refine_electricity_cost_per_kg`
 - `hardware_output = compound_mass_g * refine_hardware_yield_ppm / 1_000_000`
+- 预览字段：
+  - `compound_mass_g`: 本次计划投入的 compound 质量。
+  - `electricity_cost`: 本次预计消耗的电力。
+  - `hardware_output`: 本次预计产出的 hardware。
+  - `electricity_after`: 成功精炼后的预计剩余电力。
+  - `hardware_shortfall_before`: 精炼前距离当前第一工业目标所需 hardware 的缺口。
+  - `hardware_shortfall_after`: 精炼后距离当前第一工业目标所需 hardware 的缺口。
+  - `first_goal_relevance`: 本次产出将如何推进首个工厂、首个制成品或首条稳定产线。
+  - `recommended_refine_amount`: 推荐精炼质量；应避免默认把所有 compound 一次性转成 hardware。
+  - `refine_value_class`: `enough_for_next_step / partial_progress / poor_power_tradeoff`。
 
 最小守恒与约束：
 - 输入约束：`compound_mass_g > 0`。
 - 电力约束：`owner.electricity >= electricity_cost`，否则 `ActionRejected(InsufficientResource)`。
 - 产出约束：`hardware_output > 0`，否则 `ActionRejected(InvalidAmount)`。
 - 落账约束：成功动作必须追加 `CompoundRefined`，并在回放中重放扣电与加硬件。
+- Edge case: 若 `RefineCompound` 可提交但玩家看不到 `electricity_cost`、`hardware_output` 或 `hardware_shortfall_before/after`，标记为 `refine_quote_missing`；该缺口属于精炼净收益/电力机会成本可读性问题，不改变公式、产率或拒绝条件。
+- Acceptance: 精炼前玩家至少能判断“花这些电，换来的 hardware 是否足够推进当前第一工业目标”；若不足，应给出推荐精炼量或提示先采矿/先补电。
 
 ### 跨 chunk 边界一致性规则（CG7 落地）
 - 归属规则：碎片按中心点归属 chunk；候选碎片生成时先做“本 chunk 内 spacing”，再做“邻接 chunk（26 邻域）校验”。
@@ -235,6 +253,8 @@
 - 未访问 chunk 不进入 `Generated` 状态。
 - 回放后 chunk 状态与资源账本与原运行一致。
 - RefineCompound 链路满足电力约束与回放一致性。
+- RefineCompound 预览满足 `refine_quote` 可读性：电力成本、硬件产出、精炼后电力、目标缺口前后变化和第一工业目标关联均可追溯。
+- FragmentsReplenished 预览满足 `resource_replenishment_quote` 可读性：下一次补种 tick、预计补种量、当前剩余量摘要、等待成本、第一工业目标关联和推荐资源行动均可追溯。
 - 在默认预算下，批量生成不出现 OOM 或极端耗时。
 
 ### 回放一致性与性能回归测试（CG10 落地）
@@ -266,6 +286,7 @@
 - **CG6**：实现持久化与回放契约（ChunkGenerated 事件/快照字段/版本迁移）。
 - **CG7**：实现跨 chunk 边界一致性（邻块校验 + BoundaryReservation 保留/消费）。
 - **CG8**：实现经济资源映射最小闭环（`RefineCompound -> electricity/hardware`）。
+- **CG8.1**：冻结 `refine_quote` / `refine_preview` 玩家侧合同；本补充只约束精炼提交前可读性，不重平衡精炼公式。
 - **CG9**：实现分块生成性能预算与确定性降级（fragments/blocks 三档上限）。
 - **CG10**：补充回放一致性与性能回归测试（预算约束场景）。
 

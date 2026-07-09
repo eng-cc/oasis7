@@ -38,6 +38,11 @@
   - `completion_condition`
   - `eta`
   - `remaining_hint`
+  - `target_frag_id`
+  - `expected_material_hint`
+  - `starter_value_reason`
+  - `distance_or_accessibility_reason`
+  - `first_recipe_relevance`
 - 首局进度状态（Player Experience Local State）：
   - `session_started_at_secs`
   - `last_progress_tick`
@@ -48,6 +53,10 @@
 - 触发规则：
   - 卡住：连接成功后 `tick` 与 `event_count` 连续 5 秒无增量。
   - 结算：`guide_progress.explore_ready == true` 后首次展示回顾面板。
+- 首局 frag 推荐规则：
+  - 当 `next_action` 指向采集/探索某个 starter frag 时，Mission HUD 必须在行动前展示“为什么是这个 frag”的一行理由。
+  - reason 至少覆盖材质预期、可达性原因和第一工业目标关联。
+  - 若缺少这些字段，标记为 `starter_frag_hint_missing`，不得只展示泛化“探索附近碎片”。
 
 ## 5. Risks & Roadmap
 - M1：主任务文案结构化（动作/条件/耗时）+ 次任务折叠。
@@ -68,6 +77,7 @@
 ## 验收口径
 - Q1（目标理解）主观档位从“有点模糊”提升到“基本清楚/很清楚”为主。
 - 首局 60 秒内玩家完成首个有效动作（打开面板/选择目标/触发反馈）的可观测比例提升。
+- 首局推荐采集 frag 时，玩家在行动前能读到材质预期与它支持的第一工业目标；否则不计入目标理解通过。
 - 卡住场景下 5 秒内出现明确恢复提示，不再静默等待。
 - 当 `stuck_hint_visible=true` 且新手引导卡可见时，Mission HUD 不得与引导卡发生视觉重叠（同一截图中卡片边界有明确间距）。
 
@@ -77,6 +87,7 @@
   - 完成条件
   - 预计耗时
   - 剩余目标提示
+  - starter frag 材质预期与第一工业目标关联（后续实现项）
   - 次任务默认折叠
 - “执行下一步”按钮已按步骤提供语义化 CTA，探索阶段可直接切换 Command 并触发 `play`。
 - 已新增 5 秒无进展检测与恢复提示（基于 `tick + event_count` 双信号）。

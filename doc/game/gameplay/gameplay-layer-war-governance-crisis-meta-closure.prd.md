@@ -46,6 +46,13 @@
 - `CrisisResolved`：危机处理结果。
 - `MetaProgressGranted`：元进度发放。
 
+### 玩家侧战争后果预览
+- `DeclareWar` / 调整强度 / 暂缓 / 先谈判动作必须能派生 `war_declaration_quote` / `conflict_outcome_preview`。
+- 最小字段：`actor_alliance_id`、`target_alliance_id`、`action_kind`、`intensity`、`recommended_intensity_band`、`war_duration_ticks`、`aggressor_score_estimate`、`defender_score_estimate`、`likely_winner_before_action`、`victory_margin_estimate`、`conflict_window_blocked_until`、`reentry_cooldown_or_active_conflict_blocker`、`expected_narrative_or_module_reward`、`settlement_risk`、`alternative_action`、`recommended_war_action`、`why_this_war_is_worth_or_risky`。
+- Edge case: 若玩家准备宣战或调整强度，但看不到预计胜负、持续时间、冲突占用、结算风险、推荐强度或替代行动理由，标记为 `war_declaration_quote_missing`。
+- Acceptance: 战争原语不应只在 `WarDeclared` / `WarConcluded` 事件中解释；玩家提交宣战前应能判断当前时机、目标、强度、胜算、结算后果和替代路径。
+- Non-goal: 本补充不改变战争动作、结算公式、持续时间、胜负判定、runtime ABI 或内建模块启动闭环；只冻结玩家侧后果可读性。
+
 ### 状态模型（新增）
 - `alliances: BTreeMap<String, AllianceState>`
 - `wars: BTreeMap<String, WarState>`
