@@ -12,10 +12,9 @@
 - 想用截图加模型视觉评审替代绝大部分人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，输出卡模板在 `doc/testing/templates/model-visual-review-card-template.md`
 - 想跑真实本地栈 + Playwright + 玩家 UI 操作流程，并把这些用例作为一个长期系列管理：`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想本地启动接入 formal `public_testnet` 大世界的 test 环境、本地 viewer/API、NewAPI quota bridge 与 LetAI provider bridge，并把 OC -> NewAPI/LetAI 充值链路纳入测试：`doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md`
-- 想看当前活跃任务、阻断与最新完成项：`doc/testing/project.md`
+- 想看当前执行窗口、活跃任务、QA 阻断、覆盖缺口与最新高价值收口：`doc/testing/project.md`
 - 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`、`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
-- 想先看当前 QA 阻断与活跃覆盖缺口：`doc/testing/project.md`
 - 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/testing/prd.index.md`
 
