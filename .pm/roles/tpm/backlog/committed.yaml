@@ -1,4 +1,18 @@
 version: 1
 role: tpm
 status: committed
-tasks: []
+tasks:
+  - task_uid: task_259e8905392448cb86ae9108582ed296
+    title: "Investigate Aliyun 204 traffic spike"
+    module: engineering
+    priority: P1
+    source_signal: ""
+    related_prd: []
+    acceptance:
+      - "Identify recent two-day traffic sources and likely cause on the 204 ECS host."
+      - "Record evidence path and attribution boundaries for any operational conclusion."
+      - "Implement a durable code guard that prevents deterministic local state divergence from repeatedly pulling replication data from peers."
+      - "Merge the fix, build CI packages for supported testnet platforms, and update/verify all public testnet nodes."
+    handoff_to: []
+    status: committed
+    task_path: https://github.com/eng-cc/oasis7/issues/2179

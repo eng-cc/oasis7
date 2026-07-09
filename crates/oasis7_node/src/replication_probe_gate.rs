@@ -36,6 +36,13 @@ impl PosNodeEngine {
             "probe_from_height",
             "probing replication successor commit",
         )?;
+        if Self::replication_gap_sync_local_state_blocked(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            probe_height,
+        ) {
+            return Ok(true);
+        }
         if let Some(last_hold_decision) =
             self.replication_successor_probe_cooldown_decision(probe_height, now_ms)
         {
@@ -55,21 +62,50 @@ impl PosNodeEngine {
                 self.last_replication_successor_probe_height = None;
                 self.last_replication_successor_probe_at_ms = None;
                 self.last_replication_successor_probe_hold = None;
-                let (block_hash, committed_at_ms) =
-                    with_execution_hook(&mut execution_hook, |hook| {
-                        self.execute_synced_replication_commit(world_id, &payload, hook)
-                    })?;
-                self.persist_synced_replication_message(
+                let execution_result = with_execution_hook(&mut execution_hook, |hook| {
+                    self.execute_synced_replication_commit(world_id, &payload, hook)
+                });
+                let (block_hash, committed_at_ms) = match execution_result {
+                    Ok(result) => result,
+                    Err(err) => {
+                        self.record_replication_gap_sync_local_state_block(
+                            probe_height,
+                            self.network_committed_height.max(probe_height),
+                            probe_height,
+                            err.to_string(),
+                        );
+                        return Err(err);
+                    }
+                };
+                if let Err(err) = self.persist_synced_replication_message(
                     endpoint,
                     node_id,
                     world_id,
                     replication_runtime,
                     &message,
                     probe_height,
-                )?;
+                ) {
+                    self.record_replication_gap_sync_local_state_block(
+                        probe_height,
+                        self.network_committed_height.max(probe_height),
+                        probe_height,
+                        err.to_string(),
+                    );
+                    return Err(err);
+                }
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(probe_height);
-                self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)?;
+                if let Err(err) =
+                    self.record_synced_replication_height(probe_height, block_hash, committed_at_ms)
+                {
+                    self.record_replication_gap_sync_local_state_block(
+                        probe_height,
+                        self.network_committed_height.max(probe_height),
+                        probe_height,
+                        err.to_string(),
+                    );
+                    return Err(err);
+                }
                 Ok(true)
             }
             Ok(GapSyncHeightOutcome::NotFound { .. }) => {

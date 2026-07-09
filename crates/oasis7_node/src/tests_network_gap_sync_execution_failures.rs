@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::*;
 
@@ -33,6 +34,18 @@ impl NodeExecutionHook for PassthroughExecutionHook {
             execution_state_root: format!("exec-state-{}", context.height),
         })
     }
+}
+
+#[test]
+fn local_state_block_reason_requires_deterministic_signature() {
+    assert!(PosNodeEngine::replication_gap_sync_local_state_blocked_reason(
+        "node execution error: execution driver peer mismatch at height 1"
+    ));
+    assert!(
+        !PosNodeEngine::replication_gap_sync_local_state_blocked_reason(
+            "node execution error: temporary execution driver unavailable"
+        )
+    );
 }
 
 #[test]
@@ -90,12 +103,16 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
         .expect("commit payload");
     let expected_hash = message.record.content_hash.clone();
     let expected_blob = message.payload.clone();
+    let fetch_commit_calls = Arc::new(AtomicUsize::new(0));
+    let fetch_blob_calls = Arc::new(AtomicUsize::new(0));
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
             Box::new({
                 let message = message.clone();
+                let fetch_commit_calls = Arc::clone(&fetch_commit_calls);
                 move |_payload| {
+                    fetch_commit_calls.fetch_add(1, Ordering::SeqCst);
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
@@ -110,21 +127,26 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
-            Box::new(move |payload| {
-                let request =
-                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
-                        .map_err(|err| WorldError::DistributedValidationFailed {
-                            reason: format!("decode fetch blob request failed: {err}"),
-                        })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-            range_offset_bytes: None,
-            range_complete: None,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
-                .map_err(|err| WorldError::DistributedValidationFailed {
-                    reason: format!("encode fetch blob response failed: {err}"),
-                })
+            Box::new({
+                let fetch_blob_calls = Arc::clone(&fetch_blob_calls);
+                move |payload| {
+                    fetch_blob_calls.fetch_add(1, Ordering::SeqCst);
+                    let request =
+                        serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                            .map_err(|err| WorldError::DistributedValidationFailed {
+                                reason: format!("decode fetch blob request failed: {err}"),
+                            })?;
+                    serde_json::to_vec(&super::replication::FetchBlobResponse {
+                        found: request.content_hash == expected_hash,
+                        range_offset_bytes: None,
+                        range_complete: None,
+                        blob: (request.content_hash == expected_hash)
+                            .then(|| expected_blob.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch blob response failed: {err}"),
+                    })
+                }
             }),
         )
         .expect("register fetch blob handler");
@@ -160,6 +182,27 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
         .load_commit_message_by_height(world_id, 1)
         .expect("load persisted commit after failed probe")
         .is_none());
+    assert_eq!(fetch_commit_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fetch_blob_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(engine.last_replication_gap_sync_blocked_height, Some(1));
+    assert!(
+        engine
+            .last_replication_gap_sync_blocked_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("replication gap sync local state blocked"),
+        "{:?}",
+        engine.last_replication_gap_sync_blocked_reason
+    );
+    assert!(
+        engine
+            .last_replication_gap_sync_blocked_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("forced execution failure at height 1"),
+        "{:?}",
+        engine.last_replication_gap_sync_blocked_reason
+    );
     let reopened_replication =
         super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
             .expect("reopen local replication runtime");
@@ -169,7 +212,7 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
             .expect("reopened latest persisted height after failed probe"),
         0
     );
-    let retry_err = engine
+    engine
         .maybe_hold_proposal_for_replication_successor_probe(
             &endpoint,
             "node-b",
@@ -178,10 +221,16 @@ fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
             Some(&mut replication),
             Some(&mut hook),
         )
-        .expect_err("probe retry should still surface execution failure");
-    assert!(
-        matches!(retry_err, NodeError::Execution { ref reason } if reason.contains("forced execution failure at height 1")),
-        "unexpected probe retry error: {retry_err:?}"
+        .expect("blocked deterministic successor probe retry should be locally quarantined");
+    assert_eq!(
+        fetch_commit_calls.load(Ordering::SeqCst),
+        1,
+        "deterministic local-state failure should not keep fetching commits"
+    );
+    assert_eq!(
+        fetch_blob_calls.load(Ordering::SeqCst),
+        1,
+        "deterministic local-state failure should not keep fetching blobs"
     );
 
     let _ = fs::remove_dir_all(&dir_remote);
@@ -243,12 +292,16 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
         .expect("commit payload");
     let expected_hash = message.record.content_hash.clone();
     let expected_blob = message.payload.clone();
+    let fetch_commit_calls = Arc::new(AtomicUsize::new(0));
+    let fetch_blob_calls = Arc::new(AtomicUsize::new(0));
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL,
             Box::new({
                 let message = message.clone();
+                let fetch_commit_calls = Arc::clone(&fetch_commit_calls);
                 move |_payload| {
+                    fetch_commit_calls.fetch_add(1, Ordering::SeqCst);
                     serde_json::to_vec(&super::replication::FetchCommitResponse {
                         found: true,
                         message: Some(message.clone()),
@@ -263,21 +316,26 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
     network
         .register_handler(
             super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
-            Box::new(move |payload| {
-                let request =
-                    serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
-                        .map_err(|err| WorldError::DistributedValidationFailed {
-                            reason: format!("decode fetch blob request failed: {err}"),
-                        })?;
-                serde_json::to_vec(&super::replication::FetchBlobResponse {
-                    found: request.content_hash == expected_hash,
-            range_offset_bytes: None,
-            range_complete: None,
-                    blob: (request.content_hash == expected_hash).then(|| expected_blob.clone()),
-                })
-                .map_err(|err| WorldError::DistributedValidationFailed {
-                    reason: format!("encode fetch blob response failed: {err}"),
-                })
+            Box::new({
+                let fetch_blob_calls = Arc::clone(&fetch_blob_calls);
+                move |payload| {
+                    fetch_blob_calls.fetch_add(1, Ordering::SeqCst);
+                    let request =
+                        serde_json::from_slice::<super::replication::FetchBlobRequest>(payload)
+                            .map_err(|err| WorldError::DistributedValidationFailed {
+                                reason: format!("decode fetch blob request failed: {err}"),
+                            })?;
+                    serde_json::to_vec(&super::replication::FetchBlobResponse {
+                        found: request.content_hash == expected_hash,
+                        range_offset_bytes: None,
+                        range_complete: None,
+                        blob: (request.content_hash == expected_hash)
+                            .then(|| expected_blob.clone()),
+                    })
+                    .map_err(|err| WorldError::DistributedValidationFailed {
+                        reason: format!("encode fetch blob response failed: {err}"),
+                    })
+                }
             }),
         )
         .expect("register fetch blob handler");
@@ -313,6 +371,27 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
         .load_commit_message_by_height(world_id, 1)
         .expect("load persisted commit after failed gap sync")
         .is_none());
+    assert_eq!(fetch_commit_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fetch_blob_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(engine.last_replication_gap_sync_blocked_height, Some(1));
+    assert!(
+        engine
+            .last_replication_gap_sync_blocked_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("replication gap sync local state blocked"),
+        "{:?}",
+        engine.last_replication_gap_sync_blocked_reason
+    );
+    assert!(
+        engine
+            .last_replication_gap_sync_blocked_reason
+            .as_deref()
+            .unwrap_or("")
+            .contains("forced execution failure at height 1"),
+        "{:?}",
+        engine.last_replication_gap_sync_blocked_reason
+    );
     let reopened_replication =
         super::replication::ReplicationRuntime::new(&local_replication_config, "node-b")
             .expect("reopen local replication runtime");
@@ -322,7 +401,7 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
             .expect("reopened latest persisted height after failed gap sync"),
         0
     );
-    let retry_err = engine
+    engine
         .sync_missing_replication_commits(
             &endpoint,
             "node-b",
@@ -330,10 +409,16 @@ fn gap_sync_does_not_advance_replication_cursor_when_execution_fails() {
             Some(&mut replication),
             Some(&mut hook),
         )
-        .expect_err("gap sync retry should still surface execution failure");
-    assert!(
-        matches!(retry_err, NodeError::Execution { ref reason } if reason.contains("forced execution failure at height 1")),
-        "unexpected gap sync retry error: {retry_err:?}"
+        .expect("blocked deterministic gap sync retry should be locally quarantined");
+    assert_eq!(
+        fetch_commit_calls.load(Ordering::SeqCst),
+        1,
+        "deterministic local-state failure should not keep fetching commits"
+    );
+    assert_eq!(
+        fetch_blob_calls.load(Ordering::SeqCst),
+        1,
+        "deterministic local-state failure should not keep fetching blobs"
     );
 
     let _ = fs::remove_dir_all(&dir_remote);

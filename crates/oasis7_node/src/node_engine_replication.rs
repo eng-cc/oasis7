@@ -22,39 +22,6 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_repair_attempt_route_snapshot = Some(route_snapshot);
     }
 
-    pub(super) fn publish_execution_checkpoint_descriptor_providers(
-        endpoint: &ReplicationNetworkEndpoint,
-        world_id: &str,
-        replication_runtime: &ReplicationRuntime,
-        descriptor: &NodeExecutionCheckpointDescriptor,
-    ) -> Result<(), NodeError> {
-        let publish_if_present = |content_hash: &str, expected_size_bytes: u64| {
-            let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? else {
-                return Ok(());
-            };
-            if bytes.len() as u64 != expected_size_bytes {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "execution checkpoint provider publish local blob size mismatch hash={} expected={} actual={}",
-                        content_hash,
-                        expected_size_bytes,
-                        bytes.len()
-                    ),
-                });
-            }
-            endpoint.publish_local_content_provider_best_effort(world_id, content_hash);
-            Ok(())
-        };
-        publish_if_present(
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            publish_if_present(blob_ref.content_hash.as_str(), blob_ref.size_bytes)?;
-        }
-        Ok(())
-    }
-
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
         if self
             .last_replication_gap_sync_blocked_height
@@ -852,6 +819,18 @@ impl PosNodeEngine {
 
         let network_lag =
             advertised_network_height.saturating_sub(self.replication_persisted_height);
+        let next_height = checked_replication_successor(
+            self.replication_persisted_height,
+            "replication_persisted_height",
+            "starting replication gap sync",
+        )?;
+        if Self::replication_gap_sync_local_state_blocked(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            next_height,
+        ) {
+            return Ok(());
+        }
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
@@ -893,11 +872,7 @@ impl PosNodeEngine {
             }
         }
 
-        let mut next_height = checked_replication_successor(
-            self.replication_persisted_height,
-            "replication_persisted_height",
-            "starting replication gap sync",
-        )?;
+        let mut next_height = next_height;
         let now_ms = crate::runtime_util::now_unix_ms();
         if replication_gap_sync_provider_blob_route_blocked_in_cooldown(
             self.last_replication_gap_sync_blocked_height,
@@ -980,25 +955,59 @@ impl PosNodeEngine {
                             "attempt {attempt}/{} failed: {}",
                             REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT, err
                         ));
+                        if Self::replication_gap_sync_local_state_blocked_reason(
+                            last_error.as_deref().unwrap_or(""),
+                        ) {
+                            break;
+                        }
                     }
                 }
             }
             if let Some((message, payload)) = synced_commit {
-                let (block_hash, committed_at_ms) =
-                    with_execution_hook(&mut execution_hook, |hook| {
-                        self.execute_synced_replication_commit(world_id, &payload, hook)
-                    })?;
-                self.persist_synced_replication_message(
+                let execution_result = with_execution_hook(&mut execution_hook, |hook| {
+                    self.execute_synced_replication_commit(world_id, &payload, hook)
+                });
+                let (block_hash, committed_at_ms) = match execution_result {
+                    Ok(result) => result,
+                    Err(err) => {
+                        self.record_replication_gap_sync_local_state_block(
+                            next_height,
+                            advertised_network_height,
+                            gap_sync_target_height,
+                            err.to_string(),
+                        );
+                        return Err(err);
+                    }
+                };
+                if let Err(err) = self.persist_synced_replication_message(
                     endpoint,
                     node_id,
                     world_id,
                     replication_runtime,
                     &message,
                     next_height,
-                )?;
+                ) {
+                    self.record_replication_gap_sync_local_state_block(
+                        next_height,
+                        advertised_network_height,
+                        gap_sync_target_height,
+                        err.to_string(),
+                    );
+                    return Err(err);
+                }
                 self.replication_persisted_height =
                     self.replication_persisted_height.max(next_height);
-                self.record_synced_replication_height(next_height, block_hash, committed_at_ms)?;
+                if let Err(err) =
+                    self.record_synced_replication_height(next_height, block_hash, committed_at_ms)
+                {
+                    self.record_replication_gap_sync_local_state_block(
+                        next_height,
+                        advertised_network_height,
+                        gap_sync_target_height,
+                        err.to_string(),
+                    );
+                    return Err(err);
+                }
                 if record_peer_heads_from_gap_sync {
                     self.observe_peer_committed_head(
                         payload.node_id.as_str(),
@@ -1092,18 +1101,24 @@ impl PosNodeEngine {
             }
             self.last_replication_gap_sync_blocked_height = Some(next_height);
             self.last_replication_gap_sync_blocked_at_ms = None;
-            self.last_replication_gap_sync_blocked_reason = Some(format!(
-                "replication gap sync failed at height {next_height}: {}",
-                last_error
-                    .clone()
-                    .unwrap_or_else(|| "unknown error".to_string())
-            ));
+            let last_error = last_error.unwrap_or_else(|| "unknown error".to_string());
+            if Self::replication_gap_sync_local_state_blocked_reason(last_error.as_str()) {
+                self.record_replication_gap_sync_local_state_block(
+                    next_height,
+                    advertised_network_height,
+                    gap_sync_target_height,
+                    last_error.clone(),
+                );
+            } else {
+                self.last_replication_gap_sync_blocked_reason = Some(format!(
+                    "replication gap sync failed at height {next_height}: {}",
+                    last_error
+                ));
+            }
             return Err(NodeError::Replication {
                 reason: format!(
                     "gap sync height {} failed after {} attempts: {}",
-                    next_height,
-                    REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT,
-                    last_error.unwrap_or_else(|| "unknown error".to_string())
+                    next_height, REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT, last_error
                 ),
             });
         }
