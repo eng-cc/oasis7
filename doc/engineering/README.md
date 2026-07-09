@@ -17,8 +17,7 @@
 - 承接 engineering 治理趋势、季度审查与模板化流程沉淀。
 
 ## 按主题进入
-- 文档治理、入口减重与存量维护成本：先看 `doc/engineering/doc-governance/README.md`
-- 目录职责与 redirect 规则：先看 `doc/engineering/doc-governance/doc-structure-standard.prd.md`
+- 文档治理、入口减重、存量维护成本、目录职责与 redirect 规则：先看 `doc/engineering/doc-governance/README.md`，结构规范正文为 `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 环境分层、测试/正式云上清单、testnet/mainnet 口径：先看 `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 仓库健康手动巡检：先看 `doc/engineering/governance/repository-health-manual-inspection.runbook.md`
 - Rust 体量治理：先看 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
