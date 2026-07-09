@@ -21,7 +21,7 @@
 - [ ] 执行 `./scripts/doc-governance-check.sh`
 - [ ] 抽查本季度新增专题三件套与 `prd.index.md` 可达性
 - [ ] 复核 remediation 项是否都已分配 owner 与截止时间
-- [ ] 将发现问题写入 remediation 模板
+- [ ] 将发现问题写入 GitHub task issue evidence comments；需要跨任务跟踪的 follow-up 先记录到 `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md` 或对应 GitHub-backed task
 
 ## Findings
 | ID | 类型 | 影响范围 | 结论 | owner | 优先级 |

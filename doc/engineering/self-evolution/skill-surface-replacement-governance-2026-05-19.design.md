@@ -117,4 +117,5 @@
 ## 5. 使用方式
 
 - 看正式 inventory 判定、验收与决策：读 `skill-surface-replacement-governance-2026-05-19.prd.md`
-- 看当前任务与 follow-up：读 `skill-surface-replacement-governance-2026-05-19.project.md`
+- 看已完成任务与 follow-up 收口摘要：读 `skill-surface-replacement-governance-2026-05-19.project.md`
+- 看当前默认/非默认 skill reachability：读 `doc/engineering/workflow/source-of-truth.md#12-specialist-skill-reachability` 与 `skills/README.md`
