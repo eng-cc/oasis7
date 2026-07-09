@@ -44,7 +44,9 @@
   - `./scripts/doc-governance-check.sh`
   - `git diff --check`
 - `TASK-GAME-062` / 首次控制地板
-  - `./scripts/run-game-test.sh`
+  - 本地真实 LetAI provider-backed 试玩：`./scripts/run-local-letai-game-test.sh`
+  - 制作人 / 发布前人工验收：`./scripts/run-producer-playtest.sh --open-headed`
+  - QA / subagent evidence：`./scripts/worktree-harness.sh up`，再用 `GAME_URL="$(./scripts/worktree-harness.sh url)"` 捕获 URL 后按需执行 `./scripts/run-game-test-ab.sh --url "$GAME_URL"`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 viewer::runtime_live::mapping -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer -- --nocapture`
   - headed Web/UI + `software_safe` 各 1 轮 `agent-browser` 主路径复跑并留证
@@ -52,7 +54,9 @@
   - `env -u RUSTC_WRAPPER cargo test -p oasis7 runtime::tests::economy:: -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer ui_text_industrial -- --nocapture`
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer feedback_tone_for_event_maps_warning_positive_and_info -- --nocapture`
-  - `./scripts/run-game-test.sh`
+  - 本地真实 LetAI provider-backed 试玩：`./scripts/run-local-letai-game-test.sh`
+  - 制作人 / 发布前人工验收：`./scripts/run-producer-playtest.sh --open-headed`
+  - QA / subagent evidence：`./scripts/worktree-harness.sh up`，再用 `GAME_URL="$(./scripts/worktree-harness.sh url)"` 捕获 URL 后按需执行 `./scripts/run-game-test-ab.sh --url "$GAME_URL"`
   - 按 `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` 复跑卡片 A/B/C，并补 `30` 分钟或 `1~3` 次会话 capability follow-up 样本
 - `TASK-GAME-064` / 首屏降噪与后果可见化
   - `env -u RUSTC_WRAPPER cargo test -p oasis7_viewer push_feedback_toast_uses_runtime_industry_friendly_detail -- --nocapture`
@@ -63,7 +67,7 @@
   - headed Web/UI 与 pure API 人工复核 `投入 / 产出 / 新用途 / 修复动作 / 下一步价值`
   - `git diff --check`
 - `TASK-GAME-065` / 10 分钟 trust gate
-  - active-LLM 正式 lane：至少 3 轮 `./scripts/run-game-test.sh` + headed Web/UI 10 分钟 trust 样本
+  - active-LLM 正式 lane：至少 3 轮当前正式入口样本（本地真实 LetAI provider-backed 试玩用 `./scripts/run-local-letai-game-test.sh`；制作人 / 发布前人工验收用 `./scripts/run-producer-playtest.sh --open-headed`；QA / subagent evidence 用 `./scripts/worktree-harness.sh up` + `./scripts/run-game-test-ab.sh --url "$GAME_URL"`）+ headed Web/UI 10 分钟 trust 样本
   - `viewer` floor：至少 1 轮正式入口复核；`software_safe` 仅作为 compat alias 复核
   - 回写 `doc/playability_test_result/card_*.md` 与 QA trust verdict，并单列 capability verdict 现状
 - `TASK-GAME-076` / 前 10/30 分钟吸引力
@@ -178,7 +182,7 @@
   - `TASK-GAMEPLAY-RR-001~004` 已完成并回写 `.pm`；其中 `TASK-GAMEPLAY-RR-002/003/004` 分别收口了控制门控与 ack 语义、工业中循环 canonical 包，以及首屏噪音/后果可见化。
   - runtime follow-up `task_7bdbbf9839c74c9eb7bb8c7c161e87de` 已修复 formal lane 在 prior progress 后收到 `blocked` / `completed_no_progress` 反馈时被错误映射回 `first_session_loop` 的问题；这说明样本 B/C 里的“掉回新手态”至少有一部分是快照阶段机口径缺口，而不是完整的真实阶段回滚。
   - runtime follow-up `task_fb967ddaadde459786e286b484bc4b0c` 已补齐另一条独立 freeze path：formal lane 一旦在 prior progress 之后遇到瞬时 LLM access / decision failure，后台 `play` 过去会直接关闭 `session.playing`，把一次短暂 provider 抖动放大成 `logicalTime/eventSeq` 长时间不再前进；当前已改成有限预算重试，并用 runtime-live `auth_actions` 回归固定住“短暂失败可重试、预算耗尽仍停机”的边界。
-  - runtime follow-up `task_8d2e20dd7f5c47fd8303ff55159227ba` 已清除另一条更前置的 startup blocker：当前 `NodeRuntimeExecutionDriver` 会在 fresh execution world / simulator mirror 启动时立即落盘 `snapshot.json` 与 `journal.json`，因此 `run-game-test --json-ready` 不再因 `reward-runtime-execution-world` 缺少初始持久化文件而在 Viewer HTTP ready 前退出。该切片只恢复 trust sample 的启动前提，不单独改变 `trust gate` / `first capability gate` verdict。
+  - runtime follow-up `task_8d2e20dd7f5c47fd8303ff55159227ba` 已清除另一条更前置的 startup blocker：当前 `NodeRuntimeExecutionDriver` 会在 fresh execution world / simulator mirror 启动时立即落盘 `snapshot.json` 与 `journal.json`，因此旧 formal sample wrapper 不再因 `reward-runtime-execution-world` 缺少初始持久化文件而在 Viewer HTTP ready 前退出。当前 QA / subagent evidence 入口按 `worktree-harness.sh up` + `run-game-test-ab.sh --url "$GAME_URL"` 口径执行；该切片只恢复 trust sample 的启动前提，不单独改变 `trust gate` / `first capability gate` verdict。
   - runtime follow-up `task_319c1fc645b04dd185f3afb45dcd00ee` 已把当前 20% 长停的第三条独立签名钉住为 industrial schema drift，而且不是单点文案问题：`llm_agent` prompt/runtime helper 还在声明 assembler-only `factory_kind/recipe_id`，`recipe_coverage` 只跟踪 assembler 三条配方，而 shadow kernel `recipe_plan()` 甚至不会接受 `recipe.smelter.*`；但 `PostOnboarding` canonical 目标链与 `runtime_live` gameplay actions 已切到 smelter-first bootstrap。这样 formal lane 的 active LLM 即使持续推进 world time，也可能始终拿不到、或在 shadow decision path 里直接拒掉，`factory.smelter.mk1` / `recipe.smelter.*` 这些首条能力链动作，表现为一直停在 `post_onboarding.establish_first_capability / 20%`。当前已同步更新 LLM 工业提示、factory/recipe fallback、tracked recipe coverage、shadow kernel recipe support 与定向回归测试，用来消除这条“世界在动但能力链没法被决策命中”的 stall 来源。
   - viewer follow-up `task_a0173315eb4d44c9b83073dd55442f48` 已补齐上一条修复里仍残留的 advanced industrial recipe surface drift：`player_gameplay` 现在会显式暴露 runtime 已支持的 `scale_out` / `governance` 配方动作，active-LLM recipe truth 也扩到 runtime 已开放的 smelter / assembler 高阶配方，shadow kernel 决策面不再漏掉 `recipe.smelter.alloy_plate`、`recipe.assembler.gear`、`recipe.assembler.sensor_pack`、`recipe.assembler.module_rack`、`recipe.assembler.factory_core`。这条 follow-up 的目标是避免 canonical gameplay、LLM 提示与 shadow decision path 继续各说各话，把 runtime 明明可执行的工业能力链留在“支持但永远不会被选中”的灰区。
   - runtime follow-up `task_ed2dd76639264739a61a25c0d89c3352` 已收口当前 retention slice 的另一组 canonical truth regressions：`player_gameplay` 现在会优先跟随当前主线能力链，而不是被字典序更靠前的次级 blocked 工厂劫持；`industry_progress.stage` 也会在回收最后一座已完成产出的工厂后按现存工厂完成度重新回退，不再让历史累计完成数把失效能力误报成 `choose_first_expansion_tradeoff` 或 `choose_midloop_path`。该切片只修复真值误判，不替代新的 active-LLM formal retention 样本。

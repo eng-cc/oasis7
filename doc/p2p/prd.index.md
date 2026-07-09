@@ -127,8 +127,6 @@
 | `doc/p2p/network/readme-p1-network-production-hardening.prd.md` | `doc/p2p/network/readme-p1-network-production-hardening.design.md` | `doc/p2p/network/readme-p1-network-production-hardening.project.md` |
 | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.design.md` | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.project.md` |
 | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.prd.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.design.md` | `doc/p2p/node/node-consensus-signer-binding-replication-hardening.project.md` |
-| `doc/p2p/node/node-contribution-points-multi-node-closure-test.prd.md` | `doc/p2p/node/node-contribution-points-multi-node-closure-test.design.md` | `doc/p2p/node/node-contribution-points-multi-node-closure-test.project.md` |
-| `doc/p2p/node/node-contribution-points-runtime-closure.prd.md` | `doc/p2p/node/node-contribution-points-runtime-closure.design.md` | `doc/p2p/node/node-contribution-points-runtime-closure.project.md` |
 | `doc/p2p/node/node-contribution-points.prd.md` | `doc/p2p/node/node-contribution-points.design.md` | `doc/p2p/node/node-contribution-points.project.md` |
 | `doc/p2p/node/node-distfs-replication-network-closure.prd.md` | `doc/p2p/node/node-distfs-replication-network-closure.design.md` | `doc/p2p/node/node-distfs-replication-network-closure.project.md` |
 | `doc/p2p/node/node-execution-reward-consensus-bridge.prd.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.design.md` | `doc/p2p/node/node-execution-reward-consensus-bridge.project.md` |
@@ -180,6 +178,7 @@
 - ROUND-002 主从口径（observer）：`observer-sync-source-mode` 为主文档；`observer-sync-source-dht-mode` 为 DHT 增量子文档。
 - ROUND-002 主从口径（observer）：`observer-sync-mode-runtime-metrics` 为主文档；`metrics-runtime-bridge` 与 `observability` 为增量子文档。
 - ROUND-002 主从口径（node）：`node-contribution-points` 为主文档；`runtime-closure` 与 `multi-node-closure-test` 为增量子文档。
+- NodePoints historical/provenance note：`doc/p2p/node/node-contribution-points-runtime-closure.*` 与 `doc/p2p/node/node-contribution-points-multi-node-closure-test.*` 保留为已完成增量闭环/验证来源线索，不再作为根索引普通 active 三件套入口；当前首读与主规格以 `doc/p2p/node/node-contribution-points.prd.md`、`doc/p2p/node/node-contribution-points.project.md` 和 `doc/p2p/node/README.md` 为准。后续若删除这些历史子文档，需先完成引用审计与 deletion-readiness slice。
 - ROUND-002 主从口径（node）：`node-redeemable-power-asset` 为主文档；`audit-hardening` 与 `signature-governance-phase3` 为增量子文档。
 - ROUND-002 主从口径（distfs/self-healing）：`distfs-self-healing-control-plane-2026-02-23` 为主文档与需求/范围主入口；`polling-loop` 仅补充轮询策略/状态/入口增量；`runtime-polling-wiring` 仅补充 NodeRuntime 接线与执行器增量。通用边界、基线语义与无单机完整数据假设以主文档为准。
 - ROUND-002 主从口径（distfs）：`distfs-production-hardening-phase1` 为主文档；`phase2~phase9` 为增量子文档。

@@ -61,11 +61,12 @@
 - 首读入口:
   - `gameplay-limited-preview-execution-2026-03-22.prd.md`
   - `gameplay-closed-beta-readiness-2026-03-21.prd.md`
-  - `gameplay-release-gap-closure-2026-02-21.prd.md`
 - 适合问题:
   - limited preview 可以放什么、不能承诺什么
   - closed beta candidate gate 如何判断
-  - release gap 和 production closure 相关证据在哪里
+  - 当前 release gate 与候选级放行边界在哪里
+- 历史 closure / production provenance:
+  - release gap、production closure 与 runtime governance closure 旧专题只作为历史证据入口保留；当前首读先走 `gameplay-top-level-design.prd.md`、`gameplay-top-level-design.project.md`、`doc/game/prd.index.md#历史-closure--provenance-入口` 与 GitHub task issue evidence comments。
 
 ### 5. Economy、claim 与运营规则
 - 首读入口:
