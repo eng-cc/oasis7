@@ -195,7 +195,7 @@
 | --- | --- | --- | --- |
 | DEC-SPL-001 | 新增独立 `PRD-GAME-015`，专门定义 mature-world 小玩家成长线 | 继续把“小玩家如何继续玩”散落在 PostOnboarding、claim economy、playability evidence 与 issue 讨论中 | 当前缺的不是“首个能力能否完成”，而是“完成之后为何仍有独立价值”的正式合同。 |
 | DEC-SPL-002 | 把 `small-player lane` 起点放在 `first capability` 之后，而不是重新塞回首个 10 分钟 | 让 issue #165 与当前 early-retention 冲刺混成一个问题 | `PRD-GAME-012` 当前仍是主 blocker；如果把 mature-world 设计提前塞进 first-session，会打乱当前冲刺排序。 |
-| DEC-SPL-003 | 专业化选择必须先提供 `specialization_entry_quote` / `first_delivery_preview` | 只展示 `specialization_id`、区域有用性和切换成本 | 小玩家从 local operator 进入 regional specialist 时，需要看到第一单满足的本地需求、交付收益、预计时间和新增 leverage，才能把专业化理解为经营取舍。 |
+| DEC-SPL-007 | 专业化选择必须先提供 `specialization_entry_quote` / `first_delivery_preview` | 只展示 `specialization_id`、区域有用性和切换成本 | 小玩家从 local operator 进入 regional specialist 时，需要看到第一单满足的本地需求、交付收益、预计时间和新增 leverage，才能把专业化理解为经营取舍。 |
 | DEC-SPL-003 | 把 `protected first industrial win` 定义为“低爆炸半径 + 可恢复 + leverage 可见” | 把“保护”写成高风险模块/治理完全免疫，或继续不定义保护含义 | 完全免疫会制造失真预期；不定义又会让“首个胜利”在成熟世界里没有真实站得住脚的边界。 |
 | DEC-SPL-004 | 采用“limited-scope regional influence”，明确低于 global governance / alliance leadership | 让小玩家 first-success 直接跳到全局治理权，或反过来完全不给任何区域性影响 | 没有局部影响力，这条线会像重复打工；给太强又会破坏 mature-world 权力结构。 |
 | DEC-SPL-005 | 把 `player leverage != world activity` 写成本专题硬门槛 | 继续允许“世界很活跃”替代“玩家仍然有 meaningful participation” | `#165` 真正要解决的是小玩家是否还在推动世界，而不是世界是否本来就有很多事在发生。 |
