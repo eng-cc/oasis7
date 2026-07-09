@@ -8,6 +8,13 @@
 - 模块 PRD：`doc/engineering/prd.md`
 - 模块设计总览：`doc/engineering/design.md`
 - 模块标准执行入口：`doc/engineering/project.md`
+- 文档治理专题入口：`doc/engineering/doc-governance/README.md`
+
+## 先按治理问题分流
+- 新文档落位、后缀职责、模块 README 边界：先读 `doc/engineering/doc-governance/doc-structure-standard.design.md`
+- 默认阅读面减重、根入口/模块入口职责：先读 `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
+- 文档存量、热点路径、近限文件与维护成本：先读 `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
+- 已立项的热点路径治理（Viewer、p2p、testing evidence、readme）：先读 `doc/engineering/doc-governance/README.md` 再下钻具体专题
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
@@ -27,6 +34,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
+- `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留完整三件套可达性，不再要求读者从长表里判断治理问题归属。
 - `engineering` 根目录默认只保留 `README.md / prd.md / design.md / project.md / prd.index.md` 五个模块入口；治理专题已分别下沉到 `doc-governance/`、`rust-governance/`、`governance/` 与 `self-evolution/`。其中 `doc-surface-area-governance` 负责默认阅读面，`doc-corpus-maintenance-governance` 负责入口减重后的存量维护成本，`world-simulator-viewer-path-governance`、`p2p-node-path-governance`、`testing-evidence-path-governance` 与 `readme-governance-path-governance` 分别负责当前四个热点子域的路径级治理；`agent-workflow-borrowing-governance` 负责将外部 agent workflow 方法论映射为 repo-owned adopted / rejected / deferred 治理结论，`skill-surface-replacement-governance` 负责冻结本地 skill inventory 的 keep / replace / retire / defer 边界。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
 
 ## 历史审计留痕
