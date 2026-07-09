@@ -173,6 +173,7 @@
 - 是否要扩张？
 - 是否需要谈判？
 - 是否要推动治理提案？
+- `PublishSocialFact` / `DeclareSocialEdge` / `ChallengeSocialFact` 若影响谈判、合作、黑名单、治理或 claim 表面，必须展示 `social_fact_impact_quote` / `relationship_consequence_preview`：影响对象、可见社交表面、合作机会变化、争议/stake 风险、治理/claim 关联和推荐社交动作；玩家不应只看到事实 ID、关系边或事件日志。
 
 ---
 
@@ -206,6 +207,15 @@
 - 工业里程碑必须自然通向协作、治理、危机与扩张取舍，而不是独立支线。
 - 工业成长反馈必须优先展示“新能力 / 新选择 / 新修复手段 / 新区域用途”，而不是只展示库存与产量上涨。
 - 首个制成品、首条稳定产线与首个可交易工业品都必须绑定最小经济可读性：玩家应能看懂 `投入了什么 / 产出了什么 / 为什么值得继续 / 下一步可换来什么`。
+- 首局推荐采集目标必须把 `target_frag_id / expected_material_hint / starter_value_reason / first_recipe_relevance` 接到第一工业目标；玩家应知道“为什么先采这个 frag”，而不是只看到最近可采集物。
+- 高负载工厂或维护 sink 影响首条稳定产线时，反馈必须展示 `maintenance_runway_ticks / downtime_threshold_ppm / recommended_maintenance_action`；玩家应知道继续排产还能撑多久、何时会进入 critical / 停机、以及先维护还是继续生产的取舍。
+- `RefineCompound` / `refine_compound` 若作为首个工厂或首个制成品前置恢复动作，必须展示 `refine_quote`：compound 投入、电力成本、hardware 产出、精炼后电力、目标 hardware 缺口前后变化和第一工业目标关联；玩家应知道这次精炼是足够推进、部分推进，还是电力机会成本偏差。
+- `market_quotes` 若影响排产或材料采购，必须展示 `market_quote_decision_preview`：推荐本地采购、外部调运、延后、治理调整或拆分来源的理由，税费/运输/本地缺口各自贡献，以及下一步降本动作；玩家不应只看到 `effective_cost_index_ppm`。
+- `TransferMaterial` 若影响首条稳定产线或当前配方阻塞，必须展示 `logistics_transfer_quote` / `transfer_impact_preview`：预计到达量、损耗、到达 tick、优先级理由、吞吐占用、调运前后阻塞变化和推荐调运动作；玩家不应只在 `MaterialTransitCompleted` 后才发现这批材料是否赶上产线。
+- `ValidateProductWithModule` / `ProductValidated` 若确认首个制成品或高阶产品有效，必须展示 `product_validation_quote` / `validation_unlock_preview`：产品用途标签、可交易性、验证前后阶段、解锁能力、下一步用途和推荐行动；玩家不应只看到校验成功日志。
+- `BuyPower` / `harvest_radiation` / 等待发电若用于恢复低电、临界电力或停机风险，必须展示 `power_survival_quote` / `energy_recovery_preview`：补电量、成本、恢复后状态、可行动 runway、下一步动作可负担性、防停机原因和推荐补电动作；玩家不应只看到缺电拒绝或补电事件。
+- `SellPower` 若用于短期变现或缓解现金流，必须展示 `power_sale_quote` / `energy_liquidity_preview`：售电量、预期收入、售电后状态、剩余 runway、下一动作可负担性、产线中断风险和推荐售电动作；玩家不应只看到卖电收入而不知道是否牺牲能源稳定。
+- `FragmentsReplenished` / 运行期 frag 补种若影响缺料恢复或第一工业目标，必须展示 `resource_replenishment_quote` / `fragment_refill_preview`：当前 frag/chunk 剩余量、下一次补种 tick、预计补种量、等待成本、第一工业目标关联和推荐资源行动；玩家不应只在后台补种事件后才知道该不该等、换目标或改路线。
 
 ## 2.6 PostOnboarding 阶段承接
 
@@ -256,6 +266,8 @@ oasis7 的世界不是无尺度表格。
 2. `regional specialist`：再把这条能力转成短周期、区域性有用的专业化角色，而不是马上跳到全局治理或大型宏系统。
 3. `limited-scope regional influence`：通过持续贡献获得局部优先级、局部机会或局部可见度，但不直接等价为 global governance 权力。
 
+从 `local operator` 切到 `regional specialist` 之前，系统必须展示 `specialization_entry_quote` / `first_delivery_preview`：玩家要知道候选专业化的第一单交付会满足哪个本地需求、预计产出什么、需要哪些输入、多久形成价值、解锁哪种 `leverage_class`，以及交付后的回访 hook。否则专业化只是抽象标签，不能证明 mature-world 小玩家仍有可判断的经营取舍。
+
 这里所谓 `protected first industrial win`，保护的不是“不会被碰”，而是：
 
 - 早期 footprint 小，不应一开始就与 major-power 主战略面重叠。
@@ -263,6 +275,7 @@ oasis7 的世界不是无尺度表格。
 - 玩家必须能明确回答“我做了什么、世界因此变了什么、下一步为什么仍值得继续”，而不是只看到世界自己在运转。
 - 这条线不能只靠“再多做一点同样的工业”维持；每一阶段都必须新增一个 leverage class，例如更稳的恢复权、更短的交付周期、更有议价能力的局部服务位，或新的区域性选择权。
 - 如果继续玩唯一能得到的只是更高产量、但没有新的局部用途、恢复弹性或选择空间，这条线应判定为 grind-only，而不是 mature-world lane 成立。
+- 如果专业化推荐缺少第一单交付预览，应标记 `specialization_delivery_preview_missing`，不得只用 `recovery_operator` / `conversion_specialist` / `regional_service_runner` 标签替代玩家侧收益说明。
 
 这条线与当前 `PRD-GAME-012` 的 early-retention 冲刺边界保持分离：
 
@@ -432,6 +445,11 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 
 ### 治理提案
 通过提案调整规则、优先级和风险承担方式。
+
+`OpenGovernanceProposal` / `CastGovernanceVote` / 改票若影响治理提案结果，必须展示 `governance_vote_quote` / `proposal_outcome_preview`：剩余时间、quorum/pass 缺口、玩家票权影响、可能结果变化、通过后的规则/优先级变化、失败或冷却代价和推荐治理动作；玩家不应只看到提案日志、阈值参数或最终结算。
+
+### 战争宣告
+`DeclareWar` / 调整战争强度若影响联盟冲突，必须展示 `war_declaration_quote` / `conflict_outcome_preview`：双方联盟、推荐强度、持续时间、双方评分估计、预计胜负、冲突窗口占用、重入阻塞、结算风险、替代行动和推荐宣战动作；玩家不应只看到宣战事件或最终战报。
 
 ### 危机响应
 在供应中断、设施故障或链上异常时组织修复、让渡和恢复。

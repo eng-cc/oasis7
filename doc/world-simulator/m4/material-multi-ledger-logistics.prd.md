@@ -8,6 +8,7 @@
 ## 1. Executive Summary
 - 将 runtime 现有 world 级共享材料账本升级为多账本模型，支持 owner/site/factory 维度隔离。
 - 在不破坏现有 M4 经济闭环与 WASM 模块执行路径的前提下，增加材料物流约束（距离、损耗、在途延迟、吞吐上限）。
+- `TransferMaterial` 提交前需要玩家可读的到达收益与产线影响预览，让距离、损耗、延迟和吞吐占用成为经营取舍，而不是执行后日志。
 - 保持快照/回放兼容：旧状态可自动迁移到新账本模型。
 
 ## 2. User Experience & Functionality
@@ -17,6 +18,7 @@
 - 新增多账本材料 API：查询/设置/调整/转移。
 - 工厂建造与配方执行改为按账本扣料/入账。
 - 新增 `TransferMaterial` 动作与 `MaterialTransferred` / `MaterialTransit*` 事件。
+- 为 `TransferMaterial` 冻结 `logistics_transfer_quote` / `transfer_impact_preview` 玩家合同，用于解释预计到达量、损耗、ETA、吞吐占用、优先级理由和产线阻塞变化。
 - 新增在途队列与按 tick 结算逻辑。
 - 在经济模块请求中补充多账本可用输入（兼容旧字段）。
 - 补齐单测、回放兼容测试与场景文档更新。
@@ -52,6 +54,25 @@
   - `MaterialTransitStarted { ... ready_at ... }`
   - `MaterialTransitCompleted { ... received_amount, loss_amount ... }`
 
+玩家侧提交前 quote：
+- `logistics_transfer_quote` / `transfer_impact_preview`：
+  - `from_ledger`
+  - `to_ledger`
+  - `material_kind`
+  - `requested_amount`
+  - `estimated_received_amount`
+  - `loss_amount`
+  - `ready_at_tick`
+  - `delivery_eta_ticks`
+  - `priority_class`: `urgent / standard`
+  - `throughput_slot_impact`: 本次调运会占用的本 tick 吞吐/在途启动额度，以及是否挤占其他物流需求。
+  - `blocked_recipe_before`: 调运前仍被缺料阻塞的配方或产线。
+  - `blocked_recipe_after`: 调运到达后预计解除或部分缓解的配方/产线阻塞。
+  - `why_this_priority`: 为什么应使用 `urgent` 或保持 `standard`。
+  - `recommended_transfer_action`: 例如立即调运、降为 standard、拆分批次、先补本地库存、等待下一 tick 吞吐。
+- Edge case: 若 `TransferMaterial` 会产生在途延迟、损耗或吞吐占用，但玩家看不到到达量、ETA、优先级理由或产线阻塞影响，标记为 `transfer_impact_preview_missing`。
+- Acceptance: 玩家提交调运前，必须能看懂到达时间、损耗、优先级理由、是否会解除当前产线阻塞，以及是否会挤占其他物流需求。
+
 ### 约束
 - `amount > 0`。
 - 距离不得超过 `material_transfer_max_distance_km`。
@@ -72,7 +93,12 @@
 - 状态迁移风险：旧快照回放与新状态并存导致行为漂移。
 - 兼容风险：旧 WASM 模块仅解析旧请求结构。
 - 复杂度风险：物流约束引入后，拒绝路径和事件时序显著增加。
+- 可读性风险：若物流只在 `MaterialTransitCompleted` 后显示损耗/延迟，玩家无法判断是否值得标 urgent 或是否能赶上产线需求。
 - 性能风险：在途队列增长可能拉长每 tick 处理时延。
+
+缓解：
+- `transfer_impact_preview` 只解释现有距离、损耗、延迟、吞吐和优先级规则，不新增完整寻路/拥塞网络，不重平衡损耗/速度/吞吐公式。
 
 ## 6. Validation & Decision Record
 - 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- DEC-M4-LOG-001: `TransferMaterial` 必须先给出到达收益与产线影响预览；执行后在途/完成事件只能复核，不替代提交前经营取舍。本决策不改变动作 ABI、损耗公式、速度公式或吞吐上限。

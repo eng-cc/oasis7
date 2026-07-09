@@ -19,6 +19,7 @@
   - `TransferMaterial` 优先级与运损按 `MaterialProfileV1` 计算。
   - `ScheduleRecipe` 的瓶颈标签/阶段门槛按 `RecipeProfileV1` 生效。
   - 排产优先级可消费 `ProductProfileV1.role_tag`（旧关键词策略作为兜底）。
+  - `ValidateProductWithModule` / `ProductValidated` 应消费 `ProductProfileV1.role_tag / tradable / unlock_stage` 生成玩家侧 `validation_unlock_preview`。
 - 内置模块扩展（R2~R5 代表链路）：
   - 新增 4 个 recipe 模块：`alloy_plate`、`sensor_pack`、`module_rack`、`factory_core`。
   - 新增 4 个 product 模块：`alloy_plate`、`sensor_pack`、`module_rack`、`factory_core`。
@@ -74,6 +75,21 @@
 - 排产优先级：
   - 若产物存在 `ProductProfileV1.role_tag`，优先转为排队优先级。
   - 无配置回退关键词策略。
+- 产物校验预览：
+  - `product_validation_quote` / `validation_unlock_preview` 应从 `ProductProfileV1` 与当前 `IndustryStage` 派生。
+  - 字段：
+    - `product_id`
+    - `role_tag`
+    - `unlock_stage_before`
+    - `unlock_stage_after`
+    - `tradable`
+    - `capability_unlocked`
+    - `next_use_case`
+    - `stage_progress_delta`
+    - `recommended_next_action`
+    - `validation_value_class`: `capability_unlock / trade_value / stage_progress / low_immediate_value`
+  - Edge case: 若产品存在 `role_tag / tradable / unlock_stage`，但校验结果没有说明能力解锁、阶段推进或下一步用途，标记为 `product_validation_preview_missing`。
+  - Acceptance: R2-R5 链路完成产物校验时，玩家应能看懂该产品属于 survival/scale/explore/governance 哪类用途、是否可交易、推进了哪个阶段，以及下一步推荐如何使用。
 
 ### 4) R1~R5 默认目录（首版）
 - R1 原料：`iron_ore`、`copper_ore`、`carbon_fuel`、`silicate_ore`、`rare_earth_raw`
@@ -106,11 +122,14 @@
 - Profile 接线后行为偏移导致旧策略表现退化。
 - 新增模块与 artifact 清单不同步会触发 bootstrap 失败。
 - 阶段门槛参数过严可能造成链路过早阻断。
+- 可读性风险：如果 `role_tag / tradable / unlock_stage` 只服务 runtime 排产和测试，玩家仍可能不知道 `ProductValidated` 为什么重要。
 
 缓解：
 - 所有新规则保持“配置优先、默认兼容”。
 - 通过 descriptor-vs-manifest 一致性测试做门禁。
 - 首版仅给高阶配方设置阶段门槛，低阶链路保持可用。
+- `validation_unlock_preview` 只冻结玩家侧解释合同，不重平衡产品链、配方或阶段门槛，也不新增完整产品目录或科技树。
 
 ## 6. Validation & Decision Record
 - 追溯: 对应同名 `.project.md`，保持原文约束语义不变。
+- DEC-M4-P3-001: `ProductProfileV1.role_tag / tradable / unlock_stage` 必须能转化为玩家侧产品验证收益预览；`ProductValidated` 不能只证明落账成功，还要说明能力解锁、阶段推进和下一步用途。本决策不改变 profile ABI、配方链或阶段门槛。

@@ -8,6 +8,7 @@
 
 ## 2. 设计结构
 - 目标表达层：统一主任务、次任务和完成条件结构，压缩首屏认知负担。
+- starter frag 理由层：当首局推荐采集 frag 时，解释材质预期、可达性和第一工业目标关联。
 - 引导展示层：首局 HUD 与右侧说明区共享同一套任务语义，避免多处文案冲突。
 - 卡住检测层：根据玩家长时间无推进、无操作或重复失败信号触发提示升级。
 - 回顾闭环层：在首局结束时输出阶段回顾，帮助玩家理解“做了什么、下一步是什么”。
@@ -16,6 +17,7 @@
 - `egui_right_panel_player_guide.rs`
 - `egui_right_panel_player_experience.rs`
 - 首局任务/回顾 HUD 文案模型
+- starter frag reason fields: `target_frag_id`、`expected_material_hint`、`starter_value_reason`、`distance_or_accessibility_reason`、`first_recipe_relevance`
 - 卡住检测与结算回顾入口
 
 ## 4. 约束与边界
@@ -23,6 +25,7 @@
 - 主任务优先、次任务折叠是默认展示原则，不追求一次展示全部系统信息。
 - 卡住检测只能提供解释与建议，不替代玩家决策或自动执行控制。
 - 目标文本必须保持短句、可执行、可验证，避免重新回到描述性叙事。
+- starter frag 理由必须保持一行可读，不展开完整资源分布表或精确掉落承诺。
 
 ## 5. 设计演进计划
 - 先冻结主任务/次任务/完成条件文案结构。

@@ -26,6 +26,7 @@
 - Gameplay DomainEvent 可见性：战争/治理/危机/经济合约/元进度的事件映射与摘要规则。
 - Viewer 反馈层：toast/事件行/微循环 HUD（倒计时 + 最近动作状态 + 无进展诊断）。
 - Viewer 可见性与布局优化：控制结果显著条、玩家模式渐进披露、模块可见性默认策略修正。
+- 玩家下一步动作可见性：formal summary / Viewer 主操作面必须把 canonical `available_actions` 转译成 1-3 个当前可执行或被阻塞的推荐行动。
 - 世界可读性优化：选中强调与 2D marker 可见性/尺寸策略增强。
 - 可玩性卡片指标回归：有效控制命中率、卡片 15/16/17 评分目标。
 - 手动截图验收：每个迭代步骤输出截图并做视觉评估。
@@ -93,6 +94,7 @@
 | Gameplay 事件摘要 | `domain_kind/summary/key_ids/tone` | DomainEvent 到达后生成摘要 | `raw -> summarized` | 规则化模板映射 | 系统生成，客户端只读 |
 | 微循环 HUD 计时 | `pending_eta_ticks/due_timers` | 每 tick 刷新倒计时 | `pending -> due -> cleared` | 最近到期优先 | 客户端显示 |
 | 无进展诊断 | `idle_secs/last_action/reject_reason/suggestion` | 无进展 >= 5s 触发提示 | `idle -> hinted -> recovered` | 只保留最新 | 客户端显示 |
+| 可执行动作推荐 | `available_actions/action_label/blocker/recommended_next_step` | summary 刷新或玩家完成动作后更新 1-3 个推荐行动 | `unknown -> actionable/blocked -> resolved` | 当前任务/资源 blocker 优先，避免纯 debug 字段外露 | 客户端显示 |
 | 控制结果显著条 | `stage/action/delta/effect` | 控制反馈到达后在 HUD 顶部高亮展示 | `hidden -> highlighted -> steady` | stage 颜色优先于文本细节 | 客户端显示 |
 | 玩家模式渐进披露 | `active_preset/module_visibility` | 默认 Mission 预设，模块开关按需展开 | `uninitialized -> mission_default -> user_customized` | 任务主线优先，次级模块后置 | 客户端显示 |
 | 世界可读性增强 | `halo_radius/marker_visibility/marker_scale` | 选择目标或缩放地图时动态调整强调 | `normal -> emphasized` | 选中目标优先，2D 全局标记可见 | 客户端显示 |
@@ -133,6 +135,8 @@
   - 空数据: 无 action/event 时 HUD 显示“暂无行动/事件”，不出现误导性倒计时。
   - ACK 事件缺失：viewer 降级为“等待 DomainEvent”并提示延迟原因。
   - ACK 超时: 超过 eta_ticks 未见 DomainEvent 时提示“仍在处理中”并引导诊断。
+  - `available_actions` 为空但 gameplay summary 非空: 不展示普通空状态；必须显式说明“当前无可执行行动”的原因，优先标记 `runtime_snapshot_empty_entities`、资源不足、权限不足或等待推进等 blocker。
+  - `available_actions` 存在但无法直接执行: 允许显示为 blocked recommendation，但必须给玩家一个可恢复下一步，例如 claim starter OC、选择目标、推进 tick 或切换到可执行入口。
   - DomainEvent 字段缺失：渲染为通用摘要并记录诊断日志。
   - 事件乱序/重复：按 event_id 去重并以时间戳排序。
   - 并发冲突: 同 tick 多事件按 event_id 排序，保持可复现。
@@ -185,5 +189,6 @@
 | DEC-MLF-006 | 提升选中强调与 2D marker 可读性阈值 | 维持现有最小可见尺寸与可见门槛 | 解决场景空旷下目标辨识困难 |
 | DEC-MLF-007 | 玩家模式改为“默认停驻 + 单步优先”控制节奏 | 默认自动连续播放 | 降低 tick 快速跳变导致的视觉闪烁，提升可控性与可读性 |
 | DEC-MLF-008 | runtime_live 播放链路引入固定间隔节流（默认 `800ms`） | 读取循环每 `50ms` 推进一步 | 将播放节奏从双位数 tick/s 降至约 `1 tick/s`，显著降低闪烁 |
+| DEC-MLF-009 | 将 canonical `available_actions` 作为玩家下一步动机的正式输入，而不是只作为内部诊断字段 | 只在 debug / raw snapshot 中保留 `available_actions` | 2026-07-08 gameplay slice 指出玩家会从“选择行动 -> 反馈 -> 继续决策”退化为“观察世界/猜命令”；推荐行动和 blocker 文案是 micro-loop 的一部分 |
 
 审计轮次: 4

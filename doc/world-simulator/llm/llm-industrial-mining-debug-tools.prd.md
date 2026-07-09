@@ -16,6 +16,7 @@
 - simulator 资源类型扩展：新增矿物中间资源（`compound`）。
 - simulator 动作扩展：新增采矿动作（`mine_compound`）与调试补给动作（`debug_grant_resource`）。
 - `refine_compound` 语义升级：必须消耗 `compound` 与电力，产出硬件。
+- `refine_compound` 作为恢复/建厂前置动作时，玩家侧需要提交前 `refine_quote`，说明电力机会成本、硬件净增和第一工业目标关联。
 - kernel/replay/event/LLM parser/prompt/tool schema 全链路接线。
 - 仅在 LLM debug 模式暴露补给 tool（默认关闭）。
 - 补齐 `test_tier_required` 单测与闭环回归。
@@ -56,6 +57,18 @@
   - owner `compound` 库存必须 `>= compound_mass_g`。
   - 扣减 `compound_mass_g` 后再产出 `hardware`。
 - 保持已有电力成本和硬件产率配置（向后兼容）。
+- 玩家侧 `refine_quote` / `refine_preview` 合同：
+  - `compound_mass_g`
+  - `electricity_cost`
+  - `hardware_output`
+  - `electricity_after`
+  - `hardware_shortfall_before`
+  - `hardware_shortfall_after`
+  - `first_goal_relevance`
+  - `recommended_refine_amount`
+  - `refine_value_class`: `enough_for_next_step / partial_progress / poor_power_tradeoff`
+- Edge case: 当 `refine_compound` 被推荐为硬件不足恢复动作，但缺少电力成本、硬件产出或目标缺口变化说明时，标记为 `refine_quote_missing`。
+- Acceptance: 玩家在精炼前能看懂“花这些电，换来的 hardware 是否足够推进当前首个工厂/制成品目标”；若精炼后仍不足，需说明继续采矿、先补电或减少精炼量。
 
 ### 4) 事件与回放
 - `WorldEventKind` 新增：
@@ -85,6 +98,7 @@
 ### Technical Risks
 - 兼容风险：新增 `ResourceKind` 与事件可能影响旧断言与日志消费方。
 - 行为风险：location 采矿上限过低会导致策略卡死；过高会退化为“原地采矿”。
+- 可读性风险：`refine_compound` 若只作为硬件不足的自动恢复动作出现，玩家可能把扣电理解为隐藏转换税。
 - 调试风险：debug tool 暴露边界不严会污染线上策略评估口径。
 - 回归风险：LLM guardrail 与新动作并存可能引入未覆盖的决策重写路径。
 

@@ -47,10 +47,10 @@
 | --- | --- | --- | --- | --- | --- |
 | small-player lane contract | `lane_id`、`entry_gate`、`requires_major_power_alignment`、`first_win_definition`、`mature_world_value_definition` | 不要求立即加入组织；系统在达成 `first capability` 后显式进入 lane | `not_eligible -> eligible -> active -> specialized -> regionally_useful` | 先完成首个持续能力，再进入小玩家 lane；不得把 onboarding 与 mature-world lane 混写 | `producer_system_designer` 冻结；runtime/viewer/agent/QA 依合同实施 |
 | protected first industrial win | `first_win_goal_id`、`player_action`、`world_change_due_to_player`、`player_leverage_verdict`、`blast_radius_class`、`recovery_cost_class` | 玩家完成 1 次低爆炸半径、可恢复、对世界有可见变化的工业胜利 | `not_started -> executing -> first_win_complete -> stabilized` | “受保护”优先指低战略体量、低爆炸半径和可恢复路径，不等于高风险模块或治理免疫 | 任何正式放行结论都必须回答 leverage，而不是 world activity |
-| specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色 | `unselected -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/高风险对抗 | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
+| specialization pack | `specialization_id`、`input_profile`、`output_profile`、`regional_usefulness`、`switch_cost_class`、`org_independence_level`、`specialization_entry_quote` | 玩家从默认 local operator 主线切到 1 条短周期专业化角色；选择前展示第一单交付预览 | `unselected -> quoted -> selected -> delivering -> stable` | 先 local survival，再 specialization；默认避免一开始把玩家导向深治理/高风险对抗；专业化必须先回答第一单满足哪个本地需求、多久交付、解锁哪种 leverage | `agent_engineer` / `viewer_engineer` 对齐；`producer_system_designer` 裁决专业化边界 |
 | agent specialization behavior contract | `selected_specialization_id`、`specialization_reason`、`preferred_next_action_class`、`dependency_boundary`、`recovery_escalation_reason` | Agent 在推荐专业化、恢复或升级时，必须说明建议、独立性边界、失败代价和下一步；不得静默把小玩家推向 major-power dependency | `observe_lane -> recommend_local_path -> repair/rebuild/pivot -> voluntary_escalation/forced_dependency` | `local_operator` 维持到首个稳定世界变化可见；稳定后优先 `recovery_operator` / `conversion_specialist` / `regional_service_runner`；若 `same_loop_repeat_count >= 3` 且 leverage 仍为 `throughput_only` / `unclassified`，停止强化同一生产循环 | `agent_engineer` 负责行为合同；major-power escalation 只有 voluntary 或 runtime 标记 forced 时允许 |
 | limited-scope regional influence | `influence_surface_id`、`influence_scope`、`influence_cap`、`expires_on_inactivity`、`converts_to_global_governance` | 玩家通过区域性持续贡献获得有限影响力或优先级 | `locked -> visible -> earned -> decays_on_inactivity` | 区域影响力必须小于 global governance / alliance leadership；默认随停摆或长期闲置衰减 | 不得直接等价为 global vote power、主链治理权或 major-power membership |
-| recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
+| recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship`、`estimated_time_class`、`resource_cost_class`、`retained_benefit`、`risk_class`、`recommendation_reason` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项，并让 repair / rebuild / pivot 的代价可比较 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；同屏比较预计时间、资源消耗、保留收益、风险和推荐理由；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
 | anti-grind leverage progression | `leverage_class`、`new_option_unlocked`、`regional_dependency_reduced`、`same_loop_repeat_count`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位或新恢复弹性，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
 | mature-world guardrails | `world_activity_only`、`major_power_dependency_status`、`regional_pressure_level`、`return_hook` | QA / playability surface 明确区分“世界很活跃”和“玩家仍然有 lane” | `unclear -> bounded -> verified` | 只要 `world_activity_only=yes` 或 `major_power_dependency_status=forced`，该样本就不能支撑 lane `pass` | `qa_engineer` 守门，`producer_system_designer` 最终裁决 |
 
@@ -61,9 +61,11 @@
   - AC-4: 本专题至少定义 1 条默认主线与 2 条可延展 specialization 方向，并说明它们为何在 mature world 中仍有独立价值。
   - AC-5: 文档必须明确 `limited-scope regional influence` 的边界：它可以改变局部优先级、区域可见度或区域性机会，但不能直接等价为 global governance 权力。
   - AC-6: 文档必须定义 recoverable failure path；当玩家遭遇停机、claim 丢失、局部竞争失败或区域压力时，不得要求“只能投靠大组织”作为唯一继续路径。
+  - AC-6A: 至少停机恢复与小玩家 claim/产线受挤压场景必须给出 repair / rebuild / pivot 的最小比较条：预计时间、资源消耗、保留收益、风险和推荐理由；否则不能判定恢复路径对玩家可读。
   - AC-7: `player leverage != world activity` 的约束必须进入本专题完成定义；任何 lane `pass` 都必须回答 `player_action / world_change_due_to_player / return_hook`。
   - AC-7A: 任一阶段 checkpoint 都必须回答“玩家获得了什么新的 leverage class”；如果答案只剩“产量更高/库存更多”，而没有新区域用途、新恢复弹性、新议价位或新选择空间，则该 checkpoint 不能判定为 lane success。
   - AC-7B: `agent-small-player-specialization-contract` 必须要求 Agent 在每次推荐专业化或恢复路径时回答：建议玩家做什么、为什么仍是独立小玩家路线、失败代价是什么、卡住时如何 `repair / rebuild / pivot`、是否强制依附 major power。
+  - AC-7C: 玩家选择专业化前，必须看到 `specialization_entry_quote` / `first_delivery_preview`：第一单交付满足哪个本地需求、预计产出什么、多久形成交付、需要哪些输入、会解锁哪种 leverage、交付后如何回访；若缺失，不能把专业化判定为玩家可读选择。
   - AC-8: 本专题必须显式声明不改变当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 写成当前 stage 或 preview claim envelope 的升级依据。
   - AC-9: `game` 根 PRD / project、`gameplay` 主文档、`README`、`prd.index` 与当前 task execution log 必须能互链到 `PRD-GAME-015`。
   - AC-10: 至少拆出 `producer_system_designer`、`runtime_engineer`、`viewer_engineer`、`agent_engineer`、`qa_engineer` 五类后续任务，并给出 `test_tier_required` / `test_tier_full` 验收方向。
@@ -96,6 +98,20 @@
   - Scope: `PostOnboarding / first capability` 之后的 mature-world small-player Agent 行为；这是行为边界合同，不是 claim/economy/stage 升级。
   - 消费字段: `player_gameplay.small_player_lane_id`、`leverage_class`、`same_loop_repeat_count`、`grind_only_flag`、`major_power_dependency_status`、`recovery_path_kind`、`recovery_path_detail`、`requires_major_power_sponsorship`、`repair_available`、`rebuild_available`、`pivot_available`。
   - 应暴露或保留的 Agent-facing 摘要: `selected_specialization_id`、`specialization_reason`、`preferred_next_action_class`、`dependency_boundary`、`recovery_escalation_reason`；若 guardrail 将 `wait / wait_ticks / invalid schedule` 改写为恢复或持续生产动作，必须保留 `decision_rewrite` receipt。
+  - 专业化选择前玩家侧 quote:
+    - `specialization_entry_quote`: 专业化入口报价对象。
+    - `first_delivery_preview`: 第一单交付摘要。
+    - `specialization_id`: 候选专业化。
+    - `target_local_demand_id`: 第一单要满足的本地需求或区域阻塞。
+    - `first_output_preview`: 第一单预计产出、服务或修复结果。
+    - `estimated_delivery_ticks`: 预计多久形成第一单交付。
+    - `required_inputs`: 进入该专业化第一单所需输入、材料、维护或物流前置。
+    - `switch_cost_class`: 切换成本档位；必须与 specialization pack 的成本口径一致。
+    - `leverage_class_unlocked`: 第一单完成后新增的 leverage class。
+    - `regional_usefulness_reason`: 为什么该专业化对当前区域有用，而不是抽象职业标签。
+    - `return_hook_after_delivery`: 第一单完成后玩家下次回来要看什么或做什么。
+  - Edge case: 若系统推荐 `recovery_operator / conversion_specialist / regional_service_runner` 但缺少第一单交付、目标本地需求或 leverage 解锁说明，标记为 `specialization_delivery_preview_missing`。
+  - Acceptance: 玩家在选择专业化前能看懂“第一单交付给谁、产出什么、多久见效、解锁哪种局部 leverage、为什么仍是独立小玩家路线”。
   - 默认专业化偏好:
     - `local_operator`: 首个稳定世界变化可见前的默认主线。
     - `recovery_operator`: 修复 blocked line、补齐缺口、维持局部能力韧性。
@@ -123,7 +139,9 @@
 - Edge Cases & Error Handling:
   - 区域内已有大型组织垄断：lane 仍需给出局部独立价值和恢复路径，而不是默认判定“新玩家只能加入他们”。
   - 玩家完成 first capability，但 local site 因缺料/停机/区域压力无法继续：必须提供恢复或改道选项，不能让 lane 直接失效。
+  - repair / rebuild / pivot 同时存在但缺少代价比较：必须标记为 recovery readability gap；玩家不应只看到多个按钮，而看不出哪个更快、哪个更贵、哪个保住当前 leverage。
   - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
+  - 专业化只有标签但没有第一单交付预览：必须标记 `specialization_delivery_preview_missing`；玩家不应只看到 `recovery_operator` / `conversion_specialist` / `regional_service_runner` 名称，而看不出本地需求、交付收益和 leverage 解锁。
   - 世界很活跃，但玩家没有造成明确世界变化：必须标记 `world_activity_only=yes`，且不得把该样本判为 lane success。
   - 玩家主动加入大型组织：允许，但文档必须说明这属于 voluntary escalation，而不是 lane 的强制前提。
   - Agent 推荐加入大型组织、接受 sponsor 或 alliance dependency：若 `requires_major_power_sponsorship=no`，判定为 blocker；若是玩家自愿升级，必须标记为 `voluntary_escalation`，并说明这不是 small-player lane entry requirement。
@@ -156,6 +174,7 @@
   - 风险-1: 如果 lane 只剩“再做更多工业”，而没有区域性价值与恢复路径，会退化成重复 grind。
   - 风险-2: 如果 lane 一开始就给出过强区域/治理权力，会与 mature-world 大组织路线互相冲突，放大平衡风险。
   - 风险-3: 如果 lane 只在文档里存在、没有 canonical checkpoint 和 player leverage surface，后续仍会回到“世界很热闹但我不确定自己有用”的旧问题。
+  - 风险-4: 如果 specialization pack 只展示角色标签和区域有用性，玩家仍可能不知道第一单交付如何产生价值，专业化会被误读为抽象职业选择。
 
 ## 6. Validation & Decision Record
 
@@ -176,6 +195,8 @@
 | --- | --- | --- | --- |
 | DEC-SPL-001 | 新增独立 `PRD-GAME-015`，专门定义 mature-world 小玩家成长线 | 继续把“小玩家如何继续玩”散落在 PostOnboarding、claim economy、playability evidence 与 issue 讨论中 | 当前缺的不是“首个能力能否完成”，而是“完成之后为何仍有独立价值”的正式合同。 |
 | DEC-SPL-002 | 把 `small-player lane` 起点放在 `first capability` 之后，而不是重新塞回首个 10 分钟 | 让 issue #165 与当前 early-retention 冲刺混成一个问题 | `PRD-GAME-012` 当前仍是主 blocker；如果把 mature-world 设计提前塞进 first-session，会打乱当前冲刺排序。 |
+| DEC-SPL-003 | 专业化选择必须先提供 `specialization_entry_quote` / `first_delivery_preview` | 只展示 `specialization_id`、区域有用性和切换成本 | 小玩家从 local operator 进入 regional specialist 时，需要看到第一单满足的本地需求、交付收益、预计时间和新增 leverage，才能把专业化理解为经营取舍。 |
 | DEC-SPL-003 | 把 `protected first industrial win` 定义为“低爆炸半径 + 可恢复 + leverage 可见” | 把“保护”写成高风险模块/治理完全免疫，或继续不定义保护含义 | 完全免疫会制造失真预期；不定义又会让“首个胜利”在成熟世界里没有真实站得住脚的边界。 |
 | DEC-SPL-004 | 采用“limited-scope regional influence”，明确低于 global governance / alliance leadership | 让小玩家 first-success 直接跳到全局治理权，或反过来完全不给任何区域性影响 | 没有局部影响力，这条线会像重复打工；给太强又会破坏 mature-world 权力结构。 |
 | DEC-SPL-005 | 把 `player leverage != world activity` 写成本专题硬门槛 | 继续允许“世界很活跃”替代“玩家仍然有 meaningful participation” | `#165` 真正要解决的是小玩家是否还在推动世界，而不是世界是否本来就有很多事在发生。 |
+| DEC-SPL-006 | 把 recovery path 从“有恢复/改道选项”提升为“repair / rebuild / pivot 可比较” | 只列出恢复按钮或 Agent 建议，不展示时间、资源、保留收益、风险和推荐理由 | 2026-07-08 gameplay slice 指出不可比较的恢复选项会把失败成本变成雾状惩罚，削弱策略取舍和继续游玩的动力。 |

@@ -93,7 +93,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 协议级玩家快照 | `stage_id`、`stage_status`、`goal_id`、`goal_title`、`progress_percent`、`blocker_primary`、`next_step_hint`、`available_actions`、`recent_feedback` | 客户端拉取/订阅后直接渲染，不再需要自行猜测 UI 私有语义 | `syncing -> playable -> blocked -> recoverable -> milestone_completed` | 所有玩家语义来自统一协议快照；UI 与 API 不得各算一套 | 任何已连接客户端可读；写操作按玩家鉴权 |
-| 可执行动作列表 | `action_id`、`action_kind`、`target_kind`、`target_id`、`label`、`preconditions`、`disabled_reason` | 客户端可发起 `focus/select/control/chat/submit` 等动作；禁用项必须返回原因 | `hidden -> available -> disabled -> consumed` | 先显示当前阶段最相关动作，再显示次级动作；不得依赖 UI 才知道“下一步能做什么” | 需要鉴权的写操作必须显式标记 |
+| 可执行动作列表 | `action_id`、`action_kind`、`target_kind`、`target_id`、`label`、`preconditions`、`disabled_reason`、`disabled_reason_class`、`canonical_replacement_action`、`player_next_step_hint` | 客户端可发起 `focus/select/control/chat/submit` 等动作；禁用项必须返回原因；若禁用原因为 `unsupported_fine_grain_action`，必须附带当前可玩的替代动作或下一步提示 | `hidden -> available -> disabled -> consumed` | 先显示当前阶段最相关动作，再显示次级动作；不得依赖 UI 才知道“下一步能做什么”；过细动作请求优先翻译成 canonical replacement action | 需要鉴权的写操作必须显式标记；replacement action 不得越权或由客户端私造 |
 | 阶段切换与恢复 | `stage_transition_reason`、`entered_at`、`resumable_since`、`resume_hint` | 客户端在阶段切换或重连时展示“当前在哪里、接下来做什么” | `introduced -> active -> blocked -> branch_ready` | 阶段状态由 canonical 状态机决定；不同客户端不可分叉 | 所有玩家可读；系统自动生成 |
 | 控制反馈与解释 | `request_id`、`effect`、`delta_logical_time`、`delta_event_seq`、`result_reason`、`player_visible_summary` | 玩家执行动作后必须拿到可解释结果，而不是只能看原始事件 | `accepted -> executing -> completed_advanced/completed_timeout/blocked` | 控制反馈按最近一次玩家动作优先展示；超时与阻塞需区分 | 已鉴权客户端可见自己的动作反馈；全局事实仍可通过事件查看 |
 | 纯 API 长玩入口 | `client_mode`、`content_surface`、`parity_level`、`supported_loops` | 客户端声明自己是纯 API 模式；系统不得因无 UI 而降级可达玩法内容 | `observer_only -> playable -> parity_verified` | 默认要求至少覆盖新手、PostOnboarding 和中循环入口 | 只读观察模式允许降级；正式玩家模式不允许降级 |
@@ -109,6 +109,7 @@
   - AC-8: 必须新增 `test_tier_required` 的纯 API 长玩验证；仅有协议 smoke 不构成验收通过。
   - AC-9: 若协议返回原始事件但缺少玩家可消费语义，结论必须记为 `observer_only` 而不是 `playable parity`。
   - AC-10: 若 active LLM access 缺失或初始化失败，纯 API 会话必须显式返回 gameplay blocked 理由；`--no-llm` 不得再被写成正式可玩或 parity 放行路径。
+  - AC-11: 当纯 API 客户端提交或枚举出当前未开放的 embodied / block-editing / local physics 动作时，`disabled_reason_class=unsupported_fine_grain_action` 必须附带 `canonical_replacement_action` 或 `player_next_step_hint`；若只返回泛化 unsupported，则判定为 `granularity_translation_missing`。
 - Non-Goals:
   - 不要求纯 API 客户端复制 3D/2D 视图、镜头控制、视觉特效和 UI 布局。
   - 不要求所有调试字段都暴露给正式玩家客户端；只要求正式玩法所需信息完整。

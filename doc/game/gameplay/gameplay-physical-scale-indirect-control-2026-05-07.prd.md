@@ -16,6 +16,7 @@
   - SC-4: 文档正式要求任何 coarse-grained 子系统都声明自己的 native resolution 和与厘米真值的映射，不再只靠实现代码暗含。
   - SC-5: Viewer 正式口径明确区分“物理真值距离/尺寸”和“为了可读性进行的视觉夸张”，避免把 marker 放大误读成世界真尺寸。
   - SC-6: 未来若要引入 `player_parity` / embodied / block-editing 之类具身能力，必须满足独立 gate，不得绕过当前 `internal_playable_alpha_late` 的间接控制主路线。
+  - SC-7: 当玩家/API/agent 请求过细的具身或逐块动作时，系统必须把该请求翻译成当前可玩的间接控制替代动作，而不是只返回 `unsupported_action`。
 
 ## 2. User Experience & Functionality
 
@@ -37,7 +38,8 @@
   1. Flow-PSIC-001: `producer 复盘现有 1cm 证据 -> 冻结四层尺度合同 -> 回挂根入口与 gameplay 主文档 -> 后续 owner 按统一口径实施`
   2. Flow-PSIC-002: `runtime 新增或修改空间/碎片/移动子系统 -> 显式声明 native resolution -> 给出与厘米真值的映射 -> QA 对照文档验收`
   3. Flow-PSIC-003: `viewer 调整 marker/zoom/LOD/距离表达 -> 区分物理真值与视觉夸张 -> 玩家能看懂“这是读图放大，不是世界单位变化”`
-  4. Flow-PSIC-004: `讨论未来 embodied / block-editing 方向 -> 先通过本专题 gate 判断是否仍服务间接控制主路线 -> 若不满足则保持 deferred`
+  4. Flow-PSIC-004: `玩家提出过细动作（挖这里 / 跳过去 / 攻击目标 / 放一个块）-> 系统说明当前动作粒度边界 -> 给出最接近的可玩动作（派 agent 到地点 / inspect / build facility / schedule recipe / governance）-> 玩家继续推进`
+  5. Flow-PSIC-005: `讨论未来 embodied / block-editing 方向 -> 先通过本专题 gate 判断是否仍服务间接控制主路线 -> 若不满足则保持 deferred`
 - Functional Specification Matrix:
 
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
@@ -45,6 +47,7 @@
 | canonical physical scale | `space_unit_cm`、`GeoPos{x_cm,y_cm,z_cm}`、`distance_cm`、`radius_cm`、`size_cm` | 不新增玩家按钮；用于定义世界真值 | `draft -> frozen -> audited` | 一切物理位置与持久化坐标以整数厘米为唯一真值 | `runtime_engineer` 实现；`producer_system_designer` 冻结；`qa_engineer` 复核 |
 | subsystem native resolution | `subsystem_id`、`native_resolution_kind`、`native_resolution_value`、`cm_mapping_rule`、`rounding_rule` | 子系统 owner 在 PRD / design / code 中显式声明 | `implicit -> declared -> verified` | coarse-grained 子系统允许保留 km/voxel/location 级 native resolution，但必须给出到 cm 的映射 | 对应子系统 owner 负责；`producer_system_designer` 审核边界 |
 | player interaction scale | `interaction_surface`、`action_schema_version`、`current_action_granularity`、`deferred_embodied_capabilities` | 当前正式动作继续围绕 `move_agent / inspect / interact / harvest / mine / build_factory / recipe / governance`；不新增 block-edit 按钮 | `observer_only -> indirect_control_playable -> embodied_candidate` | 先保证间接控制的文明模拟成立，再评估具身能力是否能强化主循环 | `producer_system_designer` 拍板；`runtime_engineer` / `agent_engineer` 实现 |
+| fine-grained intent translation | `requested_granularity`、`canonical_replacement_action`、`why_fine_action_deferred`、`closest_playable_goal`、`player_next_step_hint` | 玩家/API/agent 请求 `block_editing / digging / jump / attack / local_physics` 等当前未开放动作时，返回可读解释与至少 1 个当前可执行替代动作 | `unsupported -> translated -> playable_alternative_selected` | 替代动作优先选择当前阶段目标相关、可立即执行、能保留玩家意图的间接控制动作；不得只给通用“不支持” | 玩家可见；replacement action 必须来自 canonical available action / action schema，不能由 Viewer 私造 |
 | presentation scale | `physical_distance_label`、`visual_exaggeration_reason`、`visual_scale_floor_m`、`zoom_tier` | UI 可显示真实距离、近似量级和视觉放大说明 | `opaque -> readable -> trustworthy` | 玩家先看到对决策有用的真实距离/量级；视觉夸张只服务可读性，不改物理真值 | `viewer_engineer` owner；`qa_engineer` 验收 |
 | future embodied gate | `embodied_lane_status`、`player_parity_status`、`supports_block_editing`、`supports_collision_fidelity`、`supports_local_physics_feedback` | 不在当前主入口暴露；仅作为 future candidate checklist | `deferred -> candidate -> approved_for_prototype` | 只有当具身能力能强化间接控制主路线、且不稀释当前 retention blocker 时，才允许进入原型 | `producer_system_designer` 最终拍板 |
 
@@ -58,11 +61,13 @@
   - AC-7: 本专题必须给出“现在不做什么”：不把 Minecraft 式 block editing、实时具身 3D、碰撞/跳跃/攻击动作集写成当前正式承诺。
   - AC-8: 本专题必须给出“未来什么时候才可以做”：只有当间接控制 trust/capability 主路径稳定、且具身能力能增强而不是稀释主循环时，才允许进入候选原型。
   - AC-9: QA 后续矩阵必须能同时检查 4 件事：厘米真值是否保持、子系统 coarse resolution 是否声明、Viewer 是否误导、动作面是否仍符合间接控制边界。
+  - AC-10: 当玩家/API/agent 请求当前未开放的 embodied / block-editing / local physics 动作时，必须返回 `requested_granularity / why_fine_action_deferred / canonical_replacement_action / closest_playable_goal / player_next_step_hint`；若只有 `unsupported_action` 而无替代路径，判定为 `granularity_translation_missing`。
 - Non-Goals:
   - 不把 oasis7 当前产品方向改成 Minecraft 式第一人称逐块建造。
   - 不在本专题里恢复或扩大 3D workstream 的 active delivery 承诺。
   - 不在本专题里新增 runtime 物理碰撞、跳跃、攻击、装备、方块放置/挖掘的正式实现需求。
   - 不要求所有子系统都真的按 `1cm` 精度模拟；本专题要求的是声明与对齐，而不是统一到同一数值步长。
+  - 不把过细动作翻译合同解释为已经开放 block editing、digging、jump/attack 或 3D embodied 主路线；它只负责把失败请求转成当前可玩的间接控制下一步。
 
 ## 3. AI System Requirements (If Applicable)
 
@@ -95,6 +100,8 @@
   - Viewer 为可读性放大 marker，但没有任何真实距离/尺寸锚点：判定为 presentation misleading。
   - 文档开始把 `1cm` 当成“玩家应可逐块编辑世界”的依据：判定为 scope drift，回退到 deferred。
   - agent / provider 文档先声明 `jump/attack/use_item/...`，但 runtime 当前正式动作集并不支持：必须明确标记为 candidate contract，不得写成现行正式语义。
+  - 玩家请求过细动作只得到 `unsupported_action`：若没有替代动作、目标或下一步提示，标记为 `granularity_translation_missing`，不得当作良好边界表达。
+  - 替代动作由 UI 私造：若 `canonical_replacement_action` 不来自 canonical action schema 或 `available_actions`，判定为 parity risk。
   - 某个 future 具身提案虽然技术上可做，但会抢占当前 `trust gate / first capability gate` 主路径资源：默认 deferred。
 - Non-Functional Requirements:
   - NFR-PSIC-1: `PRD-GAME-013` 的根入口互链必须在 1 个工作日内完成并可检索。
@@ -102,6 +109,7 @@
   - NFR-PSIC-3: 任何新的 coarse-grained 子系统在进入 active delivery 前，100% 具备 native resolution 与厘米映射说明。
   - NFR-PSIC-4: QA 的尺度一致性回归必须可在 fresh bundle 本地复跑，并输出 pass/block 结论。
   - NFR-PSIC-5: 当前阶段公开口径继续保持 `limited playable technical preview`；不得因为补齐尺度方案就扩大为“开放世界建造游戏已可玩”。
+  - NFR-PSIC-6: 过细动作请求的替代提示覆盖率必须为 `100%`；任何 current surface 暴露 `unsupported_fine_grain_action` 时，都必须给出 canonical replacement action 或明确说明无安全替代动作的原因。
 - Security & Privacy:
   - 本专题不引入新的隐私采集；只约束语义合同与验证口径。
 
@@ -139,3 +147,4 @@
 | DEC-PSIC-003 | 允许 coarse-grained 子系统保留自己的 native resolution，但必须声明映射 | 强制所有子系统都按 `1cm` 等步长模拟 | 实现层已有 km voxel、location/facility 级抽象；真正缺的是可审计声明，而不是盲目统一数值精度。 |
 | DEC-PSIC-004 | 允许 Viewer 做视觉夸张，但必须区分物理真值与展示层 | 要么完全禁止夸张，要么继续不解释 | 完全禁止会损失可读性；不解释会损失信任。 |
 | DEC-PSIC-005 | embodied / block-editing 只保留为 future gate | 先在文档里按理想动作面承诺 `jump/attack/use_item/block_place` | 当前 runtime 正式动作集和 3D 主路径都不支撑这类承诺，先写进去会制造伪能力。 |
+| DEC-PSIC-006 | 对过细动作请求返回最接近的可玩间接控制替代动作 | 只返回 `unsupported_action`，或直接开放 block editing / embodied 动作 | 玩家看到真实尺度后会自然尝试细粒度动作；翻译成当前可玩动作能降低预期落差，同时不改变当前产品方向。 |

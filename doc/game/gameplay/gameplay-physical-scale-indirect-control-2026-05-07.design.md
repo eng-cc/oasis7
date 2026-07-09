@@ -35,6 +35,11 @@
   - block digging
   - 第一人称 collision/jump/attack
   - 手搓局部地形编辑
+- 当玩家提出过细动作时，系统不只说“不支持”，而是翻译成当前可玩的间接控制动作：
+  - “挖这里 / 放一个块” -> `inspect location`、`build facility`、`schedule recipe` 或 `mine/harvest`。
+  - “跳过去 / 爬过去” -> `move_agent to location` 或 `choose reachable target`。
+  - “攻击目标” -> 当前阶段可用的 `interact / governance / crisis response`，或明确该对抗动作仍 deferred。
+  - 翻译条必须包含 `why_fine_action_deferred` 与 `player_next_step_hint`，避免把真实尺度体验变成死路。
 
 ### 4. Presentation Scale
 - Viewer 可以为了可读性放大、抽象、聚合，但不能改写物理真值。
@@ -48,6 +53,7 @@
 - 先主路线，再候选线：间接控制主路线优先于 embodied 候选线。
 - 先声明，再扩展：现有 coarse-grained 实现先声明和校验，再考虑新增精细能力。
 - 先解释，再美化：Viewer 的视觉优化不能抢先于语义解释。
+- 先翻译，再拒绝：过细动作请求应优先给出最接近的可玩替代动作；只有没有安全替代动作时才单独返回拒绝。
 
 ## 角色切片
 - `producer_system_designer`
@@ -61,8 +67,10 @@
   - 标识 presentation exaggeration 与 physical truth 的边界。
 - `agent_engineer`
   - 对齐 dual-mode / action contract 文档，避免把 future embodied 能力写成 current action surface。
+  - 对 `jump / attack / block_editing` 等 future embodied intent 提供 `unsupported_fine_grain_action -> canonical replacement` 的语义回执。
 - `qa_engineer`
   - 建立尺度一致性矩阵，并定义 blocker 签名。
+  - 把 `granularity_translation_missing` 纳入尺度一致性 blocker。
 
 ## 实施顺序
 1. `TASK-GAME-066`: 冻结专题，回挂根入口与主文档。

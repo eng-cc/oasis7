@@ -44,6 +44,10 @@
     - 同步注册同 ID 的 `PowerPlant`（owner 与 location 继承工厂）。
 - 发电行为：
   - `process_power_generation_tick` 的发电入账从“Location 电力池”调整为“power plant owner 资源库存”。
+- 玩家侧恢复预览：
+  - `factory.power.radiation.mk1`、等待发电或 `harvest_radiation` 被推荐为电力恢复路径时，必须能派生 `energy_recovery_preview` / `power_survival_quote`。
+  - 最小字段：`agent_id`、`current_power_level`、`power_state_before`、`recovery_action`、`power_gain_estimate`、`price_or_time_cost`、`power_state_after`、`survival_runway_ticks`、`next_action_affordability`、`shutdown_avoidance_reason`、`recommended_power_action`。
+  - Edge case: 若 owner 侧已能入账发电或采集电力，但玩家看不到恢复后的 runway、状态变化和下一步可执行性，标记为 `power_survival_quote_missing`；该缺口不恢复 Location 电力池，不重新引入 `PowerStorage` 路径，也不改变 `factory.power.radiation.mk1` 的建造/发电语义。
 
 ## 5. Risks & Roadmap
 

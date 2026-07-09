@@ -54,6 +54,13 @@
 - 治理提案到期自动结算（法定人数 + 通过阈值）。
 - 战争在持续时间窗口结束后自动结算并归档。
 
+### 玩家侧治理结果预览
+- `OpenGovernanceProposal` / `CastGovernanceVote` / 改票 / 等待 / 暂缓动作必须能派生 `governance_vote_quote` / `proposal_outcome_preview`。
+- 最小字段：`proposal_id`、`proposal_topic`、`actor_id`、`action_kind`、`closes_at_tick`、`ticks_remaining`、`current_quorum_weight`、`required_quorum_weight`、`current_pass_bps`、`required_pass_bps`、`actor_vote_weight`、`vote_swing_potential`、`likely_outcome_before_action`、`likely_outcome_after_action`、`affected_rule_or_priority`、`world_change_if_passed`、`cost_or_cooldown_if_failed`、`recommended_governance_action`、`why_this_vote_matters`。
+- Edge case: 若玩家准备发起提案、投票或改票，但看不到 quorum/pass 缺口、剩余时间、自己票权影响、通过后的世界变化或失败/过期代价，标记为 `governance_vote_quote_missing`。
+- Acceptance: 治理提案生命周期不应只在到期时结算；玩家在提交治理动作前应能判断当前票局、自己动作是否关键、通过后改变什么，以及失败/暂缓的机会成本。
+- Non-goal: 本补充不改变治理生命周期、通过阈值、法定人数、票权公式、冷却或 runtime ABI；只冻结玩家侧后果可读性。
+
 ## 里程碑
 - GLC2-R1：协议与状态模型扩展（治理提案/危机/战争生命周期事件）。
 - GLC2-R2：gameplay tick 生命周期推进器落地并接入 `step`/`step_with_modules`。

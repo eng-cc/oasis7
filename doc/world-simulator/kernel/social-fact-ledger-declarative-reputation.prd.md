@@ -74,6 +74,29 @@
     - `backing_fact_ids: Vec<u64>`
     - `ttl_ticks: Option<u64>`
 
+### 1.1) 玩家侧社会动作后果预览
+- 当玩家准备发布事实、质疑事实、仲裁事实、撤销事实或声明关系边时，玩家侧必须能读取 `social_fact_impact_quote` / `relationship_consequence_preview`，用于判断该社会动作会影响哪些信任、合作、黑名单、治理、claim 或交易协作表面。
+- 最小字段：
+  - `actor_id`
+  - `action_kind`: `publish_fact` / `challenge_fact` / `adjudicate_fact` / `revoke_fact` / `declare_edge`
+  - `schema_id`
+  - `subject_id`
+  - `object_id`
+  - `claim_summary`
+  - `confidence_ppm`
+  - `stake_at_risk`
+  - `ttl_ticks`
+  - `affected_relationships`
+  - `affected_social_surfaces`
+  - `cooperation_opportunity_delta`
+  - `blacklist_or_dispute_risk`
+  - `governance_or_claim_relevance`
+  - `recommended_social_action`
+  - `why_this_action_matters`
+- Edge case: 若玩家准备发布/质疑事实或声明关系边，但看不到影响对象、可见社交表面、合作机会变化、争议/stake 风险或推荐理由，标记为 `social_fact_impact_quote_missing`。
+- Acceptance: 玩家提交社会事实或关系声明前，至少能看懂“这条事实/关系会影响谁、影响哪些协作/交易/治理入口、我冒了什么风险、为什么现在值得发或应该暂缓”。
+- Non-goal: 本预览不新增全局唯一声誉分公式，不把社会事实硬绑定到经济定价，不重做仲裁权限、stake 结算或事实状态机，不新增复杂外交 UI、社交网络图或完整 NPC 谈判系统，也不改变 `PublishSocialFact` / `ChallengeSocialFact` / `DeclareSocialEdge` runtime ABI。
+
 ### 2) 事件扩展（simulator）
 - `SocialFactPublished`
 - `SocialFactChallenged`

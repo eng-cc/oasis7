@@ -9,6 +9,7 @@
 - 在 `llm_bootstrap`（20 tick 默认口径）下，将“可建厂但未稳定排产”的问题从能力缺口转为可度量、可回归的策略问题。
 - 引入“失败原因 -> 下一动作”强规则，减少无效重复 `harvest_radiation`，推动动作链路稳定收敛到 `refine_compound -> build_factory -> schedule_recipe`。
 - 增强闭环可观测性：报告中直接统计动作触发率与关键动作首达 tick。
+- 当策略把硬件不足恢复到 `refine_compound` 时，必须提供精炼净收益 / 电力机会成本预览，避免玩家只看到动作改写和执行结果。
 - 建立固定 mock 输出序列回归，保证策略主链路可在离线测试稳定复现。
 
 ## 2. User Experience & Functionality
@@ -37,11 +38,34 @@
   - `insufficient_resource.electricity -> harvest_radiation`
   - `factory_not_found -> build_factory`
   - `agent_already_at_location -> schedule_recipe | refine_compound`（禁止重复 move）
+- 当恢复规则推荐 `refine_compound` 时，后续实现必须通过 strategy hint，或通过升级后的 observation schema version，暴露 `refine_quote` 摘要；当前文档仅冻结恢复建议的可读性字段，不声明现行 `oc_dual_obs_v1` observation 或公共 `last_action` 已携带这些字段：
+  - `compound_mass_g`
+  - `electricity_cost`
+  - `hardware_output`
+  - `electricity_after`
+  - `hardware_shortfall_before`
+  - `hardware_shortfall_after`
+  - `first_goal_relevance`
+  - `recommended_refine_amount`
+  - `refine_value_class`
 - 数据透出：
-  - 在 prompt observation 中新增最近一次动作结果摘要：
+  - 若未来将恢复建议诊断写入 prompt observation 或公共 `last_action`，必须同步更新 dual-mode provider contract 与 schema version；本轮文档不改变当前 observation/action schema：
     - `last_action.kind`
     - `last_action.success`
     - `last_action.reject_reason`
+    - `last_action.refine_quote_missing`（future routed diagnostic：当硬件不足恢复建议缺少精炼预览时为 true；若进入 observation，必须同步更新 dual-mode provider contract 与 schema version）
+- 当恢复规则推荐 `harvest_radiation`、`BuyPower` 或等待发电时，后续实现必须通过 strategy hint，或通过升级后的 observation schema version，暴露 `power_survival_quote` / `energy_recovery_preview` 摘要；当前文档仅冻结玩家可读性字段，不声明现行 `oc_dual_obs_v1` observation 或公共 `last_action` 已携带这些字段：
+  - `current_power_level`
+  - `power_state_before`
+  - `recovery_action`
+  - `power_gain_estimate`
+  - `price_or_time_cost`
+  - `power_state_after`
+  - `survival_runway_ticks`
+  - `next_action_affordability`
+  - `shutdown_avoidance_reason`
+  - `recommended_power_action`
+  - `last_action.power_survival_quote_missing`（future routed diagnostic：当电力不足恢复建议缺少 runway / 防停机预览时为 true；若进入 observation，必须同步更新 dual-mode provider contract 与 schema version）
 
 ### 2) 报告动作触发率指标（TODO-2）
 - 位置：`crates/oasis7/src/bin/oasis7_llm_agent_demo.rs`（及其 report 结构）
@@ -76,6 +100,7 @@
 
 ### Technical Risks
 - 规则过强风险：过度硬编码可能压制模型在复杂场景的探索能力。
+- 决策误读风险：若 `schedule_recipe -> refine_compound` 只作为 guardrail 改写结果出现，玩家/模型会知道“该精炼”但不知道电力是否值得花。
 - 指标兼容风险：报告 JSON 新字段需保持向后兼容（新增不破坏旧消费方）。
 - 测试漂移风险：离线 mock 策略与在线真实模型行为仍可能存在差异，需双口径保留（离线确定性 + 在线抽样）。
 
