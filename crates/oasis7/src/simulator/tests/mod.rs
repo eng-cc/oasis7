@@ -74,6 +74,7 @@ mod persist;
 mod persist_journal_invariants;
 mod physics_parameters;
 mod power;
+mod power_sale_quote;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]

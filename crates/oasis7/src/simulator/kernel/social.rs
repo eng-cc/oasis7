@@ -1,6 +1,6 @@
 use crate::simulator::social::{
     SocialAdjudicationDecision, SocialChallengeState, SocialEdgeLifecycleState, SocialEdgeState,
-    SocialFactLifecycleState, SocialFactState, SocialStake,
+    SocialFactImpactQuote, SocialFactLifecycleState, SocialFactState, SocialStake,
 };
 
 use super::super::types::{PPM_BASE, ResourceOwner, WorldEventId, WorldTime};
@@ -11,6 +11,133 @@ const EDGE_EXPIRE_REASON_TTL: &str = "ttl_expired";
 const EDGE_EXPIRE_REASON_BACKING_FACT_INACTIVE: &str = "backing_fact_inactive";
 
 impl WorldKernel {
+    pub fn quote_publish_social_fact(
+        &self,
+        actor: &ResourceOwner,
+        schema_id: &str,
+        subject: &ResourceOwner,
+        object: Option<&ResourceOwner>,
+        claim: &str,
+        confidence_ppm: i64,
+        evidence_event_ids: &[WorldEventId],
+        ttl_ticks: Option<u64>,
+        stake: Option<&SocialStake>,
+    ) -> Result<SocialFactImpactQuote, RejectReason> {
+        self.ensure_owner_exists(actor)?;
+        self.ensure_owner_exists(subject)?;
+        if let Some(owner) = object {
+            self.ensure_owner_exists(owner)?;
+        }
+
+        let schema_id = schema_id.trim();
+        if schema_id.is_empty() {
+            return social_rule_denied("social schema_id cannot be empty");
+        }
+        let claim = claim.trim();
+        if claim.is_empty() {
+            return social_rule_denied("social claim cannot be empty");
+        }
+        if !(1..=PPM_BASE).contains(&confidence_ppm) {
+            return Err(RejectReason::InvalidAmount {
+                amount: confidence_ppm,
+            });
+        }
+        if evidence_event_ids.is_empty() {
+            return social_rule_denied("social evidence_event_ids cannot be empty");
+        }
+        for event_id in evidence_event_ids {
+            if !self.has_journal_event(*event_id) {
+                return social_rule_denied(format!("social evidence event missing: {event_id}"));
+            }
+        }
+        if ttl_ticks.is_some_and(|ticks| ticks == 0) {
+            return Err(RejectReason::InvalidAmount { amount: 0 });
+        }
+        self.ensure_social_stake_available(actor, stake)?;
+
+        Ok(SocialFactImpactQuote {
+            actor_id: social_owner_quote_id(actor),
+            action_kind: "publish_social_fact".to_string(),
+            schema_id: schema_id.to_string(),
+            subject_id: Some(social_owner_quote_id(subject)),
+            object_id: object.map(social_owner_quote_id),
+            claim_summary: summarize_social_text(claim),
+            confidence_ppm: Some(confidence_ppm),
+            stake_at_risk: stake.map(|stake| stake.amount).unwrap_or(0),
+            ttl_ticks,
+            affected_relationships: social_affected_relationships(schema_id, subject, object),
+            affected_social_surfaces: social_affected_surfaces(schema_id),
+            cooperation_opportunity_delta: "positive".to_string(),
+            blacklist_or_dispute_risk: if stake.is_some() {
+                "stake_at_risk"
+            } else {
+                "challengeable_claim"
+            }
+            .to_string(),
+            governance_or_claim_relevance: "evidence_backed_claim".to_string(),
+            recommended_social_action: "publish_fact".to_string(),
+            why_this_action_matters: format!(
+                "Publishing this claim makes {} visible for cooperation, dispute, and governance decisions.",
+                social_owner_quote_id(subject)
+            ),
+        })
+    }
+
+    pub fn quote_challenge_social_fact(
+        &self,
+        challenger: &ResourceOwner,
+        fact_id: u64,
+        reason: &str,
+        stake: Option<&SocialStake>,
+    ) -> Result<SocialFactImpactQuote, RejectReason> {
+        self.ensure_owner_exists(challenger)?;
+        let reason = reason.trim();
+        if reason.is_empty() {
+            return social_rule_denied("social challenge reason cannot be empty");
+        }
+        self.ensure_social_stake_available(challenger, stake)?;
+
+        let Some(fact) = self.model.social_facts.get(&fact_id) else {
+            return social_rule_denied(format!("social fact not found: {fact_id}"));
+        };
+        if !matches!(
+            fact.lifecycle,
+            SocialFactLifecycleState::Active | SocialFactLifecycleState::Confirmed
+        ) {
+            return social_rule_denied(format!(
+                "social fact {fact_id} cannot be challenged in state {:?}",
+                fact.lifecycle
+            ));
+        }
+        if fact.challenge.is_some() {
+            return social_rule_denied(format!("social fact {fact_id} already challenged"));
+        }
+
+        Ok(SocialFactImpactQuote {
+            actor_id: social_owner_quote_id(challenger),
+            action_kind: "challenge_social_fact".to_string(),
+            schema_id: fact.schema_id.clone(),
+            subject_id: Some(social_owner_quote_id(&fact.subject)),
+            object_id: fact.object.as_ref().map(social_owner_quote_id),
+            claim_summary: summarize_social_text(reason),
+            confidence_ppm: Some(fact.confidence_ppm),
+            stake_at_risk: stake.map(|stake| stake.amount).unwrap_or(0),
+            ttl_ticks: fact.ttl_ticks,
+            affected_relationships: social_affected_relationships(
+                &fact.schema_id,
+                &fact.subject,
+                fact.object.as_ref(),
+            ),
+            affected_social_surfaces: social_affected_surfaces(&fact.schema_id),
+            cooperation_opportunity_delta: "contested".to_string(),
+            blacklist_or_dispute_risk: "opens_dispute".to_string(),
+            governance_or_claim_relevance: "adjudication_relevant".to_string(),
+            recommended_social_action: "challenge_fact".to_string(),
+            why_this_action_matters: "Challenging this fact opens a dispute before the claim is reused by relationships or governance."
+                .to_string(),
+        })
+    }
+
     pub(super) fn apply_publish_social_fact(
         &mut self,
         actor: ResourceOwner,
@@ -566,6 +693,35 @@ impl WorldKernel {
         event_id < self.next_event_id
     }
 
+    fn ensure_social_stake_available(
+        &self,
+        owner: &ResourceOwner,
+        stake: Option<&SocialStake>,
+    ) -> Result<(), RejectReason> {
+        validate_social_stake(stake)?;
+        let Some(stake) = stake else {
+            return Ok(());
+        };
+        if matches!(owner, ResourceOwner::Location { .. })
+            && matches!(stake.kind, super::super::types::ResourceKind::Electricity)
+        {
+            return social_rule_denied("location electricity pool removed");
+        }
+        let available = self
+            .owner_stock(owner)
+            .map(|stock| stock.get(stake.kind))
+            .unwrap_or(0);
+        if available < stake.amount {
+            return Err(RejectReason::InsufficientResource {
+                owner: owner.clone(),
+                kind: stake.kind,
+                requested: stake.amount,
+                available,
+            });
+        }
+        Ok(())
+    }
+
     fn lock_social_stake(
         &mut self,
         owner: &ResourceOwner,
@@ -695,6 +851,58 @@ fn validate_social_stake(stake: Option<&SocialStake>) -> Result<(), RejectReason
         });
     }
     Ok(())
+}
+
+fn social_rule_denied<T>(note: impl Into<String>) -> Result<T, RejectReason> {
+    Err(RejectReason::RuleDenied {
+        notes: vec![note.into()],
+    })
+}
+
+fn social_owner_quote_id(owner: &ResourceOwner) -> String {
+    match owner {
+        ResourceOwner::Agent { agent_id } => agent_id.clone(),
+        ResourceOwner::Location { location_id } => location_id.clone(),
+    }
+}
+
+fn summarize_social_text(text: &str) -> String {
+    const MAX_CHARS: usize = 96;
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= MAX_CHARS {
+        return trimmed.to_string();
+    }
+    let mut summary = trimmed.chars().take(MAX_CHARS).collect::<String>();
+    summary.push_str("...");
+    summary
+}
+
+fn social_affected_relationships(
+    schema_id: &str,
+    subject: &ResourceOwner,
+    object: Option<&ResourceOwner>,
+) -> Vec<String> {
+    let mut relationships = vec![format!("schema:{schema_id}")];
+    relationships.push(format!("subject:{}", social_owner_quote_id(subject)));
+    if let Some(object) = object {
+        relationships.push(format!("object:{}", social_owner_quote_id(object)));
+    }
+    relationships
+}
+
+fn social_affected_surfaces(schema_id: &str) -> Vec<String> {
+    let lower = schema_id.to_ascii_lowercase();
+    let mut surfaces = vec!["social_fact_ledger".to_string()];
+    if lower.contains("reputation") {
+        surfaces.push("reputation".to_string());
+    }
+    if lower.contains("trust") || lower.contains("relationship") {
+        surfaces.push("relationship".to_string());
+    }
+    if lower.contains("blacklist") {
+        surfaces.push("blacklist".to_string());
+    }
+    surfaces
 }
 
 fn social_fact_party_matches(fact: &SocialFactState, owner: &ResourceOwner) -> bool {

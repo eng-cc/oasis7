@@ -129,7 +129,7 @@ pub use runner::{
 pub use scenario::{ScenarioSpecError, WorldScenario, WorldScenarioSpec};
 pub use social::{
     SocialAdjudicationDecision, SocialChallengeState, SocialEdgeLifecycleState, SocialEdgeState,
-    SocialFactLifecycleState, SocialFactState, SocialStake,
+    SocialFactImpactQuote, SocialFactLifecycleState, SocialFactState, SocialStake,
 };
 pub use types::{
     Action, ActionEnvelope, ActionId, ActionSubmitter, AgentId, AssetId,
@@ -137,8 +137,9 @@ pub use types::{
     DEFAULT_ELEMENT_RECOVERABILITY_PPM, DEFAULT_MOVE_COST_PER_KM_ELECTRICITY,
     DEFAULT_VISIBILITY_RANGE_CM, ElementBudgetError, ElementComposition, FacilityId,
     FragmentElementKind, FragmentResourceBudget, JOURNAL_VERSION, LocationId, LocationProfile,
-    MaterialKind, ModuleInstallTarget, PPM_BASE, PowerOrderSide, ResourceKind, ResourceOwner,
-    ResourceStock, SNAPSHOT_VERSION, StockError, WorldEventId, WorldTime,
+    MaterialKind, ModuleInstallTarget, PPM_BASE, PowerOrderSide, RefineQuote, ResourceKind,
+    ResourceOwner, ResourceStock, SNAPSHOT_VERSION, ScheduleQuote, StockError, WorldEventId,
+    WorldTime,
 };
 pub use world_model::{
     Agent, AgentExecutionDebugContext, AgentKinematics, AgentPromptProfile, Asset, AssetKind,
@@ -153,7 +154,7 @@ pub use world_model::{
 // Re-export power system types
 pub use power::{
     AgentPowerState, AgentPowerStatus, ConsumeReason, PlantStatus, PowerConfig, PowerEvent,
-    PowerPlant,
+    PowerPlant, PowerSaleQuote, PowerSurvivalQuote,
 };
 pub use runtime_perf::{
     RuntimePerfBottleneck, RuntimePerfHealth, RuntimePerfSeriesSnapshot, RuntimePerfSnapshot,

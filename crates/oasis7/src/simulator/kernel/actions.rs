@@ -3,10 +3,12 @@ use std::collections::BTreeMap;
 
 use super::super::chunking::CHUNK_SIZE_X_CM;
 use super::super::module_visual::ModuleVisualAnchor;
-use super::super::power::{PlantStatus, PowerEvent, PowerPlant};
+use super::super::power::{
+    AgentPowerState, PlantStatus, PowerEvent, PowerPlant, PowerSaleQuote, PowerSurvivalQuote,
+};
 use super::super::types::{
     Action, CM_PER_KM, ElementBudgetError, FragmentElementKind, PPM_BASE, PowerOrderSide,
-    ResourceKind, ResourceOwner, StockError,
+    RefineQuote, ResourceKind, ResourceOwner, ScheduleQuote, StockError,
 };
 use super::super::world_model::{Agent, Factory, FragmentResourceError, Location, PowerOrderState};
 use super::WorldKernel;
@@ -35,5 +37,8 @@ struct PreparedPowerTransfer {
 
 include!("actions_core.rs");
 include!("actions_power_order_matching.rs");
+include!("actions_power_sale_quote.rs");
+include!("actions_refine_quote.rs");
+include!("actions_schedule_quote.rs");
 include!("actions_resolution.rs");
 include!("actions_regressions.rs");

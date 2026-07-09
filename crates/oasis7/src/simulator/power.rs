@@ -125,10 +125,10 @@ impl PowerConfig {
         if capacity <= 0 {
             return AgentPowerState::Normal;
         }
-        let pct = (current * 100) / capacity;
-        if pct <= self.critical_threshold_pct {
+        let pct = (current as i128 * 100) / capacity as i128;
+        if pct <= self.critical_threshold_pct as i128 {
             AgentPowerState::Critical
-        } else if pct <= self.low_power_threshold_pct {
+        } else if pct <= self.low_power_threshold_pct as i128 {
             AgentPowerState::LowPower
         } else {
             AgentPowerState::Normal
@@ -348,6 +348,41 @@ pub enum PowerEvent {
         amount: i64,
         new_level: i64,
     },
+}
+
+/// Pre-submit opportunity-cost preview for `SellPower`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PowerSaleQuote {
+    pub agent_id: AgentId,
+    pub current_power_level: i64,
+    pub power_state_before: String,
+    pub sale_amount: i64,
+    pub price_per_pu: i64,
+    pub expected_revenue: i64,
+    pub power_state_after_sale: String,
+    pub remaining_runway_ticks: i64,
+    pub next_action_affordability_after_sale: String,
+    pub production_interrupt_risk: bool,
+    pub recommended_sale_action: String,
+    pub why_sale_is_safe_or_risky: String,
+}
+
+/// Pre-submit survival preview for `BuyPower` recovery actions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PowerSurvivalQuote {
+    pub agent_id: AgentId,
+    pub current_power_level: i64,
+    pub power_state_before: String,
+    pub recovery_action: String,
+    pub recovery_amount: i64,
+    pub power_gain_estimate: i64,
+    pub price_per_pu: i64,
+    pub price_or_time_cost: i64,
+    pub power_state_after_recovery: String,
+    pub survival_runway_ticks: i64,
+    pub next_action_affordability_after_recovery: String,
+    pub shutdown_avoidance_reason: String,
+    pub recommended_power_action: String,
 }
 
 // ============================================================================

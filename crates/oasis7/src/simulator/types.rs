@@ -391,6 +391,42 @@ pub struct ActionEnvelope {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScheduleQuote {
+    pub owner: ResourceOwner,
+    pub factory_id: FacilityId,
+    pub recipe_id: String,
+    pub batches: i64,
+    pub base_duration_ticks: i64,
+    pub electricity_cost: i64,
+    pub hardware_cost: i64,
+    pub data_output: i64,
+    pub finished_product_id: String,
+    pub finished_product_units: i64,
+    pub local_shortage_delay_ticks: i64,
+    pub shortage_reason: String,
+    pub recommended_pre_step: String,
+    pub runway_before_ticks: i64,
+    pub runway_after_ticks: i64,
+    pub downtime_threshold_ppm: i64,
+    pub maintenance_pressure_delta: String,
+    pub recommended_maintenance_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefineQuote {
+    pub owner: ResourceOwner,
+    pub compound_mass_g: i64,
+    pub electricity_cost: i64,
+    pub hardware_output: i64,
+    pub electricity_after: i64,
+    pub hardware_shortfall_before: i64,
+    pub hardware_shortfall_after: i64,
+    pub first_goal_relevance: String,
+    pub recommended_refine_amount: i64,
+    pub refine_value_class: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ActionSubmitter {
     System,

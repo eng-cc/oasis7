@@ -1,10 +1,30 @@
 use super::*;
 use std::io::{ErrorKind, Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const SNAPSHOT_PLAYER_ID: &str = "player-snapshot";
+
+fn read_probe_request(stream: &mut TcpStream) -> Vec<u8> {
+    let started_at = Instant::now();
+    let mut request = vec![0_u8; 1024];
+    loop {
+        match stream.read(&mut request) {
+            Ok(bytes) => {
+                request.truncate(bytes);
+                return request;
+            }
+            Err(err)
+                if err.kind() == ErrorKind::WouldBlock
+                    && started_at.elapsed() < Duration::from_millis(500) =>
+            {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(err) => panic!("read request: {err}"),
+        }
+    }
+}
 
 fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
@@ -21,9 +41,8 @@ fn spawn_runtime_provider_probe_server() -> (String, thread::JoinHandle<()>) {
         {
             match listener.accept() {
                 Ok((mut stream, _)) => {
-                    let mut request = [0_u8; 1024];
-                    let bytes = stream.read(&mut request).expect("read request");
-                    let request_text = String::from_utf8_lossy(&request[..bytes]);
+                    let request = read_probe_request(&mut stream);
+                    let request_text = String::from_utf8_lossy(&request);
                     let body = if request_text.contains("GET /v1/provider/info") {
                         r#"{"provider_id":"provider_local_bridge","name":"Provider Local Bridge","version":"0.1.0","protocol_version":"world-simulator-provider-loopback-http-v1","chain_resource_manifest_schema_version":"oasis7.world_resource_manifest.v1","chain_resource_delta_schema_version":"oasis7.world_resource_delta.v1","capabilities":["decision","feedback"],"supported_action_sets":["wait","wait_ticks","move_agent","speak_to_nearby","inspect_target","simple_interact"]}"#
                     } else {

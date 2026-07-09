@@ -118,6 +118,351 @@ fn schedule_recipe_accepts_scale_out_recipe_on_smelter_factory() {
 }
 
 #[test]
+fn schedule_recipe_quote_previews_costs_and_runway_without_mutating_state() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 6;
+    config.economy.recipe_hardware_cost_per_batch = 2;
+    config.economy.recipe_data_output_per_batch = 1;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+
+    let journal_len_before_quote = kernel.journal().len();
+    let resources_before_quote = kernel
+        .model()
+        .agents
+        .get("agent-smelter")
+        .expect("agent exists")
+        .resources
+        .clone();
+    let quote = kernel
+        .quote_schedule_recipe(&owner, "factory.smelter.alpha", "recipe.smelter.alloy_plate", 2)
+        .expect("schedule quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-smelter")
+            .expect("agent exists")
+            .resources,
+        resources_before_quote
+    );
+    assert_eq!(quote.factory_id, "factory.smelter.alpha");
+    assert_eq!(quote.recipe_id, "recipe.smelter.alloy_plate");
+    assert_eq!(quote.batches, 2);
+    assert_eq!(quote.base_duration_ticks, 2);
+    assert_eq!(quote.electricity_cost, 18);
+    assert_eq!(quote.hardware_cost, 8);
+    assert_eq!(quote.data_output, 4);
+    assert_eq!(quote.finished_product_id, "alloy_plate");
+    assert_eq!(quote.finished_product_units, 4);
+    assert_eq!(quote.local_shortage_delay_ticks, 0);
+    assert_eq!(quote.shortage_reason, "none");
+    assert_eq!(quote.runway_before_ticks, 0);
+    assert_eq!(quote.runway_after_ticks, 0);
+    assert_eq!(quote.downtime_threshold_ppm, 0);
+    assert_eq!(quote.maintenance_pressure_delta, "none");
+    assert_eq!(quote.recommended_pre_step, "schedule_now");
+    assert_eq!(quote.recommended_maintenance_action, "continue_production");
+}
+
+#[test]
+fn schedule_recipe_quote_rejects_output_overflow_like_execution() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 0;
+    config.economy.recipe_hardware_cost_per_batch = 0;
+    config.economy.recipe_data_output_per_batch = 1;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 8);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, i64::MAX - 1);
+
+    let journal_len_before_quote = kernel.journal().len();
+    let reason = kernel
+        .quote_schedule_recipe(&owner, "factory.smelter.alpha", "recipe.smelter.alloy_plate", 1)
+        .expect_err("output overflow should reject");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(reason, RejectReason::InvalidAmount { amount: 2 });
+}
+
+#[test]
+fn refine_compound_quote_previews_net_value_without_mutating_state() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_hardware_cost = 5;
+    config.economy.refine_electricity_cost_per_kg = 3;
+    config.economy.refine_hardware_yield_ppm = 2_000;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-refine".to_string(),
+        name: "refine-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-refiner".to_string(),
+        location_id: "loc-refine".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-refiner".to_string(),
+    };
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 50);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 2_500);
+
+    let journal_len_before_quote = kernel.journal().len();
+    let resources_before_quote = kernel
+        .model()
+        .agents
+        .get("agent-refiner")
+        .expect("agent exists")
+        .resources
+        .clone();
+    let quote = kernel
+        .quote_refine_compound(&owner, 2_500)
+        .expect("refine quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-refiner")
+            .expect("agent exists")
+            .resources,
+        resources_before_quote
+    );
+    assert_eq!(quote.owner, owner);
+    assert_eq!(quote.compound_mass_g, 2_500);
+    assert_eq!(quote.electricity_cost, 9);
+    assert_eq!(quote.hardware_output, 5);
+    assert_eq!(quote.electricity_after, 41);
+    assert_eq!(quote.hardware_shortfall_before, 5);
+    assert_eq!(quote.hardware_shortfall_after, 0);
+    assert_eq!(
+        quote.first_goal_relevance,
+        "enables_factory_build_hardware_goal"
+    );
+    assert_eq!(quote.recommended_refine_amount, 2_500);
+    assert_eq!(quote.refine_value_class, "enough_for_next_step");
+}
+
+#[test]
+fn refine_compound_quote_rejects_zero_output_like_execution() {
+    let mut config = WorldConfig::default();
+    config.economy.refine_electricity_cost_per_kg = 1;
+    config.economy.refine_hardware_yield_ppm = 1_000;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-refine".to_string(),
+        name: "refine-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-refiner".to_string(),
+        location_id: "loc-refine".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-refiner".to_string(),
+    };
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 10);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 999);
+
+    let journal_len_before_quote = kernel.journal().len();
+    let resources_before_quote = kernel
+        .model()
+        .agents
+        .get("agent-refiner")
+        .expect("agent exists")
+        .resources
+        .clone();
+    let reason = kernel
+        .quote_refine_compound(&owner, 999)
+        .expect_err("zero hardware output should reject");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-refiner")
+            .expect("agent exists")
+            .resources,
+        resources_before_quote
+    );
+    assert_eq!(reason, RejectReason::InvalidAmount { amount: 999 });
+}
+
+#[test]
+fn refine_compound_quote_marks_partial_progress_when_output_does_not_cover_goal() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_hardware_cost = 5;
+    config.economy.refine_electricity_cost_per_kg = 1;
+    config.economy.refine_hardware_yield_ppm = 1_000;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-refine".to_string(),
+        name: "refine-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-refiner".to_string(),
+        location_id: "loc-refine".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-refiner".to_string(),
+    };
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 10);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 2_500);
+
+    let quote = kernel
+        .quote_refine_compound(&owner, 2_500)
+        .expect("partial refine quote");
+
+    assert_eq!(quote.hardware_output, 2);
+    assert_eq!(quote.hardware_shortfall_before, 5);
+    assert_eq!(quote.hardware_shortfall_after, 3);
+    assert_eq!(
+        quote.first_goal_relevance,
+        "reduces_factory_build_hardware_shortfall"
+    );
+    assert_eq!(quote.recommended_refine_amount, 2_500);
+    assert_eq!(quote.refine_value_class, "partial_progress");
+}
+
+#[test]
+fn refine_compound_quote_uses_existing_goal_progress_for_recommendation() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_hardware_cost = 5;
+    config.economy.refine_electricity_cost_per_kg = 1;
+    config.economy.refine_hardware_yield_ppm = 1_000;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-refine".to_string(),
+        name: "refine-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-refiner".to_string(),
+        location_id: "loc-refine".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-refiner".to_string(),
+    };
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 10);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 6_002);
+
+    let quote = kernel
+        .quote_refine_compound(&owner, 6_000)
+        .expect("existing progress refine quote");
+
+    assert_eq!(quote.hardware_output, 6);
+    assert_eq!(quote.hardware_shortfall_before, 3);
+    assert_eq!(quote.hardware_shortfall_after, 0);
+    assert_eq!(quote.recommended_refine_amount, 3_000);
+    assert_eq!(quote.refine_value_class, "enough_for_next_step");
+}
+
+#[test]
+fn refine_compound_quote_marks_poor_tradeoff_when_goal_already_met() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_hardware_cost = 5;
+    config.economy.refine_electricity_cost_per_kg = 1;
+    config.economy.refine_hardware_yield_ppm = 1_000;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-refine".to_string(),
+        name: "refine-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-refiner".to_string(),
+        location_id: "loc-refine".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-refiner".to_string(),
+    };
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 10);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 6_005);
+
+    let quote = kernel
+        .quote_refine_compound(&owner, 1_000)
+        .expect("poor tradeoff refine quote");
+
+    assert_eq!(quote.hardware_output, 1);
+    assert_eq!(quote.hardware_shortfall_before, 0);
+    assert_eq!(quote.hardware_shortfall_after, 0);
+    assert_eq!(
+        quote.first_goal_relevance,
+        "does_not_reduce_factory_build_hardware_shortfall"
+    );
+    assert_eq!(quote.recommended_refine_amount, 0);
+    assert_eq!(quote.refine_value_class, "poor_power_tradeoff");
+}
+
+#[test]
 fn schedule_recipe_rejects_incompatible_factory_kind() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;
