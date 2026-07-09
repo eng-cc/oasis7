@@ -4,7 +4,6 @@ impl PosNodeEngine {
     pub(super) fn replication_gap_sync_local_state_blocked_reason(reason: &str) -> bool {
         reason.contains("execution hash validation failed")
             || reason.contains("execution driver peer mismatch")
-            || reason.contains("node execution error")
             || reason.contains("forced execution failure")
             || reason.contains("rollback to height")
             || reason.contains("No space left on device")

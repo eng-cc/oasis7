@@ -37,6 +37,18 @@ impl NodeExecutionHook for PassthroughExecutionHook {
 }
 
 #[test]
+fn local_state_block_reason_requires_deterministic_signature() {
+    assert!(PosNodeEngine::replication_gap_sync_local_state_blocked_reason(
+        "node execution error: execution driver peer mismatch at height 1"
+    ));
+    assert!(
+        !PosNodeEngine::replication_gap_sync_local_state_blocked_reason(
+            "node execution error: temporary execution driver unavailable"
+        )
+    );
+}
+
+#[test]
 fn successor_probe_does_not_advance_replication_cursor_when_execution_fails() {
     let dir_remote = temp_dir("successor-probe-execution-fail-remote");
     let dir_local = temp_dir("successor-probe-execution-fail-local");
