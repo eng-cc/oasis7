@@ -51,6 +51,8 @@
 - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`：按 surface 汇总现有性能覆盖、当前缺口、建议补测和建议 tier 的速查表。
 - Provider dual-mode 历史 blocker 已收敛到 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 与复签 evidence；当前 testing 阻断只从 `doc/testing/project.md` 进入。
 
+Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流，不再作为单一 PRD/design/project 三件套维护。`web-ui-agent-browser-closure-manual.*` 保留 Viewer 页面通用闭环的 PRD / project / manual 真值；`web-ui-playwright-closure-manual.manual.md` 保留真实本地栈 + 玩家 UI 操作流程的 `PWT-###` 系列入口；`web-ui-playwright-closure-manual.design.md` 仅作为历史/共享设计 companion 追溯，不再把两条 manual surface 合并成一个 normal triplet。
+
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；专题清单继续保留在下方，用于精确文件名检索和互链可达性。
@@ -68,9 +70,14 @@
 
 2026-07-06 governance note: 早期 launcher chain migration、lifecycle hardening、viewer auth/node config autowire 与 full usability closure audit 四组三件套已退役删除；当前 launcher / playtest / Web UI 闭环入口保留在 `testing-manual.md`、`doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`、`doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`、Web UI manual、GitHub task issue evidence comments 与 git history。
 
+Viewer performance historical/provenance note: `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.*` 是已完成的 legacy methodology closure，依赖已移除的 `viewer-owr4-stress` / old `perf_probe` 路径；当前 Viewer performance 入口为 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md` 与 `testing-manual.md` 的 Viewer performance probe 指引。Delete-candidate boundary: focused `rg` 确认只剩 self/provenance 引用前，保留该 legacy triplet 作为历史证据；不得把它作为当前 operator guidance。
+
+Builtin wasm m1 determinism historical/provenance note: `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.*` 是已完成的 historical triplet，旧 independent multi-runner / host-native 对账口径已并入当前 Docker canonical `wasm-determinism-gate`。当前 builtin wasm 独立 gate 入口为 `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` 与 `.github/workflows/wasm-determinism-gate.yml`；删除该 legacy triplet 前，需 focused `rg` 确认只剩 self/provenance 引用。
+
+Wasm build determinism guard historical/provenance note: `doc/testing/governance/wasm-build-determinism-guard.*` 是已完成的 historical QA gate substrate，记录早期脚本护栏、污染环境变量拦截和 workspace 编译期风险前置。当前 WASM 发布级 canonical build / release evidence 入口为 `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`；required / full gate 归属继续以 `doc/testing/prd.md`、`doc/testing/project.md`、`testing-manual.md` 与当前 task truth 为准。删除该 legacy triplet 前，需 focused `rg` 确认只剩 self/provenance 引用。
+
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-m1.project.md` |
 | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md` | `doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.project.md` |
 | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.prd.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.design.md` | `doc/testing/ci/ci-builtin-wasm-determinism-gate-required-check-protection.project.md` |
 | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.prd.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.design.md` | `doc/testing/ci/ci-remove-builtin-wasm-hash-checks-from-base-gate.project.md` |
@@ -86,7 +93,6 @@
 | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.prd.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.design.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md` |
 | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` |
 | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md` |
-| `doc/testing/governance/wasm-build-determinism-guard.prd.md` | `doc/testing/governance/wasm-build-determinism-guard.design.md` | `doc/testing/governance/wasm-build-determinism-guard.project.md` |
 | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.design.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md` |
 | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.design.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md` |
 | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.design.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md` |
@@ -99,11 +105,9 @@
 | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.prd.md` | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.design.md` | `doc/testing/longrun/s10-distfs-probe-bootstrap-2026-02-28.project.md` |
 | `doc/testing/longrun/s10-five-node-real-game-soak.prd.md` | `doc/testing/longrun/s10-five-node-real-game-soak.design.md` | `doc/testing/longrun/s10-five-node-real-game-soak.project.md` |
 | `doc/testing/manual/systematic-application-testing-manual.prd.md` | `doc/testing/manual/systematic-application-testing-manual.design.md` | `doc/testing/manual/systematic-application-testing-manual.project.md` |
-| `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | `doc/testing/manual/web-ui-playwright-closure-manual.design.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md` |
 | `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.prd.md` | `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.design.md` | `doc/testing/performance/runtime-performance-observability-foundation-2026-02-25.project.md` |
 | `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.prd.md` | `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.design.md` | `doc/testing/performance/runtime-performance-observability-llm-api-decoupling-2026-02-25.project.md` |
 | `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.prd.md` | `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.design.md` | `doc/testing/performance/viewer-perf-bottleneck-observability-2026-02-25.project.md` |
-| `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.prd.md` | `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.design.md` | `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.project.md` |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

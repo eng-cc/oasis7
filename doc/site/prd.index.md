@@ -60,8 +60,6 @@
 | --- | --- | --- |
 | `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.design.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` |
 | `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.design.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` |
-| `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-12.design.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` |
-| `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.design.md` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | `doc/site/github-pages/github-pages-hero-motion-layer.design.md` | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` |
@@ -101,4 +99,5 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档，`doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` 为增量子文档。
 - ROUND-002 口径：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为 github-pages 主文档，其余 github-pages 专题为增量子文档。
+- GitHub Pages content-sync historical/provenance note：`doc/site/github-pages/github-pages-content-sync-2026-02-12.*` 与 `doc/site/github-pages/github-pages-content-sync-2026-02-25.*` 保留为已完成内容同步批次的来源线索，不再作为当前默认活跃专题清单入口；当前 site 真值以 `doc/site/prd.md`、`doc/site/project.md` 为准，github-pages 主文档以 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为准，下载/公开面按 `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` 与 `site/**` 现行文件追溯。后续若删除这些历史子文档，需先完成引用审计与 deletion-readiness slice。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入后续路径级治理。

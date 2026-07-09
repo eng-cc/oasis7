@@ -72,20 +72,22 @@
 | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.design.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` |
 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.design.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.project.md` |
 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md` |
-| `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.design.md` | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md` |
-| `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.design.md` | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md` |
 | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.design.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.project.md` |
 | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md` | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.design.md` | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.project.md` |
-| `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md` | `doc/game/gameplay/gameplay-module-driven-production-closure.design.md` | `doc/game/gameplay/gameplay-module-driven-production-closure.project.md` |
 | `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md` | `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.design.md` | `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.project.md` |
 | `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md` | `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.design.md` | `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.project.md` |
-| `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.prd.md` | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.design.md` | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.project.md` |
-| `doc/game/gameplay/gameplay-release-production-closure.prd.md` | `doc/game/gameplay/gameplay-release-production-closure.design.md` | `doc/game/gameplay/gameplay-release-production-closure.project.md` |
-| `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.design.md` | `doc/game/gameplay/gameplay-runtime-governance-closure.project.md` |
 | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md` |
 | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md` |
+
+## 历史 closure / provenance 入口
+| 历史 closure 专题 | 当前追溯入口 |
+| --- | --- |
+| `gameplay-layer-lifecycle-rules-closure`、`gameplay-layer-war-governance-crisis-meta-closure`、`gameplay-module-driven-production-closure` | 生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包` 与 `doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`；历史审读见 `doc/core/reviews/round-004-reviewed-files.md` 与 `doc/core/reviews/round-008-reviewed-files.md`。 |
+| `gameplay-release-gap-closure-2026-02-21`、`gameplay-release-production-closure`、`gameplay-runtime-governance-closure` | 作为 release / production / runtime closure provenance 保留可检索性；当前首读和执行入口继续走 `doc/game/gameplay/gameplay-top-level-design.prd.md`、`doc/game/gameplay/gameplay-top-level-design.project.md`、相关专题 project、core review logs 与 GitHub task issue evidence comments。 |
+
+删除候选边界：上述 closure 三件套不再作为 active gameplay truth；后续若确认内容已被主入口、topic project、core review logs 与 GitHub task evidence 完整覆盖，可在独立治理切片中删除文件并保留本节或 git history 追溯。
 
 ## 运行 / 证据 / 交接补充入口
 | 文档路径 | 类型 | 用途 |

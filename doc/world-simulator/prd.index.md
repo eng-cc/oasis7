@@ -22,7 +22,7 @@
 - 想继续按文件名或子域精确下钻：直接使用下方完整清单
 
 ## 活跃补充文档
-- `doc/world-simulator/viewer/README.md`：`viewer/` 热点子域 landing page，适合先做簇级分流，再决定进入 `manual`、`software_safe` 或 runtime live 专题。
+- `doc/world-simulator/viewer/README.md`：`viewer/` 热点子域 landing page，适合先做簇级分流，再决定进入 `manual`、`viewer` canonical / `software_safe` compat alias 或 runtime live 专题。
 - `doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`：Viewer / player-facing surface 的 canonical 视觉设计规范，覆盖视觉方向、层级、pixel-world 可读性、响应式/可访问性与视觉 review gate。
 - `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`：Viewer 视觉规范 companion，覆盖 brand book、语义 token、icon/status vocabulary、资产语言、稳定 DOM hook 与扩展截图矩阵。
 - `doc/world-simulator/viewer/viewer-visual-system-review-card-2026-06-05.design.md`：本轮 Viewer 视觉系统大项的模型视觉 review card，引用 desktop/mobile/CJK/diagnostics/pixel-world 截图矩阵与 verdict。
@@ -54,14 +54,16 @@
 - Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`，原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
+- `intent-distributed-runtime-closure-2026-02-27` 与 `m4-market-hardware-data-governance-closure-2026-02-26` 已完成且不再作为 active world-simulator truth；当前 kernel / M4 阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与相关 M4 project 的依赖/provenance 记录。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
+
+删除候选边界：上述 completed closure 三件套先保留为 historical/provenance evidence；后续若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 project provenance，可在独立治理切片中删除文件并保留 Git history / GitHub task evidence 追溯。
 
 ## 完整活跃专题清单（按文件名精确检索）
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
-| `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md` | `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.design.md` | `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md` |
 | `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md` | `doc/world-simulator/kernel/kernel-rule-hook-foundation.design.md` | `doc/world-simulator/kernel/kernel-rule-hook-foundation.project.md` |
 | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.project.md` |
 | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.prd.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.design.md` | `doc/world-simulator/kernel/kernel-rule-wasm-module-governance.project.md` |
@@ -120,7 +122,6 @@
 | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.design.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md` |
 | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.design.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md` |
 | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.design.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` |
-| `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md` | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.design.md` | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md` |
 | `doc/world-simulator/m4/m4-power-system.prd.md` | `doc/world-simulator/m4/m4-power-system.design.md` | `doc/world-simulator/m4/m4-power-system.project.md` |
 | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md` |
 | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md` |
