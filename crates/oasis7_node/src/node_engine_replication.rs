@@ -22,39 +22,6 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_repair_attempt_route_snapshot = Some(route_snapshot);
     }
 
-    pub(super) fn publish_execution_checkpoint_descriptor_providers(
-        endpoint: &ReplicationNetworkEndpoint,
-        world_id: &str,
-        replication_runtime: &ReplicationRuntime,
-        descriptor: &NodeExecutionCheckpointDescriptor,
-    ) -> Result<(), NodeError> {
-        let publish_if_present = |content_hash: &str, expected_size_bytes: u64| {
-            let Some(bytes) = replication_runtime.load_blob_by_hash(content_hash)? else {
-                return Ok(());
-            };
-            if bytes.len() as u64 != expected_size_bytes {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "execution checkpoint provider publish local blob size mismatch hash={} expected={} actual={}",
-                        content_hash,
-                        expected_size_bytes,
-                        bytes.len()
-                    ),
-                });
-            }
-            endpoint.publish_local_content_provider_best_effort(world_id, content_hash);
-            Ok(())
-        };
-        publish_if_present(
-            descriptor.manifest_ref.as_str(),
-            descriptor.manifest_size_bytes,
-        )?;
-        for blob_ref in &descriptor.blobs {
-            publish_if_present(blob_ref.content_hash.as_str(), blob_ref.size_bytes)?;
-        }
-        Ok(())
-    }
-
     fn clear_replication_gap_sync_blocked_if_unblocked(&mut self) {
         if self
             .last_replication_gap_sync_blocked_height
