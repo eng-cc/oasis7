@@ -101,7 +101,8 @@
 - 有即时风险与机会
 - 能明确知道产线是否在推进、哪里停机、下一步该修什么
 - 任一关键意图在一个 bounded-response 窗口内都必须被归类为 `执行中 / 被阻塞 / 被改道 / 已完成但无有效进展 / 已完成并形成进展` 之一，不允许长时间停留在“像是在做事但我不知道发生了什么”。
-- 如果当前意图没有带来有效推进，系统必须给出最小 fallback：`继续等待`、`修复阻塞`、`改道到次优动作` 三者至少其一。
+- 如果当前意图没有带来有效推进，系统必须给出最小 fallback：`继续等待`、`修复阻塞`、`改道到次优动作` 三者至少其一；若进入 `fallback_ready`，还必须展示 `fallback_tradeoff_preview`，说明 `blocked_intent_id`、`blocker_reason`、`wait_option`、`repair_option`、`reroute_option`、`progress_kept`、`opportunity_cost`、`recommended_fallback_action_id`、`fallback_value_class`，并把推荐分类为 `safe_wait / repair_now / reroute_now`。该合同只要求玩家能比较等待、修复、改道的最小取舍，不扩展为完整恢复系统、quest tree、respec 系统或 UI 重写。
+- 如果玩家/API/agent 请求当前未开放的细粒度物理动作（例如挖掘、放块、跳跃、攻击或 local physics），不能只返回 `unsupported_action`；必须展示 `fine_grain_action_translation`，用 `show / compare / classify / recommend` 说明当前动作粒度边界、最接近的间接控制目标和下一步。最小字段为 `requested_granularity`、`why_fine_action_deferred`、`canonical_replacement_action`、`closest_playable_goal`、`player_next_step_hint`、`replacement_value_class`，分类固定为 `replacement_available / no_safe_replacement / future_embodied_candidate`；该合同不开放 block editing、直接具身控制、完整 3D UI 或 runtime 物理实现。
 
 ---
 
@@ -209,7 +210,7 @@
 - 首个制成品、首条稳定产线与首个可交易工业品都必须绑定最小经济可读性：玩家应能看懂 `投入了什么 / 产出了什么 / 为什么值得继续 / 下一步可换来什么`。
 - 首局推荐采集目标必须把 `target_frag_id / expected_material_hint / starter_value_reason / first_recipe_relevance` 接到第一工业目标；玩家应知道“为什么先采这个 frag”，而不是只看到最近可采集物。
 - 高负载工厂或维护 sink 影响首条稳定产线时，反馈必须展示 `maintenance_runway_ticks / downtime_threshold_ppm / recommended_maintenance_action`；玩家应知道继续排产还能撑多久、何时会进入 critical / 停机、以及先维护还是继续生产的取舍。
-- `RefineCompound` / `refine_compound` 若作为首个工厂或首个制成品前置恢复动作，必须展示 `refine_quote`：compound 投入、电力成本、hardware 产出、精炼后电力、目标 hardware 缺口前后变化和第一工业目标关联；玩家应知道这次精炼是足够推进、部分推进，还是电力机会成本偏差。
+- `RefineCompound` / `refine_compound` 若作为首个工厂或首个制成品前置恢复动作，必须在提交前展示 `refine_quote` / `refine_preview`：`compound_mass_g`、`electricity_cost`、`hardware_output`、`electricity_after`、`hardware_shortfall_before`、`hardware_shortfall_after`、`first_goal_relevance`、`recommended_refine_amount`、`refine_value_class`；该合同必须让玩家看见投入与产出、比较目标缺口变化、分类为 `enough_to_advance / partial_progress / poor_power_tradeoff`，并推荐继续精炼、先补电或改走采矿/等待路线。它只约束提交前可读性，不重平衡精炼公式、电力成本、产率，也不扩展为完整加工链。
 - `market_quotes` 若影响排产或材料采购，必须展示 `market_quote_decision_preview`：推荐本地采购、外部调运、延后、治理调整或拆分来源的理由，税费/运输/本地缺口各自贡献，以及下一步降本动作；玩家不应只看到 `effective_cost_index_ppm`。
 - `TransferMaterial` 若影响首条稳定产线或当前配方阻塞，必须展示 `logistics_transfer_quote` / `transfer_impact_preview`：预计到达量、损耗、到达 tick、优先级理由、吞吐占用、调运前后阻塞变化和推荐调运动作；玩家不应只在 `MaterialTransitCompleted` 后才发现这批材料是否赶上产线。
 - `ValidateProductWithModule` / `ProductValidated` 若确认首个制成品或高阶产品有效，必须展示 `product_validation_quote` / `validation_unlock_preview`：产品用途标签、可交易性、验证前后阶段、解锁能力、下一步用途和推荐行动；玩家不应只看到校验成功日志。
@@ -267,6 +268,8 @@ oasis7 的世界不是无尺度表格。
 3. `limited-scope regional influence`：通过持续贡献获得局部优先级、局部机会或局部可见度，但不直接等价为 global governance 权力。
 
 从 `local operator` 切到 `regional specialist` 之前，系统必须展示 `specialization_entry_quote` / `first_delivery_preview`：玩家要知道候选专业化的第一单交付会满足哪个本地需求、预计产出什么、需要哪些输入、多久形成价值、解锁哪种 `leverage_class`，以及交付后的回访 hook。否则专业化只是抽象标签，不能证明 mature-world 小玩家仍有可判断的经营取舍。
+
+每个 small-player lane checkpoint 还必须展示 `leverage_checkpoint_summary`：`checkpoint_id`、`previous_leverage_class`、`new_leverage_class`、`new_option_unlocked`、`regional_usefulness_delta`、`recovery_resilience_delta`、`negotiation_position_delta`、`same_loop_repeat_count`、`grind_risk_reason`、`recommended_next_branch`、`leverage_checkpoint_class`。该 summary 需要把结果分类为 `new_option_unlocked / resilience_improved / negotiation_position_improved / regional_usefulness_increased / grind_only`；如果只展示 throughput、库存或同一产线重复执行，而没有新选择、恢复弹性、议价位或区域用途，不能判定为 small-player lane progression。
 
 这里所谓 `protected first industrial win`，保护的不是“不会被碰”，而是：
 
@@ -506,9 +509,30 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - 建成首条稳定生产链
 - 落成首座工厂单元
 - 开始空间移动
-- 接触其他玩家
+- 以低承诺的交易/服务、互助或信息交换方式首次接触其他玩家；是否进入组织或治理必须留到后续显式升级动作
 
-目标：第一次拥有持续工业能力，并准备进入合作、治理或扩张取舍。
+目标：第一次拥有持续工业能力，并在不强制站队的前提下理解合作可能带来的价值；组织、治理或更高承诺的扩张取舍仍需等到玩家主动升级。
+
+### 首次社交接触预览合同
+
+第 4~7 天的首次社交入口必须在玩家确认前提供 `first_contact_preview` / `social_contact_quote`，把“接触其他玩家”收成一个可理解、可延后的下一步，而不是默认加入组织、承担治理义务或开启宏观外交。每个候选接触必须展示：
+
+- `contact_purpose`：本次要解决的当前本地问题，例如出售少量产出、请求一次运输协助或交换路线/价格信息。
+- `expected_mutual_value`：玩家与对方各自立即可见的收益，不得只写“建立关系”。
+- `risk_or_commitment`：本次最多暴露什么资源、时间、信誉或后续义务；低承诺接触不得隐含组织身份、治理票权、长期供给或排他协议。
+- `solo_lane_preserved`：明确完成、拒绝或延后该接触后，`local operator -> regional specialist -> limited-scope regional influence` 的独立路线仍可继续，且不会失去当前工业/服务主目标。
+- `recommended_contact_action`：推荐的具体接触动作及其理由，或推荐保持独立推进。
+- `defer_reason`：若当前不适合接触，说明可以延后的原因、保留的收益和下一次值得回看的触发条件。
+
+`first_contact_class` 只能取以下枚举：
+
+- `trade_or_service`：一次性或范围受限的交易、服务交换。
+- `mutual_aid`：围绕当前 blocker 的可回收互助，不建立持续成员关系。
+- `information_exchange`：交换路线、价格、风险或机会信息，不承诺资源、票权或组织身份。
+- `defer_contact`：当前独立路线更优或风险不可接受时，保留延后理由与回访条件。
+- `organization_escalation`：明确加入组织、承担长期供给、治理或排他承诺；此类动作不是第 4~7 天首次接触的默认结果，必须作为第 8~14 天或之后的独立确认步骤展示。
+
+如果首次社交入口没有 `first_contact_preview`，或把 `trade_or_service`、`mutual_aid`、`information_exchange` 默认升级为 `organization_escalation`，标记 `first_contact_preview_missing`。该合同只定义当前 limited playable technical preview 中的玩家理解与选择边界，不新增组织、治理、外交、社交图谱或 runtime/viewer 实现范围。
 
 ---
 
