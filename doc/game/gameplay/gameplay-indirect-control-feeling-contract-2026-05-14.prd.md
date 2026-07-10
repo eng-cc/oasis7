@@ -49,17 +49,18 @@
 | --- | --- | --- | --- | --- | --- |
 | 意图可见性保证 | `accepted_intent_id`、`intent_summary`、`intent_scope`、`intent_target`、`intent_age_ms` | 玩家发出 `play/step/select/gameplay_action/prompt_control` 后，界面或 API 必须能回读当前被接受的主意图 | `implicit -> acknowledged -> stale/replaced` | 最近一次仍有效的 accepted intent 优先；若被新意图取代，旧意图必须显式标记 `replaced` | 已认证玩家可见自己的当前主意图；不得暴露他人私有 prompt 细节 |
 | 因果反馈保证 | `execution_status`、`status_reason`、`blocker_type`、`override_reason`、`last_world_change` | 玩家查看当前结果时，必须看到 “accepted / executing / blocked / overridden / completed_no_progress / completed_with_progress” 之一 | `acknowledged -> executing -> blocked/overridden/completed_*` | 当前主目标相关的执行状态优先于历史日志噪音；同一时刻只高亮 1 个主因果 | 玩家可读；runtime/canonical snapshot 为真值来源，Viewer/API 不得各算一套 |
-| bounded-response 与 fallback 保证 | `response_window_class`、`stalled_reason`、`escalation_hint`、`fallback_action_id`、`fallback_action_label` | 若 accepted intent 未形成有效推进，系统必须在一个 bounded-response 窗口内把当前状态升级成 `stalled / blocked / reprioritize_recommended / fallback_ready` 之一 | `acknowledged -> executing -> stalled/escalation_ready -> reprioritized/recovered` | 不允许连续静默等待；同一主意图至多允许 1 次“继续观察”类弱反馈，之后必须升级为明确 fallback 或重排建议 | 正式玩家可见；runtime 提供真值，Viewer/API 只负责表达 |
+| bounded-response 与 fallback 保证 | `response_window_class`、`stalled_reason`、`escalation_hint`、`fallback_action_id`、`fallback_action_label`、`fallback_tradeoff_preview`、`blocked_intent_id`、`blocker_reason`、`wait_option`、`repair_option`、`reroute_option`、`progress_kept`、`opportunity_cost`、`recommended_fallback_action_id`、`fallback_value_class` | 若 accepted intent 未形成有效推进，系统必须在一个 bounded-response 窗口内把当前状态升级成 `stalled / blocked / reprioritize_recommended / fallback_ready` 之一；进入 `fallback_ready` 时必须说明、比较、分类并推荐等待、修复或改道，而不是只给单个按钮 | `acknowledged -> executing -> stalled/escalation_ready -> fallback_ready -> waiting/repaired/rerouted/recovered` | 不允许连续静默等待；同一主意图至多允许 1 次“继续观察”类弱反馈，之后必须升级为明确 fallback 或重排建议；`fallback_value_class` 固定为 `safe_wait / repair_now / reroute_now`，推荐理由必须绑定 blocker 原因、保留进度和损失机会 | 正式玩家可见；runtime 提供 blocker/recovery 真值，Viewer/API 只负责表达；本保证不要求完整恢复系统、quest 系统、respec 系统或 UI 重写 |
 | 可打断与重排保证 | `can_interrupt`、`can_reprioritize`、`replacement_intent_summary`、`handoff_result` | 提供 `focus goal`、重新选目标、重新提交 prompt/动作等显式重排入口；不允许只剩“等 AI 自己继续” | `continuing -> interrupt_requested -> reprioritized / resume_required` | 当前主阻塞若持续存在且玩家可采取更高收益动作，应优先暴露 reprioritize hook | 正式玩家可对自己的主意图重排；不允许越权改动其他玩家/组织控制面 |
 | 后果可读性保证 | `cost_summary`、`progress_delta`、`world_change_summary`、`next_step_hint` | 每次关键动作后必须给出“付出了什么 / 世界改变了什么 / 下一步最该做什么” | `opaque -> readable -> decision_ready` | 当前主目标相关的成本、产出、阻塞、恢复优先于调试日志与次级事件 | 玩家可读；系统生成，owner 冻结字段语义 |
 | 恢复与续玩保证 | `resume_anchor`、`last_accepted_intent`、`primary_blocker`、`resume_next_step` | 玩家重连或回流时，直接恢复当前 agency surface，不要求先读原始事件流 | `fresh_session -> resumed -> replanned` | 优先恢复主目标链最近一次 accepted intent；若旧意图已失效，必须显式写出失效原因 | 已认证玩家可恢复自己的续玩面板/API 字段 |
-| 长期记忆可读与纠正保证 | `memory_summary`、`memory_source_event`、`used_for_current_decision`、`player_correction_hint`、`memory_confidence_or_staleness` | 当 agent 引用长期记忆影响当前行动时，展示脱敏摘要、来源、当前用途和纠正提示；允许玩家通过新消息、重排意图或忽略提示来修正 | `memory_hidden -> memory_referenced -> corrected/ignored/reconfirmed` | 当前决策实际引用的记忆优先；过期或低置信记忆必须标记 staleness，不得伪装成确定事实 | 玩家只能看见自己可访问 agent / session 的脱敏记忆摘要；不得暴露私有 prompt 全文、内部 trace 或其他玩家记忆 |
+| 长期记忆可读与纠正保证 | `memory_summary`、`memory_source_event`、`used_for_current_decision`、`player_correction_hint`、`memory_confidence_or_staleness`、`memory_correction_outcome`、`correction_status`、`affected_memory_or_decision_scope`、`earliest_applied_action`、`correction_scope_confidence`、`stale_or_ignored_reason` | 当 agent 引用长期记忆影响当前行动时，展示脱敏摘要、来源、当前用途和纠正提示；玩家提交纠正后必须回写接受或拒绝、影响的记忆或决策范围，以及最早会应用到的下一决策/行动。接受的纠正必须反映在下一条 memory-driven action summary；若未反映，必须给出明确的 stale/ignored reason | `memory_hidden -> memory_referenced -> correction_submitted -> correction_accepted/rejected -> applied/stale/ignored/reconfirmed` | 当前决策实际引用的记忆优先；过期或低置信记忆必须标记 staleness，不得伪装成确定事实。结果只报告作用范围与置信度，不承诺单条纠正必然决定下一行动 | 玩家只能看见自己可访问 agent / session 的脱敏记忆摘要与纠正结果；不得暴露私有 prompt 全文、内部 trace 或其他玩家记忆 |
 
 - Acceptance Criteria:
   - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
   - AC-2: “间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
   - AC-3: 当前正式主路线不要求玩家获得第一人称逐帧操控；但若 accepted intent、主因果、打断重排或续玩恢复四者缺一，则不得宣称 control-feeling 合格。
   - AC-3A: 若 accepted intent 之后连续出现无主因果、无升级解释、无 fallback 建议的静默等待，则即便世界仍在 tick，也必须判定为 agency weakened。
+  - AC-3B: 若系统进入 `fallback_ready` 但缺少 `fallback_tradeoff_preview`，或只能展示单个推荐动作而无法比较 `wait / repair / reroute` 的成本、保留进度、损失机会和推荐理由，则判定为 `fallback_tradeoff_missing`，不得把 fallback CTA 本身当作 control-feeling 通过。
   - AC-4: 本专题必须显式承接 `PRD-GAME-012` 第 4 条 lane“间接控制因果与下一步”，并解释它与 `PRD-GAME-004` 微循环反馈可见性、`PRD-GAME-007` PostOnboarding、`PRD-GAME-008` pure API parity 的边界。
   - AC-5: headed Web/UI 与 pure API 都必须具备同等级的 agency surface；API 可以更简洁，但不允许缺少 accepted intent、主因果、阻塞分类或 next-step 语义。
   - AC-6: 若系统只是展示原始日志、世界 tick 或泛化状态，而不能把主意图和当前结果绑定到同一语义面，则判定为 control-feeling 失败。
@@ -68,6 +69,7 @@
   - AC-9: 本专题完成后，`game` 根 PRD / project、`gameplay` 主文档、索引与当前 task execution log 必须互链到 `PRD-GAME-014` 与 `TASK-GAME-071~075`。
   - AC-10: 当前阶段口径继续保持 `internal_playable_alpha_late`，且本专题自身不允许被单独包装成“issue #160 已解决”或“正式留存已恢复”；`#160` 的 closeout 必须继续以独立 formal evidence 为准，而不是把 control-feeling 文档当作替代证据。
   - AC-11: 若 agent 当前行动引用长期记忆，headed Web/UI 与 pure API 至少必须能回答 `记住了什么 / 来自哪里 / 影响当前哪一步 / 玩家如何纠正`；若只能看到 agent 自行行动或原始日志，判定为 agency weakened。
+  - AC-12: 若玩家已提交长期记忆纠正，headed Web/UI 与 pure API 至少必须能回答 `是否接受 / 影响哪段记忆或哪类决策 / 最早在哪个下一行动应用`；接受结果若未出现在下一条 memory-driven action summary，必须说明 `stale_or_ignored_reason`，否则判定为 `memory_correction_outcome_missing`。
 - Non-Goals:
   - 不把 oasis7 改成第一人称直接操作或逐块建造游戏。
   - 不在本专题中直接修复 active-LLM provider、runtime freeze 或 capability gate 本身；这些仍由对应实现任务负责。
@@ -117,6 +119,7 @@
   - 玩家重连后只能从 raw history 猜测最近状态，而没有恢复锚点：判定为 resume guarantee 失败。
   - agent 基于长期记忆行动，但玩家看不到记忆摘要、来源或当前用途：判定为 memory-driven agency break。
   - agent 基于过期或错误记忆继续行动，但没有纠正提示：判定为 `memory_correction_missing`，不得把长期记忆包装成续玩增强。
+  - 玩家已纠正长期记忆，但系统未展示接受/拒绝、影响范围或最早应用行动，或已接受的纠正未在下一条 memory-driven action summary 中反映且没有明确 stale/ignored reason：判定为 `memory_correction_outcome_missing`。
   - 系统提供过多 operator/debug 语义，淹没当前主意图与主因果：判定为 presentation-level control-feeling regression。
   - active-LLM lane 因 provider 问题卡死时，不得用 deterministic `--no-llm` 样本代替本专题正式验收；debug lane 只能帮助定位哪条 guarantee 先失效。
 - Non-Functional Requirements:

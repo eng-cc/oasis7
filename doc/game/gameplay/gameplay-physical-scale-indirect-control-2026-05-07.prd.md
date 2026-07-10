@@ -47,7 +47,7 @@
 | canonical physical scale | `space_unit_cm`、`GeoPos{x_cm,y_cm,z_cm}`、`distance_cm`、`radius_cm`、`size_cm` | 不新增玩家按钮；用于定义世界真值 | `draft -> frozen -> audited` | 一切物理位置与持久化坐标以整数厘米为唯一真值 | `runtime_engineer` 实现；`producer_system_designer` 冻结；`qa_engineer` 复核 |
 | subsystem native resolution | `subsystem_id`、`native_resolution_kind`、`native_resolution_value`、`cm_mapping_rule`、`rounding_rule` | 子系统 owner 在 PRD / design / code 中显式声明 | `implicit -> declared -> verified` | coarse-grained 子系统允许保留 km/voxel/location 级 native resolution，但必须给出到 cm 的映射 | 对应子系统 owner 负责；`producer_system_designer` 审核边界 |
 | player interaction scale | `interaction_surface`、`action_schema_version`、`current_action_granularity`、`deferred_embodied_capabilities` | 当前正式动作继续围绕 `move_agent / inspect / interact / harvest / mine / build_factory / recipe / governance`；不新增 block-edit 按钮 | `observer_only -> indirect_control_playable -> embodied_candidate` | 先保证间接控制的文明模拟成立，再评估具身能力是否能强化主循环 | `producer_system_designer` 拍板；`runtime_engineer` / `agent_engineer` 实现 |
-| fine-grained intent translation | `requested_granularity`、`canonical_replacement_action`、`why_fine_action_deferred`、`closest_playable_goal`、`player_next_step_hint` | 玩家/API/agent 请求 `block_editing / digging / jump / attack / local_physics` 等当前未开放动作时，返回可读解释与至少 1 个当前可执行替代动作 | `unsupported -> translated -> playable_alternative_selected` | 替代动作优先选择当前阶段目标相关、可立即执行、能保留玩家意图的间接控制动作；不得只给通用“不支持” | 玩家可见；replacement action 必须来自 canonical available action / action schema，不能由 Viewer 私造 |
+| fine-grained intent translation | `fine_grain_action_translation`、`requested_granularity`、`why_fine_action_deferred`、`canonical_replacement_action`、`closest_playable_goal`、`player_next_step_hint`、`replacement_value_class` | 玩家/API/agent 请求 `block_editing / digging / jump / attack / local_physics` 等当前未开放动作时，展示当前粒度边界、比较最接近的间接控制替代目标、分类结果并推荐下一步 | `unsupported -> translated -> playable_alternative_selected` 或 `unsupported -> translated -> safe_stop_explained` | 替代动作优先选择当前阶段目标相关、可立即执行、能保留玩家意图的间接控制动作；动词合同为 `show / compare / classify / recommend`；`replacement_value_class` 固定为 `replacement_available / no_safe_replacement / future_embodied_candidate`；不得只给通用“不支持” | 玩家可见；replacement action 必须来自 canonical available action / action schema，不能由 Viewer 私造；`no_safe_replacement` 仍需解释为什么停下比伪造动作更安全 |
 | presentation scale | `physical_distance_label`、`visual_exaggeration_reason`、`visual_scale_floor_m`、`zoom_tier` | UI 可显示真实距离、近似量级和视觉放大说明 | `opaque -> readable -> trustworthy` | 玩家先看到对决策有用的真实距离/量级；视觉夸张只服务可读性，不改物理真值 | `viewer_engineer` owner；`qa_engineer` 验收 |
 | future embodied gate | `embodied_lane_status`、`player_parity_status`、`supports_block_editing`、`supports_collision_fidelity`、`supports_local_physics_feedback` | 不在当前主入口暴露；仅作为 future candidate checklist | `deferred -> candidate -> approved_for_prototype` | 只有当具身能力能强化间接控制主路线、且不稀释当前 retention blocker 时，才允许进入原型 | `producer_system_designer` 最终拍板 |
 
@@ -61,13 +61,13 @@
   - AC-7: 本专题必须给出“现在不做什么”：不把 Minecraft 式 block editing、实时具身 3D、碰撞/跳跃/攻击动作集写成当前正式承诺。
   - AC-8: 本专题必须给出“未来什么时候才可以做”：只有当间接控制 trust/capability 主路径稳定、且具身能力能增强而不是稀释主循环时，才允许进入候选原型。
   - AC-9: QA 后续矩阵必须能同时检查 4 件事：厘米真值是否保持、子系统 coarse resolution 是否声明、Viewer 是否误导、动作面是否仍符合间接控制边界。
-  - AC-10: 当玩家/API/agent 请求当前未开放的 embodied / block-editing / local physics 动作时，必须返回 `requested_granularity / why_fine_action_deferred / canonical_replacement_action / closest_playable_goal / player_next_step_hint`；若只有 `unsupported_action` 而无替代路径，判定为 `granularity_translation_missing`。
+  - AC-10: 当玩家/API/agent 请求当前未开放的 embodied / block-editing / local physics 动作时，必须返回 `fine_grain_action_translation`，至少包含 `requested_granularity / why_fine_action_deferred / canonical_replacement_action / closest_playable_goal / player_next_step_hint / replacement_value_class`，并用 `show / compare / classify / recommend` 让玩家知道可玩替代、无安全替代或未来具身候选三种结果之一；若只有 `unsupported_action` 而无替代路径或无安全替代原因，判定为 `granularity_translation_missing`。
 - Non-Goals:
   - 不把 oasis7 当前产品方向改成 Minecraft 式第一人称逐块建造。
   - 不在本专题里恢复或扩大 3D workstream 的 active delivery 承诺。
   - 不在本专题里新增 runtime 物理碰撞、跳跃、攻击、装备、方块放置/挖掘的正式实现需求。
   - 不要求所有子系统都真的按 `1cm` 精度模拟；本专题要求的是声明与对齐，而不是统一到同一数值步长。
-  - 不把过细动作翻译合同解释为已经开放 block editing、digging、jump/attack 或 3D embodied 主路线；它只负责把失败请求转成当前可玩的间接控制下一步。
+  - 不把过细动作翻译合同解释为已经开放 block editing、digging、jump/attack 或 3D embodied 主路线；它只负责把失败请求转成当前可玩的间接控制下一步，或在没有安全替代时解释为什么停下并给出未来候选边界。
 
 ## 3. AI System Requirements (If Applicable)
 
