@@ -24,14 +24,8 @@ const knownLineDebt = new Map(Object.entries({
     reason: "this bounded World Focus visual/a11y/layout change retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
     nextTrigger: "a genuinely subsequent suitable inline-style or document-shell change, outside this bounded World Focus visual/a11y/layout change, extracts style ownership",
   },
-  "crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js": {
-    maxLines: 1395,
-    owner: "viewer_engineer",
-    reason: "large first-session attraction fixture/display-model corpus predates the frontend structure standard",
-    nextTrigger: "next gameplay attraction behavior change should extract coherent fixtures or display-model helpers",
-  },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
-    maxLines: 4583,
+    maxLines: 4424,
     owner: "viewer_engineer",
     reason: "legacy facade burndown is already tracked as viewer-legacy-core-facade-burndown-next-slice",
     nextTrigger: "next legacy_core behavior change must extract one coherent boundary or record a narrower exemption",
@@ -49,16 +43,10 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next broad UI test addition should extract fixtures/query helpers or create a narrower adjacent test",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
-    maxLines: 1816,
+    maxLines: 1680,
     owner: "viewer_engineer",
-    reason: "bounded World Focus visual/a11y work retains the Pixel World host's existing runtime bridge composition and visual fixture surface",
-    nextTrigger: "next Pixel World host behavior change extracts a named widget/service boundary",
-  },
-  "crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js": {
-    maxLines: 1304,
-    owner: "viewer_engineer",
-    reason: "semantic feedback display-model module sits just over the production source soft threshold",
-    nextTrigger: "next semantic feedback expansion should split by feedback family or shared formatting helper",
+    reason: "Pixel World host keeps runtime bridge composition and visual overlay surfaces; test-only snapshot fixture data now lives in pixel_world_visual_fixture_data.js",
+    nextTrigger: "next Pixel World UI/runtime host behavior change should extract a named widget or service boundary",
   },
 }));
 
