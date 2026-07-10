@@ -21,8 +21,8 @@ const knownLineDebt = new Map(Object.entries({
   "crates/oasis7_viewer/viewer.html": {
     maxLines: 2797,
     owner: "viewer_engineer",
-    reason: "bounded World Focus visual/a11y work retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
-    nextTrigger: "next inline style or document shell change extracts style ownership",
+    reason: "this bounded World Focus visual/a11y/layout change retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
+    nextTrigger: "a genuinely subsequent suitable inline-style or document-shell change, outside this bounded World Focus visual/a11y/layout change, extracts style ownership",
   },
   "crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js": {
     maxLines: 1395,
