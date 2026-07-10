@@ -1,9 +1,5 @@
 # engineering PRD 文件级索引
 
-审计轮次: 7
-
-更新时间：2026-04-18
-
 ## 入口
 - 模块 PRD：`doc/engineering/prd.md`
 - 模块设计总览：`doc/engineering/design.md`
