@@ -24,4 +24,4 @@
 - 阶段说明: viewer path landing page formalized
 - 阻塞项: 无
 - 最近更新: 2026-04-17
-- 后续动作: `world-simulator/viewer` 已完成第一批路径级治理，后续应继续按 `p2p -> testing -> 季度复核` 的顺序推进，而不是在当前 PR 里继续扩展到 `launcher/llm`。
+- 后续动作: `world-simulator/viewer` 已完成当前批次路径级治理。当前文档存量与热点 follow-up 的判断统一由 `doc-corpus-maintenance-governance-2026-04-17.project.md` 和 `scripts/doc-inventory-report.sh` 承接；不要复用本专题的历史 `p2p -> testing -> 季度复核` 排期。
