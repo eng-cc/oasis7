@@ -41,7 +41,6 @@
 - Historical writeback surfaces: `skill-surface-replacement-governance-2026-05-19.{prd,design,project}.md`、`doc/engineering/project.md`、`doc/engineering/workflow/source-of-truth.md`
 
 ## 状态
-- 更新日期: 2026-06-20
 - 当前阶段: completed
 - 当前任务: completed; no active follow-up remains in this project file
 - 关键结论: watch/defer 桶已拆分为 retired-to-upstream-tracking、maintain-trigger-narrowing、preserve-domain-triggered-non-default，不再作为长期观察状态。

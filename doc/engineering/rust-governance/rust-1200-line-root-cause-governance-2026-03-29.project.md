@@ -3,8 +3,6 @@
 - 对应设计文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
 - 对应需求文档: `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 
-审计轮次: 7
-
 ## 任务拆解（含 PRD-ID 映射）
 - [x] TASK-ENGINEERING-051 (PRD-ENGINEERING-R1200-001/002/005) [test_tier_required]: 产出 Rust 1200 行根治治理专题 `prd/design/project`，并同步回写 engineering 模块入口、索引与 devlog。
 - [x] TASK-ENGINEERING-052 (PRD-ENGINEERING-R1200-001/003) [test_tier_required]: 新增 Rust 文件体量检查脚本、冻结当前超限基线，并接入 `scripts/ci-tests.sh required`。
@@ -49,11 +47,10 @@
 - Batch B/C/D (`TASK-ENGINEERING-054~057`) 依赖 `TASK-ENGINEERING-052/053` 先把门禁、基线与完成态建立起来。
 
 ## 状态
-- 更新日期: 2026-05-20
-- 当前阶段: active
-- 当前任务: `rust-size-tools-gate-coverage` 已完成；`check-rust-file-size.sh` 现已覆盖 tracked 首方 `crates/**` 与 `tools/**` Rust 文件，并继续排除 `third_party/**`、`vendor-*` 与生成目录；同时 `tools/wasm_build_suite/src/lib.rs` 已通过抽离环境前缀测试模块降回 1200 行以内，继续维持 `oversized code files=0, test files=0, structural slice files=0, include targets=0`。
-- 阻塞项: 无；后续若再次出现任一超限 Rust 文件或结构切片命名，required gate 直接阻断。
-- 最新完成:
+- 当前阶段: 持续门禁
+- 当前规则: `scripts/check-rust-file-size.sh` 是当前 Rust 文件体量与结构切片的唯一运行时真值；它扫描 tracked 首方 `crates/**` 与 `tools/**`，并排除 `third_party/**`、`vendor-*` 与生成目录。任一超限或结构切片扫描结果都会由 required gate 阻断。
+- 当前状态: 无阻塞；最近扫描维持 `oversized code files=0, test files=0, structural slice files=0, include targets=0`。
+- 历史完成记录（任务拆解、GitHub task/archive trace 与 git history 可追溯）:
   - `rust-size-tools-gate-coverage`：`scripts/check-rust-file-size.sh` 的零扫描范围已从 `crates/**` 扩到 tracked 首方 `tools/**` Rust 文件，同时显式保持 vendored/生成目录不纳入治理；针对新纳入范围后暴露出的 `tools/wasm_build_suite/src/lib.rs` 1218 行热点，已将 compile-time/env prefix 相关测试抽到 `tools/wasm_build_suite/src/env_prefix_tests.rs`，主文件随之回落到阈值内。验证需通过 `cargo test -p wasm_build_suite --lib`、`./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh`，并补一个临时 git repo smoke 证明 oversized `tools/**/*.rs` 会被门禁识别。
   - `node-consensus-signatures-guardrails-hotspot-shrink`：`crates/oasis7_node/src/tests_consensus_signatures.rs` 将 `pos_engine_commits_single_validator_head`、`pos_engine_generates_chain_hashed_block_ids`、`pos_engine_stays_pending_without_peer_votes_when_auto_attest_disabled`、`pos_engine_apply_decision_rejects_height_overflow_without_state_mutation`、`pos_engine_ingest_proposal_rejects_slot_overflow_without_partial_state`、`pos_engine_restore_state_snapshot_rejects_overflow_without_partial_state`、`sequencer_commit_requires_execution_hook` 与 `runtime_start_and_stop_updates_snapshot` 抽到 `crates/oasis7_node/src/tests_pos_engine_guardrails.rs`，父模块通过新增 `#[path = "tests_pos_engine_guardrails.rs"] mod pos_engine_guardrails_tests;` 维持测试入口；主文件从 1080 行降到 778 行。验证已通过 `env -u RUSTC_WRAPPER cargo check -p oasis7_node --lib`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node pos_engine_apply_decision_rejects_height_overflow_without_state_mutation -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_start_and_stop_updates_snapshot -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node pos_engine_signature_enforced_accepts_signed_proposal_and_attestation -- --nocapture`、`./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh`。
   - `node-network-gap-sync-provider-routing-hotspot-shrink`：`crates/oasis7_node/src/tests_network_gap_sync.rs` 将 `runtime_network_replication_gap_sync_prefers_dht_blob_providers`、`runtime_network_replication_gap_sync_falls_back_after_provider_route_unavailable`、`runtime_network_replication_gap_sync_falls_back_after_provider_route_not_found` 三条 provider-route/fallback 路由测试抽到 `crates/oasis7_node/src/tests_network_gap_sync_provider_routing.rs`，并在 `crates/oasis7_node/src/tests_clock_and_replication.rs` 新增 `#[path = "tests_network_gap_sync_provider_routing.rs"] mod network_gap_sync_provider_routing_tests;` 维持测试入口；主文件从 1141 行降到 695 行。验证已通过 `env -u RUSTC_WRAPPER cargo check -p oasis7_node --lib`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_gap_sync_prefers_dht_blob_providers -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_gap_sync_falls_back_after_provider_route_unavailable -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_gap_sync_falls_back_after_provider_route_not_found -- --nocapture`、`env -u RUSTC_WRAPPER cargo test -p oasis7_node runtime_network_replication_gap_sync_not_found_is_non_fatal -- --nocapture`、`./scripts/check-rust-file-size.sh`、`./scripts/doc-governance-check.sh`。

@@ -22,4 +22,4 @@
 - 阶段说明: testing evidence path landing page formalized
 - 阻塞项: 无
 - 最近更新: 2026-04-17
-- 后续动作: `testing/evidence` 已完成当前批次路径级治理；本轮后续应转入季度复核，而不是在当前 PR 里继续并行扩到 `ci` / `longrun` / `templates`。
+- 后续动作: `testing/evidence` 已完成当前批次路径级治理。当前文档存量与热点 follow-up 的判断统一由 `doc-corpus-maintenance-governance-2026-04-17.project.md` 和 `scripts/doc-inventory-report.sh` 承接；不要复用本专题的历史季度复核排期。

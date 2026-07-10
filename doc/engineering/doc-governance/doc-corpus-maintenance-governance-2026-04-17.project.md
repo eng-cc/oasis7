@@ -3,8 +3,6 @@
 - 对应设计文档: `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
 - 对应需求文档: `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
 
-审计轮次: 1
-
 ## 任务拆解
 - [x] doc-corpus-maintenance-governance (PRD-ENGINEERING-025) [test_tier_required]: 建立专题 `prd/design/project`、新增 `scripts/doc-inventory-report.sh`、回写 engineering 主入口与 `doc-surface-area-governance` handoff，冻结从“阅读面噪音”转向“存量维护成本”的阶段判断。 Trace: .pm/tasks/task_851d3d1452534a2c83355317ae385ade.yaml
 - [x] devlog-history-compaction-followup (PRD-ENGINEERING-025/026) [test_tier_required]: 作为第一条 follow-up，建立 `devlog-history-compaction` 专题并新增 `doc/devlog/README.md`，把 `doc/devlog` 从“历史归档声明”收口到按月导航的 canonical archive 入口。 Trace: .pm/tasks/task_caaa7c575ec845dc9c0756c9e92d24f7.yaml

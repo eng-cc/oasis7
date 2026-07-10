@@ -23,4 +23,4 @@
 - 阶段说明: readme governance path landing page formalized
 - 阻塞项: 无
 - 最近更新: 2026-04-18
-- 后续动作: `readme/governance` 已完成第一批路径级治理，后续应正式转入季度复核；若未来 `governance/` 内某个主题簇再次膨胀，再单独开“簇内治理/归档”专题，而不是继续在当前 PR 里横向扩展到 `gap/production`。
+- 后续动作: `readme/governance` 已完成第一批路径级治理。当前文档存量与热点 follow-up 的判断统一由 `doc-corpus-maintenance-governance-2026-04-17.project.md` 和 `scripts/doc-inventory-report.sh` 承接；不要复用本专题已完成的季度复核排期。
