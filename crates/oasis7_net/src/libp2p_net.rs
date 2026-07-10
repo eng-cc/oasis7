@@ -13,6 +13,7 @@ mod peer_manager_active_set;
 mod peer_record;
 mod peer_record_republish;
 mod reachability;
+mod response_budget;
 mod runtime_loop;
 mod runtime_support;
 mod swarm_behaviour;
@@ -21,7 +22,7 @@ mod traffic_metrics;
 mod transport_paths;
 mod utils;
 mod wire_bytes;
-use crate::{error::WorldError, util::to_canonical_cbor};
+use crate::error::WorldError;
 pub use config::Libp2pNetworkConfig;
 use connection_lifecycle::{
     clear_disconnected_peer_state, failover_after_disconnect, log_active_transport_path,
@@ -41,7 +42,6 @@ use discovery::{
     peer_record_enables_rendezvous, peer_record_world_id, process_discovered_peer_record,
     publish_discovery_provider, start_peer_discovery_query,
 };
-use error_mapping::error_response_from_world_error;
 use futures::channel::mpsc;
 use futures::{FutureExt, StreamExt};
 use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
@@ -75,6 +75,7 @@ pub use reachability::{
     LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
 };
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
+use response_budget::{FetchBlobResponseBudget, budgeted_response_bytes};
 use runtime_loop::{
     Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
     fail_pending_request, handle_command,
@@ -103,14 +104,11 @@ use transport_paths::{
     TransportPath, bootstrap_transport_path_state, retry_transport_path_after_error,
 };
 use utils::{
-    decode_membership_directory, decode_world_head, now_ms, push_bounded_clone,
-    push_bounded_string_with_keyed_cooldown, should_republish, try_send_command,
+    LIFECYCLE_EVENT_ERROR_COOLDOWN_MS, decode_membership_directory, decode_world_head, now_ms,
+    push_bounded_clone, push_bounded_string_with_keyed_cooldown, should_republish,
+    try_send_command,
 };
 use wire_bytes::{SharedLibp2pWireByteCounters, init_shared_wire_byte_counters};
-const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
-const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
-const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
-const LIFECYCLE_EVENT_ERROR_COOLDOWN_MS: i64 = 5_000;
 type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
 #[derive(Clone)]
 pub struct Libp2pNetwork {
@@ -191,6 +189,7 @@ impl Libp2pNetwork {
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
             let mut handlers: HashMap<String, Handler> = HashMap::new();
+            let mut fetch_blob_response_budget = FetchBlobResponseBudget::default();
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
                 HashMap::new();
             let mut pending_peer_record_requests: HashMap<
@@ -353,7 +352,7 @@ impl Libp2pNetwork {
                                 }
                                 SwarmEvent::Behaviour(BehaviourEvent::RequestResponse(event)) => {
                                     match event {
-                                        request_response::Event::Message { message, peer: _, .. } => {
+                                        request_response::Event::Message { message, peer, .. } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
                                                     record_request_inbound(
@@ -372,13 +371,13 @@ impl Libp2pNetwork {
                                                             .allow_loopback_external_addrs_for_testing,
                                                         &discovered_peer_records,
                                                     );
-                                                    let response_bytes = match reply {
-                                                        Ok(bytes) => bytes,
-                                                        Err(err) => to_canonical_cbor(
-                                                            &error_response_from_world_error(&err),
-                                                        )
-                                                        .unwrap_or_default(),
-                                                    };
+                                                    let response_bytes = budgeted_response_bytes(
+                                                        &mut fetch_blob_response_budget,
+                                                        peer,
+                                                        request.protocol.as_str(),
+                                                        reply,
+                                                        now_ms(),
+                                                    );
                                                     record_response_outbound(
                                                         &event_traffic_metrics,
                                                         request.protocol.as_str(),

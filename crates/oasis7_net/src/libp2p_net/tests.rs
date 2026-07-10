@@ -10,6 +10,7 @@ use super::transport_paths::{
 };
 use super::utils::push_bounded_vec;
 use super::*;
+use crate::util::to_canonical_cbor;
 use libp2p::kad::RecordKey;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::distributed_net::DistributedNetwork as _;
