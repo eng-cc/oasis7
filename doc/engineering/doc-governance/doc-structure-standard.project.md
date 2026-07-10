@@ -5,8 +5,6 @@
 
 审计轮次: 4
 
-- 对应规范正文: `doc/engineering/doc-governance/doc-structure-standard.design.md`
-
 ## 任务拆解
 - [x] T5 (PRD-ENGINEERING-015) [test_tier_required]: 收口 README / legacy redirect 的重复治理话术，明确共享规则回链与最小 redirect 模式。
 - [x] T4 (PRD-ENGINEERING-015) [test_tier_required]: 为 ROUND-006 建立“按规范逐文档改造”的执行台账字段与挂靠关系，确保该规范进入实际治理执行面。
