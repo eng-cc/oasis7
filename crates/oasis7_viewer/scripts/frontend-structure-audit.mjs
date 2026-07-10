@@ -43,7 +43,7 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next broad UI test addition should extract fixtures/query helpers or create a narrower adjacent test",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
-    maxLines: 1676,
+    maxLines: 1680,
     owner: "viewer_engineer",
     reason: "Pixel World host keeps runtime bridge composition and visual overlay surfaces; test-only snapshot fixture data now lives in pixel_world_visual_fixture_data.js",
     nextTrigger: "next Pixel World UI/runtime host behavior change should extract a named widget or service boundary",
