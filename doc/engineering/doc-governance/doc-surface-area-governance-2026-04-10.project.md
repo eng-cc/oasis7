@@ -3,8 +3,6 @@
 - 对应设计文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md`
 - 对应需求文档: `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
 
-审计轮次: 1
-
 ## 任务拆解
 - [x] T0 (PRD-ENGINEERING-024) [test_tier_required]: 形成专题 PRD，冻结问题定义、四层消费模型、成功标准与非目标。
 - [x] T1 (PRD-ENGINEERING-024) [test_tier_required]: 输出专题设计文档，定义默认阅读面、密度触发器、优先级与执行顺序。
