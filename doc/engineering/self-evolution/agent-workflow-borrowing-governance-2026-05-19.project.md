@@ -4,8 +4,6 @@
 - 对应设计文档: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
 - 冲突 / 互借参考: `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md`
 
-审计轮次: 1
-
 > Historical note: 该 2026-05 rollout 当时的本地 `.pm` trace 已收口为单个 aggregate task `task_de7dbd97ffdb485eb4a869cc8ac0673a`。当前工程 workflow 的 canonical task truth 已迁移为 GitHub-backed task issue + Project fields；本地 `.pm` trace 在本文只作为历史追溯/脚本桥接语义。本文保留 adopted / rejected / deferred 裁决历史，不再作为当前 workflow backlog 入口；当前默认入口以 `doc/engineering/workflow/source-of-truth.md`、`default-workflow-bootstrap`、`repo-owned-workflow-router` 与 `requesting-repo-owned-review` 为准。
 
 ## 任务拆解（含 PRD-ID 映射）
