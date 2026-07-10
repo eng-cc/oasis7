@@ -49,6 +49,8 @@ WASM proposes, runtime validates / applies / signs.
 
 `micro_depot` 不属于首 10 分钟新手循环，也不应作为随时可点的自由建造物出现。它的正确阶段是中后期的 `regional specialist / limited-scope regional influence`：玩家已经理解 agent intent、repair / logistics blocker、claim / upkeep 成本和区域压力后，才解锁第一个可编程区域设施。
 
+所有 micro-depot 验证样本必须明确写作 `post-first-capability 10-minute slice` 或 `regional-specialist 10-minute scenario`。这里的 10 分钟指玩家已进入区域专业化后的局部验证窗口，不是首局 0-10 分钟 onboarding gate。
+
 阶段定位：
 
 - 前期：只暴露 agent intent、repair / logistics blocker、一次性协助或专家行动。目标是建立“玩家下指令，世界有可读反馈”的信任，不让设施建造抢走核心教学。
@@ -57,13 +59,16 @@ WASM proposes, runtime validates / applies / signs.
 
 创建准入必须来自游戏流程，而不是裸 action：
 
-1. 当前区域存在重复或高价值 blocker，例如 `supply_missing`、`route_blocked`、repair 等待过长或 logistics quote 风险过高。
-2. 玩家已完成第一次 repair / logistics 闭环，理解 before / after quote 和 receipt。
-3. 玩家拥有可操作 agent claim，且 claim / agent 与目标区域存在合理关系。
-4. 目标 location / facility 已生成，且处于 depot 服务半径与区域设施上限规则内。
-5. 玩家可支付 install 成本和后续 upkeep；restricted starter funding 不能被扩成无限设施补贴。
-6. 系统通过 regional pressure card、repair 失败反馈或 logistics bottleneck 暴露部署建议。
-7. Runtime 在 `InstallMicroDepot` 前再次校验 owner、claim scope、资源、upkeep 初始化、重复设施、module hash / schema allowlist。
+1. `first_capability_completed=yes`：玩家已完成 first capability，不再处于首局 trust/capability teaching loop。
+2. `stable_claim_available=yes`：玩家拥有可操作 agent claim，且 claim / agent 与目标区域存在合理关系。
+3. `regional_blocker_receipt_id` 或等价区域压力证据已存在，证明玩家见过 repair / logistics blocker，而不是被强行引入设施系统。
+4. `regional_specialist_lane_state=active_or_eligible`：玩家已进入或可进入 `regional specialist / limited-scope regional influence`。
+5. 玩家已能读懂 claim/upkeep、repair/logistics blocker、before/after quote 和 receipt surface。
+6. 当前区域存在重复或高价值 blocker，例如 `supply_missing`、`route_blocked`、repair 等待过长或 logistics quote 风险过高。
+7. 目标 location / facility 已生成，且处于 depot 服务半径与区域设施上限规则内。
+8. 玩家可支付 install 成本和后续 upkeep；restricted starter funding 不能被扩成无限设施补贴。
+9. 系统通过 regional pressure card、repair 失败反馈或 logistics bottleneck 暴露部署建议。
+10. Runtime 在 `InstallMicroDepot` 前再次校验 owner、claim scope、资源、upkeep 初始化、重复设施、module hash / schema allowlist。
 
 当前内核 first slice 的硬约束：
 
@@ -365,12 +370,20 @@ Runtime 必须：
 7. gameplay smoke
    - Gate: one repair / logistics action becomes measurably cheaper, faster, or less risky because of depot, and player can identify the remaining blocker.
 
-## 12. 10 分钟验证样本
+## 12. Post-first-capability 10 分钟验证切片
+
+该样本是 `regional-specialist 10-minute scenario`，不是首局 `0-10 min` onboarding 样本。运行前必须满足：
+
+- `first_capability_completed=yes`
+- `stable_claim_available=yes`
+- `regional_blocker_receipt_id` 已存在，或有等价 regional pressure evidence
+- `regional_specialist_lane_state=active_or_eligible`
+- 玩家已能读懂 claim/upkeep、repair/logistics blocker、before/after quote 和 receipt surface
 
 ```text
-0-2 min: player sees regional pressure card: repair target blocked by supply shortage
-2-4 min: player opens repair quote and sees high cost / high risk
-4-6 min: system suggests micro_depot; player reviews cost, upkeep, radius, expected effect
+0-2 min after regional-specialist entry: player sees regional pressure card: repair target blocked by supply shortage
+2-4 min: player opens repair quote and sees high cost / high risk tied to an existing blocker receipt
+4-6 min: system suggests micro_depot; player reviews cost, upkeep, radius, expected effect and coarse ROI strip
 6-8 min: micro_depot.wasm proposal changes quote; runtime emits before / after preview
 8-10 min: player executes repair/logistics action and receives receipt
 ```
@@ -381,6 +394,12 @@ Runtime 必须：
 - 玩家能说明 depot 花了什么。
 - 玩家能指出哪一次行动被 depot 改变。
 - 玩家能看到 remaining blocker 或下一步建议。
+- QA / smoke evidence 明确标注该样本发生在 first capability 之后，不能用于证明首局 0-10 分钟 onboarding 通过。
+
+失败/防漂移条件：
+
+- 若测试、样本或文案在 first capability、稳定 claim、repair/logistics blocker receipt 或等价区域压力证据、regional specialist lane、claim/upkeep 与 repair/logistics blocker literacy 之前安排 depot 部署，标记 `micro_depot_phase_boundary_missing`。
+- 若样本标题只写 `0-10 min` 而不写 `post-first-capability` 或 `regional-specialist`，同样标记 `micro_depot_phase_boundary_missing`，避免 QA / 实现把 depot 当成 early onboarding gate。
 
 ## 13. 风险
 

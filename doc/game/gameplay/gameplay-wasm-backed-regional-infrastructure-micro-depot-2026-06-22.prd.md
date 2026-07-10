@@ -52,6 +52,7 @@
   - SC-3: `micro_depot` 的 WASM 权限边界清楚区分 proposal 与 runtime authority：WASM proposes, runtime validates / applies / signs。
   - SC-4: topic PRD / design / project、根 PRD、gameplay README 与 `prd.index.md` 可互相定位，不把详细规则塞回 root PRD。
   - SC-5: 本专题不升级当前阶段或对外 claim envelope；当前仍为 `internal_playable_alpha_late` / `limited playable technical preview`。
+  - SC-6: 任何 10 分钟验证样本必须写作 `post-first-capability 10-minute slice` 或 `regional-specialist 10-minute scenario`，并显式列出 first capability、稳定 claim、repair/logistics blocker receipt、regional specialist lane 与玩家可读 surface 前置条件。
 
 ## 2. User Experience & Functionality
 
@@ -63,7 +64,7 @@
   - `runtime_engineer` / `wasm_platform_engineer`: 需要明确 WASM 只给 proposal，canonical state / accounting / receipt 由 runtime 拥有。
   - `viewer_engineer` / `agent_engineer` / `qa_engineer`: 需要玩家可读 surface、agent action contract 与 smoke matrix。
 - User Scenarios & Frequency:
-  - 首次区域设施解锁: 玩家完成 repair / logistics 闭环并看到重复 blocker 后触发。
+  - 首次区域设施解锁: 玩家完成 first capability、稳定持有 claim、完成 repair / logistics 闭环并看到重复 blocker 后触发。
   - 区域阻塞恢复: supply missing、route blocked、repair 等待过长或 logistics quote 风险过高时重复发生。
   - 维护与回收: upkeep 未付、设施超出有效范围、收益不足或玩家转向新 specialization 时发生。
 - User Stories:
@@ -131,6 +132,7 @@
   - Unsupported resource: proposal is blocked; UI must name unsupported resource class without suggesting arbitrary resource minting.
   - Insufficient funds: quote remains visible but install/action cannot proceed; restricted starter funding cannot become infinite facility subsidy.
   - Low expected use: if the regional pressure card predicts fewer follow-up blockers than `break_even_uses`, install remains possible only with a low-use warning and an explicit recommendation reason; the UI must not present the depot as an always-correct buff.
+  - Phase boundary missing: if a sample, smoke test or QA script schedules `micro_depot` deployment before first capability completion, stable claim, repair/logistics blocker receipt or equivalent regional pressure evidence, active/eligible regional specialist lane, and claim/upkeep + repair/logistics blocker literacy, mark `micro_depot_phase_boundary_missing` and do not count the run as onboarding evidence.
   - Unknown module hash or schema mismatch: runtime refuses proposal and records module evidence blocker.
 - Non-Functional Requirements:
   - NFR-MD-1: Given identical input snapshot and module hash, proposal hash must be byte-identical.
@@ -181,3 +183,4 @@
 | DEC-MD-004 | MVP only allows repo-authored allowlisted module hash | Allow arbitrary player-uploaded WASM | Arbitrary upload would move the slice from gameplay facility to security/governance platform work. |
 | DEC-MD-005 | Depot affects one bounded repair/logistics quote and receipt | Treat depot as global buff or governance power | Bounded quote contribution preserves small-player regional leverage without global power creep. |
 | DEC-MD-006 | Install quote includes coarse ROI guidance: expected future blockers, break-even uses, upkeep horizon, low-use warning and recommendation reason | Only show install/upkeep plus one before/after service improvement | 2026-07-08 gameplay slice flagged that without break-even guidance, a depot can feel like a tax or an always-correct buff rather than a regional specialization choice. |
+| DEC-MD-007 | Treat 10-minute depot verification as a `post-first-capability` slice | Label the sample as generic `0-10 min` onboarding | The depot loop requires first capability, stable claim, prior blocker evidence and regional specialist eligibility; otherwise QA can mistake it for an early onboarding gate. |

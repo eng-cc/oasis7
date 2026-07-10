@@ -51,7 +51,7 @@
 | agent specialization behavior contract | `selected_specialization_id`、`specialization_reason`、`preferred_next_action_class`、`dependency_boundary`、`recovery_escalation_reason` | Agent 在推荐专业化、恢复或升级时，必须说明建议、独立性边界、失败代价和下一步；不得静默把小玩家推向 major-power dependency | `observe_lane -> recommend_local_path -> repair/rebuild/pivot -> voluntary_escalation/forced_dependency` | `local_operator` 维持到首个稳定世界变化可见；稳定后优先 `recovery_operator` / `conversion_specialist` / `regional_service_runner`；若 `same_loop_repeat_count >= 3` 且 leverage 仍为 `throughput_only` / `unclassified`，停止强化同一生产循环 | `agent_engineer` 负责行为合同；major-power escalation 只有 voluntary 或 runtime 标记 forced 时允许 |
 | limited-scope regional influence | `influence_surface_id`、`influence_scope`、`influence_cap`、`expires_on_inactivity`、`converts_to_global_governance` | 玩家通过区域性持续贡献获得有限影响力或优先级 | `locked -> visible -> earned -> decays_on_inactivity` | 区域影响力必须小于 global governance / alliance leadership；默认随停摆或长期闲置衰减 | 不得直接等价为 global vote power、主链治理权或 major-power membership |
 | recovery path | `failure_signature`、`recovery_option_id`、`restoration_scope`、`fallback_specialization_id`、`requires_major_power_sponsorship`、`estimated_time_class`、`resource_cost_class`、`retained_benefit`、`risk_class`、`recommendation_reason` | 玩家遭遇 claim/产线/区域性挤压失败时，系统给出恢复或改道选项，并让 repair / rebuild / pivot 的代价可比较 | `healthy -> disrupted -> recoverable -> restored/pivoted` | 优先提供低成本修复、局部重建或改道；同屏比较预计时间、资源消耗、保留收益、风险和推荐理由；默认不要求先加入大组织 | `requires_major_power_sponsorship` 默认应为 `no`；只有更高阶路线才允许提升依赖 |
-| anti-grind leverage progression | `leverage_class`、`new_option_unlocked`、`regional_dependency_reduced`、`same_loop_repeat_count`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位或新恢复弹性，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
+| anti-grind leverage progression | `leverage_class`、`leverage_checkpoint_summary`、`previous_leverage_class`、`new_leverage_class`、`new_option_unlocked`、`regional_usefulness_delta`、`recovery_resilience_delta`、`negotiation_position_delta`、`same_loop_repeat_count`、`grind_risk_reason`、`recommended_next_branch`、`grind_only_flag` | 系统在每个阶段 checkpoint 明确玩家拿到的新选择、新议价位、新恢复弹性或新区域用途，而不是只显示“再生产更多” | `unclear -> improving -> differentiated / grind_only` | 连续重复同一生产循环但没有新增 leverage class 时，必须判为 `grind_only` 风险；`leverage_checkpoint_class` 固定为 `new_option_unlocked / resilience_improved / negotiation_position_improved / regional_usefulness_increased / grind_only`；优先暴露更短周期的新用途或恢复后新分支 | `producer_system_designer` 冻结判据；runtime/viewer/QA 对账 |
 | mature-world guardrails | `world_activity_only`、`major_power_dependency_status`、`regional_pressure_level`、`return_hook` | QA / playability surface 明确区分“世界很活跃”和“玩家仍然有 lane” | `unclear -> bounded -> verified` | 只要 `world_activity_only=yes` 或 `major_power_dependency_status=forced`，该样本就不能支撑 lane `pass` | `qa_engineer` 守门，`producer_system_designer` 最终裁决 |
 
 - Acceptance Criteria:
@@ -63,7 +63,7 @@
   - AC-6: 文档必须定义 recoverable failure path；当玩家遭遇停机、claim 丢失、局部竞争失败或区域压力时，不得要求“只能投靠大组织”作为唯一继续路径。
   - AC-6A: 至少停机恢复与小玩家 claim/产线受挤压场景必须给出 repair / rebuild / pivot 的最小比较条：预计时间、资源消耗、保留收益、风险和推荐理由；否则不能判定恢复路径对玩家可读。
   - AC-7: `player leverage != world activity` 的约束必须进入本专题完成定义；任何 lane `pass` 都必须回答 `player_action / world_change_due_to_player / return_hook`。
-  - AC-7A: 任一阶段 checkpoint 都必须回答“玩家获得了什么新的 leverage class”；如果答案只剩“产量更高/库存更多”，而没有新区域用途、新恢复弹性、新议价位或新选择空间，则该 checkpoint 不能判定为 lane success。
+  - AC-7A: 任一阶段 checkpoint 都必须回答“玩家获得了什么新的 leverage class”，并提供最小 `leverage_checkpoint_summary`：`checkpoint_id`、`previous_leverage_class`、`new_leverage_class`、`new_option_unlocked`、`regional_usefulness_delta`、`recovery_resilience_delta`、`negotiation_position_delta`、`same_loop_repeat_count`、`grind_risk_reason`、`recommended_next_branch`、`leverage_checkpoint_class`。如果答案只剩“产量更高/库存更多”，而没有新区域用途、新恢复弹性、新议价位或新选择空间，则该 checkpoint 不能判定为 lane success。
   - AC-7B: `agent-small-player-specialization-contract` 必须要求 Agent 在每次推荐专业化或恢复路径时回答：建议玩家做什么、为什么仍是独立小玩家路线、失败代价是什么、卡住时如何 `repair / rebuild / pivot`、是否强制依附 major power。
   - AC-7C: 玩家选择专业化前，必须看到 `specialization_entry_quote` / `first_delivery_preview`：第一单交付满足哪个本地需求、预计产出什么、多久形成交付、需要哪些输入、会解锁哪种 leverage、交付后如何回访；若缺失，不能把专业化判定为玩家可读选择。
   - AC-8: 本专题必须显式声明不改变当前 `PRD-GAME-012` 的 early-retention 主优先级，也不把 `#165` 写成当前 stage 或 preview claim envelope 的升级依据。
@@ -140,7 +140,8 @@
   - 区域内已有大型组织垄断：lane 仍需给出局部独立价值和恢复路径，而不是默认判定“新玩家只能加入他们”。
   - 玩家完成 first capability，但 local site 因缺料/停机/区域压力无法继续：必须提供恢复或改道选项，不能让 lane 直接失效。
   - repair / rebuild / pivot 同时存在但缺少代价比较：必须标记为 recovery readability gap；玩家不应只看到多个按钮，而看不出哪个更快、哪个更贵、哪个保住当前 leverage。
-  - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
+  - 玩家继续玩只能重复同一条工业循环、但没有新局部用途、恢复弹性或谈判空间：必须标记 `grind_only_flag=yes` 与 `leverage_checkpoint_class=grind_only`，并要求系统给出 specialization / repair / pivot，而不是继续鼓励“再刷一会儿”。
+  - checkpoint 缺少 `leverage_checkpoint_summary`，或 summary 只报告 throughput、库存、产线次数、世界活动而没有 `new_option_unlocked`、恢复弹性、议价位或区域用途变化：必须标记 `leverage_checkpoint_missing`，不得把该 checkpoint 计入 small-player lane progression。
   - 专业化只有标签但没有第一单交付预览：必须标记 `specialization_delivery_preview_missing`；玩家不应只看到 `recovery_operator` / `conversion_specialist` / `regional_service_runner` 名称，而看不出本地需求、交付收益和 leverage 解锁。
   - 世界很活跃，但玩家没有造成明确世界变化：必须标记 `world_activity_only=yes`，且不得把该样本判为 lane success。
   - 玩家主动加入大型组织：允许，但文档必须说明这属于 voluntary escalation，而不是 lane 的强制前提。
@@ -153,7 +154,7 @@
   - NFR-SPL-3: 任一正式 lane 不得把“立即加入 major power”作为唯一 entry requirement；若出现该依赖，默认判定为 lane contract 失败。
   - NFR-SPL-4: `limited-scope regional influence` 100% 必须与 global governance / alliance leadership 分开定义，不得偷渡成更强权力口径。
   - NFR-SPL-5: 本专题不得改写当前 `limited playable technical preview` claim envelope，也不得用来替代 `PRD-GAME-012` 的 trust/capability 样本。
-  - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力或局部影响类型，则必须升级为 grind 风险。
+  - NFR-SPL-6: 任一正式 small-player lane 样本都必须声明 `leverage_class` 和 `leverage_checkpoint_summary`，且连续两个 checkpoint 不得只重复同一种收益形态；若没有新增用途、恢复力、议价位或局部影响类型，则必须升级为 grind 风险。
   - NFR-SPL-7: Agent 行为合同不得把 global governance、alliance leadership、war 或 major-power membership 作为 `local_operator` 后的默认第一专业化；这些只能作为自愿升级或 forced dependency 说明。
 - 2026-06-25 P1/P2 viewer follow-up:
   - `viewer` 正式玩家入口在 `Formal Gameplay Summary` 中新增 `Agency Moves`、`First Win & Anti-Grind` 与 `Mature-World Continuation` surface，分别承接 P1 的打断/重排/纠偏、首个工业胜利/anti-grind leverage，以及 P2 的 mature-world repair/rebuild/pivot 与 share replay；`software_safe` 仅作为 compat alias 复核。
