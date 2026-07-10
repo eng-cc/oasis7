@@ -43,10 +43,10 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next broad UI test addition should extract fixtures/query helpers or create a narrower adjacent test",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
-    maxLines: 1816,
+    maxLines: 1676,
     owner: "viewer_engineer",
-    reason: "bounded World Focus visual/a11y work retains the Pixel World host's existing runtime bridge composition and visual fixture surface",
-    nextTrigger: "next Pixel World host behavior change extracts a named widget/service boundary",
+    reason: "Pixel World host keeps runtime bridge composition and visual overlay surfaces; test-only snapshot fixture data now lives in pixel_world_visual_fixture_data.js",
+    nextTrigger: "next Pixel World UI/runtime host behavior change should extract a named widget or service boundary",
   },
 }));
 
