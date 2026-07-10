@@ -13,11 +13,9 @@
 - 指明结构治理轮（如 ROUND-006）与工程规范专题的衔接方式。
 
 ## 2. 阅读顺序
-1. `doc/engineering/prd.md`：工程治理目标、规则、验收与追踪矩阵。
-2. `doc/engineering/design.md`：工程治理的结构设计、规则载体与执行链路。
-3. `doc/engineering/project.md`：工程任务拆解、治理批次与状态。
-4. `doc/engineering/prd.index.md`：活跃专题入口。
-5. 下钻专题：`doc-governance/`、`rust-governance/`、`self-evolution/` 等；历史 PRD 审读与 legacy 迁移证据见 `doc/core/reviews/`。
+模块级当前导航统一从 `doc/engineering/README.md` 开始；本设计文档只在进入模块三件套后承载结构设计、规则载体与执行链路，不再复制一套根入口顺序。
+
+专题精确检索由 `doc/engineering/prd.index.md` 承担；历史 PRD 审读与 legacy 迁移证据见 `doc/core/reviews/`。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
@@ -66,10 +64,10 @@
 - 覆盖模块级结构、主链路、分层与专题导航。
 - 不替代专题 `*.design.md` 的细化设计。
 
-## 关键接口 / 入口
-- 需求入口：`doc/engineering/prd.md`
-- 执行入口：`doc/engineering/project.md`
-- 索引入口：`doc/engineering/prd.index.md`
+## 导航边界
+- 模块 landing 与当前分流：`doc/engineering/README.md`
+- 本文：工程治理的结构设计、规则载体与执行链路。
+- 专题文件级精确检索：`doc/engineering/prd.index.md`
 
 ## 设计演进计划
 - M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
