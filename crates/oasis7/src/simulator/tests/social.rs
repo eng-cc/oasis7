@@ -52,6 +52,156 @@ fn setup_social_kernel() -> WorldKernel {
 }
 
 #[test]
+fn social_fact_impact_quote_previews_publish_without_mutating_journal() {
+    let kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    let journal_len_before_quote = kernel.journal().len();
+    let social_facts_before_quote = kernel.model().social_facts.clone();
+    let actor_power_before_quote = electricity_of(&kernel, "agent-a");
+
+    let quote = kernel
+        .quote_publish_social_fact(
+            &agent_owner("agent-a"),
+            "social.reputation.v1",
+            &agent_owner("agent-b"),
+            Some(&agent_owner("agent-c")),
+            "agent-b fulfilled delivery contract for agent-c",
+            875_000,
+            &[evidence_event_id],
+            Some(12),
+            Some(&SocialStake {
+                kind: ResourceKind::Electricity,
+                amount: 30,
+            }),
+        )
+        .expect("publish quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(kernel.model().social_facts, social_facts_before_quote);
+    assert_eq!(electricity_of(&kernel, "agent-a"), actor_power_before_quote);
+    assert_eq!(quote.actor_id, "agent-a");
+    assert_eq!(quote.action_kind, "publish_social_fact");
+    assert_eq!(quote.schema_id, "social.reputation.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
+    assert_eq!(quote.object_id.as_deref(), Some("agent-c"));
+    assert!(quote.claim_summary.contains("fulfilled delivery"));
+    assert_eq!(quote.confidence_ppm, Some(875_000));
+    assert_eq!(quote.stake_at_risk, 30);
+    assert_eq!(quote.ttl_ticks, Some(12));
+    assert!(
+        quote
+            .affected_social_surfaces
+            .contains(&"reputation".to_string())
+    );
+    assert_eq!(quote.cooperation_opportunity_delta, "positive");
+    assert_eq!(quote.blacklist_or_dispute_risk, "stake_at_risk");
+    assert_eq!(quote.governance_or_claim_relevance, "evidence_backed_claim");
+    assert_eq!(quote.recommended_social_action, "publish_fact");
+    assert!(quote.why_this_action_matters.contains("agent-b"));
+}
+
+#[test]
+fn social_fact_impact_quote_previews_challenge_without_mutating_journal() {
+    let mut kernel = setup_social_kernel();
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    kernel.submit_action(Action::PublishSocialFact {
+        actor: agent_owner("agent-a"),
+        schema_id: "social.reputation.v1".to_string(),
+        subject: agent_owner("agent-b"),
+        object: None,
+        claim: "agent-b delivered mission data".to_string(),
+        confidence_ppm: 800_000,
+        evidence_event_ids: vec![evidence_event_id],
+        ttl_ticks: None,
+        stake: None,
+    });
+    let publish = kernel.step().expect("publish");
+    let fact_id = match publish.kind {
+        WorldEventKind::SocialFactPublished { fact } => fact.fact_id,
+        other => panic!("unexpected publish event: {other:?}"),
+    };
+
+    let journal_len_before_quote = kernel.journal().len();
+    let fact_before_quote = kernel
+        .model()
+        .social_facts
+        .get(&fact_id)
+        .expect("fact before quote")
+        .clone();
+    let challenger_power_before_quote = electricity_of(&kernel, "agent-c");
+    let quote = kernel
+        .quote_challenge_social_fact(
+            &agent_owner("agent-c"),
+            fact_id,
+            "evidence does not prove delivery",
+            Some(&SocialStake {
+                kind: ResourceKind::Electricity,
+                amount: 20,
+            }),
+        )
+        .expect("challenge quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(
+        kernel.model().social_facts.get(&fact_id),
+        Some(&fact_before_quote)
+    );
+    assert_eq!(
+        electricity_of(&kernel, "agent-c"),
+        challenger_power_before_quote
+    );
+    assert_eq!(quote.actor_id, "agent-c");
+    assert_eq!(quote.action_kind, "challenge_social_fact");
+    assert_eq!(quote.schema_id, "social.reputation.v1");
+    assert_eq!(quote.subject_id.as_deref(), Some("agent-b"));
+    assert_eq!(quote.claim_summary, "evidence does not prove delivery");
+    assert_eq!(quote.stake_at_risk, 20);
+    assert_eq!(quote.blacklist_or_dispute_risk, "opens_dispute");
+    assert_eq!(quote.recommended_social_action, "challenge_fact");
+    assert!(quote.why_this_action_matters.contains("dispute"));
+}
+
+#[test]
+fn social_fact_impact_quote_rejects_location_electricity_stake_like_execution() {
+    let mut kernel = setup_social_kernel();
+    let actor = ResourceOwner::Location {
+        location_id: "loc-social".to_string(),
+    };
+    seed_owner_resource(&mut kernel, actor.clone(), ResourceKind::Electricity, 100);
+    let evidence_event_id = first_evidence_event_id(&kernel);
+    let journal_len_before_quote = kernel.journal().len();
+
+    let reason = kernel
+        .quote_publish_social_fact(
+            &actor,
+            "social.reputation.v1",
+            &agent_owner("agent-b"),
+            None,
+            "location sponsored reputation claim",
+            750_000,
+            &[evidence_event_id],
+            None,
+            Some(&SocialStake {
+                kind: ResourceKind::Electricity,
+                amount: 10,
+            }),
+        )
+        .expect_err("location electricity stake should reject");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    match reason {
+        RejectReason::RuleDenied { notes } => {
+            assert!(
+                notes
+                    .iter()
+                    .any(|note| note.contains("location electricity pool removed"))
+            );
+        }
+        other => panic!("unexpected reject reason: {other:?}"),
+    }
+}
+
+#[test]
 fn social_publish_rejects_missing_evidence_event() {
     let mut kernel = setup_social_kernel();
     kernel.submit_action(Action::PublishSocialFact {

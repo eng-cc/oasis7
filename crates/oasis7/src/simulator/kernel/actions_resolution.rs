@@ -698,33 +698,8 @@ impl WorldKernel {
         }
 
         let prepared = self.prepare_power_transfer(from, to, amount)?;
-        let executed_price_per_pu = if self.config.power.dynamic_price_enabled {
-            if requested_price_per_pu == 0 {
-                prepared.quoted_price_per_pu
-            } else {
-                let price_band_bps = self.config.power.market_price_band_bps;
-                let quote = prepared.quoted_price_per_pu.max(1) as i128;
-                let deviation_bps = ((requested_price_per_pu as i128
-                    - prepared.quoted_price_per_pu as i128)
-                    .abs()
-                    .saturating_mul(10_000))
-                .saturating_div(quote);
-                if deviation_bps > price_band_bps as i128 {
-                    return Err(RejectReason::RuleDenied {
-                        notes: vec![format!(
-                            "requested power price {} out of band (quote {}, band_bps {}, deviation_bps {})",
-                            requested_price_per_pu,
-                            prepared.quoted_price_per_pu,
-                            price_band_bps,
-                            deviation_bps
-                        )],
-                    });
-                }
-                requested_price_per_pu
-            }
-        } else {
-            requested_price_per_pu
-        };
+        let executed_price_per_pu =
+            self.resolve_power_transfer_price(requested_price_per_pu, prepared.quoted_price_per_pu)?;
 
         let delivered = amount - prepared.loss;
         self.remove_from_owner(from, ResourceKind::Electricity, amount)?;
