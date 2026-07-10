@@ -39,6 +39,20 @@ async function tryLoadWasmBridgeModule(loadRuntimeModule = defaultLoadRuntimeMod
   }
 }
 
+async function tryCreateWasmBridge(module, options) {
+  try {
+    return {
+      bridge: await module.createPixelWorldBridge(options),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      bridge: null,
+      error: normalizeRuntimeModuleError(error),
+    };
+  }
+}
+
 function buildRuntimeUnavailableFatal(moduleUrl, error) {
   const message = [
     "pixel world wasm runtime is unavailable",
@@ -91,11 +105,22 @@ export async function createPixelWorldRuntimeBridge({
 } = {}) {
   const runtimeModule = await tryLoadWasmBridgeModule(loadRuntimeModule);
   if (runtimeModule.module?.createPixelWorldBridge) {
+    const initializedBridge = await tryCreateWasmBridge(runtimeModule.module, { onEvent, onFatal });
+    if (!initializedBridge.error) {
+      return {
+        bridge: initializedBridge.bridge,
+        deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
+        source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
+        moduleUrl: runtimeModule.moduleUrl,
+      };
+    }
+    const fatal = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, initializedBridge.error);
     return {
-      bridge: await runtimeModule.module.createPixelWorldBridge({ onEvent, onFatal }),
-      deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
-      source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
+      bridge: createUnavailableBridge({ fatal, onFatal }),
+      deriveRenderState: null,
+      source: "wasm_bridge_init_failed",
       moduleUrl: runtimeModule.moduleUrl,
+      fatal,
     };
   }
 

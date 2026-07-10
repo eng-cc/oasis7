@@ -14,6 +14,12 @@ function renderState(agentId, xCm, yCm) {
   };
 }
 
+function pointerEvent(type, { clientX, clientY, pointerId = 1 }) {
+  const event = new MouseEvent(type, { bubbles: true, clientX, clientY });
+  Object.defineProperty(event, "pointerId", { configurable: true, value: pointerId });
+  return event;
+}
+
 afterEach(() => {
   globalThis.requestAnimationFrame = originalRequestAnimationFrame;
   globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
@@ -50,7 +56,7 @@ describe("pixel world static canvas bridge", () => {
     expect(bridge.getLastRenderState().agents[0].id).toBe("agent-2");
     onEvent.mockClear();
 
-    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 48, clientY: 34 }));
+    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 34 }));
     expect(onEvent).not.toHaveBeenCalledWith({
       type: "select_entity",
       selection: { kind: "agent", id: "agent-1" },
@@ -62,6 +68,99 @@ describe("pixel world static canvas bridge", () => {
       selection: { kind: "agent", id: "agent-2" },
     });
 
+    bridge.unmount();
+  });
+
+  it("does not select an entity from the synthetic click after panning", () => {
+    globalThis.requestAnimationFrame = vi.fn(() => 1);
+    globalThis.cancelAnimationFrame = vi.fn();
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 180;
+    canvas.getContext = vi.fn(() => ({
+      clearRect: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    }));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 180 });
+    const onEvent = vi.fn();
+    const bridge = createPixelWorldBevyBridge({ onEvent });
+
+    bridge.mount(canvas, renderState("agent-1", 100, 100));
+    onEvent.mockClear();
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 48, clientY: 34 }));
+    canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 80, clientY: 34 }));
+    canvas.dispatchEvent(pointerEvent("pointerup", { clientX: 80, clientY: 34 }));
+    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 34 }));
+
+    expect(onEvent).not.toHaveBeenCalledWith({
+      type: "select_entity",
+      selection: { kind: "agent", id: "agent-1" },
+    });
+
+    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 34 }));
+    const selections = onEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === "select_entity");
+    expect(selections).toEqual([{
+      type: "select_entity",
+      selection: { kind: "agent", id: "agent-1" },
+    }]);
+    bridge.unmount();
+  });
+
+  it("does not suppress a later click after a cancelled pan", () => {
+    globalThis.requestAnimationFrame = vi.fn(() => 1);
+    globalThis.cancelAnimationFrame = vi.fn();
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 180;
+    canvas.getContext = vi.fn(() => ({
+      clearRect: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    }));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 180 });
+    const onEvent = vi.fn();
+    const bridge = createPixelWorldBevyBridge({ onEvent });
+
+    bridge.mount(canvas, renderState("agent-1", 100, 100));
+    onEvent.mockClear();
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 48, clientY: 34 }));
+    canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 80, clientY: 34 }));
+    canvas.dispatchEvent(pointerEvent("pointercancel", { clientX: 80, clientY: 34 }));
+    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 80, clientY: 34 }));
+
+    expect(onEvent).toHaveBeenCalledWith({
+      type: "select_entity",
+      selection: { kind: "agent", id: "agent-1" },
+    });
+    bridge.unmount();
+  });
+
+  it("keeps selection active when pointer jitter stays within one pixel", () => {
+    globalThis.requestAnimationFrame = vi.fn(() => 1);
+    globalThis.cancelAnimationFrame = vi.fn();
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 180;
+    canvas.getContext = vi.fn(() => ({
+      clearRect: vi.fn(), fillRect: vi.fn(), strokeRect: vi.fn(), beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(), stroke: vi.fn(),
+    }));
+    canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 180 });
+    const onEvent = vi.fn();
+    const bridge = createPixelWorldBevyBridge({ onEvent });
+
+    bridge.mount(canvas, renderState("agent-1", 100, 100));
+    onEvent.mockClear();
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 48, clientY: 34 }));
+    canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 49, clientY: 35 }));
+    canvas.dispatchEvent(pointerEvent("pointerup", { clientX: 49, clientY: 35 }));
+    canvas.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 49, clientY: 35 }));
+
+    const selections = onEvent.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === "select_entity");
+    expect(selections).toEqual([{
+      type: "select_entity",
+      selection: { kind: "agent", id: "agent-1" },
+    }]);
     bridge.unmount();
   });
 });

@@ -58,6 +58,31 @@ describe("pixel world runtime loader", () => {
     }));
   });
 
+  it("surfaces a structured fatal path when the loaded wasm bridge cannot initialize", async () => {
+    const onFatal = vi.fn();
+    const runtime = await createPixelWorldRuntimeBridge({
+      onFatal,
+      loadRuntimeModule: async () => ({
+        createPixelWorldBridge: async () => {
+          throw new Error("WebGL context initialization failed");
+        },
+      }),
+    });
+
+    expect(runtime.source).toBe("wasm_bridge_init_failed");
+    expect(runtime.fatal).toMatchObject({
+      code: PIXEL_WORLD_RUNTIME_UNAVAILABLE_CODE,
+      message: expect.stringContaining("WebGL context initialization failed"),
+    });
+
+    const mountResult = runtime.bridge.mount(document.createElement("canvas"), {});
+    expect(mountResult).toMatchObject({
+      status: "unavailable",
+      fatal: runtime.fatal,
+    });
+    expect(onFatal).toHaveBeenCalledWith(runtime.fatal);
+  });
+
   it("selects the webgl2 backend when navigator.gpu is available", () => {
     __resetPixelWorldRuntimeModuleForTest();
     expect(resolveBackendModuleUrlForTest({

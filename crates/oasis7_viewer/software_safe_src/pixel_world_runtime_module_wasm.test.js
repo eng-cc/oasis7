@@ -145,6 +145,40 @@ describe("pixel world wasm runtime bridge", () => {
     expect(runtimeState.instances[0].click).not.toHaveBeenCalled();
   });
 
+  it("does not suppress a later click after a cancelled drag", async () => {
+    const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
+    const bridge = await createPixelWorldBridge();
+    const canvas = document.createElement("canvas");
+    canvas.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      width: 480,
+      height: 270,
+      right: 480,
+      bottom: 270,
+      x: 0,
+      y: 0,
+      toJSON() {
+        return this;
+      },
+    });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    bridge.mount(canvas, { selection: null });
+    canvas.dispatchEvent(pointerEvent("pointerdown", { clientX: 10, clientY: 10 }));
+    canvas.dispatchEvent(pointerEvent("pointermove", { clientX: 48, clientY: 10 }));
+    canvas.dispatchEvent(pointerEvent("pointercancel", { clientX: 48, clientY: 10 }));
+    canvas.dispatchEvent(new MouseEvent("click", {
+      bubbles: true,
+      clientX: 96,
+      clientY: 30,
+    }));
+
+    expect(runtimeState.instances).toHaveLength(1);
+    expect(runtimeState.instances[0].click).toHaveBeenCalledWith(96, 30);
+  });
+
   it("keeps click selection active when pointer jitter stays below the drag threshold", async () => {
     const { createPixelWorldBridge } = await import("./pixel_world_runtime_module_wasm.js");
     const bridge = await createPixelWorldBridge();
