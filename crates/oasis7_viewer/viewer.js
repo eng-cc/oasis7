@@ -777,7 +777,7 @@ function createViewerAuthSurfaceModule({
     }
     try {
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : null;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
     } catch (_) {
       return null;
     }
@@ -2460,7 +2460,7 @@ function createViewerLocalePreferencesModule({
   }
   function resolveInitialUiLocale2() {
     const params = getSearchParams2();
-    return normalizeUiLocale2(params.get("locale") || params.get("language")) || resolveStoredUiLocale() || "en";
+    return normalizeUiLocale2(params.get("locale")) || normalizeUiLocale2(params.get("language")) || resolveStoredUiLocale() || "en";
   }
   function promptOverridesVisibilityStorageKey() {
     return `${promptOverridesVisibilityStoragePrefix}:${viewerEntryStorageSegment()}`;
@@ -2618,7 +2618,7 @@ function createViewerWorldScaleModule({
   }
   function selectedWorldAnchor() {
     const selected = state2.selectedObject;
-    if (selected && selected.pos) {
+    if (selected && finitePositionComponents2(selected.pos)) {
       return {
         kind: state2.selectedKind || "location",
         id: state2.selectedId || selected.id || selected.name || "selected",
@@ -6722,6 +6722,19 @@ async function tryLoadWasmBridgeModule(loadRuntimeModule = defaultLoadRuntimeMod
     };
   }
 }
+async function tryCreateWasmBridge(module, options) {
+  try {
+    return {
+      bridge: await module.createPixelWorldBridge(options),
+      error: null
+    };
+  } catch (error) {
+    return {
+      bridge: null,
+      error: normalizeRuntimeModuleError(error)
+    };
+  }
+}
 function buildRuntimeUnavailableFatal(moduleUrl, error) {
   const message = [
     "pixel world wasm runtime is unavailable",
@@ -6769,11 +6782,22 @@ async function createPixelWorldRuntimeBridge({
 } = {}) {
   const runtimeModule = await tryLoadWasmBridgeModule(loadRuntimeModule);
   if (runtimeModule.module?.createPixelWorldBridge) {
+    const initializedBridge = await tryCreateWasmBridge(runtimeModule.module, { onEvent, onFatal });
+    if (!initializedBridge.error) {
+      return {
+        bridge: initializedBridge.bridge,
+        deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
+        source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
+        moduleUrl: runtimeModule.moduleUrl
+      };
+    }
+    const fatal2 = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, initializedBridge.error);
     return {
-      bridge: await runtimeModule.module.createPixelWorldBridge({ onEvent, onFatal }),
-      deriveRenderState: runtimeModule.module.derivePixelWorldRenderState || null,
-      source: runtimeModule.module.PIXEL_WORLD_RUNTIME_SOURCE || "runtime_module",
-      moduleUrl: runtimeModule.moduleUrl
+      bridge: createUnavailableBridge({ fatal: fatal2, onFatal }),
+      deriveRenderState: null,
+      source: "wasm_bridge_init_failed",
+      moduleUrl: runtimeModule.moduleUrl,
+      fatal: fatal2
     };
   }
   const fatal = buildRuntimeUnavailableFatal(runtimeModule.moduleUrl, runtimeModule.error);

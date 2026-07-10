@@ -87,7 +87,7 @@ export function createViewerWorldScaleModule({
 
   function selectedWorldAnchor() {
     const selected = state.selectedObject;
-    if (selected && selected.pos) {
+    if (selected && finitePositionComponents(selected.pos)) {
       return {
         kind: state.selectedKind || "location",
         id: state.selectedId || selected.id || selected.name || "selected",

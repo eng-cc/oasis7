@@ -69,7 +69,8 @@ export function createViewerLocalePreferencesModule({
 
   function resolveInitialUiLocale() {
     const params = getSearchParams();
-    return normalizeUiLocale(params.get("locale") || params.get("language"))
+    return normalizeUiLocale(params.get("locale"))
+      || normalizeUiLocale(params.get("language"))
       || resolveStoredUiLocale()
       || "en";
   }

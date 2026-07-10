@@ -121,6 +121,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
   let boundClick = null;
   let lastHoverId = null;
   let dragState = null;
+  let suppressNextClick = false;
   let animationFrameId = null;
   let lastAnimationMs = 0;
 
@@ -267,6 +268,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       mountedCanvas.removeEventListener("click", boundClick);
     }
     dragState = null;
+    suppressNextClick = false;
     mountedCanvas.style.cursor = "default";
     boundPointerDown = null;
     boundPointerMove = null;
@@ -287,6 +289,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
         startPanY: cameraState.pan_y_px,
         moved: false,
       };
+      suppressNextClick = false;
       canvas.style.cursor = "grabbing";
       canvas.setPointerCapture?.(event.pointerId);
     };
@@ -327,6 +330,9 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       if (dragState && event.pointerId === dragState.pointerId) {
         canvas.releasePointerCapture?.(event.pointerId);
         const moved = dragState.moved;
+        // A cancelled pointer sequence cannot produce the compatibility click
+        // emitted after a completed drag, so it must not suppress a later user click.
+        suppressNextClick = event.type === "pointerup" && moved;
         dragState = null;
         canvas.style.cursor = moved ? "grab" : (lastHoverId ? "pointer" : "default");
       }
@@ -349,7 +355,8 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       emitCameraState();
     };
     boundClick = (event) => {
-      if (dragState?.moved) {
+      if (suppressNextClick) {
+        suppressNextClick = false;
         return;
       }
       const hit = hitTest(eventPoint(canvas, event));
@@ -389,7 +396,9 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     },
     update(nextRenderState) {
       lastRenderState = nextRenderState;
-      invalidateHitRegions();
+      // Drop the previous frame's hit targets before drawing the new state.
+      // renderCurrentFrame rebuilds them using the current camera transform.
+      hitRegions = [];
       if (!mountedCanvas) {
         return { status: "detached" };
       }
@@ -407,6 +416,7 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
       lastRenderState = null;
       hitRegions = [];
       cameraState = createInitialCameraState();
+      suppressNextClick = false;
       return { status: "detached" };
     },
     getLastRenderState() {

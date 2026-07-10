@@ -60,6 +60,45 @@ describe("viewer world scale module", () => {
     expect(physicalTruth.worldBoundsDetail).toBe("The current snapshot does not publish world bounds yet.");
   });
 
+  it("falls back to a positioned location when the selected object has an incomplete position", () => {
+    const state = {
+      selectedId: "agent-0",
+      selectedKind: "agent",
+      selectedObject: {
+        id: "agent-0",
+        pos: { x_cm: 10, y_cm: "not-a-number", z_cm: 0 },
+      },
+      snapshot: {
+        model: {
+          locations: {
+            base: {
+              id: "base",
+              name: "Base",
+              pos: { x_cm: 0, y_cm: 0, z_cm: 0 },
+            },
+            outpost: {
+              id: "outpost",
+              name: "Outpost",
+              pos: { x_cm: 300, y_cm: 0, z_cm: 0 },
+            },
+          },
+        },
+      },
+      uiLocale: "en",
+    };
+    const module = createWorldScaleModule(state);
+
+    const physicalTruth = module.buildWorldScaleSurface().physicalTruth;
+
+    expect(physicalTruth.anchor).toMatchObject({
+      id: "base",
+      positionLabel: "x=0 cm · y=0 cm · z=0 cm",
+    });
+    expect(physicalTruth.nearestLocations).toEqual([
+      expect.objectContaining({ id: "outpost", distanceCm: 300 }),
+    ]);
+  });
+
   it("keeps nearest locations stable without full-array sorting", () => {
     const state = {
       selectedId: "origin",

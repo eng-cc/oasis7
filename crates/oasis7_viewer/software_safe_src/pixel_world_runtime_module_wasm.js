@@ -125,7 +125,9 @@ export async function createPixelWorldBridge({ onEvent, onFatal } = {}) {
       runtime.pointer_up(event.pointerId);
       canvas.releasePointerCapture?.(event.pointerId);
       canvas.style.cursor = "grab";
-      suppressNextClick = dragState?.moved === true;
+      // A cancelled pointer sequence cannot produce the compatibility click
+      // emitted after a completed drag, so it must not suppress a later user click.
+      suppressNextClick = event.type === "pointerup" && dragState?.moved === true;
       dragState = null;
     };
 

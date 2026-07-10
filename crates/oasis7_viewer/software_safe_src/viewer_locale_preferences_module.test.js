@@ -43,6 +43,12 @@ describe("viewer locale preferences module", () => {
     expect(createPreferencesModule().resolveInitialUiLocale()).toBe("zh");
   });
 
+  it("uses the legacy language query when locale is invalid", () => {
+    setViewerPath("/software_safe.html?locale=fr&language=zh&test_api=1&connect=0");
+
+    expect(createPreferencesModule().resolveInitialUiLocale()).toBe("zh");
+  });
+
   it("migrates legacy alias-scoped UI locale preferences into the shared viewer key", () => {
     window.localStorage.setItem("oasis7:viewer:ui-locale:/software_safe.html", "zh");
 

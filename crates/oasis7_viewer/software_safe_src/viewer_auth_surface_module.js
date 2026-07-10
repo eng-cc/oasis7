@@ -16,7 +16,7 @@ export function createViewerAuthSurfaceModule({
     }
     try {
       const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : null;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
     } catch (_) {
       return null;
     }
