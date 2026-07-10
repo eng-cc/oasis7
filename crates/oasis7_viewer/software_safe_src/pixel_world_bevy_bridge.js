@@ -389,7 +389,9 @@ export function createPixelWorldBevyBridge({ onEvent, onFatal } = {}) {
     },
     update(nextRenderState) {
       lastRenderState = nextRenderState;
-      invalidateHitRegions();
+      // Drop the previous frame's hit targets before drawing the new state.
+      // renderCurrentFrame rebuilds them using the current camera transform.
+      hitRegions = [];
       if (!mountedCanvas) {
         return { status: "detached" };
       }
