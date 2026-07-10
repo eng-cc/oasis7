@@ -1,4 +1,5 @@
-use crate::simulator::{RuntimePerfHealth, RuntimePerfSnapshot};
+use crate::simulator::RuntimePerfSnapshot;
+use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 
 impl LiveScript {
     fn new(kernel: &WorldKernel) -> Self {
@@ -750,9 +751,7 @@ fn metrics_from_kernel(kernel: &WorldKernel) -> RunnerMetrics {
 }
 
 fn unsupported_live_control_runtime_perf_snapshot() -> RuntimePerfSnapshot {
-    let snapshot = RuntimePerfSnapshot::default();
-    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
-    snapshot
+    unsupported_runtime_perf_snapshot()
 }
 
 fn read_requests(

@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel};
 use crate::viewer::gameplay_actions::formal_release_default_seed_model;
 
@@ -556,9 +557,7 @@ pub(super) fn runtime_metrics(world: &RuntimeWorld) -> RunnerMetrics {
 }
 
 pub(super) fn unsupported_runtime_live_perf_snapshot() -> RuntimePerfSnapshot {
-    let snapshot = RuntimePerfSnapshot::default();
-    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
-    snapshot
+    unsupported_runtime_perf_snapshot()
 }
 
 pub(super) fn latest_runtime_event_seq(world: &RuntimeWorld) -> u64 {

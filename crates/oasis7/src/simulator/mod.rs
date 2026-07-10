@@ -32,7 +32,7 @@ mod provider_loopback_adapter;
 #[cfg(not(target_arch = "wasm32"))]
 mod provider_loopback_http;
 mod runner;
-mod runtime_perf;
+pub(crate) mod runtime_perf;
 mod scenario;
 mod social;
 mod types;
