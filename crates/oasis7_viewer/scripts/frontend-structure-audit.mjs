@@ -24,12 +24,6 @@ const knownLineDebt = new Map(Object.entries({
     reason: "this bounded World Focus visual/a11y/layout change retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
     nextTrigger: "a genuinely subsequent suitable inline-style or document-shell change, outside this bounded World Focus visual/a11y/layout change, extracts style ownership",
   },
-  "crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js": {
-    maxLines: 1395,
-    owner: "viewer_engineer",
-    reason: "large first-session attraction fixture/display-model corpus predates the frontend structure standard",
-    nextTrigger: "next gameplay attraction behavior change should extract coherent fixtures or display-model helpers",
-  },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
     maxLines: 4583,
     owner: "viewer_engineer",
