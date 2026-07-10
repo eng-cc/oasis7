@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
-use oasis7::runtime::{LocalCasStore, measure_directory_storage_bytes};
+use oasis7::runtime::LocalCasStore;
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -180,30 +180,7 @@ pub(super) fn collect_storage_metrics(
     let mut snapshot = StorageMetricsSnapshot::empty(profile);
     let mut issues = Vec::new();
 
-    snapshot.bytes_by_dir.insert(
-        "runtime_root".to_string(),
-        measure_directory_storage_bytes(paths.runtime_root.as_path()),
-    );
-    snapshot.bytes_by_dir.insert(
-        "execution_world_dir".to_string(),
-        measure_directory_storage_bytes(paths.execution_world_dir.as_path()),
-    );
-    snapshot.bytes_by_dir.insert(
-        "execution_records_dir".to_string(),
-        measure_directory_storage_bytes(paths.execution_records_dir.as_path()),
-    );
-    snapshot.bytes_by_dir.insert(
-        "execution_store_root".to_string(),
-        measure_directory_storage_bytes(paths.storage_root.as_path()),
-    );
-    snapshot.bytes_by_dir.insert(
-        "reward_runtime_report_dir".to_string(),
-        measure_directory_storage_bytes(paths.reward_runtime_report_dir.as_path()),
-    );
-    snapshot.bytes_by_dir.insert(
-        "replication_root".to_string(),
-        measure_directory_storage_bytes(paths.replication_root.as_path()),
-    );
+    snapshot.bytes_by_dir = collect_storage_bytes_by_dir(paths);
 
     snapshot.blob_counts.insert(
         "execution_store_blobs".to_string(),
@@ -263,6 +240,94 @@ pub(super) fn collect_storage_metrics(
         snapshot.degraded_reason = degraded_reason;
     }
     snapshot
+}
+
+fn collect_storage_bytes_by_dir(paths: &RuntimePaths) -> BTreeMap<String, u64> {
+    collect_requested_directory_storage_bytes(&[
+        ("runtime_root", paths.runtime_root.as_path()),
+        ("execution_world_dir", paths.execution_world_dir.as_path()),
+        (
+            "execution_records_dir",
+            paths.execution_records_dir.as_path(),
+        ),
+        ("execution_store_root", paths.storage_root.as_path()),
+        (
+            "reward_runtime_report_dir",
+            paths.reward_runtime_report_dir.as_path(),
+        ),
+        ("replication_root", paths.replication_root.as_path()),
+    ])
+}
+
+fn collect_requested_directory_storage_bytes(requests: &[(&str, &Path)]) -> BTreeMap<String, u64> {
+    let requested_paths: BTreeSet<PathBuf> = requests
+        .iter()
+        .map(|(_, path)| (*path).to_path_buf())
+        .collect();
+    let maximal_roots: Vec<&PathBuf> = requested_paths
+        .iter()
+        .filter(|candidate| {
+            !requested_paths
+                .iter()
+                .any(|root| *candidate != root && candidate.starts_with(root))
+        })
+        .collect();
+    let mut measured = BTreeMap::new();
+
+    for root in maximal_roots {
+        collect_directory_storage_bytes(root.as_path(), &requested_paths, &mut measured);
+    }
+    for path in &requested_paths {
+        if !measured.contains_key(path) {
+            collect_directory_storage_bytes(path.as_path(), &requested_paths, &mut measured);
+        }
+    }
+
+    requests
+        .iter()
+        .map(|(key, path)| {
+            (
+                (*key).to_string(),
+                measured.get(*path).copied().unwrap_or_default(),
+            )
+        })
+        .collect()
+}
+
+fn collect_directory_storage_bytes(
+    path: &Path,
+    requested_paths: &BTreeSet<PathBuf>,
+    measured: &mut BTreeMap<PathBuf, u64>,
+) -> u64 {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(_) => {
+            if requested_paths.contains(path) {
+                measured.insert(path.to_path_buf(), 0);
+            }
+            return 0;
+        }
+    };
+    let total = if metadata.is_file() {
+        metadata.len()
+    } else if metadata.is_dir() {
+        match fs::read_dir(path) {
+            Ok(entries) => entries.flatten().fold(0_u64, |total, entry| {
+                total.saturating_add(collect_directory_storage_bytes(
+                    entry.path().as_path(),
+                    requested_paths,
+                    measured,
+                ))
+            }),
+            Err(_) => 0,
+        }
+    } else {
+        0
+    };
+    if requested_paths.contains(path) {
+        measured.insert(path.to_path_buf(), total);
+    }
+    total
 }
 
 fn merge_degraded_reasons(
@@ -607,11 +672,12 @@ fn read_sidecar_metrics(sidecar_store_root: &Path) -> Result<SidecarMetricsSnaps
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use oasis7::runtime::World as RuntimeWorld;
+    use oasis7::runtime::{World as RuntimeWorld, measure_directory_storage_bytes};
     use oasis7_proto::storage_profile::StorageProfile;
 
     use super::super::RuntimePaths;
@@ -639,6 +705,69 @@ mod tests {
         let blobs_dir = root.join("blobs");
         fs::create_dir_all(blobs_dir.as_path()).expect("create blobs dir");
         fs::write(blobs_dir.join(format!("{hash}.blob")), hash.as_bytes()).expect("write blob");
+    }
+
+    #[test]
+    fn storage_bytes_by_dir_matches_independent_measurements_for_nested_and_override_roots() {
+        let sandbox = temp_dir("storage-bytes-parity");
+        let runtime_root = sandbox.join("runtime");
+        let replication_root = sandbox.join("replication-override");
+        let paths = RuntimePaths {
+            runtime_root: runtime_root.clone(),
+            execution_bridge_state_path: runtime_root.join("bridge-state.json"),
+            execution_world_dir: runtime_root.join("reward-runtime-execution-world"),
+            execution_records_dir: runtime_root.join("reward-runtime-execution-records"),
+            storage_root: runtime_root.join("store"),
+            replication_root: replication_root.clone(),
+            reward_runtime_state_path: runtime_root.join("reward-runtime-state.json"),
+            reward_runtime_distfs_probe_state_path: runtime_root
+                .join("reward-runtime-distfs-probe-state.json"),
+            reward_runtime_report_dir: runtime_root.join("reward-runtime-report"),
+            reward_runtime_storage_metrics_path: runtime_root
+                .join("reward-runtime-storage-metrics.json"),
+        };
+        for (path, bytes) in [
+            (runtime_root.join("runtime.bin"), 3),
+            (paths.execution_world_dir.join("world.bin"), 5),
+            (paths.execution_records_dir.join("records.bin"), 7),
+            (paths.storage_root.join("store.bin"), 11),
+            (paths.reward_runtime_report_dir.join("report.bin"), 13),
+            (replication_root.join("replication.bin"), 17),
+        ] {
+            fs::create_dir_all(path.parent().expect("parent")).expect("create metric parent");
+            fs::write(path, vec![0_u8; bytes]).expect("write metric file");
+        }
+
+        let actual = super::collect_storage_bytes_by_dir(&paths);
+        let expected = BTreeMap::from([
+            (
+                "runtime_root".to_string(),
+                measure_directory_storage_bytes(paths.runtime_root.as_path()),
+            ),
+            (
+                "execution_world_dir".to_string(),
+                measure_directory_storage_bytes(paths.execution_world_dir.as_path()),
+            ),
+            (
+                "execution_records_dir".to_string(),
+                measure_directory_storage_bytes(paths.execution_records_dir.as_path()),
+            ),
+            (
+                "execution_store_root".to_string(),
+                measure_directory_storage_bytes(paths.storage_root.as_path()),
+            ),
+            (
+                "reward_runtime_report_dir".to_string(),
+                measure_directory_storage_bytes(paths.reward_runtime_report_dir.as_path()),
+            ),
+            (
+                "replication_root".to_string(),
+                measure_directory_storage_bytes(paths.replication_root.as_path()),
+            ),
+        ]);
+        assert_eq!(actual, expected);
+
+        let _ = fs::remove_dir_all(sandbox);
     }
 
     #[test]
