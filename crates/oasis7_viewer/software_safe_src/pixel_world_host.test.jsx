@@ -737,7 +737,11 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(screen.queryByText("World Focus")).not.toBeInTheDocument();
 
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    const worldFocusButton = screen.getByRole("button", { name: "Enter World Focus" });
+    expect(screen.getByText("Pan, zoom, and inspect the world")).toBeInTheDocument();
+    expect(worldFocusButton).toHaveAccessibleDescription("Pan, zoom, and inspect the world");
+
+    worldFocusButton.click();
 
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");
@@ -786,7 +790,7 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("routes=1");
     expect(document.querySelector('[data-focus-minimap="true"]')).toHaveTextContent("fragments=2");
     expect(document.querySelector(".pixel-world-focus-controls")).toHaveAttribute("aria-label", "World focus controls");
-    expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command" }));
+    expect(document.querySelector(".pixel-world-focus-controls")).toContainElement(screen.getByRole("button", { name: "Command & Target" }));
     expect(document.querySelector(".pixel-world-focus-hud__cell--prompt")).toHaveTextContent("Current Objective");
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-world-tick", "12");
     expect(document.querySelector(".pixel-world-focus-hud__cell--tick")).toHaveAttribute("data-hud-priority", "telemetry");
@@ -813,12 +817,12 @@ describe("pixel world host", () => {
     expect(commandDrawer.querySelector("#agent-chat-message")).not.toBeNull();
     expect(commandDrawer.querySelector("[data-chat-send='1']")).not.toBeNull();
 
-    expect(screen.getByRole("button", { name: "Command" })).toHaveClass("pixel-world-focus-control--primary");
-    expect(screen.getByRole("button", { name: "Diagnostics" })).toHaveClass("pixel-world-focus-control--secondary");
+    expect(screen.getByRole("button", { name: "Command & Target" })).toHaveClass("pixel-world-focus-control--primary");
+    expect(screen.getByRole("button", { name: "World Status" })).toHaveClass("pixel-world-focus-control--secondary");
     expect(screen.getByRole("button", { name: "Maximize" })).toHaveClass("pixel-world-focus-control--secondary");
-    expect(screen.getByRole("button", { name: "Exit" })).toHaveClass("pixel-world-focus-control--quiet");
+    expect(screen.getByRole("button", { name: "Leave Focus · Esc" })).toHaveClass("pixel-world-focus-control--quiet");
 
-    screen.getByRole("button", { name: "Command" }).click();
+    screen.getByRole("button", { name: "Command & Target" }).click();
     expect(commandDrawer.open).toBe(true);
     expect(commandDrawer).toHaveTextContent("Agent Chat");
 
@@ -831,17 +835,17 @@ describe("pixel world host", () => {
     expect(document.querySelector('[data-focus-minimap="true"]')).toBeNull();
     expect(document.querySelector(".pixel-world-focus-receipt")).toBeNull();
     expect(document.querySelector(".pixel-world-render-diagnostics")).toBeNull();
-    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Minimize");
+    expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Restore Layout");
     expect(document.querySelector(".pixel-world-focus-hud")).toHaveTextContent("Action blocked");
     expect(document.querySelector(".pixel-world-focus-drawer--command")?.open).toBe(true);
 
-    screen.getByRole("button", { name: "Minimize" }).click();
+    screen.getByRole("button", { name: "Restore Layout" }).click();
     expect(host).toHaveAttribute("data-world-focus-maximized", "false");
     expect(document.body).not.toHaveClass("pixel-world-focus-maximized");
     expect(document.querySelector(".pixel-world-host__summary")).not.toBeNull();
     expect(document.querySelector('[data-focus-cinematic="true"]')).toBeNull();
 
-    screen.getByRole("button", { name: "Diagnostics" }).click();
+    screen.getByRole("button", { name: "World Status" }).click();
     const diagnosticsDrawer = document.querySelector(".pixel-world-focus-drawer--diagnostics");
     expect(commandDrawer.open).toBe(false);
     expect(diagnosticsDrawer.open).toBe(true);
@@ -1005,7 +1009,7 @@ describe("pixel world host", () => {
     await waitFor(() => {
       expect(firstHost).toHaveAttribute("data-world-focus", "true");
     });
-    screen.getByRole("button", { name: "Diagnostics" }).click();
+    screen.getByRole("button", { name: "World Status" }).click();
 
     expect(firstHost).toHaveAttribute("data-world-focus", "true");
     expect(document.body).toHaveClass("pixel-world-focus-active");
