@@ -557,7 +557,6 @@
 - 更新日期: 2026-07-06
 - 当前状态: active
 - 下一任务: 当前 `scripts/doc-inventory-report.sh` 复算仍显示 module density / hotspot `action_required`；后续 repository health 巡检应继续按热点分类结果，为 `doc/world-simulator/launcher`、`doc/testing/evidence` 或其他选中热点单独切 focused follow-up，避免回到已收口的 near-limit project 状态区队列。
-- 最新完成: `viewer-release-immersion-phase-retirement`（已删除 `doc/world-simulator/viewer` release immersion phase2~7 旧阶段三件套，并将当前 release / 体验收口入口收敛到 `viewer-gameplay-release-experience-overhaul` 主文档、viewer 子域 README、world-simulator 索引、core review logs、git history 与 GitHub task issue evidence comments。）
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前治理重点: P0/P1 技术债首轮优化正在收口，重点是 public_testnet readiness blocker 显式化、hosted access verdict 去半实现口径，以及 Viewer 前端状态模块化。
 - 当前库存判断: 文档债的主矛盾仍是“入口减重之后的存量维护成本”，不是继续扩更多 landing pages。复算入口仍以 `scripts/doc-inventory-report.sh` 为准。
