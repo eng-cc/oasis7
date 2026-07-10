@@ -229,6 +229,52 @@ fn gap_sync_fetch_commit_uses_cold_archive_request_budget() {
 }
 
 #[test]
+fn gap_sync_fetch_commit_discards_an_unconsumed_prior_failure_snapshot() {
+    let dir_remote = temp_dir("gap-sync-fetch-commit-stale-snapshot-remote");
+    let dir_local = temp_dir("gap-sync-fetch-commit-stale-snapshot-local");
+    let world_id = "world-gap-sync-fetch-commit-stale-snapshot";
+    let budgets = Arc::new(Mutex::new(Vec::<(u64, u64, Vec<String>)>::new()));
+    let (_, _, endpoint, _) = network_gap_sync_tests::build_fetch_commit_success_cache_fixture(
+        world_id,
+        dir_remote.as_path(),
+        dir_local.as_path(),
+        142,
+        143,
+        Arc::new(BudgetCapturingFetchCommitNetwork {
+            response: super::replication::FetchCommitResponse {
+                found: true,
+                message: None,
+            },
+            budgets,
+        }),
+    );
+    endpoint.seed_gap_sync_fetch_commit_failure_route_snapshot_for_test(
+        NodeReplicationGapSyncRouteSnapshot {
+            elapsed_ms: 9_999,
+            route_attempt_count: 1,
+            error_route_count: 1,
+            last_slow_route_reason: Some("prior request failure".to_string()),
+            ..NodeReplicationGapSyncRouteSnapshot::default()
+        },
+    );
+
+    let request = signed_fetch_commit_request_for_test(world_id, 1, 143);
+    endpoint
+        .request_fetch_commit_for_gap_sync(&request)
+        .expect("current request succeeds");
+
+    assert!(
+        endpoint
+            .take_last_gap_sync_fetch_commit_failure_route_snapshot()
+            .is_none(),
+        "a successful current request must not expose a prior request's failure snapshot"
+    );
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
+}
+
+#[test]
 fn gap_sync_fetch_commit_provider_sweep_preserves_budget_for_next_provider() {
     let dir_remote = temp_dir("gap-sync-fetch-commit-provider-budget-remote");
     let dir_local = temp_dir("gap-sync-fetch-commit-provider-budget-local");

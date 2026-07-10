@@ -136,29 +136,33 @@ mod execution_bridge {
     use oasis7::runtime::{ReleaseSecurityPolicy, World as RuntimeWorld};
     use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
     use oasis7_proto::storage_profile::StorageProfileConfig;
-    use serde::Serialize;
-    use std::collections::BTreeMap;
+
+    #[derive(Debug, Default)]
+    pub(super) struct ExecutionBridgeRecord {
+        pub(super) latest_state_ref: Option<String>,
+        pub(super) snapshot_ref: Option<String>,
+        pub(super) journal_ref: Option<String>,
+        pub(super) simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
+    }
+
+    #[derive(Debug, Default)]
+    pub(super) struct ExecutionSimulatorMirrorRecord {
+        pub(super) snapshot_ref: String,
+        pub(super) journal_ref: String,
+    }
+
+    mod driver_observability {
+        include!("oasis7_chain_runtime/execution_bridge/driver_observability.rs");
+    }
+
+    pub(crate) use self::driver_observability::{
+        ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
+        reset_execution_bridge_commit_timing_for_tests, snapshot_execution_bridge_commit_timing,
+        snapshot_execution_bridge_module_tick_routing_metrics,
+    };
 
     #[derive(Debug)]
     pub(super) struct NodeRuntimeExecutionDriver;
-
-    #[derive(Debug, Clone, Default, Serialize)]
-    pub(crate) struct ExecutionBridgeStageTimingSnapshot {
-        pub(crate) count: u64,
-        pub(crate) cumulative_ms: u64,
-    }
-
-    #[derive(Debug, Clone, Default, Serialize)]
-    pub(crate) struct ExecutionBridgeCommitTimingSnapshot {
-        pub(crate) window_capacity: usize,
-        pub(crate) recent_commit_count: usize,
-        pub(crate) p50_total_ms: Option<u64>,
-        pub(crate) p95_total_ms: Option<u64>,
-        pub(crate) max_total_ms: Option<u64>,
-        pub(crate) slow_count: u64,
-        pub(crate) last_slow_stage: Option<String>,
-        pub(crate) stages: BTreeMap<String, ExecutionBridgeStageTimingSnapshot>,
-    }
 
     #[allow(dead_code)]
     impl NodeRuntimeExecutionDriver {
@@ -193,10 +197,6 @@ mod execution_bridge {
                 execution_state_root: String::new(),
             })
         }
-    }
-
-    pub(crate) fn snapshot_execution_bridge_commit_timing() -> ExecutionBridgeCommitTimingSnapshot {
-        ExecutionBridgeCommitTimingSnapshot::default()
     }
 
     pub(super) fn load_execution_world(world_dir: &Path) -> Result<RuntimeWorld, String> {

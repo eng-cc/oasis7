@@ -756,7 +756,11 @@ pub(super) use self::driver::NodeRuntimeExecutionDriver;
 pub(crate) use self::driver::load_execution_world;
 #[allow(unused_imports)]
 pub(super) use self::driver_committed_heights::bridge_committed_heights;
+#[cfg(test)]
+#[allow(unused_imports)]
+pub(crate) use self::driver_observability::reset_execution_bridge_commit_timing_for_tests;
 #[allow(unused_imports)]
 pub(crate) use self::driver_observability::{
-    ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
+    ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
+    snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };

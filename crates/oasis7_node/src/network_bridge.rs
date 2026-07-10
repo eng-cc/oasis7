@@ -303,6 +303,8 @@ pub(crate) struct ReplicationNetworkEndpoint {
     fetch_commit_success_cache_after: Duration,
     recent_fetch_commit_successes:
         Mutex<HashMap<FetchCommitSuccessCacheKey, CachedFetchCommitSuccess>>,
+    last_gap_sync_fetch_commit_failure_route_snapshot:
+        Mutex<Option<NodeReplicationGapSyncRouteSnapshot>>,
 }
 
 impl ReplicationNetworkEndpoint {
@@ -341,6 +343,7 @@ impl ReplicationNetworkEndpoint {
                 FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS,
             ),
             recent_fetch_commit_successes: Mutex::new(HashMap::new()),
+            last_gap_sync_fetch_commit_failure_route_snapshot: Mutex::new(None),
         })
     }
 
@@ -531,11 +534,44 @@ impl ReplicationNetworkEndpoint {
         )
     }
 
+    pub(crate) fn take_last_gap_sync_fetch_commit_failure_route_snapshot(
+        &self,
+    ) -> Option<NodeReplicationGapSyncRouteSnapshot> {
+        self.last_gap_sync_fetch_commit_failure_route_snapshot
+            .lock()
+            .ok()
+            .and_then(|mut snapshot| snapshot.take())
+    }
+
+    fn record_gap_sync_fetch_commit_failure_route_snapshot(
+        &self,
+        snapshot: NodeReplicationGapSyncRouteSnapshot,
+    ) {
+        if let Ok(mut last_snapshot) = self
+            .last_gap_sync_fetch_commit_failure_route_snapshot
+            .lock()
+        {
+            *last_snapshot = Some(snapshot);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_gap_sync_fetch_commit_failure_route_snapshot_for_test(
+        &self,
+        snapshot: NodeReplicationGapSyncRouteSnapshot,
+    ) {
+        self.record_gap_sync_fetch_commit_failure_route_snapshot(snapshot);
+    }
+
     fn request_fetch_commit_for_gap_sync_with_policy(
         &self,
         request: &FetchCommitRequest,
         retry_policy: GapSyncFetchCommitRetryPolicy,
     ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        // A failure snapshot describes exactly one request sweep.  Discard an
+        // unconsumed prior snapshot before any early validation return can
+        // otherwise cause it to be reported for this attempt.
+        let _ = self.take_last_gap_sync_fetch_commit_failure_route_snapshot();
         if let Some(lane) = classify_network_protocol(REPLICATION_FETCH_COMMIT_PROTOCOL) {
             validate_lane_access(
                 &self.network_policy,
@@ -566,6 +602,7 @@ impl ReplicationNetworkEndpoint {
         let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
             let err = gap_sync_fetch_commit_route_budget_exhausted();
             route_observer.observe_budget_exhausted(&err);
+            self.record_gap_sync_fetch_commit_failure_route_snapshot(route_observer.finish());
             return Err(err);
         };
         let mut response = match self
@@ -701,6 +738,8 @@ impl ReplicationNetworkEndpoint {
                 route_snapshot,
             });
         }
+        let route_snapshot = route_observer.finish();
+        self.record_gap_sync_fetch_commit_failure_route_snapshot(route_snapshot);
         Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
     }
 

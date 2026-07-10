@@ -57,6 +57,14 @@ mod status_payload_world_resource;
 use status_payload_world_resource::{ChainWorldResourceStatus, build_world_resource_status};
 
 const TRANSPORT_STABILITY_MIN_SCORE: u8 = 70;
+const CONSENSUS_FINALITY_LATENCY_BUDGET_MS: i64 = 1_000;
+const CONSENSUS_FINALITY_LATENCY_MIN_SAMPLES: usize = 4;
+const TRANSFER_LIFECYCLE_DEGRADED_MIN_SAMPLES: usize = 4;
+const TRANSFER_LIFECYCLE_DEGRADED_RATIO_PPM: u64 = 50_000;
+const MODULE_TICK_SLOW_ROUTE_MIN_SAMPLES: u64 = 4;
+const MODULE_TICK_SLOW_ROUTE_RATIO_PPM: u64 = 50_000;
+const UDP_GOSSIP_SEND_FAILURE_MIN_ATTEMPTS: u64 = 4;
+const UDP_GOSSIP_SEND_FAILURE_RATIO_PPM: u64 = 50_000;
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainP2pStatus {
@@ -227,6 +235,8 @@ pub(super) struct ChainConsensusStatus {
     pub(super) replication_gap_sync_blocked_reason: Option<String>,
     pub(super) replication_gap_sync_repair_attempt_height: Option<u64>,
     pub(super) replication_gap_sync_repair_attempt_summary: Option<String>,
+    pub(super) replication_gap_sync_repair_attempt_route_snapshot:
+        Option<oasis7_node::NodeReplicationGapSyncRouteSnapshot>,
     pub(super) storage_challenge_network_degraded_height: Option<u64>,
     pub(super) storage_challenge_network_degraded_reason: Option<String>,
     pub(super) state_sync_fallback_required: bool,
@@ -463,6 +473,36 @@ pub(super) fn build_chain_node_observability_status(
     runtime_perf: Option<&RuntimePerfSnapshot>,
     observed_at_unix_ms: i64,
 ) -> ChainNodeObservabilityStatus {
+    build_chain_node_observability_status_with_transactions(
+        snapshot,
+        storage_metrics,
+        reward_runtime_metrics,
+        replication,
+        network_head,
+        p2p,
+        policy,
+        runtime_perf,
+        None,
+        None,
+        None,
+        observed_at_unix_ms,
+    )
+}
+
+fn build_chain_node_observability_status_with_transactions(
+    snapshot: &NodeSnapshot,
+    storage_metrics: &storage_metrics::StorageMetricsSnapshot,
+    reward_runtime_metrics: &super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
+    replication: &super::ChainReplicationDebugStatus,
+    network_head: &ChainConsensusNetworkHeadStatus,
+    p2p: &ChainP2pStatus,
+    policy: &ChainReadinessPolicyStatus,
+    runtime_perf: Option<&RuntimePerfSnapshot>,
+    transactions: Option<&super::transfer_submit_api::ChainTransferMetricsStatus>,
+    module_tick_routing: Option<&ChainModuleTickRoutingStatus>,
+    wasm: Option<&ChainWasmStatus>,
+    observed_at_unix_ms: i64,
+) -> ChainNodeObservabilityStatus {
     let connected_peer_count = replication.connected_peers.len();
     let mut active_peer_count = 0usize;
     let mut candidate_peer_count = 0usize;
@@ -535,8 +575,117 @@ pub(super) fn build_chain_node_observability_status(
         .iter()
         .map(|evidence| evidence.slashable_stake)
         .sum::<u64>();
-
     let mut alerts = Vec::new();
+    if let Some(metrics) = module_tick_routing.and_then(|status| status.metrics.as_ref()) {
+        let metric_u64 = |key: &str| {
+            metrics
+                .get(key)
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0)
+        };
+        let last_missing_invocation_count = metric_u64("last_missing_invocation_count");
+        let oldest_overdue_ticks = metric_u64("oldest_overdue_ticks");
+        if last_missing_invocation_count > 0 || oldest_overdue_ticks > 0 {
+            push_observability_alert(
+                &mut alerts,
+                "warn",
+                "module_tick_routing_degraded",
+                format!(
+                    "module tick routing degraded: last_missing_invocation_count={last_missing_invocation_count} oldest_overdue_ticks={oldest_overdue_ticks}"
+                ),
+            );
+        }
+    }
+    if let Some(metrics) = module_tick_routing.and_then(|status| status.live_metrics.as_ref()) {
+        let metric_u64 = |key: &str| {
+            metrics
+                .get(key)
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0)
+        };
+        let routing_count = metric_u64("routing_count");
+        let slow_route_count = metrics
+            .get("duration_buckets")
+            .and_then(|buckets| buckets.get("ge_100ms"))
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let slow_route_ratio_ppm = slow_route_count
+            .saturating_mul(1_000_000)
+            .checked_div(routing_count)
+            .unwrap_or(0);
+        if routing_count >= MODULE_TICK_SLOW_ROUTE_MIN_SAMPLES
+            && slow_route_ratio_ppm >= MODULE_TICK_SLOW_ROUTE_RATIO_PPM
+        {
+            push_observability_alert(
+                &mut alerts,
+                "warn",
+                "module_tick_routing_degraded",
+                format!(
+                    "module tick routing degraded: sustained_slow_routes={slow_route_count} routing_count={routing_count} slow_route_ratio_ppm={slow_route_ratio_ppm} slow_route_budget_ms=100"
+                ),
+            );
+        }
+    }
+    if let Some(reason) = wasm.and_then(|status| {
+        status
+            .degraded_reason
+            .as_deref()
+            .or(status.build.degraded_reason.as_deref())
+    }) {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "wasm_observability_degraded",
+            format!("WASM observability degraded: {reason}"),
+        );
+    }
+    let finality_latency = &snapshot.consensus.recent_finality_latency;
+    if finality_latency.sample_count >= CONSENSUS_FINALITY_LATENCY_MIN_SAMPLES
+        && finality_latency
+            .p95_latency_ms
+            .is_some_and(|p95_ms| p95_ms > CONSENSUS_FINALITY_LATENCY_BUDGET_MS)
+    {
+        push_observability_alert(
+            &mut alerts,
+            "warn",
+            "consensus_finality_latency_degraded",
+            format!(
+                "consensus finality latency degraded: sample_count={} finality_p95_ms={} finality_budget_ms={}",
+                finality_latency.sample_count,
+                finality_latency.p95_latency_ms.unwrap_or_default(),
+                CONSENSUS_FINALITY_LATENCY_BUDGET_MS
+            ),
+        );
+    }
+    if let Some(transactions) = transactions {
+        let failure_count = transactions
+            .failed_count
+            .saturating_add(transactions.timeout_count);
+        let failure_ratio_ppm = if transactions.tracked_records > 0 {
+            failure_count
+                .saturating_mul(1_000_000)
+                .saturating_div(transactions.tracked_records) as u64
+        } else {
+            0
+        };
+        if transactions.tracked_records >= TRANSFER_LIFECYCLE_DEGRADED_MIN_SAMPLES
+            && failure_ratio_ppm >= TRANSFER_LIFECYCLE_DEGRADED_RATIO_PPM
+        {
+            let dominant_error_code = if transactions.timeout_count >= transactions.failed_count {
+                "transfer_timeout"
+            } else {
+                "transfer_failed"
+            };
+            push_observability_alert(
+                &mut alerts,
+                "warn",
+                "transfer_lifecycle_degraded",
+                format!(
+                    "transfer lifecycle degraded: failure_ratio_ppm={failure_ratio_ppm} dominant_error_code={dominant_error_code}"
+                ),
+            );
+        }
+    }
     if let Some(err) = snapshot.last_error.as_ref() {
         push_observability_alert(
             &mut alerts,
@@ -938,7 +1087,8 @@ pub(super) fn build_chain_status_payload(
     let readiness_policy = readiness_policy(&snapshot, loaded_network_tier_manifest);
     let network_head =
         build_network_head_status(&snapshot, observed_at_unix_ms, loaded_network_tier_manifest);
-    let observability = build_chain_node_observability_status(
+    let module_tick_routing = build_module_tick_routing_status(execution_world_dir);
+    let mut observability = build_chain_node_observability_status_with_transactions(
         &snapshot,
         &storage_metrics,
         &reward_runtime_metrics,
@@ -947,8 +1097,40 @@ pub(super) fn build_chain_status_payload(
         &p2p,
         &readiness_policy,
         runtime_perf.as_ref(),
+        Some(&transactions),
+        Some(&module_tick_routing),
+        Some(&wasm),
         observed_at_unix_ms,
     );
+    if let Some(gossip) = traffic.udp_gossip.as_ref() {
+        let outbound = &gossip.totals.outbound;
+        if outbound.attempted_datagrams >= UDP_GOSSIP_SEND_FAILURE_MIN_ATTEMPTS
+            && outbound.failure_ratio_ppm >= UDP_GOSSIP_SEND_FAILURE_RATIO_PPM
+        {
+            let dominant_error = gossip
+                .by_error_kind
+                .iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(kind, count)| format!(" dominant_error={kind} count={count}"))
+                .unwrap_or_default();
+            push_observability_alert(
+                &mut observability.alerts,
+                "warn",
+                "udp_gossip_send_failures",
+                format!(
+                    "udp gossip send failures: attempted={} succeeded={} failed={} failure_ratio_ppm={}{}",
+                    outbound.attempted_datagrams,
+                    outbound.succeeded_datagrams,
+                    outbound.failed_datagrams,
+                    outbound.failure_ratio_ppm,
+                    dominant_error,
+                ),
+            );
+            observability.status = observability_status_for_alerts(observability.alerts.as_slice());
+            observability.summary =
+                observability_summary_for_alerts(observability.alerts.as_slice());
+        }
+    }
     let consensus_participation_hold_reason = consensus_participation_hold_reason(
         &snapshot,
         observability.network_height_lag,
@@ -996,7 +1178,6 @@ pub(super) fn build_chain_status_payload(
         build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
     let chain_proof = build_chain_proof_status(execution_records_dir);
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
-    let module_tick_routing = build_module_tick_routing_status(execution_world_dir);
     let pending_proposal = snapshot
         .consensus
         .pending_proposal
@@ -1089,6 +1270,10 @@ pub(super) fn build_chain_status_payload(
             replication_gap_sync_repair_attempt_summary: snapshot
                 .consensus
                 .replication_gap_sync_repair_attempt_summary
+                .clone(),
+            replication_gap_sync_repair_attempt_route_snapshot: snapshot
+                .consensus
+                .replication_gap_sync_repair_attempt_route_snapshot
                 .clone(),
             storage_challenge_network_degraded_height: snapshot
                 .consensus

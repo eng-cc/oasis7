@@ -946,7 +946,8 @@ impl PosNodeEngine {
                         self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
                         self.last_replication_gap_sync_repair_attempt_summary =
                             Some(summary.clone());
-                        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
+                        self.last_replication_gap_sync_repair_attempt_route_snapshot =
+                            endpoint.take_last_gap_sync_fetch_commit_failure_route_snapshot();
                         last_error = Some(summary);
                         break;
                     }
@@ -955,6 +956,10 @@ impl PosNodeEngine {
                             "attempt {attempt}/{} failed: {}",
                             REPLICATION_GAP_SYNC_MAX_RETRIES_PER_HEIGHT, err
                         ));
+                        self.last_replication_gap_sync_repair_attempt_height = Some(next_height);
+                        self.last_replication_gap_sync_repair_attempt_summary = last_error.clone();
+                        self.last_replication_gap_sync_repair_attempt_route_snapshot =
+                            endpoint.take_last_gap_sync_fetch_commit_failure_route_snapshot();
                         if Self::replication_gap_sync_local_state_blocked_reason(
                             last_error.as_deref().unwrap_or(""),
                         ) {

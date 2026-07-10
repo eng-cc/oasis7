@@ -4,6 +4,7 @@ use serde::Serialize;
 
 #[cfg(not(test))]
 use super::super::execution_bridge::load_execution_world;
+use super::super::execution_bridge::snapshot_execution_bridge_module_tick_routing_metrics;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainModuleTickRoutingStatus {
@@ -11,6 +12,7 @@ pub(crate) struct ChainModuleTickRoutingStatus {
     pub(crate) source: String,
     pub(crate) load_error: Option<String>,
     pub(crate) metrics: Option<serde_json::Value>,
+    pub(crate) live_metrics: Option<serde_json::Value>,
 }
 
 #[cfg(not(test))]
@@ -23,12 +25,16 @@ pub(super) fn build_module_tick_routing_status(
             source: "execution_world".to_string(),
             load_error: None,
             metrics: serde_json::to_value(world.module_tick_routing_metrics_snapshot()).ok(),
+            live_metrics: snapshot_execution_bridge_module_tick_routing_metrics()
+                .and_then(|metrics| serde_json::to_value(metrics).ok()),
         },
         Err(err) => ChainModuleTickRoutingStatus {
             available: false,
             source: "execution_world".to_string(),
             load_error: Some(err),
             metrics: None,
+            live_metrics: snapshot_execution_bridge_module_tick_routing_metrics()
+                .and_then(|metrics| serde_json::to_value(metrics).ok()),
         },
     }
 }
@@ -48,12 +54,16 @@ pub(super) fn build_module_tick_routing_status(
             source: "execution_world".to_string(),
             load_error: None,
             metrics: snapshot.get("module_tick_routing_metrics").cloned(),
+            live_metrics: snapshot_execution_bridge_module_tick_routing_metrics()
+                .and_then(|metrics| serde_json::to_value(metrics).ok()),
         },
         Err(err) => ChainModuleTickRoutingStatus {
             available: false,
             source: "execution_world".to_string(),
             load_error: Some(err),
             metrics: None,
+            live_metrics: snapshot_execution_bridge_module_tick_routing_metrics()
+                .and_then(|metrics| serde_json::to_value(metrics).ok()),
         },
     }
 }

@@ -1019,7 +1019,7 @@ pub struct NodeFinalityLatencySnapshot {
     pub p95_latency_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
 pub struct NodeReplicationGapSyncRouteSnapshot {
     pub elapsed_ms: u64,
     pub route_attempt_count: u64,
