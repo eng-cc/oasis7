@@ -61,8 +61,8 @@ fn load_state(path: &Path) -> Result<PersistedBridgeState, String> {
 }
 
 fn persist_state(path: &Path, state: &PersistedBridgeState) -> Result<(), String> {
-    let bytes = serde_json::to_vec_pretty(state)
-        .map_err(|err| format!("serialize bridge state failed: {err}"))?;
+    let bytes =
+        serde_json::to_vec(state).map_err(|err| format!("serialize bridge state failed: {err}"))?;
     write_bytes_atomic(path, bytes.as_slice())
 }
 

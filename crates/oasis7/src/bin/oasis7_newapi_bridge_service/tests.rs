@@ -844,9 +844,17 @@ fn store_reloads_persisted_bindings_routes_and_projects() {
         )
         .expect("route");
 
+    let expected_snapshot = test_service.service.snapshot();
+    let persisted = fs::read(test_service.state_path.as_path()).expect("read state file");
+    assert_eq!(
+        persisted,
+        serde_json::to_vec(&expected_snapshot).expect("serialize compact expected state")
+    );
+
     let reloaded_store =
         BridgeStateStore::new(test_service.state_path.clone()).expect("reload bridge state store");
     let snapshot = reloaded_store.snapshot();
+    assert_eq!(snapshot, expected_snapshot);
     assert_eq!(snapshot.bindings.len(), 1);
     assert_eq!(snapshot.project_bindings.len(), 1);
     assert_eq!(snapshot.routes.len(), 1);
