@@ -15,6 +15,8 @@ use std::thread;
 
 #[path = "tests_agent_chat.rs"]
 mod tests_agent_chat;
+#[path = "tests_newapi_bridge_state.rs"]
+mod tests_newapi_bridge_state;
 
 #[derive(Debug, Clone)]
 struct FakeInvoker {

@@ -114,7 +114,7 @@ impl ExplorerStore {
                 .cloned()
                 .collect::<Vec<ExplorerTxItem>>(),
         };
-        let body = serde_json::to_vec_pretty(&snapshot)
+        let body = serde_json::to_vec(&snapshot)
             .map_err(|err| format!("encode explorer index snapshot failed: {err}"))?;
         let Some(parent) = path.parent() else {
             return Err(format!(
@@ -747,6 +747,64 @@ mod tests {
             error_code: None,
             error: None,
         }
+    }
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let unique = format!(
+            "{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        );
+        std::env::temp_dir().join(format!("oasis7-explorer-p0-store-{label}-{unique}"))
+    }
+
+    #[test]
+    fn persists_compact_json_and_reloads_block_transfer_and_action_index() {
+        let dir = temp_dir("persist-reload");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let mut persisted = ExplorerStore::default();
+        persisted.configure_persistence_path(dir.as_path());
+        let persisted_block = block(42);
+        let persisted_tx = tx(
+            "tx-persisted",
+            7,
+            "alice",
+            "bob",
+            TransferLifecycleStatus::Confirmed,
+            1_234,
+        );
+        persisted
+            .blocks_by_height
+            .insert(persisted_block.height, persisted_block.clone());
+        persisted
+            .tx_hash_by_action_id
+            .insert(persisted_tx.action_id, persisted_tx.tx_hash.clone());
+        persisted
+            .txs_by_hash
+            .insert(persisted_tx.tx_hash.clone(), persisted_tx.clone());
+        persisted.persist().expect("persist explorer store");
+
+        let index_path = dir.join(EXPLORER_INDEX_FILE);
+        let compact_json = std::fs::read(index_path).expect("read explorer index");
+        let _: serde_json::Value =
+            serde_json::from_slice(compact_json.as_slice()).expect("explorer index is valid JSON");
+
+        let mut reloaded = ExplorerStore::default();
+        reloaded.configure_persistence_path(dir.as_path());
+        reloaded.ensure_loaded();
+
+        assert_eq!(reloaded.blocks_by_height.get(&42), Some(&persisted_block));
+        assert_eq!(
+            reloaded.txs_by_hash.get("tx-persisted"),
+            Some(&persisted_tx)
+        );
+        assert_eq!(
+            reloaded.tx_hash_by_action_id.get(&7),
+            Some(&"tx-persisted".to_string())
+        );
+
+        std::fs::remove_dir_all(dir).expect("clean explorer store temp dir");
     }
 
     #[test]

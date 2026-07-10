@@ -7,17 +7,17 @@ use std::thread;
 
 use tracing::Level;
 
-use crate::observability::emit_stderr_or_event;
-use crate::simulator::{
-    PersistError, RunnerMetrics, RuntimePerfHealth, RuntimePerfSnapshot, WorldEvent, WorldJournal,
-    WorldSnapshot, WorldTime,
-};
-
 use super::protocol::{
     AgentChatError, AuthoritativeChallengeError, AuthoritativeRecoveryError, ControlCompletionAck,
     ControlCompletionStatus, PlaybackControl, PromptControlError, VIEWER_PROTOCOL_VERSION,
     ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
     viewer_event_kind_matches,
+};
+use crate::observability::emit_stderr_or_event;
+use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
+use crate::simulator::{
+    PersistError, RunnerMetrics, RuntimePerfHealth, RuntimePerfSnapshot, WorldEvent, WorldJournal,
+    WorldSnapshot, WorldTime,
 };
 
 #[derive(Debug, Clone)]
@@ -496,9 +496,7 @@ fn metrics_from_snapshot(snapshot: &WorldSnapshot) -> RunnerMetrics {
 }
 
 fn unsupported_viewer_runtime_perf_snapshot() -> RuntimePerfSnapshot {
-    let snapshot = RuntimePerfSnapshot::default();
-    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
-    snapshot
+    unsupported_runtime_perf_snapshot()
 }
 
 #[cfg(test)]

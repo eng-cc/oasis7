@@ -91,6 +91,17 @@ pub struct RuntimePerfSnapshot {
     pub bottleneck: RuntimePerfBottleneck,
 }
 
+/// Constructs the metrics snapshot used when runtime performance data is unavailable.
+///
+/// This intentionally preserves the default snapshot shape while making `Unknown`
+/// health explicit at the boundary that reports unsupported metrics.
+#[allow(dead_code)]
+pub(crate) fn unsupported_runtime_perf_snapshot() -> RuntimePerfSnapshot {
+    let snapshot = RuntimePerfSnapshot::default();
+    debug_assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
+    snapshot
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimePerfCollector {
     sample_window: usize,
@@ -449,5 +460,33 @@ mod tests {
         assert_eq!(snapshot.health, RuntimePerfHealth::Healthy);
         assert_eq!(snapshot.bottleneck, RuntimePerfBottleneck::ActionExecution);
         assert!(snapshot.llm_api.p95_ms >= 2500.0);
+    }
+
+    #[test]
+    fn default_window_preserves_percentiles_health_and_bottleneck() {
+        let mut collector = RuntimePerfCollector::default();
+        for sample_ms in 1..=DEFAULT_SAMPLE_WINDOW {
+            collector.record_tick_duration(Duration::from_millis(sample_ms as u64));
+        }
+
+        let snapshot = collector.snapshot();
+        assert_eq!(snapshot.sample_window, DEFAULT_SAMPLE_WINDOW);
+        assert_eq!(snapshot.tick.samples_total, DEFAULT_SAMPLE_WINDOW as u64);
+        assert_eq!(snapshot.tick.samples_window, DEFAULT_SAMPLE_WINDOW);
+        assert_eq!(snapshot.tick.p50_ms, 257.0);
+        assert_eq!(snapshot.tick.p95_ms, 486.0);
+        assert_eq!(snapshot.tick.p99_ms, 507.0);
+        assert_eq!(snapshot.health, RuntimePerfHealth::Critical);
+        assert_eq!(snapshot.bottleneck, RuntimePerfBottleneck::Tick);
+    }
+
+    #[test]
+    fn unsupported_snapshot_keeps_default_unavailable_semantics() {
+        let snapshot = unsupported_runtime_perf_snapshot();
+        assert_eq!(snapshot.sample_window, 0);
+        assert_eq!(snapshot.health, RuntimePerfHealth::Unknown);
+        assert_eq!(snapshot.bottleneck, RuntimePerfBottleneck::None);
+        assert!(!snapshot.tick.has_samples());
+        assert!(!snapshot.llm_api.has_samples());
     }
 }

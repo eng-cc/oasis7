@@ -1,33 +1,30 @@
 use super::*;
-use std::time::SystemTime;
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct NewapiBridgeStateCache {
     state_path: Option<String>,
-    modified_at: Option<SystemTime>,
-    payload: Option<Value>,
+    raw: Option<String>,
+    payload: Option<Arc<Value>>,
 }
 
 pub(super) fn load_cached_newapi_bridge_state(
     cache: &Arc<Mutex<NewapiBridgeStateCache>>,
-) -> Option<Value> {
+) -> Option<Arc<Value>> {
     let state_path = env::var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())?;
-    let metadata = fs::metadata(state_path.as_str()).ok()?;
-    let modified_at = metadata.modified().ok()?;
+    let raw = fs::read_to_string(state_path.as_str()).ok()?;
     let mut cache = cache.lock().expect("newapi_bridge_state_cache lock");
     if cache.state_path.as_deref() == Some(state_path.as_str())
-        && cache.modified_at == Some(modified_at)
+        && cache.raw.as_deref() == Some(raw.as_str())
     {
         return cache.payload.clone();
     }
-    let raw = fs::read_to_string(state_path.as_str()).ok()?;
-    let payload = serde_json::from_str::<Value>(raw.as_str()).ok()?;
+    let payload = Arc::new(serde_json::from_str::<Value>(raw.as_str()).ok()?);
     cache.state_path = Some(state_path);
-    cache.modified_at = Some(modified_at);
-    cache.payload = Some(payload.clone());
+    cache.raw = Some(raw);
+    cache.payload = Some(Arc::clone(&payload));
     Some(payload)
 }
 

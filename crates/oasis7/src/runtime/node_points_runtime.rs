@@ -256,6 +256,7 @@ pub struct NodePointsRuntimeCollector {
     heuristics: NodePointsRuntimeHeuristics,
     epoch_started_at_unix_ms: Option<i64>,
     cursors: BTreeMap<String, NodeCursor>,
+    latest_observed_at_unix_ms: i64,
     current_epoch: BTreeMap<String, NodeEpochAccumulator>,
 }
 
@@ -266,20 +267,29 @@ impl NodePointsRuntimeCollector {
             heuristics,
             epoch_started_at_unix_ms: None,
             cursors: BTreeMap::new(),
+            latest_observed_at_unix_ms: 0,
             current_epoch: BTreeMap::new(),
         }
     }
 
     pub fn from_snapshot(snapshot: NodePointsRuntimeCollectorSnapshot) -> Self {
+        let cursors: BTreeMap<_, _> = snapshot
+            .cursors
+            .into_iter()
+            .map(|(node_id, cursor)| (node_id, NodeCursor::from_snapshot(cursor)))
+            .collect();
+        let latest_observed_at_unix_ms = cursors
+            .values()
+            .map(|cursor| cursor.observed_at_unix_ms)
+            .max()
+            .unwrap_or(0);
+
         Self {
             ledger: NodePointsLedger::from_snapshot(snapshot.ledger),
             heuristics: snapshot.heuristics,
             epoch_started_at_unix_ms: snapshot.epoch_started_at_unix_ms,
-            cursors: snapshot
-                .cursors
-                .into_iter()
-                .map(|(node_id, cursor)| (node_id, NodeCursor::from_snapshot(cursor)))
-                .collect(),
+            cursors,
+            latest_observed_at_unix_ms,
             current_epoch: snapshot
                 .current_epoch
                 .into_iter()
@@ -406,6 +416,10 @@ impl NodePointsRuntimeCollector {
     }
 
     fn apply_observation(&mut self, observation: NodePointsRuntimeObservation) {
+        self.latest_observed_at_unix_ms = self
+            .latest_observed_at_unix_ms
+            .max(observation.observed_at_unix_ms);
+
         let accumulator = self
             .current_epoch
             .entry(observation.node_id.clone())
@@ -484,11 +498,7 @@ impl NodePointsRuntimeCollector {
     }
 
     fn latest_observed_at_unix_ms(&self) -> i64 {
-        self.cursors
-            .values()
-            .map(|cursor| cursor.observed_at_unix_ms)
-            .max()
-            .unwrap_or(0)
+        self.latest_observed_at_unix_ms
     }
 }
 
@@ -640,6 +650,81 @@ mod tests {
         assert_eq!(report.distributed_points, 100);
         assert_eq!(report.settlements.len(), 1);
         assert_eq!(report.settlements[0].node_id, "node-a");
+    }
+
+    #[test]
+    fn collector_caches_historical_latest_timestamp_across_out_of_order_observations() {
+        let mut collector = NodePointsRuntimeCollector::new(
+            NodePointsConfig::default(),
+            NodePointsRuntimeHeuristics::default(),
+        );
+        let first = NodePointsRuntimeObservation {
+            node_id: "node-a".to_string(),
+            role: NodeRole::Observer,
+            tick_count: 1,
+            running: true,
+            uptime_checks_passed: 1,
+            uptime_checks_total: 1,
+            storage_checks_passed: 0,
+            storage_checks_total: 0,
+            staked_storage_bytes: 0,
+            observed_at_unix_ms: 8_100,
+            has_error: false,
+            effective_storage_bytes: 128,
+            storage_challenge_proof_hint: None,
+        };
+
+        collector.observe(first.clone()).expect("first observe");
+        collector
+            .observe(NodePointsRuntimeObservation {
+                node_id: "node-b".to_string(),
+                observed_at_unix_ms: 2_000,
+                ..first.clone()
+            })
+            .expect("older node observe");
+        collector
+            .observe(NodePointsRuntimeObservation {
+                observed_at_unix_ms: 4_000,
+                ..first
+            })
+            .expect("out-of-order node observe");
+
+        assert_eq!(collector.latest_observed_at_unix_ms, 8_100);
+    }
+
+    #[test]
+    fn collector_restores_cached_latest_timestamp_from_snapshot_cursors() {
+        let mut collector = NodePointsRuntimeCollector::new(
+            NodePointsConfig::default(),
+            NodePointsRuntimeHeuristics::default(),
+        );
+        let first = NodePointsRuntimeObservation {
+            node_id: "node-a".to_string(),
+            role: NodeRole::Observer,
+            tick_count: 1,
+            running: true,
+            uptime_checks_passed: 1,
+            uptime_checks_total: 1,
+            storage_checks_passed: 0,
+            storage_checks_total: 0,
+            staked_storage_bytes: 0,
+            observed_at_unix_ms: 1_200,
+            has_error: false,
+            effective_storage_bytes: 128,
+            storage_challenge_proof_hint: None,
+        };
+        collector.observe(first.clone()).expect("first observe");
+        collector
+            .observe(NodePointsRuntimeObservation {
+                node_id: "node-b".to_string(),
+                observed_at_unix_ms: 9_500,
+                ..first
+            })
+            .expect("latest observe");
+
+        let restored = NodePointsRuntimeCollector::from_snapshot(collector.snapshot());
+
+        assert_eq!(restored.latest_observed_at_unix_ms, 9_500);
     }
 
     #[test]

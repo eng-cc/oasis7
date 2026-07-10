@@ -420,7 +420,7 @@ impl ProviderState {
         })
     }
 
-    fn load_newapi_bridge_state(&self) -> Option<Value> {
+    fn load_newapi_bridge_state(&self) -> Option<Arc<Value>> {
         load_cached_newapi_bridge_state(&self.newapi_bridge_state_cache)
     }
 
