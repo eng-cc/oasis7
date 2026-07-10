@@ -48,12 +48,6 @@ const knownLineDebt = new Map(Object.entries({
     reason: "bounded World Focus visual/a11y work retains the Pixel World host's existing runtime bridge composition and visual fixture surface",
     nextTrigger: "next Pixel World host behavior change extracts a named widget/service boundary",
   },
-  "crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js": {
-    maxLines: 1304,
-    owner: "viewer_engineer",
-    reason: "semantic feedback display-model module sits just over the production source soft threshold",
-    nextTrigger: "next semantic feedback expansion should split by feedback family or shared formatting helper",
-  },
 }));
 
 function repoRelative(path) {
