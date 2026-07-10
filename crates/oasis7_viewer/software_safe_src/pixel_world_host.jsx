@@ -1618,12 +1618,16 @@ export function PixelWorldHost(props) {
             </div>
           </div>
           <div class="pixel-world-focus-entry">
+            <div id="pixel-world-focus-entry-hint" class="pixel-world-focus-entry__hint">
+              {tr(locale(), "拖动、缩放并检查世界", "Pan, zoom, and inspect the world")}
+            </div>
             <button
               type="button"
               class="pixel-world-focus-entry__button"
               disabled={!renderState()}
               onClick={enterFocusMode}
               aria-pressed={focusMode() ? "true" : "false"}
+              aria-describedby="pixel-world-focus-entry-hint"
             >
               {tr(locale(), "进入沉浸模式", "Enter World Focus")}
             </button>

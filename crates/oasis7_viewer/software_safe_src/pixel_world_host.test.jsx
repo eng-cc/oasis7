@@ -737,7 +737,11 @@ describe("pixel world host", () => {
     expect(host).toHaveAttribute("data-world-focus", "false");
     expect(screen.queryByText("World Focus")).not.toBeInTheDocument();
 
-    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    const worldFocusButton = screen.getByRole("button", { name: "Enter World Focus" });
+    expect(screen.getByText("Pan, zoom, and inspect the world")).toBeInTheDocument();
+    expect(worldFocusButton).toHaveAccessibleDescription("Pan, zoom, and inspect the world");
+
+    worldFocusButton.click();
 
     await waitFor(() => {
       expect(host).toHaveAttribute("data-world-focus", "true");

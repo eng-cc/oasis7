@@ -795,7 +795,16 @@
       }
       .pixel-world-focus-entry {
         display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
         justify-content: flex-end;
+      }
+      .pixel-world-focus-entry__hint {
+        color: var(--text-muted);
+        font-size: 11px;
+        line-height: 1.2;
+        text-align: right;
       }
       .pixel-world-focus-entry__button {
         min-height: 38px;
