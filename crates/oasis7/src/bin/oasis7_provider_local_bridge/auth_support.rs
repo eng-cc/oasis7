@@ -5,12 +5,12 @@ use std::time::SystemTime;
 pub(super) struct NewapiBridgeStateCache {
     state_path: Option<String>,
     modified_at: Option<SystemTime>,
-    payload: Option<Value>,
+    payload: Option<Arc<Value>>,
 }
 
 pub(super) fn load_cached_newapi_bridge_state(
     cache: &Arc<Mutex<NewapiBridgeStateCache>>,
-) -> Option<Value> {
+) -> Option<Arc<Value>> {
     let state_path = env::var("OASIS7_REMOTE_LLM_NEWAPI_BRIDGE_STATE_PATH")
         .ok()
         .map(|value| value.trim().to_string())
@@ -24,10 +24,10 @@ pub(super) fn load_cached_newapi_bridge_state(
         return cache.payload.clone();
     }
     let raw = fs::read_to_string(state_path.as_str()).ok()?;
-    let payload = serde_json::from_str::<Value>(raw.as_str()).ok()?;
+    let payload = Arc::new(serde_json::from_str::<Value>(raw.as_str()).ok()?);
     cache.state_path = Some(state_path);
     cache.modified_at = Some(modified_at);
-    cache.payload = Some(payload.clone());
+    cache.payload = Some(Arc::clone(&payload));
     Some(payload)
 }
 
