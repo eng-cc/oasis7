@@ -3,6 +3,7 @@ import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
+import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import {
   DEFAULT_WS_ADDR,
@@ -76,9 +77,9 @@ const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
 const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 30000;
 const SEMANTIC_ACTION_OVERALL_TIMEOUT_MS = 45000;
 const AGENT_CHAT_OVERALL_TIMEOUT_MS = resolveAgentChatOverallTimeoutMs();
+const LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.viewer.localTestPlayerSession.v1";
 const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
-const LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.viewer.localTestPlayerSession.v1";
 const STARTER_AGENT_ID = "starter-agent-0";
 const LOCAL_TEST_PLAYER_ID_PREFIX = "local-test-player-";
 let localTestStarterRebindAttemptKey = null;
@@ -273,6 +274,25 @@ function initialWsUrl() {
   const params = getSearchParams();
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
 }
+
+const {
+  chatHistoryStorageKey,
+  hydrateChatHistoryFromStorage,
+  normalizeChatHistoryEntry,
+  persistChatHistory,
+  persistLocalTestPlayerSession,
+  resolveStoredLocalTestPlayerSession,
+  setChatHistory,
+} = createViewerBrowserPersistenceModule({
+  chatHistoryLimit: CHAT_HISTORY_LIMIT,
+  chatHistoryStoragePrefix: CHAT_HISTORY_STORAGE_PREFIX,
+  clone,
+  initialWsUrl,
+  localTestPlayerIdPrefix: LOCAL_TEST_PLAYER_ID_PREFIX,
+  localTestPlayerSessionStoragePrefix: LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX,
+  state,
+  windowRef: window,
+});
 
 function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
@@ -1342,181 +1362,6 @@ function addRecentEvent(event) {
   state.recentEvents = state.recentEvents.slice(0, MAX_EVENTS);
   state.eventCount = state.recentEvents.length;
   state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
-}
-
-function storageSafe() {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return null;
-    }
-    return window.localStorage;
-  } catch (_) {
-    return null;
-  }
-}
-
-function chatHistoryStorageKey() {
-  const worldId = state.worldId || state.snapshot?.world_id || state.snapshot?.worldId || null;
-  if (!worldId) {
-    return null;
-  }
-  const wsUrl = state.wsUrl || initialWsUrl();
-  return `${CHAT_HISTORY_STORAGE_PREFIX}:${encodeURIComponent(String(worldId))}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
-}
-
-function localTestPlayerSessionStorageKey() {
-  const wsUrl = state.wsUrl || initialWsUrl();
-  return `${LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
-}
-
-function persistLocalTestPlayerSession(auth) {
-  if (!auth?.available || auth.source !== "local_test_api_ephemeral" || !auth.playerId) {
-    return;
-  }
-  const storage = storageSafe();
-  if (!storage) {
-    return;
-  }
-  try {
-    storage.setItem(
-      localTestPlayerSessionStorageKey(),
-      JSON.stringify({
-        playerId: auth.playerId,
-        deviceSessionId: auth.deviceSessionId || auth.playerId,
-        publicKey: auth.publicKey || null,
-        privateKey: auth.privateKey || null,
-        issuedAtUnixMs: auth.issuedAtUnixMs || Date.now(),
-      }),
-    );
-  } catch (_) {
-  }
-}
-
-function resolveStoredLocalTestPlayerSession() {
-  const storage = storageSafe();
-  if (!storage) {
-    return null;
-  }
-  try {
-    const raw = storage.getItem(localTestPlayerSessionStorageKey());
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    const playerId = String(parsed?.playerId || "").trim();
-    const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
-    const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
-    if (!playerId.startsWith(LOCAL_TEST_PLAYER_ID_PREFIX) || !publicKey || !privateKey) {
-      storage.removeItem(localTestPlayerSessionStorageKey());
-      return null;
-    }
-    return {
-      available: true,
-      hostedAccountId: null,
-      playerId,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: String(parsed?.deviceSessionId || parsed?.device_session_id || playerId).trim() || playerId,
-      publicKey,
-      privateKey,
-      releaseToken: null,
-      error: null,
-      revokeReason: null,
-      revokedBy: null,
-      source: "local_test_api_ephemeral",
-      registrationStatus: "issued",
-      sessionEpoch: null,
-      issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? Date.now() : Number(parsed.issuedAtUnixMs),
-      recoveryErrorCode: null,
-      recoveryErrorMessage: null,
-      issueInFlight: false,
-      syncInFlight: false,
-      runtimeStatus: "issued",
-      boundAgentId: null,
-      pendingRequestedAgentId: null,
-      pendingForceRebind: false,
-      rebindNotice: null,
-    };
-  } catch (_) {
-    try {
-      storage.removeItem(localTestPlayerSessionStorageKey());
-    } catch (_) {
-    }
-    return null;
-  }
-}
-
-function normalizeChatHistoryEntry(entry) {
-  if (!entry || typeof entry !== "object") {
-    return null;
-  }
-  const message = String(entry.message || "").trim();
-  if (!message) {
-    return null;
-  }
-  return {
-    id: entry.id || `${entry.source || "chat"}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    source: entry.source || "event",
-    agentId: entry.agentId || null,
-    locationId: entry.locationId || null,
-    message,
-    tick: Number(entry.tick || 0),
-    speaker: entry.speaker || null,
-    playerId: entry.playerId || null,
-    targetAgentId: entry.targetAgentId || null,
-    intentSeq: entry.intentSeq || null,
-    code: entry.code || null,
-    response: entry.response ? clone(entry.response) : null,
-  };
-}
-
-function setChatHistory(entries) {
-  const seen = new Set();
-  const next = [];
-  for (const raw of entries || []) {
-    const entry = normalizeChatHistoryEntry(raw);
-    if (!entry || seen.has(entry.id)) {
-      continue;
-    }
-    seen.add(entry.id);
-    next.push(entry);
-    if (next.length >= CHAT_HISTORY_LIMIT) {
-      break;
-    }
-  }
-  state.chatHistory = next;
-}
-
-function persistChatHistory() {
-  const storage = storageSafe();
-  const key = chatHistoryStorageKey();
-  if (!storage || !key) {
-    return;
-  }
-  try {
-    storage.setItem(key, JSON.stringify(state.chatHistory.slice(0, CHAT_HISTORY_LIMIT)));
-  } catch (_) {
-  }
-}
-
-function hydrateChatHistoryFromStorage() {
-  const storage = storageSafe();
-  const key = chatHistoryStorageKey();
-  if (!storage || !key) {
-    return;
-  }
-  try {
-    const raw = storage.getItem(key);
-    if (!raw) {
-      return;
-    }
-    const stored = JSON.parse(raw);
-    if (!Array.isArray(stored)) {
-      return;
-    }
-    setChatHistory([...(state.chatHistory || []), ...stored]);
-  } catch (_) {
-  }
 }
 
 function handleSnapshot(snapshot) {

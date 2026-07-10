@@ -25,7 +25,7 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "a genuinely subsequent suitable inline-style or document-shell change, outside this bounded World Focus visual/a11y/layout change, extracts style ownership",
   },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
-    maxLines: 4583,
+    maxLines: 4424,
     owner: "viewer_engineer",
     reason: "legacy facade burndown is already tracked as viewer-legacy-core-facade-burndown-next-slice",
     nextTrigger: "next legacy_core behavior change must extract one coherent boundary or record a narrower exemption",
