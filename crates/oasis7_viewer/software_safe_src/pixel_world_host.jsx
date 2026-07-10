@@ -1038,18 +1038,18 @@ function PixelWorldFocusHud(props) {
         </div>
         <div class="pixel-world-focus-controls" aria-label={tr(props.locale(), "沉浸模式控制", "World focus controls")}>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
-            {tr(props.locale(), "命令", "Command")}
+            {tr(props.locale(), "命令与目标", "Command & Target")}
           </button>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>
-            {tr(props.locale(), "诊断", "Diagnostics")}
+            {tr(props.locale(), "世界状态", "World Status")}
           </button>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onToggleMaximized}>
             {props.maximized()
-              ? tr(props.locale(), "退出最大化", "Minimize")
+              ? tr(props.locale(), "还原布局", "Restore Layout")
               : tr(props.locale(), "最大化", "Maximize")}
           </button>
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>
-            {tr(props.locale(), "退出", "Exit")}
+            {tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}
           </button>
         </div>
       </div>

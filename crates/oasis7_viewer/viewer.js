@@ -7939,16 +7939,16 @@ function PixelWorldFocusHud(props) {
       insert(_el$74, () => surface().action_receipt.title);
       insert(_el$75, () => surface().action_receipt.confidence);
       addEventListener(_el$77, "click", props.onOpenCommand);
-      insert(_el$77, () => tr$1(props.locale(), "命令", "Command"));
+      insert(_el$77, () => tr$1(props.locale(), "命令与目标", "Command & Target"));
       addEventListener(_el$78, "click", props.onOpenDiagnostics);
-      insert(_el$78, () => tr$1(props.locale(), "诊断", "Diagnostics"));
+      insert(_el$78, () => tr$1(props.locale(), "世界状态", "World Status"));
       addEventListener(_el$79, "click", props.onToggleMaximized);
       insert(_el$79, (() => {
         var _c$5 = memo(() => !!props.maximized());
-        return () => _c$5() ? tr$1(props.locale(), "退出最大化", "Minimize") : tr$1(props.locale(), "最大化", "Maximize");
+        return () => _c$5() ? tr$1(props.locale(), "还原布局", "Restore Layout") : tr$1(props.locale(), "最大化", "Maximize");
       })());
       addEventListener(_el$80, "click", props.onExit);
-      insert(_el$80, () => tr$1(props.locale(), "退出", "Exit"));
+      insert(_el$80, () => tr$1(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc"));
       createRenderEffect((_p$) => {
         var _v$38 = surface().blocker.label ? "true" : "false", _v$39 = surface().blocker.label ? "critical" : "clear", _v$40 = surface().action_receipt.confidence, _v$41 = surface().action_receipt.present ? "receipt" : "waiting", _v$42 = tr$1(props.locale(), "沉浸模式控制", "World focus controls");
         _v$38 !== _p$.e && setAttribute(_el$69, "data-blocker-present", _p$.e = _v$38);

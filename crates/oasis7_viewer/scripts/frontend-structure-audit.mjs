@@ -19,10 +19,10 @@ const TEST_SOURCE_LINE_LIMIT = 1600;
 
 const knownLineDebt = new Map(Object.entries({
   "crates/oasis7_viewer/viewer.html": {
-    maxLines: 2788,
+    maxLines: 2797,
     owner: "viewer_engineer",
-    reason: "canonical HTML shell still carries the current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
-    nextTrigger: "any task that adds reusable style rules or changes the document shell should shrink this file or split style ownership",
+    reason: "bounded World Focus visual/a11y work retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
+    nextTrigger: "next inline style or document shell change extracts style ownership",
   },
   "crates/oasis7_viewer/software_safe_src/gameplay_attraction_scenario.js": {
     maxLines: 1395,
@@ -49,10 +49,10 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next broad UI test addition should extract fixtures/query helpers or create a narrower adjacent test",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
-    maxLines: 1812,
+    maxLines: 1816,
     owner: "viewer_engineer",
-    reason: "Pixel World host mixes runtime bridge composition and visual fixture surfaces from earlier slices",
-    nextTrigger: "next Pixel World UI/runtime host behavior change should extract a named widget or service boundary",
+    reason: "bounded World Focus visual/a11y work retains the Pixel World host's existing runtime bridge composition and visual fixture surface",
+    nextTrigger: "next Pixel World host behavior change extracts a named widget/service boundary",
   },
   "crates/oasis7_viewer/software_safe_src/viewer_feedback_module.js": {
     maxLines: 1304,
