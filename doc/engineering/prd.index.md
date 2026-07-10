@@ -10,11 +10,8 @@
 - 模块标准执行入口：`doc/engineering/project.md`
 - 文档治理专题入口：`doc/engineering/doc-governance/README.md`
 
-## 先按治理问题分流
-- 新文档落位、后缀职责、模块 README 边界：先读 `doc/engineering/doc-governance/doc-structure-standard.design.md`
-- 默认阅读面减重、根入口/模块入口职责：先读 `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md`
-- 文档存量、热点路径、近限文件与维护成本：先读 `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md`
-- 已立项的热点路径治理（Viewer、p2p、testing evidence、readme）：先读 `doc/engineering/doc-governance/README.md` 再下钻具体专题
+## 索引边界
+- 本页只负责工程专题的文件级精确检索与三件套可达性；按治理问题分流统一从 `doc/engineering/doc-governance/README.md` 开始。
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
