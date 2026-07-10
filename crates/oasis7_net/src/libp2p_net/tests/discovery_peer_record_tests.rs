@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::to_canonical_cbor;
 
 #[test]
 fn routing_update_defers_bootstrap_peer_record_until_connection_exists() {
@@ -714,7 +715,7 @@ fn clear_disconnected_peer_state_removes_peer_record_cooldowns() {
 #[test]
 fn cached_peer_record_request_handler_reports_not_found_on_cache_miss() {
     let request = NetworkRequest {
-        protocol: super::super::RR_GET_CACHED_PEER_RECORD.to_string(),
+        protocol: super::super::discovery::RR_GET_CACHED_PEER_RECORD.to_string(),
         payload: PeerId::random().to_string().into_bytes(),
     };
     let handlers = HashMap::new();

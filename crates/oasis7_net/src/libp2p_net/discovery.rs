@@ -34,6 +34,10 @@ use super::transport_paths::{
 use super::utils::push_bounded_string_with_keyed_cooldown;
 use super::{Handler, push_bounded_clone};
 
+const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
+pub(super) const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
+const RR_GET_CACHED_DISCOVERY_PEERS: &str = "/aw/rr/1.0.0/get_cached_discovery_peers";
+
 pub(super) enum PendingPeerRecordRequest {
     ConnectedPeerRecord {
         peer_id: PeerId,
@@ -51,9 +55,9 @@ pub(super) enum PendingPeerRecordRequest {
 impl PendingPeerRecordRequest {
     pub(super) fn protocol_label(&self) -> &'static str {
         match self {
-            Self::ConnectedPeerRecord { .. } => super::RR_GET_LOCAL_PEER_RECORD,
-            Self::CachedPeerRecord { .. } => super::RR_GET_CACHED_PEER_RECORD,
-            Self::CachedDiscoveryPeers { .. } => super::RR_GET_CACHED_DISCOVERY_PEERS,
+            Self::ConnectedPeerRecord { .. } => RR_GET_LOCAL_PEER_RECORD,
+            Self::CachedPeerRecord { .. } => RR_GET_CACHED_PEER_RECORD,
+            Self::CachedDiscoveryPeers { .. } => RR_GET_CACHED_DISCOVERY_PEERS,
         }
     }
 }
@@ -339,11 +343,11 @@ pub(super) fn maybe_request_connected_peer_record(
     {
         return false;
     }
-    record_request_outbound(traffic_metrics, super::RR_GET_LOCAL_PEER_RECORD, 0);
+    record_request_outbound(traffic_metrics, RR_GET_LOCAL_PEER_RECORD, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &peer_id,
         NetworkRequest {
-            protocol: super::RR_GET_LOCAL_PEER_RECORD.to_string(),
+            protocol: RR_GET_LOCAL_PEER_RECORD.to_string(),
             payload: Vec::new(),
         },
     );
@@ -381,13 +385,13 @@ fn request_cached_peer_record_via(
     }
     record_request_outbound(
         traffic_metrics,
-        super::RR_GET_CACHED_PEER_RECORD,
+        RR_GET_CACHED_PEER_RECORD,
         peer_id.to_string().len(),
     );
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &ask_peer,
         NetworkRequest {
-            protocol: super::RR_GET_CACHED_PEER_RECORD.to_string(),
+            protocol: RR_GET_CACHED_PEER_RECORD.to_string(),
             payload: peer_id.to_string().into_bytes(),
         },
     );
@@ -472,11 +476,11 @@ pub(super) fn maybe_request_cached_discovery_peers(
     {
         return false;
     }
-    record_request_outbound(traffic_metrics, super::RR_GET_CACHED_DISCOVERY_PEERS, 0);
+    record_request_outbound(traffic_metrics, RR_GET_CACHED_DISCOVERY_PEERS, 0);
     let request_id = swarm.behaviour_mut().request_response.send_request(
         &peer_id,
         NetworkRequest {
-            protocol: super::RR_GET_CACHED_DISCOVERY_PEERS.to_string(),
+            protocol: RR_GET_CACHED_DISCOVERY_PEERS.to_string(),
             payload: Vec::new(),
         },
     );
@@ -631,10 +635,10 @@ pub(super) fn handle_request_response_request(
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
 ) -> Result<Vec<u8>, WorldError> {
     match request.protocol.as_str() {
-        super::RR_GET_LOCAL_PEER_RECORD => {
+        RR_GET_LOCAL_PEER_RECORD => {
             let Some(template) = peer_record_template else {
                 return Err(WorldError::NetworkProtocolUnavailable {
-                    protocol: super::RR_GET_LOCAL_PEER_RECORD.to_string(),
+                    protocol: RR_GET_LOCAL_PEER_RECORD.to_string(),
                 });
             };
             let record = build_configured_peer_record(
@@ -646,7 +650,7 @@ pub(super) fn handle_request_response_request(
             )?;
             to_canonical_cbor(&record)
         }
-        super::RR_GET_CACHED_PEER_RECORD => {
+        RR_GET_CACHED_PEER_RECORD => {
             let peer_id = String::from_utf8(request.payload.clone())
                 .map_err(|_| WorldError::NetworkProtocolUnavailable {
                     protocol: "cached peer record payload must be utf-8".to_string(),
@@ -664,7 +668,7 @@ pub(super) fn handle_request_response_request(
             })?;
             to_canonical_cbor(record)
         }
-        super::RR_GET_CACHED_DISCOVERY_PEERS => {
+        RR_GET_CACHED_DISCOVERY_PEERS => {
             let peers: Vec<String> = discovered_peer_records
                 .values()
                 .filter(|record| {

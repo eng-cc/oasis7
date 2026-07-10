@@ -11,6 +11,7 @@ use oasis7_proto::distributed_dht::MembershipDirectorySnapshot;
 use super::Command;
 
 const RECENT_VALUE_PRUNE_INTERVAL_MS: i64 = 1_000;
+pub(super) const LIFECYCLE_EVENT_ERROR_COOLDOWN_MS: i64 = 5_000;
 
 pub(super) fn decode_world_head(bytes: &[u8]) -> Result<WorldHeadAnnounce, WorldError> {
     Ok(serde_cbor::from_slice(bytes)?)
