@@ -7,6 +7,7 @@
 - 想看当前执行任务、最新完成项与后续活跃动作：`doc/readme/project.md`
 - 想按子域或文件名继续下钻，而不是从长名单里逐条找：`doc/readme/prd.index.md`
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication / Moltbook / limited preview 与 reward / 小红书 / 公开定位分流：`doc/readme/governance/README.md`
+- 想先理解 README 与实现/流程缺口的主从关系，再按具体能力下钻：`doc/readme/gap/README.md`
 - 想追溯 README production 收口、历史基线或受台账约束的 production 素材：`doc/readme/production/README.md`
 
 ## 入口
@@ -21,6 +22,7 @@
 - `project.md` 是执行台账，适合确认当前活跃专题、收口状态与最新完成项。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按子域或文件名继续下钻，不是新读者的首读入口。
 - `governance/README.md` 是当前最高密度热点子域 `governance/` 的 canonical 入口，适合先按治理控制、release communication、Moltbook、limited preview/reward、小红书与公开定位分流，再进入具体专题。
+- `gap/README.md` 是 README gap 收口资料的本地入口；先区分总收口主文档、具体增量与历史追溯，避免把任一完成态 leaf 当成当前模块口径。
 - `production/README.md` 是 production 证据与素材的本地入口，区分当前可检索专题、历史压缩三件套和仍受模块台账约束的 dated 素材；它不替代模块 PRD 或项目台账。
 - liveops runbook / material / execution 文档按需进入，不再在模块 README 首屏平铺成长名单。
 
@@ -35,13 +37,13 @@
 - 承接 release communication、公告底稿、运营 runbook 与根 README 状态同步等对外口径闭环。
 
 ## 热点子域导航（2026-07-04 快照）
-- `governance/`（59）：release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口，已删除旧根 README 对齐和顶层链接检查一次性专题三件套。
-- `gap/`（27）：README 与实现/流程间差距闭环，适合 owner 排查口径或能力缺口时进入。
+- `governance/`（56 份 Markdown）：release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口，已删除旧根 README 对齐和顶层链接检查一次性专题三件套。
+- `gap/`（28，含本地入口）：README 与实现/流程间差距闭环；先从 `gap/README.md` 区分主收口、增量和历史追溯。
 - `production/`（16）：生产收口、阶段边界、readiness 主题及受台账约束的 production 素材；先从 `production/README.md` 分流。
 
 ## 高密度提示
-- `doc/readme/` 当前共有 106 份 Markdown 文件；这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
-- 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；进入 `governance/` 或 `production/` 时，优先先读各自的 `README.md` 再继续下钻；需要素材包、执行记录或历史专题时，再按具体子域进入。
+- `doc/readme/` 当前共有 105 份 Markdown 文件；这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
+- 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；进入 `governance/`、`gap/` 或 `production/` 时，优先先读各自的 `README.md` 再继续下钻；需要素材包、执行记录或历史专题时，再按具体子域进入。
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
