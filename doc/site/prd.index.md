@@ -13,15 +13,15 @@
 ## 首读分流
 - 想先回答 site 模块在管什么、哪些公开边界是当前真值：先读 `doc/site/prd.md`
 - 想先回答当前站点同步状态、最近完成项和是否还有未收口任务：先读 `doc/site/project.md`
-- 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/site-manual-static-docs.prd.md`
+- 想先看公开 docs hub 与手册镜像的 canonical 策略：先读 `doc/site/manual/README.md`
 - 想先看 GitHub Pages 下载链路与公开版本说明边界：先读 `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
 - 想先看“正式公告仍在准备中”的当前公开口径：先读 `doc/site/prd.md`、`doc/site/project.md`，再对照 `site/index.html` 与 `site/doc/cn/index.html`
 - 想继续按子域或文件名下钻：使用下方密度快照、热点子域导航与补充入口
 
 ## 密度快照（2026-07-08）
-- `doc/site/`：63 份文件
+- `doc/site/`：64 份文件
 - `doc/site/github-pages/`：50 份文件
-- `doc/site/manual/`：6 份文件
+- `doc/site/manual/`：7 份文件（含本地首读入口）
 - 模块根入口：5 份文件
 - `doc/site/` 正式专题三件套：54 份文件
 - 当前默认活跃专题三件套：54 份文件
@@ -32,15 +32,14 @@
 | --- | --- | --- |
 | `github-pages/` 当前默认活跃专题三件套 | 48 | 公开首页、下载链路、内容同步、SEO 与质量门禁 |
 | `github-pages/` 已退役删除旧专题 | 2 个专题 | 完成态公告占位与 CTA 微专题已删除；只从当前入口、GitHub task issue evidence comments 与 git history 追溯 |
-| `manual/` 正式专题三件套 | 6 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
+| `manual/` 路由入口与正式专题三件套 | 7 | 静态 docs hub、Viewer 手册镜像与 canonical/manual 映射 |
 | 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
 - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`：GitHub Pages 下载链路、发布资产和公开版本说明主入口。
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`：站点主叙事、docs hub 与 game-first 入口重定位主入口。
 - `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md`：Pages 质量门禁、同步与 SEO 约束主入口。
-- `doc/site/manual/site-manual-static-docs.prd.md`：静态 docs hub 与手册镜像策略主入口。
-- `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md`：Viewer 手册镜像内容迁移与 canonical/manual 映射补充入口。
+- `doc/site/manual/README.md`：静态 docs hub、Viewer 手册镜像与 canonical/manual 映射的首读入口；再分流到主专题或已完成增量记录。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部 github-pages 与 manual 专题表。
@@ -97,7 +96,7 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档，`doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` 为增量子文档。
+- ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档，`doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` 为增量子文档；默认阅读先经 `doc/site/manual/README.md` 分流。
 - ROUND-002 口径：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为 github-pages 主文档，其余 github-pages 专题为增量子文档。
 - GitHub Pages content-sync historical/provenance note：`doc/site/github-pages/github-pages-content-sync-2026-02-12.*` 与 `doc/site/github-pages/github-pages-content-sync-2026-02-25.*` 保留为已完成内容同步批次的来源线索，不再作为当前默认活跃专题清单入口；当前 site 真值以 `doc/site/prd.md`、`doc/site/project.md` 为准，github-pages 主文档以 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为准，下载/公开面按 `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` 与 `site/**` 现行文件追溯。后续若删除这些历史子文档，需先完成引用审计与 deletion-readiness slice。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入后续路径级治理。
