@@ -25,5 +25,5 @@
 - 趋势 / 季度复核 / 迁移 / 审读：统一从 `doc/engineering/prd.index.md` 下钻对应专题
 
 ## 共享约定
-- 模块根入口、专题落位、README 职责与 legacy redirect 约定统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
+- 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。
 - 共享规则与专题长表统一回收到 `doc/engineering/prd.index.md` 与各专题 `*.project.md`，本页只保留 landing 所需分流。
