@@ -4,11 +4,8 @@
 
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
-- 想先回答“自动化测试能不能证明游戏好玩、还缺哪层证据”：`doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
-- 想先回答“为什么 `L4` 现在只保留 `L4A synthetic`、`L4B embodied-agent` 两个正式内部层，并把内部真人试玩降为 `L4B` 可选佐证”：`doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
-- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先读 `testing-manual.md` 的 `L4A/L4B/L5` 章节，再执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
-- 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
-- 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
+- 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：`doc/testing/governance/README.md`
+- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 章节并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
 - 想用截图加模型视觉评审替代绝大部分人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，输出卡模板在 `doc/testing/templates/model-visual-review-card-template.md`
 - 想跑真实本地栈 + Playwright + 玩家 UI 操作流程，并把这些用例作为一个长期系列管理：`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
 - 想本地启动接入 formal `public_testnet` 大世界的 test 环境、本地 viewer/API、NewAPI quota bridge 与 LetAI provider bridge，并把 OC -> NewAPI/LetAI 充值链路纳入测试：`doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md`
@@ -48,7 +45,7 @@
 - `ci/`：CI、wasm determinism、tiering 与 gate 保护。
 - `longrun/`：长稳、chaos、soak 与在线稳定性。
 - `launcher/`：启动器链路测试、playtest 与配置自动接线。
-- `governance/`：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
+- `governance/`：质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻。
 - `templates/`：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
 - `performance/`：runtime / viewer 性能观测与方法学。
 - `manual/`：系统测试手册分册、Web UI 闭环 manual、Playwright 实跑系列入口。
