@@ -824,13 +824,6 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
-        if Self::replication_gap_sync_local_state_blocked(
-            self.last_replication_gap_sync_blocked_height,
-            self.last_replication_gap_sync_blocked_reason.as_deref(),
-            next_height,
-        ) {
-            return Ok(());
-        }
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
@@ -870,6 +863,13 @@ impl PosNodeEngine {
                     Err(err) => return Err(err),
                 }
             }
+        }
+        if Self::replication_gap_sync_local_state_blocked(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            next_height,
+        ) {
+            return Ok(());
         }
 
         let mut next_height = next_height;

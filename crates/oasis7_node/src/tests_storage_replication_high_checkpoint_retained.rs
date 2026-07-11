@@ -2,6 +2,7 @@ use super::*;
 
 struct CheckpointInstallingExecutionHook {
     installed: Vec<u64>,
+    sequential_commits: Vec<u64>,
 }
 
 impl NodeExecutionHook for CheckpointInstallingExecutionHook {
@@ -9,6 +10,7 @@ impl NodeExecutionHook for CheckpointInstallingExecutionHook {
         &mut self,
         context: NodeExecutionCommitContext,
     ) -> Result<NodeExecutionCommitResult, String> {
+        self.sequential_commits.push(context.height);
         Err(format!(
             "{} at height {}",
             EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, context.height
@@ -499,7 +501,7 @@ fn fetch_commit_handler_does_not_block_on_checkpoint_provider_publish() {
 }
 
 #[test]
-fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head() {
+fn observer_gap_sync_recovers_local_state_block_with_retained_checkpoint() {
     let world_id = "world-gap-sync-retained-window-below-head";
     let dir_a = temp_dir("gap-sync-retained-window-below-head-a");
     let dir_b = temp_dir("gap-sync-retained-window-below-head-b");
@@ -613,8 +615,14 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
             .expect("runtime b");
     let mut engine_b = PosNodeEngine::new(&config_b).expect("engine b");
     engine_b.network_committed_height = 300;
+    engine_b.last_replication_gap_sync_blocked_height = Some(1);
+    engine_b.last_replication_gap_sync_blocked_reason = Some(
+        "replication gap sync local state blocked: deterministic execution/state failure at height 1: execution driver peer mismatch"
+            .to_string(),
+    );
     let mut execution_hook = CheckpointInstallingExecutionHook {
         installed: Vec::new(),
+        sequential_commits: Vec::new(),
     };
 
     engine_b
@@ -628,6 +636,10 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         .expect("retained-window checkpoint gap sync");
 
     assert_eq!(execution_hook.installed, vec![64]);
+    assert!(
+        execution_hook.sequential_commits.is_empty(),
+        "deterministic local-state block must still prevent sequential replay"
+    );
     assert_eq!(engine_b.committed_height, 64);
     assert_eq!(engine_b.replication_persisted_height, 64);
     assert_eq!(engine_b.last_execution_height, 64);
@@ -636,6 +648,7 @@ fn observer_gap_sync_probes_retained_checkpoint_window_below_non_checkpoint_head
         Some(("exec-block-64", "exec-state-64"))
     );
     assert_eq!(engine_b.last_replication_gap_sync_blocked_height, None);
+    assert_eq!(engine_b.last_replication_gap_sync_blocked_reason, None);
     let provider_attempts = network_impl.provider_attempts();
     assert!(
         provider_attempts.iter().any(|providers| providers
