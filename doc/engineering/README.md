@@ -18,11 +18,10 @@
 
 ## 按主题进入
 - 文档治理、入口减重、存量维护成本、目录职责与 redirect 规则：统一从 `doc/engineering/doc-governance/README.md` 分流
-- 环境分层、测试/正式云上清单、testnet/mainnet 口径：先看 `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
-- 仓库健康手动巡检：先看 `doc/engineering/governance/repository-health-manual-inspection.runbook.md`
+- 环境分层、云上清单、仓库健康巡检、季度复核与已收口审计 follow-up：统一从 `doc/engineering/governance/README.md` 分流
 - Rust 体量治理：先看 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
 - `.pm` / self-evolution：当前 task truth 与 evidence sink 先看 `doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract`；repo-local memory / working_memory / stage-gate 对象背景再看 `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`，历史需求锚点保留为 `PRD-ENGINEERING-021`
-- 趋势 / 季度复核 / 迁移 / 审读：统一从 `doc/engineering/prd.index.md` 下钻对应专题
+- 历史迁移、审读记录与文件级专题检索：从 `doc/engineering/prd.index.md` 下钻；当前运行型工程治理资料从 `doc/engineering/governance/README.md` 下钻
 
 ## 共享约定
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。
