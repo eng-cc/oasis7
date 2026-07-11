@@ -6,7 +6,7 @@
 - 想先理解 P2P / 主链 / DistFS / 节点奖励的总边界：`doc/p2p/prd.md`
 - 想看当前活跃任务、阻断与最新完成项：`doc/p2p/project.md`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
-- 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md` 或 `doc/p2p/observer/README.md`，再进入具体专题。
+- 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md`、`doc/p2p/observer/README.md` 或 `doc/p2p/viewer-live/README.md`，再进入具体专题。
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - 想先看 hosted player entry / `hosted_public_join` 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`（legacy topic label: hosted world）
 - 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
@@ -27,7 +27,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted player access 的统一边界。
 - `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted access 相关任务的推进状态。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
-- `distfs/README.md` 与 `observer/README.md` 是 phase / 增量专题的折叠入口，适合先确认主文档，再按 delta 追溯。
+- `distfs/README.md`、`observer/README.md` 与 `viewer-live/README.md` 是专题簇的折叠入口，适合先确认现行主文档，再按 delta 或历史变更追溯。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
 - 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责 hosted player entry / hosted access 与会话鉴权（旧专题名保留作 trace，不表示多个玩家世界）；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
@@ -50,7 +50,7 @@
 - `observer/`：观察者同步模式与可观测性；默认先读 `observer/README.md`。
 - `blockchain/`：区块链与 P2PFS 硬化阶段。
 - `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案。
-- `viewer-live/`：viewer live 发行与开关策略。
+- `viewer-live/`：已完成的 Viewer LLM 默认值与显式 observer/debug 回退变更；默认先读 `viewer-live/README.md`。
 - `consensus/`：共识相关专题。
 - `distributed/`：分布式运行时专题。
 - `network/`：网络桥接专题。
@@ -63,7 +63,7 @@
 - `token/`：创世分配、签名授权、治理分发与流通边界。
 - `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
 - `distributed/`：分布式 runtime / consensus / hard split 路线。
-- `viewer-live/`：viewer-live 发行、开关与观察服务边界。
+- `viewer-live/`：已完成 CLI 变更的追溯入口；现行观察服务边界先读 `viewer-live/README.md`，再回链模块 PRD 与 Viewer 手册。
 - `consensus/`：共识实现与内建 wasm 身份口径。
 
 ## 当前 inventory 快照

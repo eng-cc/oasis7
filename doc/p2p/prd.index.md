@@ -27,7 +27,7 @@
 | `token/` | 创世分配、签名授权、治理分发与流通边界 |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
 | `distributed/` | 分布式 runtime / consensus / hard split 路线 |
-| `viewer-live/` | viewer-live 发行、开关与观察服务边界 |
+| `viewer-live/` | 已完成的 Viewer LLM 默认值与 observer/debug 回退变更；默认先读 `doc/p2p/viewer-live/README.md`，再按文件名追溯 |
 | `consensus/` | 共识实现与内建 wasm 身份口径 |
 
 ## 当前补充阅读面
@@ -44,7 +44,7 @@
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
-- `node/README.md`、`distfs/README.md` 与 `observer/README.md` 负责高密度热点子域的首读分流；完整长表继续由本页保留。
+- `node/README.md`、`distfs/README.md`、`observer/README.md` 与 `viewer-live/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义
@@ -67,6 +67,7 @@
 | `distfs/` self-healing | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | `distfs-self-healing-polling-loop-2026-02-23` 与 `distfs-self-healing-runtime-polling-wiring-2026-02-23` 仅作为增量入口 |
 | `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | `observer-sync-source-dht-mode` 仅作为 DHT 组合链路 delta |
 | `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 仅作为增量入口 |
+| `viewer-live/` CLI defaults | `doc/p2p/viewer-live/README.md` -> `doc/p2p/prd.md` | `oasis7-viewer-live-llm-default-on-2026-02-23` 与 `oasis7-viewer-live-no-llm-flag-2026-02-23` 均已完成，仅作为历史变更与审计追溯入口 |
 
 ## 完整专题检索清单（按文件名精确检索）
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
