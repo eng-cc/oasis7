@@ -1,6 +1,6 @@
 # engineering/doc-governance 专题入口
 
-本目录收拢 `doc/` 文档树组织、路径落位、入口减重与存量维护成本治理。读者应先从这里判断问题属于哪一类，再进入对应 PRD / design / project 三件套；不要把同一治理规则继续复制到模块 README 或零散专题里。
+本目录是 `doc/` 文档树治理的唯一上游分流入口，收拢文档组织、路径落位、入口减重与存量维护成本治理。读者应先从这里判断问题属于哪一类，再进入对应 PRD / design / project 三件套；不要把同一治理规则继续复制到模块 README 或零散专题里。
 
 ## 首读路径
 - 文档组织规则、后缀职责、模块 README 边界：`doc/engineering/doc-governance/doc-structure-standard.design.md`
@@ -21,5 +21,6 @@
 
 ## 维护规则
 - 本页只做专题导航和抽象分流，不承载完整治理规则正文。
+- 就文档树共享治理规则而言，上游 `doc/README.md` 与 `doc/engineering/README.md` 只链接本页；其他模块或专题导航按各自职责保留。具体规则、专题正文与执行状态必须从本页继续下钻，避免上游入口各自固定某个专题文件。
 - 新增 doc-governance 专题时，同批更新 `doc/engineering/prd.index.md`，并在本页补一行“按治理问题分流”。
 - 历史证据、旧审读轮次和任务过程仍保留在 GitHub task issue evidence comments、`doc/core/reviews/round-*` 与 git history；不要为减重而批量改写历史文件。
