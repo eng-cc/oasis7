@@ -5,9 +5,10 @@
 - 模块设计总览：`doc/engineering/design.md`
 - 模块标准执行入口：`doc/engineering/project.md`
 - 文档治理专题入口：`doc/engineering/doc-governance/README.md`
+- Rust 体量治理专题入口：`doc/engineering/rust-governance/README.md`
 
 ## 索引边界
-- 本页只负责工程专题的文件级精确检索与三件套可达性；按治理问题分流统一从 `doc/engineering/doc-governance/README.md` 开始。
+- 本页只负责工程专题的文件级精确检索与三件套可达性；文档树问题从 `doc/engineering/doc-governance/README.md` 开始，Rust 体量与结构切片问题从 `doc/engineering/rust-governance/README.md` 开始。
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
@@ -28,6 +29,7 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留完整三件套可达性，不再要求读者从长表里判断治理问题归属。
+- `doc/engineering/rust-governance/README.md` 是 Rust 体量治理簇级分流入口；本索引保留同名三件套的精确检索入口。
 - `engineering` 根目录默认只保留 `README.md / prd.md / design.md / project.md / prd.index.md` 五个模块入口；治理专题已分别下沉到 `doc-governance/`、`rust-governance/`、`governance/` 与 `self-evolution/`。其中 `doc-surface-area-governance` 负责默认阅读面，`doc-corpus-maintenance-governance` 负责入口减重后的存量维护成本，`world-simulator-viewer-path-governance`、`p2p-node-path-governance`、`testing-evidence-path-governance` 与 `readme-governance-path-governance` 分别负责当前四个热点子域的路径级治理；`agent-workflow-borrowing-governance` 负责将外部 agent workflow 方法论映射为 repo-owned adopted / rejected / deferred 治理结论，`skill-surface-replacement-governance` 负责冻结本地 skill inventory 的 keep / replace / retire / defer 边界。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
 
 ## 历史审计留痕
@@ -39,4 +41,4 @@
 - 2026-03 core release-candidate / next-round producer/QA/LiveOps 一次性 handoff 面与 release-candidate readiness / version / go-no-go 根目录三件套已退役删除；历史发布候选证据保留在 `doc/core/reviews/*` 与 git history，当前角色证据 sink 为 GitHub task issue evidence comments 与 pre-PR local role review packet；历史 `.pm` execution log 只作为迁移前追溯层。
 - 2026-03 self-evolution file-based PM project 面与历史 pointer PRD 已退役删除；`PRD-ENGINEERING-021` 历史锚点由 `file-based-self-evolution-management-2026-03-30.design.md` 的 object-model 背景承接，当前 task truth / evidence / reflection intake / PR-readiness 规则以 `doc/engineering/workflow/source-of-truth.md` 为准。
 - 2026-04 `devlog-history-compaction` 一次性专题三件套已退役删除；`doc/devlog/README.md` 保留 compact archive summary，当前任务执行证据以 GitHub task issue evidence comments、GitHub Project fields 与 workflow source-of-truth 为准。
-- 2026-02 oversized Rust file splitting round3 三件套已退役删除；当前 Rust 1200 行治理入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`，历史 round3 审读证据保留在 `doc/core/reviews/round-*` logs 与 git history。
+- 2026-02 oversized Rust file splitting round3 三件套已退役删除；当前 Rust 1200 行治理统一从 `doc/engineering/rust-governance/README.md` 分流，历史 round3 审读证据保留在 `doc/core/reviews/round-*` logs 与 git history。
