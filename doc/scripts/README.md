@@ -42,13 +42,13 @@
 - 承接脚本治理基线、文档门禁与运行约束收口。
 
 ## 主题文档
-- `precommit/`：提交前检查与门禁策略。
+- `precommit/`：提交前检查与门禁策略；先从 `doc/scripts/precommit/README.md` 按问题选择当前契约或修复流程。
 - `wasm/`：WASM 构建脚本与环境约束。
 - `governance/`：脚本分层、参数契约与 task/worktree 治理；先从 `doc/scripts/governance/README.md` 选择权威专题。
 
 ## 高频专题
 - 脚本治理、task worktree / PR 收口与隔离栈：`doc/scripts/governance/README.md`；历史稳定性趋势基线保留在 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
-- 其他高频入口：`doc/scripts/precommit/pre-commit.prd.md`
+- 想进入 pre-commit 本地门禁或失败修复专题：`doc/scripts/precommit/README.md`
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
