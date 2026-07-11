@@ -9,18 +9,20 @@
 - 模块设计总览：`doc/readme/design.md`
 - 模块标准执行入口：`doc/readme/project.md`
 - 当前热点子域入口：`doc/readme/governance/README.md`
+- production 证据与素材入口：`doc/readme/production/README.md`
 
 ## 首读分流
 - 想先回答 README 模块在管什么、哪些内容属于正式对外口径：先读 `doc/readme/prd.md`
 - 想先回答当前在推进什么、哪些治理或运营专题仍是 active：先读 `doc/readme/project.md`
 - 想先进入 `governance` 热点子域，并按治理控制 / release communication 模板 / Moltbook / limited preview 贡献奖励 / 小红书 / 公开定位分流：先读 `doc/readme/governance/README.md`
+- 想追溯 production 收口证据或判断 dated production 素材是否仍可删除：先读 `doc/readme/production/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-07-04）
 - `doc/readme/`：106 份 Markdown 文件
 - `doc/readme/governance/`：59 份 Markdown 文件
 - `doc/readme/gap/`：27 份文件
-- `doc/readme/production/`：15 份文件
+- `doc/readme/production/`：16 份文件
 - `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
 - 正式专题三件套：28 组
 - 当前默认活跃专题三件套：24 组
@@ -31,10 +33,11 @@
 | --- | --- | --- |
 | `governance/` | 59 | release communication 模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口；旧根 README 对齐和顶层链接检查一次性专题已删除 |
 | `gap/` | 27 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口 |
-| `production/` | 15 | 生产收口、阶段边界、readiness 与对外承诺约束 |
+| `production/` | 16 | 生产收口、阶段边界、readiness 与受台账约束的素材；先由 `production/README.md` 分流 |
 
 ## 活跃补充文档
 - `doc/readme/governance/README.md`：`governance/` 热点子域 landing page，按治理控制、release communication 模板、Moltbook、limited preview 贡献奖励、小红书与公开定位分流读者。
+- `doc/readme/production/README.md`：production 子域 landing page，按当前可检索专题、历史压缩三件套及仍受项目台账约束的素材分流；不会把历史收口证据误作当前执行入口。
 - `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`：面向第一次接触仓库读者的白皮书式项目总览，适合先理解“项目是什么、为什么存在、当前做到哪一步”，再下钻正式真值源。
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
