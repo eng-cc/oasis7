@@ -9,7 +9,7 @@
     - `doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`
     - `doc/scripts/governance/script-entry-layering-2026-03-11.design.md`
     - `doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
-    - `doc/scripts/governance/runtime-to-qa-task-scripts-002-entry-layering-2026-03-11.md`
+    - 已删除：一次性 runtime→QA handoff brief；持续规则收敛到上述三件套，路由见 `doc/scripts/governance/README.md`。
   - 验收命令 (`test_tier_required`):
     - `rg -n "ci-tests.sh|release-gate.sh|run-viewer-web.sh|site-link-check.sh" doc/scripts/governance/script-entry-layering-2026-03-11.prd.md doc/scripts/governance/script-entry-layering-2026-03-11.project.md`
     - `./scripts/doc-governance-check.sh`
@@ -18,7 +18,7 @@
     - `doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`
     - `doc/scripts/governance/script-parameter-contracts-2026-03-11.design.md`
     - `doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
-    - `doc/scripts/governance/runtime-to-qa-task-scripts-003-parameter-contracts-2026-03-11.md`
+    - 已删除：一次性 runtime→QA handoff brief；持续规则收敛到上述三件套，路由见 `doc/scripts/governance/README.md`。
   - 验收命令 (`test_tier_required`):
     - `rg -n "ci-tests.sh|release-gate.sh|build-game-launcher-bundle.sh|run-viewer-web.sh|site-link-check.sh|skip-|dry-run" doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md doc/scripts/governance/script-parameter-contracts-2026-03-11.project.md`
     - `./scripts/doc-governance-check.sh`

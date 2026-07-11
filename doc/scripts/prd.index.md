@@ -8,6 +8,7 @@
 - 模块 PRD：`doc/scripts/prd.md`
 - 模块设计总览：`doc/scripts/design.md`
 - 模块标准执行入口：`doc/scripts/project.md`
+- governance 专题路由：`doc/scripts/governance/README.md`
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
