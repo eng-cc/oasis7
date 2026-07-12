@@ -1,4 +1,5 @@
 use super::*;
+use oasis7_proto::distributed::{DistributedErrorCode, ErrorResponse};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -143,4 +144,69 @@ fn timed_out_slow_response_surfaces_as_retryable_transport_failure() {
             ..
         }
     ));
+}
+
+#[test]
+fn saturated_blob_queue_returns_a_retryable_overload_response() {
+    let server = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen addr")],
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "server listen",
+        Instant::now() + Duration::from_secs(5),
+        || !server.listening_addrs().is_empty(),
+    );
+    let server_addr = server
+        .listening_addrs()
+        .into_iter()
+        .next()
+        .expect("server address")
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+    server
+        .register_handler(
+            FETCH_BLOB,
+            Box::new(|_| {
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(b"blob".to_vec())
+            }),
+        )
+        .expect("register blob handler");
+    let client = Libp2pNetwork::new(Libp2pNetworkConfig {
+        bootstrap_peers: vec![server_addr],
+        request_response_timeout: Duration::from_secs(3),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "client connect",
+        Instant::now() + Duration::from_secs(5),
+        || client.connected_peers().contains(&server.peer_id()),
+    );
+
+    let mut requests = Vec::new();
+    for _ in 0..11 {
+        let client = client.clone();
+        let peer = server.peer_id();
+        requests.push(std::thread::spawn(move || {
+            client.request_to_peer(FETCH_BLOB, b"blob", peer)
+        }));
+    }
+    let responses: Vec<_> = requests
+        .into_iter()
+        .map(|request| request.join().expect("request thread"))
+        .collect();
+    let overloads: Vec<_> = responses
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|response| serde_cbor::from_slice::<ErrorResponse>(&response).ok())
+        .filter(|error| {
+            error.code == DistributedErrorCode::ErrNotAvailable
+                && error.retryable
+                && error.message.contains("response worker overloaded")
+        })
+        .collect();
+    assert!(
+        !overloads.is_empty(),
+        "a saturated requester must receive a retryable overload response"
+    );
 }

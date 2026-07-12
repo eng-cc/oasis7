@@ -288,7 +288,7 @@ impl Libp2pNetwork {
                 loop {
                     futures::select! {
                         completed = completed_response_rx.next().fuse() => if let Some(completed) = completed {
-                            response_workers.complete(completed, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, |channel, response| swarm.behaviour_mut().request_response.send_response(channel, response).is_ok(), &event_errors, max_error_messages);
+                            response_workers.complete(completed, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages);
                         },
                         command = command_rx.next().fuse() => {
                             match handle_command(
@@ -364,7 +364,12 @@ impl Libp2pNetwork {
                                                         request.payload.len(),
                                                     );
                                                     if let Some(handler) = handlers.get(&request.protocol).cloned() {
-                                                        response_workers.schedule(channel, request.protocol, peer, request.payload, now_ms(), handler, &event_errors, max_error_messages);
+                                                        if let Err(rejected) = response_workers.schedule(channel, request.protocol, peer, request.payload, now_ms(), handler) {
+                                                            let protocol = rejected.protocol;
+                                                            let peer = rejected.peer;
+                                                            response_workers.send_immediate(rejected.channel, protocol.as_str(), peer, Err(ResponseWorkers::overload_response()), &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
+                                                            push_bounded_clone(&event_errors, format!("libp2p response worker queue full protocol={protocol} peer={peer}"), max_error_messages, "lock errors");
+                                                        }
                                                         continue;
                                                     }
                                                     let reply = handle_request_response_request(
@@ -378,9 +383,7 @@ impl Libp2pNetwork {
                                                             .allow_loopback_external_addrs_for_testing,
                                                         &discovered_peer_records,
                                                     );
-                                                    response_workers.send_immediate(channel, request.protocol.as_str(), peer, reply, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, |channel, response| {
-                                                        swarm.behaviour_mut().request_response.send_response(channel, response).ok();
-                                                    });
+                                                    response_workers.send_immediate(channel, request.protocol.as_str(), peer, reply, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {

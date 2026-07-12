@@ -10,7 +10,7 @@ use super::error_mapping::error_response_from_world_error;
 
 const FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
 const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
-const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = 8 * 1024 * 1024;
+pub(super) const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = 8 * 1024 * 1024;
 
 #[derive(Default)]
 pub(super) struct FetchBlobResponseBudget {
