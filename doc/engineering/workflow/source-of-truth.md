@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.5**
+Version: **v1.9.6**
 Last Updated: **2026-07-12**
 
 ## 0. Purpose
@@ -77,9 +77,9 @@ never satisfy a live task.
 **PR creation gate.**
 
 An evidence-only commit may change HEAD but not the frozen implementation tree.
-When it changes HEAD, re-run final-head verification and review, then issue a
-new provenance packet; otherwise PR creation is forbidden. PR creation binds
-the attested PR head.
+When it changes HEAD, re-run final-head verification and review, then record a
+new review packet; otherwise PR creation is forbidden. PR creation binds the
+reviewed PR head.
 
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
@@ -419,7 +419,7 @@ taxonomy. Lifecycle transitions use only the five [canonical gates](#canonical-g
   commitments.
 
 The current path uses explicit TPM continuation. The future unattended
-executor is isolated in [Appendix A](#appendix-a-target-supervisor-contract).
+executor is limited by the [unattended invariants](#appendix-a-target-supervisor-contract).
 ## 4. Failure and Rollback Paths
 ### 4.1 Verification failure
 - Stop completion claim.
@@ -663,38 +663,12 @@ format a small workflow/docs packet but cannot replace role returns.
 comments remain the formal sink.
 
 <a id="appendix-a-target-supervisor-contract"></a>
-### Appendix A: Target production supervisor runtime contract
+### Appendix A: Unattended automation invariants
 
-This appendix specifies a future unattended executor. It is not an operator
-runbook and does not change the [current capability status](#capability-and-ownership).
+Future unattended automation does not change the current human-operated path:
 
-- The driver is a durable checkpoint, not a producer of remote facts,
-  professional evidence, approval, or merge authority.
-- Every remote mutation follows `intent -> action -> readback -> committed`.
-- Checkpoints use a path-scoped OS lock, lease token, monotonic revision,
-  atomic replacement, recovery generation, bounded retry, and `Retry-After`.
-- Each action has a stable ID, executable operation, typed inputs, receipt
-  schema, live validator, and required readback fields. Caller JSON, process
-  exit zero, generic echo, and local field assignment are never evidence.
-- Receipts are locators. An allowlisted validator rebuilds authority from the
-  bound GitHub task, worktree, repository, PR, head, epoch, and evidence node.
-- Missing production machinery or dispatch attestation is
-  `capability_blocked`; an available trusted external dependency with an exact
-  resume condition is `external_wait`; identity mismatch is `failed` and
-  requires escalation to authorize a new epoch or rebootstrap.
-- Professional stages require typed dispatch plus an attested, digest-bound
-  role return. The controller never manufactures professional judgment.
-- PR readiness comes only from fresh live GitHub readback and the canonical PR
-  gate. Caller-authored holds or dispositions cannot enable merge.
-- Every mutating resume requires revision-and-lease CAS. Expired-lease takeover
-  is explicit and policy checked; recursive driver locking is forbidden.
-- A durable schedule is not a wakeup. Unattended progress requires acknowledged
-  scheduler delivery followed by exactly one ID-bound consumer transition.
-- Bootstrap hydrates task identity and resume authority from canonical GitHub
-  readback. Operators cannot repair authority by editing checkpoint JSON.
-- One task, task owner role, canonical worktree, branch, and PR chain remain
-  invariant across retries and crashes. The
-  [terminal order](#canonical-state-machine) remains mandatory; active holds
-  and incomplete evidence fail closed.
-- Production code cannot read caller-selected test adapters or fixture-mode
-  environment variables. Fixtures remain isolated test executables.
+- it must preserve canonical task/worktree/head/PR identity and lifecycle order;
+- it must derive remote facts and mutation success from trusted readback;
+- it must not manufacture professional judgment or accept caller-authored,
+  self-signed, or fixture evidence as runtime authority; and
+- missing required unattended machinery is `capability_blocked`.

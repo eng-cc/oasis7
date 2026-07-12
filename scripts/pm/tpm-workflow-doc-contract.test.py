@@ -302,27 +302,27 @@ class WorkflowDocumentationContract(unittest.TestCase):
         states = self.section("State, gate, and PM mapping")
         self.assertIn("recorded action authority", states.lower())
 
-    def test_evidence_only_commit_head_identity_and_reattestation_are_explicit(self) -> None:
+    def test_evidence_only_commit_head_identity_and_rereview_are_explicit(self) -> None:
         gates = self.section("Ready and Done")
         packet = self.section("Pre-PR review packet")
         finishing = FINISHING.read_text(encoding="utf-8")
         combined = "\n".join((gates, packet, finishing))
-        for term in ("final implementation head", "attested pr head", "evidence-only commit"):
+        for term in ("final implementation head", "reviewed pr head", "evidence-only commit"):
             self.assertIn(term, combined.lower())
         self.assertRegex(
             combined,
             r"(?is)(HEAD changes?|changes? HEAD).{0,300}(new|renew|repeat|re-run|reissue).{0,200}(packet|verify|verification).{0,200}review",
         )
 
-    def test_finishing_requires_final_head_reattestation_after_any_evidence_commit(self) -> None:
+    def test_finishing_requires_final_head_rereview_after_any_evidence_commit(self) -> None:
         finishing = FINISHING.read_text(encoding="utf-8")
         self.assertRegex(
             finishing,
             r"(?is)evidence-only.{0,240}(changes? HEAD|HEAD change).{0,240}"
             r"(re-run|repeat|new).{0,160}(verification|verify).{0,160}review.{0,160}"
-            r"(new|reissue|renew).{0,100}(packet|attestation)",
+            r"(new|reissue|renew).{0,100}packet",
         )
-        self.assertRegex(finishing, r"(?is)(final|attested) PR head")
+        self.assertRegex(finishing, r"(?is)(final|reviewed) PR head")
 
     def test_human_pre_pr_is_not_blocked_by_unattended_attestation(self) -> None:
         status = self.section("Capability status")
@@ -585,7 +585,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertNotIn("Uninterrupted lifecycle controller contract", section_three)
         self.assertEqual(
             1,
-            len(re.findall(r"(?im)^###\s+.*production supervisor runtime contract\s*$", self.text)),
+            len(re.findall(r"(?im)^###\s+Appendix A: Unattended automation invariants\s*$", self.text)),
         )
 
     def test_phase_diagram_freeze_is_not_commit_and_reaches_post_merge_done(self) -> None:
@@ -623,11 +623,11 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertRegex(normalized, r"task owner role.{0,120}(result|outcome|implementation|judgment)")
         self.assertNotRegex(normalized, r"tpm.{0,80}(professional|implementation|verification) owner")
 
-    def test_future_controller_design_is_one_short_appendix(self) -> None:
-        headings = re.findall(r"(?im)^##+\s+.*(?:future|target).*supervisor.*$", self.text)
-        self.assertEqual(1, len(headings), headings)
-        appendix = self.section(re.sub(r"^##+\s+", "", headings[0], flags=re.I))
-        self.assertLessEqual(len(appendix.splitlines()), 80, "future design obscures current runbook")
+    def test_unattended_invariants_are_minimal(self) -> None:
+        appendix = self.section("Appendix A: Unattended automation invariants")
+        self.assertLessEqual(len(appendix.splitlines()), 12, "hypothetical design obscures current runbook")
+        for detail in ("CAS", "wake", "lease", "Retry-After", "scheduler"):
+            self.assertNotIn(detail, appendix)
 
     def test_secondary_policy_is_thin_not_link_only(self) -> None:
         policy = self.section("Documentation policy")

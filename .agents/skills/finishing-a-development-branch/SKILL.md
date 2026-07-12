@@ -26,7 +26,8 @@ Use after implementation and its required verification are complete.
    gate](../../../doc/engineering/workflow/source-of-truth.md#pr-creation-gate):
    re-run final-head verification and review, then issue a new packet
    for the final PR head;
-   otherwise do not create the PR.
+   otherwise do not create the PR. The resulting packet binds the reviewed PR
+   head.
 5. Record Pre-PR Ready with the adapter:
 
 ```bash

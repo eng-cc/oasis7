@@ -134,7 +134,7 @@ PY
   REVIEW_ROLES="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^roles=//p')"
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
-  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
+  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
     || die "ready closeout provenance validation failed"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then

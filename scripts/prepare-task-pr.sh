@@ -1132,6 +1132,7 @@ if [[ "$CREATE_PR" == "1" ]]; then
   [[ "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" != n/a* ]] || die "pre-PR local role review requires a machine-checkable slice provenance ledger"
   python3 "$ROOT_DIR/scripts/pm/validate-review-provenance.py" \
     --root "$SOURCE_WORKTREE" \
+    --task-uid "$LOCAL_ROLE_REVIEW_TASK_UID" \
     --ledger "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" \
     --roles "$LOCAL_ROLE_REVIEW_ROLES" \
     --source-head "$LOCAL_ROLE_REVIEW_SOURCE_HEAD" >/dev/null \

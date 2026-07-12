@@ -196,7 +196,7 @@ if missing_roles:
     raise SystemExit("error: Slice Ledger missing required role provenance: " + ",".join(missing_roles))
 PY
 python3 "$SCRIPT_DIR/validate-review-provenance.py" \
-  --root "$ROOT_DIR" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
+  --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
   || die "Slice Ledger trusted dispatch provenance validation failed"
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'

@@ -18,6 +18,7 @@ def capability_blocked(role: str, reason: str) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--root", type=Path, required=True)
+    p.add_argument("--task-uid", required=True)
     p.add_argument("--ledger", required=True)
     p.add_argument("--roles", required=True)
     p.add_argument("--source-head", required=True)
@@ -38,6 +39,7 @@ def main() -> int:
         role = str(item.get("role") or "")
         if role not in required or str(item.get("status") or "") not in {"completed", "passed"}: continue
         if role in seen: p.error(f"duplicate completed provenance for {role}")
+        if str(item.get("task_uid") or "") != args.task_uid: p.error(f"task_uid mismatch for {role}")
         mandatory = ["slice_id","activation","context_delivery","actual_runtime","artifact_digest","scope_verdict","risk_verdict","findings","residual_risk"]
         if args.mode == "unattended": mandatory.append("dispatch_receipt")
         missing = [k for k in mandatory if not str(item.get(k) or "").strip()]
