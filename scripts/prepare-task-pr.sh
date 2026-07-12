@@ -1222,7 +1222,7 @@ SYNC_CMD=""
 if [[ -n "$BASE_WORKTREE" ]]; then
   SYNC_CMD="git -C $BASE_WORKTREE pull --ff-only $REMOTE_NAME $BASE_BRANCH"
 fi
-CLEANUP_CMD_1="python3 ./scripts/pm/pr-merge-receipt.py <pr-number> --json > <fresh-pr-merge-receipt.json> && ./scripts/pm/post-merge-cleanup.sh --repo-root $CANONICAL_REPO_ROOT --worktree $SOURCE_WORKTREE --branch $SOURCE_BRANCH --main-ref $BASE_BRANCH --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --pr-receipt <fresh-pr-merge-receipt.json>"
+CLEANUP_CMD_1="RECEIPT_ROOT=\$(python3 $CANONICAL_REPO_ROOT/scripts/pm/canonical-receipt-root.py --default-worktree $CANONICAL_REPO_ROOT --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --create) && python3 $CANONICAL_REPO_ROOT/scripts/pm/pr-merge-receipt.py <pr-number> --json > \"\$RECEIPT_ROOT/merge-receipt.json\" && $CANONICAL_REPO_ROOT/scripts/pm/post-merge-main-sync.sh --repo-root $CANONICAL_REPO_ROOT --main-ref $BASE_BRANCH --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --pr-receipt \"\$RECEIPT_ROOT/merge-receipt.json\" --receipt-output \"\$RECEIPT_ROOT/main-sync-receipt.json\" && $CANONICAL_REPO_ROOT/scripts/pm/post-merge-cleanup.sh --repo-root $CANONICAL_REPO_ROOT --worktree $SOURCE_WORKTREE --branch $SOURCE_BRANCH --main-ref $BASE_BRANCH --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --pr-receipt \"\$RECEIPT_ROOT/merge-receipt.json\" --main-sync-receipt \"\$RECEIPT_ROOT/main-sync-receipt.json\" --terminal-receipt-output \"\$RECEIPT_ROOT/terminal-cleanup-receipt.json\""
 CLEANUP_CMD_2=""
 
 PR_URL=""

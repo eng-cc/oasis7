@@ -365,7 +365,24 @@ def main() -> int:
         mapping = json.loads((Path(args.root) / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
         record = (mapping.get("tasks") or {}).get(args.task_uid) or {}
         rebuilt = rebuild_issue_evidence(str(data["repository"]), int(record["issue_number"]), args.task_uid, data)
-        data["merge_hold"] = rebuilt.get("merge_hold")
+        rebuilt_hold = rebuilt.get("merge_hold")
+        recorded_hold = record.get("merge_hold")
+        selected_pr_matches_live = str(args.pr or "") == str(data.get("number") or "")
+        recorded_pr = str(record.get("pr_number") or "")
+        default_hold_matches_live_pr = (
+            isinstance(recorded_hold, dict)
+            and recorded_hold.get("kind") == "normal_pr_ci_watch"
+            and recorded_hold.get("active") is False
+            and selected_pr_matches_live
+            and bool(recorded_pr)
+            and recorded_pr == str(data.get("number") or "")
+        )
+        # An explicit head-bound issue comment always wins.  The only local
+        # fallback is record-pr's canonical inactive default for this exact PR;
+        # caller-authored active holds never gain authority from cache shape.
+        data["merge_hold"] = rebuilt_hold if rebuilt_hold is not None else (
+            recorded_hold if default_hold_matches_live_pr else None
+        )
         data["comment_dispositions"] = rebuilt.get("comment_dispositions") or []
         data["review_dispositions"] = rebuilt.get("review_dispositions") or []
         evidence_mode = "production"

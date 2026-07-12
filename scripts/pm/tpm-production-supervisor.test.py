@@ -103,6 +103,11 @@ class ProductionSupervisorContract(unittest.TestCase):
                 self.assertEqual("valid", action["schema_validation"])
                 self.assertEqual(phase, action["phase"])
                 self.assertTrue(action["argv"])
+                if phase == "safe_cleanup":
+                    for required in ("--pr-receipt", "--main-sync-receipt",
+                                     "--terminal-receipt-output"):
+                        self.assertIn(required, action["argv"],
+                                      f"safe_cleanup must bind {required} before execution")
                 self.assertFalse(any("FIXTURE" in arg or "fixtures/" in arg for arg in action["argv"]))
                 executable = Path(action["argv"][0])
                 self.assertTrue(executable.is_absolute(), action)

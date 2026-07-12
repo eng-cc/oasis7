@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -208,6 +209,70 @@ class FinalTrustRed(unittest.TestCase):
                       "canonical active/clear receipt must be persisted; cache shape alone is not authority")
         self.assertIn("task_uid", hold_section)
         self.assertIn("issue_number", hold_section)
+
+    def test_live_rebuild_preserves_default_inactive_normal_watch_hold(self) -> None:
+        task_uid = "task_" + "1" * 32
+        live = clean_pr()
+        live.update({"number": 2198, "reviewDecision": "APPROVED",
+                     "statusCheckRollup": [], "required_status_checks": [],
+                     "policy_discovery": {"status": "resolved", "required_status_checks": []}})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mapping = root / ".pm/github-project-sync/tasks.json"
+            mapping.parent.mkdir(parents=True)
+            mapping.write_text(json.dumps({"tasks": {task_uid: {
+                "issue_number": 2198,
+                "pr_number": 2198,
+                "merge_hold": {"kind": "normal_pr_ci_watch", "active": False,
+                               "requester": "workflow", "reason": "normal",
+                               "resume_authority": "workflow"},
+            }}}))
+            argv = ["pr-lifecycle-gate.py", "2198", "--root", str(root),
+                    "--task-uid", task_uid, "--json"]
+            with mock.patch.object(gate, "load_live", return_value=live), \
+                 mock.patch.object(gate, "rebuild_issue_evidence", return_value={
+                     "comment_dispositions": [], "review_dispositions": []}), \
+                 mock.patch.object(sys, "argv", argv):
+                self.assertEqual(0, gate.main(),
+                                 "an absent override comment must not erase the canonical default hold")
+
+    def test_default_hold_requires_task_truth_bound_to_the_live_pr(self) -> None:
+        task_uid = "task_" + "1" * 32
+        live = clean_pr()
+        live.update({"number": 2198, "reviewDecision": "APPROVED",
+                     "statusCheckRollup": [], "required_status_checks": [],
+                     "policy_discovery": {"status": "resolved", "required_status_checks": []}})
+        for label, recorded_pr in (("missing", None), ("mismatched", 9999)):
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                mapping = root / ".pm/github-project-sync/tasks.json"
+                mapping.parent.mkdir(parents=True)
+                record = {
+                    "issue_number": 2198,
+                    "merge_hold": {"kind": "normal_pr_ci_watch", "active": False,
+                                   "requester": "workflow", "reason": "normal",
+                                   "resume_authority": "workflow"},
+                }
+                if recorded_pr is not None:
+                    record["pr_number"] = recorded_pr
+                mapping.write_text(json.dumps({"tasks": {task_uid: record}}))
+                argv = ["pr-lifecycle-gate.py", "2198", "--root", str(root),
+                        "--task-uid", task_uid, "--json"]
+                with mock.patch.object(gate, "load_live", return_value=live), \
+                     mock.patch.object(gate, "rebuild_issue_evidence", return_value={
+                         "comment_dispositions": [], "review_dispositions": []}), \
+                     mock.patch.object(sys, "argv", argv):
+                    self.assertEqual(3, gate.main(),
+                                     "unbound or mismatched task truth must not authorize the default hold")
+
+    def test_merge_hold_writer_binds_comment_to_live_pr_head(self) -> None:
+        source = (ROOT / "scripts/pm/github-project-task.py").read_text(encoding="utf-8")
+        hold_section = source[source.index("def command_set_merge_hold"):
+                              source.index("def add_common", source.index("def command_set_merge_hold"))]
+        self.assertIn("headRefOid", hold_section,
+                      "manual/user hold comments must bind the current live PR head")
+        self.assertRegex(hold_section, r"gh[^\n]+pr[^\n]+view",
+                         "the hold writer must read the PR head from GitHub, not stale task cache")
 
     def test_default_branch_is_queried_for_default_branch_ruleset(self) -> None:
         missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")

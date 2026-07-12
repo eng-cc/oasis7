@@ -993,7 +993,16 @@ def command_set_merge_hold(args: argparse.Namespace) -> int:
         if not all((args.requester, args.reason, args.resume_authority)):
             die("set-merge-hold: active hold requires requester, reason, and resume authority")
         hold = {"kind": args.kind, "active": True, "requester": args.requester, "reason": args.reason, "resume_authority": args.resume_authority, "recorded_at": now()}
-    issue_number=int(record["issue_number"]); pr_number=int(record.get("pr_number") or 0); head_oid=str(record.get("source_head") or record.get("head_oid") or "")
+    issue_number=int(record["issue_number"]); pr_number=int(record.get("pr_number") or 0)
+    if pr_number <= 0:
+        die("set-merge-hold: task truth has no recorded PR")
+    try:
+        live_pr=json.loads(run_text(["gh","pr","view",str(pr_number),"--repo",args.repo,"--json","number,headRefOid,url"]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"set-merge-hold: live PR head readback failed: {exc}")
+    head_oid=str(live_pr.get("headRefOid") or "")
+    if str(live_pr.get("number") or "") != str(pr_number) or not re.fullmatch(r"[0-9a-f]{40}",head_oid,re.I):
+        die("set-merge-hold: live PR identity/headRefOid readback is invalid")
     canonical = "\n".join(["<!-- oasis7-merge-hold -->",f"- task_uid: `{args.task_uid}`",f"- repository: `{args.repo}`",f"- issue_number: `{issue_number}`",f"- pr_number: `{pr_number}`",f"- head_oid: `{head_oid}`","- node_id: `merge_hold`","- kind: `merge_hold`",f"- disposition: `{'active' if hold.get('active') else 'cleared'}`",f"- hold_kind: `{hold['kind']}`",f"- active: `{str(hold.get('active',False)).lower()}`",f"- requester: `{hold.get('requester') or ''}`",f"- reason: `{hold.get('reason') or ''}`",f"- resume_authority: `{hold.get('resume_authority') or ''}`",""])
     comment_url = issue_comment(args.repo, issue_number, canonical)
     comment_id=comment_url.rsplit("issuecomment-",1)[-1]
