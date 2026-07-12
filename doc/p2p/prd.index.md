@@ -27,7 +27,7 @@
 | `observer/` | 观察者同步模式、指标与可观测性；默认先读 `doc/p2p/observer/README.md` |
 | `token/` | 创世分配、签名授权、治理分发与流通边界 |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
-| `distributed/` | 分布式 runtime / consensus / hard split 路线 |
+| `distributed/` | 分布式 runtime / consensus / hard split 路线；首读 `doc/p2p/distributed/README.md` |
 | `viewer-live/` | 已完成的 Viewer LLM 默认值与 observer/debug 回退变更；默认先读 `doc/p2p/viewer-live/README.md`，再按文件名追溯 |
 | `consensus/` | 共识实现与内建 wasm 身份口径；默认先读 `doc/p2p/consensus/README.md` |
 
