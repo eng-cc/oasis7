@@ -42,6 +42,7 @@ PY
 
 (cd "$REPO" && SCRIPT_DIR="$REPO/scripts/pm" ./scripts/pm/record-pre-pr-review.sh \
   --task-uid "$TASK_UID" --roles "$ROLE" \
+  --issue 1 --repo eng-cc/oasis7 \
   --review-evidence "$ROLE: no_findings" \
   --review-verdicts "$ROLE scope/spec compliance=approved; role quality/risk=approved" \
   --finding-disposition-evidence fixture --verification fixture --residual-risk fixture \
