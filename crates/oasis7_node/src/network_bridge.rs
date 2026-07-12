@@ -30,6 +30,7 @@ pub(crate) use crate::network_error_classification::{
     network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
+    replication_network_error_is_rate_limited_protocol,
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
     replication_network_error_is_unsupported_protocol, replication_network_error_kind_label,
     replication_network_error_mentions_protocol,

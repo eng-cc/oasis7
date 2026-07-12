@@ -134,6 +134,11 @@ fn high_replication_checkpoint_probe_continues_after_missing_checkpoint_blob() {
             "replication network availability gap: libp2p-replication outbound request failed: NetworkProtocolUnavailable { protocol: \"request failed: Timeout\" }"
                 .to_string(),
     };
+    let rate_limited_blob = NodeError::Replication {
+        reason:
+            "replication network request failed: kind=rate_limited protocol=/aw/node/replication/fetch-blob/1.0.0 detail=fetch-blob response budget exhausted; retry after window reset"
+                .to_string(),
+    };
 
     assert!(PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &blob_err
@@ -146,6 +151,9 @@ fn high_replication_checkpoint_probe_continues_after_missing_checkpoint_blob() {
     ));
     assert!(!PosNodeEngine::high_replication_checkpoint_probe_can_continue(
         &protocol_omitted_blob_timeout
+    ));
+    assert!(PosNodeEngine::high_replication_checkpoint_probe_can_continue(
+        &rate_limited_blob
     ));
 }
 

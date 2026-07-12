@@ -89,6 +89,20 @@ pub(crate) fn replication_network_error_is_timeout_protocol(
             || reason.contains("timed out"))
 }
 
+pub(crate) fn replication_network_error_is_rate_limited_protocol(
+    err: &NodeError,
+    protocol: &str,
+) -> bool {
+    let NodeError::Replication { reason } = err else {
+        return false;
+    };
+    (network_request_reason_has_kind(reason, "rate_limited")
+        && network_request_reason_has_protocol(reason, protocol))
+        || (reason.contains("NetworkRequestFailed")
+            && reason.contains("ErrRateLimited")
+            && reason.contains(protocol))
+}
+
 pub(crate) fn replication_network_error_should_keep_timeout_over_provider_gap(
     current: Option<&NodeError>,
     candidate: &NodeError,
@@ -134,6 +148,12 @@ fn network_request_reason_detail_mentions_protocol(reason: &str, protocol: &str)
         .is_some_and(|(_, detail)| detail.contains(protocol))
 }
 
+fn network_request_reason_has_protocol(reason: &str, protocol: &str) -> bool {
+    reason
+        .split_whitespace()
+        .any(|field| field.strip_prefix("protocol=") == Some(protocol))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +168,20 @@ mod tests {
         };
 
         assert!(replication_network_error_is_timeout_protocol(
+            &err, protocol
+        ));
+    }
+
+    #[test]
+    fn rate_limited_protocol_matches_structured_response_shape() {
+        let protocol = "/aw/node/replication/fetch-blob/1.0.0";
+        let err = NodeError::Replication {
+            reason: format!(
+                "replication network request failed: kind=rate_limited protocol={protocol} detail=fetch-blob response budget exhausted; retry after window reset"
+            ),
+        };
+
+        assert!(replication_network_error_is_rate_limited_protocol(
             &err, protocol
         ));
     }

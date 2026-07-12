@@ -1,10 +1,40 @@
 use super::*;
+use crate::replication_state_reconcile::ReplicationCommitPayload;
+use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
     // Mirrors release_default.execution_checkpoint_keep. Probe the advertised head first, then
     // the older retained-window boundaries. The newest aligned boundary can still be in-flight
     // or unretained on live testnet nodes, so retained-window probing starts one interval back.
     const HIGH_REPLICATION_CHECKPOINT_LOOKBACK_WINDOWS: u64 = 8;
+
+    pub(super) fn validate_world_head_checkpoint_payload(
+        world_id: &str,
+        payload: &ReplicationCommitPayload,
+        expected_head: &WorldHeadAnnounce,
+    ) -> Result<(), NodeError> {
+        let payload_state_root = payload.execution_state_root.as_deref().unwrap_or_default();
+        if expected_head.world_id != world_id
+            || payload.world_id != world_id
+            || expected_head.height != payload.height
+            || expected_head.block_hash != payload.block_hash
+            || expected_head.state_root != payload_state_root
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "world head checkpoint mismatch: world_id={} expected_height={} payload_height={} expected_block_hash={} payload_block_hash={} expected_state_root={} payload_state_root={}",
+                    world_id,
+                    expected_head.height,
+                    payload.height,
+                    expected_head.block_hash,
+                    payload.block_hash,
+                    expected_head.state_root,
+                    payload_state_root
+                ),
+            });
+        }
+        Ok(())
+    }
 
     pub(super) fn high_replication_checkpoint_candidates(
         advertised_network_height: u64,
@@ -48,7 +78,47 @@ impl PosNodeEngine {
         let checkpoint_blob_missing = reason.contains("execution checkpoint blob not found hash=")
             || (reason.contains("gap sync height ")
                 && reason.contains(" blob not found for hash "));
-        fetch_commit_route_error || checkpoint_blob_missing
+        fetch_commit_route_error
+            || checkpoint_blob_missing
+            || crate::node_engine_replication_provider_route::replication_gap_sync_fetch_blob_rate_limited(err)
+    }
+
+    pub(super) fn replication_gap_sync_fetch_blob_rate_limited_in_cooldown(
+        &self,
+        next_height: u64,
+        now_ms: i64,
+    ) -> bool {
+        crate::node_engine_replication_provider_route::replication_gap_sync_fetch_blob_rate_limited_in_cooldown(
+            self.last_replication_gap_sync_blocked_height,
+            self.last_replication_gap_sync_blocked_reason.as_deref(),
+            self.last_replication_gap_sync_blocked_at_ms,
+            next_height,
+            now_ms,
+        )
+    }
+
+    pub(super) fn record_high_replication_checkpoint_probe_failure(
+        &mut self,
+        next_height: u64,
+        checkpoint_candidate: u64,
+        now_ms: i64,
+        err: &NodeError,
+    ) -> bool {
+        if crate::node_engine_replication_provider_route::replication_gap_sync_fetch_blob_rate_limited(err)
+        {
+            self.last_replication_gap_sync_blocked_height = Some(next_height);
+            self.last_replication_gap_sync_blocked_at_ms = Some(now_ms);
+            self.last_replication_gap_sync_blocked_reason = Some(format!(
+                "replication checkpoint state sync rate limited at height {next_height}: {err}"
+            ));
+            return true;
+        }
+        self.last_replication_gap_sync_repair_attempt_height = Some(checkpoint_candidate);
+        self.last_replication_gap_sync_repair_attempt_summary = Some(format!(
+            "checkpoint_candidate={checkpoint_candidate} transient_error={err}"
+        ));
+        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
+        false
     }
 
     pub(super) fn publish_execution_checkpoint_descriptor_providers(
