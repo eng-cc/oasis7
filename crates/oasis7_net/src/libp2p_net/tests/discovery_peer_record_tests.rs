@@ -123,7 +123,7 @@ fn routing_update_skips_peer_record_for_unconnected_non_bootstrap_peer() {
 }
 
 #[test]
-fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligible() {
+fn process_discovered_peer_record_retains_local_static_bootstrap_provenance() {
     super::super::runtime_support::run_on_libp2p_test_runtime(|| {
         let mut swarm = super::super::swarm_behaviour::build_swarm(
             &Keypair::generate_ed25519(),
@@ -136,7 +136,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
         let peer_id = PeerId::from(peer_key.public());
         let suspect_record = super::signed_discovery_peer_record(
             &peer_key,
-            vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
+            vec![crate::dht::PeerDiscoverySource::Dht],
             1,
         );
         let upgraded_record = super::signed_discovery_peer_record(
@@ -152,6 +152,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
         let mut last_dialed_transport_paths = HashMap::new();
         let active_transport_paths = HashMap::new();
         let mut failed_transport_path_labels = HashSet::new();
+        let static_bootstrap_peer_ids = HashSet::from([peer_id]);
 
         super::super::discovery::process_discovered_peer_record(
             &mut swarm,
@@ -162,6 +163,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
             &mut failed_transport_path_labels,
             None,
             &PeerManagerPolicy::default(),
+            &static_bootstrap_peer_ids,
             suspect_record,
         )
         .expect("process suspect peer record");
@@ -182,6 +184,7 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
             &mut failed_transport_path_labels,
             None,
             &PeerManagerPolicy::default(),
+            &static_bootstrap_peer_ids,
             upgraded_record,
         )
         .expect("process upgraded peer record");
@@ -201,7 +204,10 @@ fn process_discovered_peer_record_keeps_single_source_bootstrap_peer_dial_eligib
             .map(|source| peer_manager::discovery_source_label(*source))
             .collect();
         upgraded_source_labels.sort_unstable();
-        assert_eq!(upgraded_source_labels, ["dht", "rendezvous"]);
+        assert_eq!(
+            upgraded_source_labels,
+            ["dht", "rendezvous", "static_bootstrap"]
+        );
         assert_eq!(
             upgraded_sources.len(),
             upgraded_source_labels.len(),
@@ -241,11 +247,54 @@ fn process_discovered_peer_record_keeps_dht_only_suspect_peer_non_dialable() {
         &mut failed_transport_path_labels,
         None,
         &PeerManagerPolicy::default(),
+        &HashSet::new(),
         suspect_record,
     )
     .expect("process dht-only suspect peer record");
 
     assert!(discovered_peer_records.contains_key(&peer_id));
+    assert!(!last_dialed_transport_paths.contains_key(&peer_id));
+}
+
+#[test]
+fn process_discovered_peer_record_rejects_invalid_static_peer_record() {
+    let mut swarm = super::super::swarm_behaviour::build_swarm(
+        &Keypair::generate_ed25519(),
+        false,
+        true,
+        std::time::Duration::from_secs(30),
+        super::super::wire_bytes::init_shared_wire_byte_counters(),
+    );
+    let peer_key = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(peer_key.public());
+    let mut invalid_record = super::signed_discovery_peer_record(
+        &peer_key,
+        vec![crate::dht::PeerDiscoverySource::Dht],
+        1,
+    );
+    invalid_record.record.world_id = "tampered-world".to_string();
+    let mut discovered_peer_records = HashMap::new();
+    let mut known_transport_paths = HashMap::new();
+    let mut last_dialed_transport_paths = HashMap::new();
+    let active_transport_paths = HashMap::new();
+    let mut failed_transport_path_labels = HashSet::new();
+
+    let err = super::super::discovery::process_discovered_peer_record(
+        &mut swarm,
+        &mut discovered_peer_records,
+        &mut known_transport_paths,
+        &mut last_dialed_transport_paths,
+        &active_transport_paths,
+        &mut failed_transport_path_labels,
+        None,
+        &PeerManagerPolicy::default(),
+        &HashSet::from([peer_id]),
+        invalid_record,
+    )
+    .expect_err("invalid signed peer record must remain rejected");
+
+    assert!(format!("{err:?}").contains("signature"));
+    assert!(!discovered_peer_records.contains_key(&peer_id));
     assert!(!last_dialed_transport_paths.contains_key(&peer_id));
 }
 
@@ -807,6 +856,7 @@ fn cached_peer_record_not_found_retries_via_another_connected_peer() {
         16,
         &event_errors,
         &PeerManagerPolicy::default(),
+        &HashSet::new(),
     );
 
     assert_eq!(pending_peer_record_requests.len(), 1);
@@ -994,6 +1044,7 @@ fn cached_peer_record_not_found_stops_after_all_connected_proxies_are_tried() {
         16,
         &event_errors,
         &PeerManagerPolicy::default(),
+        &HashSet::new(),
     );
 
     assert!(pending_peer_record_requests.is_empty());

@@ -47,12 +47,9 @@ use futures::{FutureExt, StreamExt};
 use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
-use libp2p::kad::{self};
-use libp2p::relay;
-use libp2p::rendezvous;
-use libp2p::request_response::{self};
 use libp2p::swarm::SwarmEvent;
 use libp2p::{Multiaddr, PeerId};
+use libp2p::{kad, relay, rendezvous, request_response};
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
@@ -200,7 +197,7 @@ impl Libp2pNetwork {
             let mut peers: Vec<PeerId> = Vec::new();
             let mut provider_keys: HashMap<String, i64> = HashMap::new();
             let mut discovered_peer_records: HashMap<PeerId, SignedPeerRecord> = HashMap::new();
-            let (mut known_transport_paths, mut failed_transport_path_labels) =
+            let (mut known_transport_paths, mut failed_transport_path_labels, static_bootstrap_peer_ids) =
                 bootstrap_transport_path_state(&config_clone.bootstrap_peers);
             let mut last_dialed_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
             let mut active_transport_paths: HashMap<PeerId, TransportPath> = HashMap::new();
@@ -416,6 +413,7 @@ impl Libp2pNetwork {
                                                             max_error_messages,
                                                             &event_errors,
                                                             &config_clone.peer_manager_policy,
+                                                            &static_bootstrap_peer_ids,
                                                         );
                                                         (
                                                             peer_healths_by_id,
@@ -541,6 +539,7 @@ impl Libp2pNetwork {
                                                                 &mut failed_transport_path_labels,
                                                                 peer_record_template.as_ref(),
                                                                 &config_clone.peer_manager_policy,
+                                                                &static_bootstrap_peer_ids,
                                                                 record,
                                                             ) {
                                                                 push_bounded_clone(

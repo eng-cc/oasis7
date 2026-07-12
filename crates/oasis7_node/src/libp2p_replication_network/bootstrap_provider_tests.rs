@@ -93,6 +93,11 @@ fn libp2p_replication_network_known_peers_includes_bootstrap_providers_before_co
             .any(|peer_id| peer_id == &storage.peer_id().to_string()),
         "bootstrap storage provider should be visible to gap-sync peer sweeps before it is connected"
     );
+    assert_eq!(
+        observer.configured_static_bootstrap_peer_ids(),
+        vec![storage.peer_id().to_string()],
+        "static bootstrap peer IDs should retain their configured provenance"
+    );
 }
 
 #[test]

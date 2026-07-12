@@ -131,6 +131,24 @@ pub struct PeerManagerBlockArtifact {
     pub last_cleared_at_ms: Option<i64>,
 }
 
+pub(super) fn retain_static_bootstrap_provenance(
+    record: &mut SignedPeerRecord,
+    peer_id: PeerId,
+    static_bootstrap_peer_ids: &HashSet<PeerId>,
+) {
+    if static_bootstrap_peer_ids.contains(&peer_id)
+        && !record
+            .record
+            .discovery_sources
+            .contains(&PeerDiscoverySource::StaticBootstrap)
+    {
+        record
+            .record
+            .discovery_sources
+            .push(PeerDiscoverySource::StaticBootstrap);
+    }
+}
+
 pub(super) fn recompute_peer_manager_healths(
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,

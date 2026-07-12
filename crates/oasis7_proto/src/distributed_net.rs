@@ -174,6 +174,9 @@ pub trait DistributedNetwork<E> {
     fn known_peer_ids(&self) -> Vec<String> {
         self.connected_peer_ids()
     }
+    fn configured_static_bootstrap_peer_ids(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn request_with_providers(
         &self,
         protocol: &str,

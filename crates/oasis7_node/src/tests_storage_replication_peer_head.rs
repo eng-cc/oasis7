@@ -4,11 +4,14 @@ use super::*;
 struct PeerDirectedHeadTestNetwork {
     inner: Arc<TestInMemoryNetwork>,
     connected_peer_ids: Vec<String>,
+    known_peer_ids: Vec<String>,
+    configured_static_bootstrap_peer_ids: Vec<String>,
     peer_heads: Arc<Mutex<HashMap<String, super::replication::FetchHeadResponse>>>,
     head_request_errors: Arc<Mutex<HashMap<String, WorldError>>>,
     unsupported_head_peers: Vec<String>,
     waitable_fetch_commit_heights: Arc<Mutex<Vec<u64>>>,
     provider_attempts: Arc<Mutex<Vec<Vec<String>>>>,
+    provider_budgets: Arc<Mutex<Vec<(u64, u64)>>>,
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirectedHeadTestNetwork {
@@ -29,6 +32,29 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for PeerDirec
 
     fn connected_peer_ids(&self) -> Vec<String> {
         self.connected_peer_ids.clone()
+    }
+
+    fn known_peer_ids(&self) -> Vec<String> {
+        self.known_peer_ids.clone()
+    }
+
+    fn configured_static_bootstrap_peer_ids(&self) -> Vec<String> {
+        self.configured_static_bootstrap_peer_ids.clone()
+    }
+
+    fn request_with_providers_budget(
+        &self,
+        protocol: &str,
+        payload: &[u8],
+        providers: &[String],
+        request_timeout_ms: u64,
+        retry_budget_ms: u64,
+    ) -> Result<Vec<u8>, WorldError> {
+        self.provider_budgets
+            .lock()
+            .expect("lock provider budgets")
+            .push((request_timeout_ms, retry_budget_ms));
+        self.request_with_providers(protocol, payload, providers)
     }
 
     fn request_with_providers(
@@ -126,23 +152,30 @@ fn waitable_fetch_commit_error(protocol: &str) -> WorldError {
 fn peer_directed_head_endpoint(
     world_id: &str,
     connected_peer_ids: Vec<String>,
+    known_peer_ids: Vec<String>,
+    configured_static_bootstrap_peer_ids: Vec<String>,
     peer_heads: Arc<Mutex<HashMap<String, super::replication::FetchHeadResponse>>>,
     head_request_errors: Arc<Mutex<HashMap<String, WorldError>>>,
 ) -> (
     ReplicationNetworkEndpoint,
     Arc<Mutex<Vec<Vec<String>>>>,
+    Arc<Mutex<Vec<(u64, u64)>>>,
 ) {
     let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
+    let provider_budgets = Arc::new(Mutex::new(Vec::<(u64, u64)>::new()));
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
     > = Arc::new(PeerDirectedHeadTestNetwork {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids,
+        known_peer_ids,
+        configured_static_bootstrap_peer_ids,
         peer_heads,
         head_request_errors,
         unsupported_head_peers: Vec::new(),
         waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts: Arc::clone(&provider_attempts),
+        provider_budgets: Arc::clone(&provider_budgets),
     });
     let handle = NodeReplicationNetworkHandle::new(network);
     let endpoint = ReplicationNetworkEndpoint::new(
@@ -152,7 +185,7 @@ fn peer_directed_head_endpoint(
         &NodeNetworkPolicy::for_runtime_role(NodeRole::Observer),
     )
     .expect("peer-directed head endpoint");
-    (endpoint, provider_attempts)
+    (endpoint, provider_attempts, provider_budgets)
 }
 
 #[test]
@@ -181,9 +214,11 @@ fn peer_world_head_probe_continues_after_connected_peer_timeout() {
             retryable: true,
         },
     );
-    let (endpoint, provider_attempts) = peer_directed_head_endpoint(
+    let (endpoint, provider_attempts, _) = peer_directed_head_endpoint(
         world_id,
         vec!["peer-a".to_string(), "peer-b".to_string()],
+        vec!["peer-a".to_string(), "peer-b".to_string()],
+        Vec::new(),
         peer_heads,
         head_request_errors,
     );
@@ -201,6 +236,110 @@ fn peer_world_head_probe_continues_after_connected_peer_timeout() {
             .expect("lock provider attempts")
             .as_slice(),
         &[vec!["peer-a".to_string()], vec!["peer-b".to_string()]]
+    );
+}
+
+#[test]
+fn peer_world_head_probe_uses_candidate_static_peer_after_active_peer_timeout() {
+    let world_id = "world-peer-head-static-candidate-fallback";
+    let peer_heads = Arc::new(Mutex::new(HashMap::from([(
+        "static-204".to_string(),
+        super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: 204,
+                block_hash: "block-204".to_string(),
+                state_root: "state-204".to_string(),
+                timestamp_ms: 4_204,
+            }),
+        },
+    )])));
+    let head_request_errors = Arc::new(Mutex::new(HashMap::from([(
+        "static-205".to_string(),
+        WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrTimeout,
+            message: REPLICATION_GET_HEAD_PROTOCOL.to_string(),
+            retryable: true,
+        },
+    )])));
+    let (endpoint, provider_attempts, _) = peer_directed_head_endpoint(
+        world_id,
+        vec!["static-205".to_string()],
+        vec!["static-205".to_string(), "static-204".to_string()],
+        vec!["static-205".to_string(), "static-204".to_string()],
+        peer_heads,
+        head_request_errors,
+    );
+
+    let head = endpoint
+        .lookup_world_head(world_id)
+        .expect("active timeout should fall through to candidate static peer")
+        .expect("candidate static peer head");
+
+    assert_eq!(head.height, 204);
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[vec!["static-205".to_string()], vec!["static-204".to_string()]]
+    );
+}
+
+#[test]
+fn peer_world_head_probe_prioritizes_static_bootstrap_before_earlier_dht_candidate() {
+    let world_id = "world-peer-head-static-bootstrap-priority";
+    let peer_heads = Arc::new(Mutex::new(HashMap::from([(
+        "static-204".to_string(),
+        super::replication::FetchHeadResponse {
+            found: true,
+            head: Some(super::replication::ReplicationHeadSummary {
+                world_id: world_id.to_string(),
+                height: 204,
+                block_hash: "block-204".to_string(),
+                state_root: "state-204".to_string(),
+                timestamp_ms: 4_204,
+            }),
+        },
+    )])));
+    let head_request_errors = Arc::new(Mutex::new(HashMap::from([(
+        "static-205".to_string(),
+        WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrTimeout,
+            message: REPLICATION_GET_HEAD_PROTOCOL.to_string(),
+            retryable: true,
+        },
+    )])));
+    let (endpoint, provider_attempts, provider_budgets) = peer_directed_head_endpoint(
+        world_id,
+        vec!["static-205".to_string()],
+        vec![
+            "dht-001".to_string(),
+            "static-204".to_string(),
+            "static-205".to_string(),
+        ],
+        vec!["static-205".to_string(), "static-204".to_string()],
+        peer_heads,
+        head_request_errors,
+    );
+
+    let head = endpoint
+        .lookup_world_head(world_id)
+        .expect("active timeout should fall through to static bootstrap provider")
+        .expect("static bootstrap provider head");
+
+    assert_eq!(head.height, 204);
+    assert_eq!(
+        provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .as_slice(),
+        &[vec!["static-205".to_string()], vec!["static-204".to_string()]]
+    );
+    assert_eq!(
+        provider_budgets.lock().expect("lock provider budgets").as_slice(),
+        &[(1_500, 3_000), (1_500, 3_000)]
     );
 }
 
@@ -229,9 +368,11 @@ fn peer_world_head_probe_continues_after_protocol_omitted_libp2p_timeout() {
                 .to_string(),
         },
     );
-    let (endpoint, provider_attempts) = peer_directed_head_endpoint(
+    let (endpoint, provider_attempts, _) = peer_directed_head_endpoint(
         world_id,
         vec!["peer-a".to_string(), "peer-b".to_string()],
+        vec!["peer-a".to_string(), "peer-b".to_string()],
+        Vec::new(),
         peer_heads,
         head_request_errors,
     );
@@ -281,9 +422,11 @@ fn peer_world_head_probe_rejects_mismatched_world_without_fallback() {
             }),
         },
     );
-    let (endpoint, provider_attempts) = peer_directed_head_endpoint(
+    let (endpoint, provider_attempts, _) = peer_directed_head_endpoint(
         world_id,
         vec!["peer-a".to_string(), "peer-b".to_string()],
+        vec!["peer-a".to_string(), "peer-b".to_string()],
+        Vec::new(),
         peer_heads,
         Arc::new(Mutex::new(HashMap::new())),
     );
@@ -408,11 +551,14 @@ fn observer_gap_sync_continues_peer_world_head_probe_after_peer_without_head() {
     > = Arc::new(PeerDirectedHeadTestNetwork {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
+        known_peer_ids: vec!["peer-a".to_string(), "peer-b".to_string()],
+        configured_static_bootstrap_peer_ids: Vec::new(),
         peer_heads: Arc::clone(&peer_heads),
         head_request_errors: Arc::new(Mutex::new(HashMap::new())),
         unsupported_head_peers: vec!["peer-a".to_string()],
         waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts: Arc::clone(&provider_attempts),
+        provider_budgets: Arc::new(Mutex::new(Vec::new())),
     });
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
@@ -540,11 +686,14 @@ fn peer_world_head_fallback_retains_high_network_height_after_partial_sync() {
     > = Arc::new(PeerDirectedHeadTestNetwork {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string()],
+        known_peer_ids: vec!["peer-a".to_string()],
+        configured_static_bootstrap_peer_ids: Vec::new(),
         peer_heads,
         head_request_errors: Arc::new(Mutex::new(HashMap::new())),
         unsupported_head_peers: Vec::new(),
         waitable_fetch_commit_heights: Arc::new(Mutex::new(Vec::new())),
         provider_attempts,
+        provider_budgets: Arc::new(Mutex::new(Vec::new())),
     });
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
@@ -666,11 +815,14 @@ fn peer_world_head_fallback_retains_high_network_height_after_waitable_gap() {
     > = Arc::new(PeerDirectedHeadTestNetwork {
         inner: Arc::new(TestInMemoryNetwork::default()),
         connected_peer_ids: vec!["peer-a".to_string()],
+        known_peer_ids: vec!["peer-a".to_string()],
+        configured_static_bootstrap_peer_ids: Vec::new(),
         peer_heads,
         head_request_errors: Arc::new(Mutex::new(HashMap::new())),
         unsupported_head_peers: Vec::new(),
         waitable_fetch_commit_heights: Arc::new(Mutex::new(vec![2])),
         provider_attempts: Arc::new(Mutex::new(Vec::new())),
+        provider_budgets: Arc::new(Mutex::new(Vec::new())),
     });
     register_replication_fetch_handlers(
         &NodeReplicationNetworkHandle::new(Arc::clone(&network)),

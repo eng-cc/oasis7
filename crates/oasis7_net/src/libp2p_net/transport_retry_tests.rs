@@ -73,6 +73,7 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
             &mut failed_transport_path_labels,
             None,
             &PeerManagerPolicy::default(),
+            &HashSet::new(),
             record.clone(),
         )
         .expect("first discovery dial");
@@ -96,6 +97,7 @@ fn process_discovered_peer_record_retries_failed_candidate_dial_on_rediscovery()
             &mut failed_transport_path_labels,
             None,
             &PeerManagerPolicy::default(),
+            &HashSet::new(),
             record,
         )
         .expect("rediscovery must retry dial");
