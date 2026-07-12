@@ -69,8 +69,11 @@ pub fn classify_world_error_availability(err: &WorldError) -> Libp2pAvailability
         WorldError::NetworkRequestFailed {
             code,
             message,
-            retryable: _,
+            retryable,
         } => {
+            if *retryable {
+                return Libp2pAvailabilityClass::RetryableGap;
+            }
             let classified = classify_protocol_unavailable(message);
             if matches!(classified, Libp2pAvailabilityClass::RetryableGap) {
                 return classified;

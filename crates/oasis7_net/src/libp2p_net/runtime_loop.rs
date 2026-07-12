@@ -7,6 +7,7 @@ use libp2p::kad::{self, Quorum, RecordKey};
 use libp2p::request_response;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
+use oasis7_proto::distributed::DistributedErrorCode;
 
 use super::peer_manager::recompute_peer_manager_healths;
 use super::peer_manager_active_set::{
@@ -54,9 +55,57 @@ pub(super) fn fail_pending_request(
     );
     let _ = pending_response
         .response
-        .send(Err(WorldError::NetworkProtocolUnavailable {
-            protocol: message,
-        }));
+        .send(Err(request_failure_world_error(error, message)));
+}
+
+pub(super) fn request_failure_world_error(
+    error: request_response::OutboundFailure,
+    message: String,
+) -> WorldError {
+    let retryable = match error {
+        request_response::OutboundFailure::ConnectionClosed
+        | request_response::OutboundFailure::DialFailure
+        | request_response::OutboundFailure::Timeout => true,
+        request_response::OutboundFailure::Io(error) => {
+            error.kind() == std::io::ErrorKind::UnexpectedEof
+        }
+        request_response::OutboundFailure::UnsupportedProtocols => false,
+    };
+    if retryable {
+        WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            message,
+            retryable: true,
+        }
+    } else {
+        WorldError::NetworkProtocolUnavailable { protocol: message }
+    }
+}
+
+#[cfg(test)]
+mod request_failure_tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_response_and_unexpected_eof_are_retryable_transport_failures() {
+        for failure in [
+            request_response::OutboundFailure::ConnectionClosed,
+            request_response::OutboundFailure::Io(std::io::Error::from(
+                std::io::ErrorKind::UnexpectedEof,
+            )),
+        ] {
+            let error = request_failure_world_error(failure, "request failed".to_string());
+            assert!(super::super::error_mapping::world_error_is_retryable_connection_gap(&error));
+            assert!(matches!(
+                error,
+                WorldError::NetworkRequestFailed {
+                    code: DistributedErrorCode::ErrNotAvailable,
+                    retryable: true,
+                    ..
+                }
+            ));
+        }
+    }
 }
 
 pub(super) struct CommandContext<'a> {

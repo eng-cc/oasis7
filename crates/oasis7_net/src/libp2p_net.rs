@@ -14,6 +14,7 @@ mod peer_record;
 mod peer_record_republish;
 mod reachability;
 mod response_budget;
+mod response_workers;
 mod runtime_loop;
 mod runtime_support;
 mod swarm_behaviour;
@@ -55,7 +56,7 @@ use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
-    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, NetworkMessage, NetworkRequest, NetworkResponse,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, NetworkMessage, NetworkRequest,
     classify_network_protocol, classify_network_topic, push_bounded_inbox_message,
 };
 pub use peer_manager::{
@@ -72,7 +73,8 @@ pub use reachability::{
     LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
 };
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
-use response_budget::{FetchBlobResponseBudget, budgeted_response_bytes};
+use response_budget::FetchBlobResponseBudget;
+use response_workers::ResponseWorkers;
 use runtime_loop::{
     Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
     fail_pending_request, handle_command,
@@ -187,6 +189,7 @@ impl Libp2pNetwork {
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
             let mut handlers: HashMap<String, Handler> = HashMap::new();
             let mut fetch_blob_response_budget = FetchBlobResponseBudget::default();
+            let (response_workers, mut completed_response_rx) = ResponseWorkers::new();
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
                 HashMap::new();
             let mut pending_peer_record_requests: HashMap<
@@ -284,6 +287,9 @@ impl Libp2pNetwork {
                 }
                 loop {
                     futures::select! {
+                        completed = completed_response_rx.next().fuse() => if let Some(completed) = completed {
+                            response_workers.complete(completed, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, |channel, response| swarm.behaviour_mut().request_response.send_response(channel, response).is_ok(), &event_errors, max_error_messages);
+                        },
                         command = command_rx.next().fuse() => {
                             match handle_command(
                                 &mut swarm,
@@ -357,6 +363,10 @@ impl Libp2pNetwork {
                                                         request.protocol.as_str(),
                                                         request.payload.len(),
                                                     );
+                                                    if let Some(handler) = handlers.get(&request.protocol).cloned() {
+                                                        response_workers.schedule(channel, request.protocol, peer, request.payload, now_ms(), handler, &event_errors, max_error_messages);
+                                                        continue;
+                                                    }
                                                     let reply = handle_request_response_request(
                                                         &request,
                                                         &handlers,
@@ -368,20 +378,9 @@ impl Libp2pNetwork {
                                                             .allow_loopback_external_addrs_for_testing,
                                                         &discovered_peer_records,
                                                     );
-                                                    let response_bytes = budgeted_response_bytes(
-                                                        &mut fetch_blob_response_budget,
-                                                        peer,
-                                                        request.protocol.as_str(),
-                                                        reply,
-                                                        now_ms(),
-                                                    );
-                                                    record_response_outbound(
-                                                        &event_traffic_metrics,
-                                                        request.protocol.as_str(),
-                                                        response_bytes.len(),
-                                                    );
-                                                    let response = NetworkResponse { payload: response_bytes };
-                                                    swarm.behaviour_mut().request_response.send_response(channel, response).ok();
+                                                    response_workers.send_immediate(channel, request.protocol.as_str(), peer, reply, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, |channel, response| {
+                                                        swarm.behaviour_mut().request_response.send_response(channel, response).ok();
+                                                    });
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
