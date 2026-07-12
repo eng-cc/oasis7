@@ -16,12 +16,12 @@
 - 想直接进入下一轮跨模块优先级主入口：先读 `doc/core/next-round-priority-slate-2026-03-11.prd.md`
 - 想直接进入玩家访问模式 / execution lane 的正式契约：先读 `doc/core/player-access-mode-contract-2026-03-19.prd.md`
 - 想直接进入统一持久大世界默认产品模型与术语迁移计划：先读 `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
-- 想追溯 2026-03 版本候选 readiness / go-no-go：按需读 `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md` 与 `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md`
+- 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需读 `doc/core/reviews/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 密度快照（2026-06-23）
 - `doc/core/`：59 份文件
-- `doc/core/reviews/`：45 份文件
+- `doc/core/reviews/`：46 份文件（含本地 router）
 - 根目录保留专题：7 份文件
 - `doc/core/templates/`：2 份文件
 - `doc/core/checklists/`：1 份文件
@@ -29,7 +29,7 @@
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `reviews/` | 45 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；默认按需进入 |
+| `reviews/` | 46 | ROUND 审查、候选级 readiness/go-no-go、audit progress 与历史评审留痕；先由 `reviews/README.md` 分流，默认按需进入 |
 | 根目录保留专题 | 7 | 项目级总览、下一轮优先级、player access mode contract、统一持久大世界术语迁移；2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已全量退役删除 |
 | `templates/` | 2 | 阶段收口与 PRD-ID 追踪模板 |
 | `checklists/` | 1 | 跨模块影响检查清单 |
@@ -38,7 +38,7 @@
 - `doc/core/next-round-priority-slate-2026-03-11.prd.md`：下一轮跨模块优先级主入口，适合快速判断“接下来只做什么”。
 - `doc/core/player-access-mode-contract-2026-03-19.prd.md`：`viewer / pure_api` 与 execution lane 的正式 cross-module 契约；`software_safe` 仅作为 `viewer` 兼容 alias。
 - `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`：统一持久大世界默认产品模型、legacy 术语清理、runtime/ops 兼容边界与后续 gate 计划。
-- 2026-03 版本候选 readiness / go-no-go 已降为审计留痕，按需从 `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md` 与 `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md` 进入。
+- 2026-03 版本候选 readiness / go-no-go 已降为审计留痕，按需从 `doc/core/reviews/README.md` 分流进入。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者先顺扫全部活跃专题和 review 文件。
@@ -60,11 +60,7 @@
 ## 审计 / 模板 / 清单补充入口
 | 文档路径 | 类型 | 用途 |
 | --- | --- | --- |
-| `doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md` | `audit` | TASK-CORE-005 ROUND-001~008 收口结论；替代已删除的 producer->QA 一次性 handoff 作为当前追溯入口 |
-| `doc/core/reviews/consistency-review-round-009.md` | `audit` | ROUND-009 文档消费入口与手册语义收口轮记录 |
-| `doc/core/reviews/consistency-review-round-010.md` | `audit` | ROUND-010 继续复审记录 |
-| `doc/core/reviews/release-candidate-go-no-go-version-2026-03-11.md` | `audit` | 版本候选 go/no-go 留痕 |
-| `doc/core/reviews/release-candidate-readiness-board-version-2026-03-11.md` | `audit` | 版本候选 readiness board |
+| `doc/core/reviews/README.md` | `audit_router` | ROUND 审计、任务收口、版本候选 readiness/go-no-go 与支持证据的本地分流；替代根索引平铺多个历史叶子入口 |
 | `doc/core/templates/stage-closure-go-no-go-template.md` | `template` | 阶段收口 go/no-go 模板 |
 | `doc/core/templates/prd-id-test-evidence-mapping.md` | `template` | PRD-ID 到测试证据映射模板 |
 | `doc/core/checklists/cross-module-impact-checklist.md` | `checklist` | 跨模块影响检查清单 |

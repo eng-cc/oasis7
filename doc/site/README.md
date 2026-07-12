@@ -8,7 +8,7 @@
 - 想先理解站点模块边界、同步原则与验收口径：`doc/site/prd.md`
 - 想先看当前站点任务、同步状态与最近完成项：`doc/site/project.md`
 - 想直接按文件名定位某个 github-pages / manual 专题：`doc/site/prd.index.md`
-- 想先确认静态手册镜像如何挂到仓库权威文档：`doc/site/manual/site-manual-static-docs.prd.md` 与 `doc/world-simulator/viewer/viewer-manual.manual.md`
+- 想先确认静态手册镜像如何挂到仓库权威文档：`doc/site/manual/README.md`
 - 想先确认下载链路、公开公告准备态与真实状态口径：`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、`doc/site/prd.md` 与 `doc/site/project.md`
 
 ## 入口
@@ -21,7 +21,7 @@
 - `README.md` 只承担 landing page 职责：帮助读者先决定去模块 PRD、项目台账、文件级索引，还是少量仍承担当前公开口径判断职责的高频专题。
 - `site/doc/{cn,en}/index.html` 是对外 docs hub，承担公开阅读入口；仓库内 `doc/site/**` 负责治理规则、同步策略与追溯。
 - `site/skills/oasis7.md` 是公开 `oasis7` skill 的可直接抓取 Markdown 镜像；中英 docs hub 只负责给它提供入口。
-- `doc/site/manual/` 负责静态手册镜像策略与 canonical/manual 映射，不替代公开页面本身。
+- `doc/site/manual/` 负责静态手册镜像策略与 canonical/manual 映射；先读其 `README.md` 再按主专题或历史增量下钻，不替代公开页面本身。
 - `doc/world-simulator/viewer/viewer-manual.manual.md` 仍是仓库内 canonical Viewer 手册，`site/doc/{cn,en}/viewer-manual.html` 只是公开只读镜像。
 - `doc/site/prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
 
@@ -40,13 +40,13 @@
 ## 热点子域导航（2026-07-08 快照）
 - `github-pages/` 当前默认活跃专题三件套（48）：公开首页、下载链路、质量门禁、内容同步与公开叙事边界。
 - `github-pages/` 已退役删除旧专题（2 个专题）：完成态公告占位与 CTA 微专题只从当前入口、GitHub task issue evidence comments 与 git history 追溯。
-- `manual/` 正式专题三件套（6）：静态文档站与 Viewer 手册镜像策略。
+- `manual/` 路由入口与正式专题三件套（7）：静态文档站与 Viewer 手册镜像策略。
 - 模块根入口（5）：`README.md`、`prd.md`、`project.md`、`design.md`、`prd.index.md`。
 - 公开 HTML 入口（仓库外显层）：`site/index.html`、`site/en/index.html`、`site/doc/{cn,en}/index.html`、`site/doc/{cn,en}/viewer-manual.html`。
 - 公开 raw skill 入口（可直接抓取）：`site/skills/oasis7.md`。
 
 ## 高密度提示
-- `doc/site/` 当前共有 63 份文件，其中 `doc/site/github-pages/` 占 50 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
+- `doc/site/` 当前共有 64 份文件，其中 `doc/site/github-pages/` 占 50 份；默认入口不再尝试把 github-pages 长表直接摊平到模块首页。
 - 需要完整活跃专题清单时，进入 `doc/site/prd.index.md`；需要公开 docs hub、下载页或手册镜像时，再按 `site/**` 的公开页面定向进入。
 
 ## 共享约定
