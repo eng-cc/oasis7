@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT_DIR"
 
 usage() {
@@ -125,6 +126,7 @@ done
 [[ -n "$FINDING_DISPOSITION_EVIDENCE" ]] || die "--finding-disposition-evidence is required"
 [[ -n "$VERIFICATION" ]] || die "--verification is required"
 [[ -n "$RESIDUAL_RISK" ]] || die "--residual-risk is required"
+[[ "$SLICE_LEDGER" != n/a* ]] || die "--slice-ledger must name a machine-checkable provenance JSONL file for a passed review"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   if [[ "$ALLOW_DIRTY" != "1" || -z "$REVIEWED_PATHS" || -z "$SOURCE_HEAD" ]]; then
@@ -147,6 +149,55 @@ if [[ -z "$ROLE_BASIS" ]]; then
 fi
 REVIEW_PACKAGE="$(sanitize_evidence_path_field "Review Package" "$REVIEW_PACKAGE")"
 SLICE_LEDGER="$(sanitize_evidence_path_field "Slice Ledger" "$SLICE_LEDGER")"
+python3 - "$ROOT_DIR" "$SLICE_LEDGER" "$ROLES" "$SOURCE_HEAD" <<'PY'
+from __future__ import annotations
+import hashlib, json, re, sys
+from pathlib import Path
+
+root, relative, roles_csv, source_head = Path(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
+path = root / relative
+if not path.is_file():
+    raise SystemExit(f"error: Slice Ledger does not exist: {relative}")
+required = {item.strip() for item in roles_csv.split(",") if item.strip()}
+seen = {}
+for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    if not raw.strip():
+        continue
+    try:
+        item = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"error: invalid Slice Ledger JSON at line {line_number}: {exc}")
+    role = str(item.get("role") or "")
+    if role not in required or str(item.get("status") or "") not in {"completed", "passed"}:
+        continue
+    if role in seen:
+        raise SystemExit(f"error: duplicate completed Slice Ledger provenance for role: {role}")
+    mandatory = ("slice_id", "activation", "context_delivery", "actual_runtime", "artifact_digest", "scope_verdict", "risk_verdict", "findings", "residual_risk")
+    missing = [key for key in mandatory if not str(item.get(key) or "").strip()]
+    if missing:
+        raise SystemExit(f"error: incomplete Slice Ledger provenance for {role}: {','.join(missing)}")
+    slice_id = str(item["slice_id"])
+    if slice_id.lower() in {"tpm", "self", "self-attested", role}:
+        raise SystemExit(f"error: self-attested Slice Ledger identity is forbidden for {role}")
+    if str(item.get("head") or "") != source_head:
+        raise SystemExit(f"error: Slice Ledger source head mismatch for {role}")
+    digest = str(item["artifact_digest"])
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise SystemExit(f"error: invalid artifact SHA-256 for {role}")
+    artifacts = item.get("artifacts") or []
+    if not artifacts:
+        raise SystemExit(f"error: Slice Ledger has no returned artifact for {role}")
+    artifact = root / str(artifacts[0])
+    if not artifact.is_file() or hashlib.sha256(artifact.read_bytes()).hexdigest() != digest:
+        raise SystemExit(f"error: Slice Ledger artifact digest mismatch for {role}")
+    seen[role] = item
+missing_roles = sorted(required - set(seen))
+if missing_roles:
+    raise SystemExit("error: Slice Ledger missing required role provenance: " + ",".join(missing_roles))
+PY
+python3 "$SCRIPT_DIR/validate-review-provenance.py" \
+  --root "$ROOT_DIR" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
+  || die "Slice Ledger trusted dispatch provenance validation failed"
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'
 from __future__ import annotations

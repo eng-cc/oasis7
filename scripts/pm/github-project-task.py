@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
+import hashlib
 import importlib.util
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -19,6 +22,14 @@ ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done"
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
+ALLOWED_PHASE_TRANSITIONS = {"task_done": {"main_sync"}, "main_sync": {"main_sync"}}
+RECEIPT_SCHEMAS = {"main_sync": ("oasis7_main_sync", "post-merge-main-sync")}
+
+_store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
+_store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
+assert _store_spec and _store_spec.loader
+durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
 
 
 def die(message: str) -> None:
@@ -46,9 +57,47 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
+save_mapping = durable_store.replace_json
+
+
+def merge_task_mapping(path: pathlib.Path, task_uid: str, record: dict[str, Any]) -> None:
+    """Reload under lock and merge only one task, preventing lost updates."""
+    def update(latest: dict[str, Any]) -> None:
+        latest_record = dict((latest.setdefault("tasks", {}).get(task_uid) or {}))
+        for key, value in record.items():
+            if key in {"claim_verifications", "evidence_comments"}:
+                merged = list(latest_record.get(key) or [])
+                for item in value or []:
+                    if item not in merged:
+                        merged.append(item)
+                latest_record[key] = merged
+            else:
+                latest_record[key] = value
+        latest["tasks"][task_uid] = latest_record
+    durable_store.transact_json(path, update, {"version": 1, "tasks": {}})
+
+
+def atomic_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    encoded = (json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode()
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def merge_project_mapping(path: pathlib.Path, project: dict[str, Any]) -> None:
+    def update(latest: dict[str, Any]) -> None:
+        latest_project = dict(latest.get("project") or {})
+        latest_project.update(project)
+        latest["project"] = latest_project
+    durable_store.transact_json(path, update, {"version": 1, "tasks": {}})
 
 
 def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
@@ -59,6 +108,57 @@ def mapping_path_for(root: pathlib.Path, value: str) -> pathlib.Path:
 def run_text(cmd: list[str]) -> str:
     result = subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
     return result.stdout.strip()
+
+
+def authoritative_repository_identity(root: pathlib.Path, repository: str, worktree_hint: str) -> dict[str, str]:
+    """Resolve the task/repository identity from the registered git worktree."""
+    root = root.resolve(strict=True)
+    requested = pathlib.Path(worktree_hint or root).expanduser()
+    # A stale/missing hint is not authority.  The active command root is the
+    # authoritative registered worktree fallback and is persisted separately
+    # as canonical_worktree.
+    canonical = (requested if requested.exists() else root).resolve(strict=True)
+    def resolved_common_dir(worktree: pathlib.Path) -> pathlib.Path:
+        value = pathlib.Path(run_text(["git", "-C", str(worktree), "rev-parse", "--git-common-dir"]))
+        return value.resolve() if value.is_absolute() else (worktree / value).resolve()
+    root_common_dir = resolved_common_dir(root)
+    candidate_common_dir = resolved_common_dir(canonical)
+    if candidate_common_dir != root_common_dir:
+        die(f"worktree hint belongs to a different git common dir: {canonical}")
+    # Membership comes only from the command root's repository registry.  A
+    # foreign worktree cannot authorize itself by listing its own family.
+    registered = run_text(["git", "-C", str(root), "worktree", "list", "--porcelain"])
+    worktrees: list[tuple[str, str]] = []
+    current_path = ""
+    for line in registered.splitlines() + [""]:
+        if line.startswith("worktree "):
+            current_path = str(pathlib.Path(line.removeprefix("worktree ")).resolve())
+        elif line.startswith("branch refs/heads/") and current_path:
+            worktrees.append((current_path, line.removeprefix("branch refs/heads/")))
+        elif not line:
+            current_path = ""
+    canonical_text = str(canonical)
+    task_branch = next((branch for path, branch in worktrees if path == canonical_text), "")
+    if not task_branch:
+        die(f"canonical worktree is detached or unregistered: {canonical}")
+    try:
+        default_branch = run_text(["git", "-C", str(canonical), "symbolic-ref", "--short", "refs/remotes/origin/HEAD"]).removeprefix("origin/")
+    except subprocess.CalledProcessError:
+        # `git worktree list` emits the primary worktree first; for a local
+        # repository without origin this is the only authoritative default
+        # branch fact available.
+        default_branch = worktrees[0][1] if worktrees else ""
+    normalized_repository = repository.strip().strip("/")
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", normalized_repository):
+        die(f"invalid repository identity: {repository!r}")
+    if not default_branch:
+        die("cannot resolve repository default branch from git facts")
+    return {
+        "repository": normalized_repository,
+        "canonical_worktree": canonical_text,
+        "task_branch": task_branch,
+        "default_branch": default_branch,
+    }
 
 
 def issue_number_from_url(issue_url: str) -> int:
@@ -79,6 +179,14 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
+    hold_values: dict[str, Any] = {}
+    for key in ("kind", "requester", "reason", "resume_authority", "active"):
+        match = re.search(rf"^- merge_hold_{key}: `([^`]+)`$", body, re.MULTILINE)
+        if match:
+            hold_values[key] = match.group(1)
+    if hold_values:
+        hold_values["active"] = str(hold_values.get("active", "false")).lower() == "true"
+        fields["merge_hold"] = hold_values
     for key in ("pr_url", "pr_number"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
@@ -86,13 +194,18 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     source_refs = re.findall(r"^- `([^`]+)`$", body, re.MULTILINE)
     if source_refs:
         fields["source_refs"] = source_refs
-    acceptance_match = re.search(r"^Acceptance:\n(?P<body>(?:^- .+\n?)+)", body, re.MULTILINE)
-    if acceptance_match:
-        fields["acceptance"] = [
-            line[2:].strip()
-            for line in acceptance_match.group("body").splitlines()
-            if line.startswith("- ")
-        ]
+    lines = body.splitlines()
+    acceptance: list[str] = []
+    for index, line in enumerate(lines):
+        if line.strip() != "Acceptance:":
+            continue
+        for item in lines[index + 1:]:
+            match = re.match(r"^-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$", item)
+            if not match:
+                break
+            acceptance.append(match.group(1).strip())
+        break
+    fields["acceptance"] = acceptance
     return fields
 
 
@@ -148,12 +261,14 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("module", record.get("module") or ""),
             ("worktree_hint", record.get("worktree_hint") or ""),
             ("status", record.get("status") or "candidate"),
+            ("workflow_phase", record.get("workflow_phase") or ""),
             ("priority", record.get("priority") or "P2"),
             ("source_signal", record.get("source_signal") or ""),
             ("source_type", record.get("source_type") or ""),
             ("severity", record.get("severity") or ""),
             ("pr_url", record.get("pr_url") or record.get("pull_request_url") or ""),
             ("pr_number", record.get("pr_number") or ""),
+            ("merge_hold", record.get("merge_hold") or {}),
             ("source_refs", record.get("source_refs") or []),
             ("acceptance", record.get("acceptance") or []),
             ("updated_at", record.get("updated_at") or now()),
@@ -187,6 +302,11 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
+    if task.get("merge_hold"):
+        hold = task["merge_hold"]
+        for key in ("kind", "requester", "reason", "resume_authority", "active"):
+            value = str(hold.get(key, "")).lower() if key == "active" else hold.get(key, "")
+            lines.append(f"- merge_hold_{key}: `{value}`")
     source_refs = task.get("source_refs") or []
     if source_refs:
         lines.append("")
@@ -203,7 +323,7 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
 
 
 def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
         handle.write(issue_body(task))
         body_path = handle.name
     try:
@@ -213,7 +333,7 @@ def create_issue(repo: str, task: OrderedDict[str, Any]) -> str:
 
 
 def update_issue_body(repo: str, issue_number: int, task: OrderedDict[str, Any]) -> None:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
         handle.write(issue_body(task))
         body_path = handle.name
     try:
@@ -223,7 +343,7 @@ def update_issue_body(repo: str, issue_number: int, task: OrderedDict[str, Any])
 
 
 def issue_comment(repo: str, issue_number: int, body: str) -> str:
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False, dir="/tmp") as handle:
         handle.write(body)
         body_path = handle.name
     try:
@@ -316,9 +436,64 @@ def add_project_item(args: argparse.Namespace, issue_url: str) -> str:
 def command_new_task(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     mapping_path = mapping_path_for(root, args.mapping)
-    mapping = load_mapping(mapping_path)
-    mapping.setdefault("tasks", {})
-    task_uid = f"task_{uuid.uuid4().hex}"
+    repository_identity = authoritative_repository_identity(root, args.repo, args.worktree_hint or str(root))
+    immutable_request = OrderedDict(
+        [
+            ("repo", args.repo),
+            ("title", args.title),
+            ("owner_role", args.owner_role),
+            ("worktree_hint", args.worktree_hint or ""),
+            ("module", args.module or ""),
+            ("priority", args.priority),
+            ("source_refs", sorted(args.source_ref or [])),
+            ("acceptance", list(args.acceptance or [])),
+            ("source_signal", args.source_signal or ""),
+            ("source_type", args.source_type or ""),
+            ("severity", args.severity or ""),
+            ("doc_refs", sorted(args.doc_ref or [])),
+            ("related_prd", sorted(args.related_prd or [])),
+            ("handoff_to", sorted(args.handoff_to or [])),
+        ]
+    )
+    immutable_digest = hashlib.sha256(
+        json.dumps(immutable_request, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    ).hexdigest()
+    journal_key = hashlib.sha256(
+        "\0".join((args.repo, args.title, args.owner_role, args.worktree_hint or "")).encode()
+    ).hexdigest()
+    test_scratch = os.environ.get("OASIS7_PM_TEST_SCRATCH", "")
+    if test_scratch:
+        scratch_root = pathlib.Path(test_scratch)
+        if not scratch_root.is_absolute():
+            die("OASIS7_PM_TEST_SCRATCH must be absolute")
+        journal_root = scratch_root / "bootstrap-journal"
+    else:
+        journal_root = root / ".pm/scratch/bootstrap-journal"
+    journal_path = journal_root / f"{journal_key}.json"
+    journal_existed = journal_path.exists()
+    journal = json.loads(journal_path.read_text(encoding="utf-8")) if journal_existed else {}
+    if journal:
+        recorded_request = journal.get("immutable_request") or journal.get("request")
+        if not isinstance(recorded_request, dict):
+            die("bootstrap journal is missing immutable request; cannot resume safely")
+        normalized_recorded = OrderedDict(
+            (key, sorted(recorded_request.get(key) or []) if key in {"source_refs", "doc_refs", "related_prd", "handoff_to"} else
+             list(recorded_request.get(key) or []) if key == "acceptance" else
+             str(recorded_request.get(key) or ""))
+            for key in immutable_request
+        )
+        if normalized_recorded != immutable_request:
+            changed = [key for key in immutable_request if normalized_recorded.get(key) != immutable_request.get(key)]
+            die("bootstrap immutable request drift; start a new task bootstrap (mismatch: " + ",".join(changed) + ")")
+        recorded_digest = str(journal.get("immutable_request_digest") or "")
+        if recorded_digest and recorded_digest != immutable_digest:
+            die("bootstrap immutable request digest mismatch; journal may be corrupt")
+    task_uid = str(journal.get("task_uid") or f"task_{uuid.uuid4().hex}")
+    if not journal:
+        journal = {"version": 2, "task_uid": task_uid, "state": "planned", "next_action": "create_issue",
+                   "immutable_request": immutable_request, "immutable_request_digest": immutable_digest,
+                   "updated_at": now()}
+        atomic_json(journal_path, journal)
     task = OrderedDict(
         [
             ("task_uid", task_uid),
@@ -339,9 +514,23 @@ def command_new_task(args: argparse.Namespace) -> int:
             ("updated_at", now()),
         ]
     )
-    issue_url = create_issue(args.repo, task)
+    issue_url = str(journal.get("issue_url") or "")
+    if not issue_url and journal_existed:
+        try:
+            recovered = github_issue_record(args.repo, task_uid)
+        except (subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError):
+            recovered = None
+        issue_url = str((recovered or {}).get("issue_url") or "")
+    if not issue_url:
+        issue_url = create_issue(args.repo, task)
+    journal.update({"issue_url": issue_url, "state": "issue_created", "next_action": "add_project_item", "updated_at": now()})
+    atomic_json(journal_path, journal)
     issue_number = issue_number_from_url(issue_url)
-    item_id = add_project_item(args, issue_url)
+    item_id = str(journal.get("project_item_id") or "")
+    if not item_id:
+        item_id = add_project_item(args, issue_url)
+    journal.update({"project_item_id": item_id, "state": "project_item_added", "next_action": "update_project_fields", "updated_at": now()})
+    atomic_json(journal_path, journal)
     updated_fields = update_project_fields(args, task, item_id)
     record = {
         "task_uid": task_uid,
@@ -365,12 +554,12 @@ def command_new_task(args: argparse.Namespace) -> int:
         "created_at": now(),
         "updated_at": now(),
         "evidence_sink": issue_url,
+        **repository_identity,
     }
-    mapping["tasks"][task_uid] = record
-    project = dict(mapping.get("project") or {})
-    project.update({"owner": args.project_owner, "number": args.project_number, "repo": args.repo})
-    mapping["project"] = project
-    save_mapping(mapping_path, mapping)
+    merge_task_mapping(mapping_path, task_uid, record)
+    merge_project_mapping(mapping_path, {"owner": args.project_owner, "number": args.project_number, "repo": args.repo})
+    journal.update({"state": "completed", "next_action": "none", "mapping_path": str(mapping_path), "updated_at": now()})
+    atomic_json(journal_path, journal)
     payload = dict(record)
     payload.update(
         {
@@ -378,6 +567,7 @@ def command_new_task(args: argparse.Namespace) -> int:
             "execution_log_path": issue_url,
             "updated_field_values": updated_fields,
             "mapping_path": str(mapping_path),
+            "bootstrap_journal": str(journal_path),
         }
     )
     if args.json:
@@ -446,7 +636,7 @@ def command_append_evidence(args: argparse.Namespace) -> int:
     record["last_evidence_at"] = now()
     record["updated_at"] = now()
     record.setdefault("evidence_comments", []).append(comment_url)
-    save_mapping(mapping_path, mapping)
+    merge_task_mapping(mapping_path, args.task_uid, record)
     payload = {
         "task_uid": args.task_uid,
         "issue_url": record.get("issue_url"),
@@ -476,7 +666,7 @@ def command_workflow_report(args: argparse.Namespace) -> int:
     record["last_evidence_at"] = now()
     record["updated_at"] = now()
     record.setdefault("evidence_comments", []).append(comment_url)
-    save_mapping(mapping_path, mapping)
+    merge_task_mapping(mapping_path, args.task_uid, record)
     payload = {
         "task_uid": args.task_uid,
         "role": args.role,
@@ -511,15 +701,10 @@ def command_move_task(args: argparse.Namespace) -> int:
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
-    if args.to_status == "done":
-        updated_fields = update_done_project_fields(args, task, str(record["project_item_id"]))
-    elif record.get("project_item_id"):
+    if args.to_status != "done" and record.get("project_item_id"):
         updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
-    if args.to_status == "done":
-        run_text(["gh", "issue", "close", str(record["issue_number"]), "-R", args.repo, "--reason", "completed"])
-    if record.get("_github_source") != "issue_search" or mapping_path.exists():
-        save_mapping(mapping_path, mapping)
+    merge_task_mapping(mapping_path, args.task_uid, record)
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -532,6 +717,213 @@ def command_move_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_closeout_task(args: argparse.Namespace) -> int:
+    mapping_path, mapping, original = require_record(args)
+    previous = str(original.get("status") or "")
+    claim = json.loads(args.claim_json)
+    if args.to_status != "deferred":
+        if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
+            die("closeout-task: verified immutable claim evidence is required")
+    record = json.loads(json.dumps(original))
+    closed_at = now()
+    record.setdefault("claim_verifications", []).append(claim)
+    record["last_claim_verification_at"] = claim.get("verified_at")
+    record["last_closed_at"] = closed_at
+    record["last_evidence_at"] = closed_at
+    record["status"] = args.to_status
+    if args.to_status == "done" and args.pr_receipt:
+        receipt = json.loads(pathlib.Path(args.pr_receipt).read_text(encoding="utf-8"))
+        record["merge_receipt"] = receipt
+        record["merge_receipt_sha256"] = hashlib.sha256(pathlib.Path(args.pr_receipt).read_bytes()).hexdigest()
+    if args.to_status == "done":
+        recover_missing_project_item(args, record)
+        if not record.get("project_item_id"):
+            die("closeout-task: done requires a recoverable GitHub Project item")
+    task = task_from_record(args.task_uid, record)
+    terminal_phase = "task_done" if args.to_status == "done" else "pre_pr_ready"
+    record["workflow_phase"] = terminal_phase
+    task = task_from_record(args.task_uid, record)
+    evidence_fields = {
+        "Workflow Phase": "task_done" if args.to_status == "done" else "pre_pr_ready",
+        "Task Status": args.to_status,
+        "Immutable Verification Head": claim.get("frozen_source_head") or "n/a",
+        "Immutable Verification Tree": claim.get("frozen_source_tree") or "n/a",
+    }
+    if record.get("merge_receipt"):
+        receipt = record["merge_receipt"]
+        evidence_fields.update({
+            "Merge Receipt Issuer": receipt.get("issuer"),
+            "Merge Receipt Repository": receipt.get("repository"),
+            "Merge Receipt PR": receipt.get("pr_url"),
+            "Merge Receipt Head": receipt.get("head_oid"),
+            "Merge Receipt Observed At": receipt.get("observed_at"),
+        })
+    comment_url = issue_comment(
+        args.repo,
+        int(record["issue_number"]),
+        evidence_body(
+            args.task_uid,
+            args.role,
+            terminal_phase,
+            evidence_fields,
+        ),
+    )
+    updated_fields = 0
+    if args.to_status == "done":
+        updated_fields = update_done_project_fields(args, task, str(record["project_item_id"]))
+    elif record.get("project_item_id"):
+        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+    update_issue_body(args.repo, int(record["issue_number"]), task)
+    record.setdefault("evidence_comments", []).append(comment_url)
+    if record.get("_github_source") != "issue_search" or mapping_path.exists():
+        cache_patch = {
+            "status": record["status"],
+            "last_closed_at": record["last_closed_at"],
+            "last_evidence_at": record["last_evidence_at"],
+            "last_claim_verification_at": record.get("last_claim_verification_at"),
+            "claim_verifications": [claim],
+            "evidence_comments": [comment_url],
+            "workflow_phase": terminal_phase,
+        }
+        if record.get("merge_receipt"):
+            cache_patch["merge_receipt"] = record["merge_receipt"]
+            cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
+        if record.get("project_item_id"):
+            cache_patch["project_item_id"] = record["project_item_id"]
+        merge_task_mapping(mapping_path, args.task_uid, cache_patch)
+    payload = {
+        "task_uid": args.task_uid,
+        "previous_status": previous,
+        "status": args.to_status,
+        "issue_url": record.get("issue_url"),
+        "comment_url": comment_url,
+        "last_closed_at": closed_at,
+        "updated_field_values": updated_fields,
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"closeout-task: {args.task_uid} -> {args.to_status}")
+    return 0
+
+
+def command_set_phase(args: argparse.Namespace) -> int:
+    mapping_path, _mapping, original = require_record(args)
+    receipt = json.loads(pathlib.Path(args.receipt_json).read_text(encoding="utf-8"))
+    current = str(original.get("workflow_phase") or "")
+    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set())
+    if not allowed_transition:
+        die(f"set-phase: transition {current!r} -> {args.phase!r} is not allowed")
+    receipt_schema = RECEIPT_SCHEMAS.get(args.phase)
+    if not receipt_schema or (receipt.get("receipt_type"), receipt.get("issuer")) != receipt_schema:
+        die("set-phase: receipt schema or issuer mismatch")
+    if receipt.get("task_uid") != args.task_uid:
+        die("set-phase: receipt task_uid mismatch")
+    record = json.loads(json.dumps(original))
+    record["workflow_phase"] = args.phase
+    record.setdefault("phase_receipts", {})[args.phase] = receipt
+    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(pathlib.Path(args.receipt_json).read_bytes()).hexdigest()
+    comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_body(
+        args.task_uid, args.role, args.phase,
+        {"Workflow Phase": args.phase, "Receipt Type": receipt.get("receipt_type"),
+         "Receipt Observed At": receipt.get("observed_at")},
+    ))
+    record.setdefault("evidence_comments", []).append(comment_url)
+    task = task_from_record(args.task_uid, record)
+    if record.get("project_item_id"):
+        update_project_fields(args, task, str(record["project_item_id"]))
+    merge_task_mapping(mapping_path, args.task_uid, {
+        "workflow_phase": args.phase,
+        "phase_receipts": record["phase_receipts"],
+        "phase_receipt_sha256": record["phase_receipt_sha256"],
+        "evidence_comments": [comment_url],
+        "last_evidence_at": now(),
+    })
+    print(json.dumps({"status":"ok","task_uid":args.task_uid,"workflow_phase":args.phase,
+                      "comment_url":comment_url}, sort_keys=True))
+    return 0
+
+
+def command_refresh_task(args: argparse.Namespace) -> int:
+    mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
+    latest = load_mapping(mapping_path)
+    existing = dict((latest.get("tasks") or {}).get(args.task_uid) or {})
+    live = github_issue_record(args.repo, args.task_uid)
+    if not live:
+        die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
+    repository_identity = authoritative_repository_identity(
+        args.root.resolve(), args.repo, str(live.get("worktree_hint") or args.root.resolve())
+    )
+    recovered: dict[str, Any] = {}
+    try:
+        recovered = load_sync_module().recover_project_mapping(args.project_owner, args.project_number).get(args.task_uid) or {}
+    except Exception as exc:
+        die(f"refresh-task: GitHub Project reconciliation failed: {exc}")
+    item_id = str(recovered.get("project_item_id") or existing.get("project_item_id") or "")
+    project_fields: dict[str, str] = {}
+    if item_id:
+        query = """
+        query($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            ... on ProjectV2Item {
+              id
+              fieldValues(first: 100) {
+                nodes {
+                  ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+                  ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+                }
+              }
+            }
+          }
+        }
+        """
+        payload = json.loads(run_text(["gh", "api", "graphql", "-f", f"query={query}", "-F", f"ids[]={item_id}"]))
+        nodes = ((payload.get("data") or {}).get("nodes") or [])
+        if nodes:
+            for value in (((nodes[0] or {}).get("fieldValues") or {}).get("nodes") or []):
+                field_name = str(((value.get("field") or {}).get("name") or ""))
+                field_value = str(value.get("name") or value.get("text") or "")
+                if field_name and field_value:
+                    project_fields[field_name] = field_value
+    authoritative_keys = {
+        "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
+        "status", "priority", "worktree_hint", "source_signal", "source_type",
+        "severity", "pr_url", "pr_number", "merge_hold", "source_refs", "acceptance",
+    }
+    record: dict[str, Any] = {}
+    for key in authoritative_keys:
+        if key in live:
+            record[key] = live[key]
+        elif key == "acceptance":
+            record[key] = []
+    record.update({key: value for key, value in recovered.items() if value not in (None, "")})
+    project_status = project_fields.get("PM Status", "")
+    lifecycle_rank = {
+        "candidate": 0, "committed": 1, "blocked": 2, "ready": 3,
+        "pr_watch": 4, "done": 5, "deferred": 5,
+    }
+    issue_status = str(record.get("status") or "candidate")
+    if project_status in lifecycle_rank and lifecycle_rank[project_status] >= lifecycle_rank.get(issue_status, -1):
+        record["status"] = project_status
+        record["project_status"] = project_fields.get("Status", "")
+        record["workflow_phase"] = project_fields.get("Workflow Phase", "")
+        record["reconciled_from_project"] = project_status != issue_status
+    record["cache_refreshed_at"] = now()
+    # Local cache identity is never accepted from stale issue/project/cache
+    # values.  Every refresh overwrites it from current registered git facts.
+    record.update(repository_identity)
+    merge_task_mapping(mapping_path, args.task_uid, record)
+    committed = (load_mapping(mapping_path).get("tasks") or {}).get(args.task_uid) or record
+    payload = {
+        "status": "refreshed",
+        "task_uid": args.task_uid,
+        "issue_url": committed.get("issue_url"),
+        "project_item_id": committed.get("project_item_id"),
+        "task_status": committed.get("status"),
+        "acceptance": committed.get("acceptance") or [],
+        "cache_refreshed_at": committed["cache_refreshed_at"],
+    }
+    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"refresh-task: refreshed {args.task_uid}")
+    return 0
+
+
 def command_record_pr(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
@@ -540,6 +932,14 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if number is not None:
         record["pr_number"] = number
     record["status"] = "pr_watch"
+    record.setdefault("merge_hold", {
+        "kind": "normal_pr_ci_watch",
+        "active": False,
+        "requester": args.role,
+        "reason": "default PR purpose decision recorded by record-pr",
+        "resume_authority": args.role,
+        "recorded_at": now(),
+    })
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
@@ -565,8 +965,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         ),
     )
     record.setdefault("evidence_comments", []).append(comment_url)
-    if record.get("_github_source") != "issue_search" or mapping_path.exists():
-        save_mapping(mapping_path, mapping)
+    merge_task_mapping(mapping_path, args.task_uid, record)
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -578,6 +977,46 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "updated_field_values": updated_fields,
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"record-pr: recorded {args.pr_url} for {args.task_uid}")
+    return 0
+
+
+def command_set_merge_hold(args: argparse.Namespace) -> int:
+    mapping_path, _mapping, record = require_record(args)
+    previous = record.get("merge_hold") or {}
+    if args.kind == "normal_pr_ci_watch":
+        if not previous.get("active"):
+            die("set-merge-hold: no active hold to clear")
+        if args.resume_authority != previous.get("resume_authority"):
+            die("set-merge-hold: resume authority does not match persisted task truth")
+        hold = {**previous, "active": False, "cleared_at": now(), "cleared_by": args.requester, "kind": "normal_pr_ci_watch"}
+    else:
+        if not all((args.requester, args.reason, args.resume_authority)):
+            die("set-merge-hold: active hold requires requester, reason, and resume authority")
+        hold = {"kind": args.kind, "active": True, "requester": args.requester, "reason": args.reason, "resume_authority": args.resume_authority, "recorded_at": now()}
+    issue_number=int(record["issue_number"]); pr_number=int(record.get("pr_number") or 0)
+    if pr_number <= 0:
+        die("set-merge-hold: task truth has no recorded PR")
+    try:
+        live_pr=json.loads(run_text(["gh","pr","view",str(pr_number),"--repo",args.repo,"--json","number,headRefOid,url"]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"set-merge-hold: live PR head readback failed: {exc}")
+    head_oid=str(live_pr.get("headRefOid") or "")
+    if str(live_pr.get("number") or "") != str(pr_number) or not re.fullmatch(r"[0-9a-f]{40}",head_oid,re.I):
+        die("set-merge-hold: live PR identity/headRefOid readback is invalid")
+    canonical = "\n".join(["<!-- oasis7-merge-hold -->",f"- task_uid: `{args.task_uid}`",f"- repository: `{args.repo}`",f"- issue_number: `{issue_number}`",f"- pr_number: `{pr_number}`",f"- head_oid: `{head_oid}`","- node_id: `merge_hold`","- kind: `merge_hold`",f"- disposition: `{'active' if hold.get('active') else 'cleared'}`",f"- hold_kind: `{hold['kind']}`",f"- active: `{str(hold.get('active',False)).lower()}`",f"- requester: `{hold.get('requester') or ''}`",f"- reason: `{hold.get('reason') or ''}`",f"- resume_authority: `{hold.get('resume_authority') or ''}`",""])
+    comment_url = issue_comment(args.repo, issue_number, canonical)
+    comment_id=comment_url.rsplit("issuecomment-",1)[-1]
+    readback=json.loads(run_text(["gh","api",f"repos/{args.repo}/issues/comments/{comment_id}"]))
+    read_body=str(readback.get("body") or "")
+    if read_body != canonical: die("set-merge-hold: GitHub comment readback mismatch")
+    evidence_receipt={"source":"github_task_issue_comment","runtime_verified":True,"task_uid":args.task_uid,"repository":args.repo,"issue_number":issue_number,"pr_number":pr_number,"head_oid":head_oid,"node_id":"merge_hold","kind":"merge_hold","disposition":"active" if hold.get("active") else "cleared","github_node_id":str(readback.get("id")),"url":readback.get("html_url"),"author":(readback.get("user") or {}).get("login"),"observed_at":readback.get("created_at"),"digest":hashlib.sha256(read_body.encode()).hexdigest()}
+    hold["evidence_receipt"]=evidence_receipt
+    record["merge_hold"] = hold
+    record.setdefault("evidence_comments", []).append(comment_url)
+    record["updated_at"] = now()
+    update_issue_body(args.repo, int(record["issue_number"]), task_from_record(args.task_uid, record))
+    merge_task_mapping(mapping_path, args.task_uid, record)
+    print(json.dumps({"task_uid": args.task_uid, "merge_hold": hold, "comment_url": comment_url}, indent=2, sort_keys=True) if args.json else f"set-merge-hold: {hold['kind']}")
     return 0
 
 
@@ -641,6 +1080,31 @@ def build_parser() -> argparse.ArgumentParser:
     move.add_argument("--json", action="store_true")
     move.set_defaults(func=command_move_task)
 
+    closeout = subparsers.add_parser("closeout-task")
+    add_common(closeout)
+    closeout.add_argument("--task-uid", required=True)
+    closeout.add_argument("--role", required=True)
+    closeout.add_argument("--to-status", required=True, choices=("ready", "done", "deferred"))
+    closeout.add_argument("--claim-json", required=True)
+    closeout.add_argument("--pr-receipt")
+    closeout.add_argument("--json", action="store_true")
+    closeout.set_defaults(func=command_closeout_task)
+
+    phase = subparsers.add_parser("set-phase")
+    add_common(phase)
+    phase.add_argument("--task-uid", required=True)
+    phase.add_argument("--role", default="tpm")
+    phase.add_argument("--phase", required=True, choices=("main_sync",))
+    phase.add_argument("--receipt-json", required=True)
+    phase.add_argument("--json", action="store_true")
+    phase.set_defaults(func=command_set_phase)
+
+    refresh = subparsers.add_parser("refresh-task")
+    add_common(refresh)
+    refresh.add_argument("--task-uid", required=True)
+    refresh.add_argument("--json", action="store_true")
+    refresh.set_defaults(func=command_refresh_task)
+
     record_pr = subparsers.add_parser("record-pr")
     add_common(record_pr)
     record_pr.add_argument("--task-uid", required=True)
@@ -649,6 +1113,17 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
+
+    hold = subparsers.add_parser("set-merge-hold")
+    add_common(hold)
+    hold.add_argument("--task-uid", required=True)
+    hold.add_argument("--kind", required=True, choices=("normal_pr_ci_watch", "manual_packaging_ci_hold", "user_requested_merge_hold"))
+    hold.add_argument("--requester", required=True)
+    hold.add_argument("--reason", default="")
+    hold.add_argument("--resume-authority", required=True)
+    hold.add_argument("--role", default="tpm")
+    hold.add_argument("--json", action="store_true")
+    hold.set_defaults(func=command_set_merge_hold)
     return parser
 
 

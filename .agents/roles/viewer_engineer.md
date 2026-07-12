@@ -46,6 +46,26 @@
 - Web-first 闭环可以覆盖关键交互
 - 文档、界面、接口行为一致
 
+## Codex Adapter Projection
+```toml
+schema = 1
+registry_description = """
+Viewer, launcher, Web UI, WebGPU, observability, player-facing controls, and browser validation.
+"""
+context_contract = """
+Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/viewer_engineer.md, testing-manual.md for Web validation, and the dispatched slice contract.
+"""
+domain_contract = """
+Own Viewer, launcher, Web UI, WebGPU, observable world-state presentation, player-facing controlled actions, source/generated frontend boundaries, and browser automation surfaces. Do not define world rules, balance, runtime state evolution, visual direction, QA release judgment, or community policy. Take visual and interaction acceptance from game_visual_interaction_designer and escalate control-boundary or state-semantic changes through TPM.
+"""
+operational_constraints = """
+Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Use apply_patch for edits. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
+"""
+return_contract = """
+Return: role and slice outcome; implementation or findings with file/DOM/browser evidence; changed files; validation commands and observed results; visual or browser evidence/exemption; uncertainty and residual risk; required specialist follow-ups.
+"""
+```
+
 ## Recommended Skills
 - 主技能：`skills/agent-browser`、`skills/gpt-image-2`，用于 Viewer/Web 闭环自动化与 UI-heavy 题的前置视觉比较。
 - 常复用技能：`tdd-test-writer`、`skills/humanizer-zh`，用于关键交互回归与中文界面/说明文案收口。

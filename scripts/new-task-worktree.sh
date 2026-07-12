@@ -472,8 +472,10 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   BOOTSTRAP_STATUS=$?
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
-    cleanup_bootstrap_failure
-    echo "error: failed to bootstrap GitHub-backed PM task inside target worktree; cleaned up created worktree" >&2
+    echo "error: failed to bootstrap GitHub-backed PM task; preserved worktree/branch because remote creation may have succeeded: $TARGET_PATH" >&2
+    printf 'resume-bootstrap: cd %q &&' "$TARGET_PATH" >&2
+    printf ' %q' "${NEW_TASK_CMD[@]}" >&2
+    printf '\n' >&2
     exit "$BOOTSTRAP_STATUS"
   fi
 
@@ -490,8 +492,8 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   BOOTSTRAP_STATUS=$?
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
-    cleanup_bootstrap_failure
-    echo "error: failed to move/start bootstrapped GitHub-backed PM task inside target worktree; cleaned up created worktree" >&2
+    echo "error: failed to move/start bootstrapped GitHub-backed PM task; preserved worktree/branch for recovery: $TARGET_PATH" >&2
+    echo "resume-bootstrap: cd '$TARGET_PATH' && ./scripts/pm/refresh-task-cache.sh --task-uid '$PM_TASK_UID' --json, then retry move-task/workflow-report" >&2
     exit "$BOOTSTRAP_STATUS"
   fi
 fi

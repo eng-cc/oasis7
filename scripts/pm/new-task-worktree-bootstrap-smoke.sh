@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SOURCE_ROOT="$ROOT_DIR"
 
 OUTPUT_JSON=0
 KEEP_TEMP=0
@@ -49,10 +50,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 TMPDIR="$(mktemp -d)"
+FIXTURE_ROOT="$TMPDIR/repo"
+mkdir -p "$FIXTURE_ROOT"
+(cd "$SOURCE_ROOT" && git ls-files -co --exclude-standard -z | tar --null -T - -cf -) | tar -xf - -C "$FIXTURE_ROOT"
+git -C "$FIXTURE_ROOT" init -q -b main
+git -C "$FIXTURE_ROOT" config user.email test@example.com
+git -C "$FIXTURE_ROOT" config user.name Test
+git -C "$FIXTURE_ROOT" add .
+git -C "$FIXTURE_ROOT" commit -qm "fixture snapshot"
+git -C "$FIXTURE_ROOT" update-ref refs/remotes/origin/main HEAD
+ROOT_DIR="$FIXTURE_ROOT"
 WORKTREE_PATH="$TMPDIR/worktree"
 BRANCH_NAME="task/smoke-task-worktree-pm-bootstrap-$$-$(date +%s)"
 SOURCE_STATUS_BEFORE="$(git -C "$ROOT_DIR" status --short)"
-CANONICAL_REPO_ROOT="$(cd "$(git -C "$ROOT_DIR" rev-parse --git-common-dir)/.." && pwd -P)"
+GIT_COMMON_DIR="$(git -C "$ROOT_DIR" rev-parse --path-format=absolute --git-common-dir)"
+CANONICAL_REPO_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd -P)"
 CANONICAL_CONFIG_PATH="$CANONICAL_REPO_ROOT/config.toml"
 CREATED_CANONICAL_CONFIG_FIXTURE=0
 mkdir -p "$TMPDIR/bin"

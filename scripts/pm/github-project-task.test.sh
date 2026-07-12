@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
@@ -21,8 +22,33 @@ set -euo pipefail
 printf '%q ' "$@" >> "$GH_CALL_LOG"
 printf '\n' >> "$GH_CALL_LOG"
 case "$*" in
+  api\ graphql*)
+    python3 - "$GH_MAPPING_PATH" <<'PY'
+import json, os, sys
+m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); s=next_record["status"]
+state_file=os.environ.get("GH_PROJECT_STATE_FILE")
+if state_file and os.path.exists(state_file): s=open(state_file).read().strip() or s
+status={"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"Done"}.get(s,"In Progress")
+phase={"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"task_done"}.get(s,"execution")
+nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":s,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
+if next_record.get("pr_url"): nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
+node={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":f"task_uid: {uid}","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]},"fieldValues":{"nodes":nodes}}
+print(json.dumps({"data":{"nodes":[node]}}))
+PY
+    ;;
   "issue create -R eng-cc/oasis7 --title "*)
     printf 'https://github.com/eng-cc/oasis7/issues/2001\n'
+    ;;
+  issue\ list\ -R\ eng-cc/oasis7\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
+    if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
+      printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
+    else
+      printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
+    fi
+    ;;
+  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url")
+    uid="$(python3 -c 'import json,os; print(next(iter(json.load(open(os.environ["GH_MAPPING_PATH"]))["tasks"])))')"
+    printf '{"body":"task_uid: %s\\nTask metadata:\\n- owner_role: `tpm`\\n- module: `engineering`\\n- status: `committed`\\n- priority: `P2`\\n- worktree_hint: `%s/worktree`\\nAcceptance:\\n","number":2001,"title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}\n' "$uid" "$(dirname "$(dirname "$(dirname "$GH_MAPPING_PATH")")")"
     ;;
   "issue comment 2001 -R eng-cc/oasis7 --body-file "*)
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
@@ -33,6 +59,15 @@ case "$*" in
     printf 'closed\n'
     ;;
   "issue edit 2001 -R eng-cc/oasis7 --body-file "*)
+    if [[ "${GH_INTERRUPT_ISSUE_EDIT:-0}" == "1" ]]; then
+      kill -TERM "$PPID"
+      sleep 1
+      exit 143
+    fi
+    if [[ "${GH_FAIL_ISSUE_EDIT:-0}" == "1" ]]; then
+      echo "injected second-stage issue edit failure" >&2
+      exit 77
+    fi
     printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
     printf '\n' >> "$GH_EDIT_BODY_LOG"
@@ -56,6 +91,9 @@ JSON
     printf '%s\n' '--- issue edit body 2004 ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
     printf '\n' >> "$GH_EDIT_BODY_LOG"
+    printf 'edited\n'
+    ;;
+  "issue edit 2005 -R eng-cc/oasis7 --body-file "*|"issue edit 2006 -R eng-cc/oasis7 --body-file "*)
     printf 'edited\n'
     ;;
   "issue close 2004 -R eng-cc/oasis7 --reason completed")
@@ -86,7 +124,7 @@ JSON
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
 {"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_CLOSEOUT","name":"closeout"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_TASK_DONE","name":"task_done"},{"id":"OPT_MAIN_SYNC","name":"main_sync"},{"id":"OPT_POST_MERGE_DONE","name":"post_merge_done"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
 {"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
 {"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
@@ -103,7 +141,7 @@ JSON
 {"fields":[
 {"id":"FIELD_STATUS_3","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TODO_3","name":"Todo"},{"id":"OPT_IN_PROGRESS_3","name":"In Progress"}]},
 {"id":"FIELD_PM_STATUS_3","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM_3","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE_3","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE_3","name":"done"}]}
+{"id":"FIELD_WORKFLOW_PHASE_3","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_POST_MERGE_DONE_3","name":"post_merge_done"}]}
 ]}
 JSON
     ;;
@@ -115,6 +153,15 @@ JSON
 JSON
     ;;
   project\ item-edit*)
+    if [[ "$*" == *"OPT_COMMITTED"* ]]; then
+      printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+    elif [[ "$*" == *"OPT_READY_PM"* ]]; then
+      printf 'ready\n' >"$GH_PROJECT_STATE_FILE"
+    elif [[ "$*" == *"OPT_PR_WATCH_PM"* ]]; then
+      printf 'pr_watch\n' >"$GH_PROJECT_STATE_FILE"
+    elif [[ "$*" == *"OPT_DONE"* ]]; then
+      printf 'done\n' >"$GH_PROJECT_STATE_FILE"
+    fi
     printf '{}\n'
     ;;
   *)
@@ -124,10 +171,21 @@ JSON
 esac
 SH
 chmod +x "$TMPDIR/bin/gh"
+rm -f "$TMPDIR/xcrun_db"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\nproject-live-state\nxcrun_db\ntmp.*\n' > "$TMPDIR/.gitignore"
+git -C "$TMPDIR" init -q
+git -C "$TMPDIR" config user.email test@example.com
+git -C "$TMPDIR" config user.name Test
+git -C "$TMPDIR" add .
+git -C "$TMPDIR" commit -qm initial
 export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
+export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
+export GH_PROJECT_STATE_FILE="$TMPDIR/project-live-state"
+printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
+export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"
@@ -146,6 +204,15 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
+REVIEW_PACKET="$TMPDIR/review-packet.md"
+HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
+LEDGER_DIR="$TMPDIR/.pm/scratch/$TASK_UID"
+mkdir -p "$LEDGER_DIR"
+printf 'fixture return\n' >"$LEDGER_DIR/return.md"
+RETURN_SHA="$(shasum -a 256 "$LEDGER_DIR/return.md" | awk '{print $1}')"
+printf '{"receipt_type":"oasis7_subagent_dispatch","issuer":"codex_runtime","dispatch_id":"11111111-1111-4111-8111-111111111111","role":"repository_health_engineer","source_head":"%s","contract_digest":"%064d"}\n' "$HEAD_SHA" 0 >"$LEDGER_DIR/dispatch.json"
+printf '{"task_uid":"%s","role":"repository_health_engineer","status":"completed","head":"%s","slice_id":"11111111-1111-4111-8111-111111111111","dispatch_receipt":".pm/scratch/%s/dispatch.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified: fixture","artifact_digest":"%s","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture","artifacts":[".pm/scratch/%s/return.md"]}\n' "$TASK_UID" "$HEAD_SHA" "$TASK_UID" "$RETURN_SHA" "$TASK_UID" >"$LEDGER_DIR/slice-ledger.jsonl"
+printf -- "- Pre-PR Local Role Review: passed\n- Source Head: %s\n- Review Roles: repository_health_engineer\n- Slice Ledger: .pm/scratch/%s/slice-ledger.jsonl\n" "$HEAD_SHA" "$TASK_UID" >"$REVIEW_PACKET"
 
 python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
   --repo eng-cc/oasis7 \
@@ -195,10 +262,50 @@ if ! grep -Fq "refusing done without closeout" "$TMPDIR/move-done-without-closeo
   exit 1
 fi
 
+CACHE_BEFORE_FAILURE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+set +e
+GH_FAIL_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+  --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
+  >"$TMPDIR/failed-closeout.json" 2>"$TMPDIR/failed-closeout.err"
+FAILED_CLOSEOUT_STATUS=$?
+set -e
+[[ "$FAILED_CLOSEOUT_STATUS" != "0" ]]
+CACHE_AFTER_FAILURE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$CACHE_BEFORE_FAILURE" == "$CACHE_AFTER_FAILURE" ]]
+if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" ]]; then
+  echo "expected partial remote Project state to be ready before refresh" >&2
+  cat "$TMPDIR/failed-closeout.err" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/refresh-task-cache.sh" \
+  --task-uid "$TASK_UID" --json >"$TMPDIR/refreshed-after-partial.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json, sys
+record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
+assert record["status"] == "ready", record
+assert record["workflow_phase"] == "pre_pr_ready", record
+assert record["project_status"] == "Ready / PR", record
+assert record["reconciled_from_project"] is True, record
+PY
+PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/github-project-workflow.sh" \
+  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
+
+set +e
+GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+  --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
+  >"$TMPDIR/interrupted-closeout.json" 2>"$TMPDIR/interrupted-closeout.err"
+INTERRUPTED_CLOSEOUT_STATUS=$?
+set -e
+[[ "$INTERRUPTED_CLOSEOUT_STATUS" != "0" ]]
+CACHE_AFTER_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$CACHE_BEFORE_FAILURE" == "$CACHE_AFTER_INTERRUPT" ]]
+
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
-  --verify-command "true" \
+  --verification-profile fixture_repository_state \
+  --review-packet-file "$REVIEW_PACKET" \
   --json > "$TMPDIR/closeout.json"
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
@@ -209,11 +316,18 @@ python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --pr-url "https://github.com/eng-cc/oasis7/pull/2002" \
   --json > "$TMPDIR/record-pr.json"
 
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json,sys
+p=sys.argv[1]; m=json.load(open(p,encoding='utf-8')); r=m['tasks'][sys.argv[2]]
+r['completion_mode']='non_pr_task'; r['non_pr_completion_evidence']='persisted fixture completion truth'
+open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
+PY
+
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
   --to-status done \
-  --verify-command "true" \
+  --verification-profile fixture_repository_state \
   --claim-type task_complete \
   --json > "$TMPDIR/done-closeout.json"
 
@@ -231,12 +345,12 @@ assert record["status"] == "done", record
 assert record["pr_url"] == "https://github.com/eng-cc/oasis7/pull/2002", record
 assert record["pr_number"] == 2002, record
 assert record["worktree_hint"].endswith("/worktree"), record
-assert len(comments) == 7, comments
+assert len(comments) >= 7, comments
 assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record
 assert record["claim_verifications"][-1]["status"] == "verified", record
 assert "issue create" in calls, calls
 assert "issue edit 2001" in calls, calls
-assert "issue close 2001" in calls, calls
+assert "issue close 2001" not in calls, calls
 assert f"task_uid: {uid}" in edited_body, edited_body
 assert "- status: `committed`" in edited_body, edited_body
 assert "- status: `ready`" in edited_body, edited_body
@@ -277,7 +391,9 @@ import sys
 mapping_path = pathlib.Path(sys.argv[1])
 payload = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
 edited_body = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
-assert not mapping_path.exists(), "no-cache record-pr must not recreate committed mapping cache"
+assert mapping_path.exists(), "record-pr must recover the target mapping cache under lock"
+mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+assert mapping["tasks"]["task_99999999999999999999999999999999"]["status"] == "pr_watch", mapping
 assert payload["status"] == "pr_watch", payload
 assert payload["pr_number"] == 2003, payload
 assert payload["updated_field_values"] == 0, payload
@@ -342,10 +458,9 @@ edited_body = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8")
 record = mapping["tasks"]["task_44444444444444444444444444444444"]
 assert record["status"] == "done", record
 assert record["project_item_id"] == "ITEM_ID_2004", record
-assert payload["updated_field_values"] == 3, payload
+assert payload["updated_field_values"] == 0, payload
 assert "project item-list 1 --owner eng-cc --limit 1000 --format json" in calls, calls
-assert "project item-edit" in calls, calls
-assert "issue close 2004 -R eng-cc/oasis7 --reason completed" in calls, calls
+assert "issue close 2004 -R eng-cc/oasis7 --reason completed" not in calls, calls
 assert "- status: `done`" in edited_body, edited_body
 PY
 
@@ -394,17 +509,13 @@ python3 "$TMPDIR/github-project-task.py" move-task "$NOOP_PROJECT_ROOT" \
   --json > "$TMPDIR/noop-project-done.json" 2>"$TMPDIR/noop-project-done.err"
 NOOP_PROJECT_DONE_STATUS=$?
 set -e
-if [[ "$NOOP_PROJECT_DONE_STATUS" == "0" ]]; then
-  echo "github-project-task.test: expected no-op Project field update to refuse done" >&2
-  exit 1
-fi
-if ! grep -Fq "refusing done because required GitHub Project fields are unavailable" "$TMPDIR/noop-project-done.err"; then
-  echo "github-project-task.test: expected no-op Project update failure message" >&2
+if [[ "$NOOP_PROJECT_DONE_STATUS" != "0" ]]; then
+  echo "github-project-task.test: intermediate task_done must not require terminal Project fields" >&2
   cat "$TMPDIR/noop-project-done.err" >&2
   exit 1
 fi
-if grep -Fq "issue close 2005" "$GH_CALL_LOG" || grep -Fq "issue edit 2005" "$GH_CALL_LOG"; then
-  echo "github-project-task.test: no-op Project update must not edit or close issue 2005" >&2
+if grep -Fq "issue close 2005" "$GH_CALL_LOG" || ! grep -Fq "issue edit 2005" "$GH_CALL_LOG"; then
+  echo "github-project-task.test: task_done must update but not close issue 2005" >&2
   cat "$GH_CALL_LOG" >&2
   exit 1
 fi
@@ -454,22 +565,13 @@ python3 "$TMPDIR/github-project-task.py" move-task "$MISSING_OPTION_ROOT" \
   --json > "$TMPDIR/missing-option-done.json" 2>"$TMPDIR/missing-option-done.err"
 MISSING_OPTION_DONE_STATUS=$?
 set -e
-if [[ "$MISSING_OPTION_DONE_STATUS" == "0" ]]; then
-  echo "github-project-task.test: expected missing Done option to refuse done" >&2
-  exit 1
-fi
-if ! grep -Fq "refusing done because required GitHub Project fields are unavailable" "$TMPDIR/missing-option-done.err"; then
-  echo "github-project-task.test: expected required Project fields failure message" >&2
+if [[ "$MISSING_OPTION_DONE_STATUS" != "0" ]]; then
+  echo "github-project-task.test: task_done must not require terminal Done options" >&2
   cat "$TMPDIR/missing-option-done.err" >&2
   exit 1
 fi
-if ! grep -Fq "Status:missing_option:Done" "$TMPDIR/missing-option-done.err"; then
-  echo "github-project-task.test: expected skipped missing Done option evidence" >&2
-  cat "$TMPDIR/missing-option-done.err" >&2
-  exit 1
-fi
-if grep -Fq "issue close 2006" "$GH_CALL_LOG" || grep -Fq "issue edit 2006" "$GH_CALL_LOG"; then
-  echo "github-project-task.test: missing Done option must not edit or close issue 2006" >&2
+if grep -Fq "issue close 2006" "$GH_CALL_LOG" || ! grep -Fq "issue edit 2006" "$GH_CALL_LOG"; then
+  echo "github-project-task.test: task_done must update but not close issue 2006" >&2
   cat "$GH_CALL_LOG" >&2
   exit 1
 fi
@@ -478,5 +580,23 @@ if grep -Fq "ITEM_ID_2006" "$GH_CALL_LOG"; then
   cat "$GH_CALL_LOG" >&2
   exit 1
 fi
+
+CONCURRENT_ROOT="$TMPDIR/concurrent-cache"
+mkdir -p "$CONCURRENT_ROOT"
+printf '{"version":1,"tasks":{}}\n' >"$CONCURRENT_ROOT/tasks.json"
+for uid in task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; do
+  python3 - "$TMPDIR/github-project-task.py" "$CONCURRENT_ROOT/tasks.json" "$uid" <<'PY' &
+import importlib.util, sys
+spec=importlib.util.spec_from_file_location("task_impl",sys.argv[1])
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+module.merge_task_mapping(module.pathlib.Path(sys.argv[2]), sys.argv[3], {"task_uid":sys.argv[3],"status":"ready"})
+PY
+done
+wait
+python3 - "$CONCURRENT_ROOT/tasks.json" <<'PY'
+import json, sys
+tasks=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"]
+assert set(tasks) == {"task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}, tasks
+PY
 
 echo "github-project-task.test: OK"

@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 TMPDIR="$(mktemp -d)"
+export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 cleanup() {
   rm -rf "$TMPDIR"
 }
@@ -12,7 +13,7 @@ trap cleanup EXIT
 
 SUCCESS_JSON="$TMPDIR/success.json"
 "$ROOT_DIR/scripts/pm/claim-ready.sh" \
-  --claim-type ready_for_pr \
+  --claim-type tests_passed \
   --verify-command "printf 'fresh-ok\n'" \
   --json >"$SUCCESS_JSON"
 
@@ -24,16 +25,18 @@ import sys
 from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload["claim_type"] != "ready_for_pr":
-    raise SystemExit("expected ready_for_pr claim type")
+if payload["claim_type"] != "tests_passed":
+    raise SystemExit("expected tests_passed claim type")
 if payload["verification_exit_code"] != 0:
     raise SystemExit("expected success exit code")
 if payload["status"] != "verified":
     raise SystemExit("expected verified status")
 if payload["allowed_to_claim"] is not True:
     raise SystemExit("expected allowed_to_claim=true")
-if "ready for PR" not in payload["claim_message"]:
-    raise SystemExit("expected success message to mention ready for PR")
+if payload["verification_epoch_stable"] is not True:
+    raise SystemExit("expected stable repository verification epoch")
+if "tests" not in payload["claim_message"]:
+    raise SystemExit("expected success message to mention tests")
 PY
 
 FAIL_JSON="$TMPDIR/fail.json"
@@ -112,9 +115,14 @@ EOF
 chmod +x "$TMPDIR/bin/gh"
 NO_CACHE_ROOT="$TMPDIR/no-cache-root"
 mkdir -p "$NO_CACHE_ROOT"
+git -C "$NO_CACHE_ROOT" init -q
+git -C "$NO_CACHE_ROOT" config user.email test@example.com
+git -C "$NO_CACHE_ROOT" config user.name Test
+git -C "$NO_CACHE_ROOT" commit --allow-empty -qm initial
 TEST_GH_LOG="$TMPDIR/gh.log" TEST_GH_COMMENT_BODY="$TMPDIR/comment.md" PATH="$TMPDIR/bin:$PATH" PM_ROOT_DIR="$NO_CACHE_ROOT" \
   "$ROOT_DIR/scripts/pm/claim-ready.sh" \
   --claim-type ready_for_pr \
+  --verification-profile fixture_repository_state \
   --verify-command "true" \
   --task-uid task_11111111111111111111111111111111 \
   --json >"$TMPDIR/no-cache-claim.json"
@@ -129,27 +137,27 @@ from pathlib import Path
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 gh_log = Path(sys.argv[2]).read_text(encoding="utf-8")
 comment = Path(sys.argv[3]).read_text(encoding="utf-8")
-mapping = json.loads(Path(sys.argv[4]).read_text(encoding="utf-8"))
+mapping_path = Path(sys.argv[4])
 if payload["status"] != "verified":
     raise SystemExit(f"expected verified no-cache claim, got {payload}")
 if "issue list -R eng-cc/oasis7 --search task_11111111111111111111111111111111 in:body --json number --limit 5" not in gh_log:
     raise SystemExit(f"expected no-cache issue search, got {gh_log}")
 if "<!-- oasis7-pm-claim-verification -->" not in comment:
     raise SystemExit(f"expected claim verification comment body, got {comment}")
-record = mapping["tasks"]["task_11111111111111111111111111111111"]
-if record["status"] != "ready":
-    raise SystemExit(f"expected recovered ready status, got {record}")
-if record["project_item_id"] != "ITEM_123":
-    raise SystemExit(f"expected recovered project item id, got {record}")
-if record["claim_verifications"][-1]["claim_type"] != "ready_for_pr":
-    raise SystemExit(f"expected persisted no-cache claim verification, got {record}")
+if mapping_path.exists():
+    raise SystemExit("claim-ready must not create or refresh the optional local task cache")
 PY
 
 NO_CACHE_FAIL_ROOT="$TMPDIR/no-cache-fail-root"
 mkdir -p "$NO_CACHE_FAIL_ROOT"
+git -C "$NO_CACHE_FAIL_ROOT" init -q
+git -C "$NO_CACHE_FAIL_ROOT" config user.email test@example.com
+git -C "$NO_CACHE_FAIL_ROOT" config user.name Test
+git -C "$NO_CACHE_FAIL_ROOT" commit --allow-empty -qm initial
 TEST_GH_LOG="$TMPDIR/gh-fail.log" TEST_GH_COMMENT_BODY="$TMPDIR/comment-unused.md" TEST_GH_COMMENT_BODY_124="$TMPDIR/comment-124.md" PATH="$TMPDIR/bin:$PATH" PM_ROOT_DIR="$NO_CACHE_FAIL_ROOT" \
   "$ROOT_DIR/scripts/pm/claim-ready.sh" \
   --claim-type ready_for_pr \
+  --verification-profile fixture_repository_state \
   --verify-command "true" \
   --task-uid task_22222222222222222222222222222222 \
   --json >"$TMPDIR/no-cache-fail-claim.json"
@@ -173,6 +181,114 @@ if "project item-list" in gh_log:
     raise SystemExit(f"claim-ready must not recover Project item without verified issue body, got {gh_log}")
 if "<!-- oasis7-pm-claim-verification -->" not in comment:
     raise SystemExit(f"expected fallback claim comment body, got {comment}")
+PY
+
+EPOCH_ROOT="$TMPDIR/epoch-root"
+mkdir -p "$EPOCH_ROOT"
+git -C "$EPOCH_ROOT" init -q
+git -C "$EPOCH_ROOT" config user.email test@example.com
+git -C "$EPOCH_ROOT" config user.name Test
+printf 'before\n' >"$EPOCH_ROOT/tracked.txt"
+git -C "$EPOCH_ROOT" add tracked.txt
+git -C "$EPOCH_ROOT" commit -qm initial
+set +e
+PM_ROOT_DIR="$EPOCH_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --claim-type task_complete \
+  --verification-profile fixture_repository_state \
+  --verify-command "printf 'during-verify\\n' >> tracked.txt" \
+  --json >"$TMPDIR/epoch-drift.json" 2>"$TMPDIR/epoch-drift.err"
+EPOCH_STATUS=$?
+set -e
+if [[ "$EPOCH_STATUS" != "86" ]]; then
+  echo "expected epoch drift status 86, got $EPOCH_STATUS" >&2
+  exit 1
+fi
+python3 - "$TMPDIR/epoch-drift.json" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+if payload["verification_epoch_stable"] is not False or payload["allowed_to_claim"] is not False:
+    raise SystemExit(f"expected blocked unstable epoch, got {payload}")
+if payload["repository_fingerprint_before"] == payload["repository_fingerprint_after"]:
+    raise SystemExit("expected distinct epoch fingerprints")
+PY
+grep -F "repository state changed during verification epoch" "$TMPDIR/epoch-drift.err" >/dev/null
+
+IMMUTABLE_ROOT="$TMPDIR/immutable-root"
+mkdir -p "$IMMUTABLE_ROOT"
+git -C "$IMMUTABLE_ROOT" init -q
+git -C "$IMMUTABLE_ROOT" config user.email test@example.com
+git -C "$IMMUTABLE_ROOT" config user.name Test
+printf 'frozen\n' >"$IMMUTABLE_ROOT/tracked.txt"
+git -C "$IMMUTABLE_ROOT" add tracked.txt
+git -C "$IMMUTABLE_ROOT" commit -qm frozen
+(
+  sleep 0.05
+  printf 'transient-live-change\n' >"$IMMUTABLE_ROOT/tracked.txt"
+  sleep 0.05
+  printf 'frozen\n' >"$IMMUTABLE_ROOT/tracked.txt"
+) &
+MUTATOR_PID=$!
+PM_ROOT_DIR="$IMMUTABLE_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --claim-type task_complete \
+  --verification-profile fixture_repository_state \
+  --verify-command "sleep 0.2; test \"\$(cat tracked.txt)\" = frozen" \
+  --json >"$TMPDIR/immutable-claim.json"
+wait "$MUTATOR_PID"
+python3 - "$TMPDIR/immutable-claim.json" <<'PY'
+import json, sys
+payload=json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload["status"] == "verified", payload
+assert payload["verification_mode"] == "detached_frozen_tree", payload
+assert payload["frozen_source_head"] and payload["frozen_source_tree"], payload
+PY
+
+RANGE_BAD_ROOT="$TMPDIR/range-bad-root"
+mkdir -p "$RANGE_BAD_ROOT"
+git -C "$RANGE_BAD_ROOT" init -q
+git -C "$RANGE_BAD_ROOT" config user.email test@example.com
+git -C "$RANGE_BAD_ROOT" config user.name Test
+printf 'base\n' >"$RANGE_BAD_ROOT/file.txt"
+git -C "$RANGE_BAD_ROOT" add file.txt && git -C "$RANGE_BAD_ROOT" commit -qm base
+printf 'trailing whitespace   \n' >>"$RANGE_BAD_ROOT/file.txt"
+git -C "$RANGE_BAD_ROOT" add file.txt && git -C "$RANGE_BAD_ROOT" commit -qm bad
+set +e
+PM_ROOT_DIR="$RANGE_BAD_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --claim-type task_complete --verification-profile fixture_repository_state --comparison-ref HEAD^ --verify-command true --json \
+  >"$TMPDIR/range-bad.json" 2>"$TMPDIR/range-bad.err"
+RANGE_BAD_STATUS=$?
+set -e
+[[ "$RANGE_BAD_STATUS" != "0" ]]
+grep -F "immutable comparison range failed git diff --check" "$TMPDIR/range-bad.err" >/dev/null
+
+RANGE_CLEAN_ROOT="$TMPDIR/range-clean-root"
+mkdir -p "$RANGE_CLEAN_ROOT"
+git -C "$RANGE_CLEAN_ROOT" init -q
+git -C "$RANGE_CLEAN_ROOT" config user.email test@example.com
+git -C "$RANGE_CLEAN_ROOT" config user.name Test
+printf 'base\n' >"$RANGE_CLEAN_ROOT/file.txt"
+git -C "$RANGE_CLEAN_ROOT" add file.txt && git -C "$RANGE_CLEAN_ROOT" commit -qm base
+printf 'clean change\n' >>"$RANGE_CLEAN_ROOT/file.txt"
+git -C "$RANGE_CLEAN_ROOT" add file.txt && git -C "$RANGE_CLEAN_ROOT" commit -qm clean
+PM_ROOT_DIR="$RANGE_CLEAN_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --claim-type task_complete --verification-profile fixture_repository_state --comparison-ref HEAD^ --verify-command true --json \
+  >"$TMPDIR/range-clean.json"
+python3 - "$TMPDIR/range-clean.json" <<'PY'
+import json, sys
+payload=json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload["status"] == "verified", payload
+assert payload["comparison_ref"] == "HEAD^", payload
+PY
+
+# A caller-supplied readiness receipt is accepted only when its gate epoch is
+# exactly the epoch recomputed by the fresh live gate.  Comparing merely
+# repo/PR/head lets a stale decision from the same head survive policy/comment
+# changes.
+python3 - "$ROOT_DIR/scripts/pm/claim-ready.sh" <<'PY'
+import re,sys
+text=open(sys.argv[1],encoding='utf-8').read()
+match=re.search(r'for key in \(([^\n]+)\):\n\s+if str\(supplied', text)
+if not match or '"gate_epoch"' not in match.group(1):
+    raise SystemExit('RED claim-ready: supplied gate_epoch is not compared with the fresh live gate epoch')
 PY
 
 echo "claim-ready.test: OK"

@@ -41,6 +41,26 @@
 - 运营信号能回流到 PRD / project / backlog
 - 对外说明不与 `README` / PRD 主口径冲突
 
+## Codex Adapter Projection
+```toml
+schema = 1
+registry_description = """
+LiveOps, incidents, player and operator impact, community feedback, external messaging, and channel runbooks.
+"""
+context_contract = """
+Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/liveops_community.md, applicable channel runbooks, and the dispatched slice contract.
+"""
+domain_contract = """
+Own player/operator impact framing, incident and community feedback synthesis, release notes, external messaging drafts, follow-up ownership, and channel runbooks. Do not implement technical fixes, define QA release status, or independently promise rule, schedule, or product changes. Reconcile messaging with README/PRD truth and escalate high-risk impact or commitments through TPM and producer_system_designer.
+"""
+operational_constraints = """
+Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Do not publish or send external messages unless explicitly authorized by the slice contract. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
+"""
+return_contract = """
+Return: role and slice outcome; audience/impact/message findings; draft or changed files if any; source and consistency checks; publication status; uncertainty and residual risk; required product, QA, or engineering follow-ups.
+"""
+```
+
 ## Recommended Skills
 - 主技能：`skills/content-creation`、`skills/agent-browser`，用于整理对外口径、复现玩家路径与沉淀事故/反馈记录。
 - 常复用技能：`skills/humanizer-zh`、`skills/game-design-theory`、`skills/xiaohongshu-note-analyzer`，用于把社区信号转成自然可发布的话术、体验洞察与显式 opt-in 的渠道笔记分析。
