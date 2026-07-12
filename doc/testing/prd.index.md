@@ -14,11 +14,11 @@
 - 想先回答 testing 模块覆盖哪些测试层级、证据与门禁边界：先读 `doc/testing/prd.md`
 - 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：先读 `doc/testing/governance/README.md`
 - 想直接在一个 worktree 里准备完整 `L4A + L4B` 执行包：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 段落并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
-- 想用模型视觉判断替代常规人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，再按 `doc/testing/templates/model-visual-review-card-template.md` 输出评审卡
+- 想执行 Web UI、Playwright、public-testnet attach 或模型视觉评审手册：先读 `doc/testing/manual/README.md`，再按问题进入对应 manual。
 - 想快速判断“现有性能测试覆盖到哪、哪些功能面最值得补性能测试、哪些更适合进 scoped gate”：先读 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`
 - 想先回答 world state sync、commit closure、state-sync bundle、API/viewer projection，或 `module_required/module_full/integration_required/release_full` 如何定档：先读 `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`，再下钻 S9/S10 执行套件。
 - 想先回答当前在推进什么、哪些测试治理任务或 QA 阻断仍在影响收口：先读 `doc/testing/project.md`
-- 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` 与 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
+- 想直接决定要跑哪套测试或按步骤执行：先读 `testing-manual.md`；涉及专项操作再进入 `doc/testing/manual/README.md`。
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / legacy p2p network rehearsal / governance drill / claim-audit 问题分流：先读 `doc/testing/evidence/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -36,16 +36,14 @@
 | `governance/` | 质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻 |
 | `templates/` | 证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入 |
 | `performance/` | runtime / viewer 性能观测与方法学 |
-| `manual/` | 系统测试手册分册与 Web UI 闭环 manual |
+| `manual/` | 系统测试手册分册、Web UI / Playwright / public-testnet attach 与模型视觉评审；先读 `doc/testing/manual/README.md` |
 | `chaos-plans/` | 专项 chaos plan 入口 |
 
 ## 活跃补充文档
 - `doc/testing/governance/README.md`：`governance/` 热点子域 landing page，按质量门禁、playability 证据、L4 分层、role review 与 persona 问题分流读者。
 - `doc/testing/evidence/README.md`：`evidence/` 热点子域 landing page，按 release gate、hosted access、legacy p2p network rehearsal、governance drill 与 claim/audit 分流读者。
 - `testing-manual.md`：仓库级系统测试手册，不并入下方模块 PRD 三件套长表。
-- `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`：Web UI 闭环 canonical 操作手册，不并入下方模块 PRD 三件套长表。
-- `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`：Playwright 实跑测试系列入口，用于管理真实本地栈、真实 UI 输入和后续玩家操作流程矩阵，不并入下方模块 PRD 三件套长表。
-- `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`：截图加模型视觉评审 SOP，用于替代 routine 人工视觉 review，不并入下方模块 PRD 三件套长表。
+- `doc/testing/manual/README.md`：`manual/` 子树 landing page，按 Web UI 页面闭环、真实 Playwright 流程、formal public-testnet attach 与模型视觉评审分流；具体 manual 保留 operator 真值，不并入下方模块 PRD 三件套长表。
 - `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`：按 surface 汇总现有性能覆盖、当前缺口、建议补测和建议 tier 的速查表。
 - Provider dual-mode 历史 blocker 已收敛到 `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.project.md` 与复签 evidence；当前 testing 阻断只从 `doc/testing/project.md` 进入。
 
