@@ -14,6 +14,7 @@
 - 想先回答当前在推进什么、哪些安全/签名/覆盖网络任务仍在推进：先读 `doc/p2p/project.md`
 - 想先回答 P2P、DistFS、共识、执行与 observer 如何作为“链上大世界状态底座”单模块自闭环测试：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
+- 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`
 - 想先看主链安全、hosted player access / `hosted_public_join` 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
@@ -28,7 +29,7 @@
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
 | `distributed/` | 分布式 runtime / consensus / hard split 路线 |
 | `viewer-live/` | 已完成的 Viewer LLM 默认值与 observer/debug 回退变更；默认先读 `doc/p2p/viewer-live/README.md`，再按文件名追溯 |
-| `consensus/` | 共识实现与内建 wasm 身份口径 |
+| `consensus/` | 共识实现与内建 wasm 身份口径；默认先读 `doc/p2p/consensus/README.md` |
 
 ## 当前补充阅读面
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
@@ -44,7 +45,7 @@
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
-- `node/README.md`、`distfs/README.md`、`observer/README.md` 与 `viewer-live/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
+- `node/README.md`、`distfs/README.md`、`observer/README.md`、`viewer-live/README.md` 与 `consensus/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义

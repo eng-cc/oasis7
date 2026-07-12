@@ -7,6 +7,7 @@
 - 想看当前活跃任务、阻断与最新完成项：`doc/p2p/project.md`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：`doc/p2p/node/README.md`
 - 想先进入 phase / 增量文档密集的子域：先读 `doc/p2p/distfs/README.md`、`doc/p2p/observer/README.md` 或 `doc/p2p/viewer-live/README.md`，再进入具体专题。
+- 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`。
 - 想先看主链安全、mainnet-grade readiness 与 signer custody：`doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`、`doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - 想先看 hosted player entry / `hosted_public_join` 玩家接入与网页会话鉴权：`doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`（legacy topic label: hosted world）
 - 想先看 `hosted_public_join` 如何让普通玩家用邮箱登录、由服务端托管 player signer，并保留后续自托管升级路径：`doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
@@ -51,7 +52,7 @@
 - `blockchain/`：区块链与 P2PFS 硬化阶段。
 - `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案。
 - `viewer-live/`：已完成的 Viewer LLM 默认值与显式 observer/debug 回退变更；默认先读 `viewer-live/README.md`。
-- `consensus/`：共识相关专题。
+- `consensus/`：共识相关专题；默认先读 `consensus/README.md`。
 - `distributed/`：分布式运行时专题。
 - `network/`：网络桥接专题。
 
@@ -64,7 +65,7 @@
 - `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
 - `distributed/`：分布式 runtime / consensus / hard split 路线。
 - `viewer-live/`：已完成 CLI 变更的追溯入口；现行观察服务边界先读 `viewer-live/README.md`，再回链模块 PRD 与 Viewer 手册。
-- `consensus/`：共识实现与内建 wasm 身份口径。
+- `consensus/`：共识实现与内建 wasm 身份口径；默认先读 `consensus/README.md`。
 
 ## 当前 inventory 快照
 - `./scripts/doc-inventory-report.sh`（2026-06-24）将 `doc/p2p/` 统计为 290 份 Markdown，状态为 `action_required`。
