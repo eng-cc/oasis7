@@ -34,7 +34,9 @@ Subagent runtime 遵循 canonical capability policy：仓库不固定模型，�
 - finish: `.agents/skills/finishing-a-development-branch/SKILL.md`
 - reflection before task creation: `./scripts/pm/capture-todo.sh --source-ref <path> --summary "<text>"`
 
-Missing required production attestation is canonical `capability_blocked`; do not replace it with local/self-signed evidence.
+The current human-operated PR path uses frozen-head, role-complete task evidence
+and local artifact validation. Trusted runtime attestation is required only for
+future unattended automation; do not replace it with local/self-signed evidence.
 
 ## Engineering Commands
 

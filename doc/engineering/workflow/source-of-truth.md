@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.4**
+Version: **v1.9.5**
 Last Updated: **2026-07-12**
 
 ## 0. Purpose
@@ -13,15 +13,14 @@ Mandatory rule:
 <a id="capability-and-ownership"></a>
 ## Capability status
 **Current:** TPM is the accountable workflow coordinator / integrator. It advances the canonical lifecycle explicitly with repo helpers and professional subagent slices. The production supervisor is blocked; no current surface can run intake through merge and cleanup unattended.
-
 **Target:** a production supervisor executes the durable lifecycle from intake through merge and cleanup while TPM remains accountable for coordination, evidence integration, and escalation.
-
 | Capability | Status | Meaning |
 | --- | --- | --- |
 | Durable reducer/checkpoint and fail-closed phase gates | implemented | Safe local state and validation primitives exist. |
 | Receipt-bound main-sync and safe-cleanup helpers | implemented | Production helpers validate durable receipts and fail closed. |
 | Fake-GitHub lifecycle fixtures | test-only | They test reducers; they are not production evidence. |
-| Production pre-PR review attestation | blocked | No production provenance-attestation producer exists; production must stop at `capability_blocked` before `pre_pr_ready`. |
+| Human-operated pre-PR role review | implemented | TPM records frozen-head, role-complete review evidence in the GitHub task issue; repo helpers validate the local ledger and artifacts before PR creation. |
+| Unattended pre-PR review attestation | blocked | No trusted runtime provenance-attestation producer exists; unattended automation must stop at `capability_blocked`. |
 | Production supervisor from intake through merge | blocked | Without trusted production producers, automation is `capability_blocked`. |
 
 ## Lifecycle ownership
@@ -45,7 +44,7 @@ automation.
 - `running`: the recorded action authority is executing its typed action.
 - `action_required`: a bounded action awaits an authorized consumer.
 - `external_wait`: a trusted external condition has a durable resume condition.
-- `capability_blocked`: missing runtime attestation or other required production machinery.
+- `capability_blocked`: missing machinery required by the selected execution mode, including runtime attestation for unattended automation.
 - `completed`: terminal completion has been independently proven.
 - `failed`: a non-retryable contract violation; stop and escalate. Recovery
   requires an authorized new evidence epoch or a fresh bootstrap, not resume.
@@ -67,11 +66,12 @@ The final implementation head freezes one immutable tree; later code
 <a id="pre-pr-ready-gate"></a>
 **Pre-PR Ready.**
 
-Frozen-head verification and provenance-backed local review have passed.
-Ready is a pre-PR gate, not PR creation or Done. The required
-production provenance-attestation producer is currently unavailable, so the
-production path stops at `capability_blocked`; fixture evidence cannot satisfy
-this gate.
+Frozen-head verification and required involved-role review have passed. Ready
+is a pre-PR gate, not PR creation or Done. The human-operated path requires a
+GitHub task packet, all-required-role ledger, head binding, artifact digests,
+findings dispositions, and residual risk. Runtime-issued provenance applies
+only to unattended supervision, which remains `capability_blocked`. Fixtures
+never satisfy a live task.
 
 <a id="pr-creation-gate"></a>
 **PR creation gate.**
@@ -141,7 +141,7 @@ flowchart TD
   H --> R[Freeze immutable implementation head]
   R --> I[Immutable verification\nclaim-ready on frozen head]
   I --> M[Pre-PR Local Role Review\nprovenance ledger per required role]
-  M --> Q[Pre-PR Ready gate\ncapability_blocked until trusted attestation]
+  M --> Q[Pre-PR Ready gate\nhuman-operated evidence validated]
   Q --> X[Optional evidence-only commit]
   X --> J[PR creation / resume]
   J --> N{PR purpose / merge hold?}
@@ -644,15 +644,17 @@ A passed packet in GitHub task issue evidence comments contains:
   and `LiveOps Evidence`, each with evidence or a reasoned exemption
 - `Residual Risk` and `Slice Ledger`
 
-The immutable ledger matches `Review Roles` and `Source Head`, with exactly
-one return per required role. Each return binds runtime-issued slice/agent and
-dispatch identifiers, role, contract digest, activation/context mode, actual
-runtime or unverifiable reason, artifact digest, both verdicts, disposition, and
-residual risk. Invented identifiers, packet-author assertions, `n/a` ledgers,
-and unattested production receipts fail closed. The current Desktop surface
-cannot produce trusted dispatch attestation, so production Pre-PR Ready is
-`capability_blocked`; only isolated test fixtures may accept fixture
-attestations.
+The immutable ledger matches `Review Roles` and `Source Head`, with one return
+per required role. Each human-operated return binds its slice ID, role,
+activation/context mode, actual runtime or unverifiable reason, artifact digest,
+both verdicts, disposition, and residual risk. The repository validates role
+coverage, head binding, and artifact integrity; the GitHub task issue remains
+the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
+
+An unattended supervisor additionally requires runtime-issued dispatch and
+return attestation. Caller-authored receipts, issuer text, local fixtures, and
+self-signed evidence cannot satisfy that target mode; missing attestation is
+`capability_blocked` only for unattended automation.
 
 For non-trivial diffs, `review-package.sh` writes under
 `.pm/scratch/<TASK-UID>/review-packages/`. `record-pre-pr-review.sh` may

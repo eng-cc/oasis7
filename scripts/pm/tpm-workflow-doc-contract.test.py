@@ -324,12 +324,13 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertRegex(finishing, r"(?is)(final|attested) PR head")
 
-    def test_production_pre_pr_attestation_blocker_is_explicit(self) -> None:
+    def test_human_pre_pr_is_not_blocked_by_unattended_attestation(self) -> None:
         status = self.section("Capability status")
         self.assertRegex(
             status,
-            r"(?is)production[^\n]*(pre-PR|review)[^\n]*attestation[^\n]*`?capability_blocked`?",
+            r"(?is)human-operated[^\n]*(pre-PR|review)[^\n]*implemented",
         )
+        self.assertRegex(status, r"(?is)unattended[^\n]*attestation[^\n]*blocked")
 
     def test_bare_closeout_is_not_a_gate_or_phase_name(self) -> None:
         self.assertNotRegex(
@@ -600,13 +601,11 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ready = [label for label in labels if "Pre-PR Ready" in label]
         commits = [label for label in labels if "commit" in label.lower()]
         creates = [label for label in labels if "PR creat" in label]
-        blocked = [label for label in labels if "capability_blocked" in label]
         self.assertEqual(1, len(ready), labels)
         self.assertEqual(1, len(commits), labels)
         self.assertIn("optional", commits[0].lower())
         self.assertEqual(1, len(creates), labels)
-        self.assertEqual(1, len(blocked), labels)
-        self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}capability_blocked")
+        self.assertRegex(diagram, r"(?is)Pre-PR Local Role Review.{0,500}human-operated evidence validated")
         self.assertRegex(diagram, r"(?is)Pre-PR Ready.{0,500}optional.{0,500}PR creat")
 
     def test_eval_and_role_fit_own_disjoint_scratch_roots(self) -> None:

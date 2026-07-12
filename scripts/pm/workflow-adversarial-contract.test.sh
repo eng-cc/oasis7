@@ -62,7 +62,7 @@ JSON
 set +e
 python3 "$ROOT_DIR/scripts/pm/validate-review-provenance.py" --root "$TMPDIR" \
   --ledger empty-ledger.jsonl --roles repository_health_engineer \
-  --source-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --source-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --mode unattended \
   >"$TMPDIR/capability.out" 2>"$TMPDIR/capability.err"
 cap_status=$?
 set -e
