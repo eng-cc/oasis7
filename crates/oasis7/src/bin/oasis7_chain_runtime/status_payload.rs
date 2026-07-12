@@ -55,6 +55,16 @@ use status_payload_state_sync::{
 #[path = "status_payload_world_resource.rs"]
 mod status_payload_world_resource;
 use status_payload_world_resource::{ChainWorldResourceStatus, build_world_resource_status};
+#[path = "status_payload_p2p.rs"]
+mod status_payload_p2p;
+pub(super) use status_payload_p2p::{
+    ChainP2pStatus, build_chain_p2p_status, build_readiness_status, build_sync_status,
+};
+#[path = "status_payload_lifecycle.rs"]
+mod status_payload_lifecycle;
+pub(super) use status_payload_lifecycle::{
+    ChainLivenessStatus, ChainReadinessStatus, ChainSyncStatus,
+};
 
 const TRANSPORT_STABILITY_MIN_SCORE: u8 = 70;
 const CONSENSUS_FINALITY_LATENCY_BUDGET_MS: i64 = 1_000;
@@ -65,34 +75,6 @@ const MODULE_TICK_SLOW_ROUTE_MIN_SAMPLES: u64 = 4;
 const MODULE_TICK_SLOW_ROUTE_RATIO_PPM: u64 = 50_000;
 const UDP_GOSSIP_SEND_FAILURE_MIN_ATTEMPTS: u64 = 4;
 const UDP_GOSSIP_SEND_FAILURE_RATIO_PPM: u64 = 50_000;
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainP2pStatus {
-    pub(super) requested_user_mode: String,
-    pub(super) recommended_user_mode: String,
-    pub(super) effective_user_mode: String,
-    pub(super) applied_effective_user_mode: Option<String>,
-    pub(super) requires_explicit_public_entry_confirmation: bool,
-    pub(super) detected_reachability: Option<String>,
-    pub(super) hole_punch_viability: String,
-    pub(super) autonat_status: String,
-    pub(super) public_port_reachability: String,
-    pub(super) observed_public_addr: Option<String>,
-    pub(super) confirmed_external_direct_addrs: Vec<String>,
-    pub(super) active_transport_kind: Option<String>,
-    pub(super) active_transport_kind_since_unix_ms: Option<i64>,
-    pub(super) active_direct_path_count: usize,
-    pub(super) active_hole_punch_path_count: usize,
-    pub(super) active_relay_path_count: usize,
-    pub(super) transport_transition_count: u64,
-    pub(super) transport_transitions: ChainP2pTransportTransitionCounters,
-    pub(super) last_transport_transition: Option<ChainP2pTransportTransition>,
-    pub(super) relay_available: bool,
-    pub(super) probe_stable: bool,
-    pub(super) deployment_mode: String,
-    pub(super) node_role_claim: String,
-    pub(super) rationale: Vec<String>,
-}
 
 #[derive(Debug, Serialize)]
 pub(super) struct ChainStatusResponse {
@@ -126,31 +108,6 @@ pub(super) struct ChainStatusResponse {
     pub(super) replication: super::ChainReplicationDebugStatus,
     pub(super) execution_bridge_commit_timing: ExecutionBridgeCommitTimingSnapshot,
     pub(super) module_tick_routing: ChainModuleTickRoutingStatus,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainLivenessStatus {
-    pub(super) status: String,
-    pub(super) running: bool,
-    pub(super) runtime_last_error: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainReadinessStatus {
-    pub(super) status: String,
-    pub(super) ready: bool,
-    pub(super) failed_gates: Vec<String>,
-    pub(super) policy: ChainReadinessPolicyStatus,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainSyncStatus {
-    pub(super) status: String,
-    pub(super) network_head_source: String,
-    pub(super) network_height_lag: u64,
-    pub(super) fresh_peer_count: usize,
-    pub(super) stale_peer_count: usize,
-    pub(super) conflicting_peer_count: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -319,147 +276,6 @@ pub(super) struct ChainFinalityLatencyStatus {
     pub(super) max_latency_ms: Option<i64>,
     pub(super) p50_latency_ms: Option<i64>,
     pub(super) p95_latency_ms: Option<i64>,
-}
-
-pub(super) fn build_chain_p2p_status(
-    live_p2p_recommendation: &NodeUserModeRecommendation,
-    applied_effective_user_mode: Option<String>,
-    effective_p2p_policy: NodeNetworkPolicy,
-    live_snapshot: &Libp2pReachabilitySnapshot,
-    p2p_detection: NodeReachabilityAutoDetection,
-) -> ChainP2pStatus {
-    ChainP2pStatus {
-        requested_user_mode: live_p2p_recommendation
-            .requested_user_mode
-            .as_str()
-            .to_string(),
-        recommended_user_mode: live_p2p_recommendation
-            .recommended_user_mode
-            .as_str()
-            .to_string(),
-        effective_user_mode: live_p2p_recommendation
-            .effective_user_mode
-            .as_str()
-            .to_string(),
-        applied_effective_user_mode,
-        requires_explicit_public_entry_confirmation: live_p2p_recommendation
-            .requires_explicit_public_entry_confirmation,
-        detected_reachability: p2p_detection
-            .observed_reachability
-            .map(peer_reachability_as_str)
-            .map(str::to_string),
-        hole_punch_viability: p2p_detection.hole_punch_viability.to_string(),
-        autonat_status: p2p_detection.autonat_status.to_string(),
-        public_port_reachability: p2p_detection.public_port_reachability.to_string(),
-        observed_public_addr: live_snapshot.observed_public_addr.clone(),
-        confirmed_external_direct_addrs: live_snapshot.confirmed_external_direct_addrs.clone(),
-        active_transport_kind: live_snapshot
-            .active_transport_kind
-            .map(|kind| kind.as_str().to_string()),
-        active_transport_kind_since_unix_ms: live_snapshot.active_transport_kind_since_unix_ms,
-        active_direct_path_count: live_snapshot.active_direct_path_count,
-        active_hole_punch_path_count: live_snapshot.active_hole_punch_path_count,
-        active_relay_path_count: live_snapshot.active_relay_path_count,
-        transport_transition_count: live_snapshot
-            .transport_transition_counters
-            .selected_kind_change_count,
-        transport_transitions: ChainP2pTransportTransitionCounters {
-            direct_to_hole_punched: live_snapshot
-                .transport_transition_counters
-                .direct_to_hole_punched,
-            direct_to_relay_reserved: live_snapshot
-                .transport_transition_counters
-                .direct_to_relay_reserved,
-            hole_punched_to_direct: live_snapshot
-                .transport_transition_counters
-                .hole_punched_to_direct,
-            hole_punched_to_relay_reserved: live_snapshot
-                .transport_transition_counters
-                .hole_punched_to_relay_reserved,
-            relay_reserved_to_direct: live_snapshot
-                .transport_transition_counters
-                .relay_reserved_to_direct,
-            relay_reserved_to_hole_punched: live_snapshot
-                .transport_transition_counters
-                .relay_reserved_to_hole_punched,
-        },
-        last_transport_transition: live_snapshot.last_transport_transition.as_ref().map(
-            |transition| ChainP2pTransportTransition {
-                from_kind: transition.from_kind.map(|kind| kind.as_str().to_string()),
-                to_kind: transition.to_kind.map(|kind| kind.as_str().to_string()),
-                at_unix_ms: Some(transition.at_unix_ms),
-            },
-        ),
-        relay_available: p2p_detection.relay_available,
-        probe_stable: p2p_detection.probe_stable,
-        deployment_mode: effective_p2p_policy.deployment_mode.as_str().to_string(),
-        node_role_claim: effective_p2p_policy.node_role_claim.as_str().to_string(),
-        rationale: live_p2p_recommendation.rationale.clone(),
-    }
-}
-
-pub(super) fn build_readiness_status(
-    observability: &ChainNodeObservabilityStatus,
-    policy: ChainReadinessPolicyStatus,
-) -> ChainReadinessStatus {
-    let failed_gates = if observability.ready {
-        Vec::new()
-    } else {
-        observability
-            .alerts
-            .iter()
-            .map(|alert| alert.code.clone())
-            .collect::<Vec<_>>()
-    };
-    ChainReadinessStatus {
-        status: if observability.ready {
-            "ready"
-        } else {
-            "not_ready"
-        }
-        .to_string(),
-        ready: observability.ready,
-        failed_gates,
-        policy,
-    }
-}
-
-pub(super) fn build_sync_status(
-    network_head: &ChainConsensusNetworkHeadStatus,
-    network_height_lag: u64,
-    policy: &ChainReadinessPolicyStatus,
-    snapshot: &NodeSnapshot,
-    observed_at_unix_ms: i64,
-) -> ChainSyncStatus {
-    let last_commit_age_ms = snapshot
-        .consensus
-        .last_committed_at_ms
-        .map(|last_ms| observed_at_unix_ms.saturating_sub(last_ms).max(0));
-    let stalled = network_height_lag > 0
-        && last_commit_age_ms
-            .map(|age_ms| age_ms > policy.sync_stalled_after_ms)
-            .unwrap_or(false);
-    let status = if network_head.conflicting_peer_count > 0 {
-        "conflicting"
-    } else if network_head.fresh_peer_count == 0 && network_head.required_peer_count > 0 {
-        "unknown"
-    } else if stalled {
-        "stalled"
-    } else if network_height_lag > 0 {
-        "catching_up"
-    } else if network_head.stale_peer_count > 0 {
-        "stale_peer_view"
-    } else {
-        "synced"
-    };
-    ChainSyncStatus {
-        status: status.to_string(),
-        network_head_source: network_head.source.clone(),
-        network_height_lag,
-        fresh_peer_count: network_head.fresh_peer_count,
-        stale_peer_count: network_head.stale_peer_count,
-        conflicting_peer_count: network_head.conflicting_peer_count,
-    }
 }
 
 pub(super) fn build_chain_node_observability_status(
