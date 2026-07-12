@@ -16,6 +16,7 @@
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`
 - 想先看主链安全、network tier、hosted player access / `hosted_public_join` 接入或托管身份/托管密钥：先读 `doc/p2p/blockchain/README.md`；mixed-topology reachability 再进入 `network/` 子域
+- 想先看 Token 创世分配、交易授权、治理分发、理想化交易或服务额度 bridge：先读 `doc/p2p/token/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 热点子域导航
@@ -25,7 +26,7 @@
 | `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成；默认先读 `doc/p2p/distfs/README.md` |
 | `blockchain/` | 主链安全、network tier、mainnet readiness、signer custody、hosted player access；默认先读 `doc/p2p/blockchain/README.md` |
 | `observer/` | 观察者同步模式、指标与可观测性；默认先读 `doc/p2p/observer/README.md` |
-| `token/` | 创世分配、签名授权、治理分发与流通边界 |
+| `token/` | 创世分配、签名授权、治理分发与流通边界；默认先读 `doc/p2p/token/README.md` |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
 | `distributed/` | 分布式 runtime / consensus / hard split 路线；首读 `doc/p2p/distributed/README.md` |
 | `viewer-live/` | 已完成的 Viewer LLM 默认值与 observer/debug 回退变更；默认先读 `doc/p2p/viewer-live/README.md`，再按文件名追溯 |
@@ -40,13 +41,12 @@
 - `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`：共享网络最小发布列车的 legacy 执行 companion runbook；`shared_devnet` pass 仅作 rehearsal evidence，不等于 formal `public_testnet` / `mainnet` readiness。
 - `doc/testing/evidence/README.md`：QA evidence landing page，负责 public-testnet readiness evidence / claims-boundary / mixed-topology / legacy shared-network 证据的当前入口与归档边界。
-- `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.design.md`：不受当前实现约束的理想化交易目标态，覆盖字段分组、完整 JSON 草案、理想签名域、理想回执与 phased rollout。
-- `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.runbook.md`：LetAI Run OpenAPI bridge 的 operator companion runbook，覆盖独立部署、首次演练、manual review 与回滚边界。
+- `doc/p2p/token/README.md`：Token 专题簇 landing page，按创世冻结、分配机制、授权、目标态与 quota bridge 分流；再按需进入理想交易设计或 quota bridge runbook。
 
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
-- `node/README.md`、`blockchain/README.md`、`distfs/README.md`、`observer/README.md`、`viewer-live/README.md` 与 `consensus/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
+- `node/README.md`、`blockchain/README.md`、`distfs/README.md`、`observer/README.md`、`token/README.md`、`viewer-live/README.md` 与 `consensus/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义

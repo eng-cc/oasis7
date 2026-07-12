@@ -11,7 +11,7 @@
 - 想先进入主链安全、network tier、signer custody 或 `hosted_public_join` 玩家身份专题：`doc/p2p/blockchain/README.md`
 - 想先看“没有公网 IP 也要成为正式节点”的主链级覆盖网络目标态：`doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
 - 想先看 P2P/DistFS/consensus/execution/observer 如何作为“链上大世界状态底座”单模块自闭环测试：`testing-manual.md#s9a链上大世界状态底座自闭环`
-- 想先看 Token 分配 / 治理签名 / 理想化交易模型 / 生产 signer 外部化 / `OC -> LetAI Run OpenAPI quota` bridge：`doc/p2p/token/mainchain-token-initial-allocation-and-early-contribution-reward-2026-03-22.prd.md`、`doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`、`doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`、`doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`、`doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
+- 想先看 Token 分配、治理签名、理想化交易模型或 `OC -> LetAI Run OpenAPI quota` bridge：先读 `doc/p2p/token/README.md`；生产 signer 外部化再进入 `doc/p2p/blockchain/README.md`。
 - 当前链上代币的正式产品名固定为“绿洲币 / Oasis Coin”；当前 runtime symbol/ticker 为 `OC`，公钥派生账户前缀为 `oc:pk:`；当前创世 `initial_supply` 已冻结为 `10,000,000,000 OC`。
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/p2p/prd.index.md`
 
@@ -26,7 +26,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解主链、共识、DistFS、节点、token 与 hosted player access 的统一边界。
 - `project.md` 是执行台账，适合确认当前安全硬化、signer 外部化、token 与 hosted access 相关任务的推进状态。
 - `node/README.md` 是当前最高密度热点子域 `node/` 的 canonical 入口，适合先按“奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译”分流，再进入具体专题。
-- `distfs/README.md`、`observer/README.md`、`distributed/README.md` 与 `viewer-live/README.md` 是专题簇的折叠入口，适合先确认主题边界，再按 delta 或历史变更追溯。
+- `distfs/README.md`、`observer/README.md`、`token/README.md`、`distributed/README.md` 与 `viewer-live/README.md` 是专题簇的折叠入口，适合先确认主题边界，再按 delta 或历史变更追溯。
 - `prd.index.md` 是精确检索索引，适合已知专题名后按文件名直达，不适合作为第一次进入 p2p 模块时的首读入口。
 - 高频专题承担主题真值：`p2p-mainnet-*` 负责主链安全与 readiness；`p2p-mainnet-private-reachability-architecture-2026-04-01` 负责 mixed-topology 覆盖网络目标态；`p2p-hosted-world-player-access-and-session-auth` 负责 hosted player entry / hosted access 与会话鉴权（旧专题名保留作 trace，不表示多个玩家世界）；`p2p-hosted-public-join-managed-identity-custody-2026-05-18` 负责邮箱 hosted login、托管 player signer 与自托管升级边界；token / signer 系列专题负责分配、签名交易与治理签名外部化。
 
@@ -48,7 +48,7 @@
 - `node/`：节点能力、奖励、身份与复制链路；默认先读 `node/README.md`。
 - `observer/`：观察者同步模式与可观测性；默认先读 `observer/README.md`。
 - `blockchain/`：主链安全、network tier、hosted player identity 与 P2PFS 硬化；默认先读 `blockchain/README.md`。
-- `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案。
+- `token/`：主链 token 分配、正式命名、创世分桶、低流通、治理分发与 `OC -> LetAI Run OpenAPI` 服务额度桥接方案；默认先读 `token/README.md`。
 - `viewer-live/`：已完成的 Viewer LLM 默认值与显式 observer/debug 回退变更；默认先读 `viewer-live/README.md`。
 - `consensus/`：共识相关专题；默认先读 `consensus/README.md`。
 - `distributed/`：分布式运行时专题；默认先读 `distributed/README.md`。
@@ -59,7 +59,7 @@
 - `distfs/`：DistFS 生产加固、路径索引、自愈与 bridge 集成；phase 组先从 `distfs/README.md` 折叠进入。
 - `blockchain/`：主链安全、network tier、signer custody、hosted player access 与 release train；默认先读 `blockchain/README.md`。
 - `observer/`：观察者同步模式、指标与可观测性；同步源增量组先从 `observer/README.md` 折叠进入。
-- `token/`：创世分配、签名授权、治理分发与流通边界。
+- `token/`：创世分配、签名授权、治理分发与流通边界；默认先读 `token/README.md`。
 - `network/`：reachability、mobile light client、runtime bridge 与 mixed-topology 约束。
 - `distributed/`：分布式 runtime / consensus / hard split 路线；默认先读 `distributed/README.md`。
 - `viewer-live/`：已完成 CLI 变更的追溯入口；现行观察服务边界先读 `viewer-live/README.md`，再回链模块 PRD 与 Viewer 手册。
@@ -73,7 +73,7 @@
 ## 高密度提示
 - `doc/p2p/` 的文件数会随专题推进变化；需要当前数量和 `action_required` 状态时，以 `./scripts/doc-inventory-report.sh` 为准。
 - `find` / `git ls-files` 只可作为本地探索辅助；它们不携带 inventory 状态，且可能因统计口径不同与正式报告不一致。
-- 需要完整专题检索清单时，进入 `doc/p2p/prd.index.md`；进入 `node/`、`blockchain/`、`distfs/`、`observer/` 时，优先先读对应子域 README 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
+- 需要完整专题检索清单时，进入 `doc/p2p/prd.index.md`；进入 `node/`、`blockchain/`、`distfs/`、`observer/`、`token/` 时，优先先读对应子域 README 再继续下钻；需要 runbook / release 补充材料时，再按具体专题路径进入。
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
