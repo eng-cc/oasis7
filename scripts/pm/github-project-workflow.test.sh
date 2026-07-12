@@ -82,6 +82,17 @@ SH
 chmod +x "$TMPDIR/bin/gh"
 export PATH="$TMPDIR/bin:$PATH"
 
+python3 - "$TMPDIR/github-project-workflow.py" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("workflow", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.normalized_acceptance("task_uid: task_x\n") == []
+assert module.normalized_acceptance("Acceptance:\n\nNext:\n") == []
+assert module.normalized_acceptance("Acceptance:\n- [ ] first\n- [x] second\n") == ["first", "second"]
+assert module.normalized_acceptance("Acceptance:\n- first\n- second\n") == ["first", "second"]
+PY
+
 AUDIT_JSON="$TMPDIR/audit.json"
 set +e
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
@@ -225,7 +236,9 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 set -euo pipefail
 case "$*" in
   api\ graphql*)
-    if [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
+    if [[ "${GH_FAKE_METADATA_DRIFT:-0}" == "1" ]]; then
+      printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"title":"[PM] authoritative changed title","body":"task_uid: task_33333333333333333333333333333333\\nAcceptance:\\n- authoritative acceptance\\n","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
+    elif [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"blocked","field":{"name":"PM Status"}},{"name":"blocked","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     else
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_33333333333333333333333333333333","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
@@ -240,10 +253,13 @@ SH
 chmod +x "$TMPDIR/bin/gh"
 
 MAPPING_ONLY_JSON="$TMPDIR/mapping-only.json"
+MAPPING_BEFORE_SHA="$(shasum -a 256 "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
   --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
   --json \
   audit > "$MAPPING_ONLY_JSON"
+MAPPING_AFTER_SHA="$(shasum -a 256 "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$MAPPING_BEFORE_SHA" == "$MAPPING_AFTER_SHA" ]]
 
 python3 - "$MAPPING_ONLY_JSON" <<'PY'
 import json, pathlib, sys
@@ -253,6 +269,21 @@ assert payload["selected_count"] == 1, payload
 assert payload["errors"] == [], payload
 assert payload["project_owner"] == "eng-cc", payload
 assert payload["project_number"] == 1, payload
+PY
+
+METADATA_DRIFT_JSON="$TMPDIR/metadata-drift.json"
+set +e
+GH_FAKE_METADATA_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
+  --json audit > "$METADATA_DRIFT_JSON"
+METADATA_DRIFT_EXIT=$?
+set -e
+[[ "$METADATA_DRIFT_EXIT" == "1" ]]
+python3 - "$METADATA_DRIFT_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert any("cached title drift" in item for item in payload["errors"]), payload
+assert any("cached acceptance drift" in item for item in payload["errors"]), payload
 PY
 
 TASK_AUDIT_JSON="$TMPDIR/task-audit.json"
@@ -332,6 +363,8 @@ SH
 chmod +x "$TMPDIR/bin/gh"
 
 ARCHIVE_RECOVERY_JSON="$TMPDIR/archive-recovery.json"
+ARCHIVE_MAPPING_BEFORE_SHA="$(shasum -a 256 "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+set +e
 python3 "$TMPDIR/github-project-workflow.py" "$ARCHIVE_RECOVERY" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
@@ -340,17 +373,19 @@ python3 "$TMPDIR/github-project-workflow.py" "$ARCHIVE_RECOVERY" \
   --status committed \
   --json \
   audit > "$ARCHIVE_RECOVERY_JSON"
+ARCHIVE_RECOVERY_EXIT=$?
+set -e
+[[ "$ARCHIVE_RECOVERY_EXIT" == "1" ]]
+ARCHIVE_MAPPING_AFTER_SHA="$(shasum -a 256 "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+[[ "$ARCHIVE_MAPPING_BEFORE_SHA" == "$ARCHIVE_MAPPING_AFTER_SHA" ]]
 
 python3 - "$ARCHIVE_RECOVERY_JSON" "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" <<'PY'
 import json, pathlib, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
-mapping = json.loads(pathlib.Path(sys.argv[2]).read_text())
 uid = "task_44444444444444444444444444444444"
-assert payload["status"] == "ok", payload
+assert payload["status"] == "failed", payload
 assert payload["selected_count"] == 1, payload
-assert payload["errors"] == [], payload
-assert mapping["tasks"][uid]["issue_number"] == 404, mapping
-assert mapping["tasks"][uid]["project_item_id"] == "ARCHIVE_ITEM_ID", mapping
+assert any("missing mapping record" in item for item in payload["errors"]), payload
 PY
 
 echo "github-project-workflow.test: OK"

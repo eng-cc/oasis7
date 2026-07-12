@@ -73,7 +73,7 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 
 - Current task Doc / PM work: `./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`, `./scripts/doc-governance-check.sh`, `git diff --check`
 - Repo-wide PM governance: `./scripts/pm/lint.sh`
-- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verify-command "<fresh verification command>"`
+- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json>`
 - PR readiness: passed pre-PR local role review packet in GitHub task issue evidence comments, then `./scripts/prepare-task-pr.sh`
 
 ## Guardrails

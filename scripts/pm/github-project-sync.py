@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import pathlib
 import subprocess
@@ -124,9 +125,18 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+_store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
+_store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
+assert _store_spec and _store_spec.loader
+durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+def persist_mapping(path: pathlib.Path, snapshot: dict[str, Any]) -> None:
+    """Persist explicit per-task patches through the shared field-policy CAS."""
+    for task_uid, patch in (snapshot.get("tasks") or {}).items():
+        durable_store.merge_task_record(path,task_uid,dict(patch))
+    metadata={key:value for key,value in snapshot.items() if key!="tasks"}
+    if metadata:
+        durable_store.transact_json(path,lambda latest: latest.update(metadata),{"version":1,"tasks":{}})
 
 
 def run_json(cmd: list[str]) -> dict[str, Any]:
@@ -430,11 +440,11 @@ def workflow_phase_for(status: str) -> str:
     if status == "blocked":
         return "blocked"
     if status == "ready":
-        return "closeout"
+        return "pre_pr_ready"
     if status == "pr_watch":
         return "pr_watch"
     if status in {"done", "deferred"}:
-        return "done"
+        return "task_done" if status == "done" else "blocked"
     return "execution"
 
 
@@ -497,12 +507,12 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
 def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
     return {
-        "Status": project_status_for(status),
+        "Status": "In Progress" if status == "done" and task.get("workflow_phase") != "post_merge_done" else project_status_for(status),
         "Task UID": str(task.get("task_uid") or ""),
         "Owner Role": str(task.get("owner_role") or ""),
         "Module": str(task.get("module") or ""),
         "PM Status": status,
-        "Workflow Phase": workflow_phase_for(status),
+        "Workflow Phase": str(task.get("workflow_phase") or workflow_phase_for(status)),
         "Priority": str(task.get("priority") or ""),
         "Blocked Reason": "" if task.get("status") != "blocked" else "blocked in .pm",
         "Canonical Worktree": str(task.get("worktree_hint") or ""),
@@ -789,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if content_id:
                     live_record["content_id"] = content_id
-                save_mapping(mapping_path, mapping)
+                persist_mapping(mapping_path, mapping)
             return {
                 "task_uid": uid,
                 "issue_url": issue_url,
@@ -827,7 +837,7 @@ def main(argv: list[str] | None = None) -> int:
             "id": project_id,
             "repo": args.repo,
         }
-        save_mapping(mapping_path, mapping)
+        persist_mapping(mapping_path, mapping)
         if args.json:
             print(json.dumps(summary, indent=2, sort_keys=True))
         else:
@@ -889,7 +899,7 @@ def main(argv: list[str] | None = None) -> int:
                 "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             }
         )
-        save_mapping(mapping_path, mapping)
+        persist_mapping(mapping_path, mapping)
         summary["tasks"].append(
             {
                 "task_uid": uid,
@@ -905,7 +915,7 @@ def main(argv: list[str] | None = None) -> int:
         "id": project_id,
         "repo": args.repo,
     }
-    save_mapping(mapping_path, mapping)
+    persist_mapping(mapping_path, mapping)
     if args.json:
         print(json.dumps(summary, indent=2, sort_keys=True))
     else:

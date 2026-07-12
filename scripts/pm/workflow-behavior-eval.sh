@@ -43,6 +43,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-workflow-eval.XXXXXX")"
+PM_ROLE_SNAPSHOT_DIR="$TMP_DIR/pm-role-snapshot"
+OASIS7_WORKFLOW_EVAL_SCRATCH="$TMP_DIR"
 cleanup() {
   local status=$?
   rm -rf "$TMP_DIR"
@@ -50,9 +52,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
+python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
+  --root "$ROOT_DIR" --state "$PM_ROLE_SNAPSHOT_DIR" --pathspec .pm
+
 TASK_WORKTREE_JSON_FILE="$TMP_DIR/task-worktree.json"
 SUBAGENT_CONTRACT_JSON_FILE="$TMP_DIR/subagent-contract.json"
 ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
+CODEX_AGENT_CONFIG_JSON_FILE="$TMP_DIR/codex-agent-config.json"
+
+if ! TOML_PYTHON="$($ROOT_DIR/scripts/pm/find-python-with-module.sh tomllib)"; then
+  echo "workflow-behavior-eval: complete TOML validation requires an available Python 3.11+ stdlib tomllib interpreter; python3 may remain 3.9" >&2
+  exit 1
+fi
+"$TOML_PYTHON" "$ROOT_DIR/scripts/pm/validate-codex-agent-config.py" \
+  --root "$ROOT_DIR" > "$CODEX_AGENT_CONFIG_JSON_FILE"
+"$ROOT_DIR/scripts/pm/validate-codex-agent-config.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/guard-tracked-files.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/lint.test.sh" >/dev/null
 
 "$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
 "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/null
@@ -64,42 +80,99 @@ ROUTING_SCENARIOS_JSON_FILE="$TMP_DIR/routing-scenarios.json"
 "$ROOT_DIR/scripts/pm/claim-ready.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/task-closeout-transition.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/task-closeout-profile.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/pr-lifecycle-gate.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/pr-lifecycle-trust.test.sh" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/tpm-workflow-driver.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/tpm-workflow-doc-contract.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
+"$ROOT_DIR/scripts/pm/workflow-adversarial-contract.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" ruleset >/dev/null
+"$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" none >/dev/null
+"$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" denied >/dev/null
+"$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" paged >/dev/null
+"$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" filtered >/dev/null
+"$ROOT_DIR/scripts/pm/pr-disposition-evidence.test.sh" forged-cache >/dev/null
+"$ROOT_DIR/scripts/pm/pr-disposition-evidence.test.sh" top-review >/dev/null
+"$ROOT_DIR/scripts/pm/pr-disposition-evidence.test.sh" writer >/dev/null
+python3 "$ROOT_DIR/scripts/pm/pr-final-trust-red.test.py" >/dev/null
+OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
+  "$ROOT_DIR/scripts/pm/bootstrap-immutable-request.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-main-sync.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/review-provenance-trust.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/new-task-worktree-partial-bootstrap.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pr-review-thread-closeout.test.sh" >/dev/null
+if rg -n 'fresh verification -> pre-PR|commit 前.*review|workflow-report close -> move-task|closeout -> commit' \
+  "$ROOT_DIR/.pm/README.md" \
+  "$ROOT_DIR/doc/engineering/prd.md" \
+  "$ROOT_DIR/doc/scripts/prd.md" \
+  "$ROOT_DIR/doc/engineering/workflow/source-of-truth.md"; then
+  echo "workflow-behavior-eval: active workflow docs retain retired live/uncommitted closeout wording" >&2
+  exit 1
+fi
+if rg -n 'Commit exactly this task slice|closeout -> commit' \
+  "$ROOT_DIR/.agents/skills/finishing-a-development-branch/SKILL.md"; then
+  echo "workflow-behavior-eval: finishing/project surfaces retain generic post-review commit order" >&2
+  exit 1
+fi
+for marker in \
+  '## Freeze-Commit Gates' \
+  '## Optional Evidence-Only Commit / PR-Prep Gates' \
+  '## Post-PR / Pre-Merge Gates' \
+  'git diff --check <Comparison Ref>...<Source Head>' \
+  'evidence-only commit' \
+  'partial remote state recovers via refresh -> audit -> retry' \
+  'post-PR checks/comments/mergeability remain separate gates'; do
+  if ! rg -F "$marker" \
+    "$ROOT_DIR/.agents/skills/finishing-a-development-branch/SKILL.md" \
+    "$ROOT_DIR/doc/engineering/project.md" >/dev/null; then
+    echo "workflow-behavior-eval: missing finishing gate marker: $marker" >&2
+    exit 1
+  fi
+done
+python3 - "$ROOT_DIR/.agents/skills/finishing-a-development-branch/SKILL.md" <<'PY'
+from pathlib import Path
+import sys
+text=Path(sys.argv[1]).read_text(encoding="utf-8")
+markers=[
+    "## Freeze-Commit Gates",
+    "## Optional Evidence-Only Commit / PR-Prep Gates",
+    "## Post-PR / Pre-Merge Gates",
+]
+positions=[text.index(marker) for marker in markers]
+if positions != sorted(positions):
+    raise SystemExit("workflow-behavior-eval: finishing checklist temporal order is invalid")
+freeze, prep, post = positions
+review_packet = text.index("Pre-PR local role review packet recorded after immutable verification")
+purpose_decision = text.index("Record the PR purpose decision after PR creation")
+post_merge = text.index("## Post-Merge Cleanup")
+if not prep < review_packet < post:
+    raise SystemExit("workflow-behavior-eval: pre-PR review packet is outside PR-prep gate range")
+if not post < purpose_decision < post_merge:
+    raise SystemExit("workflow-behavior-eval: PR purpose decision is outside post-PR/pre-merge gate range")
+PY
+python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
+  --root "$ROOT_DIR" --state "$PM_ROLE_SNAPSHOT_DIR" --pathspec .pm >/dev/null
 
-python3 - "$ROOT_DIR" > "$SUBAGENT_CONTRACT_JSON_FILE" <<'PY'
+python3 - "$ROOT_DIR" "$CODEX_AGENT_CONFIG_JSON_FILE" > "$SUBAGENT_CONTRACT_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
-
-def load_default_subagent_runtime(text: str) -> dict[str, str]:
-    section = None
-    values: dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section = line[1:-1].strip()
-            continue
-        if section == "workflow.subagent_runtime" and "=" in line:
-            key, raw_value = line.split("=", 1)
-            values[key.strip()] = raw_value.strip().strip('"')
-    return values
 
 root = Path(sys.argv[1])
 bt = chr(96)
 source_text = (root / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
-default_runtime = load_default_subagent_runtime((root / ".codex/config.toml").read_text(encoding="utf-8"))
-default_model = default_runtime.get("model")
-default_reasoning = default_runtime.get("reasoning_effort")
-default_shorthand = default_runtime.get("shorthand")
-if not all(isinstance(value, str) and value for value in (default_model, default_reasoning, default_shorthand)):
-    raise SystemExit("workflow-behavior-eval: .codex/config.toml missing subagent runtime model/reasoning/shorthand strings")
-default_runtime_config_marker = ".codex/config.toml` under `[workflow.subagent_runtime]`"
+agent_config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+if agent_config.get("status") != "ok":
+    raise SystemExit("workflow-behavior-eval: Codex agent config validation did not pass")
+runtime_policy_marker = "The repository does not pin a default subagent model or reasoning effort in `.codex/config.toml`"
 
 checks = [
     (
@@ -115,7 +188,7 @@ checks = [
             "Specialist skills are not mandatory workflow phases.",
             "Only `.agents/skills/*/SKILL.md` entries are default skill entrypoints.",
             "non-default specialist library material for professional method skills",
-            "route, TODOs, and downstream handoff must still be recorded",
+            "route, work items, and downstream handoff must still be recorded",
             "mandatory context checklist",
             "identity and authority",
             "workflow governance",
@@ -127,23 +200,15 @@ checks = [
             "Every user request must enter the standard worktree flow before any substantive handling begins",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
             "The task/worktree decision and the professional-slice decision are intentionally decoupled",
-            default_runtime_config_marker,
-            "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
-            "`module` as the default large-module marker",
+            runtime_policy_marker,
+            "Every slice contract must record one explicit runtime outcome",
+            "A requested value must never be presented as the observed actual runtime without evidence",
+            "as the default large-module marker",
             "`game-strategy`",
             "`visualization`",
             "`chain-world-state-substrate`",
             "Do not create a separate parent/planning surface",
-            "Module-local verification remains distinct from integration/release readiness claims",
-            "### 1.2.2 Learning Intake / Loop Closeout",
-            "no-op",
-            "short GitHub issue evidence note",
-            "Reflection signal",
-            "Task-scoped `working_memory`",
-            "Candidate task or memory promotion",
-            "By default this creates a GitHub-backed `source_type=reflection` intake issue",
-            "only and must not create a candidate task unless `--create-task` is",
-            "The minimum record for a micro loop inside an already-bound task is:",
+            "Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea;",
             "### 1.2.3 GitHub Project-Backed PM Contract",
             "GitHub Issues + GitHub Project are the authoritative project-management",
             "Task UID` remains the stable internal identity",
@@ -151,13 +216,18 @@ checks = [
             "github-project-workflow.sh ... audit",
             "github-project-workflow.sh ... step3-gate",
             "fallback-evidence.sh",
-            "Lifecycle wrappers `new-task.sh`, `move-task.sh`",
+            "capture one coherent full-`.pm` snapshot",
+            "complete `.pm` filesystem path set",
+            "exact Git index mode/OID/stage/path records separately",
+            "Ordinary audit,",
+            "readiness verification, and `claim-ready.sh` are read-only",
+            "cached title or acceptance drift",
         ],
     ),
     (
         root / ".pm/README.md",
         [
-            "GitHub Project-backed PM",
+            "GitHub Project-Backed PM Operations",
             "GitHub Project 是 active work queue",
             "github-project-workflow.sh",
             "sync",
@@ -216,10 +286,10 @@ checks = [
             "只读专业判断分流",
             "纯文件存在性、路径查找、命令输出复述",
             "任何用户请求第一步都必须创建或进入标准 task worktree",
-            "只读专业 slice 的 contract、证据和 sink 必须写入",
-            "subagent 默认模型",
-            "Default subagent runtime",
-            "[workflow.subagent_runtime]",
+            "subagent slice contracts",
+            "Subagent runtime",
+            "inherit current parent selection",
+            "adapter inactive on this surface",
         ],
     ),
     (
@@ -227,12 +297,13 @@ checks = [
         [
             "# Role: tpm",
             "TPM 只做 workflow coordination / integration",
-            "默认由 `tpm` 作为新仓库变更任务的主 Agent 和 canonical workflow owner",
+            "默认由 `tpm` 作为新仓库变更任务的主 Agent、workflow coordinator / integrator",
             "每个用户请求必须先创建或进入标准 task worktree",
             "专业角色以 subagent 形式提供切片工作",
             "不得用 TPM 自己的判断替代专业 subagent 结论",
-            "Default subagent runtime",
-            "[workflow.subagent_runtime]",
+            "仓库不在 `.codex/config.toml` 固定",
+            "adapter-backed",
+            "adapter inactive on this surface",
             "派工前必须把当前 TODO",
             "mandatory context checklist",
             "workflow source-of-truth",
@@ -272,7 +343,8 @@ checks = [
         [
             "- role:",
             "- model configuration:",
-            "`Default subagent runtime` by default",
+            "`inherit current parent selection` by default",
+            "adapter inactive on this surface",
             "- mandatory context checklist:",
             "identity and authority:",
             "workflow governance:",
@@ -282,6 +354,10 @@ checks = [
             "collaboration boundary:",
             "- context exemption:",
             "除窄范围只读 explorer 且写明豁免原因外",
+            "## Example (copy/paste)",
+            "intended model configuration: `inherit current parent selection`",
+            "actual dispatched model/reasoning: `inherited/unverified` because this dispatch surface cannot report the inherited runtime",
+            "role activation: `message-assigned; adapter inactive on this surface`",
         ],
     ),
     (
@@ -299,23 +375,87 @@ checks = [
         ],
     ),
     (
+        root / "scripts/pm/find-python-with-module.sh",
+        [
+            "for generic_name in python python3",
+            'for candidate in "$path_dir"/python*',
+            "importlib.import_module",
+        ],
+    ),
+    (
+        root / "scripts/pm/guard-tracked-files.py",
+        [
+            'choices=("snapshot", "check")',
+            '"git", "ls-files", "-z"',
+            "tracked projection drift",
+            "new index projection path",
+            "removed index projection path",
+            "new untracked projection artifact",
+        ],
+    ),
+    (
+        root / "scripts/pm/validate-codex-agent-config.py",
+        [
+            "load_renderer",
+            "deterministic rendering",
+            '"status": "registry_strict_loaded"',
+            '"adapter_native_parse": "not_run"',
+            "threading.Thread",
+            "CODEX_AGENT_CONFIG_PROBE_TIMEOUT_SECONDS",
+            "bounded stderr capture",
+        ],
+    ),
+    (
+        root / "scripts/pm/lint.sh",
+        [
+            "PM_LINT_ROOT",
+            'export PM_ROOT_DIR="$PM_LINT_ROOT"',
+            "All PM validation below reads one coherent snapshot epoch",
+            "tree-manifest.py",
+            "source .pm changed during snapshot attempt",
+            "PYTHONPYCACHEPREFIX",
+        ],
+    ),
+    (
+        root / "doc/engineering/prd.md",
+        [
+            "完整专业角色 roster",
+            "`gameplay_designer`",
+            "`game_visual_interaction_designer`",
+            "`blockchain_ops_engineer`",
+            "`repository_health_engineer`",
+        ],
+    ),
+    (
+        root / "doc/engineering/project.md",
+        [
+            "下方 `default-subagent-model` 是历史完成记录，不再代表当前 runtime 口径",
+            "该配置已由 capability-aware runtime policy 取代",
+            "当前仓库不固定根 TPM 或 subagent 模型",
+        ],
+    ),
+    (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
             "Pre-PR local role review is required before PR creation",
             "findings",
             "no_findings",
             "residual_risk",
+            "include `agent_engineer` only when in-world Agent perception",
+            "repository Codex config/adapter projection/validation contracts",
+            "for `.codex/agents/<role>.toml`, require `repository_health_engineer`, `qa_engineer`, and the matching canonical `<role>`",
         ],
     ),
     (
         root / ".agents/skills/repo-owned-workflow-router/SKILL.md",
         [
             "## Subagent Slice Plan (If Needed)",
-            "## Specialist Skills Considered",
+            "Do not treat specialist domain skills as mandatory default workflow phases",
             "- role:",
             "- slice type:",
             "- model configuration:",
-            "`Default subagent runtime` by default",
+            "`inherit current parent selection` by default",
+            "adapter inactive on this surface",
             "- mandatory context checklist:",
             "identity and authority:",
             "workflow governance:",
@@ -333,7 +473,7 @@ checks = [
             "Do not treat specialist domain skills as mandatory default workflow phases",
             "Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`",
             "Already-bound read-only professional/domain judgment",
-            "pure fact lookup",
+            "Pure fact lookup",
         ],
     ),
     (
@@ -418,11 +558,8 @@ print(
         {
             "status": "ok",
             "surfaces": surfaces,
-            "default_runtime": {
-                "model": default_model,
-                "reasoning_effort": default_reasoning,
-                "shorthand": default_shorthand,
-            },
+            "runtime_policy": agent_config["runtime_policy"],
+            "codex_agent_config": agent_config,
         },
         ensure_ascii=False,
     )
@@ -430,28 +567,12 @@ print(
 PY
 
 
-python3 - "$ROOT_DIR" > "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
+python3 - "$ROOT_DIR" "$CODEX_AGENT_CONFIG_JSON_FILE" > "$ROUTING_SCENARIOS_JSON_FILE" <<'PY'
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
-
-def load_default_subagent_runtime(text: str) -> dict[str, str]:
-    section = None
-    values: dict[str, str] = {}
-    for raw_line in text.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            section = line[1:-1].strip()
-            continue
-        if section == "workflow.subagent_runtime" and "=" in line:
-            key, raw_value = line.split("=", 1)
-            values[key.strip()] = raw_value.strip().strip('"')
-    return values
 
 root = Path(sys.argv[1])
 
@@ -507,12 +628,8 @@ surfaces = {
         root / "scripts/pm/capture-todo.sh"
     ).read_text(encoding="utf-8"),
 }
-default_runtime = load_default_subagent_runtime(surfaces[".codex/config.toml"])
-default_model = default_runtime.get("model")
-default_reasoning = default_runtime.get("reasoning_effort")
-default_shorthand = default_runtime.get("shorthand")
-if not all(isinstance(value, str) and value for value in (default_model, default_reasoning, default_shorthand)):
-    raise SystemExit("workflow-behavior-eval: .codex/config.toml missing subagent runtime model/reasoning/shorthand strings")
+agent_config = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+runtime_policy = agent_config["runtime_policy"]
 
 scenarios = [
     {
@@ -555,10 +672,11 @@ scenarios = [
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             "### 1.2.2 Learning Intake / Loop Closeout",
-            "Learning intake is not a new mandatory gate before every answer.",
-            "The minimum record for a micro loop inside an already-bound task is:",
-            "question or observation, evidence path or command, answer or decision, and",
-            "Use the full bootstrap/router packets only when",
+            "Once a request is already inside the bound task/worktree",
+            "records a short GitHub issue evidence note only when the fact materially",
+            "append the follow-up evidence to the current",
+            "unless it changes owner, scope, or PR chain",
+            "same-task evidence stays in the bound GitHub task",
         ],
     },
     {
@@ -578,11 +696,11 @@ scenarios = [
         "expected_route": "learning intake -> task-scoped working_memory may supplement GitHub task issue evidence only",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Task-scoped `working_memory`",
-            "`working_memory` supplements GitHub task issue evidence comments; it never",
-            "replaces task truth.",
-            "Reflection signals, working memory, and",
-            "replace it.",
+            "task-scoped `working_memory`",
+            "Execution evidence is recorded in GitHub task issue evidence comments.",
+            "Project docs, handoff files, signals, memory, and PR evidence may supplement GitHub task issue evidence comments",
+            "but they do not replace them for task execution truth.",
+            "remain repo-local unless a later source-of-truth",
         ],
     },
     {
@@ -591,10 +709,10 @@ scenarios = [
         "surface": ".agents/skills/default-workflow-bootstrap/SKILL.md",
         "required_markers": [
             "repository-changing: requires standard worktree + GitHub Project-backed task truth before edits",
-            "choose `tpm` as the default workflow owner role unless an existing bound task already has a valid owner",
-            "professional work still requires matching bounded subagent slices",
-            "create a dedicated worktree unless the user explicitly authorized reuse",
-            "Once task truth exists, hand off to `repo-owned-workflow-router`.",
+            "TPM is the default coordinator and continuation owner",
+            "matching bounded subagent slices.",
+            "dedicated worktree unless the user explicitly authorized reuse",
+            "Once task truth exists, hand off to `repo-owned-workflow-router`",
         ],
     },
     {
@@ -612,8 +730,7 @@ scenarios = [
         "expected_route": "repo-owned-workflow-router -> bounded-brainstorming -> execution",
         "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
         "required_markers": [
-            "Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.",
-            "Do not route into `bounded-brainstorming` if the task is already implementation-ready.",
+            "Ambiguous, option-heavy, or materially visual scope -> optional `bounded-brainstorming`; do not route there when implementation-ready.",
         ],
     },
     {
@@ -663,16 +780,10 @@ scenarios = [
         "required_markers": [
             "a branch is about to create a PR",
             "a major feature or workflow helper just landed locally",
-            "Pre-PR Local Role Review: passed",
-            "Review Package: <path to review package or n/a with reason>",
-            "Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>",
-            "Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>",
-            "Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>",
-            "WASM Evidence: <support crate/determinism evidence or n/a with reason>",
-            "Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>",
-            "LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>",
-            "Slice Ledger: <path to slice ledger or n/a with reason>",
-            "Formal Sink: GitHub task issue evidence comments",
+            "canonical packet at the linked schema. Do not hand-author or restate it here",
+            "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
+            "missing trusted production attestation is `capability_blocked`",
+            "recorded in GitHub task issue evidence comments",
         ],
     },
     {
@@ -701,13 +812,15 @@ scenarios = [
         ],
     },
     {
-        "id": "subagent_default_model_is_recorded",
-        "expected_route": f"TPM records {default_shorthand} as the source-of-truth default subagent model configuration",
+        "id": "subagent_inherited_runtime_is_recorded",
+        "expected_route": f"TPM records the capability-aware runtime policy: {runtime_policy}",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             ".codex/config.toml",
-            "[workflow.subagent_runtime]",
-            "Any non-default subagent model or reasoning effort must be recorded in the slice contract",
+            "intended model: inherit current parent selection",
+            "actual model: inherited/unverified",
+            "Every slice contract must record one explicit runtime outcome",
+            "A requested value must never be presented as the observed actual runtime without evidence",
         ],
     },
     {
@@ -803,10 +916,9 @@ scenarios = [
         "expected_route": "TPM records TODO decomposition and slice contracts before delegated execution",
         "surface": ".agents/skills/repo-owned-workflow-router/SKILL.md",
         "required_markers": [
-            "TPM TODO decomposition and subagent slice contracts must be recorded in GitHub task issue evidence comments before delegated execution begins.",
             "Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.",
-            "GitHub task issue evidence sink",
-            "formal docs may supplement but not replace it",
+            "Record the slice contract in the GitHub issue evidence comment sink before dispatch.",
+            "formal sink / writeback surface: GitHub issue evidence comment (mandatory)",
         ],
     },
     {
@@ -825,25 +937,17 @@ scenarios = [
         "expected_route": "finishing-a-development-branch -> local role review -> prepare-task-pr -> GitHub required checks/review -> merge/cleanup",
         "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
         "required_markers": [
-            "Pre-PR Local Role Review: passed",
-            "Review Package: <path to review package or n/a with reason>",
-            "Review Verdicts: <per-role scope/spec compliance verdict + role quality/risk verdict>",
-            "Verification Matrix: <changed surface -> required evidence -> observed evidence or explicit deferral>",
-            "Visual Evidence: <screenshot/model visual review paths or n/a with exemption reason>",
-            "WASM Evidence: <support crate/determinism evidence or n/a with reason>",
-            "Ops Evidence: <readiness/rollback/runbook/operator evidence or n/a with reason>",
-            "LiveOps Evidence: <messaging/release-note/status/community evidence or n/a with reason>",
-            "Slice Ledger: <path to slice ledger or n/a with reason>",
+            "obtain the trusted canonical review attestation",
+            "--verification-profile <repository-owned-profile>",
+            "--review-packet-file <canonical-review-packet.json>",
+            "its schema is only at the canonical review-packet link",
             "./scripts/prepare-task-pr.sh --create",
-            "normal_pr_ci_watch",
-            "manual_packaging_ci_hold",
-            "responsible operator/role",
-            "exact resume criterion",
-            "external/status messaging evidence",
-            "Do not stop at PR creation for normal PRs; continue watching CI/review, fix failures, merge, and clean up.",
-            "Do not merge a normal PR without first checking PR comments and review threads and resolving or answering actionable items.",
+            "source-of-truth.md#canonical-state-machine",
+            "source-of-truth.md#workflow-states",
+            "source-of-truth.md#ready-and-done",
+            "./scripts/pm/pr-lifecycle-gate.py <pr-number> --json",
+            "All interpretations, retry loops, dispositions and merge authorization come",
             "Do not land locally unless the user explicitly asks for local landing.",
-            "Do not treat review-thread resolution as merge readiness.",
         ],
     },
 ]
@@ -884,7 +988,7 @@ from pathlib import Path
 task_worktree = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 subagent_contract = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 routing_scenarios = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
-default_shorthand = subagent_contract["default_runtime"]["shorthand"]
+runtime_policy = subagent_contract["runtime_policy"]
 
 segments = [
     {
@@ -906,10 +1010,25 @@ segments = [
     },
     {
         "id": "subagent_contract_surface",
-        "command": "python contract check over AGENTS / handoff / router surfaces",
+        "command": "complete TOML + Codex strict-load + negative fixture checks over specialist adapter config, then Python contract checks over AGENTS / handoff / router surfaces",
         "status": subagent_contract["status"],
         "evidence": {
             "surface_count": len(subagent_contract["surfaces"]),
+            "codex_agent_config": subagent_contract["codex_agent_config"],
+        },
+    },
+    {
+        "id": "pm_projection_immutability",
+        "command": "fail-only full-.pm guard compares the complete tracked/baseline-untracked/ignored path set with lstat kind/mode/content/symlink target and exact index mode/OID/stage/path separately; pm-lint rejects source symlinks before a manifest-stable retry/fail snapshot and uses temp pycache isolation",
+        "status": "passed",
+        "evidence": {
+            "pathspec": ".pm",
+            "tracked_projection_unchanged_before_cleanup": True,
+            "new_untracked_projection_artifacts": False,
+            "live_restore_enabled": False,
+            "guard_records_symlink_state": True,
+            "lint_source_symlinks_allowed": False,
+            "python_cache_location": "temporary lint directory",
         },
     },
     {
@@ -994,12 +1113,13 @@ payload = {
         "TPM does not own professional/domain conclusions; matching professional role slices do",
         "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
         "subagent dispatch remains bound to owner/write-scope/return-contract/formal-sink surfaces",
-        f"subagent slice contracts record {default_shorthand} as the source-of-truth default model configuration unless an override reason is present",
+        f"subagent slice contracts record the capability-aware runtime policy ({runtime_policy}) and distinguish intended from actual model selection",
+        "named-role adapter activation is claimed only on a dispatch surface that exposes and uses a named-role selector; Desktop falls back to message-assigned role attribution",
         "PR creation requires local involved-role subagent review evidence before GitHub PR watch/fix/merge",
         "done closeout refuses to proceed without fresh verification",
         "done closeout updates GitHub issue metadata, Project task fields, and closes the GitHub task issue",
         "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
-        "normal PRs continue after creation into required-check/comment/mergeability watch, failure fixes, comment closeout, authorized review-approval admin merge when policy allows, merge, and cleanup; REVIEW_REQUIRED is informational and not a blocker",
+        "normal PRs continue after creation into cursor-exhaustive required-check/comment/review/thread/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational, while automatic admin merge fails closed until a GitHub/runtime-verifiable complete-ruleset receipt exists",
         "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
     ],
@@ -1010,9 +1130,10 @@ payload = {
         "read-only professional/domain questions collapse back into TPM-owned conclusions",
         "TPM role or registry markers disappear from role surfaces",
         "optional brainstorming, TDD, or subagent gates drift into mandatory stages",
-        "task-closeout allows done closeout without verify-command",
+        "task-closeout allows done closeout without a repository-owned verification profile",
         "subagent contract markers disappear from AGENTS or handoff/router surfaces",
-        f"subagent model configuration markers disappear or no longer default to the source-of-truth runtime ({default_shorthand})",
+        f"subagent runtime markers disappear or no longer preserve the capability-aware policy ({runtime_policy})",
+        "adapter registration is treated as activation, or Desktop full-history fallback loses its message-assigned attribution boundary",
         "repo-owned review-request surface disappears or stops requiring pre-PR local role review evidence",
         "prepare-task-pr local fixture no longer creates the expected PR command path",
         "finishing branch guidance stops distinguishing normal PR CI watch from manual packaging CI hold",

@@ -6,9 +6,10 @@
 - role:
 - slice type:
 - model configuration: fill the intended/actual fields below.
-- intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override.
+- intended model configuration: `inherit current parent selection` by default; record reason for any explicit model/reasoning request.
 - actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
 - context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded.
+- role activation: named-role selector evidence when adapter-backed, otherwise `message-assigned; adapter inactive on this surface`.
 - mandatory context checklist: fill the mandatory context checklist below.
 - mandatory context checklist:
   - identity and authority: assigned role + `.agents/roles/<role>.md` + owner role + TPM integration owner
@@ -36,9 +37,10 @@
 - role: gameplay_designer
 - slice type: implementation
 - model configuration: see intended/actual fields
-- intended model configuration: workflow source-of-truth `Default subagent runtime`
-- actual dispatched model/reasoning: requested default runtime, or `inherited/unverified` with reason if the connector cannot select/report the model or actual dispatch cannot be verified
+- intended model configuration: `inherit current parent selection`
+- actual dispatched model/reasoning: `inherited/unverified` because this dispatch surface cannot report the inherited runtime
 - context delivery mode: full-thread/full-history fork
+- role activation: `message-assigned; adapter inactive on this surface`
 - mandatory context checklist: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
 - return contract: patch + test evidence

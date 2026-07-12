@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -13,6 +14,7 @@ trap cleanup EXIT
 TEST_REPO="$TMPDIR/repo"
 mkdir -p "$TEST_REPO/scripts/pm" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/record-pre-pr-review.sh" "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
+cp "$ROOT_DIR/scripts/pm/validate-review-provenance.py" "$TEST_REPO/scripts/pm/validate-review-provenance.py"
 chmod +x "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
@@ -36,19 +38,34 @@ chmod +x "$TMPDIR/bin/gh"
 
 git -C "$TEST_REPO" init -q -b main
 printf 'base\n' > "$TEST_REPO/README.md"
-git -C "$TEST_REPO" add README.md scripts/pm/record-pre-pr-review.sh
+mkdir -p "$TEST_REPO/.pm"
+printf 'scratch/\n' >"$TEST_REPO/.pm/.gitignore"
+git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "base"
 git -C "$TEST_REPO" branch base
 
 printf 'changed\n' >> "$TEST_REPO/README.md"
 git -C "$TEST_REPO" add README.md
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "change"
+mkdir -p "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111"
+printf 'review return\n' >"$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md"
+HEAD_SHA="$(git -C "$TEST_REPO" rev-parse HEAD)"
+ARTIFACT_SHA="$(shasum -a 256 "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md" | awk '{print $1}')"
+python3 - "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl" "$HEAD_SHA" "$ARTIFACT_SHA" <<'PY'
+import json, sys
+dispatch_id="11111111-1111-4111-8111-111111111111"
+receipt=".pm/scratch/task_11111111111111111111111111111111/dispatch.json"
+open(str(__import__('pathlib').Path(sys.argv[1]).parent/'dispatch.json'),"w").write(json.dumps({"receipt_type":"oasis7_subagent_dispatch","issuer":"codex_runtime","dispatch_id":dispatch_id,"role":"repository_health_engineer","source_head":sys.argv[2],"contract_digest":"0"*64})+"\n")
+open(sys.argv[1], "w").write(json.dumps({"task_uid":"task_11111111111111111111111111111111","role":"repository_health_engineer","status":"completed","head":sys.argv[2],"slice_id":dispatch_id,"dispatch_receipt":receipt,"activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified: fixture","artifact_digest":sys.argv[3],"scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture risk","artifacts":[".pm/scratch/task_11111111111111111111111111111111/review-return.md"]})+"\n")
+PY
+LEDGER_REL=".pm/scratch/task_11111111111111111111111111111111/slice-ledger.jsonl"
 
 if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --task-uid task_11111111111111111111111111111111 \
   --roles repository_health_engineer \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
   --comparison-ref refs/heads/base \
   --print-only >"$TMPDIR/missing.out" 2>"$TMPDIR/missing.err"; then
   echo "expected missing review evidence to fail" >&2
@@ -65,6 +82,7 @@ if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --finding-disposition-evidence "smoke evidence" \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
   --comparison-ref refs/heads/base \
   --print-only >"$TMPDIR/dirty.out" 2>"$TMPDIR/dirty.err"; then
   echo "expected dirty worktree to fail" >&2
@@ -112,6 +130,7 @@ if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
   --review-package "/tmp/non-repo-review-package.diff" \
+  --slice-ledger "$LEDGER_REL" \
   --comparison-ref refs/heads/base \
   --print-only >"$TMPDIR/reject.out" 2>"$TMPDIR/reject.err"; then
   echo "expected external absolute review package path to be rejected" >&2
@@ -127,6 +146,7 @@ TEST_GH_LOG="$TMPDIR/gh.log" PATH="$TMPDIR/bin:$PATH" "$TEST_REPO/scripts/pm/rec
   --finding-disposition-evidence "smoke evidence" \
   --verification "helper -> smoke -> observed" \
   --residual-risk "fixture risk" \
+  --slice-ledger "$LEDGER_REL" \
   --visual-evidence "screenshot/model review: smoke visual evidence" \
   --ops-evidence "readiness/rollback/runbook/operator evidence: smoke ops evidence" \
   --liveops-evidence "messaging/release-note/player/community evidence: smoke liveops evidence" \

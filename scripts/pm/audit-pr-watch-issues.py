@@ -138,28 +138,24 @@ def update_issue_body(repo: str, issue_number: int, body: str) -> None:
         pathlib.Path(body_path).unlink(missing_ok=True)
 
 
-def close_issue(repo: str, issue_number: int) -> None:
-    run_text(["gh", "issue", "close", str(issue_number), "-R", repo, "--reason", "completed"])
-
-
 def evidence_body(task_uid: str, pr_number: int, pr_url: str, issue_state: str) -> str:
     return "\n".join(
         [
             "<!-- oasis7-pm-evidence -->",
             f"Task UID: {task_uid}",
-            "Evidence Phase: done",
+            "Evidence Phase: task_done",
             "Role: tpm",
             f"Recorded At: {now()}",
             "",
-            "Completed: Remedial PM metadata synchronization confirmed the recorded PR is merged and synchronized task issue state to done.",
-            "Pending: none",
+            "Completed: Remedial PM metadata synchronization confirmed the recorded PR is merged and advanced task truth to task_done.",
+            "Pending: main sync, safe cleanup receipt, and post-merge finalization.",
             "Action: audit-pr-watch-issues --close",
             f"Validation Command: gh pr view {pr_number} --json state,mergedAt,url",
-            "Expected Result: PR is merged before task issue closure.",
+            "Expected Result: PR is merged before the task_done transition.",
             f"Actual Result: {pr_url or 'PR merged'}",
             f"Previous Issue State: {issue_state}",
             "Completion Judgment: not provided by this audit; this records metadata synchronization after existing ready/pre-PR evidence and a merged PR.",
-            "Blocker / Next Action: none",
+            "Blocker / Next Action: Continue the canonical terminal runbook at post-merge-main-sync.sh; only post-merge-finalize.py may close the issue.",
             "",
         ]
     )
@@ -191,6 +187,7 @@ def done_task_from_record(task_mod: Any, task_uid: str, record: dict[str, Any], 
     if str(merged["title"]).startswith("[PM] "):
         merged["title"] = str(merged["title"])[5:]
     merged["status"] = "done"
+    merged["workflow_phase"] = "task_done"
     merged["updated_at"] = now()
     return task_mod.task_from_record(task_uid, merged)
 
@@ -282,11 +279,11 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
             continue
         project_item_id = str(record.get("project_item_id") or "")
         if not project_item_id:
-            result.update({"status": "blocked", "reason": "missing project_item_id; refusing to close or mark done"})
+            result.update({"status": "blocked", "reason": "missing project_item_id; refusing to advance to task_done"})
             results.append(result)
             continue
         if not args.close:
-            result.update({"status": "would_close", "reason": "merged PR watch task can be synchronized to done"})
+            result.update({"status": "would_advance", "reason": "merged PR watch task can advance to task_done; continue the terminal runbook"})
             results.append(result)
             continue
         try:
@@ -294,11 +291,10 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
             updated_fields = update_done_project_fields(sync_mod, args, task, project_item_id)
             update_issue_body(args.repo, issue_number, task_mod.issue_body(task))
             comment_url = issue_comment(args.repo, issue_number, evidence_body(task_uid, pr_number, str(pr.get("url") or ""), str(issue.get("state") or "")))
-            if str(issue.get("state") or "").upper() != "CLOSED":
-                close_issue(args.repo, issue_number)
             record.update(
                 {
                     "status": "done",
+                    "workflow_phase": "task_done",
                     "updated_at": now(),
                     "last_closed_at": now(),
                     "last_evidence_at": now(),
@@ -315,7 +311,8 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
             result.update({"status": "blocked", "reason": str(exc)})
             results.append(result)
             continue
-        result.update({"status": "closed", "comment_url": comment_url, "updated_field_values": updated_fields})
+        result.update({"status": "task_done", "comment_url": comment_url, "updated_field_values": updated_fields,
+                       "next_action": "run canonical terminal runbook from post-merge-main-sync.sh"})
         results.append(result)
     return results
 
@@ -328,7 +325,7 @@ def main() -> int:
     parser.add_argument("--project-number", type=int, default=DEFAULT_PROJECT_NUMBER)
     parser.add_argument("--mapping", default=".pm/github-project-sync/tasks.json")
     parser.add_argument("--limit", type=int, default=100)
-    parser.add_argument("--close", action="store_true", help="Synchronize merged pr_watch tasks to done and close open issues")
+    parser.add_argument("--close", action="store_true", help="Remedially advance merged pr_watch tasks to task_done; terminal finalizer closes issues")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 

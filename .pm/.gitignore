@@ -2,3 +2,4 @@
 /roles/*/backlog/*.yaml
 /scratch/
 /github-project-sync/intake-signals.json
+/github-project-sync/*.lock

@@ -1,12 +1,52 @@
 sandbox_mode = "danger-full-access"
+
+[agents.producer_system_designer]
+description = "Product and system design: goals, rules, economy, governance, acceptance, and cross-module tradeoffs."
+config_file = "agents/producer_system_designer.toml"
+
+[agents.gameplay_designer]
+description = "Gameplay loops, player verbs, progression, balance, rewards, failure recovery, and playability criteria."
+config_file = "agents/gameplay_designer.toml"
+
+[agents.game_visual_interaction_designer]
+description = "Game visual direction, interaction feel, player-facing flow, readability, and visual acceptance."
+config_file = "agents/game_visual_interaction_designer.toml"
+
+[agents.runtime_engineer]
+description = "Runtime, simulation, state machines, replay, recovery, persistence, and deterministic server behavior."
+config_file = "agents/runtime_engineer.toml"
+
+[agents.blockchain_ops_engineer]
+description = "Node operations, deployment, topology, health baselines, upgrades, rollback, restore drills, and runbooks."
+config_file = "agents/blockchain_ops_engineer.toml"
+
+[agents.wasm_platform_engineer]
+description = "WASM platform, ABI, executor, permissions, metering, module lifecycle, manifests, hashes, and compatibility."
+config_file = "agents/wasm_platform_engineer.toml"
+
+[agents.agent_engineer]
+description = "In-world Agent perception, memory, planning, execution, feedback, behavior stability, evaluation, and inference cost."
+config_file = "agents/agent_engineer.toml"
+
+[agents.viewer_engineer]
+description = "Viewer, launcher, Web UI, WebGPU, observability, player-facing controls, and browser validation."
+config_file = "agents/viewer_engineer.toml"
+
+[agents.qa_engineer]
+description = "Test strategy, reproducible verification evidence, regressions, release risk, and blocking recommendations."
+config_file = "agents/qa_engineer.toml"
+
+[agents.repository_health_engineer]
+description = "Repository health, governance alignment, semantic clarity, cross-cutting risk, test gaps, and technical debt."
+config_file = "agents/repository_health_engineer.toml"
+
+[agents.liveops_community]
+description = "LiveOps, incidents, player and operator impact, community feedback, external messaging, and channel runbooks."
+config_file = "agents/liveops_community.toml"
+
 [features]
 memories = true
 
 [memories]
 generate_memories = true
 use_memories = true
-
-[workflow.subagent_runtime]
-model = "gpt-5.5"
-reasoning_effort = "medium"
-shorthand = "gpt-5.5-medium"

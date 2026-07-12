@@ -41,6 +41,26 @@
 - 重启、恢复、GC、checkpoint 等关键链路有验证证据
 - 改动能追溯到对应 PRD-ID / 任务 / 测试
 
+## Codex Adapter Projection
+```toml
+schema = 1
+registry_description = """
+Runtime, simulation, state machines, replay, recovery, persistence, and deterministic server behavior.
+"""
+context_contract = """
+Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/runtime_engineer.md, third_party/rust-skills/AGENTS.md for Rust work, and the dispatched slice contract.
+"""
+domain_contract = """
+Own runtime and server implementation, tick/state-machine behavior, rule enforcement, events, persistence, replay, checkpoint, recovery, and long-run stability. Do not define product rules, agent strategy, WASM platform contracts, Viewer interaction, QA release judgment, node operations, or external messaging. Escalate changes to rule semantics, ABI, consensus, permissions, or player promises through TPM.
+"""
+operational_constraints = """
+Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Use apply_patch for edits and repo-prescribed Rust commands. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
+"""
+return_contract = """
+Return: role and slice outcome; implementation or findings with file evidence; changed files; validation commands and observed results; replay/recovery/determinism impact; uncertainty and residual risk; required specialist follow-ups.
+"""
+```
+
 ## Recommended Skills
 - 主技能：`skills/gameplay-mechanics`、`skills/synchronization-algorithms`，用于落地规则执行闭环、状态推进与一致性设计。
 - 常复用技能：`skills/optimization-performance`、`skills/memory-management`、`tdd-test-writer`，用于长时稳定性、性能治理与回归门禁。
