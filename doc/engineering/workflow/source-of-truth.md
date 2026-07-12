@@ -140,7 +140,7 @@ flowchart TD
   G --> H[Implementation + Slice Verification]
   H --> R[Freeze immutable implementation head]
   R --> I[Immutable verification\nclaim-ready on frozen head]
-  I --> M[Pre-PR Local Role Review\nprovenance ledger per required role]
+  I --> M[Pre-PR Local Role Review\nrole-return ledger per required role]
   M --> Q[Pre-PR Ready gate\nhuman-operated evidence validated]
   Q --> X[Optional evidence-only commit]
   X --> J[PR creation / resume]
@@ -311,7 +311,7 @@ Deterministic script contract:
 
 - `./scripts/pm/task-closeout.sh` defaults to `ready` / `ready_for_pr`.
   `ready` requires a passed review packet bound to the same frozen
-  source head and required-role provenance ledger; arbitrary caller-provided
+  source head and required-role review-evidence ledger; arbitrary caller-provided
   success commands are not lifecycle proof. `done` requires a recorded merged
   PR, or a classified `non_pr_task`, plus verified `task_complete` evidence. It
   persists the trusted receipt and advances only to PM `done` / `task_done`;

@@ -23,6 +23,11 @@ PROJECT_WORKFLOW = ROOT / "scripts/pm/github-project-workflow.py"
 FINALIZER = ROOT / "scripts/pm/post-merge-finalize.py"
 WORKFLOW_EVAL = ROOT / "scripts/pm/workflow-behavior-eval.sh"
 ROLE_FIT = ROOT / "scripts/pm/verify-codex-subagent-role-fit.sh"
+HUMAN_REVIEW_ENTRYPOINTS = (
+    ROOT / "scripts/pm/record-pre-pr-review.sh",
+    ROOT / "scripts/prepare-task-pr.sh",
+    ROOT / "scripts/pm/task-closeout.sh",
+)
 
 
 class WorkflowDocumentationContract(unittest.TestCase):
@@ -331,6 +336,12 @@ class WorkflowDocumentationContract(unittest.TestCase):
             r"(?is)human-operated[^\n]*(pre-PR|review)[^\n]*implemented",
         )
         self.assertRegex(status, r"(?is)unattended[^\n]*attestation[^\n]*blocked")
+
+    def test_human_review_entrypoints_use_review_evidence_vocabulary(self) -> None:
+        for path in HUMAN_REVIEW_ENTRYPOINTS:
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("validate-review-provenance.py", "")
+            self.assertNotRegex(text, r"(?i)provenance|attest|trusted dispatch", str(path))
 
     def test_bare_closeout_is_not_a_gate_or_phase_name(self) -> None:
         self.assertNotRegex(

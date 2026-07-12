@@ -126,7 +126,7 @@ done
 [[ -n "$FINDING_DISPOSITION_EVIDENCE" ]] || die "--finding-disposition-evidence is required"
 [[ -n "$VERIFICATION" ]] || die "--verification is required"
 [[ -n "$RESIDUAL_RISK" ]] || die "--residual-risk is required"
-[[ "$SLICE_LEDGER" != n/a* ]] || die "--slice-ledger must name a machine-checkable provenance JSONL file for a passed review"
+[[ "$SLICE_LEDGER" != n/a* ]] || die "--slice-ledger must name a machine-checkable role-return JSONL file for a passed review"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   if [[ "$ALLOW_DIRTY" != "1" || -z "$REVIEWED_PATHS" || -z "$SOURCE_HEAD" ]]; then
@@ -171,14 +171,14 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
     if role not in required or str(item.get("status") or "") not in {"completed", "passed"}:
         continue
     if role in seen:
-        raise SystemExit(f"error: duplicate completed Slice Ledger provenance for role: {role}")
+        raise SystemExit(f"error: duplicate completed Slice Ledger return for role: {role}")
     mandatory = ("slice_id", "activation", "context_delivery", "actual_runtime", "artifact_digest", "scope_verdict", "risk_verdict", "findings", "residual_risk")
     missing = [key for key in mandatory if not str(item.get(key) or "").strip()]
     if missing:
-        raise SystemExit(f"error: incomplete Slice Ledger provenance for {role}: {','.join(missing)}")
+        raise SystemExit(f"error: incomplete Slice Ledger return for {role}: {','.join(missing)}")
     slice_id = str(item["slice_id"])
-    if slice_id.lower() in {"tpm", "self", "self-attested", role}:
-        raise SystemExit(f"error: self-attested Slice Ledger identity is forbidden for {role}")
+    if slice_id.lower() in {"tpm", "self", "self-authored", role}:
+        raise SystemExit(f"error: self-authored Slice Ledger identity is forbidden for {role}")
     if str(item.get("head") or "") != source_head:
         raise SystemExit(f"error: Slice Ledger source head mismatch for {role}")
     digest = str(item["artifact_digest"])
@@ -193,11 +193,11 @@ for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(),
     seen[role] = item
 missing_roles = sorted(required - set(seen))
 if missing_roles:
-    raise SystemExit("error: Slice Ledger missing required role provenance: " + ",".join(missing_roles))
+    raise SystemExit("error: Slice Ledger missing required role return: " + ",".join(missing_roles))
 PY
 python3 "$SCRIPT_DIR/validate-review-provenance.py" \
   --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
-  || die "Slice Ledger trusted dispatch provenance validation failed"
+  || die "Slice Ledger role-return validation failed"
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'
 from __future__ import annotations
