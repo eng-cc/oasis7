@@ -10,6 +10,7 @@
 - 模块标准执行入口：`doc/scripts/project.md`
 - governance 专题路由：`doc/scripts/governance/README.md`
 - pre-commit 专题路由：`doc/scripts/precommit/README.md`
+- WASM 历史专题路由：`doc/scripts/wasm/README.md`
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
@@ -28,3 +29,6 @@
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - 首次选择 pre-commit 的当前门禁契约或失败修复流程时，先读
   `doc/scripts/precommit/README.md`；本页保留精确 triplet 检索。
+- 首次进入 WASM 专题时，先读 `doc/scripts/wasm/README.md`；它会把 historical
+  build-std 追溯与 world-runtime 的发布级 canonical pipeline 分开，本页只保留精确
+  triplet 检索。

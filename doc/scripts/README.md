@@ -43,7 +43,7 @@
 
 ## 主题文档
 - `precommit/`：提交前检查与门禁策略；先从 `doc/scripts/precommit/README.md` 按问题选择当前契约或修复流程。
-- `wasm/`：WASM 构建脚本与环境约束。
+- `wasm/`：WASM 构建脚本历史证据与环境约束；先从 `doc/scripts/wasm/README.md` 区分历史 build-std 追溯和现行发布级 canonical pipeline。
 - `governance/`：脚本分层、参数契约与 task/worktree 治理；先从 `doc/scripts/governance/README.md` 选择权威专题。
 
 ## 高频专题
