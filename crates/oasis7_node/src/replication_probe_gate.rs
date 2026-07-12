@@ -166,6 +166,10 @@ pub(super) fn should_fallback_provider_aware_replication_request(err: &NodeError
     };
     crate::network_bridge::replication_network_error_is_availability_gap(err)
         || crate::network_bridge::replication_network_error_is_route_unavailable(err)
+        || crate::network_bridge::replication_network_error_is_rate_limited_protocol(
+            err,
+            super::replication::REPLICATION_FETCH_BLOB_PROTOCOL,
+        )
         || reason.starts_with("blob fetch routes exhausted without response")
         || reason.starts_with("blob fetch provider routes exhausted without response")
         || crate::network_bridge::replication_network_error_is_unsupported_protocol(

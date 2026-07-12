@@ -837,7 +837,7 @@ impl ReplicationNetworkEndpoint {
                 request_timeout_ms,
                 retry_budget_ms,
             )
-            .map_err(network_err)?;
+            .map_err(|err| network_err_for_protocol(protocol, err))?;
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })

@@ -1,4 +1,5 @@
 use super::*;
+use crate::node_engine_replication_provider_route::REPLICATION_GAP_SYNC_FETCH_BLOB_RATE_LIMIT_COOLDOWN_MS;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 use oasis7_proto::distributed_dht::{
     DistributedDht, MembershipDirectorySnapshot, ProviderRecord, SignedPeerRecord,
@@ -44,11 +45,17 @@ struct TimeoutThenCheckpointNetwork {
     messages: Mutex<BTreeMap<u64, replication::GossipReplicationMessage>>,
     blobs: Mutex<BTreeMap<String, Vec<u8>>>,
     attempts: Mutex<Vec<u64>>,
+    provider_attempts: Mutex<Vec<String>>,
+    rate_limited_providers: Mutex<BTreeSet<String>>,
     advertised_height: u64,
 }
 
 #[derive(Default)]
 struct TimeoutWorldHeadDht;
+
+struct CheckpointProviderDht {
+    providers: Vec<String>,
+}
 
 impl DistributedDht<WorldError> for TimeoutWorldHeadDht {
     fn publish_provider(
@@ -76,6 +83,75 @@ impl DistributedDht<WorldError> for TimeoutWorldHeadDht {
         Err(WorldError::NetworkProtocolUnavailable {
             protocol: "request failed: Timeout".to_string(),
         })
+    }
+
+    fn put_membership_directory(
+        &self,
+        _world_id: &str,
+        _snapshot: &MembershipDirectorySnapshot,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_membership_directory(
+        &self,
+        _world_id: &str,
+    ) -> Result<Option<MembershipDirectorySnapshot>, WorldError> {
+        Ok(None)
+    }
+
+    fn put_peer_record(&self, _world_id: &str, _record: &SignedPeerRecord) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_peer_record(
+        &self,
+        _world_id: &str,
+        _peer_id: &str,
+    ) -> Result<Option<SignedPeerRecord>, WorldError> {
+        Ok(None)
+    }
+}
+
+impl DistributedDht<WorldError> for CheckpointProviderDht {
+    fn publish_provider(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+        _provider_id: &str,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_providers(
+        &self,
+        _world_id: &str,
+        _content_hash: &str,
+    ) -> Result<Vec<ProviderRecord>, WorldError> {
+        Ok(self
+            .providers
+            .iter()
+            .enumerate()
+            .map(|(index, provider_id)| ProviderRecord {
+                provider_id: provider_id.clone(),
+                last_seen_ms: i64::try_from(self.providers.len() - index)
+                    .expect("provider index fits i64"),
+                storage_total_bytes: None,
+                storage_available_bytes: None,
+                uptime_ratio_per_mille: None,
+                challenge_pass_ratio_per_mille: None,
+                load_ratio_per_mille: None,
+                p50_read_latency_ms: None,
+            })
+            .collect())
+    }
+
+    fn put_world_head(&self, _world_id: &str, _head: &WorldHeadAnnounce) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn get_world_head(&self, _world_id: &str) -> Result<Option<WorldHeadAnnounce>, WorldError> {
+        Ok(None)
     }
 
     fn put_membership_directory(
@@ -150,7 +226,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutTh
         &self,
         protocol: &str,
         payload: &[u8],
-        _providers: &[String],
+        providers: &[String],
     ) -> Result<Vec<u8>, WorldError> {
         if protocol == replication::REPLICATION_GET_HEAD_PROTOCOL {
             return Err(WorldError::NetworkProtocolUnavailable {
@@ -158,6 +234,26 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutTh
             });
         }
         if protocol == replication::REPLICATION_FETCH_BLOB_PROTOCOL {
+            if let Some(provider_id) = providers.first() {
+                self.provider_attempts
+                    .lock()
+                    .expect("lock provider attempts")
+                    .push(provider_id.clone());
+                if self
+                    .rate_limited_providers
+                    .lock()
+                    .expect("lock rate-limited providers")
+                    .contains(provider_id)
+                {
+                    return Err(WorldError::NetworkRequestFailed {
+                        code: DistributedErrorCode::ErrRateLimited,
+                        message: format!(
+                            "fetch-blob response budget exhausted for provider={provider_id}"
+                        ),
+                        retryable: true,
+                    });
+                }
+            }
             return self.fetch_blob_response(payload);
         }
         if protocol != replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
@@ -203,6 +299,23 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError> for TimeoutTh
 }
 
 impl TimeoutThenCheckpointNetwork {
+    fn set_rate_limited_providers(&self, providers: &[&str]) {
+        *self
+            .rate_limited_providers
+            .lock()
+            .expect("lock rate-limited providers") = providers
+            .iter()
+            .map(|provider| (*provider).to_string())
+            .collect();
+    }
+
+    fn provider_attempts(&self) -> Vec<String> {
+        self.provider_attempts
+            .lock()
+            .expect("lock provider attempts")
+            .clone()
+    }
+
     fn fetch_blob_response(&self, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
         let request =
             serde_json::from_slice::<replication::FetchBlobRequest>(payload).map_err(|err| {
@@ -274,6 +387,257 @@ fn committed_decision(height: u64, approved_stake: u64, required_stake: u64) -> 
         required_stake,
         total_stake: 100,
     }
+}
+
+struct ProviderRateLimitCheckpointFixture {
+    dir_a: PathBuf,
+    dir_b: PathBuf,
+    network: Arc<TimeoutThenCheckpointNetwork>,
+    endpoint: ReplicationNetworkEndpoint,
+    replication: ReplicationRuntime,
+    engine: PosNodeEngine,
+    checkpoint_height: u64,
+    manifest_hash: String,
+    manifest_bytes: Vec<u8>,
+}
+
+impl ProviderRateLimitCheckpointFixture {
+    fn cleanup(&self) {
+        let _ = fs::remove_dir_all(&self.dir_a);
+        let _ = fs::remove_dir_all(&self.dir_b);
+    }
+}
+
+fn provider_rate_limit_checkpoint_fixture(
+    world_id: &str,
+    seed_a: u8,
+    seed_b: u8,
+) -> ProviderRateLimitCheckpointFixture {
+    let dir_a = temp_dir("gap-sync-provider-rate-limit-a");
+    let dir_b = temp_dir("gap-sync-provider-rate-limit-b");
+    let (_, public_key_a) = deterministic_keypair_hex(seed_a);
+    let (_, public_key_b) = deterministic_keypair_hex(seed_b);
+    let pos_config = signed_pos_config_with_signer_seeds(
+        vec![PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 100,
+        }],
+        &[("node-a", seed_a)],
+    );
+    let replication_config_a = signed_replication_config(dir_a.clone(), seed_a)
+        .with_remote_writer_allowlist(vec![public_key_b.clone()])
+        .expect("allowlist a")
+        .with_fetch_requester_allowlist(vec![public_key_b.clone()])
+        .expect("fetch allowlist a");
+    let replication_config_b = signed_replication_config(dir_b.clone(), seed_b)
+        .with_remote_writer_allowlist(vec![public_key_a])
+        .expect("allowlist b")
+        .with_fetch_requester_allowlist(vec![public_key_b])
+        .expect("fetch allowlist b");
+    let config_a = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+        .expect("config a")
+        .with_pos_config(pos_config.clone())
+        .expect("pos config a")
+        .with_replication(replication_config_a);
+    let config_b = NodeConfig::new("node-b", world_id, NodeRole::Observer)
+        .expect("config b")
+        .with_pos_config(pos_config)
+        .expect("pos config b")
+        .with_replication(replication_config_b.clone());
+    let checkpoint_height = REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL;
+    let advertised_height = checkpoint_height + 1;
+    let mut replication_a =
+        ReplicationRuntime::new(config_a.replication.as_ref().expect("repl a"), "node-a")
+            .expect("runtime a");
+    let execution_block_hash = format!("exec-block-{checkpoint_height}");
+    let execution_state_root = format!("exec-state-{checkpoint_height}");
+    let checkpoint_bundle = test_execution_checkpoint_bundle(
+        checkpoint_height,
+        execution_block_hash.as_str(),
+        execution_state_root.as_str(),
+    );
+    let manifest_hash = oasis7_distfs::blake3_hex(checkpoint_bundle.manifest_json.as_slice());
+    let message = replication_a
+        .build_local_commit_message_with_checkpoint(
+            "node-a",
+            world_id,
+            8_000,
+            &committed_decision(checkpoint_height, 100, 67),
+            Some(execution_block_hash.as_str()),
+            Some(execution_state_root.as_str()),
+            Some(checkpoint_bundle.clone()),
+        )
+        .expect("build checkpoint message")
+        .expect("checkpoint message");
+    let network = Arc::new(TimeoutThenCheckpointNetwork {
+        advertised_height,
+        ..Default::default()
+    });
+    network
+        .messages
+        .lock()
+        .expect("lock messages")
+        .insert(checkpoint_height, message.clone());
+    let mut blobs = network.blobs.lock().expect("lock blobs");
+    blobs.insert(message.record.content_hash.clone(), message.payload.clone());
+    blobs.insert(manifest_hash.clone(), checkpoint_bundle.manifest_json.clone());
+    for blob in &checkpoint_bundle.blobs {
+        blobs.insert(blob.content_hash.clone(), blob.bytes.clone());
+    }
+    drop(blobs);
+    let distributed_network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = network.clone();
+    let dht: Arc<dyn DistributedDht<WorldError> + Send + Sync> = Arc::new(CheckpointProviderDht {
+        providers: vec!["provider-a".to_string(), "provider-b".to_string()],
+    });
+    let endpoint = ReplicationNetworkEndpoint::new(
+        &NodeReplicationNetworkHandle::new(distributed_network).with_dht(dht),
+        world_id,
+        false,
+        &config_b.network_policy,
+    )
+    .expect("endpoint b");
+
+    ProviderRateLimitCheckpointFixture {
+        dir_a,
+        dir_b,
+        network,
+        endpoint,
+        replication: ReplicationRuntime::new(
+            config_b.replication.as_ref().expect("repl b"),
+            "node-b",
+        )
+        .expect("runtime b"),
+        engine: {
+            let mut engine = PosNodeEngine::new(&config_b).expect("engine b");
+            engine.network_committed_height = advertised_height;
+            engine
+        },
+        checkpoint_height,
+        manifest_hash,
+        manifest_bytes: checkpoint_bundle.manifest_json,
+    }
+}
+
+#[test]
+fn high_checkpoint_rate_limited_provider_falls_through_to_next_advertised_provider() {
+    let world_id = "world-gap-sync-provider-rate-limit-failover";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 246, 247);
+    fixture.network.set_rate_limited_providers(&["provider-a"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("provider-b should complete checkpoint install after provider-a rate limit");
+
+    assert_eq!(
+        install_hook.installed,
+        vec![fixture.checkpoint_height],
+        "checkpoint sync did not install; committed_height={} persisted_height={} provider_attempts={:?}",
+        fixture.engine.committed_height,
+        fixture.engine.replication_persisted_height,
+        fixture.network.provider_attempts(),
+    );
+    assert!(
+        fixture
+            .network
+            .provider_attempts()
+            .chunks(2)
+            .all(|attempts| attempts == ["provider-a", "provider-b"]),
+        "structured provider-a rate limit must not prevent trying provider-b: {:?}",
+        fixture.network.provider_attempts(),
+    );
+    assert_eq!(fixture.engine.last_replication_gap_sync_blocked_height, None);
+    fixture.cleanup();
+}
+
+#[test]
+fn high_checkpoint_all_rate_limited_providers_cool_down_then_resume_from_cached_blobs() {
+    let world_id = "world-gap-sync-provider-rate-limit-resume";
+    let mut fixture = provider_rate_limit_checkpoint_fixture(world_id, 248, 249);
+    fixture
+        .replication
+        .store_blob_by_hash(
+            fixture.manifest_hash.as_str(),
+            fixture.manifest_bytes.as_slice(),
+        )
+        .expect("cache checkpoint manifest");
+    fixture
+        .network
+        .set_rate_limited_providers(&["provider-a", "provider-b"]);
+    let mut install_hook = CheckpointInstallingExecutionHook { installed: Vec::new() };
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("all-provider rate limit should enter cooldown without failing sync");
+    assert!(install_hook.installed.is_empty());
+    assert_eq!(
+        fixture.network.provider_attempts(),
+        vec!["provider-a".to_string(), "provider-b".to_string()],
+        "all advertised providers should be exhausted before cooldown"
+    );
+    assert_eq!(
+        fixture.engine.last_replication_gap_sync_blocked_height,
+        Some(1),
+        "checkpoint rate limit cooldown belongs to the blocked gap height"
+    );
+
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("cooldown should safely suppress immediate retry");
+    assert_eq!(fixture.network.provider_attempts().len(), 2);
+
+    fixture.network.set_rate_limited_providers(&[]);
+    fixture.engine.last_replication_gap_sync_blocked_at_ms = Some(
+        crate::runtime_util::now_unix_ms()
+            - REPLICATION_GAP_SYNC_FETCH_BLOB_RATE_LIMIT_COOLDOWN_MS,
+    );
+    fixture
+        .engine
+        .sync_missing_replication_commits(
+            &fixture.endpoint,
+            "node-b",
+            world_id,
+            Some(&mut fixture.replication),
+            Some(&mut install_hook),
+        )
+        .expect("checkpoint install should resume after the cooldown using cached manifest blob");
+
+    assert_eq!(install_hook.installed, vec![fixture.checkpoint_height]);
+    assert_eq!(
+        fixture.network.provider_attempts(),
+        vec![
+            "provider-a".to_string(),
+            "provider-b".to_string(),
+            "provider-a".to_string(),
+            "provider-a".to_string(),
+        ],
+        "resume should reuse the cached manifest instead of fetching it again"
+    );
+    assert_eq!(fixture.engine.last_replication_gap_sync_blocked_height, None);
+    fixture.cleanup();
 }
 
 #[test]
