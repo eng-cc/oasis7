@@ -30,6 +30,7 @@ pub(crate) use crate::network_error_classification::{
     network_world_error_is_publish_failure, network_world_error_is_retryable_connection_gap,
     replication_network_error_is_availability_gap, replication_network_error_is_not_found,
     replication_network_error_is_protocol_unavailable,
+    replication_network_error_is_rate_limited_protocol,
     replication_network_error_is_route_unavailable, replication_network_error_is_timeout_protocol,
     replication_network_error_is_unsupported_protocol, replication_network_error_kind_label,
     replication_network_error_mentions_protocol,
@@ -836,7 +837,7 @@ impl ReplicationNetworkEndpoint {
                 request_timeout_ms,
                 retry_budget_ms,
             )
-            .map_err(network_err)?;
+            .map_err(|err| network_err_for_protocol(protocol, err))?;
         serde_json::from_slice::<Resp>(&response_bytes).map_err(|err| NodeError::Replication {
             reason: format!("decode replication response {} failed: {}", protocol, err),
         })

@@ -1,4 +1,5 @@
 use super::node_engine_replication_provider_route::{
+    record_replication_gap_sync_fetch_blob_rate_limit,
     replication_gap_sync_provider_blob_route_blocked,
     replication_gap_sync_provider_blob_route_blocked_in_cooldown,
 };
@@ -63,34 +64,6 @@ impl PosNodeEngine {
             )?;
         }
         self.clear_replication_gap_sync_blocked_if_unblocked();
-        Ok(())
-    }
-
-    fn validate_world_head_checkpoint_payload(
-        world_id: &str,
-        payload: &ReplicationCommitPayload,
-        expected_head: &WorldHeadAnnounce,
-    ) -> Result<(), NodeError> {
-        let payload_state_root = payload.execution_state_root.as_deref().unwrap_or_default();
-        if expected_head.world_id != world_id
-            || payload.world_id != world_id
-            || expected_head.height != payload.height
-            || expected_head.block_hash != payload.block_hash
-            || expected_head.state_root != payload_state_root
-        {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "world head checkpoint mismatch: world_id={} expected_height={} payload_height={} expected_block_hash={} payload_block_hash={} expected_state_root={} payload_state_root={}",
-                    world_id,
-                    expected_head.height,
-                    payload.height,
-                    expected_head.block_hash,
-                    payload.block_hash,
-                    expected_head.state_root,
-                    payload_state_root
-                ),
-            });
-        }
         Ok(())
     }
 
@@ -824,6 +797,10 @@ impl PosNodeEngine {
             "replication_persisted_height",
             "starting replication gap sync",
         )?;
+        let now_ms = crate::runtime_util::now_unix_ms();
+        if self.replication_gap_sync_fetch_blob_rate_limited_in_cooldown(next_height, now_ms) {
+            return Ok(());
+        }
         if network_lag > REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL {
             for checkpoint_candidate in Self::high_replication_checkpoint_candidates(
                 advertised_network_height,
@@ -831,7 +808,7 @@ impl PosNodeEngine {
             ) {
                 let expected_candidate_head =
                     expected_checkpoint_head.filter(|head| head.height == checkpoint_candidate);
-                let probe_result = self.try_sync_high_replication_checkpoint_boundary(
+                match self.try_sync_high_replication_checkpoint_boundary(
                     endpoint,
                     node_id,
                     world_id,
@@ -841,8 +818,7 @@ impl PosNodeEngine {
                     expected_candidate_head,
                     &mut execution_hook,
                     &mut progress_callback,
-                );
-                match probe_result {
+                ) {
                     Ok(true) => {
                         if self.replication_persisted_height > starting_replication_persisted_height
                         {
@@ -853,12 +829,14 @@ impl PosNodeEngine {
                     }
                     Ok(false) => {}
                     Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
-                        self.last_replication_gap_sync_repair_attempt_height =
-                            Some(checkpoint_candidate);
-                        self.last_replication_gap_sync_repair_attempt_summary = Some(format!(
-                            "checkpoint_candidate={checkpoint_candidate} transient_error={err}"
-                        ));
-                        self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
+                        if self.record_high_replication_checkpoint_probe_failure(
+                            next_height,
+                            checkpoint_candidate,
+                            now_ms,
+                            &err,
+                        ) {
+                            return Ok(());
+                        }
                     }
                     Err(err) => return Err(err),
                 }
@@ -873,7 +851,6 @@ impl PosNodeEngine {
         }
 
         let mut next_height = next_height;
-        let now_ms = crate::runtime_util::now_unix_ms();
         if replication_gap_sync_provider_blob_route_blocked_in_cooldown(
             self.last_replication_gap_sync_blocked_height,
             self.last_replication_gap_sync_blocked_reason.as_deref(),
@@ -949,6 +926,17 @@ impl PosNodeEngine {
                         self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
                         last_error = Some(summary);
                         break;
+                    }
+                    Err(err)
+                        if record_replication_gap_sync_fetch_blob_rate_limit(
+                            self,
+                            next_height,
+                            now_ms,
+                            attempt,
+                            &err,
+                        ) =>
+                    {
+                        return Ok(());
                     }
                     Err(err) => {
                         last_error = Some(format!(
@@ -1057,7 +1045,7 @@ impl PosNodeEngine {
                 ) {
                     let expected_candidate_head =
                         expected_checkpoint_head.filter(|head| head.height == checkpoint_candidate);
-                    let probe_result = self.try_sync_high_replication_checkpoint_boundary(
+                    match self.try_sync_high_replication_checkpoint_boundary(
                         endpoint,
                         node_id,
                         world_id,
@@ -1067,17 +1055,18 @@ impl PosNodeEngine {
                         expected_candidate_head,
                         &mut execution_hook,
                         &mut progress_callback,
-                    );
-                    match probe_result {
+                    ) {
                         Ok(true) => break,
                         Ok(false) => {}
                         Err(err) if Self::high_replication_checkpoint_probe_can_continue(&err) => {
-                            self.last_replication_gap_sync_repair_attempt_height =
-                                Some(checkpoint_candidate);
-                            self.last_replication_gap_sync_repair_attempt_summary = Some(format!(
-                                "checkpoint_candidate={checkpoint_candidate} transient_error={err}"
-                            ));
-                            self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
+                            if self.record_high_replication_checkpoint_probe_failure(
+                                next_height,
+                                checkpoint_candidate,
+                                now_ms,
+                                &err,
+                            ) {
+                                return Ok(());
+                            }
                         }
                         Err(err) => return Err(err),
                     }
