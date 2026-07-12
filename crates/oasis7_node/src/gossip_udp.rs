@@ -54,6 +54,10 @@ pub(crate) struct ReceivedGossipMessage {
 pub struct GossipTrafficDirectionMetricsSnapshot {
     pub datagrams: u64,
     pub payload_bytes: u64,
+    pub attempted_datagrams: u64,
+    pub succeeded_datagrams: u64,
+    pub failed_datagrams: u64,
+    pub failure_ratio_ppm: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -69,6 +73,7 @@ pub struct GossipTrafficMetricsSnapshot {
     pub excludes_transport_headers: bool,
     pub totals: GossipTrafficLaneMetricsSnapshot,
     pub by_kind: BTreeMap<String, GossipTrafficLaneMetricsSnapshot>,
+    pub by_error_kind: BTreeMap<String, u64>,
 }
 
 impl Default for GossipTrafficMetricsSnapshot {
@@ -79,6 +84,7 @@ impl Default for GossipTrafficMetricsSnapshot {
             excludes_transport_headers: true,
             totals: GossipTrafficLaneMetricsSnapshot::default(),
             by_kind: BTreeMap::new(),
+            by_error_kind: BTreeMap::new(),
         }
     }
 }
@@ -159,20 +165,28 @@ impl GossipEndpoint {
         let mut sent_datagrams = 0u64;
         let mut failure_count = 0usize;
         let mut first_error = None;
+        let mut failure_by_error_kind = BTreeMap::new();
         for peer in &peers {
             match self.socket.send_to(bytes, peer) {
                 Ok(_) => sent_datagrams = sent_datagrams.saturating_add(1),
                 Err(err) => {
                     failure_count = failure_count.saturating_add(1);
+                    *failure_by_error_kind
+                        .entry(io_error_kind_label(err.kind()).to_string())
+                        .or_insert(0u64) += 1;
                     if first_error.is_none() {
                         first_error = Some(format!("send_to {} failed: {}", peer, err));
                     }
                 }
             }
         }
-        if sent_datagrams > 0 {
-            self.record_outbound(kind, bytes.len(), sent_datagrams);
-        }
+        self.record_outbound(
+            kind,
+            bytes.len(),
+            peers.len() as u64,
+            sent_datagrams,
+            &failure_by_error_kind,
+        );
         if failure_count == 0 {
             Ok(())
         } else {
@@ -251,12 +265,34 @@ impl GossipEndpoint {
             })
     }
 
-    fn record_outbound(&self, kind: &str, payload_bytes: usize, datagrams: u64) {
+    fn record_outbound(
+        &self,
+        kind: &str,
+        payload_bytes: usize,
+        attempted_datagrams: u64,
+        succeeded_datagrams: u64,
+        failure_by_error_kind: &BTreeMap<String, u64>,
+    ) {
         let Ok(mut snapshot) = self.traffic_metrics.lock() else {
             return;
         };
-        let payload_bytes = (payload_bytes as u64).saturating_mul(datagrams);
-        bump_gossip_lane(&mut snapshot.totals.outbound, payload_bytes, datagrams);
+        let payload_bytes = (payload_bytes as u64).saturating_mul(succeeded_datagrams);
+        bump_gossip_lane(
+            &mut snapshot.totals.outbound,
+            payload_bytes,
+            succeeded_datagrams,
+        );
+        bump_gossip_outbound_attempts(
+            &mut snapshot.totals.outbound,
+            attempted_datagrams,
+            succeeded_datagrams,
+        );
+        for (error_kind, count) in failure_by_error_kind {
+            *snapshot
+                .by_error_kind
+                .entry(error_kind.clone())
+                .or_default() += count;
+        }
         bump_gossip_lane(
             &mut snapshot
                 .by_kind
@@ -264,7 +300,16 @@ impl GossipEndpoint {
                 .or_default()
                 .outbound,
             payload_bytes,
-            datagrams,
+            succeeded_datagrams,
+        );
+        bump_gossip_outbound_attempts(
+            &mut snapshot
+                .by_kind
+                .entry(kind.to_string())
+                .or_default()
+                .outbound,
+            attempted_datagrams,
+            succeeded_datagrams,
         );
     }
 
@@ -293,6 +338,40 @@ fn bump_gossip_lane(
 ) {
     lane.datagrams = lane.datagrams.saturating_add(datagrams);
     lane.payload_bytes = lane.payload_bytes.saturating_add(payload_bytes);
+}
+
+fn bump_gossip_outbound_attempts(
+    lane: &mut GossipTrafficDirectionMetricsSnapshot,
+    attempted_datagrams: u64,
+    succeeded_datagrams: u64,
+) {
+    lane.attempted_datagrams = lane.attempted_datagrams.saturating_add(attempted_datagrams);
+    lane.succeeded_datagrams = lane.succeeded_datagrams.saturating_add(succeeded_datagrams);
+    lane.failed_datagrams = lane
+        .attempted_datagrams
+        .saturating_sub(lane.succeeded_datagrams);
+    lane.failure_ratio_ppm = if lane.attempted_datagrams == 0 {
+        0
+    } else {
+        lane.failed_datagrams.saturating_mul(1_000_000) / lane.attempted_datagrams
+    };
+}
+
+fn io_error_kind_label(kind: std::io::ErrorKind) -> &'static str {
+    match kind {
+        std::io::ErrorKind::PermissionDenied => "permission_denied",
+        std::io::ErrorKind::TimedOut => "timed_out",
+        std::io::ErrorKind::ConnectionRefused => "connection_refused",
+        std::io::ErrorKind::ConnectionReset => "connection_reset",
+        std::io::ErrorKind::ConnectionAborted => "connection_aborted",
+        std::io::ErrorKind::NotConnected => "not_connected",
+        std::io::ErrorKind::AddrInUse => "addr_in_use",
+        std::io::ErrorKind::AddrNotAvailable => "addr_not_available",
+        std::io::ErrorKind::NetworkDown => "network_down",
+        std::io::ErrorKind::NetworkUnreachable => "network_unreachable",
+        std::io::ErrorKind::HostUnreachable => "host_unreachable",
+        _ => "other",
+    }
 }
 
 fn gossip_message_kind_label(message: &GossipMessage) -> &'static str {
@@ -509,6 +588,14 @@ mod tests {
         assert_eq!(received_c.len(), 1);
 
         let outbound = endpoint_a.traffic_metrics_snapshot();
+        assert_eq!(outbound.totals.outbound.attempted_datagrams, 3);
+        assert_eq!(outbound.totals.outbound.succeeded_datagrams, 2);
+        assert_eq!(outbound.totals.outbound.failed_datagrams, 1);
+        assert_eq!(outbound.totals.outbound.failure_ratio_ppm, 333_333);
+        assert_eq!(
+            outbound.by_error_kind.get("permission_denied").copied(),
+            Some(1)
+        );
         assert_eq!(outbound.totals.outbound.datagrams, 2);
         assert!(outbound.totals.outbound.payload_bytes > 0);
         assert_eq!(

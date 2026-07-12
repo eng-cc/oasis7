@@ -162,6 +162,25 @@ pub(crate) fn build_runtime_perf_observability_status(
         );
     }
 
+    if let Some(llm_api) = runtime_perf
+        .map(|snapshot| &snapshot.llm_api)
+        .filter(|llm_api| {
+            llm_api.has_samples()
+                && ((llm_api.budget_ms > 0.0 && llm_api.p95_ms > llm_api.budget_ms)
+                    || llm_api.over_budget_ratio_ppm >= 50_000)
+        })
+    {
+        push_observability_alert(
+            alerts,
+            "warn",
+            "llm_api_perf_degraded",
+            format!(
+                "LLM API performance degraded: llm_api_p95_ms={:.2} llm_api_budget_ms={:.2} llm_api_over_budget_ratio_ppm={}",
+                llm_api.p95_ms, llm_api.budget_ms, llm_api.over_budget_ratio_ppm
+            ),
+        );
+    }
+
     ChainRuntimePerfObservabilityStatus {
         available: runtime_perf.is_some(),
         health,

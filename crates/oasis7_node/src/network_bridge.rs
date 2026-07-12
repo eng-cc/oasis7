@@ -304,6 +304,8 @@ pub(crate) struct ReplicationNetworkEndpoint {
     fetch_commit_success_cache_after: Duration,
     recent_fetch_commit_successes:
         Mutex<HashMap<FetchCommitSuccessCacheKey, CachedFetchCommitSuccess>>,
+    last_gap_sync_fetch_commit_failure_route_snapshot:
+        Mutex<Option<NodeReplicationGapSyncRouteSnapshot>>,
 }
 
 impl ReplicationNetworkEndpoint {
@@ -342,6 +344,7 @@ impl ReplicationNetworkEndpoint {
                 FETCH_COMMIT_SUCCESS_CACHE_AFTER_MS,
             ),
             recent_fetch_commit_successes: Mutex::new(HashMap::new()),
+            last_gap_sync_fetch_commit_failure_route_snapshot: Mutex::new(None),
         })
     }
 
@@ -532,11 +535,44 @@ impl ReplicationNetworkEndpoint {
         )
     }
 
+    pub(crate) fn take_last_gap_sync_fetch_commit_failure_route_snapshot(
+        &self,
+    ) -> Option<NodeReplicationGapSyncRouteSnapshot> {
+        self.last_gap_sync_fetch_commit_failure_route_snapshot
+            .lock()
+            .ok()
+            .and_then(|mut snapshot| snapshot.take())
+    }
+
+    fn record_gap_sync_fetch_commit_failure_route_snapshot(
+        &self,
+        snapshot: NodeReplicationGapSyncRouteSnapshot,
+    ) {
+        if let Ok(mut last_snapshot) = self
+            .last_gap_sync_fetch_commit_failure_route_snapshot
+            .lock()
+        {
+            *last_snapshot = Some(snapshot);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn seed_gap_sync_fetch_commit_failure_route_snapshot_for_test(
+        &self,
+        snapshot: NodeReplicationGapSyncRouteSnapshot,
+    ) {
+        self.record_gap_sync_fetch_commit_failure_route_snapshot(snapshot);
+    }
+
     fn request_fetch_commit_for_gap_sync_with_policy(
         &self,
         request: &FetchCommitRequest,
         retry_policy: GapSyncFetchCommitRetryPolicy,
     ) -> Result<GapSyncFetchCommitResponse, NodeError> {
+        // A failure snapshot describes exactly one request sweep.  Discard an
+        // unconsumed prior snapshot before any early validation return can
+        // otherwise cause it to be reported for this attempt.
+        let _ = self.take_last_gap_sync_fetch_commit_failure_route_snapshot();
         if let Some(lane) = classify_network_protocol(REPLICATION_FETCH_COMMIT_PROTOCOL) {
             validate_lane_access(
                 &self.network_policy,
@@ -567,6 +603,7 @@ impl ReplicationNetworkEndpoint {
         let Some((request_timeout_ms, retry_budget_ms)) = route_budget() else {
             let err = gap_sync_fetch_commit_route_budget_exhausted();
             route_observer.observe_budget_exhausted(&err);
+            self.record_gap_sync_fetch_commit_failure_route_snapshot(route_observer.finish());
             return Err(err);
         };
         let mut response = match self
@@ -702,6 +739,8 @@ impl ReplicationNetworkEndpoint {
                 route_snapshot,
             });
         }
+        let route_snapshot = route_observer.finish();
+        self.record_gap_sync_fetch_commit_failure_route_snapshot(route_snapshot);
         Err(last_err.expect("gap-sync fetch-commit last_err should exist"))
     }
 
@@ -948,158 +987,9 @@ fn cacheable_fetch_commit_success_response(
 #[path = "tests_network_bridge.rs"]
 mod tests;
 
-pub(crate) struct ConsensusNetworkEndpoint {
-    network: Arc<dyn DistributedNetwork<WorldError> + Send + Sync>,
-    network_policy: NodeNetworkPolicy,
-    proposal_topic: String,
-    attestation_topic: String,
-    commit_topic: String,
-    proposal_subscription: Option<NetworkSubscription>,
-    attestation_subscription: Option<NetworkSubscription>,
-    commit_subscription: Option<NetworkSubscription>,
-}
-
-impl ConsensusNetworkEndpoint {
-    pub(crate) fn new(
-        handle: &NodeReplicationNetworkHandle,
-        world_id: &str,
-        subscribe: bool,
-        network_policy: &NodeNetworkPolicy,
-    ) -> Result<Self, NodeError> {
-        let registry = handle.resolved_lane_registry(world_id);
-        let proposal_topic = registry.consensus_proposal_topic;
-        let attestation_topic = registry.consensus_attestation_topic;
-        let commit_topic = registry.consensus_commit_topic;
-        let proposal_subscription = if subscribe {
-            validate_lane_access(
-                network_policy,
-                NetworkLane::ConsensusGossip,
-                NetworkLaneOperation::Subscribe,
-                proposal_topic.as_str(),
-            )?;
-            Some(
-                handle
-                    .network
-                    .subscribe(proposal_topic.as_str())
-                    .map_err(network_err)?,
-            )
-        } else {
-            None
-        };
-        let attestation_subscription = if subscribe {
-            Some(
-                handle
-                    .network
-                    .subscribe(attestation_topic.as_str())
-                    .map_err(network_err)?,
-            )
-        } else {
-            None
-        };
-        let commit_subscription = if subscribe {
-            Some(
-                handle
-                    .network
-                    .subscribe(commit_topic.as_str())
-                    .map_err(network_err)?,
-            )
-        } else {
-            None
-        };
-        Ok(Self {
-            network: Arc::clone(&handle.network),
-            network_policy: network_policy.clone(),
-            proposal_topic,
-            attestation_topic,
-            commit_topic,
-            proposal_subscription,
-            attestation_subscription,
-            commit_subscription,
-        })
-    }
-
-    pub(crate) fn publish_proposal(
-        &self,
-        message: &GossipProposalMessage,
-    ) -> Result<(), NodeError> {
-        self.publish_json(self.proposal_topic.as_str(), message)
-    }
-
-    pub(crate) fn publish_attestation(
-        &self,
-        message: &GossipAttestationMessage,
-    ) -> Result<(), NodeError> {
-        self.publish_json(self.attestation_topic.as_str(), message)
-    }
-
-    pub(crate) fn publish_commit(&self, message: &GossipCommitMessage) -> Result<(), NodeError> {
-        self.publish_json(self.commit_topic.as_str(), message)
-    }
-
-    pub(crate) fn drain_messages(&self) -> Result<Vec<GossipMessage>, NodeError> {
-        let mut out = Vec::new();
-        Self::drain_subscription(self.proposal_subscription.as_ref(), &mut out);
-        Self::drain_subscription(self.attestation_subscription.as_ref(), &mut out);
-        Self::drain_subscription(self.commit_subscription.as_ref(), &mut out);
-        Ok(out)
-    }
-
-    pub(crate) fn allows_publish(&self) -> bool {
-        self.network_policy
-            .allows_lane_operation(NetworkLane::ConsensusGossip, NetworkLaneOperation::Publish)
-    }
-
-    fn publish_json<T: Serialize>(&self, topic: &str, message: &T) -> Result<(), NodeError> {
-        validate_lane_access(
-            &self.network_policy,
-            NetworkLane::ConsensusGossip,
-            NetworkLaneOperation::Publish,
-            topic,
-        )?;
-        let payload = serde_json::to_vec(message).map_err(|err| NodeError::Replication {
-            reason: format!("serialize consensus network message failed: {}", err),
-        })?;
-        self.network
-            .publish_best_effort(topic, payload.as_slice())
-            .map_err(network_err)
-    }
-
-    fn drain_subscription(
-        subscription: Option<&NetworkSubscription>,
-        out: &mut Vec<GossipMessage>,
-    ) {
-        let Some(subscription) = subscription else {
-            return;
-        };
-        for payload in subscription.drain() {
-            if let Some(message) = decode_consensus_message(payload.as_slice()) {
-                out.push(message);
-            }
-        }
-    }
-}
-
-fn decode_consensus_message(payload: &[u8]) -> Option<GossipMessage> {
-    if let Ok(message) = serde_json::from_slice::<GossipMessage>(payload) {
-        match message {
-            GossipMessage::Proposal(_)
-            | GossipMessage::Attestation(_)
-            | GossipMessage::Commit(_) => return Some(message),
-            GossipMessage::Hello(_) => {}
-            GossipMessage::Replication(_) => {}
-        }
-    }
-    if let Ok(message) = serde_json::from_slice::<GossipProposalMessage>(payload) {
-        return Some(GossipMessage::Proposal(message));
-    }
-    if let Ok(message) = serde_json::from_slice::<GossipAttestationMessage>(payload) {
-        return Some(GossipMessage::Attestation(message));
-    }
-    if let Ok(message) = serde_json::from_slice::<GossipCommitMessage>(payload) {
-        return Some(GossipMessage::Commit(message));
-    }
-    None
-}
+#[path = "network_bridge_consensus.rs"]
+mod network_bridge_consensus;
+pub(crate) use network_bridge_consensus::ConsensusNetworkEndpoint;
 
 fn network_err(err: WorldError) -> NodeError {
     network_err_with_request_protocol(None, err)

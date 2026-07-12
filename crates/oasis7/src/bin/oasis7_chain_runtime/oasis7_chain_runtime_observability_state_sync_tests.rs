@@ -2,7 +2,8 @@ use super::*;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, NodeConsensusSnapshot, NodeNetworkPolicy,
-    NodeReachabilityAutoDetection, NodeRole, NodeSnapshot, NodeUserMode,
+    NodeReachabilityAutoDetection, NodeReplicationGapSyncRouteSnapshot, NodeRole, NodeSnapshot,
+    NodeUserMode,
 };
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole};
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
@@ -21,6 +22,19 @@ fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
     consensus.replication_gap_sync_repair_attempt_height = Some(5);
     consensus.replication_gap_sync_repair_attempt_summary =
         Some("generic:found=false;peer:p1:found=false".to_string());
+    consensus.replication_gap_sync_repair_attempt_route_snapshot =
+        Some(NodeReplicationGapSyncRouteSnapshot {
+            elapsed_ms: 3_000,
+            route_attempt_count: 4,
+            synced_route_count: 0,
+            not_found_route_count: 0,
+            error_route_count: 4,
+            generic_route_count: 1,
+            provider_route_count: 2,
+            generic_retry_route_count: 1,
+            budget_exhausted_count: 1,
+            last_slow_route_reason: Some("request failed: Timeout".to_string()),
+        });
     let snapshot = NodeSnapshot {
         node_id: "node-gap".to_string(),
         player_id: "player-gap".to_string(),
@@ -136,6 +150,18 @@ fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
             .replication_gap_sync_repair_attempt_summary
             .as_deref(),
         Some("generic:found=false;peer:p1:found=false")
+    );
+    let route_snapshot = consensus
+        .replication_gap_sync_repair_attempt_route_snapshot
+        .as_ref()
+        .expect("failed gap-sync route snapshot should be exposed in status payload");
+    assert_eq!(route_snapshot.elapsed_ms, 3_000);
+    assert_eq!(route_snapshot.route_attempt_count, 4);
+    assert_eq!(route_snapshot.error_route_count, 4);
+    assert_eq!(route_snapshot.budget_exhausted_count, 1);
+    assert_eq!(
+        route_snapshot.last_slow_route_reason.as_deref(),
+        Some("request failed: Timeout")
     );
     assert!(payload.consensus.consensus_participation_held);
     assert_eq!(
