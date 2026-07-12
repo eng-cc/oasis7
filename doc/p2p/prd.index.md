@@ -15,7 +15,7 @@
 - 想先回答 P2P、DistFS、共识、执行与 observer 如何作为“链上大世界状态底座”单模块自闭环测试：先读 `testing-manual.md#s9a链上大世界状态底座自闭环`
 - 想先进入 `node` 热点子域，并按奖励 / 复制 / PoS 时间 / 身份引导 / WASM 编译问题分流：先读 `doc/p2p/node/README.md`
 - 想区分 builtin Wasm identity 与共识代码 crate 收敛两个已完成专题：先读 `doc/p2p/consensus/README.md`
-- 想先看主链安全、hosted player access / `hosted_public_join` 接入、托管身份/托管密钥或 mixed-topology reachability：优先从 `blockchain/` 与 `network/` 子域进入
+- 想先看主链安全、network tier、hosted player access / `hosted_public_join` 接入或托管身份/托管密钥：先读 `doc/p2p/blockchain/README.md`；mixed-topology reachability 再进入 `network/` 子域
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
 ## 热点子域导航
@@ -23,7 +23,7 @@
 | --- | --- |
 | `node/` | 节点奖励、身份、复制、PoS 时间基线与执行验证 |
 | `distfs/` | DistFS 生产加固、路径索引、自愈与 runtime/bridge 集成；默认先读 `doc/p2p/distfs/README.md` |
-| `blockchain/` | 主链安全、mainnet readiness、signer custody、hosted player access |
+| `blockchain/` | 主链安全、network tier、mainnet readiness、signer custody、hosted player access；默认先读 `doc/p2p/blockchain/README.md` |
 | `observer/` | 观察者同步模式、指标与可观测性；默认先读 `doc/p2p/observer/README.md` |
 | `token/` | 创世分配、签名授权、治理分发与流通边界 |
 | `network/` | reachability、mobile light client、runtime bridge 与 mixed-topology |
@@ -34,6 +34,7 @@
 ## 当前补充阅读面
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`：项目级 test/prod 环境分层、hosted-login 云上清单与 `testnet/mainnet` claim boundary。
 - `doc/p2p/node/README.md`：`node/` 热点子域 landing page，按奖励、复制、PoS 时间、身份引导与 WASM 编译分流读者。
+- `doc/p2p/blockchain/README.md`：`blockchain/` 高密度子域 landing page，按现行 network tier、mainnet-grade security、hosted player identity 与历史 P2PFS hardening 分流读者。
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`：formal `public_testnet` 从规格骨架进入候选状态前的 companion checklist/runbook。
 - `doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md`：formal `public_testnet` governed bootstrap operator path，定义四节点重建输入、deployment truth、hard rules 与 evidence 闭包；不表示 `public_testnet` 已 live 或 ready。
 - `testing-manual.md#s9a链上大世界状态底座自闭环`：P2P transport、DistFS/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/ops 与 API/viewer projection 的模块自闭环测试入口；用于区分 `module_required/module_full/integration_required/release_full` claim boundary。
@@ -45,7 +46,7 @@
 ## 默认阅读面边界
 - 本页首屏只负责分流，不再要求读者从第一行开始顺扫完整长表。
 - README 不再平铺“近期专题”；完整清单继续保留在下方，用于精确文件名检索和互链可达性。
-- `node/README.md`、`distfs/README.md`、`observer/README.md`、`viewer-live/README.md` 与 `consensus/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
+- `node/README.md`、`blockchain/README.md`、`distfs/README.md`、`observer/README.md`、`viewer-live/README.md` 与 `consensus/README.md` 负责专题簇的首读分流；完整长表继续由本页保留。
 - runbook、release 补充材料与历史说明继续保留可检索性，但不进入模块默认首屏。
 
 ## 状态语义
