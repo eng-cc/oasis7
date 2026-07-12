@@ -407,9 +407,18 @@ impl ReplicationNetworkEndpoint {
         let request = FetchHeadRequest {
             world_id: world_id.to_string(),
         };
-        let connected_peer_ids = self.network.connected_peer_ids();
+        let mut connected_peer_ids = self.network.connected_peer_ids();
+        connected_peer_ids.sort();
+        connected_peer_ids.dedup();
+        let mut peer_ids = connected_peer_ids.clone();
+        let mut candidate_peer_ids = self.network.known_peer_ids();
+        candidate_peer_ids.sort();
+        candidate_peer_ids.dedup();
+        candidate_peer_ids.retain(|peer_id| !connected_peer_ids.contains(peer_id));
+        peer_ids.extend(candidate_peer_ids);
+        peer_ids.retain(|peer_id| !peer_id.trim().is_empty());
         let mut best_head = None;
-        if connected_peer_ids.is_empty() {
+        if peer_ids.is_empty() {
             self.maybe_update_best_peer_head(
                 world_id,
                 &mut best_head,
@@ -421,7 +430,7 @@ impl ReplicationNetworkEndpoint {
                 ),
             )?;
         } else {
-            for peer_id in connected_peer_ids
+            for peer_id in peer_ids
                 .into_iter()
                 .take(GAP_SYNC_FETCH_HEAD_MAX_PROVIDER_ROUTES_PER_POLL)
             {

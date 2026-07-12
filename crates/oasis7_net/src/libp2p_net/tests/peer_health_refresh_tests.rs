@@ -108,6 +108,47 @@ fn refresh_peer_manager_healths_admits_record_exchange_pending_active_peer() {
 }
 
 #[test]
+fn refresh_peer_manager_healths_does_not_quarantine_static_single_source_peer() {
+    let peer_key = Keypair::generate_ed25519();
+    let peer_id = PeerId::from(peer_key.public());
+    let discovered_peer_records = HashMap::from([(
+        peer_id,
+        signed_discovery_peer_record(
+            &peer_key,
+            vec![crate::dht::PeerDiscoverySource::StaticBootstrap],
+            1,
+        ),
+    )]);
+    let active_transport_paths = HashMap::from([(
+        peer_id,
+        active_transport_path_from_endpoint(
+            &HashMap::new(),
+            peer_id,
+            &"/ip4/10.0.0.2/tcp/6832"
+                .parse()
+                .expect("bootstrap endpoint"),
+        ),
+    )]);
+    let event_peer_healths = Arc::new(Mutex::new(HashMap::new()));
+    let event_block_artifacts = Arc::new(Mutex::new(HashMap::new()));
+    let event_errors = Arc::new(Mutex::new(Vec::new()));
+
+    let (_healths, quarantined, admitted) = refresh_peer_manager_healths(
+        &discovered_peer_records,
+        &active_transport_paths,
+        &HashSet::new(),
+        &PeerManagerPolicy::default(),
+        &event_peer_healths,
+        &event_block_artifacts,
+        &event_errors,
+        32,
+    );
+
+    assert!(quarantined.is_empty());
+    assert_eq!(admitted, HashSet::from([peer_id]));
+}
+
+#[test]
 fn refresh_peer_manager_healths_uses_peer_id_order_for_constrained_pending_peers() {
     let first_key = Keypair::generate_ed25519();
     let second_key = Keypair::generate_ed25519();

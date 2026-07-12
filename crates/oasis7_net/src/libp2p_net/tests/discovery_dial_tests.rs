@@ -39,6 +39,7 @@ fn process_discovered_peer_record_dials_candidate_peer() {
             &mut failed_transport_path_labels,
             None,
             &PeerManagerPolicy::default(),
+            &HashSet::new(),
             record.clone(),
         )
         .expect("process candidate peer record");

@@ -20,6 +20,7 @@ use oasis7_proto::distributed_net::NetworkRequest;
 use super::kad_queries::PendingDhtQuery;
 use super::peer_manager::{
     PeerManagerHealthStatus, PeerManagerPolicy, recompute_peer_manager_healths,
+    retain_static_bootstrap_provenance,
 };
 use super::peer_record::{
     build_configured_peer_record, put_record_query, validate_discovered_peer_record,
@@ -564,7 +565,8 @@ pub(super) fn process_discovered_peer_record(
     failed_transport_path_labels: &mut HashSet<String>,
     template: Option<&PeerRecord>,
     peer_manager_policy: &PeerManagerPolicy,
-    record: SignedPeerRecord,
+    static_bootstrap_peer_ids: &HashSet<PeerId>,
+    mut record: SignedPeerRecord,
 ) -> Result<(), WorldError> {
     validate_discovered_peer_record(&record, template)?;
     let peer_id = record.record.peer_id.parse::<PeerId>().map_err(|_| {
@@ -572,6 +574,7 @@ pub(super) fn process_discovered_peer_record(
             protocol: "peer record peer_id must be valid".to_string(),
         }
     })?;
+    retain_static_bootstrap_provenance(&mut record, peer_id, static_bootstrap_peer_ids);
     let allow_single_source_bootstrap_dial = record
         .record
         .discovery_sources
@@ -721,6 +724,7 @@ pub(super) fn handle_peer_record_response(
     max_error_messages: usize,
     event_errors: &Arc<Mutex<Vec<String>>>,
     peer_manager_policy: &PeerManagerPolicy,
+    static_bootstrap_peer_ids: &HashSet<PeerId>,
 ) {
     clear_pending_peer_record_request(
         &kind,
@@ -791,6 +795,7 @@ pub(super) fn handle_peer_record_response(
                 failed_transport_path_labels,
                 peer_record_template,
                 peer_manager_policy,
+                static_bootstrap_peer_ids,
                 record.clone(),
             ) {
                 push_bounded_clone(
