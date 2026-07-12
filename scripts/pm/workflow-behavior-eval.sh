@@ -780,9 +780,9 @@ scenarios = [
         "required_markers": [
             "a branch is about to create a PR",
             "a major feature or workflow helper just landed locally",
-            "canonical packet at the linked schema. Do not hand-author or restate it here",
+            "Record the canonical packet in the GitHub task issue and validate its frozen-head, role-complete ledger and artifacts with the repository helper.",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
-            "missing trusted production attestation is `capability_blocked`",
+            "Require trusted runtime attestation only when operating the future unattended supervisor.",
             "recorded in GitHub task issue evidence comments",
         ],
     },
@@ -937,7 +937,7 @@ scenarios = [
         "expected_route": "finishing-a-development-branch -> local role review -> prepare-task-pr -> GitHub required checks/review -> merge/cleanup",
         "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
         "required_markers": [
-            "obtain the trusted canonical review attestation",
+            "obtain the canonical human-operated review packet",
             "--verification-profile <repository-owned-profile>",
             "--review-packet-file <canonical-review-packet.json>",
             "its schema is only at the canonical review-packet link",
