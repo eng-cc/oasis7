@@ -1,152 +1,44 @@
 ---
 name: repo-owned-workflow-router
-description: Use when a bound oasis7 task needs phase selection across repo-owned workflow skills after bootstrap has established task truth.
+description: Use when a bound oasis7 task needs the next repo-owned workflow phase selected.
 ---
-
-> Workflow authority: `doc/engineering/workflow/source-of-truth.md` is the single normative workflow spec. Keep this skill as short operational guidance only; if behavior changes, update source-of-truth first, then sync this file.
-
-> PM truth: route decisions write to GitHub task issue evidence comments, and GitHub issue evidence comment (mandatory) is the active task-truth writeback sink for router outputs. Queue/status drift should be checked through `./scripts/pm/github-project-workflow.sh audit --task-uid <TASK-UID> --json` when task status or Project-backed PM state changes.
-
 
 # Repo-Owned Workflow Router
 
-Use this skill to decide which repo-owned workflow surface should drive the next phase of work.
+Canonical authority and lifecycle: [capability](../../../doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](../../../doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](../../../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../../../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done).
+
+The production supervisor is a target runtime executor and is currently `capability_blocked`; TPM remains coordinator/integrator.
 
 ## When to Use
 
-Use this skill when:
+Use after bootstrap has bound canonical task truth and the next workflow phase is not yet selected.
 
-- `default-workflow-bootstrap` has already confirmed the request has task truth
-- `default-workflow-bootstrap` has already confirmed read-only or chat-only work has task truth
-- a bootstrapped repository-changing task is starting implementation or needs phase selection
-- you are unsure which local workflow skill should apply next
-- the task needs to move across multiple phases, such as ideation -> implementation -> verification -> closeout
-- the user wants the whole workflow chained together rather than treated as isolated skills
+## Routing
 
-Do not use this skill when:
+Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.
 
-- the request has not yet passed `default-workflow-bootstrap`
-- you are already clearly inside one terminal phase and the next step is obvious
+1. Clear execution truth -> `executing-project-tasks`.
+2. Ambiguous, option-heavy, or materially visual scope -> optional `bounded-brainstorming`; do not route there when implementation-ready.
+3. Behavior change with a stable narrow harness -> `tdd-test-writer` before execution.
+4. Observed failure -> `systematic-debugging` before speculative fixes.
+5. Review feedback -> `receiving-code-review`.
+6. Implementation verified -> `finishing-a-development-branch`.
+7. Already-bound read-only professional/domain judgment -> matching bounded role slice. Pure fact lookup needs no professional slice.
 
-## Required Rules
+Do not treat specialist domain skills as mandatory default workflow phases. Select them only when their trigger matches.
 
-1. This skill is a router, not an external bootstrap.
-2. It must not replace `AGENTS.md`, `.pm` mapping/archive truth, `prd.md`, `project.md`, GitHub task issue evidence comments, or GitHub PR review.
-3. It only chooses and orders repo-owned workflow skills.
-4. If the task truth changes, route decisions must be written back into GitHub task issue evidence comments; formal docs may supplement but not replace it.
-5. Use the narrowest applicable workflow surface; do not force every phase if it is not needed.
-6. If the route implies multi-role or subagent-driven execution, the route output must also include a minimal slice contract: role, slice type, intended model configuration, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, mandatory context checklist, write scope, return contract, GitHub task issue evidence sink, and integration owner/order.
-7. TPM TODO decomposition and subagent slice contracts must be recorded in GitHub task issue evidence comments before delegated execution begins.
-8. TPM routing is coordination only. If the task needs professional/domain analysis, implementation, verification judgment, review judgment, or external messaging, route to the matching professional role slice before presenting that conclusion as authoritative.
-9. Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth. Read-only professional/domain questions still require the matching bounded role slice, and the slice contract/sink must be recorded in GitHub task issue evidence comments.
-10. Already-bound micro loops may use the source-of-truth "Learning Intake /
-    Loop Closeout" minimal record instead of a full route packet when the
-    owner, scope, phase, professional slice plan, and PR chain do not change.
-    The minimal record must include the question or observation, evidence path
-    or command, answer or decision, and whether task truth changed.
-    Same-thread continuations inside the current bound task only verify the
-    binding and record changed route/evidence; they do not repeat bootstrap.
+## Route Output
 
-## Routing Order
-
-Check the task in this order:
-
-0. Already-bound read-only professional/domain judgment
-   - Apply this router step after `default-workflow-bootstrap`; read-only professional/domain judgments must already be task-bound.
-   - Dispatch the matching bounded role slice.
-   - Unbound read-only professional questions are invalid under the always-bootstrap workflow; bootstrap first, then route and record the slice contract in GitHub task issue evidence comments.
-   - Record the slice contract in the GitHub issue evidence comment sink backed by `.pm/github-project-sync/tasks.json`.
-   - Skip professional dispatch only for pure fact lookup or command-output restatement.
-1. `bounded-brainstorming`
-   - Use when direction is still fuzzy, scope is too large, or the problem is inherently option-heavy or visual.
-   - Use for design-bible methodology work when the user wants game design docs
-     to become very detailed or express all game details, but the target topic
-     set, ownership, and validation matrix are not yet scoped.
-2. `tdd-test-writer`
-   - Use when the task changes automatable behavior and has a stable automated test surface.
-3. `executing-project-tasks`
-   - Use when `prd.md` / `project.md` / handoff / GitHub-backed task truth is ready and implementation should proceed step by step.
-4. `systematic-debugging`
-   - Use when a bug, failing test, broken script, unexpected diff, or regression appears before proposing fixes.
-5. `requesting-repo-owned-review`
-   - Use when a branch is about to create a PR and needs required local review from involved professional role subagents before GitHub reviewers.
-6. `verification-before-completion`
-   - Use when the work is close to a claim such as “done”, “tests pass”, or “ready for PR”.
-7. `finishing-a-development-branch`
-   - Use when implementation and required verification are complete and the task should close out, commit, and move into PR handling.
-8. `receiving-code-review`
-   - Use when GitHub PR review comments or requested changes arrive.
-9. `writing-repo-owned-skills`
-   - Use when local repo-owned skill surfaces are created or edited.
-
-Design-bible routing note:
-
-- If the task is about expanding `doc/game` from a clear document tree into a
-  detailed game design bible, first apply
-  `doc/engineering/workflow/source-of-truth.md#1221-detailed-game-design-documentation-method`.
-- Route professional content ownership through `producer_system_designer` and
-  `gameplay_designer` by default, adding visual, runtime, agent, viewer, QA, or
-  liveops roles only when the detailed topic touches those surfaces.
-- Keep root docs as navigation/current-truth surfaces; detailed rules should
-  land in topic PRD/design/project triplets plus indexed evidence/runbook
-  supplements, not in one swollen root PRD.
-
-## Routing Questions
-
-Ask and answer these in order:
-
-1. Is the direction already clear enough to implement?
-2. Does the task need scope decomposition or 2-3 option comparison first?
-3. Will the task change product/runtime/interaction behavior with a stable test surface?
-4. Is the task already backed by sufficient repo truth to execute?
-5. Did a bug, failing test, broken helper, unexpected diff, or regression appear?
-6. Is the branch about to create a PR and therefore due for involved-role local subagent review?
-7. Is the next risk “implementation correctness” or “claim correctness”?
-8. Is the task actually at closeout rather than execution?
-9. Did GitHub review feedback arrive?
-10. Is this task editing local skill surfaces or skill governance?
-11. Is this task asking for a design-bible level game documentation method, and
-    if so, which topics, role owners, and validation matrix rows are required
-    before document edits begin?
-12. Did this step produce reusable learning, a follow-up idea, repeated
-    friction, or a failure signature that should use the learning-intake
-    ladder: no-op, short GitHub issue evidence note, reflection signal,
-    task-scoped `working_memory`, or candidate task/memory promotion?
-
-## Expected Output
-
-```markdown
-WORKFLOW ROUTE DECIDED
-
-## Task Phase
-- Current phase:
-- Why:
-
-## Selected Workflow Skills
-1. [skill name] - [why now]
-2. [skill name] - [why next]
-3. [skill name] - [if needed]
-
-## Skipped Workflow Skills
-- [skill name] - [reason skipped]
-
-## Specialist Skills Considered
-- [skill name] - [domain trigger or reason skipped]
-
-## Required Writeback
-- `prd.md`:
-- `project.md`:
-- GitHub task issue evidence comments:
-- handoff / project supplement:
+- selected phase/skill and reason
+- skipped optional phases and reason
+- verification tier
+- GitHub issue evidence comment (mandatory)
 
 ## Subagent Slice Plan (If Needed)
+
 - role:
 - slice type:
-- model configuration: fill the intended/actual fields below
-- intended model configuration: workflow source-of-truth `Default subagent runtime` by default; record reason for any requested override
-- actual dispatched model/reasoning: record the selected model/reasoning when the tool permits and reports it; otherwise record `inherited/unverified` plus the connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified
-- context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded
-- mandatory context checklist: fill the mandatory context checklist below
+- model configuration: `inherit current parent selection` by default; record observed runtime or `adapter inactive on this surface`
 - mandatory context checklist:
   - identity and authority:
   - workflow governance:
@@ -156,33 +48,19 @@ WORKFLOW ROUTE DECIDED
   - collaboration boundary:
 - write scope:
 - return contract:
-- formal sink / writeback surface: GitHub task issue evidence comments (mandatory)
-- integration owner:
+- formal sink / writeback surface: GitHub issue evidence comment (mandatory)
+- integration owner: TPM
 - integration order:
-- context exemption:
+- context exemption: none, or reason no professional slice is required
 
-## Next Action
-- exact next step:
-```
+Record the slice contract in the GitHub issue evidence comment sink before dispatch. Unbound read-only professional questions are invalid under the always-bootstrap workflow; read-only professional/domain judgments must already be task-bound.
+
+Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist.
 
 ## Guardrails
 
-- Do not route into `bounded-brainstorming` if the task is already implementation-ready.
-- Do not route into `tdd-test-writer` for pure docs/governance work or when no stable harness exists.
-- Do not route into `executing-project-tasks` if the plan truth is still missing key scope or validation details.
-- Do not skip `systematic-debugging` when an observed failure needs reproduction and narrowing before a fix.
-- Do not skip `verification-before-completion` when you are about to make a completion claim.
-- Do not use this router as a replacement for closeout; switch to `finishing-a-development-branch` when the task is done.
-- Do not treat specialist domain skills as mandatory default workflow phases; route to them only when the task domain matches their trigger.
-- Do not dispatch implementation, verification, review, or specialist subagents without `AGENTS.md`, the assigned role card, workflow source-of-truth, current GitHub-backed task truth, and scoped repo context recorded in the mandatory context checklist.
-- Do not let TPM direct exploration become a professional conclusion; professional findings must be owned or verified by the matching role slice.
-- Do not promote a lightweight observation directly into committed task truth
-  when a reflection signal or task-scoped `working_memory` is the right
-  learning-intake weight.
+Do not route around canonical task truth or invent a specialist phase.
 
 ## Known Failure Modes
 
-- Treating this router as permission to skip GitHub task issue evidence writeback; route decisions are task truth.
-- Selecting every workflow skill because the phase map exists; use the narrowest applicable surface and record skipped gates when they matter.
-- Reporting TPM evidence gathering as a professional conclusion; dispatch or attribute the matching role slice when judgment is involved.
-- Forgetting to update the route after scope changes; append the changed route before continuing work.
+Routing before bootstrap; mandatory brainstorming; speculative fixing before debugging; incomplete slice contracts.

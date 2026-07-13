@@ -4,16 +4,11 @@
 
 ## 从这里开始
 - 想先理解 testing 模块覆盖哪些测试层级、门禁和证据边界：`doc/testing/prd.md`
-- 想先回答“自动化测试能不能证明游戏好玩、还缺哪层证据”：`doc/testing/governance/playability-evidence-stack-2026-05-06.prd.md`
-- 想先回答“为什么 `L4` 现在只保留 `L4A synthetic`、`L4B embodied-agent` 两个正式内部层，并把内部真人试玩降为 `L4B` 可选佐证”：`doc/testing/governance/playability-l4-synthetic-human-split-2026-05-06.prd.md`
-- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先读 `testing-manual.md` 的 `L4A/L4B/L5` 章节，再执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 再由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
-- 想先回答“这些标准角色 subagent 到底怎么设计、怎么组合成 review 流程”：`doc/testing/governance/playability-subagent-review-system-2026-05-06.prd.md`
-- 想先回答“agent 如何模拟多个不同风格的玩家视角，但又不把 `player` 写成正式角色”：`doc/testing/governance/playability-simulated-player-persona-panel-2026-05-06.prd.md`
-- 想用截图加模型视觉评审替代绝大部分人工视觉 review：先读 `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`，输出卡模板在 `doc/testing/templates/model-visual-review-card-template.md`
-- 想跑真实本地栈 + Playwright + 玩家 UI 操作流程，并把这些用例作为一个长期系列管理：`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
-- 想本地启动接入 formal `public_testnet` 大世界的 test 环境、本地 viewer/API、NewAPI quota bridge 与 LetAI provider bridge，并把 OC -> NewAPI/LetAI 充值链路纳入测试：`doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md`
+- 想判断好玩性证据、`L4A/L4B/L5` 边界、角色 subagent review 或 simulated player persona 的 canonical topic：`doc/testing/governance/README.md`
+- 想在一个 worktree 里直接准备一轮完整 `L4A + L4B` 验证产物：先经 `doc/testing/governance/README.md` 确认所需证据层，再读 `testing-manual.md` 的 `L4A/L4B/L5` 章节并执行 `./scripts/prepare-playability-l4-review.sh`；正式 `L4B` embodied-agent run 由 `./scripts/run-playability-l4b-agent.sh --l4-manifest <artifact>/manifest.json` 收口。
+- 想执行 Web UI、Playwright、public-testnet attach 或模型视觉评审手册：先读 `doc/testing/manual/README.md`，再按问题进入对应 manual。
 - 想看当前执行窗口、活跃任务、QA 阻断、覆盖缺口与最新高价值收口：`doc/testing/project.md`
-- 想先判断要跑哪套测试或查操作步骤：`testing-manual.md`、`doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md`、`doc/testing/manual/web-ui-playwright-closure-manual.manual.md`
+- 想先判断要跑哪套测试或查操作步骤：先读 `testing-manual.md`；涉及专项操作再进入 `doc/testing/manual/README.md`。
 - 想先进入 `evidence` 热点子域，并按 release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit 问题分流：`doc/testing/evidence/README.md`
 - 想先确认云上测试/正式环境、hosted-login 服务清单与 testnet/mainnet 口径边界：`doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/testing/prd.index.md`
@@ -30,7 +25,7 @@
 - `project.md` 是执行台账，适合确认当前 QA 阻断、活跃测试治理任务与最新完成项。
   当前窗口只保留 blocker、next step 与少量高价值收口摘要；更细的近期完成历史应回到对应 topic `*.project.md` 与 GitHub task issue evidence comments 追溯。
 - `evidence/README.md` 是当前最高密度热点子域 `evidence/` 的 canonical 入口，适合先按“release gate / hosted access / public-testnet readiness evidence / legacy p2p rehearsal / governance drill / claim-audit / 定向验证”分流，再进入具体留痕文件。
-- `testing-manual.md` 与 `manual/*.manual.md` 是 operator 手册层，用于决定跑哪套测试、按什么步骤执行；其中 Playwright 实跑系列入口是 `doc/testing/manual/web-ui-playwright-closure-manual.manual.md`。
+- `testing-manual.md` 与 `manual/README.md` 是 operator 手册层：前者决定通用测试路径，后者把 Web UI、Playwright、public-testnet attach 与模型视觉评审分流到对应步骤。
 - `prd.index.md` 是定向检索索引，适合已知主题后按文件名查找，不是新读者的首读入口。
 
 ## 活跃阅读面边界
@@ -48,10 +43,10 @@
 - `ci/`：CI、wasm determinism、tiering 与 gate 保护。
 - `longrun/`：长稳、chaos、soak 与在线稳定性。
 - `launcher/`：启动器链路测试、playtest 与配置自动接线。
-- `governance/`：质量趋势、release-gate 指标、审计检查、好玩性证据栈、L4 synthetic/human 分层、subagent 评审系统与 simulated player personas。
+- `governance/`：质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻。
 - `templates/`：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
 - `performance/`：runtime / viewer 性能观测与方法学。
-- `manual/`：系统测试手册分册、Web UI 闭环 manual、Playwright 实跑系列入口。
+- `manual/`：系统测试手册分册、Web UI 闭环、Playwright 实跑、public-testnet attach 与模型视觉评审；先读 `doc/testing/manual/README.md`。
 - `chaos-plans/`：专项 chaos plan 入口。
 
 ## 高密度提示

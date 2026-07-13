@@ -29,6 +29,7 @@ query($ids: [ID!]!) {
         ... on Issue {
           body
           number
+          title
           url
         }
         ... on PullRequest {
@@ -86,6 +87,25 @@ def die(message: str) -> None:
 
 def normalize_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def normalized_acceptance(body: str) -> list[str]:
+    lines = body.splitlines()
+    try:
+        start = next(index for index, line in enumerate(lines) if line.strip() == "Acceptance:") + 1
+    except StopIteration:
+        return []
+    values: list[str] = []
+    for line in lines[start:]:
+        if not line.strip():
+            if values:
+                break
+            continue
+        match = re.match(r"^-\s+(?:\[[ xX]\]\s*)?(.*\S)\s*$", line)
+        if not match:
+            break
+        values.append(match.group(1).strip())
+    return values
 
 
 def parse_scalar(value: str) -> Any:
@@ -174,9 +194,18 @@ def load_mapping(path: pathlib.Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+_store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
+_store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
+assert _store_spec and _store_spec.loader
+durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+def persist_mapping(path: pathlib.Path, snapshot: dict[str, Any]) -> None:
+    """Persist explicit per-task patches through the shared field-policy CAS."""
+    for task_uid, patch in (snapshot.get("tasks") or {}).items():
+        durable_store.merge_task_record(path,task_uid,dict(patch))
+    metadata={key:value for key,value in snapshot.items() if key!="tasks"}
+    if metadata:
+        durable_store.transact_json(path,lambda latest: latest.update(metadata),{"version":1,"tasks":{}})
 
 
 def run_json(cmd: list[str]) -> dict[str, Any]:
@@ -363,10 +392,10 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
     workflow_phase = {
         "blocked": "blocked",
-        "ready": "closeout",
+        "ready": "pre_pr_ready",
         "pr_watch": "pr_watch",
-        "done": "done",
-        "deferred": "done",
+        "done": "task_done",
+        "deferred": "blocked",
     }.get(status, "execution")
     project_status = {
         "candidate": "Todo",
@@ -473,19 +502,11 @@ def command_audit(args: argparse.Namespace) -> int:
     task_uid = getattr(args, "task_uid", None)
     if task_uid:
         tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
-    recovered_mapping, recovery_error = recover_missing_mapping_records(args, mapping, tasks)
-    if recovered_mapping:
-        save_mapping(mapping_path, mapping)
-        tasks = load_tasks(root, statuses, mapping)
-        if task_uid:
-            tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     mapped_tasks = mapping.get("tasks", {})
     retired_files = retired_task_files(root)
 
     errors: list[str] = []
     warnings: list[str] = []
-    if recovery_error:
-        errors.append(recovery_error)
     if task_uid and not tasks:
         errors.append(f"{task_uid}: task not found in selected mapping/archive records")
     try:
@@ -528,6 +549,19 @@ def command_audit(args: argparse.Namespace) -> int:
             errors.append(f"{uid}: mapping issue_url does not match live item content")
         if record.get("issue_number") and str(record.get("issue_number")) != str(content.get("number") or ""):
             errors.append(f"{uid}: mapping issue_number does not match live item content")
+        live_title = str(content.get("title") or "")
+        if live_title.startswith("[PM] "):
+            live_title = live_title[5:]
+        if live_title and str(record.get("title") or "") != live_title:
+            errors.append(f"{uid}: cached title drift; refresh explicitly from authoritative GitHub issue")
+        body = str(content.get("body") or "")
+        live_acceptance = normalized_acceptance(body)
+        cached_acceptance = [
+            re.sub(r"^\[[ xX]\]\s*", "", str(value)).strip()
+            for value in (record.get("acceptance") or [])
+        ]
+        if cached_acceptance != live_acceptance:
+            errors.append(f"{uid}: cached acceptance drift; refresh explicitly from authoritative GitHub issue")
         item_fields = normalized_field_values(item)
         for field_name, expected in expected_project_values(task).items():
             if not expected:

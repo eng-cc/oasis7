@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use oasis7::runtime::ModuleTickRoutingMetricsSnapshot;
+
 use super::ExecutionBridgeRecord;
 
 const EXECUTION_BRIDGE_STAGE_WARN_THRESHOLD: Duration = Duration::from_millis(500);
@@ -62,6 +64,7 @@ struct ExecutionBridgeCommitTimingState {
     slow_count: u64,
     last_slow_stage: Option<String>,
     stages: BTreeMap<&'static str, ExecutionBridgeStageTimingCounter>,
+    module_tick_routing_metrics: Option<ModuleTickRoutingMetricsSnapshot>,
 }
 
 #[derive(Debug, Default)]
@@ -229,6 +232,28 @@ pub(crate) fn snapshot_execution_bridge_commit_timing() -> ExecutionBridgeCommit
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .snapshot()
+}
+
+/// Returns the process-local module tick routing measurements from the active
+/// execution driver. These wall-clock measurements intentionally never enter
+/// the deterministic world snapshot.
+#[allow(dead_code)]
+pub(crate) fn snapshot_execution_bridge_module_tick_routing_metrics()
+-> Option<ModuleTickRoutingMetricsSnapshot> {
+    commit_timing_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .module_tick_routing_metrics
+        .clone()
+}
+
+pub(crate) fn record_execution_bridge_module_tick_routing_metrics(
+    metrics: ModuleTickRoutingMetricsSnapshot,
+) {
+    commit_timing_state()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .module_tick_routing_metrics = Some(metrics);
 }
 
 fn record_commit_timing_observation(observation: &CommitObservation<'_>, level: tracing::Level) {

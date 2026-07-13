@@ -4,6 +4,77 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 cd "$ROOT_DIR"
+SOURCE_ROOT="$ROOT_DIR"
+
+PM_LINT_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint.XXXXXX")"
+cleanup() {
+  rm -rf "$PM_LINT_TMP_DIR"
+}
+trap cleanup EXIT
+PM_LINT_ROOT="$PM_LINT_TMP_DIR/root"
+mkdir -p "$PM_LINT_ROOT"
+copy_attempts="${PM_LINT_COPY_MAX_ATTEMPTS:-3}"
+if [[ ! "$copy_attempts" =~ ^[1-9][0-9]*$ || "$copy_attempts" -gt 10 ]]; then
+  echo "pm-lint: FAIL: PM_LINT_COPY_MAX_ATTEMPTS must be between 1 and 10" >&2
+  exit 1
+fi
+copy_consistent=0
+for ((copy_attempt = 1; copy_attempt <= copy_attempts; copy_attempt++)); do
+  source_before="$($SCRIPT_DIR/tree-manifest.py --root "$SOURCE_ROOT/.pm" --reject-symlinks)"
+  if [[ -n "${PM_LINT_COPY_READY_FILE:-}" ]]; then
+    printf '%s\n' "$copy_attempt" >"$PM_LINT_COPY_READY_FILE"
+    if [[ -n "${PM_LINT_COPY_CONTINUE_FILE:-}" ]]; then
+      for _ in {1..500}; do
+        [[ -f "$PM_LINT_COPY_CONTINUE_FILE" ]] && break
+        sleep 0.01
+      done
+      if [[ ! -f "$PM_LINT_COPY_CONTINUE_FILE" ]]; then
+        echo "pm-lint: FAIL: timed out waiting for PM_LINT_COPY_CONTINUE_FILE" >&2
+        exit 1
+      fi
+    fi
+  fi
+  rm -rf "$PM_LINT_ROOT/.pm"
+  cp -R "$SOURCE_ROOT/.pm" "$PM_LINT_ROOT/.pm"
+  source_after="$($SCRIPT_DIR/tree-manifest.py --root "$SOURCE_ROOT/.pm")"
+  snapshot_hash="$($SCRIPT_DIR/tree-manifest.py --root "$PM_LINT_ROOT/.pm")"
+  if [[ "$source_before" == "$source_after" && "$source_after" == "$snapshot_hash" ]]; then
+    copy_consistent=1
+    break
+  fi
+  echo "pm-lint: source .pm changed during snapshot attempt $copy_attempt/$copy_attempts" >&2
+done
+if [[ "$copy_consistent" != "1" ]]; then
+  echo "pm-lint: FAIL: could not capture a coherent .pm snapshot" >&2
+  exit 1
+fi
+shopt -s dotglob nullglob
+for path in "$ROOT_DIR"/*; do
+  name="$(basename "$path")"
+  [[ "$name" == ".pm" || "$name" == ".git" ]] && continue
+  ln -s "$path" "$PM_LINT_ROOT/$name"
+done
+shopt -u dotglob nullglob
+
+if [[ -n "${PM_LINT_SNAPSHOT_READY_FILE:-}" ]]; then
+  : >"$PM_LINT_SNAPSHOT_READY_FILE"
+  if [[ -n "${PM_LINT_CONTINUE_FILE:-}" ]]; then
+    for _ in {1..500}; do
+      [[ -f "$PM_LINT_CONTINUE_FILE" ]] && break
+      sleep 0.01
+    done
+    if [[ ! -f "$PM_LINT_CONTINUE_FILE" ]]; then
+      echo "pm-lint: FAIL: timed out waiting for PM_LINT_CONTINUE_FILE" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# All PM validation below reads one coherent snapshot epoch. Repository files
+# outside .pm are read through snapshot-root symlinks and are never written.
+ROOT_DIR="$PM_LINT_ROOT"
+export PM_ROOT_DIR="$PM_LINT_ROOT"
+cd "$ROOT_DIR"
 
 failures=0
 
@@ -53,6 +124,8 @@ require_file "scripts/pm/append-execution-log.sh"
 require_file "scripts/pm/claim-ready.sh"
 require_file "scripts/pm/fallback-evidence.sh"
 require_file "scripts/pm/lint.sh"
+require_file "scripts/pm/lint.test.sh"
+require_file "scripts/pm/tree-manifest.py"
 require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
 require_file "scripts/pm/task-closeout.sh"
@@ -132,7 +205,7 @@ fi
 ./scripts/pm/memory-report.sh --json >/dev/null
 ./scripts/pm/working-memory-report.sh --json >/dev/null
 ./scripts/pm/reflection-report.sh --json >/dev/null
-python3 -m py_compile \
+PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache" python3 -m py_compile \
   "$SCRIPT_DIR/github-project-task.py" \
   "$SCRIPT_DIR/github-project-sync.py" \
   "$SCRIPT_DIR/github-project-workflow.py" \

@@ -174,9 +174,9 @@ fi
 if [[ "\$*" == "project field-list 1 --owner eng-cc --format json" ]]; then
   cat <<'JSON'
 {"fields":[
-{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE","name":"Done"}]},
+{"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_DONE","name":"Done"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE","name":"done"}]}
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TASK_DONE_PHASE","name":"task_done"},{"id":"OPT_MAIN_SYNC_PHASE","name":"main_sync"},{"id":"OPT_POST_MERGE_DONE_PHASE","name":"post_merge_done"}]}
 ]}
 JSON
   exit 0
@@ -216,8 +216,8 @@ from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text())
 by_number = {item["issue_number"]: item for item in payload["results"]}
-assert by_number[123]["status"] == "would_close", by_number
-assert by_number[124]["status"] == "would_close", by_number
+assert by_number[123]["status"] == "would_advance", by_number
+assert by_number[124]["status"] == "would_advance", by_number
 assert by_number[126]["status"] == "skipped" and "manual hold" in by_number[126]["reason"], by_number
 assert by_number[128]["status"] == "blocked" and "project_item_id" in by_number[128]["reason"], by_number
 assert by_number[129]["status"] == "blocked" and "pre-PR review" in by_number[129]["reason"], by_number
@@ -236,16 +236,20 @@ payload = json.loads(Path(sys.argv[1]).read_text())
 mapping = json.loads(Path(sys.argv[2]).read_text())
 log = Path(sys.argv[3]).read_text().splitlines()
 by_number = {item["issue_number"]: item for item in payload["results"]}
-assert by_number[123]["status"] == "closed", by_number
-assert by_number[124]["status"] == "closed", by_number
+assert by_number[123]["status"] == "task_done", by_number
+assert by_number[124]["status"] == "task_done", by_number
+assert by_number[123]["next_action"] == "run canonical terminal runbook from post-merge-main-sync.sh", by_number
+assert by_number[124]["next_action"] == "run canonical terminal runbook from post-merge-main-sync.sh", by_number
 assert by_number[128]["status"] == "blocked", by_number
 assert by_number[129]["status"] == "blocked", by_number
 assert by_number[130]["status"] == "blocked", by_number
 assert mapping["tasks"]["task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]["status"] == "done", mapping
 assert mapping["tasks"]["task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]["status"] == "done", mapping
+assert mapping["tasks"]["task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]["workflow_phase"] == "task_done", mapping
+assert mapping["tasks"]["task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]["workflow_phase"] == "task_done", mapping
 assert mapping["tasks"]["task_cccccccccccccccccccccccccccccccc"]["status"] == "pr_watch", mapping
 assert mapping["tasks"]["task_ffffffffffffffffffffffffffffffff"]["status"] == "pr_watch", mapping
-assert any(line == "issue close 123 -R eng-cc/oasis7 --reason completed" for line in log), log
+assert not any(line == "issue close 123 -R eng-cc/oasis7 --reason completed" for line in log), log
 assert not any(line == "issue close 124 -R eng-cc/oasis7 --reason completed" for line in log), log
 assert any(line.startswith("issue comment 123 -R eng-cc/oasis7") for line in log), log
 assert any(line.startswith("issue comment 124 -R eng-cc/oasis7") for line in log), log

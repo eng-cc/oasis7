@@ -27,7 +27,7 @@
 - `doc/world-runtime/module/`：16 份文件
 - 根目录入口：5 份文件
 - `doc/world-runtime/evidence/`：7 份文件
-- `doc/world-runtime/governance/`：5 份文件
+- `doc/world-runtime/governance/`：6 份文件（先读 `doc/world-runtime/governance/README.md`）
 - `doc/world-runtime/templates/`：2 份文件
 - `doc/world-runtime/checklists/`：1 份文件
 
@@ -39,7 +39,7 @@
 | `module/` | 16 | 模块生命周期、线上发布合法性、模块存储与订阅过滤边界 |
 | 根目录入口 | 5 | 模块主入口与当前高频导航 |
 | `evidence/` | 7 | 候选级指标、storage gate、profile consistency 与 soak 采证 |
-| `governance/` | 5 | 治理事件、收据安全与运行时审计边界 |
+| `governance/` | 6 | 治理事件、收据安全与运行时审计边界；先从 `doc/world-runtime/governance/README.md` 按问题分流 |
 
 ## 活跃补充文档
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`：Docker canonical build、receipt、identity 与 release evidence 主入口。
@@ -49,6 +49,10 @@
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities-2026-03-05.prd.md`：玩家发布实体与模块发布链路衔接入口。
 - `doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md`：治理收据安全 hardening 主入口。
+
+## governance 子域阅读边界
+- `doc/world-runtime/governance/README.md` 是治理子域的唯一首读入口：它把当前模块规格、执行台账、按需设计分册与已完成专题追溯分开，避免根 README / 文件索引重复平铺。
+- `audit-export.md` 和 `governance-events.md` 仍分别有 runtime API/test 与模块入口引用；本轮 caller scan 未发现可证明替代它们的现行文档，故保留并降为按需阅读面，而不是删除审计资料。
 
 ## WASM 相邻历史入口
 | 文档路径 | 当前状态 | 当前阅读入口 |

@@ -16,23 +16,19 @@
 ## 从这里开始
 - 想先确认 headless-runtime 当前职责、生命周期边界与发布接口：先读 `doc/headless-runtime/prd.md`。
 - 想看这个模块还有没有活跃执行项、最近一次收口了什么：先读 `doc/headless-runtime/project.md`。
-- 想理解旧 `nonviewer` 命名为什么还保留在专题文件里：先读上面的“说明”，再进入 `doc/headless-runtime/nonviewer/` 中仍被主 PRD 引用的专题。
+- 想理解旧 `nonviewer` 命名为何仍保留、并按问题进入活跃鉴权或长稳专题：先读上面的“说明”，再读 `doc/headless-runtime/nonviewer/README.md`。
 - 想查生命周期 / 鉴权一致性自检入口：先读 `doc/headless-runtime/checklists/lifecycle-auth-consistency-checklist.md`。
 - 想查长稳归档、事故追溯或 release gate 对接模板：进入 `doc/headless-runtime/templates/`。
 
 ## 模块职责
 - 维护无界面运行链路的生命周期、鉴权与长稳追溯口径。
-- 汇总 `nonviewer/` 主题下仍需当前读取的 hardening 专题。
+- 汇总 `nonviewer/` 主题下仍需当前读取的 hardening 专题；其首次分流由 `doc/headless-runtime/nonviewer/README.md` 负责。
 - 承接与 testing / core 的 headless 证据链和发布门禁对接口径。
 
 ## 主题文档
-- `nonviewer/`：仍需当前读取的鉴权与长稳归档专题。
+- `nonviewer/`：仍需当前读取的鉴权与长稳归档专题；先读 `doc/headless-runtime/nonviewer/README.md`，再进入对应 triplet。
 - `checklists/`：生命周期 / 鉴权一致性检查清单。
 - `templates/`：长稳归档、事故追溯与 release gate 对接模板。
-
-## 近期专题
-- `doc/headless-runtime/nonviewer/nonviewer-onchain-auth-protocol-hardening.prd.md`
-- `doc/headless-runtime/nonviewer/nonviewer-longrun-traceable-memory-archive-hardening-2026-02-23.prd.md`
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。
@@ -43,4 +39,4 @@
 - 无界面运行链路行为变更，优先回写 `prd.md` 与 `project.md`。
 - 仍被主 PRD 引用的历史专题文件名可保留 `nonviewer-*`，但新文档优先使用 `headless-runtime-*` 前缀。
 - 新增专题后，需同步回写 `doc/headless-runtime/prd.index.md` 与本目录索引。
-- README 负责解释命名迁移与入口顺序，不替代 `nonviewer/`、`checklists/`、`templates/` 或 `prd.index.md` 的详细内容。
+- README 负责解释命名迁移与模块级入口顺序；`nonviewer/README.md` 负责活跃专题分流，二者都不替代 `checklists/`、`templates/` 或 `prd.index.md` 的详细内容。

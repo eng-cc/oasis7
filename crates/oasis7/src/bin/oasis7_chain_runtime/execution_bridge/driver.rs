@@ -912,6 +912,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             );
         }
         let retention_ms = retention_started_at.elapsed();
+        super::record_execution_bridge_module_tick_routing_metrics(
+            self.execution_world.module_tick_routing_metrics_snapshot(),
+        );
         emit_commit_observation(CommitObservation {
             world_id: context.world_id.as_str(),
             height: context.height,

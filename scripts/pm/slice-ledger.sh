@@ -18,6 +18,14 @@ Options:
   --base <ref>              Optional reviewed base ref
   --head <ref>              Optional reviewed head ref
   --artifact <path>         Optional linked artifact path; may repeat
+  --slice-id <id>           Immutable dispatched slice/agent identifier
+  --activation <text>       Observed role activation mode
+  --context-delivery <text> Observed context delivery mode
+  --actual-runtime <text>   Observed runtime or inherited/unverified reason
+  --artifact-digest <sha>   SHA-256 of returned artifact/transcript
+  --scope-verdict <text>    Scope/spec compliance verdict
+  --risk-verdict <text>     Role quality/risk verdict
+  --findings <text>         findings/no_findings disposition
   --verdict <text>          Optional dual/verdict summary
   --residual-risk <text>    Optional residual risk summary
   --next-action <text>      Optional next action
@@ -39,6 +47,14 @@ HEAD_REF=""
 VERDICT=""
 RESIDUAL_RISK=""
 NEXT_ACTION=""
+SLICE_ID=""
+ACTIVATION=""
+CONTEXT_DELIVERY=""
+ACTUAL_RUNTIME=""
+ARTIFACT_DIGEST=""
+SCOPE_VERDICT=""
+RISK_VERDICT=""
+FINDINGS=""
 PRINT_ONLY=0
 ARTIFACTS=()
 
@@ -68,6 +84,14 @@ while [[ $# -gt 0 ]]; do
       ARTIFACTS+=("${2:-}")
       shift 2
       ;;
+    --slice-id) SLICE_ID="${2:-}"; shift 2 ;;
+    --activation) ACTIVATION="${2:-}"; shift 2 ;;
+    --context-delivery) CONTEXT_DELIVERY="${2:-}"; shift 2 ;;
+    --actual-runtime) ACTUAL_RUNTIME="${2:-}"; shift 2 ;;
+    --artifact-digest) ARTIFACT_DIGEST="${2:-}"; shift 2 ;;
+    --scope-verdict) SCOPE_VERDICT="${2:-}"; shift 2 ;;
+    --risk-verdict) RISK_VERDICT="${2:-}"; shift 2 ;;
+    --findings) FINDINGS="${2:-}"; shift 2 ;;
     --verdict)
       VERDICT="${2:-}"
       shift 2
@@ -110,7 +134,7 @@ fi
 [[ -n "$ROLE" ]] || die "--role is required unless --print is used"
 [[ -n "$STATUS" ]] || die "--status is required unless --print is used"
 
-python3 - "$LEDGER_PATH" "$TASK_UID" "$ROLE" "$STATUS" "$BASE_REF" "$HEAD_REF" "$VERDICT" "$RESIDUAL_RISK" "$NEXT_ACTION" "${ARTIFACTS[@]}" <<'PY'
+python3 - "$LEDGER_PATH" "$TASK_UID" "$ROLE" "$STATUS" "$BASE_REF" "$HEAD_REF" "$VERDICT" "$RESIDUAL_RISK" "$NEXT_ACTION" "$SLICE_ID" "$ACTIVATION" "$CONTEXT_DELIVERY" "$ACTUAL_RUNTIME" "$ARTIFACT_DIGEST" "$SCOPE_VERDICT" "$RISK_VERDICT" "$FINDINGS" "${ARTIFACTS[@]}" <<'PY'
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -129,7 +153,15 @@ entry = {
     "verdict": sys.argv[7],
     "residual_risk": sys.argv[8],
     "next_action": sys.argv[9],
-    "artifacts": sys.argv[10:],
+    "slice_id": sys.argv[10],
+    "activation": sys.argv[11],
+    "context_delivery": sys.argv[12],
+    "actual_runtime": sys.argv[13],
+    "artifact_digest": sys.argv[14],
+    "scope_verdict": sys.argv[15],
+    "risk_verdict": sys.argv[16],
+    "findings": sys.argv[17],
+    "artifacts": sys.argv[18:],
 }
 ledger_path.parent.mkdir(parents=True, exist_ok=True)
 with ledger_path.open("a", encoding="utf-8") as handle:

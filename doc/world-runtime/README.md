@@ -11,6 +11,7 @@
 - 想直接给单个 WASM 模块补标准化功能/性能观测：`doc/world-runtime/wasm/wasm-module-observability-standardization.prd.md`
 - 想先看运行态体积、恢复与 retention 治理：`doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`
 - 想先看线上模块发布合法性与 binary-only 边界：`doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
+- 想进入治理事件、审计导出或收据安全专题：`doc/world-runtime/governance/README.md`
 
 ## 入口
 - PRD: `doc/world-runtime/prd.md`
@@ -42,7 +43,7 @@
 - `module/`（16）：模块生命周期、线上发布合法性、模块存储与订阅过滤专题。
 - 根目录入口（5）：模块主入口与当前高频导航。
 - `evidence/`（7）：候选级指标、soak、storage gate 与 profile consistency 采证。
-- `governance/`（5）：治理事件与收据安全专题。
+- `governance/`（6）：治理事件、审计导出与收据安全专题；先从 `doc/world-runtime/governance/README.md` 按问题分流。
 
 ## 高密度提示
 - `doc/world-runtime/` 当前共有 120 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。

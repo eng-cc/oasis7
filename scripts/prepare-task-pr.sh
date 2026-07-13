@@ -31,7 +31,7 @@ Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: local role-subagent review -> closeout -> commit -> prepare-task-pr -> GitHub PR watch/fix/merge
+- standard path: implementation-freeze commit -> fresh verification -> local role-subagent review -> evidence-only closeout commit -> prepare-task-pr -> GitHub PR watch/fix/merge
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
@@ -255,7 +255,7 @@ required_review_roles_from_paths() {
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     case "$path" in
-      doc/engineering/workflow/*|.agents/skills/*|skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
+      AGENTS.md|.codex/config.toml|.codex/agents/*|doc/engineering/workflow/*|.agents/skills/*|skills/*|.agents/roles/*|.github/workflows/*|scripts/ci-tests.sh|scripts/plan-rust-required-scope.sh|scripts/plan-rust-required-scope.test.sh|scripts/prepare-task-pr.sh|scripts/pm/*|scripts/doc-governance-check.sh|scripts/lint-skills.sh)
         roles="$(append_unique_token "$roles" "repository_health_engineer")"
         ;;
     esac
@@ -300,12 +300,48 @@ required_review_roles_from_paths() {
         ;;
     esac
     case "$path" in
-      .codex/config.toml|.agents/*|.agents/**/*|scripts/*agent*|scripts/**/*agent*|scripts/pm/workflow-behavior-eval.sh|doc/engineering/workflow/*|doc/*agent*|doc/**/*agent*)
+      crates/*agent*|crates/**/*agent*|doc/game/*agent*|doc/game/**/*agent*|doc/world-simulator/*agent*|doc/world-simulator/**/*agent*)
         roles="$(append_unique_token "$roles" "agent_engineer")"
         ;;
     esac
     case "$path" in
-      .github/workflows/*|.github/workflows/**/*|scripts/prepare-task-pr.sh|scripts/pr-review-thread-closeout.sh|scripts/pm/claim-ready.sh|scripts/pm/task-closeout.sh|scripts/pm/workflow-lint.sh|scripts/pm/workflow-behavior-eval.sh|scripts/pm/*test*.sh|scripts/*test*.sh|scripts/plan-rust-required-scope.sh|scripts/ci-tests.sh|testing-manual.md|doc/testing/*|doc/testing/**/*|doc/*verification*|doc/**/*verification*|doc/*readiness*|doc/**/*readiness*|doc/engineering/workflow/*)
+      .codex/agents/*.toml)
+        local adapter_role="${path##*/}"
+        adapter_role="${adapter_role%.toml}"
+        case "$adapter_role" in
+          producer_system_designer|gameplay_designer|game_visual_interaction_designer|runtime_engineer|blockchain_ops_engineer|wasm_platform_engineer|agent_engineer|viewer_engineer|qa_engineer|repository_health_engineer|liveops_community)
+            roles="$(append_unique_token "$roles" "$adapter_role")"
+            ;;
+          *)
+            echo "prepare-task-pr: unknown Codex specialist adapter basename: $path" >&2
+            return 1
+            ;;
+        esac
+        ;;
+    esac
+    case "$path" in
+      .agents/roles/*.md)
+        local role_card_role="${path##*/}"
+        role_card_role="${role_card_role%.md}"
+        case "$role_card_role" in
+          producer_system_designer|gameplay_designer|game_visual_interaction_designer|runtime_engineer|blockchain_ops_engineer|wasm_platform_engineer|agent_engineer|viewer_engineer|qa_engineer|repository_health_engineer|liveops_community)
+            roles="$(append_unique_token "$roles" "$role_card_role")"
+            ;;
+        esac
+        ;;
+    esac
+    case "$path" in
+      .codex/config.toml)
+        for registry_role in \
+          producer_system_designer gameplay_designer game_visual_interaction_designer \
+          runtime_engineer blockchain_ops_engineer wasm_platform_engineer agent_engineer \
+          viewer_engineer qa_engineer repository_health_engineer liveops_community; do
+          roles="$(append_unique_token "$roles" "$registry_role")"
+        done
+        ;;
+    esac
+    case "$path" in
+      AGENTS.md|.agents/roles/tpm.md|.agents/roles/templates/subagent-slice-card.md|.agents/skills/repo-owned-workflow-router/SKILL.md|.agents/skills/requesting-repo-owned-review/SKILL.md|.codex/config.toml|.codex/agents/*|.github/workflows/*|.github/workflows/**/*|scripts/prepare-task-pr.sh|scripts/pr-review-thread-closeout.sh|scripts/pm/claim-ready.sh|scripts/pm/task-closeout.sh|scripts/pm/workflow-lint.sh|scripts/pm/workflow-behavior-eval.sh|scripts/pm/validate-codex-agent-config.py|scripts/pm/*test*.sh|scripts/*test*.sh|scripts/plan-rust-required-scope.sh|scripts/ci-tests.sh|testing-manual.md|doc/testing/*|doc/testing/**/*|doc/*verification*|doc/**/*verification*|doc/*readiness*|doc/**/*readiness*|doc/engineering/workflow/*)
         roles="$(append_unique_token "$roles" "qa_engineer")"
         ;;
     esac
@@ -556,6 +592,7 @@ def emit(
     wasm_evidence: str = "",
     ops_evidence: str = "",
     liveops_evidence: str = "",
+    reviewed_source_head: str = "",
 ) -> None:
     print(f"status={status}")
     print(f"task_uid={task_uid}")
@@ -574,6 +611,7 @@ def emit(
     print(f"wasm_evidence={wasm_evidence}")
     print(f"ops_evidence={ops_evidence}")
     print(f"liveops_evidence={liveops_evidence}")
+    print(f"reviewed_source_head={reviewed_source_head}")
     raise SystemExit(0)
 
 task_uid_re = re.compile(r"^task_[0-9a-f]{32}$")
@@ -926,6 +964,7 @@ if missing:
         wasm_evidence=wasm_evidence,
         ops_evidence=ops_evidence,
         liveops_evidence=liveops_evidence,
+        reviewed_source_head=reviewed_source_head,
     )
 
 emit(
@@ -944,6 +983,7 @@ emit(
     wasm_evidence=wasm_evidence,
     ops_evidence=ops_evidence,
     liveops_evidence=liveops_evidence,
+    reviewed_source_head=reviewed_source_head,
 )
 PY
 }
@@ -1044,7 +1084,7 @@ OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=$RUN_WORKSPACE_SUPPORT_CRATE_TESTS \
       esac
     fi
     if [[ -n "$LOCAL_REQUIRED_COMMAND" ]]; then
-      CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verify-command" "$LOCAL_REQUIRED_COMMAND")"
+      CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verification-profile" "repository_required")"
     fi
   fi
 fi
@@ -1072,6 +1112,7 @@ LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "vi
 LOCAL_ROLE_REVIEW_WASM_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "wasm_evidence")"
 LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_evidence")"
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
+LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
 MISSING_REQUIRED_REVIEW_ROLES="$(missing_required_review_roles "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_ROLES")"
 MISSING_SEMANTIC_REVIEW_EVIDENCE="$(semantic_review_evidence_missing "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE")"
@@ -1086,6 +1127,15 @@ fi
 
 if [[ "$CREATE_PR" == "1" && -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
   die "pre-PR local role review is missing required semantic evidence for inferred roles: $MISSING_SEMANTIC_REVIEW_EVIDENCE"
+fi
+if [[ "$CREATE_PR" == "1" ]]; then
+  [[ "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" != n/a* ]] || die "pre-PR local role review requires a machine-checkable slice provenance ledger"
+  python3 "$ROOT_DIR/scripts/pm/validate-review-provenance.py" \
+    --root "$SOURCE_WORKTREE" \
+    --ledger "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" \
+    --roles "$LOCAL_ROLE_REVIEW_ROLES" \
+    --source-head "$LOCAL_ROLE_REVIEW_SOURCE_HEAD" >/dev/null \
+    || die "pre-PR local role review provenance validation failed"
 fi
 
 WORKFLOW_LINT_ARGS=("--phase" "pr-ready" "--allow-unbound")
@@ -1172,8 +1222,8 @@ SYNC_CMD=""
 if [[ -n "$BASE_WORKTREE" ]]; then
   SYNC_CMD="git -C $BASE_WORKTREE pull --ff-only $REMOTE_NAME $BASE_BRANCH"
 fi
-CLEANUP_CMD_1="git -C $CANONICAL_REPO_ROOT worktree remove -f $SOURCE_WORKTREE"
-CLEANUP_CMD_2="git -C $CANONICAL_REPO_ROOT branch -D $SOURCE_BRANCH"
+CLEANUP_CMD_1="RECEIPT_ROOT=\$(python3 $CANONICAL_REPO_ROOT/scripts/pm/canonical-receipt-root.py --default-worktree $CANONICAL_REPO_ROOT --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --create) && python3 $CANONICAL_REPO_ROOT/scripts/pm/pr-merge-receipt.py <pr-number> --json > \"\$RECEIPT_ROOT/merge-receipt.json\" && $CANONICAL_REPO_ROOT/scripts/pm/post-merge-main-sync.sh --repo-root $CANONICAL_REPO_ROOT --main-ref $BASE_BRANCH --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --pr-receipt \"\$RECEIPT_ROOT/merge-receipt.json\" --receipt-output \"\$RECEIPT_ROOT/main-sync-receipt.json\" && $CANONICAL_REPO_ROOT/scripts/pm/post-merge-cleanup.sh --repo-root $CANONICAL_REPO_ROOT --worktree $SOURCE_WORKTREE --branch $SOURCE_BRANCH --main-ref $BASE_BRANCH --task-uid ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown} --pr-receipt \"\$RECEIPT_ROOT/merge-receipt.json\" --main-sync-receipt \"\$RECEIPT_ROOT/main-sync-receipt.json\" --terminal-receipt-output \"\$RECEIPT_ROOT/terminal-cleanup-receipt.json\""
+CLEANUP_CMD_2=""
 
 PR_URL=""
 if [[ "$CREATE_PR" == "1" ]]; then
@@ -1183,7 +1233,28 @@ if [[ "$CREATE_PR" == "1" ]]; then
   elif [[ "$LOCAL_ONLY_COUNT" != "0" || "$REMOTE_ONLY_COUNT" != "0" ]]; then
     git -C "$SOURCE_WORKTREE" push "$REMOTE_NAME" "$SOURCE_BRANCH"
   fi
-  PR_URL="$("${CREATE_CMD[@]}")"
+  CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  EXISTING_PR_JSON="$(gh pr list --state all --head "$SOURCE_BRANCH" --base "$BASE_BRANCH" --json url,headRefName,baseRefName,state,headRepository,headRepositoryOwner --limit 100)"
+  PR_URL="$(python3 - "$SOURCE_BRANCH" "$BASE_BRANCH" "$CURRENT_REPO" "$EXISTING_PR_JSON" <<'PY'
+import json, sys
+head, base, repo, raw = sys.argv[1:]
+owner, name = repo.split('/', 1)
+def repo_identity(item):
+    raw_owner=item.get('headRepositoryOwner') or {}
+    raw_repo=item.get('headRepository') or {}
+    return (raw_owner.get('login') if isinstance(raw_owner,dict) else raw_owner, raw_repo.get('name') if isinstance(raw_repo,dict) else raw_repo)
+exact = [item for item in json.loads(raw) if item.get("headRefName") == head and item.get("baseRefName") == base and repo_identity(item) == (owner,name)]
+if any(str(item.get('state')).upper() == 'MERGED' for item in exact):
+    raise SystemExit("prepare-task-pr: exact repository/head/base PR is already MERGED; reconcile task truth instead of creating a replacement")
+matches = [item for item in exact if item.get("state", "OPEN").upper() == "OPEN"]
+if len(matches) > 1:
+    raise SystemExit("prepare-task-pr: multiple OPEN PRs match exact repository/head/base")
+print(matches[0]["url"] if matches else "")
+PY
+)"
+  if [[ -z "$PR_URL" ]]; then
+    PR_URL="$("${CREATE_CMD[@]}")"
+  fi
   if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
     RECORD_PR_ERR="$(mktemp)"
     if ! python3 "$ROOT_DIR/scripts/pm/github-project-task.py" record-pr "$SOURCE_WORKTREE" \
@@ -1194,7 +1265,7 @@ if [[ "$CREATE_PR" == "1" ]]; then
       --json >/dev/null 2>"$RECORD_PR_ERR"; then
       RECORD_PR_FAILURE="$(cat "$RECORD_PR_ERR")"
       rm -f "$RECORD_PR_ERR"
-      die "failed to record PR watch state for $LOCAL_ROLE_REVIEW_TASK_UID: $RECORD_PR_FAILURE"
+      die "PR exists at $PR_URL but task record transition failed for $LOCAL_ROLE_REVIEW_TASK_UID: $RECORD_PR_FAILURE; recover with: python3 scripts/pm/github-project-task.py record-pr '$SOURCE_WORKTREE' --task-uid '$LOCAL_ROLE_REVIEW_TASK_UID' --pr-url '$PR_URL' --role tpm --validation-command 'resume exact head/base PR record' --json"
     fi
     rm -f "$RECORD_PR_ERR"
   fi

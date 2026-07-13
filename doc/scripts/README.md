@@ -5,6 +5,7 @@
 ## 从这里开始
 - 想先理解脚本模块的边界、门禁与维护口径：`doc/scripts/prd.md`
 - 想看当前脚本治理任务与最近完成项：`doc/scripts/project.md`
+- 想进入 scripts 治理专题并按问题选择当前规范：`doc/scripts/governance/README.md`
 - 想按专题文件名精确查 precommit / wasm / governance 文档：`doc/scripts/prd.index.md`
 - 想直接为新需求开独立 worktree：`scripts/new-task-worktree.sh` + `doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`
 - 想把 task 的 GitHub-backed ready-for-PR closeout 连同 fresh verification 一步收口：`scripts/pm/task-closeout.sh` + `.pm/README.md`
@@ -41,15 +42,13 @@
 - 承接脚本治理基线、文档门禁与运行约束收口。
 
 ## 主题文档
-- `precommit/`：提交前检查与门禁策略。
-- `wasm/`：WASM 构建脚本与环境约束。
-- `governance/`：脚本分层、参数契约、worktree harness 与 task worktree bootstrap 专题。
+- `precommit/`：提交前检查与门禁策略；先从 `doc/scripts/precommit/README.md` 按问题选择当前契约或修复流程。
+- `wasm/`：WASM 构建脚本历史证据与环境约束；先从 `doc/scripts/wasm/README.md` 区分历史 build-std 追溯和现行发布级 canonical pipeline。
+- `governance/`：脚本分层、参数契约与 task/worktree 治理；先从 `doc/scripts/governance/README.md` 选择权威专题。
 
 ## 高频专题
-- 脚本治理基线：`doc/scripts/governance/script-entry-layering-2026-03-11.prd.md`、`doc/scripts/governance/script-parameter-contracts-2026-03-11.prd.md`；历史稳定性趋势基线保留在 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
-- task worktree / PR 收口：`doc/scripts/governance/task-worktree-bootstrap-2026-03-27.prd.md`、`doc/scripts/governance/task-worktree-github-pr-closure-2026-04-10.prd.md`、`doc/scripts/governance/task-worktree-landing-2026-03-27.prd.md`
-- 隔离栈：`doc/scripts/governance/worktree-isolated-harness-2026-03-27.prd.md`
-- 其他高频入口：`doc/scripts/precommit/pre-commit.prd.md`
+- 脚本治理、task worktree / PR 收口与隔离栈：`doc/scripts/governance/README.md`；历史稳定性趋势基线保留在 `doc/scripts/evidence/script-stability-trend-baseline-2026-03-11.md`
+- 想进入 pre-commit 本地门禁或失败修复专题：`doc/scripts/precommit/README.md`
 
 ## 根目录收口
 - 模块根目录主入口保留：`README.md`、`prd.md`、`design.md`、`project.md`、`prd.index.md`。

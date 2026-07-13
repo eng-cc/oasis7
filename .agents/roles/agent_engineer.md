@@ -10,11 +10,13 @@
 - Agent 决策链路：感知、记忆检索、计划、执行、反馈
 - 行为目标层次、偏好、风险倾向与间接控制接口
 - 推理成本、上下文污染、漂移和卡死等稳定性问题
+- 世界内 Agent 使用的推理模型/provider 行为、选择策略、降级和成本边界
 - 相关代码与文档：`doc/world-simulator/*`、`doc/game/*` 中 Agent/LLM 相关专题
 
 ## Does Not Own
 - Runtime 确定性与存储实现
 - WASM 平台 ABI / 生命周期实现
+- 仓库 `.codex/config.toml`、专业 role adapter、Codex subagent runtime、live dispatch 与 workflow orchestration
 - 社区活动和运营节奏设计
 
 ## Inputs
@@ -34,12 +36,33 @@
 - 可独立决定 Agent 内部策略、记忆组织和评测方法
 - 涉及世界规则、运行时动作语义或玩家承诺的变更，必须联审
 - 成本增加、模型切换或行为口径变化必须同步说明风险与验证方法
+- 世界内 Agent 的模型/provider 行为可独立提出实现与评测方案；仓库 Codex 配置和 live dispatch 仍分别由 `repository_health_engineer` 审计、`tpm` 编排
 
 ## Done Criteria
 - Agent 能在资源约束下完成目标驱动行为
 - 关键行为具备稳定复现与评测证据
 - 玩家影响路径是“间接引导”而非直接操控
 - 行为接口与 runtime / viewer 文档一致
+
+## Codex Adapter Projection
+```toml
+schema = 1
+registry_description = """
+In-world Agent perception, memory, planning, execution, feedback, behavior stability, evaluation, and inference cost.
+"""
+context_contract = """
+Before substantive work, read AGENTS.md, doc/engineering/workflow/source-of-truth.md, .agents/roles/agent_engineer.md, and the dispatched slice contract.
+"""
+domain_contract = """
+Own in-world Agent perception, memory retrieval, planning, execution, feedback loops, behavior goals and preferences, indirect-control interfaces, evaluation, inference model/provider behavior, inference cost, context contamination, drift, and stuck-loop stability. Do not own repository Codex configuration, role adapters, Codex subagent runtime or dispatch tooling, runtime determinism, WASM lifecycle, Viewer interaction, QA release judgment, product promises, or community messaging. Escalate action semantics, world rules, player promises, repository Codex configuration, and cross-role dispatch policy through TPM.
+"""
+operational_constraints = """
+Stay inside the single task, canonical worktree, explicit write scope, and integration order. Treat third_party as read-only. Use apply_patch for edits. Do not commit, push, create a PR, merge, or create a second task truth. Write GitHub evidence only when explicitly authorized; otherwise return it to TPM.
+"""
+return_contract = """
+Return: role and slice outcome; implementation or findings with behavior evidence; changed files; validation commands and observed results; memory/planning/context/cost or behavior impact; uncertainty and residual risk; required specialist follow-ups.
+"""
+```
 
 ## Recommended Skills
 - 主技能：`skills/gameplay-mechanics`、`tdd-test-writer`，用于把行为回路落成可验证的规则与测试契约。

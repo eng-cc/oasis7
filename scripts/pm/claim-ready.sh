@@ -21,7 +21,10 @@ Claim types:
 Options:
   --claim-type <type>        Claim category to guard
   --verify-command <cmd>     Fresh verification command to execute via `bash -lc`
+  --verification-profile <name> Repository-owned named verification profile
   --task-uid <task_uid>      Persist the verification result into one task file
+  --comparison-ref <ref>     Base ref for immutable range hygiene; derived from origin/main or main when omitted
+  --pr-gate-json <path>      Fresh pr-lifecycle-gate JSON (required for ready_for_merge)
   --json                     Print machine-readable JSON summary
   -h, --help                 Show help
 
@@ -40,6 +43,9 @@ CLAIM_TYPE=""
 VERIFY_COMMAND=""
 OUTPUT_JSON=0
 TASK_UID=""
+COMPARISON_REF=""
+PR_GATE_JSON=""
+VERIFICATION_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -51,6 +57,7 @@ while [[ $# -gt 0 ]]; do
       VERIFY_COMMAND="${2:-}"
       shift 2
       ;;
+    --verification-profile) VERIFICATION_PROFILE="${2:-}"; shift 2 ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -59,6 +66,11 @@ while [[ $# -gt 0 ]]; do
       TASK_UID="${2:-}"
       shift 2
       ;;
+    --comparison-ref)
+      COMPARISON_REF="${2:-}"
+      shift 2
+      ;;
+    --pr-gate-json) PR_GATE_JSON="${2:-}"; shift 2 ;;
     -h|--help)
       usage
       exit 0
@@ -70,7 +82,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$CLAIM_TYPE" ]] || die "--claim-type is required"
-[[ -n "$VERIFY_COMMAND" ]] || die "--verify-command is required"
+if [[ -n "$VERIFICATION_PROFILE" ]]; then
+  case "$VERIFICATION_PROFILE" in
+    codex_subagent_role_fit) VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh" ;;
+    workflow_behavior) VERIFY_COMMAND="./scripts/pm/workflow-behavior-eval.sh" ;;
+    repository_required) VERIFY_COMMAND="./scripts/ci-tests.sh required" ;;
+    fixture_repository_state)
+      [[ "${OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE:-0}" == "1" ]] || die "fixture_repository_state is test-only"
+      VERIFY_COMMAND="${OASIS7_FIXTURE_VERIFICATION_COMMAND:-${VERIFY_COMMAND:-test -f .gitignore}}"
+      ;;
+    *) die "unknown repository verification profile: $VERIFICATION_PROFILE" ;;
+  esac
+elif [[ "$CLAIM_TYPE" == "task_complete" || "$CLAIM_TYPE" == "ready_for_pr" || "$CLAIM_TYPE" == "ready_for_merge" ]]; then
+  die "$CLAIM_TYPE requires --verification-profile; arbitrary --verify-command is not lifecycle proof"
+fi
+[[ -n "$VERIFY_COMMAND" ]] || die "--verify-command or --verification-profile is required"
 
 CLAIM_LABEL=""
 BLOCKED_PHRASE=""
@@ -100,6 +126,47 @@ case "$CLAIM_TYPE" in
     die "unsupported --claim-type: $CLAIM_TYPE"
     ;;
 esac
+
+if [[ "$CLAIM_LABEL" == "ready_for_merge" ]]; then
+  [[ -n "$PR_GATE_JSON" && -f "$PR_GATE_JSON" ]] || die "ready_for_merge requires --pr-gate-json from pr-lifecycle-gate.py"
+  [[ -n "$TASK_UID" ]] || die "ready_for_merge requires --task-uid for live gate revalidation"
+  python3 - "$PR_GATE_JSON" <<'PY'
+import datetime as dt, json, re, sys
+p = json.load(open(sys.argv[1], encoding="utf-8"))
+if p.get("ready_for_merge") is not True or p.get("status") != "ready" or p.get("blockers"):
+    raise SystemExit("claim-ready: PR lifecycle gate is not ready")
+r = p.get("readiness_receipt")
+if not isinstance(r, dict) or r.get("receipt_type") != "oasis7_pr_lifecycle_ready" or r.get("issuer") != "oasis7_pr_lifecycle_gate/v1":
+    raise SystemExit("claim-ready: trusted live-gate readiness receipt is missing")
+required = ("repository", "pr_number", "head_oid", "observed_at", "gate_epoch")
+if any(not str(r.get(key) or "").strip() for key in required):
+    raise SystemExit("claim-ready: readiness receipt is not bound to repo/pr/head/time/epoch")
+if not re.fullmatch(r"[0-9a-f]{64}", str(r["gate_epoch"])):
+    raise SystemExit("claim-ready: invalid readiness gate epoch")
+try:
+    observed = dt.datetime.fromisoformat(str(r["observed_at"]).replace("Z", "+00:00"))
+except ValueError as exc:
+    raise SystemExit("claim-ready: invalid readiness observed_at") from exc
+age = dt.datetime.now(dt.timezone.utc) - observed.astimezone(dt.timezone.utc)
+if age.total_seconds() < -30 or age.total_seconds() > 600:
+    raise SystemExit("claim-ready: stale readiness receipt; rerun the live PR lifecycle gate")
+PY
+  PR_NUMBER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["readiness_receipt"]["pr_number"])' "$PR_GATE_JSON")"
+  LIVE_GATE_JSON="$(mktemp)"
+  if ! python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "$PR_NUMBER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --json >"$LIVE_GATE_JSON"; then
+    rm -f "$LIVE_GATE_JSON"
+    die "live PR lifecycle gate is not ready; rerun watch/fix before claiming merge readiness"
+  fi
+  python3 - "$PR_GATE_JSON" "$LIVE_GATE_JSON" <<'PY'
+import json, sys
+supplied=json.load(open(sys.argv[1],encoding="utf-8"))["readiness_receipt"]
+live=json.load(open(sys.argv[2],encoding="utf-8")).get("readiness_receipt") or {}
+for key in ("issuer","repository","pr_number","head_oid","gate_epoch"):
+    if str(supplied.get(key)) != str(live.get(key)):
+        raise SystemExit(f"claim-ready: readiness receipt drifted at {key}; use the fresh live gate output")
+PY
+  rm -f "$LIVE_GATE_JSON"
+fi
 
 if [[ -n "$TASK_UID" && "$CLAIM_LABEL" != "task_complete" ]]; then
   python3 - "$ROOT_DIR" "$TASK_UID" "$CLAIM_LABEL" <<'PY'
@@ -191,18 +258,82 @@ fi
 
 STDOUT_CAPTURE="$(mktemp)"
 STDERR_CAPTURE="$(mktemp)"
+FINGERPRINT_BEFORE="$(mktemp)"
+FINGERPRINT_AFTER="$(mktemp)"
+VERIFY_ROOT="$ROOT_DIR"
+VERIFY_WORKTREE=""
 cleanup() {
-  rm -f "$STDOUT_CAPTURE" "$STDERR_CAPTURE"
+  if [[ -n "$VERIFY_WORKTREE" ]]; then
+    git -C "$ROOT_DIR" worktree remove --force "$VERIFY_WORKTREE" >/dev/null 2>&1 || true
+  fi
+  rm -f "$STDOUT_CAPTURE" "$STDERR_CAPTURE" "$FINGERPRINT_BEFORE" "$FINGERPRINT_AFTER"
 }
 trap cleanup EXIT
 
+FROZEN_HEAD=""
+FROZEN_TREE=""
+VERIFICATION_MODE="live_nonfinal"
+if [[ "$CLAIM_LABEL" == "task_complete" || "$CLAIM_LABEL" == "ready_for_pr" ]]; then
+  git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
+    || die "$CLAIM_LABEL requires a Git worktree with an immutable committed source"
+  DIRTY_IMPLEMENTATION_PATHS="$(git -C "$ROOT_DIR" status --porcelain --untracked-files=all | awk '
+    { path=substr($0,4) }
+    path == ".pm/github-project-sync/tasks.json" { next }
+    path == ".pm/registry/tasks.yaml" { next }
+    path ~ /^\.pm\/roles\/[^\/]+\/backlog\// { next }
+    { print }
+  ')"
+  [[ -z "$DIRTY_IMPLEMENTATION_PATHS" ]] \
+    || die "$CLAIM_LABEL requires a clean implementation-freeze commit; only generated task-cache/backlog evidence may differ: $DIRTY_IMPLEMENTATION_PATHS"
+  FROZEN_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+  FROZEN_TREE="$(git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
+  if [[ -z "$COMPARISON_REF" ]]; then
+    if git -C "$ROOT_DIR" rev-parse --verify refs/remotes/origin/main >/dev/null 2>&1; then
+      COMPARISON_REF="refs/remotes/origin/main"
+    elif git -C "$ROOT_DIR" rev-parse --verify main >/dev/null 2>&1; then
+      COMPARISON_REF="main"
+    elif git -C "$ROOT_DIR" rev-parse --verify HEAD^ >/dev/null 2>&1; then
+      COMPARISON_REF="HEAD^"
+    else
+      COMPARISON_REF="$FROZEN_HEAD"
+    fi
+  fi
+  git -C "$ROOT_DIR" rev-parse --verify "$COMPARISON_REF" >/dev/null 2>&1 \
+    || die "comparison ref is not resolvable: $COMPARISON_REF"
+  git -C "$ROOT_DIR" diff --check "$COMPARISON_REF...$FROZEN_HEAD" \
+    || die "immutable comparison range failed git diff --check: $COMPARISON_REF...$FROZEN_HEAD"
+  VERIFY_WORKTREE="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-claim-snapshot.XXXXXX")"
+  rmdir "$VERIFY_WORKTREE"
+  git -C "$ROOT_DIR" worktree add --detach "$VERIFY_WORKTREE" "$FROZEN_HEAD" >/dev/null
+  if [[ -f "$ROOT_DIR/.pm/github-project-sync/tasks.json" ]]; then
+    mkdir -p "$VERIFY_WORKTREE/.pm/github-project-sync"
+    cp "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$VERIFY_WORKTREE/.pm/github-project-sync/tasks.json"
+  fi
+  VERIFY_ROOT="$VERIFY_WORKTREE"
+  VERIFICATION_MODE="detached_frozen_tree"
+fi
+
+python3 "$SCRIPT_DIR/repo-state-fingerprint.py" "$VERIFY_ROOT" >"$FINGERPRINT_BEFORE"
+
 set +e
 (
-  cd "$ROOT_DIR"
-  /bin/bash -lc "$VERIFY_COMMAND"
+  cd "$VERIFY_ROOT"
+  OASIS7_CLAIM_COMPARISON_REF="$COMPARISON_REF" /bin/bash -lc "$VERIFY_COMMAND"
 ) >"$STDOUT_CAPTURE" 2>"$STDERR_CAPTURE"
 VERIFY_EXIT_CODE=$?
 set -e
+
+python3 "$SCRIPT_DIR/repo-state-fingerprint.py" "$VERIFY_ROOT" >"$FINGERPRINT_AFTER"
+FINGERPRINT_BEFORE_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$FINGERPRINT_BEFORE")"
+FINGERPRINT_AFTER_SHA="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha256"])' "$FINGERPRINT_AFTER")"
+EPOCH_STABLE=true
+if [[ "$FINGERPRINT_BEFORE_SHA" != "$FINGERPRINT_AFTER_SHA" ]]; then
+  EPOCH_STABLE=false
+  if [[ "$VERIFY_EXIT_CODE" == "0" ]]; then
+    VERIFY_EXIT_CODE=86
+  fi
+  printf 'claim-ready: repository state changed during verification epoch\n' >&2
+fi
 
 VERIFIED_AT="$(date -Iseconds)"
 STATUS="verified"
@@ -215,7 +346,7 @@ if [[ "$VERIFY_EXIT_CODE" != "0" ]]; then
 fi
 
 RESULT_JSON="$(
-python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" "$TASK_UID" <<'PY'
+python3 - "$CLAIM_LABEL" "$VERIFY_COMMAND" "$VERIFIED_AT" "$VERIFY_EXIT_CODE" "$STATUS" "$ALLOWED_TO_CLAIM" "$CLAIM_MESSAGE" "$BLOCKED_PHRASE" "$SUCCESS_PHRASE" "$TASK_UID" "$FINGERPRINT_BEFORE_SHA" "$FINGERPRINT_AFTER_SHA" "$EPOCH_STABLE" "$VERIFICATION_MODE" "$FROZEN_HEAD" "$FROZEN_TREE" "$COMPARISON_REF" "$VERIFICATION_PROFILE" <<'PY'
 from __future__ import annotations
 
 import json
@@ -232,6 +363,14 @@ payload = {
     "blocked_phrase": sys.argv[8],
     "success_phrase": sys.argv[9],
     "task_uid": sys.argv[10] or None,
+    "repository_fingerprint_before": sys.argv[11],
+    "repository_fingerprint_after": sys.argv[12],
+    "verification_epoch_stable": sys.argv[13] == "true",
+    "verification_mode": sys.argv[14],
+    "frozen_source_head": sys.argv[15] or None,
+    "frozen_source_tree": sys.argv[16] or None,
+    "comparison_ref": sys.argv[17] or None,
+    "verification_profile": sys.argv[18] or None,
 }
 print(json.dumps(payload, ensure_ascii=False))
 PY
@@ -256,15 +395,6 @@ mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
 record = (mapping.get("tasks") or {}).get(task_uid)
 if not record:
     raise SystemExit(0)
-record.setdefault("claim_verifications", []).append(claim)
-record["last_claim_type"] = claim["claim_type"]
-record["last_verify_command"] = claim["verify_command"]
-record["last_verified_at"] = claim["verified_at"]
-record["last_verification_exit_code"] = claim["verification_exit_code"]
-record["last_verification_status"] = claim["status"]
-record["last_claim_verification_at"] = claim["verified_at"]
-record["updated_at"] = claim["verified_at"]
-mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 repo = ((mapping.get("project") or {}).get("repo") or "eng-cc/oasis7")
 issue_number = int(record.get("issue_number") or 0)
 if issue_number:
@@ -365,71 +495,8 @@ if isinstance(hits, list) and len(hits) == 1 and hits[0].get("number"):
 
     if issue is not None:
         body_text = str(issue.get("body") or "")
-        if re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body_text, re.MULTILINE):
-            fields: dict[str, object] = {}
-            for key in ("owner_role", "module", "status", "priority", "worktree_hint", "pr_url", "pr_number"):
-                match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body_text, re.MULTILINE)
-                if match:
-                    fields[key] = match.group(1)
-            source_refs = re.findall(r"^- `([^`]+)`$", body_text, re.MULTILINE)
-            if source_refs:
-                fields["source_refs"] = source_refs
-            acceptance_match = re.search(r"^Acceptance:\n(?P<body>(?:^- .+\n?)+)", body_text, re.MULTILINE)
-            if acceptance_match:
-                fields["acceptance"] = [
-                    line[2:].strip()
-                    for line in acceptance_match.group("body").splitlines()
-                    if line.startswith("- ")
-                ]
-            title = str(issue.get("title") or "")
-            if title.startswith("[PM] "):
-                title = title[5:]
-            record = {
-                "task_uid": task_uid,
-                "title": title,
-                "issue_number": int(issue.get("number") or issue_number),
-                "issue_url": str(issue.get("url") or f"https://github.com/{repo}/issues/{issue_number}"),
-                "_github_source": "issue_search",
-                **fields,
-            }
-            try:
-                project_payload = subprocess.check_output(
-                    [
-                        "gh",
-                        "project",
-                        "item-list",
-                        "1",
-                        "--owner",
-                        "eng-cc",
-                        "--limit",
-                        "1000",
-                        "--format",
-                        "json",
-                    ],
-                    text=True,
-                    stderr=subprocess.PIPE,
-                    timeout=180,
-                )
-                project = json.loads(project_payload)
-                for item in project.get("items", []) or []:
-                    content = item.get("content") or {}
-                    if task_uid in str(content.get("body") or "") or str(content.get("url") or "") == record["issue_url"]:
-                        if item.get("id"):
-                            record["project_item_id"] = str(item["id"])
-                        break
-            except (subprocess.CalledProcessError, json.JSONDecodeError, subprocess.TimeoutExpired):
-                pass
-            record.setdefault("claim_verifications", []).append(claim)
-            record["last_claim_verification_at"] = claim["verified_at"]
-            record["updated_at"] = claim["verified_at"]
-            mapping_path = root / ".pm/github-project-sync/tasks.json"
-            mapping = {
-                "project": {"owner": "eng-cc", "number": 1, "repo": repo},
-                "version": 1,
-                "tasks": {task_uid: record},
-            }
-            mapping_path.parent.mkdir(parents=True, exist_ok=True)
-            mapping_path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if not re.search(rf"^task_uid:\s*{re.escape(task_uid)}$", body_text, re.MULTILINE):
+            issue = None
 
     body = "\n".join(
         [

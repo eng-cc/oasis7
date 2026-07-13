@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SOURCE_ROOT="$ROOT_DIR"
 REAL_GIT="$(command -v git)"
 
 TMPDIR="$(mktemp -d)"
+FIXTURE_ROOT="$TMPDIR/repo"
+mkdir -p "$FIXTURE_ROOT"
+(cd "$SOURCE_ROOT" && git ls-files -co --exclude-standard -z | tar --null -T - -cf -) | tar -xf - -C "$FIXTURE_ROOT"
+"$REAL_GIT" -C "$FIXTURE_ROOT" init -q -b main
+"$REAL_GIT" -C "$FIXTURE_ROOT" config user.email test@example.com
+"$REAL_GIT" -C "$FIXTURE_ROOT" config user.name Test
+"$REAL_GIT" -C "$FIXTURE_ROOT" add .
+"$REAL_GIT" -C "$FIXTURE_ROOT" commit -qm "fixture snapshot"
+"$REAL_GIT" -C "$FIXTURE_ROOT" update-ref refs/remotes/origin/main HEAD
+ROOT_DIR="$FIXTURE_ROOT"
 cleanup() {
   "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "${SMOKE_WORKTREE:-$TMPDIR/smoke-worktree}" >/dev/null 2>&1 || true
   if [[ -n "${SMOKE_WORKTREE_CANONICAL:-}" ]]; then
@@ -75,6 +87,16 @@ printf '%s\n' "$*" >> "$LOG_FILE"
 
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
   printf 'https://github.com/example/oasis7/pull/999\n'
+  exit 0
+fi
+
+if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
+  printf '%s\n' "${TEST_EXISTING_PR_JSON:-[]}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
+  printf 'example/oasis7\n'
   exit 0
 fi
 
@@ -175,6 +197,28 @@ write_project_trace() {
 EOF
 }
 
+write_slice_ledger() {
+  local source_head="$1"
+  local ledger_dir="$SMOKE_WORKTREE/.pm/scratch/$TASK_UID"
+  local ledger="$ledger_dir/slice-ledger.jsonl"
+  mkdir -p "$ledger_dir"
+  : >"$ledger"
+  local index=0
+  for role in producer_system_designer repository_health_engineer qa_engineer; do
+    index=$((index + 1))
+    local artifact="$ledger_dir/${role}-return.md"
+    local receipt="$ledger_dir/${role}-dispatch.json"
+    local dispatch_id="11111111-1111-4111-8111-$(printf '%012d' "$index")"
+    printf '%s review return\n' "$role" >"$artifact"
+    local digest
+    digest="$(shasum -a 256 "$artifact" | awk '{print $1}')"
+    printf '{"receipt_type":"oasis7_subagent_dispatch","issuer":"codex_runtime","dispatch_id":"%s","role":"%s","source_head":"%s","contract_digest":"%064d"}\n' \
+      "$dispatch_id" "$role" "$source_head" 0 >"$receipt"
+    printf '{"task_uid":"%s","role":"%s","status":"completed","head":"%s","slice_id":"%s","dispatch_receipt":".pm/scratch/%s/%s-dispatch.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified: fixture","artifact_digest":"%s","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture risk","artifacts":[".pm/scratch/%s/%s-return.md"]}\n' \
+      "$TASK_UID" "$role" "$source_head" "$dispatch_id" "$TASK_UID" "$role" "$digest" "$TASK_UID" "$role" >>"$ledger"
+  done
+}
+
 write_role_review_packet() {
   local source_head="$1"
   local disposition="$2"
@@ -219,6 +263,7 @@ write_role_review_packet() {
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
+  write_slice_ledger "$source_head"
 }
 
 write_shadowed_role_review_packet() {
@@ -276,6 +321,7 @@ write_shadowed_role_review_packet() {
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
+  write_slice_ledger "$source_head"
 }
 
 write_prefix_mismatch_role_review_packet() {
@@ -320,6 +366,7 @@ write_prefix_mismatch_role_review_packet() {
 - Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl
 - Blocker / Next Action: none.
 EOF
+  write_slice_ledger "$source_head"
 }
 
 commit_fixture_evidence() {
@@ -421,7 +468,56 @@ assert_roles_for_path "crates/oasis7/src/viewer/server.rs" "viewer_engineer"
 assert_roles_for_path "scripts/run-viewer-web.sh" "viewer_engineer"
 assert_roles_for_path "doc/world-simulator/viewer/readme.md" "viewer_engineer"
 assert_roles_for_path "doc/world-simulator/viewer/viewer-manual.manual.md" "viewer_engineer"
-assert_roles_for_path "scripts/pm/workflow-behavior-eval.sh" "agent_engineer"
+assert_roles_for_path "scripts/pm/workflow-behavior-eval.sh" "repository_health_engineer" "yes"
+assert_roles_for_path ".codex/config.toml" "repository_health_engineer" "yes"
+assert_roles_for_path "AGENTS.md" "repository_health_engineer" "yes"
+assert_roles_for_path ".agents/roles/tpm.md" "repository_health_engineer" "yes"
+assert_roles_for_path ".agents/roles/templates/subagent-slice-card.md" "repository_health_engineer" "yes"
+assert_roles_for_path ".agents/skills/repo-owned-workflow-router/SKILL.md" "repository_health_engineer" "yes"
+assert_roles_for_path ".agents/skills/requesting-repo-owned-review/SKILL.md" "repository_health_engineer" "yes"
+assert_roles_for_path "scripts/pm/validate-codex-agent-config.py" "repository_health_engineer" "yes"
+assert_roles_for_path "crates/oasis7_agent/src/planner.rs" "agent_engineer"
+
+role_card_roles="$(required_review_roles_from_paths ".agents/roles/agent_engineer.md")"
+for required_role in repository_health_engineer agent_engineer; do
+  if [[ ",$role_card_roles," != *",$required_role,"* ]]; then
+    echo "expected agent_engineer role card to require $required_role, got $role_card_roles" >&2
+    exit 1
+  fi
+done
+
+registry_roles="$(required_review_roles_from_paths ".codex/config.toml")"
+for required_role in \
+  producer_system_designer gameplay_designer game_visual_interaction_designer \
+  runtime_engineer blockchain_ops_engineer wasm_platform_engineer agent_engineer \
+  viewer_engineer qa_engineer repository_health_engineer liveops_community; do
+  if [[ ",$registry_roles," != *",$required_role,"* ]]; then
+    echo "expected Codex registry descriptions to require $required_role, got $registry_roles" >&2
+    exit 1
+  fi
+done
+
+for adapter_role in \
+  producer_system_designer gameplay_designer game_visual_interaction_designer \
+  runtime_engineer blockchain_ops_engineer wasm_platform_engineer agent_engineer \
+  viewer_engineer qa_engineer repository_health_engineer liveops_community; do
+  adapter_path=".codex/agents/${adapter_role}.toml"
+  adapter_roles="$(required_review_roles_from_paths "$adapter_path")"
+  for required_role in repository_health_engineer qa_engineer "$adapter_role"; do
+    if [[ ",$adapter_roles," != *",$required_role,"* ]]; then
+      echo "expected $adapter_path to require $required_role, got $adapter_roles" >&2
+      exit 1
+    fi
+  done
+done
+
+if required_review_roles_from_paths ".codex/agents/unknown_specialist.toml" \
+  >"$TMPDIR/unknown-adapter.out" 2>"$TMPDIR/unknown-adapter.err"; then
+  echo "expected unknown Codex adapter basename rejection" >&2
+  exit 1
+fi
+grep -F "unknown Codex specialist adapter basename" \
+  "$TMPDIR/unknown-adapter.err" >/dev/null
 assert_roles_for_path "doc/readme/release-note.md" "liveops_community"
 assert_roles_for_path "doc/health/node-readiness.md" "blockchain_ops_engineer"
 assert_roles_for_path "crates/oasis7_wasm_abi/src/lib.rs" "wasm_platform_engineer"
@@ -741,6 +837,7 @@ printf '\n# no-cache GitHub-backed PM fixture\n' >> "$SMOKE_WORKTREE/scripts/pre
   -c commit.gpgsign=false \
   commit --allow-empty --no-verify -m "test: no-cache GitHub-backed PM fixture" >/dev/null
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+write_slice_ledger "$SOURCE_HEAD"
 NO_CACHE_ISSUE_LIST="$TMPDIR/no-cache-issue-list.json"
 NO_CACHE_ISSUE_BODY="$TMPDIR/no-cache-issue-body.json"
 NO_CACHE_ISSUE_FULL="$TMPDIR/no-cache-issue-full.json"
@@ -766,7 +863,7 @@ cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
       "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
     },
     {
-      "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: smoke-worktree\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: n/a; smoke fixture\\n"
+      "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: smoke-worktree\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl\\n"
     }
   ]
 }
@@ -958,6 +1055,52 @@ if "Closes #123" not in gh_text:
 if stderr:
     raise SystemExit(f"did not expect stderr on titled create path: {stderr}")
 PY
+reset_project_mapping_after_record_pr
+
+closed_reuse_log="$TMPDIR/gh-closed-reuse.log"
+closed_reuse_git_log="$TMPDIR/git-closed-reuse.log"
+closed_reuse_out="$TMPDIR/closed-reuse.out"
+closed_reuse_err="$TMPDIR/closed-reuse.err"
+TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/closed\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"CLOSED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
+  run_prepare "$closed_reuse_log" "$closed_reuse_git_log" --create \
+  >"$closed_reuse_out" 2>"$closed_reuse_err"
+python3 - "$closed_reuse_log" "$closed_reuse_out" "$closed_reuse_err" "$SMOKE_BRANCH" <<'PY'
+from pathlib import Path
+import sys
+
+gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[2]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
+branch = sys.argv[4]
+if not any(line.startswith(f"pr create --base main --head {branch}") for line in gh_lines):
+    raise SystemExit(f"a CLOSED exact head/base PR must not be reused: {gh_lines}")
+if "pull/closed" in stdout:
+    raise SystemExit(f"closed PR URL leaked into resumed PR result: {stdout}")
+if stderr:
+    raise SystemExit(f"unexpected stderr on closed-PR replacement path: {stderr}")
+PY
+reset_project_mapping_after_record_pr
+
+foreign_log="$TMPDIR/gh-foreign.log"
+foreign_git_log="$TMPDIR/git-foreign.log"
+TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/foreign/oasis7/pull/7\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"OPEN\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"foreign\"}}]" \
+  run_prepare "$foreign_log" "$foreign_git_log" --create >"$TMPDIR/foreign.out" 2>"$TMPDIR/foreign.err"
+grep -F "pr create --base main --head $SMOKE_BRANCH" "$foreign_log" >/dev/null
+if grep -F 'foreign/oasis7/pull/7' "$TMPDIR/foreign.out" >/dev/null; then
+  echo "foreign same-name head PR must not be reused" >&2; exit 1
+fi
+reset_project_mapping_after_record_pr
+
+merged_log="$TMPDIR/gh-merged.log"
+merged_git_log="$TMPDIR/git-merged.log"
+if TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/8\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"MERGED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
+  run_prepare "$merged_log" "$merged_git_log" --create >"$TMPDIR/merged.out" 2>"$TMPDIR/merged.err"; then
+  echo "MERGED exact PR must block replacement creation" >&2; exit 1
+fi
+grep -F 'already MERGED; reconcile task truth' "$TMPDIR/merged.err" >/dev/null
+if grep -F "pr create --base main --head $SMOKE_BRANCH" "$merged_log" >/dev/null; then
+  echo "MERGED exact PR unexpectedly created replacement" >&2; exit 1
+fi
 reset_project_mapping_after_record_pr
 
 bad_body_file="$TMPDIR/bad-pr-body.md"
