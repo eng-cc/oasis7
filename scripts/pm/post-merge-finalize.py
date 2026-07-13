@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Finalize one receipt-proven terminal workflow transition idempotently."""
 from __future__ import annotations
-import argparse, fcntl, hashlib, importlib.util, json, os, pathlib, subprocess, sys, tempfile
+import argparse, fcntl, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 CANONICAL_ROOT_HELPER = SCRIPT_DIR/"canonical-receipt-root.py"
@@ -53,11 +53,19 @@ def _reconcile_comment(record: dict, operation_id: str) -> str:
     if len(matches)!=1: return ""
     return str(matches[0].get("html_url") or matches[0].get("url") or "")
 
-def _project_readback(project_id: str, number: int, item_id: str) -> dict[str,str]:
+def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
+                      issue_number: int, repository: str) -> dict[str,str]:
     item=project_workflow.fetch_project_items_by_ids([item_id]).get(item_id) or {}
     if (str(item.get("id") or "")!=item_id or str(item.get("_project_id") or "")!=project_id
             or str(item.get("_project_number") or "")!=str(number)):
         fail("bound Project item node readback identity mismatch")
+    content=item.get("content") or {}; body=str(content.get("body") or "")
+    url=urllib.parse.urlparse(str(content.get("url") or ""))
+    if (str(content.get("number") or "")!=str(issue_number)
+            or not re.search(rf"^task_uid:\s*{re.escape(task_uid)}\s*$",body,re.MULTILINE)
+            or url.scheme!="https" or url.netloc!="github.com"
+            or url.path.rstrip("/")!=f"/{repository}/issues/{issue_number}"):
+        fail("bound Project item content does not match task issue identity")
     return {name:str(item.get(name) or "") for name in ("Status","PM Status","Workflow Phase")}
 
 def fail(message: str) -> None:
@@ -147,7 +155,8 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
         if not project_done:
             _ledger_transition(ledger_path,task_uid,"project_update","intent")
             uncertain=bool(project_entry.get("action"))
-            live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"])) if uncertain else {}
+            live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                                   task_uid,int(record["issue_number"]),str(record["repository"])) if uncertain else {}
             missing={name for name,value in expected_project.items() if live.get(name)!=value}
             if missing:
                 # Action is durable before the first edit. A crash is resolved
@@ -156,7 +165,8 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
                 updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
                                                    only_fields=missing)
                 if skipped or updated!=len(missing): fail("terminal Project fields were not fully persisted")
-                live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]))
+                live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                                       task_uid,int(record["issue_number"]),str(record["repository"]))
             if any(live.get(name)!=value for name,value in expected_project.items()):
                 fail("terminal Project field readback mismatch")
             _ledger_transition(ledger_path,task_uid,"project_update","readback",live)

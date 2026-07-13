@@ -28,7 +28,7 @@ case "$*" in
   issue\ view*) [[ -e "$ISSUE_CLOSED" ]] && printf '%s\n' '{"state":"CLOSED"}' || printf '%s\n' '{"state":"OPEN"}' ;;
   issue\ close*) : >"$ISSUE_CLOSED"; printf '%s\n' '{}' ;;
   api\ graphql*)
-    printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://example.invalid/issues/11"},"fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}' ;;
+    printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}' ;;
   api*) python3 - "$LIVE_BODY" <<'PY'
 import json,sys
 print(json.dumps([[{"id":1,"html_url":"https://example.invalid/issues/11#issuecomment-1","body":open(sys.argv[1]).read()}]]))
@@ -54,4 +54,26 @@ PY
 grep -q '^issue close 11 -R fixture/repo --reason completed$' "$GH_LOG"
 grep -q '^api graphql ' "$GH_LOG"
 ! grep -q '^project item-list ' "$GH_LOG"
+python3 - "$ROOT_DIR" "$UID_VALUE" <<'PY'
+import importlib.util,pathlib,sys
+path=pathlib.Path(sys.argv[1])/"scripts/pm/post-merge-finalize.py"
+spec=importlib.util.spec_from_file_location("finalizer_identity_test",path)
+module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+base={"id":"ITEM1","_project_id":"P1","_project_number":1,
+      "content":{"body":f"task_uid: {sys.argv[2]}","number":11,
+                 "url":"https://github.com/fixture/repo/issues/11"},
+      "Status":"Done","PM Status":"done","Workflow Phase":"done"}
+for label,mutation in (
+    ("wrong issue",{"content":{**base["content"],"number":12,"url":"https://github.com/fixture/repo/issues/12"}}),
+    ("missing task marker",{"content":{**base["content"],"body":"no task identity"}}),
+    ("wrong repository",{"content":{**base["content"],"url":"https://github.com/other/repo/issues/11"}}),
+):
+    item={**base,**mutation}
+    module.project_workflow.fetch_project_items_by_ids=lambda ids,item=item:{"ITEM1":item}
+    try:
+        module._project_readback("P1",1,"ITEM1",sys.argv[2],11,"fixture/repo")
+    except SystemExit:
+        continue
+    raise SystemExit(f"expected bound Project readback to reject {label}")
+PY
 echo 'post-merge-finalizer-project-ledger-red.test: OK'
