@@ -152,8 +152,11 @@ if age.total_seconds() < -30 or age.total_seconds() > 600:
     raise SystemExit("claim-ready: stale readiness receipt; rerun the live PR lifecycle gate")
 PY
   PR_NUMBER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["readiness_receipt"]["pr_number"])' "$PR_GATE_JSON")"
+  USE_ADMIN_MERGE="$(python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); print("true" if p.get("admin_merge_authorized") is True and p.get("use_admin_merge") is True else "false")' "$PR_GATE_JSON")"
   LIVE_GATE_JSON="$(mktemp)"
-  if ! python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "$PR_NUMBER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --json >"$LIVE_GATE_JSON"; then
+  LIVE_GATE_ARGS=("$PR_NUMBER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --json)
+  [[ "$USE_ADMIN_MERGE" != "true" ]] || LIVE_GATE_ARGS+=(--admin-merge-authorized)
+  if ! python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "${LIVE_GATE_ARGS[@]}" >"$LIVE_GATE_JSON"; then
     rm -f "$LIVE_GATE_JSON"
     die "live PR lifecycle gate is not ready; rerun watch/fix before claiming merge readiness"
   fi

@@ -48,17 +48,20 @@ Pre-PR local role review packet recorded after immutable verification and before
 ## Post-PR / Pre-Merge Gates
 
 7. Record the PR purpose decision after PR creation. Manual packaging/release CI may wait for an operator only when task policy says so.
-8. Otherwise continue the PR watch/fix loop:
+8. Otherwise inspect the current PR gates with one batched read:
 
 ```bash
-./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
+./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <task_uid> --json
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-For a one-shot gate inspection/readback, not a polling loop, run:
+For a stable long-running required check or `required-gate` wait, follow the
+[canonical stable-wait rule](../../../doc/engineering/workflow/source-of-truth.md#stable-required-gate-wait).
+
+On a non-Codex surface, use the finite fallback:
 
 ```bash
-./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
+./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.

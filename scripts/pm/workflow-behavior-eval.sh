@@ -950,7 +950,7 @@ scenarios = [
             "source-of-truth.md#canonical-state-machine",
             "source-of-truth.md#workflow-states",
             "source-of-truth.md#ready-and-done",
-            "./scripts/pm/pr-lifecycle-gate.py <pr-number> --json",
+            "./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <task_uid> --json",
             "All interpretations, retry loops, dispositions and merge authorization come",
             "Do not land locally unless the user explicitly asks for local landing.",
         ],

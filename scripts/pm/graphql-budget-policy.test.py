@@ -8,7 +8,9 @@ sync = (root / "scripts/pm/github-project-sync.py").read_text()
 assert "rateLimit { remaining resetAt }" in workflow
 assert "graphql_budget_insufficient" in workflow and "resumable" in workflow
 assert 'PM_PR_WATCH_INTERVAL_SECONDS:-60' in watch
-assert 'PM_PR_WATCH_MAX_INTERVAL_SECONDS:-300' in watch
+assert 'PM_PR_WATCH_MAX_INTERVAL_SECONDS:-600' in watch
+assert 'PM_PR_WATCH_MAX_POLLS:-6' in watch
+assert 'stable_pr_watch_bound_exhausted' in watch
 assert 'parser.add_argument("--task-uid"' in audit
 assert '_PROJECT_CONTEXT_CACHE' in sync
 assert ':unchanged' in sync

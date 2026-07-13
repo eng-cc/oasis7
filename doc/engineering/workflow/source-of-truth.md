@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.8**
+Version: **v1.9.9**
 Last Updated: **2026-07-13**
 
 ## 0. Purpose
@@ -17,7 +17,7 @@ Mandatory rule:
 - Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.
 - Project metadata is cached per process run; field updates skip values proven unchanged by the same live snapshot.
 - One-task refresh uses at most one Project GraphQL read including missing-item recovery; one PR-watch poll batches comments, reviews, threads, and checks; selected-task closeout reuses one audit while task, HEAD, and evidence inputs remain frozen.
-- Long-running PR/CI watches start at 60 seconds, back off to 300 while unchanged, reset on change, and report only meaningful transitions; ten-second GraphQL polling is unsupported.
+- <a id="stable-required-gate-wait"></a>Active PR/CI handling may use short one-shot checks. Once only a stable long-running required check or `required-gate` wait remains, the human-operated TPM on a Codex surface yields the active turn and schedules a task-bound continuation/heartbeat for roughly ten minutes later. Each wake performs one batched current-HEAD gate read. Unchanged state stays quiet and schedules the next heartbeat; any meaningful gate, HEAD, review, comment, thread, hold, or query-certainty change cancels the stable cadence and immediately resumes normal gate handling. This continuation is not an unattended production supervisor. A non-Codex fallback must be finite, bounded, and return control with a resumable wait instead of polling forever.
 
 <a id="capability-and-ownership"></a>
 ## Capability status
