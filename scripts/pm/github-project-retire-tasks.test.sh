@@ -113,6 +113,9 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
+  "api graphql "*)
+    printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'
+    ;;
   "project item-list 1 --owner eng-cc --limit 1000 --format json")
     printf '{"totalCount":2,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"},{"id":"OLD_ITEM_ID","content":{"body":"task_uid: task_22222222222222222222222222222222","number":202,"url":"https://github.com/eng-cc/oasis7/issues/202"},"status":"Done","task UID":"task_22222222222222222222222222222222","pM Status":"done","workflow Phase":"done","test Tier Required":"n/a"}]}\n'
     ;;

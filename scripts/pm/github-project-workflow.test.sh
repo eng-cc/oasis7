@@ -63,6 +63,10 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 set -euo pipefail
 case "$*" in
   api\ graphql*)
+    if [[ "$*" == *"rateLimit"* ]]; then
+      printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'
+      exit 0
+    fi
     project_id="PROJECT_ID"
     if [[ "${GH_FAKE_WRONG_PROJECT:-0}" == "1" ]]; then
       project_id="OTHER_PROJECT_ID"
@@ -101,7 +105,7 @@ python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$AUDIT_JSON"
+  audit --global-maintenance > "$AUDIT_JSON"
 RETIRED_EXIT=$?
 set -e
 [[ "$RETIRED_EXIT" == "1" ]]
@@ -121,7 +125,7 @@ python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$AUDIT_JSON"
+  audit --global-maintenance > "$AUDIT_JSON"
 
 python3 - "$AUDIT_JSON" <<'PY'
 import json, pathlib, sys
@@ -139,7 +143,7 @@ GH_FAKE_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$DRIFT_JSON"
+  audit --global-maintenance > "$DRIFT_JSON"
 DRIFT_EXIT=$?
 set -e
 [[ "$DRIFT_EXIT" == "1" ]]
@@ -159,7 +163,7 @@ GH_FAKE_WRONG_PROJECT=1 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$WRONG_PROJECT_JSON"
+  audit --global-maintenance > "$WRONG_PROJECT_JSON"
 WRONG_PROJECT_EXIT=$?
 set -e
 [[ "$WRONG_PROJECT_EXIT" == "1" ]]
@@ -175,6 +179,9 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 case "$*" in
+  api\ graphql*)
+    printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'
+    ;;
   "project item-list 1 --owner eng-cc --limit 1000 --format json")
     printf '{"totalCount":1,"items":[{"id":"ITEM_ID","content":{"body":"task_uid: task_11111111111111111111111111111111","number":101,"url":"https://github.com/eng-cc/oasis7/issues/101"},"status":"In Progress","task UID":"task_11111111111111111111111111111111","owner Role":"tpm","module":"engineering","pM Status":"committed","workflow Phase":"execution","priority":"P2","canonical Worktree":"/tmp/worktree","test Tier Required":"n/a"}]}\n'
     ;;
@@ -236,6 +243,7 @@ cat > "$TMPDIR/bin/gh" <<'SH'
 set -euo pipefail
 case "$*" in
   api\ graphql*)
+    if [[ "$*" == *"rateLimit"* ]]; then printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'; exit 0; fi
     if [[ "${GH_FAKE_METADATA_DRIFT:-0}" == "1" ]]; then
       printf '{"data":{"nodes":[{"id":"MAPPING_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"title":"[PM] authoritative changed title","body":"task_uid: task_33333333333333333333333333333333\\nAcceptance:\\n- authoritative acceptance\\n","number":303,"url":"https://github.com/eng-cc/oasis7/issues/303"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_33333333333333333333333333333333","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/mapping-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     elif [[ "${GH_FAKE_MAPPING_DRIFT:-0}" == "1" ]]; then
@@ -257,7 +265,7 @@ MAPPING_BEFORE_SHA="$(shasum -a 256 "$MAPPING_ONLY/.pm/github-project-sync/tasks
 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
   --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$MAPPING_ONLY_JSON"
+  audit --global-maintenance > "$MAPPING_ONLY_JSON"
 MAPPING_AFTER_SHA="$(shasum -a 256 "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 [[ "$MAPPING_BEFORE_SHA" == "$MAPPING_AFTER_SHA" ]]
 
@@ -275,7 +283,7 @@ METADATA_DRIFT_JSON="$TMPDIR/metadata-drift.json"
 set +e
 GH_FAKE_METADATA_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
   --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
-  --json audit > "$METADATA_DRIFT_JSON"
+  --json audit --global-maintenance > "$METADATA_DRIFT_JSON"
 METADATA_DRIFT_EXIT=$?
 set -e
 [[ "$METADATA_DRIFT_EXIT" == "1" ]]
@@ -310,7 +318,7 @@ GH_FAKE_MAPPING_DRIFT=1 python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_O
   --project-number 1 \
   --mapping "$MAPPING_ONLY/.pm/github-project-sync/tasks.json" \
   --json \
-  audit > "$MAPPING_DRIFT_JSON"
+  audit --global-maintenance > "$MAPPING_DRIFT_JSON"
 MAPPING_DRIFT_EXIT=$?
 set -e
 [[ "$MAPPING_DRIFT_EXIT" == "1" ]]
@@ -348,6 +356,7 @@ case "$*" in
     exit 9
     ;;
   api\ graphql*)
+    if [[ "$*" == *"rateLimit"* ]]; then printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'; exit 0; fi
     if [[ "$*" == *"ids[]=ARCHIVE_ITEM_ID"* ]]; then
       printf '{"data":{"nodes":[{"id":"ARCHIVE_ITEM_ID","project":{"id":"PROJECT_ID","number":1},"content":{"body":"task_uid: task_44444444444444444444444444444444","number":404,"url":"https://github.com/eng-cc/oasis7/issues/404"},"fieldValues":{"nodes":[{"name":"In Progress","field":{"name":"Status"}},{"text":"task_44444444444444444444444444444444","field":{"name":"Task UID"}},{"name":"tpm","field":{"name":"Owner Role"}},{"name":"engineering","field":{"name":"Module"}},{"name":"committed","field":{"name":"PM Status"}},{"name":"execution","field":{"name":"Workflow Phase"}},{"name":"P2","field":{"name":"Priority"}},{"text":"/tmp/archive-worktree","field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]}}]}}\n'
     else
@@ -372,7 +381,7 @@ python3 "$TMPDIR/github-project-workflow.py" "$ARCHIVE_RECOVERY" \
   --mapping "$ARCHIVE_RECOVERY/.pm/github-project-sync/tasks.json" \
   --status committed \
   --json \
-  audit > "$ARCHIVE_RECOVERY_JSON"
+  audit --global-maintenance > "$ARCHIVE_RECOVERY_JSON"
 ARCHIVE_RECOVERY_EXIT=$?
 set -e
 [[ "$ARCHIVE_RECOVERY_EXIT" == "1" ]]

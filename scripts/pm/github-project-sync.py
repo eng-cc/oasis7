@@ -46,6 +46,7 @@ SINGLE_SELECT_FIELDS = {
 TASK_UID_RE = re.compile(r"task_uid:\s*(task_[0-9a-f]{32})")
 ISSUE_URL_RE = re.compile(r"/issues/(\d+)(?:$|[?#])")
 RECOVERY_BATCH_SIZE = 10
+_PROJECT_CONTEXT_CACHE: dict[tuple[str, int], tuple[str, dict[str, dict[str, Any]]]] = {}
 
 
 def die(message: str) -> None:
@@ -202,6 +203,23 @@ def graphql_request(token: str, query: str, variables: dict[str, Any] | None = N
     return payload.get("data") or {}
 
 
+def broad_rate_limit_guard(token: str = "") -> dict[str, Any]:
+    try:
+        payload = run_json(["gh","api","graphql","-f","query=query { rateLimit { remaining resetAt } }"])
+        rate = ((payload.get("data") or {}).get("rateLimit") or {})
+    except Exception as exc:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable","error":str(exc),
+                "resumable":True,"resume":"restore rateLimit access and rerun"}
+    remaining, reset_at = rate.get("remaining"), str(rate.get("resetAt") or "")
+    if not isinstance(remaining, int) or not reset_at:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True,
+                "resume":"restore rateLimit visibility and rerun"}
+    if remaining < 100:
+        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,
+                "resetAt":reset_at,"resumable":True,"resume":f"resume after {reset_at}"}
+    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+
+
 def create_issue_direct(token: str, repo: str, task: OrderedDict[str, Any]) -> dict[str, Any]:
     owner, name = repo.split("/", 1)
     payload = github_json_request(
@@ -244,6 +262,7 @@ def update_fields_direct(
     task: OrderedDict[str, Any],
     fields: dict[str, dict[str, Any]],
     only_fields: set[str] | None = None,
+    current_values: dict[str, str] | None = None,
 ) -> tuple[int, list[str]]:
     values = project_field_values(task)
     mutations: list[str] = []
@@ -252,6 +271,9 @@ def update_fields_direct(
     variable_index = 0
     for field_name, value in values.items():
         if only_fields is not None and field_name not in only_fields:
+            continue
+        if current_values is not None and str(current_values.get(field_name) or "") == str(value):
+            skipped.append(f"{field_name}:unchanged")
             continue
         field = fields.get(field_name)
         if not field:
@@ -318,6 +340,9 @@ def issue_number_from_url(issue_url: str) -> int | None:
 
 
 def project_context(owner: str, number: int) -> tuple[str, dict[str, dict[str, Any]]]:
+    cache_key = (owner, number)
+    if cache_key in _PROJECT_CONTEXT_CACHE:
+        return _PROJECT_CONTEXT_CACHE[cache_key]
     project = run_json(["gh", "project", "view", str(number), "--owner", owner, "--format", "json"])
     project_id = str(project.get("id") or "")
     if not project_id:
@@ -333,7 +358,8 @@ def project_context(owner: str, number: int) -> tuple[str, dict[str, dict[str, A
         }
         by_name["options_by_name"] = options
         fields[str(field.get("name"))] = by_name
-    return project_id, fields
+    _PROJECT_CONTEXT_CACHE[cache_key] = (project_id, fields)
+    return _PROJECT_CONTEXT_CACHE[cache_key]
 
 
 def project_id_for(owner: str, number: int, mapping: dict[str, Any]) -> str:
@@ -393,6 +419,10 @@ def recover_project_mapping_for_task_uids(
                         id
                         number
                       }}
+                      fieldValues(first: 100) {{ nodes {{
+                        ... on ProjectV2ItemFieldTextValue {{ text field {{ ... on ProjectV2FieldCommon {{ name }} }} }}
+                        ... on ProjectV2ItemFieldSingleSelectValue {{ name field {{ ... on ProjectV2FieldCommon {{ name }} }} }}
+                      }} }}
                     }}
                   }}
                 }}
@@ -428,10 +458,18 @@ def recover_project_mapping_for_task_uids(
             issue_url = str(issue.get("url") or "")
             issue_number = int(issue.get("number") or issue_number_from_url(issue_url) or 0)
             if item_id and issue_url and issue_number:
+                selected_item = next(node for node in ((issue.get("projectItems") or {}).get("nodes") or [])
+                                     if str(node.get("id") or "") == item_id)
+                live_values = {
+                    str(((value.get("field") or {}).get("name") or "")): str(value.get("name") or value.get("text") or "")
+                    for value in (((selected_item.get("fieldValues") or {}).get("nodes")) or [])
+                    if str(((value.get("field") or {}).get("name") or ""))
+                }
                 recovered[task_uid] = {
                     "issue_url": issue_url,
                     "issue_number": str(issue_number),
                     "project_item_id": item_id,
+                    "project_field_values": live_values,
                 }
     return recovered
 
@@ -612,12 +650,16 @@ def update_fields(
     task: OrderedDict[str, Any],
     fields: dict[str, dict[str, Any]],
     only_fields: set[str] | None = None,
+    current_values: dict[str, str] | None = None,
 ) -> tuple[int, list[str]]:
     values = project_field_values(task)
     updated = 0
     skipped: list[str] = []
     for field_name, value in values.items():
         if only_fields is not None and field_name not in only_fields:
+            continue
+        if current_values is not None and str(current_values.get(field_name) or "") == str(value):
+            skipped.append(f"{field_name}:unchanged")
             continue
         field = fields.get(field_name)
         if not field:
@@ -640,6 +682,24 @@ def update_fields(
     return updated, skipped
 
 
+def confirmed_project_field_values(
+    current_values: dict[str, str],
+    task: OrderedDict[str, Any],
+    skipped: list[str],
+    only_fields: set[str] | None = None,
+) -> dict[str, str]:
+    """Merge desired values that were confirmed unchanged or successfully written."""
+    confirmed = dict(current_values)
+    skipped_by_field = {item.split(":", 1)[0]: item for item in skipped}
+    for field_name, value in project_field_values(task).items():
+        if only_fields is not None and field_name not in only_fields:
+            continue
+        disposition = skipped_by_field.get(field_name)
+        if disposition is None or disposition.endswith(":unchanged"):
+            confirmed[field_name] = value
+    return confirmed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync oasis7 .pm tasks to GitHub Issues and a GitHub Project.")
     parser.add_argument("root", help="repository root")
@@ -650,6 +710,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--status", action="append", choices=ALL_STATUSES, help="task status to include; repeatable")
     parser.add_argument("--include-done", action="store_true", help="include done and deferred tasks")
     parser.add_argument("--limit", type=int, default=0, help="maximum tasks to sync after filtering")
+    parser.add_argument("--task-uid", help="sync exactly one task_uid; avoids broad Project recovery")
+    parser.add_argument("--global-maintenance", action="store_true", help="explicitly authorize guarded broad sync")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="plan only after read-only GitHub Project mapping recovery")
     mode.add_argument("--apply", action="store_true", help="create/update GitHub issues and project items")
@@ -664,6 +726,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if not args.task_uid and not args.global_maintenance:
+        die("--task-uid is required by default; use --global-maintenance for guarded broad sync")
+    if args.global_maintenance:
+        budget = broad_rate_limit_guard()
+        if budget["status"] != "ok":
+            print(json.dumps(budget, indent=2, sort_keys=True)); return 2
     root = pathlib.Path(args.root).resolve()
     if not args.apply:
         args.dry_run = True
@@ -671,6 +739,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.include_done:
         statuses.update({"done", "deferred"})
     tasks = load_tasks(root, statuses)
+    if args.task_uid:
+        tasks = [task for task in tasks if str(task.get("task_uid") or "") == args.task_uid]
+        args.skip_recover = False
     mapping_path = pathlib.Path(args.mapping)
     if not mapping_path.is_absolute():
         mapping_path = root / mapping_path
@@ -707,6 +778,7 @@ def main(argv: list[str] | None = None) -> int:
             if recovered.get("issue_number"):
                 record.setdefault("issue_number", int(recovered["issue_number"]))
             record.setdefault("project_item_id", recovered["project_item_id"])
+            record["project_field_values"] = dict(recovered.get("project_field_values") or {})
 
     summary: dict[str, Any] = {
         "dry_run": bool(args.dry_run),
@@ -786,6 +858,7 @@ def main(argv: list[str] | None = None) -> int:
                 task,
                 fields,
                 only_fields=only_fields,
+                current_values=dict(record.get("project_field_values") or {}),
             )
             with mapping_lock:
                 live_record = mapping["tasks"].setdefault(uid, {})
@@ -804,6 +877,9 @@ def main(argv: list[str] | None = None) -> int:
                         "execution_log_path": task.get("execution_log_path") or "",
                         "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                     }
+                )
+                live_record["project_field_values"] = confirmed_project_field_values(
+                    dict(record.get("project_field_values") or {}), task, skipped, only_fields
                 )
                 if content_id:
                     live_record["content_id"] = content_id
@@ -891,7 +967,9 @@ def main(argv: list[str] | None = None) -> int:
                 die(f"github-project-sync: missing item id for {uid}")
             record["project_item_id"] = item_id
             summary["added_items"] += 1
-        updated, skipped = update_fields(project_id, str(item_id), task, fields, only_fields=only_fields)
+        current_values = dict(record.get("project_field_values") or {})
+        updated, skipped = update_fields(project_id, str(item_id), task, fields,
+                                         only_fields=only_fields, current_values=current_values)
         summary["updated_field_values"] += updated
         summary["skipped_field_values"].extend([f"{uid}:{item}" for item in skipped])
         record.update(
@@ -906,6 +984,9 @@ def main(argv: list[str] | None = None) -> int:
                 "execution_log_path": task.get("execution_log_path") or "",
                 "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             }
+        )
+        record["project_field_values"] = confirmed_project_field_values(
+            current_values, task, skipped, only_fields
         )
         persist_mapping(mapping_path, mapping)
         summary["tasks"].append(
