@@ -9,9 +9,10 @@ if [[ "${1:-}" == *pr-lifecycle-gate.py ]]; then
   [[ "${TEST_GATE_FAILURE:-0}" != 1 ]] || exit 23
   n=$(cat "$TEST_COUNT" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$TEST_COUNT"
   state=blocked
-  [[ "${TEST_NEVER_READY:-0}" != 1 && "$n" -ge 6 ]] && state=ready
+  [[ "${TEST_READY_FIRST:-0}" == 1 || ( "${TEST_NEVER_READY:-0}" != 1 && "$n" -ge 6 ) ]] && state=ready
   printf '{"status":"%s","gate_epoch":"epoch-%s","readiness_receipt":{"observed_at":"2026-01-01T00:00:0%sZ","identity":"receipt-%s"},"nested":{"approval_only_receipt":{"identity":"nested-%s"}}}\n' "$state" "$n" "$n" "$n" "$n"
-  exit 0
+  [[ "$state" == ready ]] && exit 0
+  exit 3
 fi
 exec /usr/bin/python3 "$@"
 SH
@@ -28,6 +29,13 @@ diff -u <(printf '60\n120\n240\n480\n600\n') "$TMP/sleeps"
 [[ $(wc -l <"$TMP/out" | tr -d ' ') == 2 ]]
 grep -q '"status":"blocked"' "$TMP/out"
 grep -q '"status":"ready"' "$TMP/out"
+
+rm -f "$TMP/count" "$TMP/sleeps"
+PATH="$TMP/bin:$PATH" TEST_READY_FIRST=1 \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/ready-out"
+[[ $(wc -l <"$TMP/ready-out" | tr -d ' ') == 1 ]]
+grep -q '"status":"ready"' "$TMP/ready-out"
+[[ ! -e "$TMP/sleeps" ]]
 
 rm -f "$TMP/count" "$TMP/sleeps"
 set +e

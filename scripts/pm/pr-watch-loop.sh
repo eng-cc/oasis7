@@ -18,7 +18,13 @@ if (( interval > max_interval )); then
 fi
 previous=""
 for ((poll = 1; poll <= max_polls; poll++)); do
+  set +e
   snapshot="$(python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "$PR" "$@" --json)"
+  gate_rc=$?
+  set -e
+  if (( gate_rc != 0 && gate_rc != 3 )); then
+    exit "$gate_rc"
+  fi
   digest="$(printf '%s' "$snapshot" | python3 -c '
 import hashlib,json,sys
 volatile={"observed_at","verified_at","cache_refreshed_at","last_synced_at","gate_epoch"}
@@ -31,7 +37,7 @@ print(hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":")).enc
 ')"
   if [[ "$digest" != "$previous" ]]; then
     printf '%s\n' "$snapshot"
-    if [[ -n "$previous" ]]; then
+    if (( gate_rc == 0 )) || [[ -n "$previous" ]]; then
       exit 0
     fi
     previous="$digest"
