@@ -173,8 +173,8 @@ def issue_has_required_ready_evidence(issue: dict[str, Any], task_uid: str) -> b
 
     has_review = has_packet("Pre-PR Local Role Review: passed")
     has_ready_claim = has_packet("Claim Type: ready_for_pr", "Verification Status: verified")
-    has_close_evidence = has_packet("<!-- oasis7-pm-evidence -->", "Evidence Phase: pre_pr_ready")
-    return has_review and has_ready_claim and has_close_evidence
+    has_pre_pr_ready_evidence = has_packet("<!-- oasis7-pm-evidence -->", "Evidence Phase: pre_pr_ready")
+    return has_review and has_ready_claim and has_pre_pr_ready_evidence
 
 
 def done_task_from_record(task_mod: Any, task_uid: str, record: dict[str, Any], fields: dict[str, str], issue: dict[str, Any]) -> OrderedDict[str, Any]:
