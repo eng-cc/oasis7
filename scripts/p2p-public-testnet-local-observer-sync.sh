@@ -704,8 +704,14 @@ backup_and_remove_path() {
   local path=$1
   local backup_target=$2
 
-  if [[ ! -e "$path" ]]; then
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
     printf 'skipped missing %s\n' "$path"
+    return 0
+  fi
+
+  if [[ -e "$backup_target" || -L "$backup_target" ]]; then
+    rm -rf -- "$path"
+    printf 'retained existing backup %s; cleared retry state %s\n' "$backup_target" "$path"
     return 0
   fi
 
@@ -725,6 +731,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 
 mode, manifest_path, execution_world_dir, source_execution_world_dir = sys.argv[1:5]
 manifest_path = os.path.abspath(manifest_path)
@@ -746,13 +753,11 @@ def resolve_ref(ref, base_dir, label):
         fail(f"missing {label}")
     return os.path.abspath(ref if os.path.isabs(ref) else os.path.join(base_dir, ref))
 
-def require_within(path, root, label):
+def is_within(path, root):
     try:
-        inside = os.path.commonpath((path, root)) == root
+        return os.path.commonpath((path, root)) == root and path != root
     except ValueError:
-        inside = False
-    if not inside or path == root:
-        fail(f"unsafe {label} outside execution world: {path}")
+        return False
 
 def reject_symlink_components(path, root, label):
     relative = os.path.relpath(path, root)
@@ -793,18 +798,16 @@ sidecar_target = resolve_ref(sidecar_ref, manifest_dir, "generated_world_sidecar
 provenance_target = resolve_ref(
     provenance_ref, manifest_dir, "world_generation_provenance_ref"
 )
-require_within(sidecar_target, execution_world_dir, "generated world sidecar path")
-require_within(provenance_target, execution_world_dir, "world generation provenance path")
 target_common = os.path.commonpath((provenance_target, sidecar_target))
 if target_common in (sidecar_target, provenance_target):
     fail("world generation provenance path must not overlap generated world sidecar")
 
 bundle = load_json(bundle_path, "release candidate bundle")
 governed = (
-    ("generated_world_sidecar", "directory", sidecar_target),
-    ("world_generation_provenance", "file", provenance_target),
+    ("generated_world_sidecar", "directory", sidecar_target, ("snapshot.json", "journal.json")),
+    ("world_generation_provenance", "file", provenance_target, ()),
 )
-for key, expected_kind, expected_path in governed:
+for key, expected_kind, expected_path, _ in governed:
     entry = bundle.get(key)
     if not isinstance(entry, dict):
         fail(f"release candidate bundle missing {key}")
@@ -817,42 +820,54 @@ for key, expected_kind, expected_path in governed:
     if bundle_ref_path != expected_path or bundle_resolved_path != expected_path:
         fail(f"release candidate bundle {key} does not resolve to governed path")
 
-sidecar_relative = os.path.relpath(sidecar_target, execution_world_dir)
-provenance_relative = os.path.relpath(provenance_target, execution_world_dir)
-sidecar_source = os.path.join(source_execution_world_dir, sidecar_relative)
-provenance_source = os.path.join(source_execution_world_dir, provenance_relative)
-reject_symlink_components(
-    sidecar_source, source_execution_world_dir, "generated world sidecar backup path"
-)
-reject_symlink_components(
-    provenance_source,
-    source_execution_world_dir,
-    "world generation provenance backup path",
-)
-
-if not os.path.isdir(sidecar_source):
-    fail(f"missing governed generated world sidecar backup: {sidecar_source}")
-required_sidecar_sources = []
-for filename in ("snapshot.json", "journal.json"):
-    source = os.path.join(sidecar_source, filename)
-    if not os.path.isfile(source) or os.path.islink(source):
-        fail(f"missing governed generated world sidecar artifact: {source}")
-    required_sidecar_sources.append((source, os.path.join(sidecar_target, filename)))
-if not os.path.isfile(provenance_source):
-    fail(f"missing governed world generation provenance backup: {provenance_source}")
+owned = []
+for key, expected_kind, target, required_files in governed:
+    if not is_within(target, execution_world_dir):
+        continue
+    relative = os.path.relpath(target, execution_world_dir)
+    source = os.path.join(source_execution_world_dir, relative)
+    reject_symlink_components(source, source_execution_world_dir, f"{key} backup path")
+    if expected_kind == "directory":
+        if not os.path.isdir(source) or os.path.islink(source):
+            fail(f"missing governed {key} backup: {source}")
+        for filename in required_files:
+            required_source = os.path.join(source, filename)
+            if not os.path.isfile(required_source) or os.path.islink(required_source):
+                fail(f"missing governed {key} artifact: {required_source}")
+    elif not os.path.isfile(source) or os.path.islink(source):
+        fail(f"missing governed {key} backup: {source}")
+    owned.append((key, expected_kind, target, source, required_files))
 
 if mode == "validate":
     sys.exit(0)
 if mode != "restore":
     fail(f"unknown governed bootstrap restore mode: {mode}")
-if os.path.lexists(sidecar_target) or os.path.lexists(provenance_target):
-    fail("governed bootstrap restore target already exists")
+if not owned:
+    sys.exit(0)
+if os.path.lexists(execution_world_dir):
+    fail(f"governed bootstrap restore target already exists: {execution_world_dir}")
 
-os.makedirs(sidecar_target)
-for source, target in required_sidecar_sources:
-    shutil.copy2(source, target)
-os.makedirs(os.path.dirname(provenance_target), exist_ok=True)
-shutil.copy2(provenance_source, provenance_target)
+execution_world_parent = os.path.dirname(execution_world_dir)
+os.makedirs(execution_world_parent, exist_ok=True)
+stage_dir = tempfile.mkdtemp(
+    prefix=f".{os.path.basename(execution_world_dir)}.governed-restore.",
+    dir=execution_world_parent,
+)
+try:
+    for _, expected_kind, target, source, required_files in owned:
+        stage_target = os.path.join(stage_dir, os.path.relpath(target, execution_world_dir))
+        if expected_kind == "directory":
+            os.makedirs(stage_target)
+            for filename in required_files:
+                shutil.copy2(os.path.join(source, filename), os.path.join(stage_target, filename))
+        else:
+            os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+            shutil.copy2(source, stage_target)
+    os.replace(stage_dir, execution_world_dir)
+    stage_dir = None
+finally:
+    if stage_dir is not None:
+        shutil.rmtree(stage_dir, ignore_errors=True)
 PY
 }
 
@@ -862,7 +877,7 @@ reset_local_state() {
 
   local local_stack_root node_id execution_world_dir execution_records_dir simulator_dir
   local replication_root runtime_root execution_bridge_state_path
-  local storage_root manifest_path
+  local storage_root manifest_path governed_restore_source
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
   node_id=$(resolved_env_value "$local_env" NODE_ID)
@@ -890,11 +905,15 @@ reset_local_state() {
   mkdir -p "$backup_dir"
 
   if [[ -n "$manifest_path" ]]; then
+    governed_restore_source="$execution_world_dir"
+    if [[ -e "$backup_dir/execution-world" || -L "$backup_dir/execution-world" ]]; then
+      governed_restore_source="$backup_dir/execution-world"
+    fi
     restore_governed_bootstrap_artifacts \
       validate \
       "$manifest_path" \
       "$execution_world_dir" \
-      "$execution_world_dir"
+      "$governed_restore_source"
   fi
 
   backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"

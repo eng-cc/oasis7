@@ -5,6 +5,19 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 source "$repo_root/config/chain-pos-defaults.env"
 
+test_case=${OASIS7_OBSERVER_SYNC_TEST_CASE:-all}
+if [[ "$test_case" == "all" ]]; then
+  for test_case in canonical_layout reset_owned_restore_retry; do
+    OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
+  done
+  echo "ok: local observer sync accepts sequencer/storage validator env pair"
+  exit 0
+fi
+if [[ "$test_case" != "canonical_layout" && "$test_case" != "reset_owned_restore_retry" ]]; then
+  echo "unknown observer sync test case: $test_case" >&2
+  exit 2
+fi
+
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-local-observer-sync.XXXXXX")
 cleanup() {
   rm -rf "$tmp_dir"
@@ -12,6 +25,19 @@ cleanup() {
 trap cleanup EXIT
 
 local_stack="$tmp_dir/local-stack"
+manifest_path="$local_stack/manifest.json"
+bundle_path="$local_stack/governed-bundle.json"
+mkdir -p "$local_stack"
+
+if [[ "$test_case" == "canonical_layout" ]]; then
+  sidecar_ref="generated-world/generated-scenario-world"
+  provenance_ref="generated-world/world-generation-provenance.json"
+else
+  sidecar_ref="world/generated-scenario-world"
+  provenance_ref="world/world-generation-provenance.json"
+fi
+sidecar_path="$local_stack/$sidecar_ref"
+provenance_path="$local_stack/$provenance_ref"
 
 cat >"$tmp_dir/local.env" <<EOF
 HOST_LABEL=local-a
@@ -37,7 +63,7 @@ TRAFFIC_MONITOR_WINDOW_MINUTES=10
 TRAFFIC_MONITOR_TOP_N=5
 TRAFFIC_MONITOR_OUTPUT_DIR=\$STACK_ROOT/output/traffic-monitor
 P2P_NODE_ROLE=observer_light
-NETWORK_TIER_MANIFEST_PATH=$tmp_dir/manifest.json
+NETWORK_TIER_MANIFEST_PATH=$manifest_path
 EOF
 
 cat >"$tmp_dir/sequencer.env" <<EOF
@@ -84,28 +110,28 @@ NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:50
 NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:65c27d,triad-testnet-storage:858e97
 EOF
 
-cat >"$tmp_dir/manifest.json" <<'EOF'
+cat >"$manifest_path" <<EOF
 {
   "network_id": "public_testnet",
   "runtime_refs": {
     "release_candidate_bundle_ref": "governed-bundle.json",
-    "generated_world_sidecar_ref": "local-stack/world/generated-scenario-world",
-    "world_generation_provenance_ref": "local-stack/world/world-generation-provenance.json"
+    "generated_world_sidecar_ref": "$sidecar_ref",
+    "world_generation_provenance_ref": "$provenance_ref"
   }
 }
 EOF
 
-cat >"$tmp_dir/governed-bundle.json" <<EOF
+cat >"$bundle_path" <<EOF
 {
   "generated_world_sidecar": {
     "kind": "directory",
-    "ref": "local-stack/world/generated-scenario-world",
-    "resolved_path": "$local_stack/world/generated-scenario-world"
+    "ref": "$sidecar_ref",
+    "resolved_path": "$sidecar_path"
   },
   "world_generation_provenance": {
     "kind": "file",
-    "ref": "local-stack/world/world-generation-provenance.json",
-    "resolved_path": "$local_stack/world/world-generation-provenance.json"
+    "ref": "$provenance_ref",
+    "resolved_path": "$provenance_path"
   }
 }
 EOF
@@ -115,7 +141,7 @@ rendered_env="$tmp_dir/rendered.env"
   --local-env "$tmp_dir/local.env" \
   --sequencer-env "$tmp_dir/sequencer.env" \
   --storage-env "$tmp_dir/storage.env" \
-  --manifest-path "$tmp_dir/manifest.json" \
+  --manifest-path "$manifest_path" \
   --out "$rendered_env"
 
 grep -q '^WORLD_ID=oasis7-public-testnet-governed-20260606$' "$rendered_env"
@@ -138,16 +164,19 @@ grep -q 'bundle\["generated_world_sidecar"\]\["resolved_path"\]' scripts/p2p-pub
 
 mkdir -p \
   "$local_stack/world" \
-  "$local_stack/world/generated-scenario-world" \
+  "$sidecar_path" \
   "$local_stack/world-simulator-mirror" \
   "$local_stack/execution-records" \
   "$local_stack/store/blobs" \
   "$local_stack/runtime-root" \
   "$local_stack/replication-root"
 printf '{"height":1233}\n' >"$local_stack/world/snapshot.json"
-printf '{"generated":"snapshot"}\n' >"$local_stack/world/generated-scenario-world/snapshot.json"
-printf '{"generated":"journal"}\n' >"$local_stack/world/generated-scenario-world/journal.json"
-printf '{"scenario_id":"asteroid_fragment_bootstrap"}\n' >"$local_stack/world/world-generation-provenance.json"
+printf '{"generated":"snapshot"}\n' >"$sidecar_path/snapshot.json"
+printf '{"generated":"journal"}\n' >"$sidecar_path/journal.json"
+printf '{"scenario_id":"asteroid_fragment_bootstrap"}\n' >"$provenance_path"
+cp "$sidecar_path/snapshot.json" "$tmp_dir/expected-generated-snapshot.json"
+cp "$sidecar_path/journal.json" "$tmp_dir/expected-generated-journal.json"
+cp "$provenance_path" "$tmp_dir/expected-world-generation-provenance.json"
 printf '{"mirror":"old"}\n' >"$local_stack/world-simulator-mirror/snapshot.json"
 printf '{"height":1233}\n' >"$local_stack/execution-records/latest.json"
 printf 'old blob\n' >"$local_stack/store/blobs/old"
@@ -155,24 +184,126 @@ printf '{"runtime":"old"}\n' >"$local_stack/runtime-root/reward-runtime-executio
 printf '{"committed_height":1233}\n' >"$local_stack/replication-root/node_pos_state.json"
 
 jq -e \
-  --arg sidecar "$local_stack/world/generated-scenario-world" \
-  --arg provenance "$local_stack/world/world-generation-provenance.json" \
+  --arg sidecar "$sidecar_path" \
+  --arg provenance "$provenance_path" \
   '.generated_world_sidecar.resolved_path == $sidecar
     and .world_generation_provenance.resolved_path == $provenance' \
-  "$tmp_dir/governed-bundle.json" >/dev/null
-test -f "$local_stack/world/generated-scenario-world/snapshot.json"
-test -f "$local_stack/world/generated-scenario-world/journal.json"
-test -f "$local_stack/world/world-generation-provenance.json"
+  "$bundle_path" >/dev/null
+test -f "$sidecar_path/snapshot.json"
+test -f "$sidecar_path/journal.json"
+test -f "$provenance_path"
 
 reset_backup="$tmp_dir/reset-backup"
-./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
-  --local-env "$tmp_dir/local.env" \
-  --backup-dir "$reset_backup"
+
+if [[ "$test_case" == "reset_owned_restore_retry" ]]; then
+  real_python3=$(command -v python3)
+  fake_bin="$tmp_dir/fake-bin"
+  restore_failure_marker="$tmp_dir/restore-copy-failed-once"
+  mkdir -p "$fake_bin"
+  cat >"$fake_bin/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${OASIS7_TEST_FAIL_RESTORE_COPY_ONCE:-0}" == "1" \
+  && "${1:-}" == "-" \
+  && "${2:-}" == "restore" \
+  && ! -e "${OASIS7_TEST_RESTORE_FAILURE_MARKER:?}" ]]; then
+  touch "$OASIS7_TEST_RESTORE_FAILURE_MARKER"
+  exec "${OASIS7_REAL_PYTHON3:?}" -c '
+import shutil
+import sys
+
+source = sys.stdin.read()
+original_copy2 = shutil.copy2
+copy_count = 0
+
+def fail_second_copy(src, dst, *args, **kwargs):
+    global copy_count
+    copy_count += 1
+    if copy_count == 2:
+        raise OSError("forced governed bootstrap restore copy failure")
+    return original_copy2(src, dst, *args, **kwargs)
+
+shutil.copy2 = fail_second_copy
+sys.argv = sys.argv[1:]
+exec(compile(source, "<observer-sync-restore>", "exec"))
+' "$@"
+fi
+
+exec "${OASIS7_REAL_PYTHON3:?}" "$@"
+EOF
+  chmod +x "$fake_bin/python3"
+
+  first_reset_stdout="$tmp_dir/first-reset.stdout"
+  first_reset_stderr="$tmp_dir/first-reset.stderr"
+  set +e
+  PATH="$fake_bin:$PATH" \
+    OASIS7_REAL_PYTHON3="$real_python3" \
+    OASIS7_TEST_FAIL_RESTORE_COPY_ONCE=1 \
+    OASIS7_TEST_RESTORE_FAILURE_MARKER="$restore_failure_marker" \
+    ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+      --local-env "$tmp_dir/local.env" \
+      --backup-dir "$reset_backup" \
+      >"$first_reset_stdout" 2>"$first_reset_stderr"
+  first_reset_rc=$?
+  set -e
+
+  if [[ "$first_reset_rc" -eq 0 ]]; then
+    echo "expected forced governed bootstrap restore copy failure" >&2
+    exit 1
+  fi
+  if ! grep -q 'forced governed bootstrap restore copy failure' "$first_reset_stderr"; then
+    echo "expected injected restore-copy failure signature" >&2
+    cat "$first_reset_stderr" >&2
+    exit 1
+  fi
+  test -f "$reset_backup/execution-world/generated-scenario-world/snapshot.json"
+  test -f "$reset_backup/execution-world/generated-scenario-world/journal.json"
+  test -f "$reset_backup/execution-world/world-generation-provenance.json"
+
+  retry_contract_failed=0
+  if [[ -e "$sidecar_path" || -e "$provenance_path" ]]; then
+    echo "expected failed governed bootstrap restore to leave no partial live target" >&2
+    retry_contract_failed=1
+  fi
+
+  retry_stdout="$tmp_dir/retry.stdout"
+  retry_stderr="$tmp_dir/retry.stderr"
+  set +e
+  PATH="$fake_bin:$PATH" \
+    OASIS7_REAL_PYTHON3="$real_python3" \
+    OASIS7_TEST_FAIL_RESTORE_COPY_ONCE=1 \
+    OASIS7_TEST_RESTORE_FAILURE_MARKER="$restore_failure_marker" \
+    ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+      --local-env "$tmp_dir/local.env" \
+      --backup-dir "$reset_backup" \
+      >"$retry_stdout" 2>"$retry_stderr"
+  retry_rc=$?
+  set -e
+  if [[ "$retry_rc" -ne 0 ]]; then
+    echo "expected same-command retry to restore from complete retained backup" >&2
+    cat "$retry_stderr" >&2
+    retry_contract_failed=1
+  fi
+  if [[ "$retry_contract_failed" -ne 0 ]]; then
+    exit 1
+  fi
+else
+  ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+    --local-env "$tmp_dir/local.env" \
+    --backup-dir "$reset_backup"
+fi
+
+if [[ "$test_case" == "canonical_layout" ]]; then
+  test ! -e "$reset_backup/execution-world/generated-scenario-world"
+  test ! -e "$reset_backup/execution-world/world-generation-provenance.json"
+else
+  test -f "$reset_backup/execution-world/generated-scenario-world/snapshot.json"
+  test -f "$reset_backup/execution-world/generated-scenario-world/journal.json"
+  test -f "$reset_backup/execution-world/world-generation-provenance.json"
+fi
 
 test -f "$reset_backup/execution-world/snapshot.json"
-test -f "$reset_backup/execution-world/generated-scenario-world/snapshot.json"
-test -f "$reset_backup/execution-world/generated-scenario-world/journal.json"
-test -f "$reset_backup/execution-world/world-generation-provenance.json"
 test -f "$reset_backup/execution-world-simulator-mirror/snapshot.json"
 test -f "$reset_backup/execution-records/latest.json"
 test -f "$reset_backup/storage/blobs/old"
@@ -185,34 +316,40 @@ test ! -e "$local_stack/store/blobs/old"
 test ! -e "$local_stack/runtime-root/reward-runtime-execution-bridge-state.json"
 test ! -e "$local_stack/replication-root/node_pos_state.json"
 
-if [[ ! -d "$local_stack/world/generated-scenario-world" ]]; then
+if [[ ! -d "$sidecar_path" ]]; then
   echo "expected reset-state to restore governed generated_world_sidecar directory" >&2
   exit 1
 fi
 for required_sidecar_file in snapshot.json journal.json; do
-  if [[ ! -f "$local_stack/world/generated-scenario-world/$required_sidecar_file" ]]; then
+  if [[ ! -f "$sidecar_path/$required_sidecar_file" ]]; then
     echo "expected reset-state to restore governed generated_world_sidecar/$required_sidecar_file" >&2
     exit 1
   fi
 done
-if [[ ! -f "$local_stack/world/world-generation-provenance.json" ]]; then
+if [[ ! -f "$provenance_path" ]]; then
   echo "expected reset-state to restore governed world_generation_provenance" >&2
   exit 1
 fi
-cmp -s \
-  "$reset_backup/execution-world/generated-scenario-world/snapshot.json" \
-  "$local_stack/world/generated-scenario-world/snapshot.json"
-cmp -s \
-  "$reset_backup/execution-world/generated-scenario-world/journal.json" \
-  "$local_stack/world/generated-scenario-world/journal.json"
-cmp -s \
-  "$reset_backup/execution-world/world-generation-provenance.json" \
-  "$local_stack/world/world-generation-provenance.json"
+if [[ "$test_case" == "reset_owned_restore_retry" ]]; then
+  cmp -s \
+    "$reset_backup/execution-world/generated-scenario-world/snapshot.json" \
+    "$sidecar_path/snapshot.json"
+  cmp -s \
+    "$reset_backup/execution-world/generated-scenario-world/journal.json" \
+    "$sidecar_path/journal.json"
+  cmp -s \
+    "$reset_backup/execution-world/world-generation-provenance.json" \
+    "$provenance_path"
+else
+  cmp -s "$tmp_dir/expected-generated-snapshot.json" "$sidecar_path/snapshot.json"
+  cmp -s "$tmp_dir/expected-generated-journal.json" "$sidecar_path/journal.json"
+  cmp -s "$tmp_dir/expected-world-generation-provenance.json" "$provenance_path"
+fi
 jq -e \
-  --arg sidecar "$local_stack/world/generated-scenario-world" \
-  --arg provenance "$local_stack/world/world-generation-provenance.json" \
+  --arg sidecar "$sidecar_path" \
+  --arg provenance "$provenance_path" \
   '.generated_world_sidecar.resolved_path == $sidecar
     and .world_generation_provenance.resolved_path == $provenance' \
-  "$tmp_dir/governed-bundle.json" >/dev/null
+  "$bundle_path" >/dev/null
 
-echo "ok: local observer sync accepts sequencer/storage validator env pair"
+echo "ok: observer reset case $test_case"
