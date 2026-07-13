@@ -120,7 +120,7 @@ if [[ "$TARGET_STATUS" == "ready" ]]; then
   FROZEN_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)"
   grep -q 'Pre-PR Local Role Review: passed' "$REVIEW_PACKET_FILE" || die "review packet is not passed"
   grep -q "Source Head: $FROZEN_HEAD" "$REVIEW_PACKET_FILE" || die "review packet is not bound to current frozen HEAD"
-  grep -Eq 'Slice Ledger: [^[:space:]].*slice-ledger.*\.jsonl' "$REVIEW_PACKET_FILE" || die "review packet lacks machine-checkable slice provenance"
+  grep -Eq 'Slice Ledger: [^[:space:]].*slice-ledger.*\.jsonl' "$REVIEW_PACKET_FILE" || die "review packet lacks a machine-checkable role-return ledger"
   REVIEW_FIELDS="$(python3 - "$REVIEW_PACKET_FILE" <<'PY'
 import re,sys
 t=open(sys.argv[1],encoding='utf-8').read()
@@ -134,8 +134,8 @@ PY
   REVIEW_ROLES="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^roles=//p')"
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
-  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
-    || die "ready closeout provenance validation failed"
+  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
+    || die "ready closeout role-return validation failed"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then
   RECORDED_PR_NUMBER="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'

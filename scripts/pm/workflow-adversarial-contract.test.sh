@@ -57,12 +57,13 @@ fi
 # it must neither pass nor collapse into an unstructured attestation error.
 if [[ "$CASE" == all || "$CASE" == provenance ]]; then
 cat >"$TMPDIR/empty-ledger.jsonl" <<'JSON'
-{"role":"repository_health_engineer","status":"completed","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","slice_id":"11111111-1111-4111-8111-111111111111","dispatch_receipt":"missing.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified","artifact_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"none","artifacts":[]}
+{"task_uid":"task_11111111111111111111111111111111","role":"repository_health_engineer","status":"completed","head":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","slice_id":"11111111-1111-4111-8111-111111111111","dispatch_receipt":"missing.json","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified","artifact_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"none","artifacts":[]}
 JSON
 set +e
 python3 "$ROOT_DIR/scripts/pm/validate-review-provenance.py" --root "$TMPDIR" \
+  --task-uid task_11111111111111111111111111111111 \
   --ledger empty-ledger.jsonl --roles repository_health_engineer \
-  --source-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --source-head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --mode unattended \
   >"$TMPDIR/capability.out" 2>"$TMPDIR/capability.err"
 cap_status=$?
 set -e

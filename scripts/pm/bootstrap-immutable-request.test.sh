@@ -7,10 +7,18 @@ export OASIS7_PM_TEST_SCRATCH="${OASIS7_PM_TEST_SCRATCH:-$TMPDIR}"
 trap 'rm -rf "$TMPDIR"' EXIT
 mkdir -p "$TMPDIR/bin"
 
+FIXTURE_ROOT="$TMPDIR/repo"
+git init -q -b main "$FIXTURE_ROOT"
+git -C "$FIXTURE_ROOT" config user.name "oasis7 smoke"
+git -C "$FIXTURE_ROOT" config user.email "smoke@example.invalid"
+printf 'fixture\n' >"$FIXTURE_ROOT/README.md"
+git -C "$FIXTURE_ROOT" add README.md
+git -C "$FIXTURE_ROOT" commit -qm "initial fixture"
+
 REPO=eng-cc/oasis7
 TITLE='immutable bootstrap fixture'
 OWNER=tpm
-WORKTREE="$ROOT_DIR"
+WORKTREE="$FIXTURE_ROOT"
 KEY="$(python3 - "$REPO" "$TITLE" "$OWNER" "$WORKTREE" <<'PY'
 import hashlib,sys
 print(hashlib.sha256('\0'.join(sys.argv[1:]).encode()).hexdigest())
@@ -30,7 +38,7 @@ SH
 chmod +x "$TMPDIR/bin/gh"
 
 set +e
-GH_CALLED="$TMPDIR/gh-called" PATH="$TMPDIR/bin:$PATH" python3 "$ROOT_DIR/scripts/pm/github-project-task.py" new-task "$ROOT_DIR" \
+GH_CALLED="$TMPDIR/gh-called" PATH="$TMPDIR/bin:$PATH" python3 "$ROOT_DIR/scripts/pm/github-project-task.py" new-task "$FIXTURE_ROOT" \
   --repo "$REPO" --project-owner eng-cc --project-number 1 \
   --owner-role "$OWNER" --title "$TITLE" --module engineering --priority P2 \
   --source-ref doc/engineering/project.md --acceptance 'original acceptance' \

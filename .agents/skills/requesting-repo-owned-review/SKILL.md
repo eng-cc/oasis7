@@ -19,8 +19,8 @@ Use after implementation freeze and before the canonical Pre-PR Ready gate.
 2. Select only involved roles from changed surfaces and risk. Always include `repository_health_engineer` for workflow/governance/repository surfaces and `qa_engineer` for behavior or verification coverage.
 3. Dispatch fresh bounded reviews with the standard slice contract already recorded in GitHub task issue evidence comments.
 4. Require each role to return `findings` or `no_findings`, plus `residual_risk`; resolve valid findings or reject them with evidence.
-5. Ask the trusted producer to validate and record the canonical packet at the linked schema. Do not hand-author or restate it here.
-6. Continue only when the canonical Pre-PR Ready gate passes; missing trusted production attestation is `capability_blocked`.
+5. Record the canonical packet in the GitHub task issue and validate its frozen-head, role-complete ledger and artifacts with the repository helper.
+6. Continue only when the canonical Pre-PR Ready gate passes. Require trusted runtime attestation only when operating the future unattended supervisor.
 
 Role selection exceptions:
 
@@ -34,9 +34,9 @@ Role selection exceptions:
 - reviewed comparison range and frozen head
 - involved roles and immutable returns
 - findings disposition and residual risk
-- canonical packet/attestation evidence link, or `capability_blocked` with resume instruction
+- canonical packet evidence link, or a canonical blocker with resume instruction
 
-Do not use chat-only review, self-signed evidence, or local fixture output as production provenance. Do not resolve GitHub review threads solely from this local review.
+Do not use chat-only review or local fixture output as live task evidence. Do not resolve GitHub review threads solely from this local review. Self-signed evidence never substitutes for runtime attestation in unattended mode.
 
 ## Guardrails
 
