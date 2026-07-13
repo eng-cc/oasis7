@@ -252,7 +252,9 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
     listed = [] if args.task_uid else list_issue_numbers(args.repo, args.limit)
     if selected:
         issue_number = str(selected.get("issue_number") or "")
-        listed = [int(issue_number)] if issue_number.isdigit() else []
+        if not issue_number.isdigit():
+            return [{"task_uid": args.task_uid, "status": "blocked", "reason": "selected task has no valid issue_number; refresh or repair the local mapping"}]
+        listed = [int(issue_number)]
     results: list[dict[str, Any]] = []
     issue_numbers = listed if args.task_uid else candidate_issue_numbers(mapping, listed)
     for issue_number in issue_numbers:

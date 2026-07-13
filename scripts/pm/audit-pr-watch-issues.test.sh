@@ -76,6 +76,21 @@ cat > "$MAPPING" <<EOF
       "project_item_id": "PVTI_MIXED_EVIDENCE",
       "status": "pr_watch",
       "title": "mixed evidence task"
+    },
+    "task_gggggggggggggggggggggggggggggggg": {
+      "owner_role": "tpm",
+      "priority": "P3",
+      "project_item_id": "PVTI_NO_ISSUE",
+      "status": "pr_watch",
+      "title": "missing issue number task"
+    },
+    "task_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh": {
+      "issue_number": "not-a-number",
+      "owner_role": "tpm",
+      "priority": "P3",
+      "project_item_id": "PVTI_BAD_ISSUE",
+      "status": "pr_watch",
+      "title": "invalid issue number task"
     }
   },
   "version": 1
@@ -210,6 +225,26 @@ echo "unexpected gh invocation: \$*" >&2
 exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
+
+: > "$LOG"
+for selected_uid in task_gggggggggggggggggggggggggggggggg task_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh; do
+  PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" \
+    --mapping "$MAPPING" --task-uid "$selected_uid" --json > "$TMPDIR/missing-issue.json"
+
+  python3 - "$TMPDIR/missing-issue.json" "$selected_uid" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["status"] == "ok", payload
+assert len(payload["results"]) == 1, payload
+assert payload["results"][0]["status"] == "blocked", payload
+assert payload["results"][0]["task_uid"] == sys.argv[2], payload
+assert "issue_number" in payload["results"][0]["reason"], payload
+PY
+done
+[[ ! -s "$LOG" ]] || { echo "selected invalid issue number unexpectedly called GitHub" >&2; exit 1; }
 
 PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --json > "$TMPDIR/dry-run.json"
 

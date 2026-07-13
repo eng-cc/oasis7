@@ -682,6 +682,24 @@ def update_fields(
     return updated, skipped
 
 
+def confirmed_project_field_values(
+    current_values: dict[str, str],
+    task: OrderedDict[str, Any],
+    skipped: list[str],
+    only_fields: set[str] | None = None,
+) -> dict[str, str]:
+    """Merge desired values that were confirmed unchanged or successfully written."""
+    confirmed = dict(current_values)
+    skipped_by_field = {item.split(":", 1)[0]: item for item in skipped}
+    for field_name, value in project_field_values(task).items():
+        if only_fields is not None and field_name not in only_fields:
+            continue
+        disposition = skipped_by_field.get(field_name)
+        if disposition is None or disposition.endswith(":unchanged"):
+            confirmed[field_name] = value
+    return confirmed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sync oasis7 .pm tasks to GitHub Issues and a GitHub Project.")
     parser.add_argument("root", help="repository root")
@@ -860,7 +878,9 @@ def main(argv: list[str] | None = None) -> int:
                         "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                     }
                 )
-                live_record["project_field_values"] = dict(project_field_values(task))
+                live_record["project_field_values"] = confirmed_project_field_values(
+                    dict(record.get("project_field_values") or {}), task, skipped, only_fields
+                )
                 if content_id:
                     live_record["content_id"] = content_id
                 persist_mapping(mapping_path, mapping)
@@ -965,7 +985,9 @@ def main(argv: list[str] | None = None) -> int:
                 "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             }
         )
-        record["project_field_values"] = dict(project_field_values(task))
+        record["project_field_values"] = confirmed_project_field_values(
+            current_values, task, skipped, only_fields
+        )
         persist_mapping(mapping_path, mapping)
         summary["tasks"].append(
             {

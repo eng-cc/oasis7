@@ -105,6 +105,27 @@ export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 : > "$GH_CALL_LOG"
 
+python3 - "$TMPDIR/github-project-sync.py" <<'PY'
+import importlib.util
+import sys
+from collections import OrderedDict
+
+spec = importlib.util.spec_from_file_location("sync", sys.argv[1])
+sync = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sync)
+task = OrderedDict(task_uid="task_x", status="committed", owner_role="tpm", module="engineering", priority="P2")
+current = {"PM Status": "blocked", "Owner Role": "tpm"}
+confirmed = sync.confirmed_project_field_values(
+    current,
+    task,
+    ["PM Status:missing_option:committed", "Owner Role:unchanged", "Last PM Update:deferred_date_field"],
+)
+assert confirmed["PM Status"] == "blocked", confirmed
+assert confirmed["Owner Role"] == "tpm", confirmed
+assert confirmed["Task UID"] == "task_x", confirmed
+assert "Last PM Update" not in confirmed, confirmed
+PY
+
 DRY_JSON="$TMPDIR/dry.json"
 GH_FAKE_RECOVER_EXISTING=1 python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \
