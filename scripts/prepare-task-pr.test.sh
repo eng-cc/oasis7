@@ -1131,6 +1131,19 @@ if "must include a non-closing GitHub task reference" not in stderr:
     raise SystemExit(f"expected task-reference error for bad explicit body, got: {stderr}")
 PY
 
+for closing_link in \
+  "Closes eng-cc/oasis7#123" \
+  "Fixes https://github.com/eng-cc/oasis7/issues/123"; do
+  closing_body_file="$TMPDIR/closing-pr-body.md"
+  printf 'Refs #123\n%s\n' "$closing_link" > "$closing_body_file"
+  if run_prepare "$TMPDIR/gh-closing-body.log" "$TMPDIR/git-closing-body.log" \
+    --create --body-file "$closing_body_file" >/dev/null 2>"$TMPDIR/closing-body.err"; then
+    echo "expected qualified auto-close link to fail: $closing_link" >&2
+    exit 1
+  fi
+  grep -F 'must include a non-closing GitHub task reference' "$TMPDIR/closing-body.err" >/dev/null
+done
+
 behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
 behind_out="$TMPDIR/behind.out"

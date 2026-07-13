@@ -525,7 +525,8 @@ import sys
 body = Path(sys.argv[1]).read_text(encoding="utf-8")
 issue_number = re.escape(sys.argv[2])
 reference = re.compile(rf"\b(refs?|references?)\s+#\s*{issue_number}\b", re.IGNORECASE)
-auto_close = re.compile(rf"\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#\s*{issue_number}\b", re.IGNORECASE)
+target = rf"(?:#\s*{issue_number}\b|[\w.-]+/[\w.-]+#\s*{issue_number}\b|https?://github\.com/[\w.-]+/[\w.-]+/issues/{issue_number}\b)"
+auto_close = re.compile(rf"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+{target}", re.IGNORECASE)
 raise SystemExit(0 if reference.search(body) and not auto_close.search(body) else 1)
 PY
 }

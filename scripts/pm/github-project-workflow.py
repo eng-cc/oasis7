@@ -390,6 +390,7 @@ def expected_project_id(args: argparse.Namespace, mapping: dict[str, Any]) -> st
 
 def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
     status = str(task.get("status") or "")
+    internal_phase = str(task.get("workflow_phase") or "")
     workflow_phase = {
         "blocked": "blocked",
         "ready": "pre_pr_ready",
@@ -406,6 +407,8 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "done": "Done",
         "deferred": "Done",
     }.get(status, "Todo")
+    if status == "done" and internal_phase != "post_merge_done":
+        project_status = "In Progress"
     return {
         "Status": project_status,
         "Task UID": str(task.get("task_uid") or ""),

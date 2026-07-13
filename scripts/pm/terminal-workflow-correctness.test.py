@@ -26,13 +26,20 @@ class TerminalWorkflowCorrectness(unittest.TestCase):
 
     def test_project_uses_coarse_done_for_internal_terminal_phases(self) -> None:
         sync = load("github_project_sync", ROOT / "scripts/pm/github-project-sync.py")
-        for phase in ("task_done", "main_sync", "post_merge_done"):
-            values = sync.project_field_values({"status": "done", "workflow_phase": phase})
-            self.assertEqual("done", values["Workflow Phase"], phase)
-
         workflow = load("github_project_workflow", ROOT / "scripts/pm/github-project-workflow.py")
-        values = workflow.expected_project_values({"status": "done", "workflow_phase": "task_done"})
-        self.assertEqual("done", values["Workflow Phase"])
+        for phase in ("task_done", "main_sync", "post_merge_done"):
+            task = {"status": "done", "workflow_phase": phase}
+            written = sync.project_field_values(task)
+            audited = workflow.expected_project_values(task)
+            for field in ("Status", "PM Status", "Workflow Phase"):
+                self.assertEqual(written[field], audited[field], f"{phase}: {field}")
+            self.assertEqual("done", written["Workflow Phase"], phase)
+        self.assertEqual("In Progress", sync.project_field_values(
+            {"status": "done", "workflow_phase": "task_done"})["Status"])
+        self.assertEqual("In Progress", sync.project_field_values(
+            {"status": "done", "workflow_phase": "main_sync"})["Status"])
+        self.assertEqual("Done", sync.project_field_values(
+            {"status": "done", "workflow_phase": "post_merge_done"})["Status"])
 
     def test_generated_pr_link_does_not_auto_close_task(self) -> None:
         text = (ROOT / "scripts/prepare-task-pr.sh").read_text(encoding="utf-8")
