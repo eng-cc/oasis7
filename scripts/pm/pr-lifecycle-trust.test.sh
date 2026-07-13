@@ -157,7 +157,11 @@ if PATH="$TMPDIR/bin:$PATH" TEST_PR_FIXTURE="$TMPDIR/persisted-hold.json" TEST_M
   echo "expected actionable comment from second cursor page to block merge" >&2
   exit 1
 fi
-grep -F 'actionable PR conversation comment: https://example.invalid/comment/2' "$TMPDIR/multipage.out" >/dev/null
+grep -F 'bounded PR snapshot exceeded 100 nodes for: comments' "$TMPDIR/multipage.err" >/dev/null
+if grep -F '"readiness_receipt"' "$TMPDIR/multipage.out" >/dev/null; then
+  echo "paginated PR surface minted readiness despite incomplete bounded snapshot" >&2
+  exit 1
+fi
 
 python3 - "$TMPDIR/missing-hold.json" "$TMPDIR/actionable-bot.json" <<'PY'
 import json,sys

@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.7**
+Version: **v1.9.8**
 Last Updated: **2026-07-13**
 
 ## 0. Purpose
@@ -9,6 +9,30 @@ Mandatory rule:
 1. Any workflow change must be edited in this file first.
 2. After this file is updated, sync all related scripts/docs/skills to match.
 3. PRs that change workflow scripts without updating this file are invalid.
+
+### GitHub query budget and terminal defaults
+
+- Terminal refresh, sync, PR-watch audit, and closeout require the selected
+  `task_uid`; broad Project or repository issue traversal is rejected unless
+  an operator explicitly selects `--global-maintenance`.
+- Selected terminal audit command:
+  `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`.
+  Repository-wide repair is a separate operator action:
+  `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`; it must
+  pass the live GraphQL budget guard before listing issues.
+- A broad GraphQL operation reads live `rateLimit.remaining/resetAt` first and
+  returns a resumable `capability_blocked` result when the budget is unknown or
+  insufficient. Stale local cache is never authority to continue.
+- Project metadata is cached for one process run. Field updates skip values
+  proven unchanged by the same live snapshot.
+- One-task refresh uses at most one Project GraphQL read, including missing-item
+  recovery. One PR-watch poll batches comments, reviews, threads, and checks in
+  one bounded read. Selected-task closeout reuses one audit while task, HEAD,
+  and evidence inputs remain frozen.
+- Long-running PR/CI watches start at 60 seconds, back off to at most 300
+  seconds while state is unchanged, reset on state change, and report only
+  meaningful transitions. Ten-second GraphQL polling is not a supported
+  terminal default.
 
 <a id="capability-and-ownership"></a>
 ## Capability status
@@ -344,7 +368,7 @@ Deterministic script contract:
   auto-close keyword for the task. The generated linkage is
   `Refs #<task-issue-number>` and is separate from `Task UID`; only the terminal
   finalizer closes the task issue.
-- `scripts/pm/audit-pr-watch-issues.sh --close` is the remedial post-merge
+- `scripts/pm/audit-pr-watch-issues.sh --task-uid <TASK-UID> --close` is the remedial post-merge
   audit for GitHub-backed tasks whose recorded PR is already merged but whose
   PM task issue/body/Project state still says `pr_watch`. The PR body
   PR linkage is not a closure mechanism; the audit remains the PM lifecycle

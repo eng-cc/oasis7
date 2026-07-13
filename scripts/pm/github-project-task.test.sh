@@ -281,8 +281,11 @@ if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" ]]; then
   cat "$GH_CALL_LOG" >&2
   exit 1
 fi
+GRAPHQL_BEFORE="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/refresh-task-cache.sh" \
   --task-uid "$TASK_UID" --json >"$TMPDIR/refreshed-after-partial.json"
+GRAPHQL_AFTER="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
+[[ $((GRAPHQL_AFTER - GRAPHQL_BEFORE)) == 1 ]]
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
 import json, sys
 record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]

@@ -111,6 +111,7 @@ GH_FAKE_RECOVER_EXISTING=1 python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
   --project-owner eng-cc \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --task-uid task_11111111111111111111111111111111 \
   --dry-run \
   --json > "$DRY_JSON"
 
@@ -134,6 +135,7 @@ python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
   --project-owner eng-cc \
   --project-number 1 \
   --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --task-uid task_11111111111111111111111111111111 \
   --apply \
   --json > "$APPLY_JSON"
 

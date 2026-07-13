@@ -134,6 +134,10 @@ print(json.dumps({"body": body, "comments": comments, "number": int(number), "st
 PY
 }
 
+if [[ "\${1:-}" == "api" && "\${2:-}" == "graphql" ]]; then
+  printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'
+  exit 0
+fi
 if [[ "\${1:-}" == "issue" && "\${2:-}" == "list" ]]; then
   printf '[{"number":123,"state":"OPEN","title":"open merged task","url":"https://github.com/eng-cc/oasis7/issues/123"},{"number":124,"state":"CLOSED","title":"closed merged task","url":"https://github.com/eng-cc/oasis7/issues/124"},{"number":125,"state":"OPEN","title":"ready task","url":"https://github.com/eng-cc/oasis7/issues/125"},{"number":126,"state":"OPEN","title":"hold task","url":"https://github.com/eng-cc/oasis7/issues/126"},{"number":128,"state":"OPEN","title":"blocked task","url":"https://github.com/eng-cc/oasis7/issues/128"},{"number":129,"state":"OPEN","title":"missing evidence task","url":"https://github.com/eng-cc/oasis7/issues/129"},{"number":130,"state":"OPEN","title":"mixed evidence task","url":"https://github.com/eng-cc/oasis7/issues/130"}]\n'
   exit 0
@@ -207,7 +211,7 @@ exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
 
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --json > "$TMPDIR/dry-run.json"
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --json > "$TMPDIR/dry-run.json"
 
 python3 - "$TMPDIR/dry-run.json" <<'PY'
 import json
@@ -225,7 +229,7 @@ assert by_number[130]["status"] == "blocked" and "pre-PR review" in by_number[13
 PY
 
 : > "$LOG"
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --close --json > "$TMPDIR/close.json"
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --close --json > "$TMPDIR/close.json"
 
 python3 - "$TMPDIR/close.json" "$MAPPING" "$LOG" <<'PY'
 import json
