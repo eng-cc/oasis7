@@ -590,6 +590,20 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(helper)
         self.assertLess(cd.start(), helper.start(), "runbook must enter default worktree before its first helper")
 
+    def test_terminal_runbook_separates_ordinary_and_squash_retry_lanes(self) -> None:
+        match = re.search(r"(?ms)^###?\s+Terminal runbook\s*$\n(.*?)(?=^#{2,3}\s+|\Z)", self.text)
+        self.assertIsNotNone(match)
+        runbook = match.group(1)
+        ordinary = re.search(r"(?ms)4\. Main sync.*?```bash\n(.*?)```", runbook)
+        self.assertIsNotNone(ordinary)
+        self.assertNotIn("--patch-equivalence-receipt", ordinary.group(1))
+        retry = re.search(r"(?m)^Squash/rebase retry:.*$", runbook)
+        self.assertIsNotNone(retry)
+        self.assertIn("patch-equivalence-receipt.sh", retry.group(0))
+        self.assertIn("--patch-equivalence-receipt", retry.group(0))
+        self.assertIn("exact binary delta", retry.group(0))
+        self.assertIn("integration commit remains an ancestor", retry.group(0))
+
     def test_failed_is_escalation_or_new_epoch_not_resume_authority(self) -> None:
         failed_windows = [
             self.text[max(0, m.start() - 160):m.end() + 240]

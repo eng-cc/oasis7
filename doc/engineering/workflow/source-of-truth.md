@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.9**
+Version: **v1.9.10**
 Last Updated: **2026-07-13**
 
 ## 0. Purpose
@@ -612,6 +612,7 @@ cd <canonical-default-worktree>
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
   --receipt-output "$RECEIPT_ROOT/main-sync-receipt.json"
 ```
+Squash/rebase retry: run `bash ./scripts/pm/patch-equivalence-receipt.sh --root <canonical-default-worktree> --branch-tip <task-branch-tip> --main-commit <integration-commit-in-main-history> --main-parent <integration-first-parent> > "$RECEIPT_ROOT/patch-equivalence-receipt.json"`, then retry steps 4 and 5 with `--patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json"`. Both helpers recompute the exact binary delta and bind its digest; later main commits are allowed only while the integration commit remains an ancestor, and caller-authored JSON is not authority.
 
 5. Safe cleanup — require journal/receipt readback; resume by retrying this command.
 ```bash
@@ -635,7 +636,7 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 1 | merge receipt | live PR is merged | repeat step 1 |
 | 2 | `task_done` | task remains open at `task_done` | repeat step 2 |
 | 3 | refreshed mapping | canonical default-worktree task truth | repeat step 3 |
-| 4 | main-sync receipt | local/default remote heads match | repeat step 4 |
+| 4 | main-sync receipt | local/default remote heads match and ancestry or exact patch equivalence is verified | repeat step 4 |
 | 5 | cleanup receipt | intent journal proves cleanup | repeat step 5 |
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
 

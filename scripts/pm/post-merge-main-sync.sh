@@ -4,16 +4,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 die() { echo "post-merge-main-sync: $*" >&2; exit 1; }
 usage() {
-  echo "Usage: $0 --repo-root <path> --main-ref <branch> --task-uid <uid> --pr-receipt <json> --receipt-output <json>"
+  echo "Usage: $0 --repo-root <path> --main-ref <branch> --task-uid <uid> --pr-receipt <json> --receipt-output <json> [--patch-equivalence-receipt <json>]"
 }
 
-REPO_ROOT="" MAIN_REF="" TASK_UID="" PR_RECEIPT="" RECEIPT_OUTPUT=""
+REPO_ROOT="" MAIN_REF="" TASK_UID="" PR_RECEIPT="" RECEIPT_OUTPUT="" PATCH_RECEIPT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo-root) REPO_ROOT="${2:-}"; shift 2 ;;
     --main-ref) MAIN_REF="${2:-}"; shift 2 ;;
     --task-uid) TASK_UID="${2:-}"; shift 2 ;;
     --pr-receipt) PR_RECEIPT="${2:-}"; shift 2 ;;
+    --patch-equivalence-receipt) PATCH_RECEIPT="${2:-}"; shift 2 ;;
     --receipt-output) RECEIPT_OUTPUT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -28,6 +29,10 @@ REPO_ROOT="$(git -C "$REPO_ROOT" rev-parse --show-toplevel)"
 # Canonical validation precedes fetch or any other repository effect.
 PR_RECEIPT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$PR_RECEIPT" --name merge-receipt.json)" || die "noncanonical merge receipt"
 RECEIPT_OUTPUT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$RECEIPT_OUTPUT" --name main-sync-receipt.json)" || die "noncanonical main-sync receipt output"
+if [[ -n "$PATCH_RECEIPT" ]]; then
+  PATCH_RECEIPT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$PATCH_RECEIPT" --name patch-equivalence-receipt.json)" || die "noncanonical patch-equivalence receipt"
+  [[ -f "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is unavailable"
+fi
 ACTUAL_BRANCH="$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD)" || die "repo root must be on a named branch"
 [[ "$ACTUAL_BRANCH" == "$MAIN_REF" ]] || die "repo root is not checked out on the requested default branch"
 [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=all)" ]] || die "default-branch worktree is dirty"
@@ -65,19 +70,62 @@ git -C "$REPO_ROOT" merge --ff-only "$REMOTE_MAIN" >/dev/null || die "default br
 LOCAL_MAIN="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$MAIN_REF")"
 [[ "$LOCAL_MAIN" == "$REMOTE_MAIN" ]] || die "default branch did not synchronize exactly"
 MERGED_HEAD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("head_oid") or "")' "$PR_RECEIPT")"
-git -C "$REPO_ROOT" merge-base --is-ancestor "$MERGED_HEAD" "$LOCAL_MAIN" || die "synchronized default branch does not contain merged head"
+INTEGRATION_MODE="ancestry"
+PATCH_RECEIPT_SHA=""
+PATCH_ID=""
+DELTA_SHA256=""
+PATCH_MAIN_COMMIT=""
+PATCH_MAIN_PARENT=""
+if git -C "$REPO_ROOT" merge-base --is-ancestor "$MERGED_HEAD" "$LOCAL_MAIN"; then
+  [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when synchronized main contains merged head"
+else
+  [[ -n "$PATCH_RECEIPT" ]] || die "synchronized default branch does not contain merged head and no patch-equivalence receipt was supplied"
+  PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$MERGED_HEAD" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding='utf-8'))
+if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('issuer')!='oasis7_patch_equivalence_helper':
+ raise SystemExit('post-merge-main-sync: invalid patch-equivalence receipt type or issuer')
+if p.get('branch_tip')!=sys.argv[2]:
+ raise SystemExit('post-merge-main-sync: patch-equivalence receipt identity mismatch')
+if not p.get('main_parent') or not p.get('patch_id') or not p.get('delta_sha256'):
+ raise SystemExit('post-merge-main-sync: incomplete patch-equivalence receipt')
+print(p['main_commit']); print(p['main_parent']); print(p['patch_id']); print(p['delta_sha256'])
+PY
+)" || die "invalid patch-equivalence receipt"
+  PATCH_MAIN_COMMIT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
+  PATCH_MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
+  PATCH_ID="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
+  DELTA_SHA256="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '4p')"
+  git -C "$REPO_ROOT" merge-base --is-ancestor "$PATCH_MAIN_COMMIT" "$LOCAL_MAIN" || die "patch-equivalence integration commit is not contained in synchronized main"
+  git -C "$REPO_ROOT" rev-list --first-parent "$PATCH_MAIN_COMMIT" \
+    | awk -v base="$PATCH_MAIN_PARENT" '$0==base { found=1 } END { exit !found }' \
+    || die "patch-equivalence receipt main parent is not on the integration first-parent chain"
+  PATCH_BASE="$(git -C "$REPO_ROOT" merge-base "$MERGED_HEAD" "$PATCH_MAIN_PARENT")"
+  BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_BASE..$MERGED_HEAD" | git patch-id --stable | awk '{print $1}')"
+  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_MAIN_PARENT..$PATCH_MAIN_COMMIT" | git patch-id --stable | awk '{print $1}')"
+  [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$MAIN_PATCH" && "$BRANCH_PATCH" == "$PATCH_ID" ]] || die "patch-equivalence receipt failed recomputation"
+  BRANCH_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$PATCH_BASE..$MERGED_HEAD" | shasum -a 256 | awk '{print $1}')"
+  MAIN_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$PATCH_MAIN_PARENT..$PATCH_MAIN_COMMIT" | shasum -a 256 | awk '{print $1}')"
+  [[ "$BRANCH_DELTA_SHA" == "$MAIN_DELTA_SHA" && "$BRANCH_DELTA_SHA" == "$DELTA_SHA256" ]] || die "patch-equivalence exact delta failed recomputation"
+  PATCH_RECEIPT_SHA="$(shasum -a 256 "$PATCH_RECEIPT" | awk '{print $1}')"
+  INTEGRATION_MODE="patch_equivalence"
+fi
 
 mkdir -p "$(dirname "$RECEIPT_OUTPUT")"
 TMP_RECEIPT="$(mktemp "$(dirname "$RECEIPT_OUTPUT")/.main-sync.XXXXXX")"
 trap 'rm -f "$TMP_RECEIPT"' EXIT
-python3 - "$TMP_RECEIPT" "$MAPPING" "$TASK_UID" "$PR_RECEIPT" "$MAIN_REF" "$LOCAL_MAIN" <<'PY'
+python3 - "$TMP_RECEIPT" "$MAPPING" "$TASK_UID" "$PR_RECEIPT" "$MAIN_REF" "$LOCAL_MAIN" "$INTEGRATION_MODE" "$PATCH_RECEIPT_SHA" "$PATCH_ID" "$DELTA_SHA256" "$PATCH_MAIN_COMMIT" "$PATCH_MAIN_PARENT" <<'PY'
 import datetime as d,hashlib,json,pathlib,sys
 mapping=json.load(open(sys.argv[2],encoding='utf-8')); record=(mapping.get('tasks') or {}).get(sys.argv[3]) or {}
 receipt_path=pathlib.Path(sys.argv[4]); digest=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
 out={'receipt_type':'oasis7_main_sync','issuer':'post-merge-main-sync','task_uid':sys.argv[3],
      'repository':record['repository'],'default_branch':sys.argv[5],
      'main_commit':sys.argv[6],'remote_main_commit':sys.argv[6],
-     'merge_receipt_sha256':digest,'observed_at':d.datetime.now(d.timezone.utc).isoformat()}
+     'merge_receipt_sha256':digest,'integration_mode':sys.argv[7],
+     'observed_at':d.datetime.now(d.timezone.utc).isoformat()}
+if sys.argv[7]=='patch_equivalence':
+ out['patch_equivalence_receipt_sha256']=sys.argv[8]; out['patch_id']=sys.argv[9]; out['delta_sha256']=sys.argv[10]
+ out['integration_commit']=sys.argv[11]; out['integration_parent']=sys.argv[12]
 pathlib.Path(sys.argv[1]).write_text(json.dumps(out,indent=2,sort_keys=True)+'\n',encoding='utf-8')
 PY
 mv "$TMP_RECEIPT" "$RECEIPT_OUTPUT"

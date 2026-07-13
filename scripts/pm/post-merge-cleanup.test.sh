@@ -46,7 +46,7 @@ python3 - "$MERGE_RECEIPT" "$MAIN_SYNC_RECEIPT" "$TASK_UID" "$MAIN_COMMIT" "$OBS
 import hashlib,json,pathlib,sys
 merge=pathlib.Path(sys.argv[1]); out=pathlib.Path(sys.argv[2])
 out.write_text(json.dumps({
-  "receipt_type":"oasis7_main_sync", "issuer":"post-merge-main-sync",
+  "receipt_type":"oasis7_main_sync", "issuer":"post-merge-main-sync", "integration_mode":"ancestry",
   "task_uid":sys.argv[3], "repository":"eng-cc/oasis7", "default_branch":"main",
   "main_commit":sys.argv[4], "remote_main_commit":sys.argv[4],
   "merge_receipt_sha256":hashlib.sha256(merge.read_bytes()).hexdigest(),
