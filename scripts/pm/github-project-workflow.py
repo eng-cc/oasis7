@@ -394,7 +394,7 @@ def expected_project_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "blocked": "blocked",
         "ready": "pre_pr_ready",
         "pr_watch": "pr_watch",
-        "done": "task_done",
+        "done": "done",
         "deferred": "blocked",
     }.get(status, "execution")
     project_status = {

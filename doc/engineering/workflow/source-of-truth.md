@@ -283,15 +283,18 @@ Project field taxonomy:
 | `Module` | TPM during task creation/routing | Large work queue and reporting group, not owner role or free tag | `engineering`, `game-strategy`, `visualization`, `chain-world-state-substrate` |
 | GitHub Project built-in `Status` | TPM and Project views | Human cockpit lane for day-to-day queue visibility | `Todo`, `In Progress`, `Blocked`, `Ready / PR`, `PR Watch`, `Done` |
 | `PM Status` | PM lifecycle scripts | Deterministic lifecycle state used by helpers/audits | `candidate`, `committed`, `blocked`, `ready`, `pr_watch`, `done`, `deferred` |
-| `Workflow Phase` | Workflow helpers | Current workflow stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pre_pr_ready`, `pr_watch`, `blocked`, `task_done`, `main_sync`, `post_merge_done` |
+| `Workflow Phase` | Workflow helpers | Project cockpit stage, orthogonal to queue lane | `bootstrap`, `planning`, `execution`, `verification`, `pre_pr_review`, `pre_pr_ready`, `pr_watch`, `blocked`, `done` |
 | Priority | Owner / TPM | Scheduling priority, not severity | repo-defined `P0`..`P3` values |
 
 Scripts that sync Project state must keep GitHub built-in `Status`, custom `PM
 Status`, and `Workflow Phase` aligned through deterministic mapping:
 `candidate -> Todo/execution`, `committed -> In Progress/execution`,
 `blocked -> Blocked/blocked`, `ready -> Ready / PR/pre_pr_ready`,
-`pr_watch -> PR Watch/pr_watch`, `done -> In Progress/task_done`, and
-`deferred -> Done/blocked`; only the finalizer advances to `post_merge_done`.
+`pr_watch -> PR Watch/pr_watch`, `done -> In Progress/done`, and
+`deferred -> Done/blocked`; internal receipts retain the finer
+`task_done -> main_sync -> post_merge_done` sequence while the Project cockpit
+uses the coarse `done` phase. Only the finalizer advances built-in Status to
+`Done`.
 `Blocked`, `Ready / PR`, `PR Watch`, and `Done` are cockpit lanes, not modules
 or owner roles.
 
@@ -335,15 +338,16 @@ Deterministic script contract:
   reconciliation. A foreign repository's same-name head is never a match.
 - `scripts/prepare-task-pr.sh` must read passed local role review packets from
   GitHub task issue evidence comments and mapping-backed task truth.
-- `scripts/prepare-task-pr.sh --create` must include a GitHub auto-close
-  keyword for the bound GitHub task issue in the PR body, or reject an explicit
-  PR body file that omits the linkage. The normal generated linkage is
-  `Closes #<task-issue-number>` and is separate from `Task UID`.
+- `scripts/prepare-task-pr.sh --create` must include a non-closing GitHub task
+  reference in the PR body and reject explicit bodies that contain an
+  auto-close keyword for the task. The generated linkage is
+  `Refs #<task-issue-number>` and is separate from `Task UID`; only the terminal
+  finalizer closes the task issue.
 - `scripts/pm/audit-pr-watch-issues.sh --close` is the remedial post-merge
   audit for GitHub-backed tasks whose recorded PR is already merged but whose
   PM task issue/body/Project state still says `pr_watch`. The PR body
-  auto-close keyword is only a missed-closure backstop; the audit remains the
-  PM lifecycle synchronizer. Despite its retained CLI name, it advances only to
+  PR linkage is not a closure mechanism; the audit remains the PM lifecycle
+  synchronizer. Despite its retained CLI name, it advances only to
   `task_done`; it never writes `post_merge_done` or closes an issue. It may
   synchronize only PM task issues whose body
   contains the task marker, `status: pr_watch`, a recorded `pr_number` whose

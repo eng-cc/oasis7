@@ -222,7 +222,7 @@ printf 'frozen\n' >"$IMMUTABLE_ROOT/tracked.txt"
 git -C "$IMMUTABLE_ROOT" add tracked.txt
 git -C "$IMMUTABLE_ROOT" commit -qm frozen
 (
-  sleep 0.05
+  while [[ ! -e "$TMPDIR/immutable-verify-started" ]]; do sleep 0.01; done
   printf 'transient-live-change\n' >"$IMMUTABLE_ROOT/tracked.txt"
   sleep 0.05
   printf 'frozen\n' >"$IMMUTABLE_ROOT/tracked.txt"
@@ -231,7 +231,7 @@ MUTATOR_PID=$!
 PM_ROOT_DIR="$IMMUTABLE_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
   --claim-type task_complete \
   --verification-profile fixture_repository_state \
-  --verify-command "sleep 0.2; test \"\$(cat tracked.txt)\" = frozen" \
+  --verify-command "touch '$TMPDIR/immutable-verify-started'; sleep 0.2; test \"\$(cat tracked.txt)\" = frozen" \
   --json >"$TMPDIR/immutable-claim.json"
 wait "$MUTATOR_PID"
 python3 - "$TMPDIR/immutable-claim.json" <<'PY'
@@ -289,6 +289,22 @@ text=open(sys.argv[1],encoding='utf-8').read()
 match=re.search(r'for key in \(([^\n]+)\):\n\s+if str\(supplied', text)
 if not match or '"gate_epoch"' not in match.group(1):
     raise SystemExit('RED claim-ready: supplied gate_epoch is not compared with the fresh live gate epoch')
+PY
+
+# The workflow-behavior profile includes the task-transition fixture whose fake
+# GitHub client kills its parent.  The target must name that interrupt target
+# explicitly, isolate the fixture, and keep the eval caller alive.
+python3 - "$ROOT_DIR/scripts/pm/workflow-behavior-eval.sh" "$ROOT_DIR/scripts/pm/github-project-task.test.sh" <<'PY'
+from pathlib import Path
+import sys
+eval_text=Path(sys.argv[1]).read_text(encoding="utf-8")
+fixture_text=Path(sys.argv[2]).read_text(encoding="utf-8")
+if "GH_INTERRUPT_TARGET" not in fixture_text:
+    raise SystemExit("RED claim-ready: github-project-task fixture kills an implicit PPID instead of an explicit interrupt target")
+if "run_interrupt_isolated" not in eval_text or 'run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh"' not in eval_text:
+    raise SystemExit("RED claim-ready: workflow_behavior does not isolate github-project-task's parent-kill fixture")
+if "caller-survived" not in eval_text:
+    raise SystemExit("RED claim-ready: workflow_behavior has no caller-continuation proof after the isolated interrupt")
 PY
 
 echo "claim-ready.test: OK"

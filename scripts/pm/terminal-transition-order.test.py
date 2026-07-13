@@ -307,9 +307,13 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
     def test_canonical_phase_enum_and_done_default_are_nonterminal(self) -> None:
         source = SOURCE.read_text(encoding="utf-8")
         phase_row = next(line for line in source.splitlines() if line.startswith("| `Workflow Phase`"))
-        for phase in ("blocked", "task_done", "main_sync", "post_merge_done"):
+        for phase in ("blocked", "done"):
             self.assertIn(f"`{phase}`", phase_row)
+        for phase in ("task_done", "main_sync", "post_merge_done"):
+            self.assertNotIn(f"`{phase}`", phase_row)
         sync = SYNC.read_text(encoding="utf-8")
+        for phase in ("task_done", "main_sync", "post_merge_done"):
+            self.assertIn(phase, sync)
         phase_function = function(sync, "workflow_phase_for")
         self.assertRegex(phase_function, r"done[^\n]{0,120}task_done|task_done[^\n]{0,120}done")
         self.assertNotRegex(phase_function, r"done[^\n]{0,120}post_merge_done")

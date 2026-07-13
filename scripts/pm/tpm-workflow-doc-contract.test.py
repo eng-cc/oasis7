@@ -481,7 +481,8 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(enum_match, "Workflow Phase must publish one closed enum")
         canonical = set(re.findall(r"[a-z][a-z0-9_]*", enum_match.group(1)))
         self.assertIn("pre_pr_ready", canonical)
-        self.assertIn("post_merge_done", canonical)
+        self.assertIn("done", canonical)
+        self.assertNotIn("post_merge_done", canonical)
         self.assertFalse({"close", "closeout"} & canonical)
         for path in (PROJECT_TASK, PROJECT_SYNC, PROJECT_WORKFLOW):
             text = path.read_text(encoding="utf-8")

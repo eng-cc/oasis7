@@ -60,7 +60,7 @@ PY
     ;;
   "issue edit 2001 -R eng-cc/oasis7 --body-file "*)
     if [[ "${GH_INTERRUPT_ISSUE_EDIT:-0}" == "1" ]]; then
-      kill -TERM "$PPID"
+      kill -TERM "${GH_INTERRUPT_TARGET:?missing explicit interrupt target}"
       sleep 1
       exit 143
     fi
@@ -104,6 +104,9 @@ JSON
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2003#issuecomment-%s\n' "$n"
     ;;
+  "issue comment 2006 -R eng-cc/oasis7 --body-file "*)
+    printf 'https://github.com/eng-cc/oasis7/issues/2006#issuecomment-2006\n'
+    ;;
   "project item-add 1 --owner eng-cc --url https://github.com/eng-cc/oasis7/issues/2001 --format json")
     printf '{"id":"ITEM_ID","content":{"url":"https://github.com/eng-cc/oasis7/issues/2001"}}\n'
     ;;
@@ -124,7 +127,7 @@ JSON
 {"id":"FIELD_OWNER_ROLE","name":"Owner Role","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TPM","name":"tpm"}]},
 {"id":"FIELD_MODULE","name":"Module","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_ENGINEERING","name":"engineering"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_CANDIDATE","name":"candidate"},{"id":"OPT_COMMITTED","name":"committed"},{"id":"OPT_READY_PM","name":"ready"},{"id":"OPT_PR_WATCH_PM","name":"pr_watch"},{"id":"OPT_DONE","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_TASK_DONE","name":"task_done"},{"id":"OPT_MAIN_SYNC","name":"main_sync"},{"id":"OPT_POST_MERGE_DONE","name":"post_merge_done"}]},
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_EXECUTION","name":"execution"},{"id":"OPT_PRE_PR_READY","name":"pre_pr_ready"},{"id":"OPT_PR_WATCH_PHASE","name":"pr_watch"},{"id":"OPT_DONE_PHASE","name":"done"}]},
 {"id":"FIELD_PRIORITY","name":"Priority","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_P2","name":"P2"}]},
 {"id":"FIELD_BLOCKED","name":"Blocked Reason","type":"ProjectV2Field"},
 {"id":"FIELD_WORKTREE","name":"Canonical Worktree","type":"ProjectV2Field"},
@@ -141,7 +144,7 @@ JSON
 {"fields":[
 {"id":"FIELD_STATUS_3","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TODO_3","name":"Todo"},{"id":"OPT_IN_PROGRESS_3","name":"In Progress"}]},
 {"id":"FIELD_PM_STATUS_3","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM_3","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE_3","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_POST_MERGE_DONE_3","name":"post_merge_done"}]}
+{"id":"FIELD_WORKFLOW_PHASE_3","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE_3","name":"done"}]}
 ]}
 JSON
     ;;
@@ -292,7 +295,8 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/github-project-workflow.sh" \
   --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
 
 set +e
-GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
+  'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
   >"$TMPDIR/interrupted-closeout.json" 2>"$TMPDIR/interrupted-closeout.err"
 INTERRUPTED_CLOSEOUT_STATUS=$?
@@ -580,6 +584,26 @@ if grep -Fq "ITEM_ID_2006" "$GH_CALL_LOG"; then
   cat "$GH_CALL_LOG" >&2
   exit 1
 fi
+
+# `task_done` is an intermediate terminal workflow state. A Project whose live
+# schema exposes only the coarse `done` option must not strand remedial closeout;
+# fine terminal sequencing remains in the local mapping and receipts.
+CLOSEOUT_CLAIM='{"claim_type":"task_complete","status":"verified","allowed_to_claim":true,"verification_exit_code":0,"verified_at":"2026-07-01T12:00:00Z"}'
+if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROOT" \
+  --repo eng-cc/oasis7 --project-owner eng-cc --project-number 3 \
+  --task-uid "$MISSING_OPTION_UID" --role tpm --to-status done \
+  --claim-json "$CLOSEOUT_CLAIM" --json >"$TMPDIR/missing-option-closeout.json" 2>"$TMPDIR/missing-option-closeout.err"; then
+  echo "github-project-task.test: remedial task_done closeout must map the coarse Project done option and advance" >&2
+  cat "$TMPDIR/missing-option-closeout.err" >&2
+  exit 1
+fi
+python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" <<'PY'
+import json,sys
+record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
+payload=json.load(open(sys.argv[3],encoding="utf-8"))
+assert record["status"] == "done" and record["workflow_phase"] == "task_done", record
+assert payload["updated_field_values"] == 3, payload
+PY
 
 CONCURRENT_ROOT="$TMPDIR/concurrent-cache"
 mkdir -p "$CONCURRENT_ROOT"

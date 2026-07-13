@@ -448,6 +448,14 @@ def workflow_phase_for(status: str) -> str:
     return "execution"
 
 
+def project_workflow_phase(task: OrderedDict[str, Any]) -> str:
+    """Map fine terminal receipt phases onto the Project cockpit's coarse done lane."""
+    internal = str(task.get("workflow_phase") or workflow_phase_for(str(task.get("status") or "")))
+    if internal in {"task_done", "main_sync", "post_merge_done"}:
+        return "done"
+    return internal
+
+
 def project_status_for(status: str) -> str:
     if status == "candidate":
         return "Todo"
@@ -512,7 +520,7 @@ def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "Owner Role": str(task.get("owner_role") or ""),
         "Module": str(task.get("module") or ""),
         "PM Status": status,
-        "Workflow Phase": str(task.get("workflow_phase") or workflow_phase_for(status)),
+        "Workflow Phase": project_workflow_phase(task),
         "Priority": str(task.get("priority") or ""),
         "Blocked Reason": "" if task.get("status") != "blocked" else "blocked in .pm",
         "Canonical Worktree": str(task.get("worktree_hint") or ""),

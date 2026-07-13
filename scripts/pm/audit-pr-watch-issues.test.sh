@@ -176,7 +176,7 @@ if [[ "\$*" == "project field-list 1 --owner eng-cc --format json" ]]; then
 {"fields":[
 {"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_DONE","name":"Done"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TASK_DONE_PHASE","name":"task_done"},{"id":"OPT_MAIN_SYNC_PHASE","name":"main_sync"},{"id":"OPT_POST_MERGE_DONE_PHASE","name":"post_merge_done"}]}
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE","name":"done"}]}
 ]}
 JSON
   exit 0
