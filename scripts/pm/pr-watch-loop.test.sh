@@ -6,6 +6,7 @@ mkdir -p "$TMP/bin"
 cat >"$TMP/bin/python3" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == *pr-lifecycle-gate.py ]]; then
+  [[ "${TEST_GATE_FAILURE:-0}" != 1 ]] || exit 23
   n=$(cat "$TEST_COUNT" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$TEST_COUNT"
   state=blocked
   [[ "${TEST_NEVER_READY:-0}" != 1 && "$n" -ge 6 ]] && state=ready
@@ -31,13 +32,13 @@ grep -q '"status":"ready"' "$TMP/out"
 rm -f "$TMP/count" "$TMP/sleeps"
 set +e
 PATH="$TMP/bin:$PATH" TEST_NEVER_READY=1 PM_PR_WATCH_MAX_POLLS=3 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/stable-out" 2>"$TMP/stable-err"
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/stable-out"
 rc=$?
 set -e
 [[ "$rc" == 75 ]]
 diff -u <(printf '60\n120\n') "$TMP/sleeps"
-[[ $(wc -l <"$TMP/stable-out" | tr -d ' ') == 1 ]]
-grep -q '"reason":"stable_pr_watch_bound_exhausted"' "$TMP/stable-err"
+[[ $(wc -l <"$TMP/stable-out" | tr -d ' ') == 2 ]]
+grep -q '"reason":"stable_pr_watch_bound_exhausted"' "$TMP/stable-out"
 
 set +e
 PATH="$TMP/bin:$PATH" PM_PR_WATCH_INTERVAL_SECONDS=0 \
@@ -46,5 +47,13 @@ rc=$?
 set -e
 [[ "$rc" == 64 ]]
 grep -q 'interval must be a positive integer' "$TMP/invalid-err"
+
+set +e
+PATH="$TMP/bin:$PATH" TEST_GATE_FAILURE=1 \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/failure-out" 2>"$TMP/failure-err"
+rc=$?
+set -e
+[[ "$rc" == 23 ]]
+[[ ! -s "$TMP/failure-out" ]]
 
 echo "pr-watch-loop.test: OK"

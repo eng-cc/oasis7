@@ -55,18 +55,10 @@ Pre-PR local role review packet recorded after immutable verification and before
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-If only a stable long-running required check or `required-gate` wait remains on a
-Codex surface, follow the canonical GitHub query budget rule: yield the active
-turn and schedule a task-bound continuation/heartbeat for roughly ten minutes
-later. Each wake runs one batched current-HEAD gate read; unchanged state stays
-quiet and schedules the next heartbeat, while a meaningful transition or query
-uncertainty returns immediately to normal gate handling. Delete the heartbeat
-when the wait ends. This is human-operated continuation, not an unattended
-production supervisor.
+For a stable long-running required check or `required-gate` wait, follow the
+[canonical stable-wait rule](../../../doc/engineering/workflow/source-of-truth.md#stable-required-gate-wait).
 
-On a non-Codex surface, the finite fallback below returns on a meaningful change
-or with a resumable bounded-wait result; it must not be wrapped in an infinite
-polling loop:
+On a non-Codex surface, use the finite fallback:
 
 ```bash
 ./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>

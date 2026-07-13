@@ -37,7 +37,7 @@ print(hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":")).enc
     previous="$digest"
   fi
   if (( poll == max_polls )); then
-    printf '{"status":"external_wait","reason":"stable_pr_watch_bound_exhausted","resume_after_seconds":%s,"polls":%s}\n' "$interval" "$max_polls" >&2
+    printf '{"status":"external_wait","reason":"stable_pr_watch_bound_exhausted","resume_after_seconds":%s,"polls":%s}\n' "$interval" "$max_polls"
     exit 75
   fi
   sleep "$interval"
