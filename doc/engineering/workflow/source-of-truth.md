@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.9**
+Version: **v1.9.10**
 Last Updated: **2026-07-13**
 
 ## 0. Purpose
@@ -610,8 +610,11 @@ cd <canonical-default-worktree>
 ./scripts/pm/post-merge-main-sync.sh --repo-root <canonical-default-worktree> \
   --main-ref <default-branch> --task-uid <TASK-UID> \
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
+  --patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json" \
   --receipt-output "$RECEIPT_ROOT/main-sync-receipt.json"
 ```
+Omit patch equivalence for ancestry. For squash/rebase, generate its canonical receipt against the exact branch tip and synchronized main commit/first parent, then retry step 4.
+Main-sync recomputes equivalence and binds its digest; caller-authored JSON is not authority.
 
 5. Safe cleanup — require journal/receipt readback; resume by retrying this command.
 ```bash
@@ -620,6 +623,7 @@ cd <canonical-default-worktree>
   --main-ref <default-branch> --task-uid <TASK-UID> \
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
   --main-sync-receipt "$RECEIPT_ROOT/main-sync-receipt.json" \
+  --patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json" \
   --terminal-receipt-output "$RECEIPT_ROOT/terminal-cleanup-receipt.json"
 ```
 
@@ -635,7 +639,7 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 1 | merge receipt | live PR is merged | repeat step 1 |
 | 2 | `task_done` | task remains open at `task_done` | repeat step 2 |
 | 3 | refreshed mapping | canonical default-worktree task truth | repeat step 3 |
-| 4 | main-sync receipt | local/default remote heads match | repeat step 4 |
+| 4 | main-sync receipt | local/default remote heads match and ancestry or exact patch equivalence is verified | repeat step 4 |
 | 5 | cleanup receipt | intent journal proves cleanup | repeat step 5 |
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
 

@@ -44,6 +44,10 @@ MAPPING="$REPO_ROOT/.pm/github-project-sync/tasks.json"
 # Canonical receipt-root validation precedes every external or destructive effect.
 PR_RECEIPT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$PR_RECEIPT" --name merge-receipt.json)" || die "noncanonical merge receipt"
 MAIN_SYNC_RECEIPT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$MAIN_SYNC_RECEIPT" --name main-sync-receipt.json)" || die "noncanonical main-sync receipt"
+if [[ -n "$PATCH_RECEIPT" ]]; then
+  PATCH_RECEIPT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$PATCH_RECEIPT" --name patch-equivalence-receipt.json)" || die "noncanonical patch-equivalence receipt"
+  [[ -f "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is unavailable"
+fi
 if [[ "$DRY_RUN" == "0" ]]; then
   TERMINAL_RECEIPT_OUTPUT="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" --default-worktree "$REPO_ROOT" --task-uid "$TASK_UID" --create --path "$TERMINAL_RECEIPT_OUTPUT" --name terminal-cleanup-receipt.json)" || die "noncanonical terminal cleanup receipt"
 fi
@@ -161,6 +165,7 @@ if r.get('receipt_type')!='oasis7_main_sync' or r.get('issuer')!='post-merge-mai
 for key,expected in (('task_uid',sys.argv[3]),('repository',sys.argv[4]),('default_branch',sys.argv[5])):
  if r.get(key)!=expected: raise SystemExit(f'post-merge-cleanup: main-sync receipt {key} mismatch')
 if r.get('merge_receipt_sha256')!=hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(): raise SystemExit('post-merge-cleanup: main-sync receipt is not bound to merge receipt')
+if r.get('integration_mode') not in ('ancestry','patch_equivalence'): raise SystemExit('post-merge-cleanup: main-sync receipt integration mode is invalid')
 seen=d.datetime.fromisoformat(str(r.get('observed_at')).replace('Z','+00:00'))
 age=(d.datetime.now(d.timezone.utc)-seen).total_seconds()
 if age < -30 or age > 600: raise SystemExit('post-merge-cleanup: main-sync receipt is stale')
@@ -193,6 +198,15 @@ if git -C "$REPO_ROOT" remote get-url origin >/dev/null 2>&1; then
 fi
 if ! git -C "$REPO_ROOT" merge-base --is-ancestor "$BRANCH_TIP" "$MAIN_COMMIT"; then
   [[ -n "$PATCH_RECEIPT" && -f "$PATCH_RECEIPT" ]] || die "$MAIN_REF does not contain task branch tip and no patch-equivalence receipt was supplied"
+  SYNC_PATCH_FIELDS="$(python3 - "$MAIN_SYNC_RECEIPT" "$PATCH_RECEIPT" <<'PY'
+import hashlib,json,pathlib,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+if r.get('integration_mode')!='patch_equivalence': raise SystemExit('post-merge-cleanup: main-sync receipt did not authorize patch equivalence')
+digest=hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest()
+if r.get('patch_equivalence_receipt_sha256')!=digest: raise SystemExit('post-merge-cleanup: patch-equivalence receipt digest mismatch')
+print(r.get('patch_id') or '')
+PY
+)" || die "main-sync patch-equivalence binding failed"
   PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$BRANCH_TIP" "$MAIN_COMMIT" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -204,10 +218,15 @@ PY
 )"
   MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
   EXPECTED_PATCH="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
+  [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_FIELDS" ]] || die "main-sync patch id disagrees with patch-equivalence receipt"
+  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$MAIN_COMMIT^")" || die "squash main commit has no first parent"
+  [[ "$MAIN_PARENT" == "$ACTUAL_MAIN_PARENT" ]] || die "patch-equivalence receipt main parent mismatch"
   BASE="$(git -C "$REPO_ROOT" merge-base "$BRANCH_TIP" "$MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$BASE..$BRANCH_TIP" | git patch-id --stable | awk '{print $1}')"
   MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$MAIN_PARENT..$MAIN_COMMIT" | git patch-id --stable | awk '{print $1}')"
   [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$MAIN_PATCH" && "$BRANCH_PATCH" == "$EXPECTED_PATCH" ]] || die "patch-equivalence receipt failed recomputation"
+else
+  [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when main contains the task branch tip"
 fi
 
 printf 'git -C %q worktree remove %q\n' "$REPO_ROOT" "$WORKTREE"

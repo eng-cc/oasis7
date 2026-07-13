@@ -50,6 +50,70 @@ assert r['main_commit']==r['remote_main_commit'],r
 assert r['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
 
+SQUASH_REMOTE="$TMPDIR/squash-origin.git"
+SQUASH_REPO="$TMPDIR/squash-repo"
+git init -q --bare "$SQUASH_REMOTE"
+git clone -q "$SQUASH_REMOTE" "$SQUASH_REPO"
+git -C "$SQUASH_REPO" config user.email test@example.invalid
+git -C "$SQUASH_REPO" config user.name Test
+git -C "$SQUASH_REPO" switch -qc main
+printf 'base\n' >"$SQUASH_REPO/file"
+printf '.pm/\n' >"$SQUASH_REPO/.gitignore"
+git -C "$SQUASH_REPO" add file .gitignore
+git -C "$SQUASH_REPO" commit -qm base
+SQUASH_BASE="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+git -C "$SQUASH_REPO" push -q -u origin main
+git -C "$SQUASH_REPO" switch -qc task/change
+printf 'squashed change\n' >>"$SQUASH_REPO/file"
+git -C "$SQUASH_REPO" commit -qam task-change
+SQUASH_BRANCH_TIP="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+git -C "$SQUASH_REPO" switch -q main
+git -C "$SQUASH_REPO" diff "$SQUASH_BASE..$SQUASH_BRANCH_TIP" | git -C "$SQUASH_REPO" apply
+git -C "$SQUASH_REPO" commit -qam squash-merge
+SQUASH_MAIN="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+git -C "$SQUASH_REPO" push -q origin main
+git -C "$SQUASH_REPO" reset -q --hard "$SQUASH_BASE"
+
+mkdir -p "$SQUASH_REPO/.pm/github-project-sync" "$TMPDIR/squash-task-worktree"
+cat >"$SQUASH_REPO/.pm/github-project-sync/tasks.json" <<EOF
+{"version":1,"tasks":{"$TASK_UID":{"status":"done","repository":"fixture/repo","default_branch":"main","canonical_worktree":"$TMPDIR/squash-task-worktree","pr_number":8,"pr_url":"https://example.invalid/pull/8"}}}
+EOF
+SQUASH_RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$SQUASH_REPO" --task-uid "$TASK_UID" --create)"
+SQUASH_MERGE_RECEIPT="$SQUASH_RECEIPT_ROOT/merge-receipt.json"
+SQUASH_PATCH_RECEIPT="$SQUASH_RECEIPT_ROOT/patch-equivalence-receipt.json"
+SQUASH_SYNC_RECEIPT="$SQUASH_RECEIPT_ROOT/main-sync-receipt.json"
+cat >"$SQUASH_MERGE_RECEIPT" <<EOF
+{"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"fixture/repo","default_branch":"main","pr_number":8,"pr_url":"https://example.invalid/pull/8","state":"MERGED","merged_at":"$OBSERVED_AT","head_oid":"$SQUASH_BRANCH_TIP","base_ref":"main","observed_at":"$OBSERVED_AT"}
+EOF
+bash "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$SQUASH_REPO" \
+  --branch-tip "$SQUASH_BRANCH_TIP" --main-commit "$SQUASH_MAIN" --main-parent "$SQUASH_BASE" \
+  >"$SQUASH_PATCH_RECEIPT"
+
+"$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$SQUASH_REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
+  --receipt-output "$SQUASH_SYNC_RECEIPT" >/dev/null
+python3 - "$SQUASH_SYNC_RECEIPT" "$SQUASH_PATCH_RECEIPT" "$SQUASH_MAIN" <<'PY'
+import hashlib,json,pathlib,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+assert r['integration_mode']=='patch_equivalence',r
+assert r['main_commit']==sys.argv[3],r
+assert r['patch_equivalence_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
+PY
+
+python3 - "$SQUASH_PATCH_RECEIPT" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding='utf-8')); p['patch_id']='0'*40
+open(sys.argv[1], 'w', encoding='utf-8').write(json.dumps(p)+'\n')
+PY
+if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$SQUASH_REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
+  --receipt-output "$SQUASH_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/forged-patch.err"; then
+  echo "expected forged patch-equivalence receipt to fail" >&2; exit 1
+fi
+grep -Eqi 'patch.equivalence|patch id|patch_id' "$TMPDIR/forged-patch.err"
+
 if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$REPO" --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$TMPDIR/missing.json" \
   --receipt-output "$TMPDIR/missing-out.json" >/dev/null 2>"$TMPDIR/missing.err"; then
