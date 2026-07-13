@@ -320,6 +320,15 @@ python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --pr-url "https://github.com/eng-cc/oasis7/pull/2002" \
   --json > "$TMPDIR/record-pr.json"
 
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" <<'PY'
+import json, pathlib, sys
+record=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["tasks"][sys.argv[2]]
+calls=pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+assert record["status"] == "pr_watch", record
+assert record["workflow_phase"] == "pr_watch", record
+assert "OPT_PR_WATCH_PHASE" in calls, calls
+PY
+
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
 import json,sys
 p=sys.argv[1]; m=json.load(open(p,encoding='utf-8')); r=m['tasks'][sys.argv[2]]
@@ -398,6 +407,7 @@ edited_body = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
 assert mapping_path.exists(), "record-pr must recover the target mapping cache under lock"
 mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
 assert mapping["tasks"]["task_99999999999999999999999999999999"]["status"] == "pr_watch", mapping
+assert mapping["tasks"]["task_99999999999999999999999999999999"]["workflow_phase"] == "pr_watch", mapping
 assert payload["status"] == "pr_watch", payload
 assert payload["pr_number"] == 2003, payload
 assert payload["updated_field_values"] == 0, payload

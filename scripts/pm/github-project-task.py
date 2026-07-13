@@ -932,6 +932,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if number is not None:
         record["pr_number"] = number
     record["status"] = "pr_watch"
+    record["workflow_phase"] = "pr_watch"
     record.setdefault("merge_hold", {
         "kind": "normal_pr_ci_watch",
         "active": False,

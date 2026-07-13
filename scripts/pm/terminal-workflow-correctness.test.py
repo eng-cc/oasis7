@@ -52,6 +52,14 @@ class TerminalWorkflowCorrectness(unittest.TestCase):
             self.assertIn("Evidence Phase: pre_pr_ready", text, relative)
             self.assertNotIn("Evidence Phase: close", text, relative)
 
+    def test_record_pr_advances_status_and_phase_together(self) -> None:
+        text = (ROOT / "scripts/pm/github-project-task.py").read_text(encoding="utf-8")
+        start = text.index("def command_record_pr")
+        end = text.index("\ndef command_", start + 1)
+        command = text[start:end]
+        self.assertIn('record["status"] = "pr_watch"', command)
+        self.assertIn('record["workflow_phase"] = "pr_watch"', command)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
