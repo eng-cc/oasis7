@@ -154,6 +154,39 @@ def graphql_pages(repo: str, number: int, surface: str) -> list[dict[str, Any]]:
         cursor = next_cursor
 
 
+def graphql_pr_snapshot(repo: str, number: int) -> dict[str, list[dict[str, Any]]]:
+    """Load all hot PR-watch surfaces in one bounded GraphQL request.
+
+    A watch poll intentionally fails closed when any surface exceeds 100 nodes;
+    silently issuing pagination reads would make the per-poll budget unbounded.
+    """
+    owner, name = repo.split("/", 1)
+    query = """query($owner:String!,$repo:String!,$number:Int!){
+      repository(owner:$owner,name:$repo){pullRequest(number:$number){
+        comments(first:100){pageInfo{hasNextPage} nodes{id body url createdAt author{login} authorAssociation}}
+        reviews(first:100){pageInfo{hasNextPage} nodes{id body url submittedAt createdAt state author{login}}}
+        reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved}}
+        commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{
+          __typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}}
+          ... on StatusContext{context state}
+        }}}}}}
+      }}
+    }"""
+    payload = _run_json(["gh", "api", "graphql", "-f", f"query={query}",
+                         "-F", f"owner={owner}", "-F", f"repo={name}", "-F", f"number={number}"])
+    pr = (((payload.get("data") or {}).get("repository") or {}).get("pullRequest") or {})
+    surfaces = {"comments": pr.get("comments") or {}, "reviews": pr.get("reviews") or {},
+                "threads": pr.get("reviewThreads") or {}}
+    commits = ((pr.get("commits") or {}).get("nodes") or [])
+    rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") or {}) if commits else {}
+    surfaces["statusCheckRollup"] = rollup.get("contexts") or {}
+    oversized = [name for name, connection in surfaces.items()
+                 if (connection.get("pageInfo") or {}).get("hasNextPage")]
+    if oversized:
+        raise SystemExit("pr-lifecycle-gate: bounded PR snapshot exceeded 100 nodes for: " + ", ".join(oversized))
+    return {name: list(connection.get("nodes") or []) for name, connection in surfaces.items()}
+
+
 def _run_json(cmd: list[str]) -> Any:
     return json.loads(subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE))
 
@@ -253,10 +286,7 @@ def load_live(selector: str) -> dict[str, Any]:
     payload = json.loads(raw)
     repo = json.loads(subprocess.check_output(["gh", "repo", "view", "--json", "nameWithOwner"], text=True))["nameWithOwner"]
     payload["repository"] = repo
-    payload["comments"] = graphql_pages(repo, int(payload["number"]), "comments")
-    payload["reviews"] = graphql_pages(repo, int(payload["number"]), "reviews")
-    payload["threads"] = graphql_pages(repo, int(payload["number"]), "reviewThreads")
-    payload["statusCheckRollup"] = graphql_pages(repo, int(payload["number"]), "checks")
+    payload.update(graphql_pr_snapshot(repo, int(payload["number"])))
     payload["policy_discovery"] = discover_required_policy(repo, str(payload["baseRefName"]))
     payload["required_status_checks"] = payload["policy_discovery"]["required_status_checks"]
     return payload

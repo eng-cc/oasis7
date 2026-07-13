@@ -134,6 +134,8 @@ PY
   REVIEW_ROLES="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^roles=//p')"
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
+  REVIEW_LEDGER_PATH="$REVIEW_LEDGER"
+  [[ "$REVIEW_LEDGER_PATH" == /* ]] || REVIEW_LEDGER_PATH="$ROOT_DIR/$REVIEW_LEDGER_PATH"
   python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
     || die "ready closeout role-return validation failed"
 fi
@@ -179,9 +181,17 @@ PY
   trap - EXIT
 fi
 
-TASK_AUDIT_JSON="$("$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID")" \
-  || die "selected-task audit failed; run ./scripts/pm/refresh-task-cache.sh --task-uid $TASK_UID --json, re-run audit, then retry task-closeout"
-
+selected_task_audit() {
+  "$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID"
+}
+closeout_head_fingerprint() {
+  git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || printf '%s\n' "non-git-fixture"
+}
+AUDIT_INPUT_HEAD="$(closeout_head_fingerprint)"
+AUDIT_INPUT_MAPPING_SHA="$(shasum -a 256 "$ROOT_DIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+AUDIT_INPUT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && shasum -a 256 "$REVIEW_PACKET_FILE" | awk '{print $1}' || printf none)"
+AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && shasum -a 256 "$REVIEW_LEDGER_PATH" | awk '{print $1}' || printf none)"
+AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && shasum -a 256 "$PR_MERGE_RECEIPT" | awk '{print $1}' || printf none)"
 if [[ "$TARGET_STATUS" != "deferred" ]]; then
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
   if [[ -n "$COMPARISON_REF" ]]; then
@@ -204,8 +214,20 @@ PY
 )"
 fi
 
-TRANSITION_AUDIT_JSON="$("$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID")" \
-  || die "selected-task audit failed before transition; run ./scripts/pm/refresh-task-cache.sh --task-uid $TASK_UID --json, re-run audit, then retry task-closeout"
+CURRENT_HEAD="$(closeout_head_fingerprint)"
+CURRENT_MAPPING_SHA="$(shasum -a 256 "$ROOT_DIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+CURRENT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && shasum -a 256 "$REVIEW_PACKET_FILE" | awk '{print $1}' || printf none)"
+CURRENT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && shasum -a 256 "$REVIEW_LEDGER_PATH" | awk '{print $1}' || printf none)"
+CURRENT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && shasum -a 256 "$PR_MERGE_RECEIPT" | awk '{print $1}' || printf none)"
+[[ "$CURRENT_HEAD" == "$AUDIT_INPUT_HEAD" && "$CURRENT_MAPPING_SHA" == "$AUDIT_INPUT_MAPPING_SHA" && \
+   "$CURRENT_REVIEW_SHA" == "$AUDIT_INPUT_REVIEW_SHA" && "$CURRENT_LEDGER_SHA" == "$AUDIT_INPUT_LEDGER_SHA" && \
+   "$CURRENT_PR_RECEIPT_SHA" == "$AUDIT_INPUT_PR_RECEIPT_SHA" ]] \
+  || die "closeout inputs changed during verification; restart selected-task closeout"
+# Run exactly one authoritative selected live audit after claim/evidence inputs
+# are proven stable, immediately before the transition that consumes it.
+TASK_AUDIT_JSON="$(selected_task_audit)" \
+  || die "selected-task audit failed at transition"
+TRANSITION_AUDIT_JSON="$TASK_AUDIT_JSON"
 
 CLOSEOUT_ARGS=(closeout-task "$ROOT_DIR" --task-uid "$TASK_UID" --role "$ROLE" \
   --to-status "$TARGET_STATUS" --claim-json "$CLAIM_READY_JSON")

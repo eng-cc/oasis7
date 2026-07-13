@@ -246,6 +246,26 @@ def run_passthrough(cmd: list[str]) -> int:
     return subprocess.run(cmd, check=False).returncode
 
 
+def broad_graphql_budget() -> dict[str, Any]:
+    """Fail closed before intentionally broad Project/issue operations."""
+    query = "query { rateLimit { remaining resetAt } }"
+    try:
+        payload = run_json(["gh", "api", "graphql", "-f", f"query={query}"])
+    except Exception as exc:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable",
+                "error":str(exc),"resumable":True,
+                "resume":"restore GitHub rateLimit access and rerun; stale cache is not accepted"}
+    rate = ((payload.get("data") or {}).get("rateLimit") or {})
+    remaining, reset_at = rate.get("remaining"), str(rate.get("resetAt") or "")
+    if not isinstance(remaining, int) or not reset_at:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True,
+                "resume":"restore GitHub rateLimit visibility and rerun; stale cache is not accepted"}
+    if remaining < 100:
+        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,
+                "resetAt":reset_at,"resumable":True,"resume":f"resume after {reset_at}"}
+    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+
+
 def load_sync_module() -> Any:
     path = pathlib.Path(__file__).with_name("github-project-sync.py")
     spec = importlib.util.spec_from_file_location("github_project_sync", path)
@@ -472,6 +492,8 @@ def recover_missing_mapping_records(
 
 
 def command_sync(args: argparse.Namespace) -> int:
+    if not getattr(args, "task_uid", None) and not getattr(args, "global_maintenance", False):
+        die("sync requires --task-uid by default; broad traversal requires explicit --global-maintenance")
     script = pathlib.Path(__file__).with_name("github-project-sync.py")
     cmd = [
         sys.executable,
@@ -487,6 +509,13 @@ def command_sync(args: argparse.Namespace) -> int:
         args.mapping,
         "--apply",
     ]
+    if getattr(args, "task_uid", None):
+        cmd.extend(["--task-uid", args.task_uid])
+    if getattr(args, "global_maintenance", False):
+        # The shared sync child owns the single live rate-limit preflight at the
+        # boundary immediately before broad work. Do not duplicate that query
+        # in this wrapper.
+        cmd.append("--global-maintenance")
     if args.include_done:
         cmd.append("--include-done")
     for status in args.status or []:
@@ -497,6 +526,12 @@ def command_sync(args: argparse.Namespace) -> int:
 
 
 def command_audit(args: argparse.Namespace) -> int:
+    if not getattr(args, "task_uid", None) and not getattr(args, "global_maintenance", False):
+        die("audit requires --task-uid by default; broad traversal requires explicit --global-maintenance")
+    if args.full_list or getattr(args, "global_maintenance", False):
+        budget = broad_graphql_budget()
+        if budget["status"] != "ok":
+            print(json.dumps(budget, indent=2, sort_keys=True)); return 2
     root = args.root.resolve()
     statuses = selected_statuses(args)
     mapping_path = mapping_path_for(root, args.mapping)
@@ -615,6 +650,7 @@ def command_step3_gate(args: argparse.Namespace) -> int:
     args.include_done = True
     args.strict_mapping = True
     args.full_list = True
+    args.global_maintenance = True
     return command_audit(args)
 
 
@@ -634,6 +670,8 @@ def build_parser() -> argparse.ArgumentParser:
     sync.add_argument("--status", action="append", choices=ALL_STATUSES, default=argparse.SUPPRESS)
     sync.add_argument("--include-done", action="store_true", default=argparse.SUPPRESS)
     sync.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    sync.add_argument("--task-uid", help="Sync exactly one task_uid without broad Project traversal")
+    sync.add_argument("--global-maintenance", action="store_true", help="explicitly authorize guarded broad sync")
     sync.set_defaults(func=command_sync)
 
     audit = subparsers.add_parser("audit", help="verify .pm, mapping, and GitHub Project agree")
@@ -644,6 +682,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--full-list", action="store_true")
     audit.add_argument("--strict-mapping", action="store_true")
     audit.add_argument("--task-uid", help="Audit one task_uid across all statuses unless --status is supplied")
+    audit.add_argument("--global-maintenance", action="store_true", help="explicitly authorize guarded broad audit")
     audit.set_defaults(func=command_audit)
 
     step3_gate = subparsers.add_parser(

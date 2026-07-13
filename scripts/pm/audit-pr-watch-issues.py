@@ -110,6 +110,20 @@ def list_issue_numbers(repo: str, limit: int) -> list[int]:
     return numbers
 
 
+def broad_rate_limit_guard() -> dict[str, Any]:
+    try:
+        payload=json.loads(run_text(["gh","api","graphql","-f","query=query { rateLimit { remaining resetAt } }"]))
+        rate=((payload.get("data") or {}).get("rateLimit") or {})
+    except Exception as exc:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable","error":str(exc),"resumable":True}
+    remaining,reset_at=rate.get("remaining"),str(rate.get("resetAt") or "")
+    if not isinstance(remaining,int) or not reset_at:
+        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True}
+    if remaining < 100:
+        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,"resetAt":reset_at,"resumable":True}
+    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+
+
 def pr_view(repo: str, number: int) -> dict[str, Any]:
     payload = run_text(["gh", "pr", "view", str(number), "-R", repo, "--json", "number,state,mergedAt,url,title"])
     data = json.loads(payload)
@@ -232,9 +246,18 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
     task_mod = load_module(root / "scripts/pm/github-project-task.py", "github_project_task_impl")
     sync_mod = load_module(root / "scripts/pm/github-project-sync.py", "github_project_sync_impl")
 
-    listed = list_issue_numbers(args.repo, args.limit)
+    selected = (mapping.get("tasks") or {}).get(args.task_uid) if args.task_uid else None
+    if args.task_uid and not selected:
+        return [{"task_uid": args.task_uid, "status": "blocked", "reason": "selected task is missing from local mapping; refresh it explicitly"}]
+    listed = [] if args.task_uid else list_issue_numbers(args.repo, args.limit)
+    if selected:
+        issue_number = str(selected.get("issue_number") or "")
+        if not issue_number.isdigit():
+            return [{"task_uid": args.task_uid, "status": "blocked", "reason": "selected task has no valid issue_number; refresh or repair the local mapping"}]
+        listed = [int(issue_number)]
     results: list[dict[str, Any]] = []
-    for issue_number in candidate_issue_numbers(mapping, listed):
+    issue_numbers = listed if args.task_uid else candidate_issue_numbers(mapping, listed)
+    for issue_number in issue_numbers:
         try:
             issue = issue_view(args.repo, issue_number)
         except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
@@ -243,6 +266,10 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
         body = str(issue.get("body") or "")
         fields = parse_task_body(body)
         task_uid = fields.get("task_uid") or ""
+        if args.task_uid and task_uid != args.task_uid:
+            results.append({"issue_number":issue_number,"task_uid":task_uid or None,
+                            "status":"blocked","reason":"selected issue task_uid does not match requested task"})
+            continue
         pr_number_raw = fields.get("pr_number") or ""
         record = (mapping.get("tasks") or {}).get(task_uid) or {}
         result: dict[str, Any] = {
@@ -325,9 +352,17 @@ def main() -> int:
     parser.add_argument("--project-number", type=int, default=DEFAULT_PROJECT_NUMBER)
     parser.add_argument("--mapping", default=".pm/github-project-sync/tasks.json")
     parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--task-uid", help="audit exactly one mapped pr_watch task; avoids repository issue listing")
+    parser.add_argument("--global-maintenance", action="store_true", help="explicitly authorize guarded repository-wide audit")
     parser.add_argument("--close", action="store_true", help="Remedially advance merged pr_watch tasks to task_done; terminal finalizer closes issues")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
+    if not args.task_uid and not args.global_maintenance:
+        die("--task-uid is required by default; use --global-maintenance for guarded broad audit")
+    if args.global_maintenance:
+        budget=broad_rate_limit_guard()
+        if budget["status"] != "ok":
+            print(json.dumps(budget,indent=2,sort_keys=True)); return 2
 
     results = audit(args)
     payload = {"status": "ok", "close": args.close, "results": results}
