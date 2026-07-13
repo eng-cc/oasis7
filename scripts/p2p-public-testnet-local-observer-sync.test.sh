@@ -12,6 +12,8 @@ if [[ "$test_case" == "all" ]]; then
     reset_owned_restore_retry \
     corrupt_file_metadata \
     corrupt_tree_metadata \
+    corrupt_tree_file_count \
+    corrupt_tree_total_bytes \
     legacy_manifest \
     completed_backup_reuse_fails_closed; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
@@ -23,6 +25,8 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "reset_owned_restore_retry" \
   && "$test_case" != "corrupt_file_metadata" \
   && "$test_case" != "corrupt_tree_metadata" \
+  && "$test_case" != "corrupt_tree_file_count" \
+  && "$test_case" != "corrupt_tree_total_bytes" \
   && "$test_case" != "legacy_manifest" \
   && "$test_case" != "completed_backup_reuse_fails_closed" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
@@ -298,15 +302,32 @@ bundle["world_generation_provenance"].update(
 bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
 PY
 
-if [[ "$test_case" == "corrupt_file_metadata" || "$test_case" == "corrupt_tree_metadata" ]]; then
+if [[ "$test_case" == "corrupt_file_metadata" \
+  || "$test_case" == "corrupt_tree_metadata" \
+  || "$test_case" == "corrupt_tree_file_count" \
+  || "$test_case" == "corrupt_tree_total_bytes" ]]; then
+  original_sha256_tree=$(jq -r '.generated_world_sidecar.sha256_tree' "$bundle_path")
   if [[ "$test_case" == "corrupt_file_metadata" ]]; then
     jq '.world_generation_provenance.sha256 = ("0" * 64)' "$bundle_path" >"$bundle_path.tmp"
     expected_failure='world_generation_provenance sha256 drift'
-  else
+  elif [[ "$test_case" == "corrupt_tree_metadata" ]]; then
     jq '.generated_world_sidecar.sha256_tree = ("0" * 64)' "$bundle_path" >"$bundle_path.tmp"
     expected_failure='generated_world_sidecar sha256_tree drift'
+  elif [[ "$test_case" == "corrupt_tree_file_count" ]]; then
+    jq '.generated_world_sidecar.file_count += 1' "$bundle_path" >"$bundle_path.tmp"
+    expected_failure='generated_world_sidecar file_count drift'
+  else
+    jq '.generated_world_sidecar.total_bytes += 1' "$bundle_path" >"$bundle_path.tmp"
+    expected_failure='generated_world_sidecar total_bytes drift'
   fi
   mv "$bundle_path.tmp" "$bundle_path"
+  if [[ "$test_case" == "corrupt_tree_file_count" \
+    || "$test_case" == "corrupt_tree_total_bytes" ]]; then
+    jq -e \
+      --arg expected "$original_sha256_tree" \
+      '.generated_world_sidecar.sha256_tree == $expected' \
+      "$bundle_path" >/dev/null
+  fi
   reset_stderr="$tmp_dir/reset.stderr"
   if ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
     --local-env "$tmp_dir/local.env" \
