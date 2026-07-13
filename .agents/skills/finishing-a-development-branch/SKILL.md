@@ -48,17 +48,28 @@ Pre-PR local role review packet recorded after immutable verification and before
 ## Post-PR / Pre-Merge Gates
 
 7. Record the PR purpose decision after PR creation. Manual packaging/release CI may wait for an operator only when task policy says so.
-8. Otherwise continue the PR watch/fix loop:
-
-```bash
-./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
-./scripts/pr-review-thread-closeout.sh --unresolved-only
-```
-
-For a one-shot gate inspection/readback, not a polling loop, run:
+8. Otherwise inspect the current PR gates with one batched read:
 
 ```bash
 ./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
+./scripts/pr-review-thread-closeout.sh --unresolved-only
+```
+
+If only a stable long-running required check or `required-gate` wait remains on a
+Codex surface, follow the canonical GitHub query budget rule: yield the active
+turn and schedule a task-bound continuation/heartbeat for roughly ten minutes
+later. Each wake runs one batched current-HEAD gate read; unchanged state stays
+quiet and schedules the next heartbeat, while a meaningful transition or query
+uncertainty returns immediately to normal gate handling. Delete the heartbeat
+when the wait ends. This is human-operated continuation, not an unattended
+production supervisor.
+
+On a non-Codex surface, the finite fallback below returns on a meaningful change
+or with a resumable bounded-wait result; it must not be wrapped in an infinite
+polling loop:
+
+```bash
+./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.

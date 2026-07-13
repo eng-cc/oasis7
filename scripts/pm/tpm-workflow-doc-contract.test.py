@@ -49,6 +49,28 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("production supervisor", table.lower())
         self.assertRegex(table.lower(), r"production supervisor[^\n]*\bblocked\b")
 
+    def test_stable_required_gate_wait_uses_bounded_codex_heartbeat(self) -> None:
+        budget = self.section("GitHub query budget and terminal defaults")
+        normalized = re.sub(r"\s+", " ", budget.lower())
+        for term in (
+            "required-gate",
+            "codex surface",
+            "continuation/heartbeat",
+            "roughly ten minutes",
+            "one batched current-head gate read",
+            "unchanged state stays quiet",
+            "not an unattended production supervisor",
+            "finite, bounded",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, normalized)
+        self.assertNotIn("back off to 300", normalized)
+
+        finishing = FINISHING.read_text(encoding="utf-8").lower()
+        self.assertIn("continuation/heartbeat", finishing)
+        self.assertIn("roughly ten minutes", finishing)
+        self.assertIn("non-codex surface", finishing)
+
     def test_terminal_helpers_are_current_while_supervisor_automation_is_blocked(self) -> None:
         table = self.section("Capability status")
         self.assertRegex(table, r"(?im)^\|[^\n]*(?:main[- ]sync|safe[- ]cleanup)[^\n]*\|\s*implemented\s*\|")
