@@ -25,6 +25,7 @@ HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
 ARTIFACT_REL=".pm/scratch/$TASK_UID/artifacts/review.txt"
 RECEIPT_REL=".pm/scratch/$TASK_UID/fake-dispatch-receipt.json"
 LEDGER_REL=".pm/scratch/$TASK_UID/slice-ledger.jsonl"
+HUMAN_LEDGER_REL=".pm/scratch/$TASK_UID/human-slice-ledger.jsonl"
 printf 'no_findings from fixture\n' >"$REPO/$ARTIFACT_REL"
 DIGEST="$(shasum -a 256 "$REPO/$ARTIFACT_REL" | awk '{print $1}')"
 cat >"$REPO/$RECEIPT_REL" <<EOF
@@ -33,35 +34,80 @@ EOF
 cat >"$REPO/$LEDGER_REL" <<EOF
 {"task_uid":"$TASK_UID","role":"$ROLE","status":"completed","head":"$HEAD_SHA","slice_id":"11111111-1111-4111-8111-111111111111","activation":"message-assigned","context_delivery":"full-history","actual_runtime":"inherited/unverified","artifact_digest":"$DIGEST","scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"fixture","artifacts":["$ARTIFACT_REL"],"dispatch_receipt":"$RECEIPT_REL"}
 EOF
+python3 - "$REPO/$LEDGER_REL" "$REPO/$HUMAN_LEDGER_REL" <<'PY'
+import json,sys
+p=json.loads(open(sys.argv[1],encoding='utf-8').read()); p.pop('dispatch_receipt')
+open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p)+'\n')
+PY
 
-set +e
 (cd "$REPO" && SCRIPT_DIR="$REPO/scripts/pm" ./scripts/pm/record-pre-pr-review.sh \
   --task-uid "$TASK_UID" --roles "$ROLE" \
+  --issue 1 --repo eng-cc/oasis7 \
   --review-evidence "$ROLE: no_findings" \
   --review-verdicts "$ROLE scope/spec compliance=approved; role quality/risk=approved" \
   --finding-disposition-evidence fixture --verification fixture --residual-risk fixture \
-  --slice-ledger "$LEDGER_REL" --reviewed-paths README.md --source-head "$HEAD_SHA" \
+  --slice-ledger "$HUMAN_LEDGER_REL" --reviewed-paths README.md --source-head "$HEAD_SHA" \
   --allow-dirty --print-only) >"$TMPDIR/out" 2>"$TMPDIR/err"
-status=$?
-set -e
-if [[ "$status" == "0" ]]; then
-  echo "expected TPM-issued fake dispatch receipt to be rejected" >&2
+grep -F 'Pre-PR Local Role Review: passed' "$TMPDIR/out" >/dev/null
+
+python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \
+  --task-uid "$TASK_UID" --ledger "$HUMAN_LEDGER_REL" --roles "$ROLE" --source-head "$HEAD_SHA" \
+  >"$TMPDIR/human-no-receipt.out"
+grep -F '"mode": "human-operated"' "$TMPDIR/human-no-receipt.out" >/dev/null
+
+if python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \
+  --task-uid "$TASK_UID" --ledger "$HUMAN_LEDGER_REL" --roles "$ROLE" --source-head "$HEAD_SHA" \
+  --mode unattended >"$TMPDIR/no-receipt.out" 2>"$TMPDIR/no-receipt.err"; then
+  echo "expected receipt-free human ledger to fail unattended mode" >&2
   exit 1
 fi
-if ! grep -Eiq 'trusted dispatch|codex_runtime|receipt issuer|dispatch receipt' "$TMPDIR/err"; then
-  echo "expected trusted-dispatch rejection, got:" >&2
-  cat "$TMPDIR/err" >&2
+
+if python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \
+  --task-uid "$TASK_UID" --ledger "$LEDGER_REL" --roles "$ROLE" --source-head "$HEAD_SHA" \
+  --mode unattended >"$TMPDIR/untrusted.out" 2>"$TMPDIR/untrusted.err"; then
+  echo "expected TPM-issued dispatch receipt to be rejected in unattended mode" >&2
   exit 1
 fi
+grep -F 'untrusted dispatch receipt' "$TMPDIR/untrusted.err" >/dev/null
 
 python3 - "$REPO/$RECEIPT_REL" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8')); p['issuer']='codex_runtime'
 json.dump(p,open(sys.argv[1],'w',encoding='utf-8'))
 PY
+
+expect_both_modes_fail() {
+  local name="$1" task_uid="$2" ledger="$3" roles="$4" head="$5" mode
+  for mode in human-operated unattended; do
+    if python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \
+      --task-uid "$task_uid" --ledger "$ledger" --roles "$roles" --source-head "$head" --mode "$mode" \
+      >"$TMPDIR/$name-$mode.out" 2>"$TMPDIR/$name-$mode.err"; then
+      echo "expected $name to fail in $mode mode" >&2
+      exit 1
+    fi
+  done
+}
+
+expect_both_modes_fail missing-role "$TASK_UID" "$LEDGER_REL" "$ROLE,qa_engineer" "$HEAD_SHA"
+expect_both_modes_fail stale-head "$TASK_UID" "$LEDGER_REL" "$ROLE" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+expect_both_modes_fail wrong-task task_22222222222222222222222222222222 "$LEDGER_REL" "$ROLE" "$HEAD_SHA"
+
+MISSING_TASK_LEDGER_REL=".pm/scratch/$TASK_UID/missing-task-ledger.jsonl"
+python3 - "$REPO/$LEDGER_REL" "$REPO/$MISSING_TASK_LEDGER_REL" <<'PY'
+import json,sys
+p=json.loads(open(sys.argv[1],encoding='utf-8').read()); p.pop('task_uid')
+open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p)+'\n')
+PY
+expect_both_modes_fail missing-task "$TASK_UID" "$MISSING_TASK_LEDGER_REL" "$ROLE" "$HEAD_SHA"
+
+printf 'tampered\n' >>"$REPO/$ARTIFACT_REL"
+expect_both_modes_fail tampered-artifact "$TASK_UID" "$LEDGER_REL" "$ROLE" "$HEAD_SHA"
+printf 'no_findings from fixture\n' >"$REPO/$ARTIFACT_REL"
+
 unset OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS
 if python3 "$REPO/scripts/pm/validate-review-provenance.py" --root "$REPO" \
-  --ledger "$LEDGER_REL" --roles "$ROLE" --source-head "$HEAD_SHA" \
+  --task-uid "$TASK_UID" --ledger "$LEDGER_REL" --roles "$ROLE" --source-head "$HEAD_SHA" \
+  --mode unattended \
   >"$TMPDIR/unattested.out" 2>"$TMPDIR/unattested.err"; then
   echo "expected issuer text without runtime-verifiable attestation to fail closed" >&2
   exit 1

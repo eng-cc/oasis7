@@ -71,47 +71,37 @@ PY
 python3 - "$TMPDIR/missing-hold.json" "$TMPDIR/blocked.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8')); p['merge_hold']={'kind':'normal_pr_ci_watch','requester':'workflow','reason':'normal','resume_authority':'workflow','active':False}; p['mergeStateStatus']='BLOCKED'
+p['policy_discovery']={'status':'resolved','active_rule_types':['required_status_checks','required_pull_request_reviews'],'required_status_checks':[{'context':'required-gate','app_id':None}]}
+p['required_status_checks']=p['policy_discovery']['required_status_checks']
+p['admin_merge_authority']={'requester':'user','scope':'review_approval_only','reason':'fixture authorization','disposition':'authorized'}
 json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
 PY
 if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/blocked.json" \
-  --admin-merge-authorized --json >"$TMPDIR/blocked.out"; then
-  echo "expected BLOCKED+REVIEW_REQUIRED without approval-only receipt to remain blocked" >&2
+  --json >"$TMPDIR/blocked-without-authority.out"; then
+  echo "expected BLOCKED+REVIEW_REQUIRED without admin authorization to remain blocked" >&2
   exit 1
 fi
-
-python3 - "$TMPDIR/blocked.json" "$TMPDIR/approval.json" <<'PY'
+python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/blocked.json" \
+  --admin-merge-authorized --json >"$TMPDIR/blocked.out"
+python3 - "$TMPDIR/blocked.out" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
-p['approval_only_receipt']={'source':'github_runtime_complete_ruleset','runtime_verified':True,'pr_number':2198,'blocking_rules':['required_review_approval']}
-json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
+assert p['status']=='ready',p
+assert p['ready_for_merge'],p
+assert p['use_admin_merge'],p
 PY
-if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/approval.json" \
-  --admin-merge-authorized --json >"$TMPDIR/approval.out"; then
-  echo "RED approval-only receipt: unbound receipt bypassed repo/head/time/epoch trust" >&2
-  exit 1
-fi
 
-python3 - "$TMPDIR/blocked.json" "$TMPDIR/approval-bound.json" <<'PY'
-import datetime,json,sys
-p=json.load(open(sys.argv[1],encoding='utf-8'))
-p['approval_only_receipt']={'source':'github_runtime_complete_ruleset','runtime_verified':True,
- 'repository':'eng-cc/oasis7','pr_number':2198,'head_oid':p['headRefOid'],
- 'observed_at':datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z'),
- 'gate_epoch':'b'*64,'blocking_rules':['required_review_approval']}
-json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
-PY
-if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/approval-bound.json" \
-  --admin-merge-authorized --json >"$TMPDIR/approval-bound.out"; then
-  echo "expected admin merge to remain capability-blocked without runtime producer" >&2
-  exit 1
-fi
-python3 - "$TMPDIR/approval-bound.out" <<'PY'
+python3 - "$TMPDIR/blocked.json" "$TMPDIR/unsupported-rule.json" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
-assert p['status']=='capability_blocked',p
-assert p['capability_blocked']['reason']=='complete_ruleset_runtime_receipt_unavailable',p
-assert not p['use_admin_merge'],p
+p['policy_discovery']['active_rule_types'].append('required_deployments')
+json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
 PY
+if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/unsupported-rule.json" \
+  --admin-merge-authorized --json >"$TMPDIR/unsupported-rule.out"; then
+  echo "expected an additional active blocking rule to reject admin merge" >&2
+  exit 1
+fi
 
 python3 - "$TMPDIR/missing-hold.json" "$TMPDIR/latest-review.json" <<'PY'
 import json,sys

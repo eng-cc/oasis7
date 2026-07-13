@@ -17,16 +17,17 @@ Use after implementation and its required verification are complete.
 
 1. Run fresh verification at the required tier and inspect all output.
 2. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
-3. Use `requesting-repo-owned-review`; resolve findings and obtain the trusted canonical review attestation.
+3. Use `requesting-repo-owned-review`; resolve findings and obtain the canonical human-operated review packet.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
 
 4. If review/evidence helpers produce metadata after the frozen head, allow only an evidence-only commit; any implementation change invalidates the freeze and review.
    If that evidence-only commit changes HEAD, follow the canonical [PR creation
    gate](../../../doc/engineering/workflow/source-of-truth.md#pr-creation-gate):
-   re-run final-head verification and review, then issue a new packet/attestation
+   re-run final-head verification and review, then issue a new packet
    for the final PR head;
-   otherwise do not create the PR.
+   otherwise do not create the PR. The resulting packet binds the reviewed PR
+   head.
 5. Record Pre-PR Ready with the adapter:
 
 ```bash
@@ -69,7 +70,9 @@ second copy of its order or commands.
 - PR URL and merged receipt, or canonical blocker with resume instruction
 - main-sync and cleanup result
 
-Missing trusted production attestation is `capability_blocked`; never manufacture a passed packet or downgrade it to waiting.
+Missing trusted runtime attestation is `capability_blocked` for unattended
+automation, not for the current human-operated PR path. Never manufacture a
+passed packet or downgrade a real blocker to waiting.
 
 ## Guardrails
 
