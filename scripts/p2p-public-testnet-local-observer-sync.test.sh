@@ -7,13 +7,22 @@ source "$repo_root/config/chain-pos-defaults.env"
 
 test_case=${OASIS7_OBSERVER_SYNC_TEST_CASE:-all}
 if [[ "$test_case" == "all" ]]; then
-  for test_case in canonical_layout reset_owned_restore_retry; do
+  for test_case in \
+    canonical_layout \
+    reset_owned_restore_retry \
+    corrupt_file_metadata \
+    corrupt_tree_metadata \
+    legacy_manifest; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
   done
   echo "ok: local observer sync accepts sequencer/storage validator env pair"
   exit 0
 fi
-if [[ "$test_case" != "canonical_layout" && "$test_case" != "reset_owned_restore_retry" ]]; then
+if [[ "$test_case" != "canonical_layout" \
+  && "$test_case" != "reset_owned_restore_retry" \
+  && "$test_case" != "corrupt_file_metadata" \
+  && "$test_case" != "corrupt_tree_metadata" \
+  && "$test_case" != "legacy_manifest" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
   exit 2
 fi
@@ -28,6 +37,36 @@ local_stack="$tmp_dir/local-stack"
 manifest_path="$local_stack/manifest.json"
 bundle_path="$local_stack/governed-bundle.json"
 mkdir -p "$local_stack"
+
+if [[ "$test_case" == "legacy_manifest" ]]; then
+  cat >"$tmp_dir/local.env" <<EOF
+STACK_ROOT=$local_stack
+NODE_ID=triad-testnet-local
+EXECUTION_WORLD_DIR=\$STACK_ROOT/world
+EXECUTION_RECORDS_DIR=\$STACK_ROOT/execution-records
+STORAGE_ROOT=\$STACK_ROOT/store
+RUNTIME_ROOT=\$STACK_ROOT/runtime-root
+REPLICATION_ROOT=\$STACK_ROOT/replication-root
+NETWORK_TIER_MANIFEST_PATH=$manifest_path
+EOF
+  cat >"$manifest_path" <<'EOF'
+{
+  "network_id": "public_testnet",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "legacy-bundle.json"
+  }
+}
+EOF
+  mkdir -p "$local_stack/world" "$local_stack/execution-records" "$local_stack/store"
+  printf '{"height":1233}\n' >"$local_stack/world/snapshot.json"
+  ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+    --local-env "$tmp_dir/local.env" \
+    --backup-dir "$tmp_dir/reset-backup"
+  test -f "$tmp_dir/reset-backup/execution-world/snapshot.json"
+  test ! -e "$local_stack/world"
+  echo "ok: observer reset case $test_case"
+  exit 0
+fi
 
 if [[ "$test_case" == "canonical_layout" ]]; then
   sidecar_ref="generated-world/generated-scenario-world"
@@ -173,15 +212,85 @@ mkdir -p \
 printf '{"height":1233}\n' >"$local_stack/world/snapshot.json"
 printf '{"generated":"snapshot"}\n' >"$sidecar_path/snapshot.json"
 printf '{"generated":"journal"}\n' >"$sidecar_path/journal.json"
+printf '{"generated":"complete-tree-member"}\n' >"$sidecar_path/bootstrap-metadata.json"
 printf '{"scenario_id":"asteroid_fragment_bootstrap"}\n' >"$provenance_path"
 cp "$sidecar_path/snapshot.json" "$tmp_dir/expected-generated-snapshot.json"
 cp "$sidecar_path/journal.json" "$tmp_dir/expected-generated-journal.json"
+cp "$sidecar_path/bootstrap-metadata.json" "$tmp_dir/expected-bootstrap-metadata.json"
 cp "$provenance_path" "$tmp_dir/expected-world-generation-provenance.json"
 printf '{"mirror":"old"}\n' >"$local_stack/world-simulator-mirror/snapshot.json"
 printf '{"height":1233}\n' >"$local_stack/execution-records/latest.json"
 printf 'old blob\n' >"$local_stack/store/blobs/old"
 printf '{"runtime":"old"}\n' >"$local_stack/runtime-root/reward-runtime-execution-bridge-state.json"
 printf '{"committed_height":1233}\n' >"$local_stack/replication-root/node_pos_state.json"
+
+python3 - "$bundle_path" "$sidecar_path" "$provenance_path" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+bundle_path, sidecar_path, provenance_path = map(pathlib.Path, sys.argv[1:4])
+
+def file_sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+combined = hashlib.sha256()
+file_count = 0
+total_bytes = 0
+for child in sorted(path for path in sidecar_path.rglob("*") if path.is_file()):
+    relative = child.relative_to(sidecar_path).as_posix()
+    digest = file_sha256(child)
+    size = child.stat().st_size
+    combined.update(relative.encode("utf-8"))
+    combined.update(b"\0")
+    combined.update(digest.encode("ascii"))
+    combined.update(b"\0")
+    combined.update(str(size).encode("ascii"))
+    combined.update(b"\n")
+    file_count += 1
+    total_bytes += size
+
+bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+bundle["generated_world_sidecar"].update(
+    {
+        "sha256_tree": combined.hexdigest(),
+        "file_count": file_count,
+        "total_bytes": total_bytes,
+    }
+)
+bundle["world_generation_provenance"].update(
+    {
+        "sha256": file_sha256(provenance_path),
+        "size_bytes": provenance_path.stat().st_size,
+    }
+)
+bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+PY
+
+if [[ "$test_case" == "corrupt_file_metadata" || "$test_case" == "corrupt_tree_metadata" ]]; then
+  if [[ "$test_case" == "corrupt_file_metadata" ]]; then
+    jq '.world_generation_provenance.sha256 = ("0" * 64)' "$bundle_path" >"$bundle_path.tmp"
+    expected_failure='world_generation_provenance sha256 drift'
+  else
+    jq '.generated_world_sidecar.sha256_tree = ("0" * 64)' "$bundle_path" >"$bundle_path.tmp"
+    expected_failure='generated_world_sidecar sha256_tree drift'
+  fi
+  mv "$bundle_path.tmp" "$bundle_path"
+  reset_stderr="$tmp_dir/reset.stderr"
+  if ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+    --local-env "$tmp_dir/local.env" \
+    --backup-dir "$tmp_dir/reset-backup" \
+    >"$tmp_dir/reset.stdout" 2>"$reset_stderr"; then
+    echo "expected corrupt governed artifact metadata to reject reset" >&2
+    exit 1
+  fi
+  grep -q "$expected_failure" "$reset_stderr"
+  test -f "$local_stack/world/snapshot.json"
+  test ! -e "$tmp_dir/reset-backup/execution-world"
+  echo "ok: observer reset case $test_case"
+  exit 0
+fi
 
 jq -e \
   --arg sidecar "$sidecar_path" \
@@ -326,6 +435,10 @@ for required_sidecar_file in snapshot.json journal.json; do
     exit 1
   fi
 done
+if [[ ! -f "$sidecar_path/bootstrap-metadata.json" ]]; then
+  echo "expected reset-state to restore complete governed generated_world_sidecar tree" >&2
+  exit 1
+fi
 if [[ ! -f "$provenance_path" ]]; then
   echo "expected reset-state to restore governed world_generation_provenance" >&2
   exit 1
@@ -338,11 +451,15 @@ if [[ "$test_case" == "reset_owned_restore_retry" ]]; then
     "$reset_backup/execution-world/generated-scenario-world/journal.json" \
     "$sidecar_path/journal.json"
   cmp -s \
+    "$reset_backup/execution-world/generated-scenario-world/bootstrap-metadata.json" \
+    "$sidecar_path/bootstrap-metadata.json"
+  cmp -s \
     "$reset_backup/execution-world/world-generation-provenance.json" \
     "$provenance_path"
 else
   cmp -s "$tmp_dir/expected-generated-snapshot.json" "$sidecar_path/snapshot.json"
   cmp -s "$tmp_dir/expected-generated-journal.json" "$sidecar_path/journal.json"
+  cmp -s "$tmp_dir/expected-bootstrap-metadata.json" "$sidecar_path/bootstrap-metadata.json"
   cmp -s "$tmp_dir/expected-world-generation-provenance.json" "$provenance_path"
 fi
 jq -e \

@@ -727,8 +727,10 @@ restore_governed_bootstrap_artifacts() {
   local source_execution_world_dir=$4
 
   python3 - "$mode" "$manifest_path" "$execution_world_dir" "$source_execution_world_dir" <<'PY'
+import hashlib
 import json
 import os
+import pathlib
 import shutil
 import sys
 import tempfile
@@ -747,6 +749,41 @@ def load_json(path, label):
         fail(f"{label} must be a regular file: {path}")
     with open(path, "r", encoding="utf-8") as fh:
         return json.load(fh)
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def sha256_dir_tree(path):
+    root = pathlib.Path(path)
+    combined = hashlib.sha256()
+    file_count = 0
+    total_bytes = 0
+    for child in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
+        relative = child.relative_to(root).as_posix()
+        child_digest = sha256_file(child)
+        size = child.stat().st_size
+        combined.update(relative.encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(child_digest.encode("ascii"))
+        combined.update(b"\0")
+        combined.update(str(size).encode("ascii"))
+        combined.update(b"\n")
+        file_count += 1
+        total_bytes += size
+    return combined.hexdigest(), file_count, total_bytes
+
+def require_sha256(value, label):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(ch not in "0123456789abcdef" for ch in value)
+    ):
+        fail(f"invalid {label}")
+    return value
 
 def resolve_ref(ref, base_dir, label):
     if not isinstance(ref, str) or not ref:
@@ -779,10 +816,11 @@ ref_keys = (
     "generated_world_sidecar_ref",
     "world_generation_provenance_ref",
 )
-configured = [key for key in ref_keys if runtime_refs.get(key)]
-if not configured:
+optional_ref_keys = ref_keys[1:]
+configured_optional = [key for key in optional_ref_keys if runtime_refs.get(key)]
+if not configured_optional:
     sys.exit(0)
-if len(configured) != len(ref_keys):
+if len(configured_optional) != len(optional_ref_keys) or not runtime_refs.get(ref_keys[0]):
     fail("governed bootstrap artifact refs must be configured together")
 
 bundle_ref = runtime_refs["release_candidate_bundle_ref"]
@@ -804,11 +842,22 @@ if target_common in (sidecar_target, provenance_target):
 
 bundle = load_json(bundle_path, "release candidate bundle")
 governed = (
-    ("generated_world_sidecar", "directory", sidecar_target, ("snapshot.json", "journal.json")),
-    ("world_generation_provenance", "file", provenance_target, ()),
+    (
+        "generated_world_sidecar",
+        "directory",
+        sidecar_target,
+        ("snapshot.json", "journal.json"),
+        bundle.get("generated_world_sidecar"),
+    ),
+    (
+        "world_generation_provenance",
+        "file",
+        provenance_target,
+        (),
+        bundle.get("world_generation_provenance"),
+    ),
 )
-for key, expected_kind, expected_path, _ in governed:
-    entry = bundle.get(key)
+for key, expected_kind, expected_path, _, entry in governed:
     if not isinstance(entry, dict):
         fail(f"release candidate bundle missing {key}")
     if entry.get("kind") != expected_kind:
@@ -820,23 +869,57 @@ for key, expected_kind, expected_path, _ in governed:
     if bundle_ref_path != expected_path or bundle_resolved_path != expected_path:
         fail(f"release candidate bundle {key} does not resolve to governed path")
 
-owned = []
-for key, expected_kind, target, required_files in governed:
-    if not is_within(target, execution_world_dir):
-        continue
-    relative = os.path.relpath(target, execution_world_dir)
-    source = os.path.join(source_execution_world_dir, relative)
-    reject_symlink_components(source, source_execution_world_dir, f"{key} backup path")
+def validate_artifact(key, expected_kind, source, source_root, required_files, entry):
+    reject_symlink_components(source, source_root, f"{key} backup path")
     if expected_kind == "directory":
         if not os.path.isdir(source) or os.path.islink(source):
             fail(f"missing governed {key} backup: {source}")
+        for child in pathlib.Path(source).rglob("*"):
+            if child.is_symlink():
+                fail(f"unsafe symlink in {key} backup path: {child}")
         for filename in required_files:
             required_source = os.path.join(source, filename)
             if not os.path.isfile(required_source) or os.path.islink(required_source):
                 fail(f"missing governed {key} artifact: {required_source}")
-    elif not os.path.isfile(source) or os.path.islink(source):
-        fail(f"missing governed {key} backup: {source}")
-    owned.append((key, expected_kind, target, source, required_files))
+        expected_digest = require_sha256(entry.get("sha256_tree"), f"{key}.sha256_tree")
+        actual_digest, actual_file_count, actual_total_bytes = sha256_dir_tree(source)
+        if actual_digest != expected_digest:
+            fail(
+                f"{key} sha256_tree drift: bundle={expected_digest} current={actual_digest}"
+            )
+        expected_file_count = entry.get("file_count")
+        if expected_file_count is not None and expected_file_count != actual_file_count:
+            fail(
+                f"{key} file_count drift: bundle={expected_file_count} current={actual_file_count}"
+            )
+        expected_total_bytes = entry.get("total_bytes")
+        if expected_total_bytes is not None and expected_total_bytes != actual_total_bytes:
+            fail(
+                f"{key} total_bytes drift: bundle={expected_total_bytes} current={actual_total_bytes}"
+            )
+    else:
+        if not os.path.isfile(source) or os.path.islink(source):
+            fail(f"missing governed {key} backup: {source}")
+        expected_digest = require_sha256(entry.get("sha256"), f"{key}.sha256")
+        actual_digest = sha256_file(source)
+        if actual_digest != expected_digest:
+            fail(f"{key} sha256 drift: bundle={expected_digest} current={actual_digest}")
+
+owned = []
+for key, expected_kind, target, required_files, entry in governed:
+    if not is_within(target, execution_world_dir):
+        continue
+    relative = os.path.relpath(target, execution_world_dir)
+    source = os.path.join(source_execution_world_dir, relative)
+    validate_artifact(
+        key,
+        expected_kind,
+        source,
+        source_execution_world_dir,
+        required_files,
+        entry,
+    )
+    owned.append((key, expected_kind, target, source, required_files, entry))
 
 if mode == "validate":
     sys.exit(0)
@@ -854,15 +937,24 @@ stage_dir = tempfile.mkdtemp(
     dir=execution_world_parent,
 )
 try:
-    for _, expected_kind, target, source, required_files in owned:
+    for _, expected_kind, target, source, _, _ in owned:
         stage_target = os.path.join(stage_dir, os.path.relpath(target, execution_world_dir))
         if expected_kind == "directory":
-            os.makedirs(stage_target)
-            for filename in required_files:
-                shutil.copy2(os.path.join(source, filename), os.path.join(stage_target, filename))
+            os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+            shutil.copytree(source, stage_target, copy_function=shutil.copy2)
         else:
             os.makedirs(os.path.dirname(stage_target), exist_ok=True)
             shutil.copy2(source, stage_target)
+    for key, expected_kind, target, _, required_files, entry in owned:
+        stage_target = os.path.join(stage_dir, os.path.relpath(target, execution_world_dir))
+        validate_artifact(
+            key,
+            expected_kind,
+            stage_target,
+            stage_dir,
+            required_files,
+            entry,
+        )
     os.replace(stage_dir, execution_world_dir)
     stage_dir = None
 finally:
