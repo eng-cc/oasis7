@@ -8,6 +8,8 @@ def response(overflow=False):
 gate._run_json=lambda cmd:(calls.append(cmd) or response(False))
 snapshot=gate.graphql_pr_snapshot("eng-cc/oasis7",1)
 assert len(calls)==1 and set(snapshot)=={"comments","reviews","threads","statusCheckRollup"}
+query=next(arg.removeprefix("query=") for arg in calls[0] if arg.startswith("query="))
+assert query.count("{")==query.count("}"), query
 calls.clear(); gate._run_json=lambda cmd:(calls.append(cmd) or response(True))
 try: gate.graphql_pr_snapshot("eng-cc/oasis7",1)
 except SystemExit as exc: assert "exceeded 100 nodes" in str(exc)

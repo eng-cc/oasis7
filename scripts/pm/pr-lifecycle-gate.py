@@ -170,7 +170,7 @@ def graphql_pr_snapshot(repo: str, number: int) -> dict[str, list[dict[str, Any]
           __typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}}
           ... on StatusContext{context state}
         }}}}}}
-      }}}
+      }}
     }"""
     payload = _run_json(["gh", "api", "graphql", "-f", f"query={query}",
                          "-F", f"owner={owner}", "-F", f"repo={name}", "-F", f"number={number}"])
