@@ -122,13 +122,13 @@ if extra == "mixed_ready_evidence":
     comments = [
         {"body": f"Pre-PR Local Role Review: passed\nTask UID: {uid}\nReview Findings Disposition: no_findings"},
         {"body": f"<!-- oasis7-pm-claim-verification -->\nTask UID: {other_uid}\nClaim Type: ready_for_pr\nVerification Status: verified"},
-        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: close\nRole: tpm"},
+        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: pre_pr_ready\nRole: tpm"},
     ]
 elif extra != "no_ready_evidence":
     comments = [
         {"body": f"Pre-PR Local Role Review: passed\nTask UID: {uid}\nReview Findings Disposition: no_findings"},
         {"body": f"<!-- oasis7-pm-claim-verification -->\nTask UID: {uid}\nClaim Type: ready_for_pr\nVerification Status: verified"},
-        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: close\nRole: tpm"},
+        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: pre_pr_ready\nRole: tpm"},
     ]
 print(json.dumps({"body": body, "comments": comments, "number": int(number), "state": state, "title": f"issue {number}", "url": f"https://github.com/eng-cc/oasis7/issues/{number}"}))
 PY
@@ -176,7 +176,7 @@ if [[ "\$*" == "project field-list 1 --owner eng-cc --format json" ]]; then
 {"fields":[
 {"id":"FIELD_STATUS","name":"Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_IN_PROGRESS","name":"In Progress"},{"id":"OPT_DONE","name":"Done"}]},
 {"id":"FIELD_PM_STATUS","name":"PM Status","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PM","name":"done"}]},
-{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_TASK_DONE_PHASE","name":"task_done"},{"id":"OPT_MAIN_SYNC_PHASE","name":"main_sync"},{"id":"OPT_POST_MERGE_DONE_PHASE","name":"post_merge_done"}]}
+{"id":"FIELD_WORKFLOW_PHASE","name":"Workflow Phase","type":"ProjectV2SingleSelectField","options":[{"id":"OPT_DONE_PHASE","name":"done"}]}
 ]}
 JSON
   exit 0
