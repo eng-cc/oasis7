@@ -86,6 +86,8 @@ SQUASH_RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" 
 SQUASH_MERGE_RECEIPT="$SQUASH_RECEIPT_ROOT/merge-receipt.json"
 SQUASH_PATCH_RECEIPT="$SQUASH_RECEIPT_ROOT/patch-equivalence-receipt.json"
 SQUASH_SYNC_RECEIPT="$SQUASH_RECEIPT_ROOT/main-sync-receipt.json"
+SQUASH_TERMINAL_RECEIPT="$SQUASH_RECEIPT_ROOT/terminal-cleanup-receipt.json"
+SQUASH_CLEANUP_JOURNAL="$SQUASH_RECEIPT_ROOT/cleanup-intent.json"
 cat >"$SQUASH_MERGE_RECEIPT" <<EOF
 {"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"fixture/repo","default_branch":"main","pr_number":8,"pr_url":"https://example.invalid/pull/8","state":"MERGED","merged_at":"$OBSERVED_AT","head_oid":"$SQUASH_BRANCH_TIP","base_ref":"main","observed_at":"$OBSERVED_AT"}
 EOF
@@ -154,12 +156,15 @@ if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDI
   --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
   --main-sync-receipt "$SQUASH_SYNC_RECEIPT" --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
-  --dry-run >"$TMPDIR/tampered-cleanup.out" 2>"$TMPDIR/tampered-cleanup.err"; then
+  --terminal-receipt-output "$SQUASH_TERMINAL_RECEIPT" \
+  >"$TMPDIR/tampered-cleanup.out" 2>"$TMPDIR/tampered-cleanup.err"; then
   echo "expected cleanup with replaced patch receipt to fail" >&2; exit 1
 fi
 grep -Eqi 'digest mismatch|patch.equivalence binding' "$TMPDIR/tampered-cleanup.err"
 test -d "$TMPDIR/squash-task-worktree"
 git -C "$SQUASH_REPO" show-ref --verify --quiet refs/heads/task/change
+test ! -e "$SQUASH_CLEANUP_JOURNAL"
+test ! -e "$SQUASH_TERMINAL_RECEIPT"
 if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$SQUASH_REPO" --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
   --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
