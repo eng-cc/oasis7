@@ -24,6 +24,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod commit_execution_hashes_tests;
 #[path = "tests_pos_engine_guardrails.rs"]
 mod pos_engine_guardrails_tests;
+#[path = "tests_peer_head_binding.rs"]
+mod peer_head_binding_tests;
 #[path = "tests_pos_signature_and_runtime.rs"]
 mod pos_signature_and_runtime_tests;
 #[path = "tests_runtime_replica_maintenance.rs"]

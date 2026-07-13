@@ -79,6 +79,113 @@ fn cas_transparently_compresses_large_blob_on_disk() {
 }
 
 #[test]
+fn cas_raw_range_honors_a_nonzero_offset_once() {
+    let dir = temp_dir("cas-raw-range-offset");
+    let store = LocalCasStore::new(&dir);
+    let bytes = b"0123456789abcdef".to_vec();
+    let hash = store.put_bytes(&bytes).expect("put");
+    let blob_path = store.blobs_dir().join(format!("{hash}.blob"));
+    // Keep this fixture raw: range reads must not skip after the file seek.
+    fs::write(blob_path, &bytes).expect("write raw blob");
+
+    assert_eq!(
+        store.get_range(&hash, 4, 5).expect("range"),
+        (b"45678".to_vec(), false)
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cas_compressed_late_ranges_are_stable_for_concurrent_checkpoint_reads() {
+    let dir = temp_dir("cas-compressed-range-cache");
+    let store = LocalCasStore::new(&dir);
+    let bytes = vec![b'z'; 16 * 1024 * 1024];
+    let hash = store.put_bytes(&bytes).expect("put compressed blob");
+    let offset = 12 * 1024 * 1024;
+    assert_eq!(
+        store.get_range(&hash, offset, 1024).expect("late range").0,
+        bytes[offset as usize..offset as usize + 1024]
+    );
+
+    let mut readers = Vec::new();
+    for _ in 0..4 {
+        let store = store.clone();
+        let hash = hash.clone();
+        readers.push(std::thread::spawn(move || {
+            store
+                .get_range(&hash, offset, 1024)
+                .expect("concurrent late range")
+        }));
+    }
+    for reader in readers {
+        assert_eq!(
+            reader.join().expect("reader"),
+            (
+                bytes[offset as usize..offset as usize + 1024].to_vec(),
+                false
+            )
+        );
+    }
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn cas_compressed_cache_rotates_distinct_blobs_without_global_decode_locking() {
+    let dir = temp_dir("cas-compressed-range-rotation");
+    let store = LocalCasStore::new(&dir);
+    let blobs = [b'a', b'b', b'c'].map(|byte| vec![byte; 16 * 1024 * 1024]);
+    let hashes: Vec<_> = blobs
+        .iter()
+        .map(|bytes| store.put_bytes(bytes).expect("put compressed blob"))
+        .collect();
+    let offset = 12 * 1024 * 1024;
+    for (hash, bytes) in hashes.iter().zip(&blobs) {
+        assert_eq!(
+            store.get_range(hash, offset, 1024).expect("late range").0,
+            bytes[offset as usize..offset as usize + 1024]
+        );
+    }
+    let cache_paths = compressed_range_cache::paths();
+    assert_eq!(
+        cache_paths.len(),
+        2,
+        "decoded cache stays under its entry cap"
+    );
+    assert!(
+        cache_paths
+            .iter()
+            .any(|path| path.ends_with(format!("{}.blob", hashes[2]))),
+        "the later checkpoint blob must replace the oldest cache entry"
+    );
+
+    let first = store.clone();
+    let first_hash = hashes[1].clone();
+    let second = store.clone();
+    let second_hash = hashes[2].clone();
+    let first_reader = std::thread::spawn(move || first.get_range(&first_hash, offset, 1024));
+    let second_reader = std::thread::spawn(move || second.get_range(&second_hash, offset, 1024));
+    assert_eq!(
+        first_reader
+            .join()
+            .expect("first reader")
+            .expect("first range")
+            .0,
+        vec![b'b'; 1024]
+    );
+    assert_eq!(
+        second_reader
+            .join()
+            .expect("second reader")
+            .expect("second range")
+            .0,
+        vec![b'c'; 1024]
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn cas_does_not_misdecode_raw_blob_that_looks_like_compressed_payload() {
     let dir = temp_dir("cas-magic-collision");
     let store = LocalCasStore::new(&dir);

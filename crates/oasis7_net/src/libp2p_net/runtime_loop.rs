@@ -7,6 +7,8 @@ use libp2p::kad::{self, Quorum, RecordKey};
 use libp2p::request_response;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
+use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::distributed_net::NetworkRequestContext;
 
 use super::peer_manager::recompute_peer_manager_healths;
 use super::peer_manager_active_set::{
@@ -15,17 +17,26 @@ use super::peer_manager_active_set::{
 };
 use super::traffic_metrics::{record_gossip_outbound, record_request_outbound};
 use super::{
-    Behaviour, CommandResponseSender, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, Handler, Keypair,
-    Libp2pReachabilitySnapshot, MembershipDirectorySnapshot, NetworkMessage, NetworkRequest,
-    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
-    PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord, TransportPath, WorldError,
-    WorldHeadAnnounce, classify_network_protocol, classify_network_topic,
-    maybe_discover_rendezvous_namespace, maybe_register_rendezvous_namespace,
-    maybe_request_cached_discovery_peers, now_ms, publish_configured_peer_record,
-    publish_discovery_provider, push_bounded_clone, put_record_query, should_republish,
-    start_peer_discovery_query,
+    Behaviour, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, Keypair, Libp2pReachabilitySnapshot,
+    MembershipDirectorySnapshot, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord,
+    TransportPath, WorldError, WorldHeadAnnounce, classify_network_protocol,
+    classify_network_topic, maybe_discover_rendezvous_namespace,
+    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
+    publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
+    put_record_query, should_republish, start_peer_discovery_query,
 };
+
+pub(super) type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
+pub(super) type Handler =
+    Arc<dyn Fn(&NetworkRequestContext, &[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+pub(super) type Admission = Arc<dyn Fn(&[u8]) -> Result<(), WorldError> + Send + Sync>;
+
+pub(super) struct HandlerRegistration {
+    pub handler: Handler,
+    pub admission: Option<Admission>,
+}
 
 pub(super) enum CommandOutcome {
     Continue,
@@ -54,9 +65,58 @@ pub(super) fn fail_pending_request(
     );
     let _ = pending_response
         .response
-        .send(Err(WorldError::NetworkProtocolUnavailable {
-            protocol: message,
-        }));
+        .send(Err(request_failure_world_error(error, message)));
+}
+
+pub(super) fn request_failure_world_error(
+    error: request_response::OutboundFailure,
+    message: String,
+) -> WorldError {
+    let failure_detail = format!("{error:?}");
+    let retryable = match error {
+        request_response::OutboundFailure::ConnectionClosed
+        | request_response::OutboundFailure::DialFailure
+        | request_response::OutboundFailure::Timeout => true,
+        request_response::OutboundFailure::Io(error) => {
+            error.kind() == std::io::ErrorKind::UnexpectedEof
+        }
+        request_response::OutboundFailure::UnsupportedProtocols => false,
+    };
+    if retryable {
+        WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            message: format!("{message}: {failure_detail}"),
+            retryable: true,
+        }
+    } else {
+        WorldError::NetworkProtocolUnavailable { protocol: message }
+    }
+}
+
+#[cfg(test)]
+mod request_failure_tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_response_and_unexpected_eof_are_retryable_transport_failures() {
+        for failure in [
+            request_response::OutboundFailure::ConnectionClosed,
+            request_response::OutboundFailure::Io(std::io::Error::from(
+                std::io::ErrorKind::UnexpectedEof,
+            )),
+        ] {
+            let error = request_failure_world_error(failure, "request failed".to_string());
+            assert!(super::super::error_mapping::world_error_is_retryable_connection_gap(&error));
+            assert!(matches!(
+                error,
+                WorldError::NetworkRequestFailed {
+                    code: DistributedErrorCode::ErrNotAvailable,
+                    retryable: true,
+                    ..
+                }
+            ));
+        }
+    }
 }
 
 pub(super) struct CommandContext<'a> {
@@ -101,6 +161,7 @@ pub(super) enum Command {
     RegisterHandler {
         protocol: String,
         handler: Handler,
+        admission: Option<Admission>,
         response: CommandResponseSender<()>,
     },
     PublishProvider(String, Option<CommandResponseSender<()>>),
@@ -138,7 +199,7 @@ pub(super) struct CommandStateRefs<'a> {
     pub subscriptions: &'a mut HashSet<String>,
     pub topic_map: &'a mut HashMap<TopicHash, String>,
     pub topic_inbox_limits: &'a mut HashMap<String, usize>,
-    pub handlers: &'a mut HashMap<String, Handler>,
+    pub handlers: &'a mut HashMap<String, HandlerRegistration>,
     pub pending: &'a mut HashMap<request_response::OutboundRequestId, PendingResponse>,
     pub pending_peer_record_requests:
         &'a mut HashMap<request_response::OutboundRequestId, PendingPeerRecordRequest>,
@@ -706,7 +767,19 @@ pub(super) fn handle_command(
             if connected_request_peers.is_empty() {
                 if providers.is_empty() {
                     if let Some(handler) = handlers.get(&protocol) {
-                        let _ = response.send(handler(&payload));
+                        let invoke = || {
+                            let context = NetworkRequestContext::new(
+                                std::time::Instant::now() + std::time::Duration::from_secs(30),
+                                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                            );
+                            (handler.handler)(&context, &payload)
+                        };
+                        let result = if let Some(admission) = handler.admission.as_ref() {
+                            admission(&payload).and_then(|()| invoke())
+                        } else {
+                            invoke()
+                        };
+                        let _ = response.send(result);
                     } else {
                         let _ =
                             response.send(Err(WorldError::NetworkProtocolUnavailable { protocol }));
@@ -807,9 +880,10 @@ pub(super) fn handle_command(
         Some(Command::RegisterHandler {
             protocol,
             handler,
+            admission,
             response,
         }) => {
-            handlers.insert(protocol, handler);
+            handlers.insert(protocol, HandlerRegistration { handler, admission });
             let _ = response.send(Ok(()));
             CommandOutcome::Continue
         }

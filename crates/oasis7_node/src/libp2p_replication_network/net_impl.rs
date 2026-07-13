@@ -6,7 +6,7 @@ use oasis7_proto::distributed_net::{
 };
 use oasis7_proto::world_error::WorldError;
 
-use super::{Handler, Libp2pReplicationNetwork};
+use super::{Admission, Handler, Libp2pReplicationNetwork};
 
 impl Libp2pReplicationNetwork {
     pub fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
@@ -32,6 +32,15 @@ impl Libp2pReplicationNetwork {
         handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
     ) -> Result<(), WorldError> {
         ProtoDistributedNetwork::register_handler(self, protocol, handler)
+    }
+
+    pub fn register_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: oasis7_proto::distributed_net::NetworkAdmission<WorldError>,
+        handler: oasis7_proto::distributed_net::NetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        ProtoDistributedNetwork::register_handler_with_admission(self, protocol, admission, handler)
     }
 }
 
@@ -196,6 +205,81 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
             .lock()
             .expect("lock libp2p replication handlers")
             .insert(protocol.to_string(), handler);
+        Ok(())
+    }
+
+    fn register_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: oasis7_proto::distributed_net::NetworkAdmission<WorldError>,
+        handler: oasis7_proto::distributed_net::NetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        let admission: Admission = Arc::from(admission);
+        let handler: Handler = Arc::from(handler);
+        self.inner.register_handler_with_admission(
+            protocol,
+            Box::new({
+                let admission = Arc::clone(&admission);
+                move |payload| admission(payload)
+            }),
+            Box::new({
+                let handler = Arc::clone(&handler);
+                move |payload| handler(payload)
+            }),
+        )?;
+        self.handlers
+            .lock()
+            .expect("lock libp2p replication handlers")
+            .insert(
+                protocol.to_string(),
+                Arc::new(move |payload| {
+                    admission(payload)?;
+                    handler(payload)
+                }),
+            );
+        Ok(())
+    }
+
+    fn register_context_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: oasis7_proto::distributed_net::NetworkAdmission<WorldError>,
+        handler: oasis7_proto::distributed_net::ContextNetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        let admission: Admission = Arc::from(admission);
+        let handler: Arc<
+            dyn Fn(
+                    &oasis7_proto::distributed_net::NetworkRequestContext,
+                    &[u8],
+                ) -> Result<Vec<u8>, WorldError>
+                + Send
+                + Sync,
+        > = Arc::from(handler);
+        self.inner.register_context_handler_with_admission(
+            protocol,
+            Box::new({
+                let admission = Arc::clone(&admission);
+                move |payload| admission(payload)
+            }),
+            Box::new({
+                let handler = Arc::clone(&handler);
+                move |context, payload| handler(context, payload)
+            }),
+        )?;
+        self.handlers
+            .lock()
+            .expect("lock libp2p replication handlers")
+            .insert(
+                protocol.to_string(),
+                Arc::new(move |payload| {
+                    admission(payload)?;
+                    let context = oasis7_proto::distributed_net::NetworkRequestContext::new(
+                        std::time::Instant::now() + std::time::Duration::from_secs(30),
+                        Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                    );
+                    handler(&context, payload)
+                }),
+            );
         Ok(())
     }
 }

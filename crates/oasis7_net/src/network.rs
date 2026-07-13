@@ -77,4 +77,23 @@ impl proto_net::DistributedNetwork<WorldError> for InMemoryNetwork {
         handlers.insert(protocol.to_string(), Arc::from(handler));
         Ok(())
     }
+
+    fn register_context_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: proto_net::NetworkAdmission<WorldError>,
+        handler: proto_net::ContextNetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        self.register_handler(
+            protocol,
+            Box::new(move |payload| {
+                admission(payload)?;
+                let context = proto_net::NetworkRequestContext::new(
+                    std::time::Instant::now() + std::time::Duration::from_secs(30),
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                );
+                handler(&context, payload)
+            }),
+        )
+    }
 }

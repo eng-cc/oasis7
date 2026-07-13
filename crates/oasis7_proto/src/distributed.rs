@@ -565,6 +565,7 @@ pub enum DistributedErrorCode {
     ErrUnauthorized,
     ErrBusy,
     ErrRateLimited,
+    ErrOverloaded,
     ErrTimeout,
     ErrNotAvailable,
 }
@@ -575,6 +576,7 @@ impl DistributedErrorCode {
             self,
             DistributedErrorCode::ErrBusy
                 | DistributedErrorCode::ErrRateLimited
+                | DistributedErrorCode::ErrOverloaded
                 | DistributedErrorCode::ErrTimeout
                 | DistributedErrorCode::ErrNotAvailable
         )

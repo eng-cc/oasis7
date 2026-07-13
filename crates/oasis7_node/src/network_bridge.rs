@@ -210,6 +210,7 @@ impl NodeReplicationNetworkHandle {
             .map_err(network_err)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn publish_checkpoint_descriptor_providers_from_root_best_effort(
         &self,
         network_policy: &NodeNetworkPolicy,
@@ -239,6 +240,63 @@ impl NodeReplicationNetworkHandle {
         Ok(())
     }
 
+    pub(crate) fn publish_checkpoint_descriptor_providers_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        descriptor: Option<&NodeExecutionCheckpointDescriptor>,
+    ) -> Result<(), NodeError> {
+        let Some(descriptor) = descriptor else {
+            return Ok(());
+        };
+        self.publish_checkpoint_blob_provider_from_root(
+            network_policy,
+            root_dir,
+            world_id,
+            descriptor.manifest_ref.as_str(),
+            descriptor.manifest_size_bytes,
+        )?;
+        for blob_ref in &descriptor.blobs {
+            self.publish_checkpoint_blob_provider_from_root(
+                network_policy,
+                root_dir,
+                world_id,
+                blob_ref.content_hash.as_str(),
+                blob_ref.size_bytes,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn publish_checkpoint_blob_provider_from_root(
+        &self,
+        network_policy: &NodeNetworkPolicy,
+        root_dir: &Path,
+        world_id: &str,
+        content_hash: &str,
+        expected_size_bytes: u64,
+    ) -> Result<(), NodeError> {
+        let Some(bytes) = load_blob_from_root(root_dir, content_hash)? else {
+            return Ok(());
+        };
+        if bytes.len() as u64 != expected_size_bytes {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    concat!(
+                        "checkpoint provider publish local blob size mismatch ",
+                        "hash={} expected={} actual={}"
+                    ),
+                    content_hash,
+                    expected_size_bytes,
+                    bytes.len()
+                ),
+            });
+        }
+        self.publish_local_content_provider(network_policy, world_id, content_hash)
+    }
+
+    #[allow(dead_code)]
     fn publish_checkpoint_blob_provider_from_root_best_effort(
         &self,
         network_policy: &NodeNetworkPolicy,
@@ -260,28 +318,32 @@ impl NodeReplicationNetworkHandle {
                 ),
             });
         }
-        self.publish_local_content_provider_best_effort(network_policy, world_id, content_hash);
-        Ok(())
+        self.publish_local_content_provider_best_effort_result(
+            network_policy,
+            world_id,
+            content_hash,
+        )
     }
 
-    pub(crate) fn publish_local_content_provider_best_effort(
+    pub(crate) fn publish_local_content_provider_best_effort_result(
         &self,
         network_policy: &NodeNetworkPolicy,
         world_id: &str,
         content_hash: &str,
-    ) {
+    ) -> Result<(), NodeError> {
         let Some(dht) = self.dht.as_ref() else {
-            return;
+            return Ok(());
         };
         let Some(local_provider_id) = self.local_provider_id.as_deref() else {
-            return;
+            return Ok(());
         };
         if !network_policy
             .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
         {
-            return;
+            return Ok(());
         }
-        let _ = dht.publish_provider_best_effort(world_id, content_hash, local_provider_id);
+        dht.publish_provider_best_effort(world_id, content_hash, local_provider_id)
+            .map_err(network_err)
     }
 
     fn resolved_topic(&self, world_id: &str) -> String {

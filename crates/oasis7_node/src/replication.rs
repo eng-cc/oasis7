@@ -51,7 +51,9 @@ use self::support::{
     verify_replication_message_signature, verify_signed_fetch_request, write_json_compact,
     write_json_pretty,
 };
-pub(crate) use self::support::{load_blob_from_root, load_commit_message_from_root};
+pub(crate) use self::support::{
+    load_blob_from_root, load_blob_range_from_root, load_commit_message_from_root,
+};
 pub(crate) use replication_fetch::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse,
 };

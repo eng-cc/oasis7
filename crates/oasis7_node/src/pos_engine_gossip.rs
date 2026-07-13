@@ -442,6 +442,45 @@ impl PosNodeEngine {
         Ok(Some((height, commit)))
     }
 
+    pub(super) fn validated_peer_commit_head_message(
+        &self,
+        node_id: &str,
+        world_id: &str,
+    ) -> Result<Option<(u64, GossipCommitMessage)>, NodeError> {
+        let Some(source) = self.latest_validated_peer_commit.as_ref() else {
+            return Ok(None);
+        };
+        if source.world_id != world_id || source.height > self.network_committed_height {
+            return Ok(None);
+        }
+        if self
+            .validator_id_for_peer_head(source.node_id.as_str())
+            .is_some_and(|validator_id| self.quarantined_validators.contains(&validator_id))
+        {
+            return Ok(None);
+        }
+        let Some(head) = self.peer_heads.get(source.node_id.as_str()) else {
+            return Ok(None);
+        };
+        if head.height != source.height
+            || head.block_hash != source.block_hash
+            || head.execution_block_hash != source.execution_block_hash
+            || head.execution_state_root != source.execution_state_root
+            || (!head.action_root.is_empty() && head.action_root != source.action_root)
+        {
+            return Ok(None);
+        }
+        let mut commit = source.clone();
+        commit.node_id = node_id.to_string();
+        commit.player_id = self.node_player_id.clone();
+        commit.public_key_hex = None;
+        commit.signature_hex = None;
+        if let Some(signer) = self.consensus_signer.as_ref() {
+            sign_commit_message(&mut commit, signer)?;
+        }
+        Ok(Some((commit.height, commit)))
+    }
+
     fn validate_replicated_commit_head_matches_local(
         &self,
         commit: &GossipCommitMessage,
@@ -497,8 +536,9 @@ impl PosNodeEngine {
         if !endpoint.allows_publish() {
             return Ok(());
         }
+        let replicated = self.replicated_commit_head_message(node_id, world_id, replication)?;
         let Some((height, commit)) =
-            self.replicated_commit_head_message(node_id, world_id, replication)?
+            replicated.or(self.validated_peer_commit_head_message(node_id, world_id)?)
         else {
             return Ok(());
         };
@@ -524,8 +564,9 @@ impl PosNodeEngine {
         now_ms: i64,
         replication: Option<&ReplicationRuntime>,
     ) -> Result<(), NodeError> {
+        let replicated = self.replicated_commit_head_message(node_id, world_id, replication)?;
         let Some((height, commit)) =
-            self.replicated_commit_head_message(node_id, world_id, replication)?
+            replicated.or(self.validated_peer_commit_head_message(node_id, world_id)?)
         else {
             return Ok(());
         };

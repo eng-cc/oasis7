@@ -1,5 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 mod api;
 mod config;
 mod connection_lifecycle;
@@ -7,6 +9,7 @@ mod constructor_support;
 mod discovery;
 mod drop_support;
 pub(crate) mod error_mapping;
+mod inbound_dispatch;
 mod kad_queries;
 mod peer_manager;
 mod peer_manager_active_set;
@@ -14,6 +17,7 @@ mod peer_record;
 mod peer_record_republish;
 mod reachability;
 mod response_budget;
+mod response_workers;
 mod runtime_loop;
 mod runtime_support;
 mod swarm_behaviour;
@@ -35,15 +39,14 @@ use constructor_support::{
 };
 use discovery::{
     PendingPeerRecordRequest, handle_peer_record_outbound_failure, handle_peer_record_response,
-    handle_rendezvous_discovered, handle_request_response_request, handle_routing_updated,
-    maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
-    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
-    maybe_request_cached_peer_record, maybe_request_connected_peer_record,
-    peer_record_enables_rendezvous, peer_record_world_id, process_discovered_peer_record,
-    publish_discovery_provider, start_peer_discovery_query,
+    handle_rendezvous_discovered, handle_routing_updated, maybe_discover_rendezvous_namespace,
+    maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
+    maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
+    maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
+    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
 };
-use futures::channel::mpsc;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, channel::mpsc};
+use inbound_dispatch::dispatch_inbound_request;
 use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
@@ -55,7 +58,7 @@ use oasis7_proto::distributed_dht::{
     MembershipDirectorySnapshot, PeerRecord, ProviderRecord, SignedPeerRecord,
 };
 use oasis7_proto::distributed_net::{
-    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, NetworkMessage, NetworkRequest, NetworkResponse,
+    DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, NetworkMessage, NetworkRequest,
     classify_network_protocol, classify_network_topic, push_bounded_inbox_message,
 };
 pub use peer_manager::{
@@ -72,10 +75,10 @@ pub use reachability::{
     LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
 };
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
-use response_budget::{FetchBlobResponseBudget, budgeted_response_bytes};
+use response_workers::ResponseWorkers;
 use runtime_loop::{
-    Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
-    fail_pending_request, handle_command,
+    Command, CommandContext, CommandOutcome, CommandResponseSender, CommandStateRefs, Handler,
+    HandlerRegistration, PendingResponse, fail_pending_request, handle_command,
 };
 #[cfg(test)]
 use runtime_loop::{
@@ -106,7 +109,6 @@ use utils::{
     try_send_command,
 };
 use wire_bytes::{SharedLibp2pWireByteCounters, init_shared_wire_byte_counters};
-type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,
@@ -122,8 +124,8 @@ pub struct Libp2pNetwork {
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
     traffic_metrics: SharedLibp2pTrafficMetrics,
     wire_byte_counters: SharedLibp2pWireByteCounters,
+    _shutdown_guard: Arc<drop_support::ShutdownGuard>,
 }
-type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -185,8 +187,11 @@ impl Libp2pNetwork {
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
-            let mut handlers: HashMap<String, Handler> = HashMap::new();
-            let mut fetch_blob_response_budget = FetchBlobResponseBudget::default();
+            let mut handlers: HashMap<String, HandlerRegistration> = HashMap::new();
+            let (response_workers, mut completed_response_rx, mut fetch_blob_response_budget) =
+                ResponseWorkers::new(config_clone.request_response_timeout);
+            let mut pre_crypto_admission_budget =
+                inbound_dispatch::PreCryptoAdmissionBudget::default();
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
                 HashMap::new();
             let mut pending_peer_record_requests: HashMap<
@@ -284,6 +289,9 @@ impl Libp2pNetwork {
                 }
                 loop {
                     futures::select! {
+                        completed = completed_response_rx.next().fuse() => if let Some(completed) = completed {
+                            response_workers.complete(completed, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages);
+                        },
                         command = command_rx.next().fuse() => {
                             match handle_command(
                                 &mut swarm,
@@ -352,36 +360,7 @@ impl Libp2pNetwork {
                                         request_response::Event::Message { message, peer, .. } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
-                                                    record_request_inbound(
-                                                        &event_traffic_metrics,
-                                                        request.protocol.as_str(),
-                                                        request.payload.len(),
-                                                    );
-                                                    let reply = handle_request_response_request(
-                                                        &request,
-                                                        &handlers,
-                                                        peer_record_template.as_ref(),
-                                                        &keypair_clone,
-                                                        &event_listening_addrs,
-                                                        &event_reachability,
-                                                        config_clone
-                                                            .allow_loopback_external_addrs_for_testing,
-                                                        &discovered_peer_records,
-                                                    );
-                                                    let response_bytes = budgeted_response_bytes(
-                                                        &mut fetch_blob_response_budget,
-                                                        peer,
-                                                        request.protocol.as_str(),
-                                                        reply,
-                                                        now_ms(),
-                                                    );
-                                                    record_response_outbound(
-                                                        &event_traffic_metrics,
-                                                        request.protocol.as_str(),
-                                                        response_bytes.len(),
-                                                    );
-                                                    let response = NetworkResponse { payload: response_bytes };
-                                                    swarm.behaviour_mut().request_response.send_response(channel, response).ok();
+                                                    dispatch_inbound_request(request, channel, peer, &handlers, &response_workers, &mut fetch_blob_response_budget, &mut pre_crypto_admission_budget, &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages, peer_record_template.as_ref(), &keypair_clone, &event_listening_addrs, &event_reachability, config_clone.allow_loopback_external_addrs_for_testing, &discovered_peer_records);
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
@@ -1178,7 +1157,7 @@ impl Libp2pNetwork {
         Self {
             peer_id,
             keypair,
-            command_tx,
+            command_tx: command_tx.clone(),
             inbox,
             published,
             listening_addrs,
@@ -1189,6 +1168,7 @@ impl Libp2pNetwork {
             reachability,
             traffic_metrics,
             wire_byte_counters,
+            _shutdown_guard: Arc::new(drop_support::ShutdownGuard::new(command_tx)),
         }
     }
 }

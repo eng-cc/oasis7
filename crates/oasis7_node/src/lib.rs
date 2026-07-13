@@ -67,6 +67,7 @@ mod pos_engine_gossip;
 mod pos_schedule;
 mod pos_state_store;
 mod pos_validation;
+mod provider_publication_queue;
 mod replica_maintenance_support;
 mod replication;
 mod replication_fetch_handler_support;
@@ -137,16 +138,20 @@ use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
 use node_runtime_core::RuntimeState;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
+use provider_publication_queue::{ProviderPublicationEnqueueResult, ProviderPublicationQueue};
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
     FetchHeadResponse, REPLICATION_FETCH_BLOB_PROTOCOL, REPLICATION_FETCH_COMMIT_PROTOCOL,
-    REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime, load_blob_from_root,
+    REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime,
     load_commit_message_from_root, load_latest_commit_message_from_root,
 };
-use replication_fetch_handler_support::attach_checkpoint_for_fetch_commit_if_boundary;
 #[cfg(test)]
 use replication_fetch_handler_support::should_export_checkpoint_for_fetch_commit;
+use replication_fetch_handler_support::{
+    admit_fetch_commit_request, attach_checkpoint_for_fetch_commit_if_boundary,
+    register_fetch_blob_handler,
+};
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
     request_fetch_blob_with_storage_challenge_routes,
@@ -802,37 +807,36 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         let commit_execution_hook = execution_hook.clone();
         let commit_handle = handle.clone();
         let commit_network_policy = network_policy.clone();
+        let commit_admission_world_id = commit_world_id.clone();
+        let commit_admission_config = commit_replication_config.clone();
+        let provider_publications = ProviderPublicationQueue::new();
         network
-            .register_handler(
+            .register_context_handler_with_admission(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
                 Box::new(move |payload| {
-                    let request =
-                        serde_json::from_slice::<FetchCommitRequest>(payload).map_err(|err| {
-                            network_bad_request(format!(
-                                "decode fetch-commit request failed: {}",
-                                err
-                            ))
-                        })?;
-                    if request.world_id != commit_world_id {
-                        return Err(network_bad_request(format!(
-                            "fetch-commit world mismatch: expected={}, got={}",
-                            commit_world_id, request.world_id
-                        )));
-                    }
-                    commit_replication_config
-                        .authorize_fetch_commit_request(&request)
-                        .map_err(|err| {
-                            network_bad_request(format!(
-                                "fetch-commit authorization failed: {}",
-                                err
-                            ))
-                        })?;
+                    admit_fetch_commit_request(
+                        payload,
+                        commit_admission_world_id.as_str(),
+                        &commit_admission_config,
+                    )
+                    .map(|_| ())
+                }),
+                Box::new(move |context, payload| {
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
+                    // Keep the same check at execution time: admission protects scarce
+                    // workers, while this closes any adapter or scheduling gap.
+                    let request = admit_fetch_commit_request(
+                        payload,
+                        commit_world_id.as_str(),
+                        &commit_replication_config,
+                    )?;
                     let message = load_commit_message_from_root(
                         commit_root_dir.as_path(),
                         commit_world_id.as_str(),
                         request.height,
                     )
                     .map_err(network_internal_error)?;
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
                     let message = attach_checkpoint_for_fetch_commit_if_boundary(
                         message,
                         commit_execution_hook.as_ref(),
@@ -843,6 +847,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         request.height,
                     )
                     .map_err(network_internal_error)?;
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
                     if let Some(message) = message.as_ref() {
                         let payload_content_hash = message.record.content_hash.clone();
                         if let Some(payload) =
@@ -853,24 +858,52 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                             let publish_network_policy = commit_network_policy.clone();
                             let publish_root_dir = commit_root_dir.clone();
                             let publish_world_id = commit_world_id.clone();
-                            let _ = thread::Builder::new()
-                                .name("replication-fetch-commit-provider-publish".to_string())
-                                .spawn(move || {
-                                    publish_handle.publish_local_content_provider_best_effort(
-                                        &publish_network_policy,
-                                        publish_world_id.as_str(),
-                                        payload_content_hash.as_str(),
-                                    );
-                                    if let Some(descriptor) = descriptor {
-                                        let _ = publish_handle
-                                            .publish_checkpoint_descriptor_providers_from_root_best_effort(
+                            let publication_key = format!(
+                                "{}:{}:{}",
+                                publish_world_id, payload_content_hash, request.height
+                            );
+                            let enqueue_result =
+                                provider_publications.enqueue(publication_key, move || {
+                                    publish_handle
+                                        .publish_local_content_provider(
+                                            &publish_network_policy,
+                                            publish_world_id.as_str(),
+                                            payload_content_hash.as_str(),
+                                        )
+                                        .map_err(|err| err.to_string())?;
+                                    if let Some(descriptor) = descriptor.as_ref() {
+                                        publish_handle
+                                            .publish_checkpoint_descriptor_providers_from_root(
                                                 &publish_network_policy,
                                                 publish_root_dir.as_path(),
                                                 publish_world_id.as_str(),
-                                                Some(&descriptor),
-                                            );
+                                                Some(descriptor),
+                                            )
+                                            .map_err(|err| err.to_string())?;
                                     }
+                                    Ok(())
                                 });
+                            if matches!(
+                                enqueue_result,
+                                ProviderPublicationEnqueueResult::Saturated
+                                    | ProviderPublicationEnqueueResult::Disconnected
+                            ) {
+                                let snapshot = provider_publications.snapshot();
+                                eprintln!(
+                                    concat!(
+                                        "provider publication enqueue loss ",
+                                        "result={:?} depth={} coalesced={} ",
+                                        "dropped={} completed={} failed={} retries={}"
+                                    ),
+                                    enqueue_result,
+                                    snapshot.depth,
+                                    snapshot.coalesced,
+                                    snapshot.dropped,
+                                    snapshot.completed,
+                                    snapshot.failed,
+                                    snapshot.retries
+                                );
+                            }
                         }
                     }
                     let response = FetchCommitResponse {
@@ -961,59 +994,13 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         oasis7_proto::distributed_net::NetworkLane::BlobState,
         oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
     ) {
-        let blob_root_dir = replication.root_dir.clone();
-        let blob_replication_config = replication.clone();
-        network
-            .register_handler(
-                REPLICATION_FETCH_BLOB_PROTOCOL,
-                Box::new(move |payload| {
-                    let request =
-                        serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
-                            network_bad_request(format!(
-                                "decode fetch-blob request failed: {}",
-                                err
-                            ))
-                        })?;
-                    blob_replication_config
-                        .authorize_fetch_blob_request(&request)
-                        .map_err(|err| {
-                            network_bad_request(format!("fetch-blob authorization failed: {}", err))
-                        })?;
-                    let blob =
-                        load_blob_from_root(blob_root_dir.as_path(), request.content_hash.as_str())
-                            .map_err(network_internal_error)?;
-                    let (blob, range_complete) = match blob {
-                        Some(bytes) => {
-                            let (slice, range_complete) = slice_fetch_blob_response(
-                                bytes,
-                                request.offset_bytes,
-                                request.limit_bytes,
-                            );
-                            (Some(slice), range_complete)
-                        }
-                        None => (None, None),
-                    };
-                    let range_offset_bytes =
-                        request.offset_bytes.filter(|_| range_complete.is_some());
-                    let response = FetchBlobResponse {
-                        found: blob.is_some(),
-                        range_offset_bytes,
-                        range_complete,
-                        blob,
-                    };
-                    serde_json::to_vec(&response).map_err(|err| {
-                        network_internal_error(NodeError::Replication {
-                            reason: format!("encode fetch-blob response failed: {}", err),
-                        })
-                    })
-                }),
-            )
-            .map_err(network_replication_error)?;
+        register_fetch_blob_handler(network, replication).map_err(network_replication_error)?;
     }
 
     Ok(())
 }
 
+#[cfg(test)]
 fn slice_fetch_blob_response(
     bytes: Vec<u8>,
     offset_bytes: Option<u64>,
@@ -1046,6 +1033,14 @@ fn network_internal_error(err: NodeError) -> ProtoWorldError {
     ProtoWorldError::NetworkRequestFailed {
         code: DistributedErrorCode::ErrNotAvailable,
         message: err.to_string(),
+        retryable: true,
+    }
+}
+
+fn network_timeout_error(message: impl Into<String>) -> ProtoWorldError {
+    ProtoWorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrTimeout,
+        message: message.into(),
         retryable: true,
     }
 }
@@ -1125,6 +1120,7 @@ struct PosNodeEngine {
     consensus_signer: Option<NodeConsensusMessageSigner>,
     enforce_consensus_signature: bool,
     peer_heads: BTreeMap<String, PeerCommittedHead>,
+    latest_validated_peer_commit: Option<GossipCommitMessage>,
     misbehavior_evidence: BTreeMap<String, ConsensusMisbehaviorEvidence>,
     quarantined_validators: BTreeSet<String>,
     last_committed_at_ms: Option<i64>,

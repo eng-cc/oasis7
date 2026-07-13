@@ -23,9 +23,14 @@ use crate::replication::REPLICATION_FETCH_COMMIT_PROTOCOL;
 mod net_impl;
 
 #[cfg(test)]
+#[path = "libp2p_replication_network/admission_tests.rs"]
+mod admission_tests;
+
+#[cfg(test)]
 use oasis7_net::{PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth};
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+type Admission = Arc<dyn Fn(&[u8]) -> Result<(), WorldError> + Send + Sync>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicationPeerHealthDebug {

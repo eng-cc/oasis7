@@ -26,6 +26,7 @@ mod peer_health_refresh_tests;
 mod peer_manager_observer_tests;
 mod peer_record_tests;
 mod request_peer_filter_tests;
+mod response_worker_tests;
 mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 

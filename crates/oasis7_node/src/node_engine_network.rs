@@ -6,7 +6,7 @@ use super::node_engine_core::InboundSlotWindow;
 use super::*;
 
 impl PosNodeEngine {
-    fn observe_peer_commit_message(&mut self, commit: &GossipCommitMessage) {
+    pub(super) fn observe_peer_commit_message(&mut self, commit: &GossipCommitMessage) {
         if commit.height == 0 {
             return;
         }
@@ -22,12 +22,39 @@ impl PosNodeEngine {
             signature_hex: commit.signature_hex.clone(),
         };
         self.observe_peer_committed_head(commit.node_id.as_str(), next_head);
+        if self
+            .peer_heads
+            .get(commit.node_id.as_str())
+            .is_some_and(|head| {
+                head.height == commit.height && head.block_hash == commit.block_hash
+            })
+        {
+            self.remember_latest_validated_peer_commit(commit);
+        }
+    }
+
+    fn remember_latest_validated_peer_commit(&mut self, commit: &GossipCommitMessage) {
+        let replace = match self.latest_validated_peer_commit.as_ref() {
+            None => true,
+            Some(previous) if commit.height > previous.height => true,
+            Some(previous) if commit.height < previous.height => false,
+            Some(previous) => {
+                validated_commits_share_identity_block_action(previous, commit)
+                    && commit.execution_block_hash.is_some()
+                    && commit.execution_state_root.is_some()
+                    && (previous.execution_block_hash.is_none()
+                        || previous.execution_state_root.is_none())
+            }
+        };
+        if replace {
+            self.latest_validated_peer_commit = Some(commit.clone());
+        }
     }
 
     pub(super) fn observe_peer_committed_head(
         &mut self,
         peer_node_id: &str,
-        next_head: PeerCommittedHead,
+        mut next_head: PeerCommittedHead,
     ) {
         if next_head.height == 0 {
             return;
@@ -60,6 +87,17 @@ impl PosNodeEngine {
                 }
                 return;
             }
+            if next_head.height == previous.height && next_head.block_hash == previous.block_hash {
+                if next_head.execution_block_hash.is_none() {
+                    next_head.execution_block_hash = previous.execution_block_hash.clone();
+                }
+                if next_head.execution_state_root.is_none() {
+                    next_head.execution_state_root = previous.execution_state_root.clone();
+                }
+                if next_head.action_root.is_empty() {
+                    next_head.action_root = previous.action_root.clone();
+                }
+            }
         }
         self.network_committed_height = self.network_committed_height.max(next_head.height);
         self.peer_heads.insert(peer_node_id.to_string(), next_head);
@@ -75,6 +113,19 @@ impl PosNodeEngine {
     ) {
         let key = format!("commit_equivocation:{validator_id}:{}", first.height);
         self.quarantined_validators.insert(validator_id.clone());
+        if self
+            .latest_validated_peer_commit
+            .as_ref()
+            .is_some_and(|commit| {
+                commit.node_id == node_id
+                    || self
+                        .validator_id_for_peer_head(commit.node_id.as_str())
+                        .as_deref()
+                        == Some(validator_id.as_str())
+            })
+        {
+            self.latest_validated_peer_commit = None;
+        }
         self.misbehavior_evidence
             .entry(key)
             .or_insert_with(|| ConsensusMisbehaviorEvidence {
@@ -1078,9 +1129,30 @@ fn execution_error_is_peer_mismatch(err: &NodeError) -> bool {
 
 fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHead) -> bool {
     left.block_hash != right.block_hash
-        || left.execution_block_hash != right.execution_block_hash
-        || left.execution_state_root != right.execution_state_root
+        || matches!(
+            (&left.execution_block_hash, &right.execution_block_hash),
+            (Some(left), Some(right)) if left != right
+        )
+        || matches!(
+            (&left.execution_state_root, &right.execution_state_root),
+            (Some(left), Some(right)) if left != right
+        )
         || (!left.action_root.is_empty()
             && !right.action_root.is_empty()
             && left.action_root != right.action_root)
+}
+
+fn validated_commits_share_identity_block_action(
+    left: &GossipCommitMessage,
+    right: &GossipCommitMessage,
+) -> bool {
+    left.world_id == right.world_id
+        && left.node_id == right.node_id
+        && left.player_id == right.player_id
+        && left.height == right.height
+        && left.slot == right.slot
+        && left.epoch == right.epoch
+        && left.block_hash == right.block_hash
+        && left.action_root == right.action_root
+        && left.actions == right.actions
 }

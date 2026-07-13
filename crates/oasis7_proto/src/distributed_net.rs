@@ -2,7 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::distributed_dht::PeerNodeRole;
 
@@ -11,6 +13,28 @@ pub const CONSENSUS_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 256;
 pub const SYNC_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 1024;
 pub const BLOB_STATE_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 128;
 pub const CONTROL_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 64;
+/// Per-peer fetch-blob response egress window.  Kept here so request sizing and
+/// transport accounting cannot drift apart.
+pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = 8 * 1024 * 1024;
+pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize = 64 * 1024 * 1024;
+pub const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
+pub const FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS: usize = 256;
+/// A legacy JSON byte-array can encode each input byte as `255,`.
+pub const FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE: usize = 4;
+/// Conservative envelope reserve for `FetchBlobResponse` fields and future
+/// compatible metadata.
+pub const FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD: usize = 1024;
+/// Largest raw chunk that is guaranteed to fit the peer egress window even
+/// when every byte uses the legacy JSON worst case.
+pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = (FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+    - FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD)
+    / FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE;
+
+pub fn fetch_blob_legacy_json_encoded_upper_bound(raw_bytes: usize) -> usize {
+    raw_bytes
+        .saturating_mul(FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE)
+        .saturating_add(FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -159,9 +183,43 @@ pub struct NetworkResponse {
 }
 
 pub type NetworkHandler<E> = Box<dyn Fn(&[u8]) -> Result<Vec<u8>, E> + Send + Sync>;
+pub type NetworkAdmission<E> = Box<dyn Fn(&[u8]) -> Result<(), E> + Send + Sync>;
+pub type ContextNetworkHandler<E> =
+    Box<dyn Fn(&NetworkRequestContext, &[u8]) -> Result<Vec<u8>, E> + Send + Sync>;
+
+#[derive(Clone, Debug)]
+pub struct NetworkRequestContext {
+    deadline: Instant,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl NetworkRequestContext {
+    pub fn new(deadline: Instant, cancelled: Arc<AtomicBool>) -> Self {
+        Self {
+            deadline,
+            cancelled,
+        }
+    }
+
+    pub fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire) || Instant::now() >= self.deadline
+    }
+
+    pub fn check_cancelled<E>(&self, error: impl FnOnce() -> E) -> Result<(), E> {
+        if self.is_cancelled() {
+            Err(error())
+        } else {
+            Ok(())
+        }
+    }
+}
 pub type SubscriptionInbox = Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>;
 
-pub trait DistributedNetwork<E> {
+pub trait DistributedNetwork<E: 'static> {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), E>;
     fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), E> {
         self.publish(topic, payload)
@@ -199,6 +257,39 @@ pub trait DistributedNetwork<E> {
         self.request_with_providers(protocol, payload, providers)
     }
     fn register_handler(&self, protocol: &str, handler: NetworkHandler<E>) -> Result<(), E>;
+    fn register_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: NetworkAdmission<E>,
+        handler: NetworkHandler<E>,
+    ) -> Result<(), E> {
+        self.register_handler(
+            protocol,
+            Box::new(move |payload| {
+                admission(payload)?;
+                handler(payload)
+            }),
+        )
+    }
+
+    fn register_context_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: NetworkAdmission<E>,
+        handler: ContextNetworkHandler<E>,
+    ) -> Result<(), E> {
+        self.register_handler_with_admission(
+            protocol,
+            admission,
+            Box::new(move |payload| {
+                let context = NetworkRequestContext::new(
+                    Instant::now() + std::time::Duration::from_secs(30),
+                    Arc::new(AtomicBool::new(false)),
+                );
+                handler(&context, payload)
+            }),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -344,5 +435,18 @@ mod tests {
             !NetworkLane::BlobState.allows_role(PeerNodeRole::Relay, NetworkLaneOperation::Serve)
         );
         assert!(NetworkLane::Control.allows_role(PeerNodeRole::Relay, NetworkLaneOperation::Serve));
+    }
+
+    #[test]
+    fn fetch_blob_legacy_chunk_bound_fits_the_peer_window() {
+        assert!(
+            fetch_blob_legacy_json_encoded_upper_bound(FETCH_BLOB_MAX_RAW_CHUNK_BYTES)
+                <= FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+        );
+        assert!(
+            fetch_blob_legacy_json_encoded_upper_bound(
+                FETCH_BLOB_MAX_RAW_CHUNK_BYTES.saturating_add(1)
+            ) > FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+        );
     }
 }
