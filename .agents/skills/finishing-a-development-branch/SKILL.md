@@ -51,7 +51,7 @@ Pre-PR local role review packet recorded after immutable verification and before
 8. Otherwise inspect the current PR gates with one batched read:
 
 ```bash
-./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
+./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <task_uid> --json
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 

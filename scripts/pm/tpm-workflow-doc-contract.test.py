@@ -69,6 +69,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         finishing = FINISHING.read_text(encoding="utf-8").lower()
         self.assertIn("source-of-truth.md#stable-required-gate-wait", finishing)
         self.assertIn("non-codex surface", finishing)
+        self.assertIn(
+            "./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <task_uid> --json",
+            finishing,
+        )
         for duplicated_policy in (
             "roughly ten minutes",
             "one batched current-head gate read",
