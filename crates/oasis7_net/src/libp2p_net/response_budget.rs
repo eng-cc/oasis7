@@ -174,6 +174,34 @@ mod tests {
     }
 
     #[test]
+    fn fetch_blob_global_budget_admits_eight_full_peer_windows() {
+        let mut budget = FetchBlobResponseBudget::default();
+        let now = 1_000;
+
+        for _ in 0..8 {
+            budget
+                .admit(
+                    PeerId::random(),
+                    FETCH_BLOB_PROTOCOL,
+                    FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW,
+                    now,
+                )
+                .expect("eight full peer windows fit the global budget");
+        }
+
+        assert!(
+            budget
+                .admit(
+                    PeerId::random(),
+                    FETCH_BLOB_PROTOCOL,
+                    FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW,
+                    now,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
     fn fetch_blob_budget_does_not_apply_to_other_protocols() {
         let mut budget = FetchBlobResponseBudget::default();
         budget

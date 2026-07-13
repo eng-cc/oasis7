@@ -47,6 +47,27 @@ fn fetch_blob_range_rejects_oversized_response_before_loading() {
     assert!(err.contains("fetch-blob requested response bytes"));
 }
 
+#[test]
+fn fetch_blob_range_admits_legacy_v1_two_mib_request() {
+    const LEGACY_V1_FETCH_BLOB_BYTES: u64 = 2 * 1024 * 1024;
+    let request = super::replication::FetchBlobRequest {
+        content_hash: "legacy-v1-two-mib".to_string(),
+        offset_bytes: Some(0),
+        limit_bytes: Some(LEGACY_V1_FETCH_BLOB_BYTES),
+        requester_public_key_hex: None,
+        requester_signature_hex: None,
+    };
+
+    let (offset, limit) = super::replication_fetch_handler_support::validated_fetch_blob_range(
+        request.offset_bytes,
+        request.limit_bytes,
+    )
+    .expect("legacy v1 2 MiB fetch-blob request must remain admitted");
+
+    assert_eq!(offset, 0);
+    assert_eq!(limit, LEGACY_V1_FETCH_BLOB_BYTES as usize);
+}
+
 fn test_fetch_blob_response(
     found: bool,
     blob: Option<Vec<u8>>,
