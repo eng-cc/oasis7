@@ -710,9 +710,7 @@ backup_and_remove_path() {
   fi
 
   if [[ -e "$backup_target" || -L "$backup_target" ]]; then
-    rm -rf -- "$path"
-    printf 'retained existing backup %s; cleared retry state %s\n' "$backup_target" "$path"
-    return 0
+    die "refusing to overwrite existing backup $backup_target while live path exists: $path"
   fi
 
   mkdir -p "$(dirname "$backup_target")"

@@ -12,7 +12,8 @@ if [[ "$test_case" == "all" ]]; then
     reset_owned_restore_retry \
     corrupt_file_metadata \
     corrupt_tree_metadata \
-    legacy_manifest; do
+    legacy_manifest \
+    completed_backup_reuse_fails_closed; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
   done
   echo "ok: local observer sync accepts sequencer/storage validator env pair"
@@ -22,7 +23,8 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "reset_owned_restore_retry" \
   && "$test_case" != "corrupt_file_metadata" \
   && "$test_case" != "corrupt_tree_metadata" \
-  && "$test_case" != "legacy_manifest" ]]; then
+  && "$test_case" != "legacy_manifest" \
+  && "$test_case" != "completed_backup_reuse_fails_closed" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
   exit 2
 fi
@@ -38,7 +40,8 @@ manifest_path="$local_stack/manifest.json"
 bundle_path="$local_stack/governed-bundle.json"
 mkdir -p "$local_stack"
 
-if [[ "$test_case" == "legacy_manifest" ]]; then
+if [[ "$test_case" == "legacy_manifest" \
+  || "$test_case" == "completed_backup_reuse_fails_closed" ]]; then
   cat >"$tmp_dir/local.env" <<EOF
 STACK_ROOT=$local_stack
 NODE_ID=triad-testnet-local
@@ -64,6 +67,33 @@ EOF
     --backup-dir "$tmp_dir/reset-backup"
   test -f "$tmp_dir/reset-backup/execution-world/snapshot.json"
   test ! -e "$local_stack/world"
+
+  if [[ "$test_case" == "completed_backup_reuse_fails_closed" ]]; then
+    mkdir -p "$local_stack/world"
+    printf 'new live state\n' >"$local_stack/world/new-live-marker"
+    reuse_stderr="$tmp_dir/reuse.stderr"
+    reuse_failed=0
+    if ./scripts/p2p-public-testnet-local-observer-sync.sh reset-state \
+      --local-env "$tmp_dir/local.env" \
+      --backup-dir "$tmp_dir/reset-backup" \
+      >"$tmp_dir/reuse.stdout" 2>"$reuse_stderr"; then
+      echo "expected completed backup reuse to fail closed" >&2
+      reuse_failed=1
+    fi
+    if [[ ! -f "$local_stack/world/new-live-marker" ]]; then
+      echo "completed backup reuse deleted newly created live state" >&2
+      reuse_failed=1
+    fi
+    if [[ ! -f "$tmp_dir/reset-backup/execution-world/snapshot.json" ]]; then
+      echo "completed backup reuse damaged the original backup" >&2
+      reuse_failed=1
+    fi
+    if [[ "$reuse_failed" -ne 0 ]]; then
+      exit 1
+    fi
+    grep -q 'refusing to overwrite existing backup' "$reuse_stderr"
+  fi
+
   echo "ok: observer reset case $test_case"
   exit 0
 fi
