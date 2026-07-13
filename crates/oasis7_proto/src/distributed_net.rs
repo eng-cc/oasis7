@@ -13,22 +13,21 @@ pub const CONSENSUS_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 256;
 pub const SYNC_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 1024;
 pub const BLOB_STATE_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 128;
 pub const CONTROL_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 64;
-/// Per-peer fetch-blob response egress window.  Kept here so request sizing and
-/// transport accounting cannot drift apart.
-pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = 8 * 1024 * 1024;
-pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize = 64 * 1024 * 1024;
-pub const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
-pub const FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS: usize = 256;
 /// A legacy JSON byte-array can encode each input byte as `255,`.
 pub const FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE: usize = 4;
 /// Conservative envelope reserve for `FetchBlobResponse` fields and future
 /// compatible metadata.
 pub const FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD: usize = 1024;
-/// Largest raw chunk that is guaranteed to fit the peer egress window even
-/// when every byte uses the legacy JSON worst case.
-pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = (FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
-    - FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD)
-    / FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE;
+/// Stable `/1.0.0` wire contract used by already-deployed peers.
+pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = 2 * 1024 * 1024;
+/// Per-peer fetch-blob response egress window, sized from the stable wire chunk
+/// so operational accounting cannot silently narrow the protocol contract.
+pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = FETCH_BLOB_MAX_RAW_CHUNK_BYTES
+    * FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE
+    + FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD;
+pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize = 64 * 1024 * 1024;
+pub const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
+pub const FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS: usize = 256;
 
 pub fn fetch_blob_legacy_json_encoded_upper_bound(raw_bytes: usize) -> usize {
     raw_bytes
@@ -439,6 +438,7 @@ mod tests {
 
     #[test]
     fn fetch_blob_legacy_chunk_bound_fits_the_peer_window() {
+        assert_eq!(FETCH_BLOB_MAX_RAW_CHUNK_BYTES, 2 * 1024 * 1024);
         assert!(
             fetch_blob_legacy_json_encoded_upper_bound(FETCH_BLOB_MAX_RAW_CHUNK_BYTES)
                 <= FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW

@@ -431,18 +431,33 @@ mod tests {
             response_deadline_ms: 1,
         };
         let mut reservations = Vec::new();
-        for _ in 0..BLOB_MAX_IN_FLIGHT {
+        let full_response_count = BLOB_MAX_IN_FLIGHT_BYTES / FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+        for _ in 0..full_response_count {
             reservations.push(
                 workers
                     .reserve("fetch-blob", FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW)
                     .expect("within blob capacity"),
             );
         }
+        assert!(
+            workers
+                .reserve("fetch-blob", FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW)
+                .is_none()
+        );
+        let small_reservation = workers
+            .reserve("fetch-blob", 1)
+            .expect("remaining byte capacity can fill the final job slot");
         assert!(workers.reserve("fetch-blob", 1).is_none());
         assert_eq!(
             workers.pending_limits(),
-            (0, 0, BLOB_MAX_IN_FLIGHT, BLOB_MAX_IN_FLIGHT_BYTES)
+            (
+                0,
+                0,
+                BLOB_MAX_IN_FLIGHT,
+                full_response_count * FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW + 1,
+            )
         );
+        drop(small_reservation);
         reservations.pop();
         assert!(
             workers
