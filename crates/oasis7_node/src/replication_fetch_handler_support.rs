@@ -13,7 +13,8 @@ use crate::replication::{
 use crate::replication_state_reconcile::parse_replication_commit_payload;
 use crate::{NodeError, REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL};
 use crate::{network_bad_request, network_internal_error};
-use oasis7_proto::distributed_net::DistributedNetwork;
+use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::distributed_net::{DistributedNetwork, NetworkRequestContext};
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 
 pub(super) const FETCH_BLOB_MAX_RESPONSE_BYTES: u64 =
@@ -59,7 +60,7 @@ pub(super) fn register_fetch_blob_handler(
     let root = replication.root_dir.clone();
     let handler_config = replication.clone();
     let admission_config = replication.clone();
-    network.register_handler_with_admission(
+    network.register_context_handler_with_admission(
         REPLICATION_FETCH_BLOB_PROTOCOL,
         Box::new(move |payload| {
             let request = serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
@@ -74,7 +75,8 @@ pub(super) fn register_fetch_blob_handler(
                 .map_err(network_bad_request)?;
             Ok(())
         }),
-        Box::new(move |payload| {
+        Box::new(move |context, payload| {
+            check_request_context(context)?;
             let request = serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
                 network_bad_request(format!("decode fetch-blob request failed: {err}"))
             })?;
@@ -86,6 +88,7 @@ pub(super) fn register_fetch_blob_handler(
             let (offset, limit) =
                 validated_fetch_blob_range(request.offset_bytes, request.limit_bytes)
                     .map_err(network_bad_request)?;
+            check_request_context(context)?;
             let blob = load_blob_range_from_root(
                 root.as_path(),
                 request.content_hash.as_str(),
@@ -93,6 +96,7 @@ pub(super) fn register_fetch_blob_handler(
                 limit,
             )
             .map_err(network_internal_error)?;
+            check_request_context(context)?;
             let (blob, range_complete) = match blob {
                 Some((bytes, complete)) => (Some(bytes), Some(complete)),
                 None => (None, None),
@@ -167,4 +171,11 @@ pub(super) fn should_export_checkpoint_for_fetch_commit(
     request_height == latest_height
         || request_height % REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL == 0
         || request_height % (REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL / 2) == 0
+}
+fn check_request_context(context: &NetworkRequestContext) -> Result<(), ProtoWorldError> {
+    context.check_cancelled(|| ProtoWorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrTimeout,
+        message: "request deadline elapsed during cooperative handler work".to_string(),
+        retryable: true,
+    })
 }

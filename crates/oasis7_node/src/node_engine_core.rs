@@ -161,6 +161,7 @@ impl PosNodeEngine {
             consensus_signer,
             enforce_consensus_signature,
             peer_heads: BTreeMap::new(),
+            latest_validated_peer_commit: None,
             misbehavior_evidence: BTreeMap::new(),
             quarantined_validators: BTreeSet::new(),
             last_committed_at_ms: None,
@@ -825,6 +826,20 @@ impl PosNodeEngine {
             self.execution_binding_for_height(committed_height)
         {
             return Ok((Some(execution_block_hash), Some(execution_state_root)));
+        }
+        if !self.require_execution_on_commit {
+            let local_block_hash = self.last_committed_block_hash.as_deref();
+            if let Some(peer_head) = self.peer_heads.values().find(|head| {
+                head.height == committed_height
+                    && local_block_hash == Some(head.block_hash.as_str())
+                    && head.execution_block_hash.is_some()
+                    && head.execution_state_root.is_some()
+            }) {
+                return Ok((
+                    peer_head.execution_block_hash.as_deref(),
+                    peer_head.execution_state_root.as_deref(),
+                ));
+            }
         }
         if self.require_execution_on_commit || self.require_peer_execution_hashes {
             return Err(NodeError::Consensus {

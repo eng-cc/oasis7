@@ -190,6 +190,8 @@ impl Libp2pNetwork {
             let mut handlers: HashMap<String, HandlerRegistration> = HashMap::new();
             let (response_workers, mut completed_response_rx, mut fetch_blob_response_budget) =
                 ResponseWorkers::new(config_clone.request_response_timeout);
+            let mut pre_crypto_admission_budget =
+                inbound_dispatch::PreCryptoAdmissionBudget::default();
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
                 HashMap::new();
             let mut pending_peer_record_requests: HashMap<
@@ -358,7 +360,7 @@ impl Libp2pNetwork {
                                         request_response::Event::Message { message, peer, .. } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
-                                                    dispatch_inbound_request(request, channel, peer, &handlers, &response_workers, &mut fetch_blob_response_budget, &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages, peer_record_template.as_ref(), &keypair_clone, &event_listening_addrs, &event_reachability, config_clone.allow_loopback_external_addrs_for_testing, &discovered_peer_records);
+                                                    dispatch_inbound_request(request, channel, peer, &handlers, &response_workers, &mut fetch_blob_response_budget, &mut pre_crypto_admission_budget, &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages, peer_record_template.as_ref(), &keypair_clone, &event_listening_addrs, &event_reachability, config_clone.allow_loopback_external_addrs_for_testing, &discovered_peer_records);
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {

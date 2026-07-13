@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use libp2p::PeerId;
 use oasis7_proto::distributed::DistributedErrorCode;
-use oasis7_proto::distributed_net::FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+use oasis7_proto::distributed_net::{
+    FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW, FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS,
+    FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW, FETCH_BLOB_RESPONSE_WINDOW_MS,
+};
 
 use crate::error::WorldError;
 use crate::util::to_canonical_cbor;
@@ -10,12 +13,10 @@ use crate::util::to_canonical_cbor;
 use super::error_mapping::error_response_from_world_error;
 
 const FETCH_BLOB_PROTOCOL: &str = "/aw/node/replication/fetch-blob/1.0.0";
-const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
-const FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS: usize = 256;
-
 #[derive(Default)]
 pub(super) struct FetchBlobResponseBudget {
     by_peer: HashMap<PeerId, ResponseWindow>,
+    global: Option<ResponseWindow>,
 }
 
 #[derive(Clone, Copy)]
@@ -38,6 +39,26 @@ impl FetchBlobResponseBudget {
 
         self.evict_stale_and_over_capacity(now_ms, Some(peer));
 
+        let global = self.global.get_or_insert(ResponseWindow {
+            started_at_ms: now_ms,
+            bytes: 0,
+        });
+        if now_ms.saturating_sub(global.started_at_ms) >= FETCH_BLOB_RESPONSE_WINDOW_MS {
+            *global = ResponseWindow {
+                started_at_ms: now_ms,
+                bytes: 0,
+            };
+        }
+        if response_bytes > FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW.saturating_sub(global.bytes)
+        {
+            return Err(WorldError::NetworkRequestFailed {
+                code: DistributedErrorCode::ErrRateLimited,
+                message: "global fetch-blob response budget exhausted; retry after window reset"
+                    .to_string(),
+                retryable: true,
+            });
+        }
+
         let window = self.by_peer.entry(peer).or_insert(ResponseWindow {
             started_at_ms: now_ms,
             bytes: 0,
@@ -55,11 +76,12 @@ impl FetchBlobResponseBudget {
                 message: format!(
                     "fetch-blob response budget exhausted for peer={peer}; retry after window reset"
                 ),
-                retryable: false,
+                retryable: true,
             });
         }
 
         window.bytes = window.bytes.saturating_add(response_bytes);
+        global.bytes = global.bytes.saturating_add(response_bytes);
         Ok(())
     }
 
@@ -133,7 +155,7 @@ mod tests {
             err,
             WorldError::NetworkRequestFailed {
                 code: DistributedErrorCode::ErrRateLimited,
-                retryable: false,
+                retryable: true,
                 ..
             }
         ));
@@ -207,5 +229,35 @@ mod tests {
             )
             .expect("stale entries are pruned before inserting");
         assert_eq!(budget.by_peer.len(), 1);
+    }
+
+    #[test]
+    fn rotating_peers_cannot_bypass_global_window_and_window_recovers() {
+        let mut budget = FetchBlobResponseBudget::default();
+        let now = 2_000;
+        let chunk = FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW / 300;
+        let mut admitted = 0usize;
+        for _ in 0..300 {
+            if budget
+                .admit(PeerId::random(), FETCH_BLOB_PROTOCOL, chunk, now)
+                .is_ok()
+            {
+                admitted += chunk;
+            }
+        }
+        assert!(admitted <= FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW);
+        assert!(
+            budget
+                .admit(PeerId::random(), FETCH_BLOB_PROTOCOL, chunk, now)
+                .is_err()
+        );
+        budget
+            .admit(
+                PeerId::random(),
+                FETCH_BLOB_PROTOCOL,
+                chunk,
+                now + FETCH_BLOB_RESPONSE_WINDOW_MS,
+            )
+            .expect("global deterministic window resets");
     }
 }

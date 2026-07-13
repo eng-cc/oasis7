@@ -6,6 +6,7 @@ pub enum Libp2pAvailabilityClass {
     MissingHandler,
     BadRequest,
     RetryableGap,
+    Overloaded,
     Other,
 }
 
@@ -56,6 +57,7 @@ fn protocol_unavailable_code(protocol: &str) -> DistributedErrorCode {
         Libp2pAvailabilityClass::MissingHandler | Libp2pAvailabilityClass::Other => {
             DistributedErrorCode::ErrUnsupported
         }
+        Libp2pAvailabilityClass::Overloaded => DistributedErrorCode::ErrOverloaded,
         Libp2pAvailabilityClass::BadRequest => DistributedErrorCode::ErrBadRequest,
         Libp2pAvailabilityClass::RetryableGap => DistributedErrorCode::ErrNotAvailable,
     }
@@ -76,6 +78,9 @@ pub fn classify_world_error_availability(err: &WorldError) -> Libp2pAvailability
                 return classified;
             }
             match code {
+                DistributedErrorCode::ErrOverloaded | DistributedErrorCode::ErrRateLimited => {
+                    Libp2pAvailabilityClass::Overloaded
+                }
                 DistributedErrorCode::ErrBadRequest
                     if matches!(classified, Libp2pAvailabilityClass::BadRequest) =>
                 {

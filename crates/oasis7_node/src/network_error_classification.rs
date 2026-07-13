@@ -14,6 +14,7 @@ pub(crate) fn replication_network_error_kind_label(code: DistributedErrorCode) -
         DistributedErrorCode::ErrNotAvailable => "not_available",
         DistributedErrorCode::ErrBusy => "busy",
         DistributedErrorCode::ErrRateLimited => "rate_limited",
+        DistributedErrorCode::ErrOverloaded => "overloaded",
         DistributedErrorCode::ErrBadRequest => "bad_request",
         DistributedErrorCode::ErrUnauthorized => "unauthorized",
         DistributedErrorCode::ErrStateMismatch => "state_mismatch",

@@ -468,7 +468,7 @@ fn saturated_blob_queue_returns_a_retryable_overload_response() {
         .filter_map(Result::ok)
         .filter_map(|response| serde_cbor::from_slice::<ErrorResponse>(&response).ok())
         .filter(|error| {
-            error.code == DistributedErrorCode::ErrNotAvailable
+            error.code == DistributedErrorCode::ErrOverloaded
                 && error.retryable
                 && error.message.contains("response worker overloaded")
         })
@@ -476,6 +476,77 @@ fn saturated_blob_queue_returns_a_retryable_overload_response() {
     assert!(
         !overloads.is_empty(),
         "a saturated requester must receive a retryable overload response"
+    );
+}
+
+#[test]
+fn cooperative_blocked_blob_work_observes_deadline_and_lane_recovers() {
+    let server = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().unwrap()],
+        request_response_timeout: Duration::from_millis(120),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "server listen",
+        Instant::now() + Duration::from_secs(5),
+        || !server.listening_addrs().is_empty(),
+    );
+    let server_addr = server.listening_addrs()[0]
+        .clone()
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+    let cancelled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed = Arc::clone(&cancelled);
+    server
+        .register_context_handler_with_admission(
+            FETCH_BLOB,
+            Box::new(|_| Ok(())),
+            Box::new(move |context, payload| {
+                if payload == b"block" {
+                    while !context.is_cancelled() {
+                        std::thread::yield_now();
+                    }
+                    observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    return Err(WorldError::NetworkRequestFailed {
+                        code: DistributedErrorCode::ErrTimeout,
+                        message: "cooperative cancellation".into(),
+                        retryable: true,
+                    });
+                }
+                Ok(b"recovered".to_vec())
+            }),
+        )
+        .unwrap();
+    let client = Libp2pNetwork::new(Libp2pNetworkConfig {
+        bootstrap_peers: vec![server_addr],
+        request_response_timeout: Duration::from_secs(1),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "client connect",
+        Instant::now() + Duration::from_secs(5),
+        || client.connected_peers().contains(&server.peer_id()),
+    );
+    let mut blocked = Vec::new();
+    for _ in 0..2 {
+        let client = client.clone();
+        let peer = server.peer_id();
+        blocked.push(std::thread::spawn(move || {
+            client.request_to_peer(FETCH_BLOB, b"block", peer)
+        }));
+    }
+    wait_until(
+        "cooperative cancellation",
+        Instant::now() + Duration::from_secs(2),
+        || cancelled.load(std::sync::atomic::Ordering::SeqCst) == 2,
+    );
+    for request in blocked {
+        let _ = request.join();
+    }
+    assert_eq!(
+        client
+            .request_to_peer(FETCH_BLOB, b"ok", server.peer_id())
+            .unwrap(),
+        b"recovered"
     );
 }
 

@@ -691,7 +691,11 @@ pub(super) fn handle_request_response_request(
                 if let Some(admission) = handler.admission.as_ref() {
                     admission(&request.payload)?;
                 }
-                (handler.handler)(&request.payload)
+                let context = oasis7_proto::distributed_net::NetworkRequestContext::new(
+                    std::time::Instant::now() + std::time::Duration::from_secs(30),
+                    Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                );
+                (handler.handler)(&context, &request.payload)
             } else {
                 Err(WorldError::NetworkProtocolUnavailable {
                     protocol: request.protocol.clone(),

@@ -442,6 +442,28 @@ impl PosNodeEngine {
         Ok(Some((height, commit)))
     }
 
+    fn validated_peer_commit_head_message(
+        &self,
+        node_id: &str,
+        world_id: &str,
+    ) -> Result<Option<(u64, GossipCommitMessage)>, NodeError> {
+        let Some(source) = self.latest_validated_peer_commit.as_ref() else {
+            return Ok(None);
+        };
+        if source.world_id != world_id || source.height > self.network_committed_height {
+            return Ok(None);
+        }
+        let mut commit = source.clone();
+        commit.node_id = node_id.to_string();
+        commit.player_id = self.node_player_id.clone();
+        commit.public_key_hex = None;
+        commit.signature_hex = None;
+        if let Some(signer) = self.consensus_signer.as_ref() {
+            sign_commit_message(&mut commit, signer)?;
+        }
+        Ok(Some((commit.height, commit)))
+    }
+
     fn validate_replicated_commit_head_matches_local(
         &self,
         commit: &GossipCommitMessage,
@@ -497,8 +519,9 @@ impl PosNodeEngine {
         if !endpoint.allows_publish() {
             return Ok(());
         }
+        let replicated = self.replicated_commit_head_message(node_id, world_id, replication)?;
         let Some((height, commit)) =
-            self.replicated_commit_head_message(node_id, world_id, replication)?
+            replicated.or(self.validated_peer_commit_head_message(node_id, world_id)?)
         else {
             return Ok(());
         };
@@ -524,8 +547,9 @@ impl PosNodeEngine {
         now_ms: i64,
         replication: Option<&ReplicationRuntime>,
     ) -> Result<(), NodeError> {
+        let replicated = self.replicated_commit_head_message(node_id, world_id, replication)?;
         let Some((height, commit)) =
-            self.replicated_commit_head_message(node_id, world_id, replication)?
+            replicated.or(self.validated_peer_commit_head_message(node_id, world_id)?)
         else {
             return Ok(());
         };

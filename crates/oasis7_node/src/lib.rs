@@ -811,7 +811,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         let commit_admission_config = commit_replication_config.clone();
         let provider_publications = ProviderPublicationQueue::new();
         network
-            .register_handler_with_admission(
+            .register_context_handler_with_admission(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
                 Box::new(move |payload| {
                     admit_fetch_commit_request(
@@ -821,7 +821,8 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                     )
                     .map(|_| ())
                 }),
-                Box::new(move |payload| {
+                Box::new(move |context, payload| {
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
                     // Keep the same check at execution time: admission protects scarce
                     // workers, while this closes any adapter or scheduling gap.
                     let request = admit_fetch_commit_request(
@@ -835,6 +836,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         request.height,
                     )
                     .map_err(network_internal_error)?;
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
                     let message = attach_checkpoint_for_fetch_commit_if_boundary(
                         message,
                         commit_execution_hook.as_ref(),
@@ -845,6 +847,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                         request.height,
                     )
                     .map_err(network_internal_error)?;
+                    context.check_cancelled(|| network_timeout_error("fetch-commit cancelled"))?;
                     if let Some(message) = message.as_ref() {
                         let payload_content_hash = message.record.content_hash.clone();
                         if let Some(payload) =
@@ -859,22 +862,26 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                                 "{}:{}:{}",
                                 publish_world_id, payload_content_hash, request.height
                             );
-                            let _ = provider_publications.enqueue(publication_key, move || {
-                                    publish_handle.publish_local_content_provider_best_effort(
+                            if !provider_publications.enqueue(publication_key, move || {
+                                    publish_handle.publish_local_content_provider_best_effort_result(
                                         &publish_network_policy,
                                         publish_world_id.as_str(),
                                         payload_content_hash.as_str(),
-                                    );
+                                    ).map_err(|err| err.to_string())?;
                                     if let Some(descriptor) = descriptor {
-                                        let _ = publish_handle
+                                        publish_handle
                                             .publish_checkpoint_descriptor_providers_from_root_best_effort(
                                                 &publish_network_policy,
                                                 publish_root_dir.as_path(),
                                                 publish_world_id.as_str(),
                                                 Some(&descriptor),
-                                            );
+                                            ).map_err(|err| err.to_string())?;
                                     }
-                                });
+                                    Ok(())
+                                }) {
+                                let snapshot = provider_publications.snapshot();
+                                eprintln!("provider publication enqueue rejected depth={} dropped={} failed={}", snapshot.depth, snapshot.dropped, snapshot.failed);
+                            }
                         }
                     }
                     let response = FetchCommitResponse {
@@ -1008,6 +1015,14 @@ fn network_internal_error(err: NodeError) -> ProtoWorldError {
     }
 }
 
+fn network_timeout_error(message: impl Into<String>) -> ProtoWorldError {
+    ProtoWorldError::NetworkRequestFailed {
+        code: DistributedErrorCode::ErrTimeout,
+        message: message.into(),
+        retryable: true,
+    }
+}
+
 fn network_replication_error(err: ProtoWorldError) -> NodeError {
     NodeError::Replication {
         reason: format!("replication network error: {err:?}"),
@@ -1083,6 +1098,7 @@ struct PosNodeEngine {
     consensus_signer: Option<NodeConsensusMessageSigner>,
     enforce_consensus_signature: bool,
     peer_heads: BTreeMap<String, PeerCommittedHead>,
+    latest_validated_peer_commit: Option<GossipCommitMessage>,
     misbehavior_evidence: BTreeMap<String, ConsensusMisbehaviorEvidence>,
     quarantined_validators: BTreeSet<String>,
     last_committed_at_ms: Option<i64>,

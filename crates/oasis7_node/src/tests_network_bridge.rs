@@ -82,6 +82,7 @@ impl DistributedNetwork<WorldError> for BestEffortOnlyNetwork {
 struct BlockingProviderDht {
     entered: Mutex<mpsc::Sender<()>>,
     release: Mutex<mpsc::Receiver<()>>,
+    fail_best_effort: bool,
 }
 
 impl proto_dht::DistributedDht<WorldError> for BlockingProviderDht {
@@ -107,7 +108,13 @@ impl proto_dht::DistributedDht<WorldError> for BlockingProviderDht {
         _provider_id: &str,
     ) -> Result<(), WorldError> {
         let _ = self.entered.lock().expect("lock entered").send(());
-        Ok(())
+        if self.fail_best_effort {
+            Err(WorldError::NetworkProtocolUnavailable {
+                protocol: "controlled provider publication failure".to_string(),
+            })
+        } else {
+            Ok(())
+        }
     }
 
     fn get_providers(
@@ -304,6 +311,7 @@ fn best_effort_provider_publish_does_not_block_on_slow_dht() {
     let dht = Arc::new(BlockingProviderDht {
         entered: Mutex::new(entered_tx),
         release: Mutex::new(release_rx),
+        fail_best_effort: false,
     });
     let handle = NodeReplicationNetworkHandle::new(Arc::new(NoopDistributedNetwork))
         .with_dht(dht)
@@ -320,4 +328,32 @@ fn best_effort_provider_publish_does_not_block_on_slow_dht() {
         .recv_timeout(Duration::from_millis(250))
         .expect("best-effort provider publish should start promptly");
     drop(release_tx);
+}
+
+#[test]
+fn best_effort_provider_publish_result_exposes_dht_failure() {
+    let (entered_tx, _entered_rx) = mpsc::channel();
+    let (_release_tx, release_rx) = mpsc::channel();
+    let dht = Arc::new(BlockingProviderDht {
+        entered: Mutex::new(entered_tx),
+        release: Mutex::new(release_rx),
+        fail_best_effort: true,
+    });
+    let handle = NodeReplicationNetworkHandle::new(Arc::new(NoopDistributedNetwork))
+        .with_dht(dht)
+        .with_local_provider_id("storage-provider");
+    let config = NodeConfig::new("storage-provider", "world-provider", NodeRole::Storage).unwrap();
+
+    let error = handle
+        .publish_local_content_provider_best_effort_result(
+            &config.network_policy,
+            "world-provider",
+            "hash-1",
+        )
+        .expect_err("DHT failure must remain observable to queue worker");
+    assert!(
+        error
+            .to_string()
+            .contains("controlled provider publication failure")
+    );
 }

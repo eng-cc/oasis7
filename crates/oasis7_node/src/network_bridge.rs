@@ -260,28 +260,32 @@ impl NodeReplicationNetworkHandle {
                 ),
             });
         }
-        self.publish_local_content_provider_best_effort(network_policy, world_id, content_hash);
-        Ok(())
+        self.publish_local_content_provider_best_effort_result(
+            network_policy,
+            world_id,
+            content_hash,
+        )
     }
 
-    pub(crate) fn publish_local_content_provider_best_effort(
+    pub(crate) fn publish_local_content_provider_best_effort_result(
         &self,
         network_policy: &NodeNetworkPolicy,
         world_id: &str,
         content_hash: &str,
-    ) {
+    ) -> Result<(), NodeError> {
         let Some(dht) = self.dht.as_ref() else {
-            return;
+            return Ok(());
         };
         let Some(local_provider_id) = self.local_provider_id.as_deref() else {
-            return;
+            return Ok(());
         };
         if !network_policy
             .allows_lane_operation(NetworkLane::BlobState, NetworkLaneOperation::Serve)
         {
-            return;
+            return Ok(());
         }
-        let _ = dht.publish_provider_best_effort(world_id, content_hash, local_provider_id);
+        dht.publish_provider_best_effort(world_id, content_hash, local_provider_id)
+            .map_err(network_err)
     }
 
     fn resolved_topic(&self, world_id: &str) -> String {

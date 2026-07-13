@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
@@ -84,6 +85,7 @@ pub(super) struct Job {
     expires_at_ms: i64,
     handler: Handler,
     reservation: InFlightReservation,
+    cancelled: Arc<AtomicBool>,
 }
 
 pub(super) struct RejectedResponse {
@@ -173,6 +175,7 @@ impl ResponseWorkers {
             expires_at_ms: queued_at_ms.saturating_add(self.response_deadline_ms),
             handler,
             reservation,
+            cancelled: Arc::new(AtomicBool::new(false)),
         })
         .map_err(|job| RejectedResponse {
             channel: job.channel,
@@ -243,7 +246,7 @@ impl ResponseWorkers {
 
     pub(super) fn overload_response() -> WorldError {
         WorldError::NetworkRequestFailed {
-            code: DistributedErrorCode::ErrNotAvailable,
+            code: DistributedErrorCode::ErrOverloaded,
             message: "response worker overloaded; retry request".to_string(),
             retryable: true,
         }
@@ -382,7 +385,15 @@ fn spawn_workers(
                 // Synchronous handlers are run only by this fixed worker pool. A remote client
                 // may time out, but a non-cooperative callback retains its execution slot until
                 // it returns; this keeps capacity accounting honest and OS-thread count bounded.
-                let reply = (job.handler)(&job.payload);
+                let context = oasis7_proto::distributed_net::NetworkRequestContext::new(
+                    std::time::Instant::now()
+                        + std::time::Duration::from_millis(
+                            u64::try_from(job.expires_at_ms.saturating_sub(super::now_ms()))
+                                .unwrap_or(0),
+                        ),
+                    Arc::clone(&job.cancelled),
+                );
+                let reply = (job.handler)(&context, &job.payload);
                 // Backpressure is confined to this worker; the swarm loop drains completions.
                 if futures::executor::block_on(completed.send(CompletedResponse {
                     channel: job.channel,

@@ -8,6 +8,7 @@ use libp2p::request_response;
 use libp2p::swarm::Swarm;
 use libp2p::{Multiaddr, PeerId};
 use oasis7_proto::distributed::DistributedErrorCode;
+use oasis7_proto::distributed_net::NetworkRequestContext;
 
 use super::peer_manager::recompute_peer_manager_healths;
 use super::peer_manager_active_set::{
@@ -28,7 +29,8 @@ use super::{
 };
 
 pub(super) type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
-pub(super) type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+pub(super) type Handler =
+    Arc<dyn Fn(&NetworkRequestContext, &[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 pub(super) type Admission = Arc<dyn Fn(&[u8]) -> Result<(), WorldError> + Send + Sync>;
 
 pub(super) struct HandlerRegistration {
@@ -765,11 +767,17 @@ pub(super) fn handle_command(
             if connected_request_peers.is_empty() {
                 if providers.is_empty() {
                     if let Some(handler) = handlers.get(&protocol) {
-                        let result = match handler.admission.as_ref() {
-                            Some(admission) => {
-                                admission(&payload).and_then(|()| (handler.handler)(&payload))
-                            }
-                            None => (handler.handler)(&payload),
+                        let invoke = || {
+                            let context = NetworkRequestContext::new(
+                                std::time::Instant::now() + std::time::Duration::from_secs(30),
+                                Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                            );
+                            (handler.handler)(&context, &payload)
+                        };
+                        let result = if let Some(admission) = handler.admission.as_ref() {
+                            admission(&payload).and_then(|()| invoke())
+                        } else {
+                            invoke()
                         };
                         let _ = response.send(result);
                     } else {

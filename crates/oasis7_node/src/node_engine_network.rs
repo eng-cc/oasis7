@@ -22,12 +22,21 @@ impl PosNodeEngine {
             signature_hex: commit.signature_hex.clone(),
         };
         self.observe_peer_committed_head(commit.node_id.as_str(), next_head);
+        if self
+            .peer_heads
+            .get(commit.node_id.as_str())
+            .is_some_and(|head| {
+                head.height == commit.height && head.block_hash == commit.block_hash
+            })
+        {
+            self.latest_validated_peer_commit = Some(commit.clone());
+        }
     }
 
     pub(super) fn observe_peer_committed_head(
         &mut self,
         peer_node_id: &str,
-        next_head: PeerCommittedHead,
+        mut next_head: PeerCommittedHead,
     ) {
         if next_head.height == 0 {
             return;
@@ -59,6 +68,17 @@ impl PosNodeEngine {
                     self.peer_heads.remove(peer_node_id);
                 }
                 return;
+            }
+            if next_head.height == previous.height && next_head.block_hash == previous.block_hash {
+                if next_head.execution_block_hash.is_none() {
+                    next_head.execution_block_hash = previous.execution_block_hash.clone();
+                }
+                if next_head.execution_state_root.is_none() {
+                    next_head.execution_state_root = previous.execution_state_root.clone();
+                }
+                if next_head.action_root.is_empty() {
+                    next_head.action_root = previous.action_root.clone();
+                }
             }
         }
         self.network_committed_height = self.network_committed_height.max(next_head.height);
@@ -1078,8 +1098,14 @@ fn execution_error_is_peer_mismatch(err: &NodeError) -> bool {
 
 fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHead) -> bool {
     left.block_hash != right.block_hash
-        || left.execution_block_hash != right.execution_block_hash
-        || left.execution_state_root != right.execution_state_root
+        || matches!(
+            (&left.execution_block_hash, &right.execution_block_hash),
+            (Some(left), Some(right)) if left != right
+        )
+        || matches!(
+            (&left.execution_state_root, &right.execution_state_root),
+            (Some(left), Some(right)) if left != right
+        )
         || (!left.action_root.is_empty()
             && !right.action_root.is_empty()
             && left.action_root != right.action_root)
