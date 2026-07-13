@@ -53,7 +53,8 @@ cat > "$TMPDIR/.pm/github-project-sync/tasks.json" <<'JSON'
       "issue_url": "https://github.com/eng-cc/oasis7/issues/202",
       "issue_number": 202,
       "project_item_id": "OLD_ITEM_ID",
-      "status": "done"
+      "status": "done",
+      "workflow_phase": "post_merge_done"
     }
   }
 }
