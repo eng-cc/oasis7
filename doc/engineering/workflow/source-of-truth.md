@@ -293,8 +293,9 @@ Status`, and `Workflow Phase` aligned through deterministic mapping:
 `pr_watch -> PR Watch/pr_watch`, `done -> In Progress/done`, and
 `deferred -> Done/blocked`; internal receipts retain the finer
 `task_done -> main_sync -> post_merge_done` sequence while the Project cockpit
-uses the coarse `done` phase. Only the finalizer advances built-in Status to
-`Done`.
+uses the coarse `done` phase. For PM status `done`, only the finalizer advances
+built-in Status to `Done`; `deferred` remains a separate non-completion archive
+lane.
 `Blocked`, `Ready / PR`, `PR Watch`, and `Done` are cockpit lanes, not modules
 or owner roles.
 
