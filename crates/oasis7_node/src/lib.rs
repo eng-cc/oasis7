@@ -138,7 +138,7 @@ use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
 use node_runtime_core::RuntimeState;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
-use provider_publication_queue::ProviderPublicationQueue;
+use provider_publication_queue::{ProviderPublicationEnqueueResult, ProviderPublicationQueue};
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
@@ -862,25 +862,47 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                                 "{}:{}:{}",
                                 publish_world_id, payload_content_hash, request.height
                             );
-                            if !provider_publications.enqueue(publication_key, move || {
-                                    publish_handle.publish_local_content_provider_best_effort_result(
-                                        &publish_network_policy,
-                                        publish_world_id.as_str(),
-                                        payload_content_hash.as_str(),
-                                    ).map_err(|err| err.to_string())?;
-                                    if let Some(descriptor) = descriptor {
+                            let enqueue_result =
+                                provider_publications.enqueue(publication_key, move || {
+                                    publish_handle
+                                        .publish_local_content_provider(
+                                            &publish_network_policy,
+                                            publish_world_id.as_str(),
+                                            payload_content_hash.as_str(),
+                                        )
+                                        .map_err(|err| err.to_string())?;
+                                    if let Some(descriptor) = descriptor.as_ref() {
                                         publish_handle
-                                            .publish_checkpoint_descriptor_providers_from_root_best_effort(
+                                            .publish_checkpoint_descriptor_providers_from_root(
                                                 &publish_network_policy,
                                                 publish_root_dir.as_path(),
                                                 publish_world_id.as_str(),
-                                                Some(&descriptor),
-                                            ).map_err(|err| err.to_string())?;
+                                                Some(descriptor),
+                                            )
+                                            .map_err(|err| err.to_string())?;
                                     }
                                     Ok(())
-                                }) {
+                                });
+                            if matches!(
+                                enqueue_result,
+                                ProviderPublicationEnqueueResult::Saturated
+                                    | ProviderPublicationEnqueueResult::Disconnected
+                            ) {
                                 let snapshot = provider_publications.snapshot();
-                                eprintln!("provider publication enqueue rejected depth={} dropped={} failed={}", snapshot.depth, snapshot.dropped, snapshot.failed);
+                                eprintln!(
+                                    concat!(
+                                        "provider publication enqueue loss ",
+                                        "result={:?} depth={} coalesced={} ",
+                                        "dropped={} completed={} failed={} retries={}"
+                                    ),
+                                    enqueue_result,
+                                    snapshot.depth,
+                                    snapshot.coalesced,
+                                    snapshot.dropped,
+                                    snapshot.completed,
+                                    snapshot.failed,
+                                    snapshot.retries
+                                );
                             }
                         }
                     }

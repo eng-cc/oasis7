@@ -6,7 +6,7 @@ use super::node_engine_core::InboundSlotWindow;
 use super::*;
 
 impl PosNodeEngine {
-    fn observe_peer_commit_message(&mut self, commit: &GossipCommitMessage) {
+    pub(super) fn observe_peer_commit_message(&mut self, commit: &GossipCommitMessage) {
         if commit.height == 0 {
             return;
         }
@@ -29,6 +29,24 @@ impl PosNodeEngine {
                 head.height == commit.height && head.block_hash == commit.block_hash
             })
         {
+            self.remember_latest_validated_peer_commit(commit);
+        }
+    }
+
+    fn remember_latest_validated_peer_commit(&mut self, commit: &GossipCommitMessage) {
+        let replace = match self.latest_validated_peer_commit.as_ref() {
+            None => true,
+            Some(previous) if commit.height > previous.height => true,
+            Some(previous) if commit.height < previous.height => false,
+            Some(previous) => {
+                validated_commits_share_identity_block_action(previous, commit)
+                    && commit.execution_block_hash.is_some()
+                    && commit.execution_state_root.is_some()
+                    && (previous.execution_block_hash.is_none()
+                        || previous.execution_state_root.is_none())
+            }
+        };
+        if replace {
             self.latest_validated_peer_commit = Some(commit.clone());
         }
     }
@@ -95,6 +113,19 @@ impl PosNodeEngine {
     ) {
         let key = format!("commit_equivocation:{validator_id}:{}", first.height);
         self.quarantined_validators.insert(validator_id.clone());
+        if self
+            .latest_validated_peer_commit
+            .as_ref()
+            .is_some_and(|commit| {
+                commit.node_id == node_id
+                    || self
+                        .validator_id_for_peer_head(commit.node_id.as_str())
+                        .as_deref()
+                        == Some(validator_id.as_str())
+            })
+        {
+            self.latest_validated_peer_commit = None;
+        }
         self.misbehavior_evidence
             .entry(key)
             .or_insert_with(|| ConsensusMisbehaviorEvidence {
@@ -1109,4 +1140,19 @@ fn peer_commit_heads_conflict(left: &PeerCommittedHead, right: &PeerCommittedHea
         || (!left.action_root.is_empty()
             && !right.action_root.is_empty()
             && left.action_root != right.action_root)
+}
+
+fn validated_commits_share_identity_block_action(
+    left: &GossipCommitMessage,
+    right: &GossipCommitMessage,
+) -> bool {
+    left.world_id == right.world_id
+        && left.node_id == right.node_id
+        && left.player_id == right.player_id
+        && left.height == right.height
+        && left.slot == right.slot
+        && left.epoch == right.epoch
+        && left.block_hash == right.block_hash
+        && left.action_root == right.action_root
+        && left.actions == right.actions
 }

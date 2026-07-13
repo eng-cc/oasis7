@@ -442,7 +442,7 @@ impl PosNodeEngine {
         Ok(Some((height, commit)))
     }
 
-    fn validated_peer_commit_head_message(
+    pub(super) fn validated_peer_commit_head_message(
         &self,
         node_id: &str,
         world_id: &str,
@@ -451,6 +451,23 @@ impl PosNodeEngine {
             return Ok(None);
         };
         if source.world_id != world_id || source.height > self.network_committed_height {
+            return Ok(None);
+        }
+        if self
+            .validator_id_for_peer_head(source.node_id.as_str())
+            .is_some_and(|validator_id| self.quarantined_validators.contains(&validator_id))
+        {
+            return Ok(None);
+        }
+        let Some(head) = self.peer_heads.get(source.node_id.as_str()) else {
+            return Ok(None);
+        };
+        if head.height != source.height
+            || head.block_hash != source.block_hash
+            || head.execution_block_hash != source.execution_block_hash
+            || head.execution_state_root != source.execution_state_root
+            || (!head.action_root.is_empty() && head.action_root != source.action_root)
+        {
             return Ok(None);
         }
         let mut commit = source.clone();

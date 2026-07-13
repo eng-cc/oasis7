@@ -357,3 +357,46 @@ fn best_effort_provider_publish_result_exposes_dht_failure() {
             .contains("controlled provider publication failure")
     );
 }
+
+#[test]
+fn result_bearing_provider_publish_waits_for_dht_completion() {
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let dht = Arc::new(BlockingProviderDht {
+        entered: Mutex::new(entered_tx),
+        release: Mutex::new(release_rx),
+        fail_best_effort: false,
+    });
+    let handle = NodeReplicationNetworkHandle::new(Arc::new(NoopDistributedNetwork))
+        .with_dht(dht)
+        .with_local_provider_id("storage-provider");
+    let network_policy = NodeConfig::new("storage-provider", "world-provider", NodeRole::Storage)
+        .expect("config")
+        .network_policy;
+    let (result_tx, result_rx) = mpsc::channel();
+
+    std::thread::spawn(move || {
+        let result = handle.publish_local_content_provider(
+            &network_policy,
+            "world-provider",
+            "hash-actual-completion",
+        );
+        result_tx.send(result).expect("send publish result");
+    });
+
+    entered_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("result-bearing publish should enter DHT");
+    assert!(
+        matches!(
+            result_rx.recv_timeout(Duration::from_millis(20)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ),
+        "result-bearing publication must not report success before DHT completion"
+    );
+    release_tx.send(()).expect("release DHT completion");
+    result_rx
+        .recv_timeout(Duration::from_millis(250))
+        .expect("publication result")
+        .expect("completed DHT publication");
+}
