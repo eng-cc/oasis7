@@ -704,14 +704,261 @@ backup_and_remove_path() {
   local path=$1
   local backup_target=$2
 
-  if [[ ! -e "$path" ]]; then
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
     printf 'skipped missing %s\n' "$path"
     return 0
+  fi
+
+  if [[ -e "$backup_target" || -L "$backup_target" ]]; then
+    die "refusing to overwrite existing backup $backup_target while live path exists: $path"
   fi
 
   mkdir -p "$(dirname "$backup_target")"
   mv "$path" "$backup_target"
   printf 'backed up %s -> %s\n' "$path" "$backup_target"
+}
+
+restore_governed_bootstrap_artifacts() {
+  local mode=$1
+  local manifest_path=$2
+  local execution_world_dir=$3
+  local source_execution_world_dir=$4
+
+  python3 - "$mode" "$manifest_path" "$execution_world_dir" "$source_execution_world_dir" <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import shutil
+import sys
+import tempfile
+
+mode, manifest_path, execution_world_dir, source_execution_world_dir = sys.argv[1:5]
+manifest_path = os.path.abspath(manifest_path)
+manifest_dir = os.path.dirname(manifest_path)
+execution_world_dir = os.path.abspath(execution_world_dir)
+source_execution_world_dir = os.path.abspath(source_execution_world_dir)
+
+def fail(message):
+    raise SystemExit(message)
+
+def load_json(path, label):
+    if not os.path.isfile(path) or os.path.islink(path):
+        fail(f"{label} must be a regular file: {path}")
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def sha256_dir_tree(path):
+    root = pathlib.Path(path)
+    combined = hashlib.sha256()
+    file_count = 0
+    total_bytes = 0
+    for child in sorted(candidate for candidate in root.rglob("*") if candidate.is_file()):
+        relative = child.relative_to(root).as_posix()
+        child_digest = sha256_file(child)
+        size = child.stat().st_size
+        combined.update(relative.encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(child_digest.encode("ascii"))
+        combined.update(b"\0")
+        combined.update(str(size).encode("ascii"))
+        combined.update(b"\n")
+        file_count += 1
+        total_bytes += size
+    return combined.hexdigest(), file_count, total_bytes
+
+def require_sha256(value, label):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(ch not in "0123456789abcdef" for ch in value)
+    ):
+        fail(f"invalid {label}")
+    return value
+
+def resolve_ref(ref, base_dir, label):
+    if not isinstance(ref, str) or not ref:
+        fail(f"missing {label}")
+    return os.path.abspath(ref if os.path.isabs(ref) else os.path.join(base_dir, ref))
+
+def is_within(path, root):
+    try:
+        return os.path.commonpath((path, root)) == root and path != root
+    except ValueError:
+        return False
+
+def reject_symlink_components(path, root, label):
+    relative = os.path.relpath(path, root)
+    current = root
+    if os.path.islink(current):
+        fail(f"unsafe symlink in {label}: {current}")
+    for component in relative.split(os.sep):
+        current = os.path.join(current, component)
+        if os.path.islink(current):
+            fail(f"unsafe symlink in {label}: {current}")
+
+manifest = load_json(manifest_path, "network tier manifest")
+runtime_refs = manifest.get("runtime_refs")
+if not isinstance(runtime_refs, dict):
+    fail("network tier manifest runtime_refs must be an object")
+
+ref_keys = (
+    "release_candidate_bundle_ref",
+    "generated_world_sidecar_ref",
+    "world_generation_provenance_ref",
+)
+optional_ref_keys = ref_keys[1:]
+configured_optional = [key for key in optional_ref_keys if runtime_refs.get(key)]
+if not configured_optional:
+    sys.exit(0)
+if len(configured_optional) != len(optional_ref_keys) or not runtime_refs.get(ref_keys[0]):
+    fail("governed bootstrap artifact refs must be configured together")
+
+bundle_ref = runtime_refs["release_candidate_bundle_ref"]
+if os.path.isabs(bundle_ref):
+    fail(f"unsafe absolute release candidate bundle ref: {bundle_ref}")
+bundle_path = resolve_ref(bundle_ref, manifest_dir, "release_candidate_bundle_ref")
+if os.path.commonpath((bundle_path, manifest_dir)) != manifest_dir:
+    fail(f"unsafe release candidate bundle ref outside manifest directory: {bundle_ref}")
+
+sidecar_ref = runtime_refs["generated_world_sidecar_ref"]
+provenance_ref = runtime_refs["world_generation_provenance_ref"]
+sidecar_target = resolve_ref(sidecar_ref, manifest_dir, "generated_world_sidecar_ref")
+provenance_target = resolve_ref(
+    provenance_ref, manifest_dir, "world_generation_provenance_ref"
+)
+target_common = os.path.commonpath((provenance_target, sidecar_target))
+if target_common in (sidecar_target, provenance_target):
+    fail("world generation provenance path must not overlap generated world sidecar")
+
+bundle = load_json(bundle_path, "release candidate bundle")
+governed = (
+    (
+        "generated_world_sidecar",
+        "directory",
+        sidecar_target,
+        ("snapshot.json", "journal.json"),
+        bundle.get("generated_world_sidecar"),
+    ),
+    (
+        "world_generation_provenance",
+        "file",
+        provenance_target,
+        (),
+        bundle.get("world_generation_provenance"),
+    ),
+)
+for key, expected_kind, expected_path, _, entry in governed:
+    if not isinstance(entry, dict):
+        fail(f"release candidate bundle missing {key}")
+    if entry.get("kind") != expected_kind:
+        fail(f"release candidate bundle {key} kind must be {expected_kind}")
+    bundle_ref_path = resolve_ref(entry.get("ref"), manifest_dir, f"bundle {key} ref")
+    bundle_resolved_path = resolve_ref(
+        entry.get("resolved_path"), manifest_dir, f"bundle {key} resolved_path"
+    )
+    if bundle_ref_path != expected_path or bundle_resolved_path != expected_path:
+        fail(f"release candidate bundle {key} does not resolve to governed path")
+
+def validate_artifact(key, expected_kind, source, source_root, required_files, entry):
+    reject_symlink_components(source, source_root, f"{key} backup path")
+    if expected_kind == "directory":
+        if not os.path.isdir(source) or os.path.islink(source):
+            fail(f"missing governed {key} backup: {source}")
+        for child in pathlib.Path(source).rglob("*"):
+            if child.is_symlink():
+                fail(f"unsafe symlink in {key} backup path: {child}")
+        for filename in required_files:
+            required_source = os.path.join(source, filename)
+            if not os.path.isfile(required_source) or os.path.islink(required_source):
+                fail(f"missing governed {key} artifact: {required_source}")
+        expected_digest = require_sha256(entry.get("sha256_tree"), f"{key}.sha256_tree")
+        actual_digest, actual_file_count, actual_total_bytes = sha256_dir_tree(source)
+        if actual_digest != expected_digest:
+            fail(
+                f"{key} sha256_tree drift: bundle={expected_digest} current={actual_digest}"
+            )
+        expected_file_count = entry.get("file_count")
+        if expected_file_count is not None and expected_file_count != actual_file_count:
+            fail(
+                f"{key} file_count drift: bundle={expected_file_count} current={actual_file_count}"
+            )
+        expected_total_bytes = entry.get("total_bytes")
+        if expected_total_bytes is not None and expected_total_bytes != actual_total_bytes:
+            fail(
+                f"{key} total_bytes drift: bundle={expected_total_bytes} current={actual_total_bytes}"
+            )
+    else:
+        if not os.path.isfile(source) or os.path.islink(source):
+            fail(f"missing governed {key} backup: {source}")
+        expected_digest = require_sha256(entry.get("sha256"), f"{key}.sha256")
+        actual_digest = sha256_file(source)
+        if actual_digest != expected_digest:
+            fail(f"{key} sha256 drift: bundle={expected_digest} current={actual_digest}")
+
+owned = []
+for key, expected_kind, target, required_files, entry in governed:
+    if not is_within(target, execution_world_dir):
+        continue
+    relative = os.path.relpath(target, execution_world_dir)
+    source = os.path.join(source_execution_world_dir, relative)
+    validate_artifact(
+        key,
+        expected_kind,
+        source,
+        source_execution_world_dir,
+        required_files,
+        entry,
+    )
+    owned.append((key, expected_kind, target, source, required_files, entry))
+
+if mode == "validate":
+    sys.exit(0)
+if mode != "restore":
+    fail(f"unknown governed bootstrap restore mode: {mode}")
+if not owned:
+    sys.exit(0)
+if os.path.lexists(execution_world_dir):
+    fail(f"governed bootstrap restore target already exists: {execution_world_dir}")
+
+execution_world_parent = os.path.dirname(execution_world_dir)
+os.makedirs(execution_world_parent, exist_ok=True)
+stage_dir = tempfile.mkdtemp(
+    prefix=f".{os.path.basename(execution_world_dir)}.governed-restore.",
+    dir=execution_world_parent,
+)
+try:
+    for _, expected_kind, target, source, _, _ in owned:
+        stage_target = os.path.join(stage_dir, os.path.relpath(target, execution_world_dir))
+        if expected_kind == "directory":
+            os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+            shutil.copytree(source, stage_target, copy_function=shutil.copy2)
+        else:
+            os.makedirs(os.path.dirname(stage_target), exist_ok=True)
+            shutil.copy2(source, stage_target)
+    for key, expected_kind, target, _, required_files, entry in owned:
+        stage_target = os.path.join(stage_dir, os.path.relpath(target, execution_world_dir))
+        validate_artifact(
+            key,
+            expected_kind,
+            stage_target,
+            stage_dir,
+            required_files,
+            entry,
+        )
+    os.replace(stage_dir, execution_world_dir)
+    stage_dir = None
+finally:
+    if stage_dir is not None:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+PY
 }
 
 reset_local_state() {
@@ -720,7 +967,7 @@ reset_local_state() {
 
   local local_stack_root node_id execution_world_dir execution_records_dir simulator_dir
   local replication_root runtime_root execution_bridge_state_path
-  local storage_root
+  local storage_root manifest_path governed_restore_source
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
   node_id=$(resolved_env_value "$local_env" NODE_ID)
@@ -734,12 +981,30 @@ reset_local_state() {
   fi
   runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
   execution_bridge_state_path=$(execution_bridge_state_path_for_root "$local_stack_root" "$node_id" "$runtime_root")
+  if raw_value "$local_env" NETWORK_TIER_MANIFEST_PATH >/dev/null 2>&1; then
+    manifest_path=$(resolved_env_value "$local_env" NETWORK_TIER_MANIFEST_PATH)
+    require_file "$manifest_path"
+  else
+    manifest_path=""
+  fi
 
   if [[ -z "$backup_dir" ]]; then
     backup_dir="$local_stack_root/backups/local-observer-state-reset-$(date +%Y%m%d-%H%M%S)"
   fi
 
   mkdir -p "$backup_dir"
+
+  if [[ -n "$manifest_path" ]]; then
+    governed_restore_source="$execution_world_dir"
+    if [[ -e "$backup_dir/execution-world" || -L "$backup_dir/execution-world" ]]; then
+      governed_restore_source="$backup_dir/execution-world"
+    fi
+    restore_governed_bootstrap_artifacts \
+      validate \
+      "$manifest_path" \
+      "$execution_world_dir" \
+      "$governed_restore_source"
+  fi
 
   backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"
   backup_and_remove_path "$simulator_dir" "$backup_dir/execution-world-simulator-mirror"
@@ -752,6 +1017,13 @@ reset_local_state() {
   backup_and_remove_path \
     "$execution_bridge_state_path" \
     "$backup_dir/chain-runtime/$node_id/$(basename "$execution_bridge_state_path")"
+  if [[ -n "$manifest_path" ]]; then
+    restore_governed_bootstrap_artifacts \
+      restore \
+      "$manifest_path" \
+      "$execution_world_dir" \
+      "$backup_dir/execution-world"
+  fi
   printf 'backup_dir=%s\n' "$backup_dir"
 }
 

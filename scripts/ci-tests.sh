@@ -218,6 +218,7 @@ run_required_gate_checks() {
   run ./scripts/s10-five-node-game-soak-summary.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
   run ./scripts/release-gate-bash-preflight.test.sh
+  run bash ./scripts/p2p-public-testnet-local-observer-sync.test.sh
   run_provider_remote_https_smoke
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
   run_newapi_bridge_service_accounting_tests

@@ -1187,6 +1187,195 @@ function normalizeViewerAvailableActions({
     };
   });
 }
+function normalizeGameplayToken(value) {
+  return String(value || "").trim().toLowerCase().replaceAll("_", "").replaceAll("-", "");
+}
+function buildGameplayEconomicSurface({
+  locale,
+  localeText: localeText2,
+  gameplay,
+  availableActions,
+  recommendedAction,
+  recentFeedback,
+  blockerLabel,
+  narrativeNextStep,
+  lastWorldChange
+}) {
+  const goalKind = normalizeGameplayToken(gameplay.goal_kind);
+  const blockerKind = normalizeGameplayToken(gameplay.blocker_kind);
+  const blockerDetail = gameplay.blocker_detail || recentFeedback?.reason || null;
+  const fallbackLabel = gameplay.fallback_action_label || recommendedAction?.label || null;
+  const input = (() => {
+    if (blockerKind === "materialshortage") {
+      return localeText2(
+        locale,
+        blockerDetail ? `当前关键投入缺口是物料链：${blockerDetail}` : "当前关键投入缺口是物料链，先把原料重新接上。",
+        blockerDetail ? `The gating input is the material chain: ${blockerDetail}` : "The gating input is the material chain; restore raw material flow first."
+      );
+    }
+    if (blockerKind === "powershortage") {
+      return localeText2(
+        locale,
+        blockerDetail ? `当前关键投入缺口是供电：${blockerDetail}` : "当前关键投入缺口是供电，先恢复能量再谈扩产。",
+        blockerDetail ? `The gating input is power availability: ${blockerDetail}` : "The gating input is power availability; restore energy before expanding."
+      );
+    }
+    if (blockerKind === "governancegate") {
+      return localeText2(
+        locale,
+        blockerDetail ? `当前关键投入缺口是许可或治理前提：${blockerDetail}` : "当前关键投入缺口是许可或治理前提，先补齐访问资格。",
+        blockerDetail ? `The gating input is permission/governance: ${blockerDetail}` : "The gating input is permission/governance; satisfy the access prerequisite first."
+      );
+    }
+    if (goalKind === "createfirstworldfeedback") {
+      return localeText2(
+        locale,
+        "当前投入不是更多库存，而是 1 次 committed world step 加 1 次可读 delta。",
+        "The current input is not more inventory; it is one committed world step plus one readable delta."
+      );
+    }
+    if (goalKind === "startfactoryrun") {
+      return localeText2(
+        locale,
+        "当前投入是能持续一个完整周期的配方、原料和供电，而不是一次性点亮。",
+        "The current input is a recipe, materials, and power that can survive one full cycle, not a one-off ignition."
+      );
+    }
+    if (goalKind === "turnmaterialflowintooutput") {
+      return localeText2(
+        locale,
+        "当前投入是把原料流真正推过产线，直到它变成首个制成品。",
+        "The current input is pushing material flow all the way through the line until it becomes first finished output."
+      );
+    }
+    if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
+      return localeText2(
+        locale,
+        "当前投入是让第一条线能扛住一次中断并恢复，而不是只完成一次幸运产出。",
+        "The current input is making the first line survive one interruption and recover, not just finishing one lucky output."
+      );
+    }
+    if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
+      return localeText2(
+        locale,
+        "当前投入是一条已证明可用的能力线，以及一个值得付出机会成本的新分支。",
+        "The current input is one proven capability line plus a branch worth its opportunity cost."
+      );
+    }
+    return gameplay.objective || gameplay.progress_detail || localeText2(
+      locale,
+      "当前还没有发布更细的经济投入说明。",
+      "No finer-grained economic input explanation is published yet."
+    );
+  })();
+  const output = lastWorldChange || recentFeedback?.effect || gameplay.progress_detail || localeText2(
+    locale,
+    "当前还没有新的世界级结果；先看阻塞与下一步。",
+    "There is no new world-level result yet; read the blocker and next step first."
+  );
+  const unlockedValue = (() => {
+    if (goalKind === "createfirstworldfeedback") {
+      return localeText2(
+        locale,
+        "一旦看见第一条 committed delta，你拿到的是“我的命令真的会改世界”的信任，而不是单纯一条日志。",
+        "Once the first committed delta lands, you gain trust that your command truly changes the world, not just another log line."
+      );
+    }
+    if (goalKind === "recovercapability") {
+      return localeText2(
+        locale,
+        "修复后恢复的是已有能力位，而不是被迫从旁观状态重开一条完全新线。",
+        "Repair restores an existing capability slot instead of forcing you to restart from a watch-only state."
+      );
+    }
+    if (goalKind === "startfactoryrun" || goalKind === "turnmaterialflowintooutput") {
+      return localeText2(
+        locale,
+        "这一拍的新用途，是把原料和站点从“摆着”变成“能稳定产出下一种东西”。",
+        "The new use here is turning idle materials and a site into something that can reliably produce the next thing."
+      );
+    }
+    if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
+      return localeText2(
+        locale,
+        "这一拍的新用途，是把一次性成果升级成可重复调用的能力位与恢复弹性。",
+        "The new use here is upgrading a one-off success into a reusable capability slot with recovery elasticity."
+      );
+    }
+    if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
+      return localeText2(
+        locale,
+        "这一拍的新用途，是给你一个真正不同的增长或专业化分支，而不是继续重复同一循环。",
+        "The new use here is unlocking a genuinely different growth or specialization branch instead of repeating the same loop."
+      );
+    }
+    return localeText2(
+      locale,
+      "当前系统已经在尝试把“继续推进”解释成新的 leverage，而不是更多库存数字。",
+      "The system is trying to frame this step as new leverage, not just bigger stockpile numbers."
+    );
+  })();
+  const repairAction = (() => {
+    if (fallbackLabel) {
+      return blockerDetail ? localeText2(
+        locale,
+        `${fallbackLabel}，然后确认 blocker 是否真的解除。`,
+        `${fallbackLabel}, then confirm the blocker actually clears.`
+      ) : fallbackLabel;
+    }
+    return narrativeNextStep || localeText2(
+      locale,
+      "当前还没有发布更短的修复动作，请先读下一步指引。",
+      "No shorter repair action is published yet; read the next-step guidance first."
+    );
+  })();
+  const nextValue = (() => {
+    if (gameplay.branch_hint) {
+      return gameplay.branch_hint;
+    }
+    if (goalKind === "recovercapability") {
+      return localeText2(
+        locale,
+        "完成这次修复后，停住的产线会重新变成可经营能力。",
+        "Once this repair holds, the stalled line becomes an operable capability again."
+      );
+    }
+    if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
+      return localeText2(
+        locale,
+        "稳定性会把一次成功变成后续扩张、恢复或分工的前提。",
+        "Stability turns one success into the prerequisite for expansion, recovery, or specialization."
+      );
+    }
+    if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
+      return localeText2(
+        locale,
+        "下一步会改变你拿到的杠杆类型，而不只是把同一种产出做得更多。",
+        "The next move changes the kind of leverage you get, not just the amount of the same output."
+      );
+    }
+    if (goalKind === "createfirstworldfeedback") {
+      return localeText2(
+        locale,
+        "先确认第一条世界反馈，后面的工业选择才不再像盲按按钮。",
+        "Confirm the first world feedback so later industrial choices stop feeling blind."
+      );
+    }
+    return narrativeNextStep || localeText2(
+      locale,
+      "下一步应该带来新的用途、恢复弹性或更清晰的分支价值。",
+      "The next move should create new use, recovery elasticity, or a clearer branch value."
+    );
+  })();
+  return {
+    input,
+    output,
+    unlockedValue,
+    repairAction,
+    nextValue,
+    blockerLabel: blockerLabel || null
+  };
+}
 function createViewerFeedbackModule({
   clone: clone2,
   feedbackBadgeClass: feedbackBadgeClass2,
@@ -1250,194 +1439,6 @@ function createViewerFeedbackModule({
   }
   function humanizePromptField(field) {
     return String(field || "").trim().replaceAll("_", " ");
-  }
-  function normalizeGameplayToken(value) {
-    return String(value || "").trim().toLowerCase().replaceAll("_", "").replaceAll("-", "");
-  }
-  function buildGameplayEconomicSurface({
-    locale,
-    gameplay,
-    availableActions,
-    recommendedAction,
-    recentFeedback,
-    blockerLabel,
-    narrativeNextStep,
-    lastWorldChange
-  }) {
-    const goalKind = normalizeGameplayToken(gameplay.goal_kind);
-    const blockerKind = normalizeGameplayToken(gameplay.blocker_kind);
-    const blockerDetail = gameplay.blocker_detail || recentFeedback?.reason || null;
-    const fallbackLabel = gameplay.fallback_action_label || recommendedAction?.label || null;
-    const input = (() => {
-      if (blockerKind === "materialshortage") {
-        return localeText2(
-          locale,
-          blockerDetail ? `当前关键投入缺口是物料链：${blockerDetail}` : "当前关键投入缺口是物料链，先把原料重新接上。",
-          blockerDetail ? `The gating input is the material chain: ${blockerDetail}` : "The gating input is the material chain; restore raw material flow first."
-        );
-      }
-      if (blockerKind === "powershortage") {
-        return localeText2(
-          locale,
-          blockerDetail ? `当前关键投入缺口是供电：${blockerDetail}` : "当前关键投入缺口是供电，先恢复能量再谈扩产。",
-          blockerDetail ? `The gating input is power availability: ${blockerDetail}` : "The gating input is power availability; restore energy before expanding."
-        );
-      }
-      if (blockerKind === "governancegate") {
-        return localeText2(
-          locale,
-          blockerDetail ? `当前关键投入缺口是许可或治理前提：${blockerDetail}` : "当前关键投入缺口是许可或治理前提，先补齐访问资格。",
-          blockerDetail ? `The gating input is permission/governance: ${blockerDetail}` : "The gating input is permission/governance; satisfy the access prerequisite first."
-        );
-      }
-      if (goalKind === "createfirstworldfeedback") {
-        return localeText2(
-          locale,
-          "当前投入不是更多库存，而是 1 次 committed world step 加 1 次可读 delta。",
-          "The current input is not more inventory; it is one committed world step plus one readable delta."
-        );
-      }
-      if (goalKind === "startfactoryrun") {
-        return localeText2(
-          locale,
-          "当前投入是能持续一个完整周期的配方、原料和供电，而不是一次性点亮。",
-          "The current input is a recipe, materials, and power that can survive one full cycle, not a one-off ignition."
-        );
-      }
-      if (goalKind === "turnmaterialflowintooutput") {
-        return localeText2(
-          locale,
-          "当前投入是把原料流真正推过产线，直到它变成首个制成品。",
-          "The current input is pushing material flow all the way through the line until it becomes first finished output."
-        );
-      }
-      if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
-        return localeText2(
-          locale,
-          "当前投入是让第一条线能扛住一次中断并恢复，而不是只完成一次幸运产出。",
-          "The current input is making the first line survive one interruption and recover, not just finishing one lucky output."
-        );
-      }
-      if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
-        return localeText2(
-          locale,
-          "当前投入是一条已证明可用的能力线，以及一个值得付出机会成本的新分支。",
-          "The current input is one proven capability line plus a branch worth its opportunity cost."
-        );
-      }
-      return gameplay.objective || gameplay.progress_detail || localeText2(
-        locale,
-        "当前还没有发布更细的经济投入说明。",
-        "No finer-grained economic input explanation is published yet."
-      );
-    })();
-    const output = lastWorldChange || recentFeedback?.effect || gameplay.progress_detail || localeText2(
-      locale,
-      "当前还没有新的世界级结果；先看阻塞与下一步。",
-      "There is no new world-level result yet; read the blocker and next step first."
-    );
-    const unlockedValue = (() => {
-      if (goalKind === "createfirstworldfeedback") {
-        return localeText2(
-          locale,
-          "一旦看见第一条 committed delta，你拿到的是“我的命令真的会改世界”的信任，而不是单纯一条日志。",
-          "Once the first committed delta lands, you gain trust that your command truly changes the world, not just another log line."
-        );
-      }
-      if (goalKind === "recovercapability") {
-        return localeText2(
-          locale,
-          "修复后恢复的是已有能力位，而不是被迫从旁观状态重开一条完全新线。",
-          "Repair restores an existing capability slot instead of forcing you to restart from a watch-only state."
-        );
-      }
-      if (goalKind === "startfactoryrun" || goalKind === "turnmaterialflowintooutput") {
-        return localeText2(
-          locale,
-          "这一拍的新用途，是把原料和站点从“摆着”变成“能稳定产出下一种东西”。",
-          "The new use here is turning idle materials and a site into something that can reliably produce the next thing."
-        );
-      }
-      if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
-        return localeText2(
-          locale,
-          "这一拍的新用途，是把一次性成果升级成可重复调用的能力位与恢复弹性。",
-          "The new use here is upgrading a one-off success into a reusable capability slot with recovery elasticity."
-        );
-      }
-      if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
-        return localeText2(
-          locale,
-          "这一拍的新用途，是给你一个真正不同的增长或专业化分支，而不是继续重复同一循环。",
-          "The new use here is unlocking a genuinely different growth or specialization branch instead of repeating the same loop."
-        );
-      }
-      return localeText2(
-        locale,
-        "当前系统已经在尝试把“继续推进”解释成新的 leverage，而不是更多库存数字。",
-        "The system is trying to frame this step as new leverage, not just bigger stockpile numbers."
-      );
-    })();
-    const repairAction = (() => {
-      if (fallbackLabel) {
-        return blockerDetail ? localeText2(
-          locale,
-          `${fallbackLabel}，然后确认 blocker 是否真的解除。`,
-          `${fallbackLabel}, then confirm the blocker actually clears.`
-        ) : fallbackLabel;
-      }
-      return narrativeNextStep || localeText2(
-        locale,
-        "当前还没有发布更短的修复动作，请先读下一步指引。",
-        "No shorter repair action is published yet; read the next-step guidance first."
-      );
-    })();
-    const nextValue = (() => {
-      if (gameplay.branch_hint) {
-        return gameplay.branch_hint;
-      }
-      if (goalKind === "recovercapability") {
-        return localeText2(
-          locale,
-          "完成这次修复后，停住的产线会重新变成可经营能力。",
-          "Once this repair holds, the stalled line becomes an operable capability again."
-        );
-      }
-      if (goalKind === "stabilizefirstline" || goalKind === "establishfirstcapability") {
-        return localeText2(
-          locale,
-          "稳定性会把一次成功变成后续扩张、恢复或分工的前提。",
-          "Stability turns one success into the prerequisite for expansion, recovery, or specialization."
-        );
-      }
-      if (goalKind === "choosefirstexpansiontradeoff" || goalKind === "choosemidlooppath") {
-        return localeText2(
-          locale,
-          "下一步会改变你拿到的杠杆类型，而不只是把同一种产出做得更多。",
-          "The next move changes the kind of leverage you get, not just the amount of the same output."
-        );
-      }
-      if (goalKind === "createfirstworldfeedback") {
-        return localeText2(
-          locale,
-          "先确认第一条世界反馈，后面的工业选择才不再像盲按按钮。",
-          "Confirm the first world feedback so later industrial choices stop feeling blind."
-        );
-      }
-      return narrativeNextStep || localeText2(
-        locale,
-        "下一步应该带来新的用途、恢复弹性或更清晰的分支价值。",
-        "The next move should create new use, recovery elasticity, or a clearer branch value."
-      );
-    })();
-    return {
-      input,
-      output,
-      unlockedValue,
-      repairAction,
-      nextValue,
-      blockerLabel: blockerLabel || null
-    };
   }
   function summarizeAppliedFields(feedback) {
     const fields = Array.isArray(feedback?.response?.applied_fields) ? feedback.response.applied_fields.map(humanizePromptField).filter(Boolean) : [];
@@ -1955,6 +1956,7 @@ function createViewerFeedbackModule({
     const narrativeBlockerDetail = pendingEmptyWorldClaimSync ? recentFeedback?.hint || resolvedBlockerDetail || statusReason || null : resolvedBlockerDetail || statusReason || recentFeedback?.reason || null;
     const economicSurface = buildGameplayEconomicSurface({
       locale,
+      localeText: localeText2,
       gameplay,
       availableActions,
       recommendedAction,
@@ -2534,6 +2536,189 @@ function createViewerLocalePreferencesModule({
     setViewerLocale: setViewerLocale2,
     togglePromptOverridesVisible: togglePromptOverridesVisible2,
     toggleViewerLocale
+  };
+}
+function createViewerBrowserPersistenceModule({
+  chatHistoryLimit,
+  chatHistoryStoragePrefix,
+  clone: clone2,
+  initialWsUrl: initialWsUrl2,
+  localTestPlayerIdPrefix,
+  localTestPlayerSessionStoragePrefix,
+  state: state2,
+  windowRef
+}) {
+  function storageSafe() {
+    try {
+      return windowRef?.localStorage || null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function chatHistoryStorageKey() {
+    const worldId = state2.worldId || state2.snapshot?.world_id || state2.snapshot?.worldId || null;
+    if (!worldId) {
+      return null;
+    }
+    const wsUrl = state2.wsUrl || initialWsUrl2();
+    return `${chatHistoryStoragePrefix}:${encodeURIComponent(String(worldId))}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
+  }
+  function localTestPlayerSessionStorageKey() {
+    const wsUrl = state2.wsUrl || initialWsUrl2();
+    return `${localTestPlayerSessionStoragePrefix}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
+  }
+  function persistLocalTestPlayerSession2(auth) {
+    if (!auth?.available || auth.source !== "local_test_api_ephemeral" || !auth.playerId) {
+      return;
+    }
+    const storage = storageSafe();
+    if (!storage) {
+      return;
+    }
+    try {
+      storage.setItem(
+        localTestPlayerSessionStorageKey(),
+        JSON.stringify({
+          playerId: auth.playerId,
+          deviceSessionId: auth.deviceSessionId || auth.playerId,
+          publicKey: auth.publicKey || null,
+          privateKey: auth.privateKey || null,
+          issuedAtUnixMs: auth.issuedAtUnixMs || Date.now()
+        })
+      );
+    } catch (_) {
+    }
+  }
+  function resolveStoredLocalTestPlayerSession2() {
+    const storage = storageSafe();
+    if (!storage) {
+      return null;
+    }
+    try {
+      const raw = storage.getItem(localTestPlayerSessionStorageKey());
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      const playerId = String(parsed?.playerId || "").trim();
+      const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
+      const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
+      if (!playerId.startsWith(localTestPlayerIdPrefix) || !publicKey || !privateKey) {
+        storage.removeItem(localTestPlayerSessionStorageKey());
+        return null;
+      }
+      return {
+        available: true,
+        hostedAccountId: null,
+        playerId,
+        loginChannel: null,
+        maskedLoginHint: null,
+        deviceSessionId: String(parsed?.deviceSessionId || parsed?.device_session_id || playerId).trim() || playerId,
+        publicKey,
+        privateKey,
+        releaseToken: null,
+        error: null,
+        revokeReason: null,
+        revokedBy: null,
+        source: "local_test_api_ephemeral",
+        registrationStatus: "issued",
+        sessionEpoch: null,
+        issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? Date.now() : Number(parsed.issuedAtUnixMs),
+        recoveryErrorCode: null,
+        recoveryErrorMessage: null,
+        issueInFlight: false,
+        syncInFlight: false,
+        runtimeStatus: "issued",
+        boundAgentId: null,
+        pendingRequestedAgentId: null,
+        pendingForceRebind: false,
+        rebindNotice: null
+      };
+    } catch (_) {
+      try {
+        storage.removeItem(localTestPlayerSessionStorageKey());
+      } catch (_2) {
+      }
+      return null;
+    }
+  }
+  function normalizeChatHistoryEntry2(entry) {
+    if (!entry || typeof entry !== "object") {
+      return null;
+    }
+    const message = String(entry.message || "").trim();
+    if (!message) {
+      return null;
+    }
+    return {
+      id: entry.id || `${entry.source || "chat"}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      source: entry.source || "event",
+      agentId: entry.agentId || null,
+      locationId: entry.locationId || null,
+      message,
+      tick: Number(entry.tick || 0),
+      speaker: entry.speaker || null,
+      playerId: entry.playerId || null,
+      targetAgentId: entry.targetAgentId || null,
+      intentSeq: entry.intentSeq || null,
+      code: entry.code || null,
+      response: entry.response ? clone2(entry.response) : null
+    };
+  }
+  function setChatHistory2(entries) {
+    const seen = /* @__PURE__ */ new Set();
+    const next = [];
+    for (const raw of entries || []) {
+      const entry = normalizeChatHistoryEntry2(raw);
+      if (!entry || seen.has(entry.id)) {
+        continue;
+      }
+      seen.add(entry.id);
+      next.push(entry);
+      if (next.length >= chatHistoryLimit) {
+        break;
+      }
+    }
+    state2.chatHistory = next;
+  }
+  function persistChatHistory2() {
+    const storage = storageSafe();
+    const key = chatHistoryStorageKey();
+    if (!storage || !key) {
+      return;
+    }
+    try {
+      storage.setItem(key, JSON.stringify(state2.chatHistory.slice(0, chatHistoryLimit)));
+    } catch (_) {
+    }
+  }
+  function hydrateChatHistoryFromStorage2() {
+    const storage = storageSafe();
+    const key = chatHistoryStorageKey();
+    if (!storage || !key) {
+      return;
+    }
+    try {
+      const raw = storage.getItem(key);
+      if (!raw) {
+        return;
+      }
+      const stored = JSON.parse(raw);
+      if (!Array.isArray(stored)) {
+        return;
+      }
+      setChatHistory2([...state2.chatHistory || [], ...stored]);
+    } catch (_) {
+    }
+  }
+  return {
+    chatHistoryStorageKey,
+    hydrateChatHistoryFromStorage: hydrateChatHistoryFromStorage2,
+    normalizeChatHistoryEntry: normalizeChatHistoryEntry2,
+    persistChatHistory: persistChatHistory2,
+    persistLocalTestPlayerSession: persistLocalTestPlayerSession2,
+    resolveStoredLocalTestPlayerSession: resolveStoredLocalTestPlayerSession2,
+    setChatHistory: setChatHistory2
   };
 }
 function createViewerWorldScaleModule({
@@ -3240,9 +3425,9 @@ const AGENT_CHAT_ACK_TIMEOUT_MS = 3e4;
 const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 3e4;
 const SEMANTIC_ACTION_OVERALL_TIMEOUT_MS = 45e3;
 const AGENT_CHAT_OVERALL_TIMEOUT_MS = resolveAgentChatOverallTimeoutMs();
+const LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.viewer.localTestPlayerSession.v1";
 const CHAT_HISTORY_STORAGE_PREFIX = "oasis7.viewer.chatHistory.v1";
 const CHAT_HISTORY_LIMIT = 40;
-const LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX = "oasis7.viewer.localTestPlayerSession.v1";
 const STARTER_AGENT_ID = "starter-agent-0";
 const LOCAL_TEST_PLAYER_ID_PREFIX = "local-test-player-";
 let localTestStarterRebindAttemptKey = null;
@@ -3392,6 +3577,23 @@ function initialWsUrl() {
   const params = getSearchParams();
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
 }
+const {
+  hydrateChatHistoryFromStorage,
+  normalizeChatHistoryEntry,
+  persistChatHistory,
+  persistLocalTestPlayerSession,
+  resolveStoredLocalTestPlayerSession,
+  setChatHistory
+} = createViewerBrowserPersistenceModule({
+  chatHistoryLimit: CHAT_HISTORY_LIMIT,
+  chatHistoryStoragePrefix: CHAT_HISTORY_STORAGE_PREFIX,
+  clone,
+  initialWsUrl,
+  localTestPlayerIdPrefix: LOCAL_TEST_PLAYER_ID_PREFIX,
+  localTestPlayerSessionStoragePrefix: LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX,
+  state,
+  windowRef: window
+});
 function shouldConnectViewerWs() {
   const mode = String(getSearchParams().get("connect") || "").trim().toLowerCase();
   return mode !== "0" && mode !== "false" && mode !== "off";
@@ -3626,7 +3828,7 @@ function entityCollections() {
     locations: Object.values(model.locations || {})
   };
 }
-function agentBindingForId$1(agentId) {
+function agentBindingForId(agentId) {
   const id = String(agentId || "").trim();
   if (!id) {
     return { playerId: null, publicKey: null };
@@ -3643,7 +3845,7 @@ function isAgentVisibleToCurrentSession(agentId) {
   }
   const boundAgentId = String(state.auth.boundAgentId || "").trim();
   const currentPlayerId = String(state.auth.playerId || "").trim();
-  const binding = agentBindingForId$1(id);
+  const binding = agentBindingForId(id);
   const boundPlayerId = String(binding.playerId || "").trim();
   if (boundAgentId && id === boundAgentId) {
     return true;
@@ -3693,7 +3895,7 @@ function selectedAgentBindingInfo() {
   if (!agentId) {
     return null;
   }
-  return agentBindingForId$1(agentId);
+  return agentBindingForId(agentId);
 }
 function selectedAgentExecutionDebugContext() {
   const agentId = selectedAgentId();
@@ -4347,172 +4549,6 @@ function addRecentEvent(event) {
   state.recentEvents = state.recentEvents.slice(0, MAX_EVENTS);
   state.eventCount = state.recentEvents.length;
   state.eventSeq = Math.max(state.eventSeq, Number(event?.id || 0));
-}
-function storageSafe() {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) {
-      return null;
-    }
-    return window.localStorage;
-  } catch (_) {
-    return null;
-  }
-}
-function chatHistoryStorageKey() {
-  const worldId = state.worldId || state.snapshot?.world_id || state.snapshot?.worldId || null;
-  if (!worldId) {
-    return null;
-  }
-  const wsUrl = state.wsUrl || initialWsUrl();
-  return `${CHAT_HISTORY_STORAGE_PREFIX}:${encodeURIComponent(String(worldId))}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
-}
-function localTestPlayerSessionStorageKey() {
-  const wsUrl = state.wsUrl || initialWsUrl();
-  return `${LOCAL_TEST_PLAYER_SESSION_STORAGE_PREFIX}:${encodeURIComponent(String(wsUrl || "viewer"))}`;
-}
-function persistLocalTestPlayerSession(auth) {
-  if (!auth?.available || auth.source !== "local_test_api_ephemeral" || !auth.playerId) {
-    return;
-  }
-  const storage = storageSafe();
-  if (!storage) {
-    return;
-  }
-  try {
-    storage.setItem(
-      localTestPlayerSessionStorageKey(),
-      JSON.stringify({
-        playerId: auth.playerId,
-        deviceSessionId: auth.deviceSessionId || auth.playerId,
-        publicKey: auth.publicKey || null,
-        privateKey: auth.privateKey || null,
-        issuedAtUnixMs: auth.issuedAtUnixMs || Date.now()
-      })
-    );
-  } catch (_) {
-  }
-}
-function resolveStoredLocalTestPlayerSession() {
-  const storage = storageSafe();
-  if (!storage) {
-    return null;
-  }
-  try {
-    const raw = storage.getItem(localTestPlayerSessionStorageKey());
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    const playerId = String(parsed?.playerId || "").trim();
-    const publicKey = String(parsed?.publicKey || "").trim().toLowerCase();
-    const privateKey = String(parsed?.privateKey || "").trim().toLowerCase();
-    if (!playerId.startsWith(LOCAL_TEST_PLAYER_ID_PREFIX) || !publicKey || !privateKey) {
-      storage.removeItem(localTestPlayerSessionStorageKey());
-      return null;
-    }
-    return {
-      available: true,
-      hostedAccountId: null,
-      playerId,
-      loginChannel: null,
-      maskedLoginHint: null,
-      deviceSessionId: String(parsed?.deviceSessionId || parsed?.device_session_id || playerId).trim() || playerId,
-      publicKey,
-      privateKey,
-      releaseToken: null,
-      error: null,
-      revokeReason: null,
-      revokedBy: null,
-      source: "local_test_api_ephemeral",
-      registrationStatus: "issued",
-      sessionEpoch: null,
-      issuedAtUnixMs: parsed?.issuedAtUnixMs == null ? Date.now() : Number(parsed.issuedAtUnixMs),
-      recoveryErrorCode: null,
-      recoveryErrorMessage: null,
-      issueInFlight: false,
-      syncInFlight: false,
-      runtimeStatus: "issued",
-      boundAgentId: null,
-      pendingRequestedAgentId: null,
-      pendingForceRebind: false,
-      rebindNotice: null
-    };
-  } catch (_) {
-    try {
-      storage.removeItem(localTestPlayerSessionStorageKey());
-    } catch (_2) {
-    }
-    return null;
-  }
-}
-function normalizeChatHistoryEntry(entry) {
-  if (!entry || typeof entry !== "object") {
-    return null;
-  }
-  const message = String(entry.message || "").trim();
-  if (!message) {
-    return null;
-  }
-  return {
-    id: entry.id || `${entry.source || "chat"}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    source: entry.source || "event",
-    agentId: entry.agentId || null,
-    locationId: entry.locationId || null,
-    message,
-    tick: Number(entry.tick || 0),
-    speaker: entry.speaker || null,
-    playerId: entry.playerId || null,
-    targetAgentId: entry.targetAgentId || null,
-    intentSeq: entry.intentSeq || null,
-    code: entry.code || null,
-    response: entry.response ? clone(entry.response) : null
-  };
-}
-function setChatHistory(entries) {
-  const seen = /* @__PURE__ */ new Set();
-  const next = [];
-  for (const raw of entries || []) {
-    const entry = normalizeChatHistoryEntry(raw);
-    if (!entry || seen.has(entry.id)) {
-      continue;
-    }
-    seen.add(entry.id);
-    next.push(entry);
-    if (next.length >= CHAT_HISTORY_LIMIT) {
-      break;
-    }
-  }
-  state.chatHistory = next;
-}
-function persistChatHistory() {
-  const storage = storageSafe();
-  const key = chatHistoryStorageKey();
-  if (!storage || !key) {
-    return;
-  }
-  try {
-    storage.setItem(key, JSON.stringify(state.chatHistory.slice(0, CHAT_HISTORY_LIMIT)));
-  } catch (_) {
-  }
-}
-function hydrateChatHistoryFromStorage() {
-  const storage = storageSafe();
-  const key = chatHistoryStorageKey();
-  if (!storage || !key) {
-    return;
-  }
-  try {
-    const raw = storage.getItem(key);
-    if (!raw) {
-      return;
-    }
-    const stored = JSON.parse(raw);
-    if (!Array.isArray(stored)) {
-      return;
-    }
-    setChatHistory([...state.chatHistory || [], ...stored]);
-  } catch (_) {
-  }
 }
 function handleSnapshot(snapshot) {
   clearInitialSnapshotRetryTimer();
@@ -6809,21 +6845,6 @@ async function createPixelWorldRuntimeBridge({
     fatal
   };
 }
-var _tmpl$$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
-function tr$1(locale, zh, en) {
-  return isLocaleZh(locale) ? zh : en;
-}
-const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
-const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
-const pixelWorldFocusUiSessionState = {
-  focusMode: false,
-  commandDrawerOpen: false,
-  diagnosticsDrawerOpen: false,
-  maximized: false
-};
-const FRAGMENT_TERRAIN_PALETTE = {
-  unknown: [148, 163, 184]
-};
 function pixelWorldSelectedBlockerVisualFixture() {
   return {
     time: 12,
@@ -6840,22 +6861,14 @@ function pixelWorldSelectedBlockerVisualFixture() {
           id: "agent-0",
           name: "Agent 0",
           location_id: "loc-0",
-          pos: {
-            x_cm: 29e5,
-            y_cm: 345e4,
-            z_cm: 0
-          },
+          pos: { x_cm: 29e5, y_cm: 345e4, z_cm: 0 },
           resources: {}
         },
         "agent-1": {
           id: "agent-1",
           name: "Agent 1",
           location_id: "loc-1",
-          pos: {
-            x_cm: 69e5,
-            y_cm: 115e4,
-            z_cm: 0
-          },
+          pos: { x_cm: 69e5, y_cm: 115e4, z_cm: 0 },
           resources: {}
         }
       },
@@ -6863,91 +6876,36 @@ function pixelWorldSelectedBlockerVisualFixture() {
         "loc-0": {
           id: "loc-0",
           name: "Factory Anchor",
-          pos: {
-            x_cm: 715e4,
-            y_cm: 22e5,
-            z_cm: 0
-          },
-          profile: {
-            radius_cm: 55e3,
-            radiation_emission_per_tick: 0,
-            material: "silicate"
-          },
+          pos: { x_cm: 715e4, y_cm: 22e5, z_cm: 0 },
+          profile: { radius_cm: 55e3, radiation_emission_per_tick: 0, material: "silicate" },
           fragment_profile: {
             blocks: {
-              blocks: [{
-                origin_cm: {
-                  x_cm: -36e3,
-                  y_cm: 0,
-                  z_cm: -22e3
+              blocks: [
+                {
+                  origin_cm: { x_cm: -36e3, y_cm: 0, z_cm: -22e3 },
+                  size_cm: { x_cm: 28e3, y_cm: 7500, z_cm: 2e4 },
+                  density_kg_per_m3: 3200,
+                  compounds: { ppm: { silicate_matrix: 8e5, water_ice: 2e5 } }
                 },
-                size_cm: {
-                  x_cm: 28e3,
-                  y_cm: 7500,
-                  z_cm: 2e4
+                {
+                  origin_cm: { x_cm: 4e3, y_cm: 1e3, z_cm: -12e3 },
+                  size_cm: { x_cm: 42e3, y_cm: 8e3, z_cm: 18e3 },
+                  density_kg_per_m3: 7800,
+                  compounds: { ppm: { iron_nickel_alloy: 9e5, sulfide_ore: 1e5 } }
                 },
-                density_kg_per_m3: 3200,
-                compounds: {
-                  ppm: {
-                    silicate_matrix: 8e5,
-                    water_ice: 2e5
-                  }
+                {
+                  origin_cm: { x_cm: -18e3, y_cm: 500, z_cm: 18e3 },
+                  size_cm: { x_cm: 34e3, y_cm: 6e3, z_cm: 24e3 },
+                  density_kg_per_m3: 5200,
+                  compounds: { ppm: { sulfide_ore: 62e4, hydrated_mineral: 38e4 } }
+                },
+                {
+                  origin_cm: { x_cm: 3e4, y_cm: 0, z_cm: 24e3 },
+                  size_cm: { x_cm: 22e3, y_cm: 4500, z_cm: 16e3 },
+                  density_kg_per_m3: 2600,
+                  compounds: { ppm: { silicate_matrix: 7e5, rare_earth_oxide: 3e5 } }
                 }
-              }, {
-                origin_cm: {
-                  x_cm: 4e3,
-                  y_cm: 1e3,
-                  z_cm: -12e3
-                },
-                size_cm: {
-                  x_cm: 42e3,
-                  y_cm: 8e3,
-                  z_cm: 18e3
-                },
-                density_kg_per_m3: 7800,
-                compounds: {
-                  ppm: {
-                    iron_nickel_alloy: 9e5,
-                    sulfide_ore: 1e5
-                  }
-                }
-              }, {
-                origin_cm: {
-                  x_cm: -18e3,
-                  y_cm: 500,
-                  z_cm: 18e3
-                },
-                size_cm: {
-                  x_cm: 34e3,
-                  y_cm: 6e3,
-                  z_cm: 24e3
-                },
-                density_kg_per_m3: 5200,
-                compounds: {
-                  ppm: {
-                    sulfide_ore: 62e4,
-                    hydrated_mineral: 38e4
-                  }
-                }
-              }, {
-                origin_cm: {
-                  x_cm: 3e4,
-                  y_cm: 0,
-                  z_cm: 24e3
-                },
-                size_cm: {
-                  x_cm: 22e3,
-                  y_cm: 4500,
-                  z_cm: 16e3
-                },
-                density_kg_per_m3: 2600,
-                compounds: {
-                  ppm: {
-                    silicate_matrix: 7e5,
-                    rare_earth_oxide: 3e5
-                  }
-                }
-              }]
+              ]
             }
           },
           resources: {}
@@ -6955,25 +6913,14 @@ function pixelWorldSelectedBlockerVisualFixture() {
         "loc-1": {
           id: "loc-1",
           name: "Assembly Nexus",
-          pos: {
-            x_cm: 455e4,
-            y_cm: 12e5,
-            z_cm: 0
-          },
-          profile: {
-            radius_cm: 38e3,
-            radiation_emission_per_tick: 0,
-            material: "alloy"
-          },
+          pos: { x_cm: 455e4, y_cm: 12e5, z_cm: 0 },
+          profile: { radius_cm: 38e3, radiation_emission_per_tick: 0, material: "alloy" },
           resources: {}
         }
       },
       agent_prompt_profiles: {},
       agent_execution_debug_contexts: {},
-      agent_player_bindings: {
-        "agent-0": "player-one",
-        "agent-1": "player-two"
-      },
+      agent_player_bindings: { "agent-0": "player-one", "agent-1": "player-two" },
       agent_player_public_key_bindings: {
         "agent-0": "abcdef0123456789abcdef0123456789",
         "agent-1": "bbbbbb0123456789bbbbbb0123456789"
@@ -7021,6 +6968,21 @@ function pixelWorldSelectedBlockerVisualFixture() {
     }
   };
 }
+var _tmpl$$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$1 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
+function tr$1(locale, zh, en) {
+  return isLocaleZh(locale) ? zh : en;
+}
+const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
+const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
+const pixelWorldFocusUiSessionState = {
+  focusMode: false,
+  commandDrawerOpen: false,
+  diagnosticsDrawerOpen: false,
+  maximized: false
+};
+const FRAGMENT_TERRAIN_PALETTE = {
+  unknown: [148, 163, 184]
+};
 function pixelWorldTestApiEnabled() {
   if (typeof window === "undefined" || !window.location) {
     return false;
@@ -8870,6 +8832,117 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
+function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
+  function normalizedId2(value) {
+    return String(value || "").trim();
+  }
+  function buildAgentClaimTargets2(snapshot, agentClaim) {
+    const agents = snapshot?.model?.agents || {};
+    const ownedTargets = new Set(
+      Array.isArray(agentClaim?.owned_claims) ? agentClaim.owned_claims.map((claim) => String(claim?.target_agent_id || "").trim()).filter(Boolean) : []
+    );
+    const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
+    const candidates = Object.keys(agents).filter((agentId) => !ownedTargets.has(agentId)).map((agentId) => ({
+      id: agentId,
+      name: agents[agentId]?.name || agentId,
+      isClaimer: agentId === claimerAgentId
+    }));
+    const unclaimedNonActor = candidates.filter((candidate) => !candidate.isClaimer);
+    return unclaimedNonActor.length > 0 ? unclaimedNonActor : candidates;
+  }
+  function agentBindingForId2(agentId, snapshot = state2.snapshot) {
+    const id = normalizedId2(agentId);
+    if (!id) {
+      return { playerId: null, publicKey: null };
+    }
+    return {
+      playerId: snapshot?.model?.agent_player_bindings?.[id] || null,
+      publicKey: snapshot?.model?.agent_player_public_key_bindings?.[id] || null
+    };
+  }
+  function describeAgentSessionStatus2(agentId, locale, snapshot = state2.snapshot) {
+    const id = normalizedId2(agentId);
+    const boundAgentId = normalizedId2(state2.auth.boundAgentId);
+    const playerId = normalizedId2(state2.auth.playerId);
+    const binding = agentBindingForId2(id, snapshot);
+    const boundPlayerId = normalizedId2(binding.playerId);
+    const isCurrentBoundAgent = Boolean(id && boundAgentId && id === boundAgentId);
+    const isBoundToCurrentPlayer = Boolean(boundPlayerId && playerId && boundPlayerId === playerId);
+    if (isCurrentBoundAgent) {
+      return {
+        kind: "current",
+        isCurrentSessionAgent: true,
+        badge: tr2(locale, "我的 Agent", "My Agent"),
+        detail: tr2(locale, "当前会话绑定，可执行聊天和指挥。", "Bound to the current session; chat and command controls are available."),
+        badgeClass: "badge badge--good",
+        binding
+      };
+    }
+    if (isBoundToCurrentPlayer) {
+      return {
+        kind: "current_player_binding_pending",
+        isCurrentSessionAgent: false,
+        badge: tr2(locale, "绑定待同步", "Binding Pending"),
+        detail: tr2(locale, "快照显示这个 Agent 绑定到当前玩家，但当前会话还没有同步 boundAgent；聊天和指挥暂不开放。", "The snapshot shows this Agent bound to the current player, but this session has not synced boundAgent yet; chat and command stay unavailable."),
+        badgeClass: "badge badge--accent",
+        binding
+      };
+    }
+    if (boundPlayerId) {
+      return {
+        kind: "other_bound",
+        isCurrentSessionAgent: false,
+        badge: tr2(locale, "已隐藏", "Hidden"),
+        detail: tr2(locale, "这个 Agent 已绑定到其他账号，默认不在当前账号的 Agent 列表中展示。", "This Agent is bound to another account and is hidden from the current account's Agent list by default."),
+        badgeClass: "badge badge--warn",
+        binding
+      };
+    }
+    return {
+      kind: "unbound_agent_hidden",
+      isCurrentSessionAgent: false,
+      badge: tr2(locale, "未绑定", "Unbound"),
+      detail: tr2(locale, "这个 Agent 没有账号绑定，默认不在玩家 Agent 列表中展示。", "This Agent has no account binding and is hidden from the player Agent list by default."),
+      badgeClass: "badge badge--warn",
+      binding
+    };
+  }
+  function agentClaimUsesCurrentBoundAgent(agentClaim) {
+    const claimerAgentId = normalizedId2(agentClaim?.claimer_agent_id);
+    const boundAgentId = normalizedId2(state2.auth.boundAgentId);
+    return Boolean(claimerAgentId && boundAgentId && claimerAgentId === boundAgentId);
+  }
+  function buildAgentClaimAction2(agentClaim, targetAgentId) {
+    const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
+    const boundAgentId = normalizedId2(state2.auth.boundAgentId);
+    const target = String(targetAgentId || "").trim();
+    const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
+    if (!claimerAgentId || !target || blockedReason || !boundAgentId || claimerAgentId !== boundAgentId) return null;
+    return {
+      actionId: "claim_agent",
+      action_id: "claim_agent",
+      label: "Claim Agent",
+      protocolAction: "gameplay_action.submit",
+      protocol_action: "gameplay_action.submit",
+      executeKind: "claim_agent",
+      targetAgentId: target,
+      target_agent_id: target,
+      actorAgentId: claimerAgentId,
+      actor_agent_id: claimerAgentId,
+      disabledReason: null,
+      disabled_reason: null
+    };
+  }
+  function hasExecutableAgentClaim2(snapshot, agentClaim) {
+    if (!agentClaim || !agentClaimUsesCurrentBoundAgent(agentClaim) || String(agentClaim?.next_claim_quote?.blocked_reason || "").trim()) return false;
+    const targets = buildAgentClaimTargets2(snapshot, agentClaim);
+    return targets.length > 0 && Boolean(buildAgentClaimAction2(agentClaim, targets[0]?.id));
+  }
+  function hasAgentClaimSessionBoundary2(agentClaim) {
+    return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
+  }
+  return { agentBindingForId: agentBindingForId2, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction: buildAgentClaimAction2, buildAgentClaimTargets: buildAgentClaimTargets2, describeAgentSessionStatus: describeAgentSessionStatus2, hasAgentClaimSessionBoundary: hasAgentClaimSessionBoundary2, hasExecutableAgentClaim: hasExecutableAgentClaim2, normalizedId: normalizedId2 };
+}
 var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$47 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$48 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$49 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$50 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$51 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$60 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$61 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$62 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$63 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$64 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$65 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
@@ -9426,6 +9499,17 @@ function FeedbackCard(props) {
     return _el$32;
   })();
 }
+const {
+  buildAgentClaimAction,
+  buildAgentClaimTargets,
+  describeAgentSessionStatus,
+  hasAgentClaimSessionBoundary,
+  hasExecutableAgentClaim,
+  normalizedId
+} = createViewerAgentClaimDisplayModel({
+  state,
+  tr
+});
 function normalizedFeedbackStage(stage) {
   const value = String(stage || "").trim().toLowerCase();
   if (["ack", "sent", "queued", "completed", "blocked", "rejected", "error"].includes(value)) {
@@ -10582,119 +10666,6 @@ function renderGameplayAction(action) {
     requestRender();
   }
   return result;
-}
-function buildAgentClaimTargets(snapshot, agentClaim) {
-  const agents = snapshot?.model?.agents || {};
-  const ownedTargets = new Set(Array.isArray(agentClaim?.owned_claims) ? agentClaim.owned_claims.map((claim) => String(claim?.target_agent_id || "").trim()).filter(Boolean) : []);
-  const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
-  const candidates = Object.keys(agents).filter((agentId) => !ownedTargets.has(agentId)).map((agentId) => ({
-    id: agentId,
-    name: agents[agentId]?.name || agentId,
-    isClaimer: agentId === claimerAgentId
-  }));
-  const unclaimedNonActor = candidates.filter((candidate) => !candidate.isClaimer);
-  return unclaimedNonActor.length > 0 ? unclaimedNonActor : candidates;
-}
-function normalizedId(value) {
-  return String(value || "").trim();
-}
-function agentBindingForId(agentId, snapshot = state.snapshot) {
-  const id = normalizedId(agentId);
-  if (!id) {
-    return {
-      playerId: null,
-      publicKey: null
-    };
-  }
-  return {
-    playerId: snapshot?.model?.agent_player_bindings?.[id] || null,
-    publicKey: snapshot?.model?.agent_player_public_key_bindings?.[id] || null
-  };
-}
-function describeAgentSessionStatus(agentId, locale, snapshot = state.snapshot) {
-  const id = normalizedId(agentId);
-  const boundAgentId = normalizedId(state.auth.boundAgentId);
-  const playerId = normalizedId(state.auth.playerId);
-  const binding = agentBindingForId(id, snapshot);
-  const boundPlayerId = normalizedId(binding.playerId);
-  const isCurrentBoundAgent = Boolean(id && boundAgentId && id === boundAgentId);
-  const isBoundToCurrentPlayer = Boolean(boundPlayerId && playerId && boundPlayerId === playerId);
-  if (isCurrentBoundAgent) {
-    return {
-      kind: "current",
-      isCurrentSessionAgent: true,
-      badge: tr(locale, "我的 Agent", "My Agent"),
-      detail: tr(locale, "当前会话绑定，可执行聊天和指挥。", "Bound to the current session; chat and command controls are available."),
-      badgeClass: "badge badge--good",
-      binding
-    };
-  }
-  if (isBoundToCurrentPlayer) {
-    return {
-      kind: "current_player_binding_pending",
-      isCurrentSessionAgent: false,
-      badge: tr(locale, "绑定待同步", "Binding Pending"),
-      detail: tr(locale, "快照显示这个 Agent 绑定到当前玩家，但当前会话还没有同步 boundAgent；聊天和指挥暂不开放。", "The snapshot shows this Agent bound to the current player, but this session has not synced boundAgent yet; chat and command stay unavailable."),
-      badgeClass: "badge badge--accent",
-      binding
-    };
-  }
-  if (boundPlayerId) {
-    return {
-      kind: "other_bound",
-      isCurrentSessionAgent: false,
-      badge: tr(locale, "已隐藏", "Hidden"),
-      detail: tr(locale, "这个 Agent 已绑定到其他账号，默认不在当前账号的 Agent 列表中展示。", "This Agent is bound to another account and is hidden from the current account's Agent list by default."),
-      badgeClass: "badge badge--warn",
-      binding
-    };
-  }
-  return {
-    kind: "unbound_agent_hidden",
-    isCurrentSessionAgent: false,
-    badge: tr(locale, "未绑定", "Unbound"),
-    detail: tr(locale, "这个 Agent 没有账号绑定，默认不在玩家 Agent 列表中展示。", "This Agent has no account binding and is hidden from the player Agent list by default."),
-    badgeClass: "badge badge--warn",
-    binding
-  };
-}
-function agentClaimUsesCurrentBoundAgent(agentClaim) {
-  const claimerAgentId = normalizedId(agentClaim?.claimer_agent_id);
-  const boundAgentId = normalizedId(state.auth.boundAgentId);
-  return Boolean(claimerAgentId && boundAgentId && claimerAgentId === boundAgentId);
-}
-function buildAgentClaimAction(agentClaim, targetAgentId) {
-  const claimerAgentId = String(agentClaim?.claimer_agent_id || "").trim();
-  const boundAgentId = normalizedId(state.auth.boundAgentId);
-  const target = String(targetAgentId || "").trim();
-  const blockedReason = String(agentClaim?.next_claim_quote?.blocked_reason || "").trim();
-  if (!claimerAgentId || !target || blockedReason || !boundAgentId || claimerAgentId !== boundAgentId) {
-    return null;
-  }
-  return {
-    actionId: "claim_agent",
-    action_id: "claim_agent",
-    label: "Claim Agent",
-    protocolAction: "gameplay_action.submit",
-    protocol_action: "gameplay_action.submit",
-    executeKind: "claim_agent",
-    targetAgentId: target,
-    target_agent_id: target,
-    actorAgentId: claimerAgentId,
-    actor_agent_id: claimerAgentId,
-    disabledReason: null,
-    disabled_reason: null
-  };
-}
-function hasExecutableAgentClaim(snapshot, agentClaim) {
-  if (!agentClaim || !agentClaimUsesCurrentBoundAgent(agentClaim) || String(agentClaim?.next_claim_quote?.blocked_reason || "").trim()) {
-    return false;
-  }
-  const targets = buildAgentClaimTargets(snapshot, agentClaim);
-  return targets.length > 0 && Boolean(buildAgentClaimAction(agentClaim, targets[0]?.id));
-}
-function hasAgentClaimSessionBoundary(agentClaim) {
-  return Boolean(agentClaim?.next_claim_quote) && !agentClaimUsesCurrentBoundAgent(agentClaim);
 }
 function AgentClaimSessionBoundaryCard(props) {
   const locale = () => props.locale ?? uiLocale();
