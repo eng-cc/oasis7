@@ -25,7 +25,7 @@ pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = 2 * 1024 * 1024;
 pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = FETCH_BLOB_MAX_RAW_CHUNK_BYTES
     * FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE
     + FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD;
-/// Preserve the aggregate capacity of the original 64 MiB / 8 MiB budget.
+/// Preserve the original aggregate concurrency of eight complete peer windows.
 pub const FETCH_BLOB_GLOBAL_RESPONSE_FULL_PEER_WINDOWS: usize = 8;
 pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize =
     FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW * FETCH_BLOB_GLOBAL_RESPONSE_FULL_PEER_WINDOWS;
