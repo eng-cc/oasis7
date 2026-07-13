@@ -714,13 +714,155 @@ backup_and_remove_path() {
   printf 'backed up %s -> %s\n' "$path" "$backup_target"
 }
 
+restore_governed_bootstrap_artifacts() {
+  local mode=$1
+  local manifest_path=$2
+  local execution_world_dir=$3
+  local source_execution_world_dir=$4
+
+  python3 - "$mode" "$manifest_path" "$execution_world_dir" "$source_execution_world_dir" <<'PY'
+import json
+import os
+import shutil
+import sys
+
+mode, manifest_path, execution_world_dir, source_execution_world_dir = sys.argv[1:5]
+manifest_path = os.path.abspath(manifest_path)
+manifest_dir = os.path.dirname(manifest_path)
+execution_world_dir = os.path.abspath(execution_world_dir)
+source_execution_world_dir = os.path.abspath(source_execution_world_dir)
+
+def fail(message):
+    raise SystemExit(message)
+
+def load_json(path, label):
+    if not os.path.isfile(path) or os.path.islink(path):
+        fail(f"{label} must be a regular file: {path}")
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+def resolve_ref(ref, base_dir, label):
+    if not isinstance(ref, str) or not ref:
+        fail(f"missing {label}")
+    return os.path.abspath(ref if os.path.isabs(ref) else os.path.join(base_dir, ref))
+
+def require_within(path, root, label):
+    try:
+        inside = os.path.commonpath((path, root)) == root
+    except ValueError:
+        inside = False
+    if not inside or path == root:
+        fail(f"unsafe {label} outside execution world: {path}")
+
+def reject_symlink_components(path, root, label):
+    relative = os.path.relpath(path, root)
+    current = root
+    if os.path.islink(current):
+        fail(f"unsafe symlink in {label}: {current}")
+    for component in relative.split(os.sep):
+        current = os.path.join(current, component)
+        if os.path.islink(current):
+            fail(f"unsafe symlink in {label}: {current}")
+
+manifest = load_json(manifest_path, "network tier manifest")
+runtime_refs = manifest.get("runtime_refs")
+if not isinstance(runtime_refs, dict):
+    fail("network tier manifest runtime_refs must be an object")
+
+ref_keys = (
+    "release_candidate_bundle_ref",
+    "generated_world_sidecar_ref",
+    "world_generation_provenance_ref",
+)
+configured = [key for key in ref_keys if runtime_refs.get(key)]
+if not configured:
+    sys.exit(0)
+if len(configured) != len(ref_keys):
+    fail("governed bootstrap artifact refs must be configured together")
+
+bundle_ref = runtime_refs["release_candidate_bundle_ref"]
+if os.path.isabs(bundle_ref):
+    fail(f"unsafe absolute release candidate bundle ref: {bundle_ref}")
+bundle_path = resolve_ref(bundle_ref, manifest_dir, "release_candidate_bundle_ref")
+if os.path.commonpath((bundle_path, manifest_dir)) != manifest_dir:
+    fail(f"unsafe release candidate bundle ref outside manifest directory: {bundle_ref}")
+
+sidecar_ref = runtime_refs["generated_world_sidecar_ref"]
+provenance_ref = runtime_refs["world_generation_provenance_ref"]
+sidecar_target = resolve_ref(sidecar_ref, manifest_dir, "generated_world_sidecar_ref")
+provenance_target = resolve_ref(
+    provenance_ref, manifest_dir, "world_generation_provenance_ref"
+)
+require_within(sidecar_target, execution_world_dir, "generated world sidecar path")
+require_within(provenance_target, execution_world_dir, "world generation provenance path")
+target_common = os.path.commonpath((provenance_target, sidecar_target))
+if target_common in (sidecar_target, provenance_target):
+    fail("world generation provenance path must not overlap generated world sidecar")
+
+bundle = load_json(bundle_path, "release candidate bundle")
+governed = (
+    ("generated_world_sidecar", "directory", sidecar_target),
+    ("world_generation_provenance", "file", provenance_target),
+)
+for key, expected_kind, expected_path in governed:
+    entry = bundle.get(key)
+    if not isinstance(entry, dict):
+        fail(f"release candidate bundle missing {key}")
+    if entry.get("kind") != expected_kind:
+        fail(f"release candidate bundle {key} kind must be {expected_kind}")
+    bundle_ref_path = resolve_ref(entry.get("ref"), manifest_dir, f"bundle {key} ref")
+    bundle_resolved_path = resolve_ref(
+        entry.get("resolved_path"), manifest_dir, f"bundle {key} resolved_path"
+    )
+    if bundle_ref_path != expected_path or bundle_resolved_path != expected_path:
+        fail(f"release candidate bundle {key} does not resolve to governed path")
+
+sidecar_relative = os.path.relpath(sidecar_target, execution_world_dir)
+provenance_relative = os.path.relpath(provenance_target, execution_world_dir)
+sidecar_source = os.path.join(source_execution_world_dir, sidecar_relative)
+provenance_source = os.path.join(source_execution_world_dir, provenance_relative)
+reject_symlink_components(
+    sidecar_source, source_execution_world_dir, "generated world sidecar backup path"
+)
+reject_symlink_components(
+    provenance_source,
+    source_execution_world_dir,
+    "world generation provenance backup path",
+)
+
+if not os.path.isdir(sidecar_source):
+    fail(f"missing governed generated world sidecar backup: {sidecar_source}")
+required_sidecar_sources = []
+for filename in ("snapshot.json", "journal.json"):
+    source = os.path.join(sidecar_source, filename)
+    if not os.path.isfile(source) or os.path.islink(source):
+        fail(f"missing governed generated world sidecar artifact: {source}")
+    required_sidecar_sources.append((source, os.path.join(sidecar_target, filename)))
+if not os.path.isfile(provenance_source):
+    fail(f"missing governed world generation provenance backup: {provenance_source}")
+
+if mode == "validate":
+    sys.exit(0)
+if mode != "restore":
+    fail(f"unknown governed bootstrap restore mode: {mode}")
+if os.path.lexists(sidecar_target) or os.path.lexists(provenance_target):
+    fail("governed bootstrap restore target already exists")
+
+os.makedirs(sidecar_target)
+for source, target in required_sidecar_sources:
+    shutil.copy2(source, target)
+os.makedirs(os.path.dirname(provenance_target), exist_ok=True)
+shutil.copy2(provenance_source, provenance_target)
+PY
+}
+
 reset_local_state() {
   local local_env=$1
   local backup_dir=$2
 
   local local_stack_root node_id execution_world_dir execution_records_dir simulator_dir
   local replication_root runtime_root execution_bridge_state_path
-  local storage_root
+  local storage_root manifest_path
 
   local_stack_root=$(resolved_env_value "$local_env" STACK_ROOT)
   node_id=$(resolved_env_value "$local_env" NODE_ID)
@@ -734,12 +876,26 @@ reset_local_state() {
   fi
   runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
   execution_bridge_state_path=$(execution_bridge_state_path_for_root "$local_stack_root" "$node_id" "$runtime_root")
+  if raw_value "$local_env" NETWORK_TIER_MANIFEST_PATH >/dev/null 2>&1; then
+    manifest_path=$(resolved_env_value "$local_env" NETWORK_TIER_MANIFEST_PATH)
+    require_file "$manifest_path"
+  else
+    manifest_path=""
+  fi
 
   if [[ -z "$backup_dir" ]]; then
     backup_dir="$local_stack_root/backups/local-observer-state-reset-$(date +%Y%m%d-%H%M%S)"
   fi
 
   mkdir -p "$backup_dir"
+
+  if [[ -n "$manifest_path" ]]; then
+    restore_governed_bootstrap_artifacts \
+      validate \
+      "$manifest_path" \
+      "$execution_world_dir" \
+      "$execution_world_dir"
+  fi
 
   backup_and_remove_path "$execution_world_dir" "$backup_dir/execution-world"
   backup_and_remove_path "$simulator_dir" "$backup_dir/execution-world-simulator-mirror"
@@ -752,6 +908,13 @@ reset_local_state() {
   backup_and_remove_path \
     "$execution_bridge_state_path" \
     "$backup_dir/chain-runtime/$node_id/$(basename "$execution_bridge_state_path")"
+  if [[ -n "$manifest_path" ]]; then
+    restore_governed_bootstrap_artifacts \
+      restore \
+      "$manifest_path" \
+      "$execution_world_dir" \
+      "$backup_dir/execution-world"
+  fi
   printf 'backup_dir=%s\n' "$backup_dir"
 }
 
