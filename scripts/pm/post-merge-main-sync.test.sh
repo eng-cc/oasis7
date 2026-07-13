@@ -65,12 +65,20 @@ SQUASH_BASE="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
 git -C "$SQUASH_REPO" push -q -u origin main
 git -C "$SQUASH_REPO" switch -qc task/change
 printf 'squashed change\n' >>"$SQUASH_REPO/file"
-git -C "$SQUASH_REPO" commit -qam task-change
+git -C "$SQUASH_REPO" commit -qam task-change-one
+SQUASH_BRANCH_FIRST="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+printf 'second rebased change\n' >"$SQUASH_REPO/second"
+git -C "$SQUASH_REPO" add second
+git -C "$SQUASH_REPO" commit -qm task-change-two
 SQUASH_BRANCH_TIP="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
 git -C "$SQUASH_REPO" switch -q main
-git -C "$SQUASH_REPO" diff "$SQUASH_BASE..$SQUASH_BRANCH_TIP" | git -C "$SQUASH_REPO" apply
-git -C "$SQUASH_REPO" commit -qam squash-merge
+git -C "$SQUASH_REPO" diff "$SQUASH_BASE..$SQUASH_BRANCH_FIRST" | git -C "$SQUASH_REPO" apply
+git -C "$SQUASH_REPO" commit -qam rebase-merge-one
+git -C "$SQUASH_REPO" diff "$SQUASH_BRANCH_FIRST..$SQUASH_BRANCH_TIP" | git -C "$SQUASH_REPO" apply
+git -C "$SQUASH_REPO" add second
+git -C "$SQUASH_REPO" commit -qm rebase-merge-two
 SQUASH_MAIN="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+test "$(git -C "$SQUASH_REPO" rev-list --count "$SQUASH_BASE..$SQUASH_MAIN")" -eq 2
 printf 'later main work\n' >"$SQUASH_REPO/later"
 git -C "$SQUASH_REPO" add later
 git -C "$SQUASH_REPO" commit -qm later-main-commit
@@ -110,6 +118,33 @@ assert r['integration_parent']==p['main_parent'],r
 assert r['delta_sha256']==p['delta_sha256'],r
 assert r['patch_equivalence_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
+
+git -C "$SQUASH_REPO" branch side-parent "$SQUASH_BASE"
+git -C "$SQUASH_REPO" switch -q side-parent
+git -C "$SQUASH_REPO" commit --allow-empty -qm side-parent
+SIDE_PARENT="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+git -C "$SQUASH_REPO" switch -q main
+git -C "$SQUASH_REPO" merge -q --no-ff side-parent -m side-parent-merge
+DAG_MAIN="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+git -C "$SQUASH_REPO" push -q origin main
+VALID_PATCH_RECEIPT="$TMPDIR/valid-patch-receipt.json"
+cp "$SQUASH_PATCH_RECEIPT" "$VALID_PATCH_RECEIPT"
+python3 - "$VALID_PATCH_RECEIPT" "$SQUASH_PATCH_RECEIPT" "$DAG_MAIN" "$SIDE_PARENT" <<'PY'
+import json,sys
+p=json.load(open(sys.argv[1],encoding='utf-8'))
+p['main_commit']=sys.argv[3]; p['main_parent']=sys.argv[4]
+open(sys.argv[2],'w',encoding='utf-8').write(json.dumps(p,sort_keys=True)+'\n')
+PY
+if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$SQUASH_REPO" --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
+  --receipt-output "$SQUASH_SYNC_RECEIPT" >/dev/null 2>"$TMPDIR/second-parent.err"; then
+  echo "expected second-parent integration base to fail" >&2; exit 1
+fi
+grep -Fqi 'first-parent chain' "$TMPDIR/second-parent.err"
+cp "$VALID_PATCH_RECEIPT" "$SQUASH_PATCH_RECEIPT"
+git -C "$SQUASH_REPO" reset -q --hard "$SQUASH_CURRENT_MAIN"
+git -C "$SQUASH_REPO" push -q --force origin main
 
 git -C "$SQUASH_REPO" worktree add -q "$TMPDIR/squash-task-worktree" task/change
 mkdir -p "$TMPDIR/squash-bin"

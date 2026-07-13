@@ -97,8 +97,9 @@ PY
   PATCH_ID="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
   DELTA_SHA256="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '4p')"
   git -C "$REPO_ROOT" merge-base --is-ancestor "$PATCH_MAIN_COMMIT" "$LOCAL_MAIN" || die "patch-equivalence integration commit is not contained in synchronized main"
-  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$PATCH_MAIN_COMMIT^")" || die "squash main commit has no first parent"
-  [[ "$PATCH_MAIN_PARENT" == "$ACTUAL_MAIN_PARENT" ]] || die "patch-equivalence receipt main parent mismatch"
+  git -C "$REPO_ROOT" rev-list --first-parent "$PATCH_MAIN_COMMIT" \
+    | awk -v base="$PATCH_MAIN_PARENT" '$0==base { found=1 } END { exit !found }' \
+    || die "patch-equivalence receipt main parent is not on the integration first-parent chain"
   PATCH_BASE="$(git -C "$REPO_ROOT" merge-base "$MERGED_HEAD" "$PATCH_MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_BASE..$MERGED_HEAD" | git patch-id --stable | awk '{print $1}')"
   MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_MAIN_PARENT..$PATCH_MAIN_COMMIT" | git patch-id --stable | awk '{print $1}')"

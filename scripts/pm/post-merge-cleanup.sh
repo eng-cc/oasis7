@@ -228,8 +228,9 @@ PY
   [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_ID" && "$EXPECTED_DELTA_SHA" == "$SYNC_DELTA_SHA" ]] || die "main-sync patch proof disagrees with patch-equivalence receipt"
   [[ "$MAIN_PARENT" == "$SYNC_INTEGRATION_PARENT" ]] || die "main-sync integration parent disagrees with patch-equivalence receipt"
   git -C "$REPO_ROOT" merge-base --is-ancestor "$SYNC_INTEGRATION_COMMIT" "$MAIN_COMMIT" || die "patch-equivalence integration commit is not contained in synchronized main"
-  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$SYNC_INTEGRATION_COMMIT^")" || die "squash main commit has no first parent"
-  [[ "$MAIN_PARENT" == "$ACTUAL_MAIN_PARENT" ]] || die "patch-equivalence receipt main parent mismatch"
+  git -C "$REPO_ROOT" rev-list --first-parent "$SYNC_INTEGRATION_COMMIT" \
+    | awk -v base="$MAIN_PARENT" '$0==base { found=1 } END { exit !found }' \
+    || die "patch-equivalence receipt main parent is not on the integration first-parent chain"
   BASE="$(git -C "$REPO_ROOT" merge-base "$BRANCH_TIP" "$MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$BASE..$BRANCH_TIP" | git patch-id --stable | awk '{print $1}')"
   MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$MAIN_PARENT..$SYNC_INTEGRATION_COMMIT" | git patch-id --stable | awk '{print $1}')"
