@@ -25,7 +25,10 @@ pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = 2 * 1024 * 1024;
 pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = FETCH_BLOB_MAX_RAW_CHUNK_BYTES
     * FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE
     + FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD;
-pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize = 64 * 1024 * 1024;
+/// Preserve the aggregate capacity of the original 64 MiB / 8 MiB budget.
+pub const FETCH_BLOB_GLOBAL_RESPONSE_FULL_PEER_WINDOWS: usize = 8;
+pub const FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW: usize =
+    FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW * FETCH_BLOB_GLOBAL_RESPONSE_FULL_PEER_WINDOWS;
 pub const FETCH_BLOB_RESPONSE_WINDOW_MS: i64 = 60_000;
 pub const FETCH_BLOB_RESPONSE_BUDGET_MAX_PEERS: usize = 256;
 
@@ -447,6 +450,10 @@ mod tests {
             fetch_blob_legacy_json_encoded_upper_bound(
                 FETCH_BLOB_MAX_RAW_CHUNK_BYTES.saturating_add(1)
             ) > FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+        );
+        assert_eq!(
+            FETCH_BLOB_GLOBAL_RESPONSE_BYTES_PER_WINDOW,
+            FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW * 8
         );
     }
 }
