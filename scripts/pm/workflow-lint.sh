@@ -393,8 +393,8 @@ if github_backed:
                   "GitHub issue comments missing claim-ready verification marker")
             check(comment_has(("Pre-PR Local Role Review: passed",), comments, uid),
                   "GitHub issue comments missing passed pre-PR local role review packet")
-            check(comment_has(("Evidence Phase: close",), comments, uid) or comment_has(("Evidence Phase: pr_watch",), comments, uid),
-                  "GitHub issue comments missing closeout or PR-watch evidence marker")
+            check(comment_has(("Evidence Phase: pre_pr_ready",), comments, uid) or comment_has(("Evidence Phase: pr_watch",), comments, uid),
+                  "GitHub issue comments missing pre-PR-ready or PR-watch evidence marker")
     if phase == "post-pr":
         check(bool(task.get("pr_url") or task.get("pull_request_url") or task.get("pr_number")),
               "GitHub-backed task missing PR evidence link")
