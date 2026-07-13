@@ -860,7 +860,7 @@ cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
       "body": "<!-- oasis7-pm-claim-verification -->\\nTask UID: $TASK_UID\\nClaim Type: ready_for_pr\\nVerification Status: verified"
     },
     {
-      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: pre_pr_ready\\nRole: tpm"
     },
     {
       "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: smoke-worktree\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl\\n"
@@ -882,7 +882,7 @@ cat > "$NO_CACHE_ISSUE_FULL" <<EOF
     },
     {
       "url": "https://github.com/example/oasis7/issues/123#issuecomment-3",
-      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: pre_pr_ready\\nRole: tpm"
     }
   ],
   "number": 123,
@@ -918,8 +918,8 @@ branch = sys.argv[4]
 
 if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create on no-cache path, got: {gh_lines}")
-if "Closes #123" not in gh_text:
-    raise SystemExit(f"expected generated no-cache PR body to close task issue #123, got: {gh_text}")
+if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
+    raise SystemExit(f"generated no-cache PR body must reference without auto-closing task issue #123, got: {gh_text}")
 if not any(line.startswith("issue list -R eng-cc/oasis7 --search") for line in gh_lines):
     raise SystemExit(f"expected no-cache GitHub issue search, got: {gh_lines}")
 if any(line.startswith("project item-edit") for line in gh_lines):
@@ -997,8 +997,8 @@ branch = sys.argv[5]
 
 if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first, got: {gh_lines}")
-if "Closes #123" not in gh_text:
-    raise SystemExit(f"expected generated PR body to close task issue #123, got: {gh_text}")
+if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
+    raise SystemExit(f"generated PR body must reference without auto-closing task issue #123, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls, got: {gh_lines}")
 if not any(line.startswith("issue edit 123 -R eng-cc/oasis7") for line in gh_lines):
@@ -1050,8 +1050,8 @@ task_uid = sys.argv[4]
 expected = f"pr create --base main --head {branch} --title Fixture PR title --body Task: {task_uid}"
 if not any(line.startswith(expected) for line in gh_lines):
     raise SystemExit(f"expected titled gh pr create to include generated body, got: {gh_lines}")
-if "Closes #123" not in gh_text:
-    raise SystemExit(f"expected titled generated PR body to close task issue #123, got: {gh_text}")
+if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
+    raise SystemExit(f"titled generated PR body must reference without auto-closing task issue #123, got: {gh_text}")
 if stderr:
     raise SystemExit(f"did not expect stderr on titled create path: {stderr}")
 PY
@@ -1104,12 +1104,12 @@ fi
 reset_project_mapping_after_record_pr
 
 bad_body_file="$TMPDIR/bad-pr-body.md"
-printf 'Task body without GitHub close linkage.\n' > "$bad_body_file"
+printf 'Task body without GitHub task reference.\n' > "$bad_body_file"
 bad_body_log="$TMPDIR/gh-bad-body.log"
 bad_body_git_log="$TMPDIR/git-bad-body.log"
 bad_body_err="$TMPDIR/bad-body.err"
 if run_prepare "$bad_body_log" "$bad_body_git_log" --create --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
-  echo "expected --body-file without close linkage to fail" >&2
+  echo "expected --body-file without task reference to fail" >&2
   exit 1
 fi
 
@@ -1127,9 +1127,22 @@ if any(line.startswith("pr create ") for line in gh_lines):
     raise SystemExit(f"expected no PR creation for bad explicit body, got: {gh_lines}")
 if any("push" in line for line in git_lines):
     raise SystemExit(f"expected no push for bad explicit body, got: {git_lines}")
-if "must include a GitHub auto-close link" not in stderr:
-    raise SystemExit(f"expected close-linkage error for bad explicit body, got: {stderr}")
+if "must include a non-closing GitHub task reference" not in stderr:
+    raise SystemExit(f"expected task-reference error for bad explicit body, got: {stderr}")
 PY
+
+for closing_link in \
+  "Closes eng-cc/oasis7#123" \
+  "Fixes https://github.com/eng-cc/oasis7/issues/123"; do
+  closing_body_file="$TMPDIR/closing-pr-body.md"
+  printf 'Refs #123\n%s\n' "$closing_link" > "$closing_body_file"
+  if run_prepare "$TMPDIR/gh-closing-body.log" "$TMPDIR/git-closing-body.log" \
+    --create --body-file "$closing_body_file" >/dev/null 2>"$TMPDIR/closing-body.err"; then
+    echo "expected qualified auto-close link to fail: $closing_link" >&2
+    exit 1
+  fi
+  grep -F 'must include a non-closing GitHub task reference' "$TMPDIR/closing-body.err" >/dev/null
+done
 
 behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
@@ -1152,8 +1165,8 @@ branch = sys.argv[5]
 
 if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first on behind-but-allowed path, got: {gh_lines}")
-if "Closes #123" not in gh_text:
-    raise SystemExit(f"expected behind path generated PR body to close task issue #123, got: {gh_text}")
+if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
+    raise SystemExit(f"generated PR must reference without auto-closing task issue before terminal finalization, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls on behind-but-allowed path, got: {gh_lines}")
 if not any(
@@ -1195,8 +1208,8 @@ branch = sys.argv[4]
 
 if not any(line.startswith(f"pr create --base main --head {branch} --fill --body Task: ") for line in gh_lines):
     raise SystemExit(f"expected gh pr create first after addressed findings, got: {gh_lines}")
-if "Closes #123" not in gh_text:
-    raise SystemExit(f"expected addressed path generated PR body to close task issue #123, got: {gh_text}")
+if "Refs #123" not in gh_text or any(token in gh_text.lower() for token in ("closes #123", "fixes #123", "resolves #123")):
+    raise SystemExit(f"generated PR must reference without auto-closing task issue before terminal finalization, got: {gh_text}")
 if not any(line.startswith("project item-edit") for line in gh_lines):
     raise SystemExit(f"expected record-pr Project field update calls after addressed findings, got: {gh_lines}")
 if "- findings disposition: addressed" not in stdout:

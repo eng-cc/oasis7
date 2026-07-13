@@ -15,13 +15,13 @@ printf '%s\n' "$*" >>"$GH_LOG"
 case "$*" in
   "project view 1 --owner fixture --format json") printf '%s\n' '{"id":"P1"}' ;;
   "project field-list 1 --owner fixture --format json")
-    printf '%s\n' '{"fields":[{"name":"Status","id":"F_STATUS","options":[{"name":"Done","id":"O_DONE"}]},{"name":"PM Status","id":"F_PM","options":[{"name":"done","id":"O_PM_DONE"}]},{"name":"Workflow Phase","id":"F_PHASE","options":[{"name":"post_merge_done","id":"O_PHASE_DONE"}]}]}' ;;
+    printf '%s\n' '{"fields":[{"name":"Status","id":"F_STATUS","options":[{"name":"Done","id":"O_DONE"}]},{"name":"PM Status","id":"F_PM","options":[{"name":"done","id":"O_PM_DONE"}]},{"name":"Workflow Phase","id":"F_PHASE","options":[{"name":"done","id":"O_PHASE_DONE"}]}]}' ;;
   project\ item-edit*)
     field=""; prev=""; for arg in "$@"; do [[ "$prev" == --field-id ]] && field="$arg"; prev="$arg"; done
     printf '%s\n' "$field" >>"$EDIT_LOG"; printf '%s\n' "$field" >>"$REMOTE_STATE"; printf '%s\n' '{}'
     if [[ "$(wc -l <"$REMOTE_STATE" | tr -d ' ')" == 3 && ! -e "$CRASHED" ]]; then : >"$CRASHED"; kill -KILL "$PPID"; fi ;;
   "project item-list 1 --owner fixture --limit 1000 --format json")
-    printf '%s\n' '{"items":[{"id":"ITEM1","status":"Done","pm status":"done","workflow phase":"post_merge_done"}]}' ;;
+    printf '%s\n' '{"items":[{"id":"ITEM1","status":"Done","pm status":"done","workflow phase":"done"}]}' ;;
   issue\ comment*)
     prev=""; for arg in "$@"; do [[ "$prev" == --body-file ]] && cp "$arg" "$LIVE_BODY"; prev="$arg"; done
     printf '%s\n' 'https://example.invalid/issues/11#issuecomment-1' ;;

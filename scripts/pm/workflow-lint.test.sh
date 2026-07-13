@@ -139,7 +139,7 @@ case "\$*" in
 {"comments":[
 {"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: $GITHUB_UID\nClaim Type: ready_for_pr\nVerification Status: verified"},
 {"body":"Pre-PR Local Role Review: passed\nTask UID: $GITHUB_UID\nReview Findings Disposition: no_findings"},
-{"body":"<!-- oasis7-pm-evidence -->\nTask UID: $GITHUB_UID\nEvidence Phase: close\nRole: tpm"}
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: $GITHUB_UID\nEvidence Phase: pre_pr_ready\nRole: tpm"}
 ]}
 JSON
     ;;
@@ -204,7 +204,7 @@ JSON
 {"number":123,"title":"GitHub-backed fixture","url":"https://github.com/eng-cc/oasis7/issues/123","body":"<!-- oasis7-pm-task -->\ntask_uid: task_33333333333333333333333333333333\n\nTask metadata:\n- owner_role: \`tpm\`\n- module: \`engineering\`\n- status: \`ready\`\n- priority: \`P2\`\n- worktree_hint: \`/tmp/github-backed-fixture\`\n","comments":[
 {"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-1","body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_33333333333333333333333333333333\nClaim Type: ready_for_pr\nVerification Status: verified"},
 {"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-2","body":"Pre-PR Local Role Review: passed\nTask UID: task_33333333333333333333333333333333\nReview Findings Disposition: no_findings"},
-{"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-3","body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: close\nRole: tpm"}
+{"url":"https://github.com/eng-cc/oasis7/issues/123#issuecomment-3","body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: pre_pr_ready\nRole: tpm"}
 ]}
 JSON
     ;;
@@ -213,7 +213,7 @@ JSON
 {"comments":[
 {"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_33333333333333333333333333333333\nClaim Type: ready_for_pr\nVerification Status: verified"},
 {"body":"Pre-PR Local Role Review: passed\nTask UID: task_33333333333333333333333333333333\nReview Findings Disposition: no_findings"},
-{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: close\nRole: tpm"}
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_33333333333333333333333333333333\nEvidence Phase: pre_pr_ready\nRole: tpm"}
 ]}
 JSON
     ;;
@@ -273,7 +273,7 @@ case "$*" in
 {"comments":[
 {"body":"<!-- oasis7-pm-claim-verification -->\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nClaim Type: ready_for_pr\nVerification Status: verified"},
 {"body":"Pre-PR Local Role Review: passed\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nReview Findings Disposition: no_findings"},
-{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nEvidence Phase: close\nRole: tpm"}
+{"body":"<!-- oasis7-pm-evidence -->\nTask UID: task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nEvidence Phase: pre_pr_ready\nRole: tpm"}
 ]}
 JSON
     ;;

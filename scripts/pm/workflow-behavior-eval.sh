@@ -52,6 +52,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+run_interrupt_isolated() {
+  "$@"
+  : "caller-survived"
+}
+
 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$ROOT_DIR" --state "$PM_ROLE_SNAPSHOT_DIR" --pathspec .pm
 
@@ -71,7 +76,7 @@ fi
 "$ROOT_DIR/scripts/pm/lint.test.sh" >/dev/null
 
 "$ROOT_DIR/scripts/pm/new-task-worktree-bootstrap-smoke.sh" --json > "$TASK_WORKTREE_JSON_FILE"
-"$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/null
+run_interrupt_isolated "$ROOT_DIR/scripts/pm/github-project-task.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-sync.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-workflow.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/github-project-retire-tasks.test.sh" >/dev/null
