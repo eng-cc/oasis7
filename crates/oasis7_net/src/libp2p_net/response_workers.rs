@@ -6,13 +6,16 @@ use futures::channel::mpsc as futures_mpsc;
 use libp2p::request_response;
 use libp2p::swarm::Swarm;
 use oasis7_proto::distributed::DistributedErrorCode;
+#[cfg(test)]
+use oasis7_proto::distributed_net::FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+use oasis7_proto::distributed_net::{
+    FETCH_BLOB_MAX_RAW_CHUNK_BYTES, fetch_blob_legacy_json_encoded_upper_bound,
+};
 
 use crate::error::WorldError;
 use oasis7_proto::distributed_net::NetworkResponse;
 
-use super::response_budget::{
-    FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW, FetchBlobResponseBudget, budgeted_response_bytes,
-};
+use super::response_budget::{FetchBlobResponseBudget, budgeted_response_bytes};
 use super::{Behaviour, Handler};
 
 const CONTROL_QUEUE_CAPACITY: usize = 32;
@@ -26,11 +29,8 @@ const CONTROL_MAX_IN_FLIGHT: usize = CONTROL_QUEUE_CAPACITY + CONTROL_WORKERS;
 const HEAD_MAX_IN_FLIGHT: usize = HEAD_QUEUE_CAPACITY + HEAD_WORKERS;
 const BLOB_MAX_IN_FLIGHT: usize = BLOB_QUEUE_CAPACITY + BLOB_WORKERS;
 const BLOB_MAX_IN_FLIGHT_BYTES: usize = 80 * 1024 * 1024;
-const FETCH_BLOB_MAX_RESPONSE_BYTES: usize = FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+const FETCH_BLOB_MAX_RESPONSE_BYTES: usize = FETCH_BLOB_MAX_RAW_CHUNK_BYTES;
 const FETCH_COMMIT_HEAD_PROTOCOL: &str = "/aw/node/replication/fetch-commit/head/1.0.0";
-// `FetchBlobResponse` is JSON and serializes every byte as a decimal array element. Reserve the
-// truthful worst case (`255,` per byte) plus fixed object fields before a worker allocates it.
-const FETCH_BLOB_JSON_RESPONSE_FIXED_OVERHEAD: usize = 1024;
 
 #[derive(Clone, Copy)]
 enum ResponseLane {
@@ -345,9 +345,7 @@ fn response_reservation_bytes(protocol: &str, payload: &[u8]) -> Result<usize, W
             retryable: false,
         });
     }
-    Ok(requested
-        .saturating_mul(4)
-        .saturating_add(FETCH_BLOB_JSON_RESPONSE_FIXED_OVERHEAD))
+    Ok(fetch_blob_legacy_json_encoded_upper_bound(requested))
 }
 
 fn response(
@@ -520,9 +518,15 @@ mod tests {
         )
         .expect("valid maximum raw range");
         assert!(encoded > FETCH_BLOB_MAX_RESPONSE_BYTES);
-        let first = workers.reserve("fetch-blob", encoded).expect("first fits");
-        let second = workers.reserve("fetch-blob", encoded).expect("second fits");
+        let reservation_count = BLOB_MAX_IN_FLIGHT_BYTES / encoded;
+        let reservations = (0..reservation_count)
+            .map(|_| {
+                workers
+                    .reserve("fetch-blob", encoded)
+                    .expect("encoded range fits")
+            })
+            .collect::<Vec<_>>();
         assert!(workers.reserve("fetch-blob", encoded).is_none());
-        drop((first, second));
+        drop(reservations);
     }
 }

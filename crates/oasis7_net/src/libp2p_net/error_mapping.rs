@@ -69,11 +69,8 @@ pub fn classify_world_error_availability(err: &WorldError) -> Libp2pAvailability
         WorldError::NetworkRequestFailed {
             code,
             message,
-            retryable,
+            retryable: _,
         } => {
-            if *retryable {
-                return Libp2pAvailabilityClass::RetryableGap;
-            }
             let classified = classify_protocol_unavailable(message);
             if matches!(classified, Libp2pAvailabilityClass::RetryableGap) {
                 return classified;
@@ -151,6 +148,7 @@ fn protocol_unavailable_is_retryable_gap(protocol: &str) -> bool {
         || protocol.contains("request failed: ConnectionClosed")
         || protocol.contains("request failed: DialFailure")
         || protocol.contains("request failed: Timeout")
+        || protocol.contains("UnexpectedEof")
 }
 
 #[cfg(test)]
@@ -170,6 +168,17 @@ mod tests {
             Libp2pAvailabilityClass::RetryableGap
         );
         assert!(world_error_is_retryable_connection_gap(&err));
+
+        let generic_retryable = WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrNotAvailable,
+            message: "remote temporarily unavailable".to_string(),
+            retryable: true,
+        };
+        assert_eq!(
+            classify_world_error_availability(&generic_retryable),
+            Libp2pAvailabilityClass::Other
+        );
+        assert!(!world_error_is_retryable_connection_gap(&generic_retryable));
     }
 
     #[test]

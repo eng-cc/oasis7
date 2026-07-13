@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::execution_hook::NodeExecutionHook;
 use crate::replication::{
-    FetchBlobRequest, FetchBlobResponse, REPLICATION_FETCH_BLOB_PROTOCOL, load_blob_range_from_root,
+    FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, REPLICATION_FETCH_BLOB_PROTOCOL,
+    load_blob_range_from_root,
 };
 use crate::replication::{
     GossipReplicationMessage, NodeReplicationConfig, ReplicationRuntime,
@@ -15,7 +16,27 @@ use crate::{network_bad_request, network_internal_error};
 use oasis7_proto::distributed_net::DistributedNetwork;
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 
-pub(super) const FETCH_BLOB_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
+pub(super) const FETCH_BLOB_MAX_RESPONSE_BYTES: u64 =
+    oasis7_proto::distributed_net::FETCH_BLOB_MAX_RAW_CHUNK_BYTES as u64;
+
+pub(super) fn admit_fetch_commit_request(
+    payload: &[u8],
+    world_id: &str,
+    replication: &NodeReplicationConfig,
+) -> Result<FetchCommitRequest, ProtoWorldError> {
+    let request = serde_json::from_slice::<FetchCommitRequest>(payload)
+        .map_err(|err| network_bad_request(format!("decode fetch-commit request failed: {err}")))?;
+    if request.world_id != world_id {
+        return Err(network_bad_request(format!(
+            "fetch-commit world mismatch: expected={world_id}, got={}",
+            request.world_id
+        )));
+    }
+    replication
+        .authorize_fetch_commit_request(&request)
+        .map_err(|err| network_bad_request(format!("fetch-commit authorization failed: {err}")))?;
+    Ok(request)
+}
 
 pub(super) fn validated_fetch_blob_range(
     offset_bytes: Option<u64>,

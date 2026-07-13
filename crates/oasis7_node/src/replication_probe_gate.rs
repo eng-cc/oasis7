@@ -1,7 +1,8 @@
 use super::*;
 use crate::node_engine_gap_sync_outcome::GapSyncHeightOutcome;
 
-const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize = 2 * 1024 * 1024;
+const REPLICATION_FETCH_BLOB_CHUNK_BYTES: usize =
+    oasis7_proto::distributed_net::FETCH_BLOB_MAX_RAW_CHUNK_BYTES;
 const STORAGE_CHALLENGE_FETCH_BLOB_REQUEST_TIMEOUT_MS: u64 = 2_000;
 const STORAGE_CHALLENGE_FETCH_BLOB_RETRY_BUDGET_MS: u64 = 3_000;
 

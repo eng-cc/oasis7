@@ -67,6 +67,7 @@ mod pos_engine_gossip;
 mod pos_schedule;
 mod pos_state_store;
 mod pos_validation;
+mod provider_publication_queue;
 mod replica_maintenance_support;
 mod replication;
 mod replication_fetch_handler_support;
@@ -137,6 +138,7 @@ use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
 use node_runtime_core::RuntimeState;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
+use provider_publication_queue::ProviderPublicationQueue;
 use replica_maintenance_support::maybe_run_runtime_replica_maintenance_poll;
 use replication::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
@@ -147,7 +149,8 @@ use replication::{
 #[cfg(test)]
 use replication_fetch_handler_support::should_export_checkpoint_for_fetch_commit;
 use replication_fetch_handler_support::{
-    attach_checkpoint_for_fetch_commit_if_boundary, register_fetch_blob_handler,
+    admit_fetch_commit_request, attach_checkpoint_for_fetch_commit_if_boundary,
+    register_fetch_blob_handler,
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
@@ -804,31 +807,28 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         let commit_execution_hook = execution_hook.clone();
         let commit_handle = handle.clone();
         let commit_network_policy = network_policy.clone();
+        let commit_admission_world_id = commit_world_id.clone();
+        let commit_admission_config = commit_replication_config.clone();
+        let provider_publications = ProviderPublicationQueue::new();
         network
-            .register_handler(
+            .register_handler_with_admission(
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
                 Box::new(move |payload| {
-                    let request =
-                        serde_json::from_slice::<FetchCommitRequest>(payload).map_err(|err| {
-                            network_bad_request(format!(
-                                "decode fetch-commit request failed: {}",
-                                err
-                            ))
-                        })?;
-                    if request.world_id != commit_world_id {
-                        return Err(network_bad_request(format!(
-                            "fetch-commit world mismatch: expected={}, got={}",
-                            commit_world_id, request.world_id
-                        )));
-                    }
-                    commit_replication_config
-                        .authorize_fetch_commit_request(&request)
-                        .map_err(|err| {
-                            network_bad_request(format!(
-                                "fetch-commit authorization failed: {}",
-                                err
-                            ))
-                        })?;
+                    admit_fetch_commit_request(
+                        payload,
+                        commit_admission_world_id.as_str(),
+                        &commit_admission_config,
+                    )
+                    .map(|_| ())
+                }),
+                Box::new(move |payload| {
+                    // Keep the same check at execution time: admission protects scarce
+                    // workers, while this closes any adapter or scheduling gap.
+                    let request = admit_fetch_commit_request(
+                        payload,
+                        commit_world_id.as_str(),
+                        &commit_replication_config,
+                    )?;
                     let message = load_commit_message_from_root(
                         commit_root_dir.as_path(),
                         commit_world_id.as_str(),
@@ -855,9 +855,11 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
                             let publish_network_policy = commit_network_policy.clone();
                             let publish_root_dir = commit_root_dir.clone();
                             let publish_world_id = commit_world_id.clone();
-                            let _ = thread::Builder::new()
-                                .name("replication-fetch-commit-provider-publish".to_string())
-                                .spawn(move || {
+                            let publication_key = format!(
+                                "{}:{}:{}",
+                                publish_world_id, payload_content_hash, request.height
+                            );
+                            let _ = provider_publications.enqueue(publication_key, move || {
                                     publish_handle.publish_local_content_provider_best_effort(
                                         &publish_network_policy,
                                         publish_world_id.as_str(),

@@ -11,6 +11,25 @@ pub const CONSENSUS_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 256;
 pub const SYNC_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 1024;
 pub const BLOB_STATE_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 128;
 pub const CONTROL_LANE_SUBSCRIPTION_INBOX_MAX_MESSAGES: usize = 64;
+/// Per-peer fetch-blob response egress window.  Kept here so request sizing and
+/// transport accounting cannot drift apart.
+pub const FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW: usize = 8 * 1024 * 1024;
+/// A legacy JSON byte-array can encode each input byte as `255,`.
+pub const FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE: usize = 4;
+/// Conservative envelope reserve for `FetchBlobResponse` fields and future
+/// compatible metadata.
+pub const FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD: usize = 1024;
+/// Largest raw chunk that is guaranteed to fit the peer egress window even
+/// when every byte uses the legacy JSON worst case.
+pub const FETCH_BLOB_MAX_RAW_CHUNK_BYTES: usize = (FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+    - FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD)
+    / FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE;
+
+pub fn fetch_blob_legacy_json_encoded_upper_bound(raw_bytes: usize) -> usize {
+    raw_bytes
+        .saturating_mul(FETCH_BLOB_LEGACY_JSON_MAX_ENCODED_BYTES_PER_RAW_BYTE)
+        .saturating_add(FETCH_BLOB_LEGACY_JSON_RESPONSE_FIXED_OVERHEAD)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -359,5 +378,18 @@ mod tests {
             !NetworkLane::BlobState.allows_role(PeerNodeRole::Relay, NetworkLaneOperation::Serve)
         );
         assert!(NetworkLane::Control.allows_role(PeerNodeRole::Relay, NetworkLaneOperation::Serve));
+    }
+
+    #[test]
+    fn fetch_blob_legacy_chunk_bound_fits_the_peer_window() {
+        assert!(
+            fetch_blob_legacy_json_encoded_upper_bound(FETCH_BLOB_MAX_RAW_CHUNK_BYTES)
+                <= FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+        );
+        assert!(
+            fetch_blob_legacy_json_encoded_upper_bound(
+                FETCH_BLOB_MAX_RAW_CHUNK_BYTES.saturating_add(1)
+            ) > FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW
+        );
     }
 }

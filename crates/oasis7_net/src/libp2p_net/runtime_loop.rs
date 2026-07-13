@@ -70,6 +70,7 @@ pub(super) fn request_failure_world_error(
     error: request_response::OutboundFailure,
     message: String,
 ) -> WorldError {
+    let failure_detail = format!("{error:?}");
     let retryable = match error {
         request_response::OutboundFailure::ConnectionClosed
         | request_response::OutboundFailure::DialFailure
@@ -82,7 +83,7 @@ pub(super) fn request_failure_world_error(
     if retryable {
         WorldError::NetworkRequestFailed {
             code: DistributedErrorCode::ErrNotAvailable,
-            message,
+            message: format!("{message}: {failure_detail}"),
             retryable: true,
         }
     } else {
