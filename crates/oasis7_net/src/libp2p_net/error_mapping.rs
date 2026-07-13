@@ -17,7 +17,10 @@ pub(super) fn error_response_from_world_error(err: &WorldError) -> ErrorResponse
             message,
             retryable,
         } => ErrorResponse {
-            code: *code,
+            code: match code {
+                DistributedErrorCode::ErrOverloaded => DistributedErrorCode::ErrBusy,
+                code => *code,
+            },
             message: message.clone(),
             retryable: *retryable,
         },
@@ -159,6 +162,47 @@ fn protocol_unavailable_is_retryable_gap(protocol: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    enum LegacyV1DistributedErrorCode {
+        ErrNotFound,
+        ErrBadRequest,
+        ErrInvalidHash,
+        ErrStateMismatch,
+        ErrUnsupported,
+        ErrUnauthorized,
+        ErrBusy,
+        ErrRateLimited,
+        ErrTimeout,
+        ErrNotAvailable,
+    }
+
+    #[derive(Debug, PartialEq, Eq, Deserialize)]
+    struct LegacyV1ErrorResponse {
+        code: LegacyV1DistributedErrorCode,
+        message: String,
+        retryable: bool,
+    }
+
+    #[test]
+    fn overload_response_remains_decodable_by_legacy_v1_peers_as_busy() {
+        let current_error = WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrOverloaded,
+            message: "response worker overloaded; retry shortly".to_string(),
+            retryable: true,
+        };
+        let current_response = error_response_from_world_error(&current_error);
+        let payload = crate::util::to_canonical_cbor(&current_response)
+            .expect("serialize current overload response");
+
+        let legacy_response: LegacyV1ErrorResponse = serde_cbor::from_slice(&payload)
+            .expect("legacy v1 peer must decode overload response as ERR_BUSY");
+        assert_eq!(legacy_response.code, LegacyV1DistributedErrorCode::ErrBusy);
+        assert_eq!(legacy_response.message, current_response.message);
+        assert!(legacy_response.retryable);
+    }
 
     #[test]
     fn world_error_availability_classifies_retryable_request_failures() {

@@ -415,7 +415,7 @@ fn timed_out_handlers_keep_the_fixed_execution_pool_bounded_until_they_exit() {
 }
 
 #[test]
-fn saturated_blob_queue_returns_a_retryable_overload_response() {
+fn saturated_blob_queue_returns_a_legacy_compatible_retryable_busy_response() {
     let server = Libp2pNetwork::new(Libp2pNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen addr")],
         ..Libp2pNetworkConfig::default()
@@ -468,14 +468,14 @@ fn saturated_blob_queue_returns_a_retryable_overload_response() {
         .filter_map(Result::ok)
         .filter_map(|response| serde_cbor::from_slice::<ErrorResponse>(&response).ok())
         .filter(|error| {
-            error.code == DistributedErrorCode::ErrOverloaded
+            error.code == DistributedErrorCode::ErrBusy
                 && error.retryable
                 && error.message.contains("response worker overloaded")
         })
         .collect();
     assert!(
         !overloads.is_empty(),
-        "a saturated requester must receive a retryable overload response"
+        "a saturated requester must receive a legacy-compatible retryable busy response with overload context"
     );
 }
 
