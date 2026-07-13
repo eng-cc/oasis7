@@ -1,5 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
 mod api;
 mod config;
 mod connection_lifecycle;
@@ -43,8 +45,7 @@ use discovery::{
     peer_record_enables_rendezvous, peer_record_world_id, process_discovered_peer_record,
     publish_discovery_provider, start_peer_discovery_query,
 };
-use futures::channel::mpsc;
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, StreamExt, channel::mpsc};
 use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
@@ -73,11 +74,10 @@ pub use reachability::{
     LiveTransportKind, LiveTransportTransition, LiveTransportTransitionCounters,
 };
 use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snapshot_clone};
-use response_budget::FetchBlobResponseBudget;
 use response_workers::ResponseWorkers;
 use runtime_loop::{
-    Command, CommandContext, CommandOutcome, CommandStateRefs, PendingResponse,
-    fail_pending_request, handle_command,
+    Command, CommandContext, CommandOutcome, CommandResponseSender, CommandStateRefs, Handler,
+    PendingResponse, fail_pending_request, handle_command,
 };
 #[cfg(test)]
 use runtime_loop::{
@@ -108,7 +108,6 @@ use utils::{
     try_send_command,
 };
 use wire_bytes::{SharedLibp2pWireByteCounters, init_shared_wire_byte_counters};
-type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
 #[derive(Clone)]
 pub struct Libp2pNetwork {
     peer_id: PeerId,
@@ -124,8 +123,8 @@ pub struct Libp2pNetwork {
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
     traffic_metrics: SharedLibp2pTrafficMetrics,
     wire_byte_counters: SharedLibp2pWireByteCounters,
+    shutdown_guard: Arc<()>,
 }
-type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
         let keypair = config
@@ -188,8 +187,8 @@ impl Libp2pNetwork {
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
             let mut handlers: HashMap<String, Handler> = HashMap::new();
-            let mut fetch_blob_response_budget = FetchBlobResponseBudget::default();
-            let (response_workers, mut completed_response_rx) = ResponseWorkers::new();
+            let (response_workers, mut completed_response_rx, mut fetch_blob_response_budget) =
+                ResponseWorkers::new(config_clone.request_response_timeout);
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
                 HashMap::new();
             let mut pending_peer_record_requests: HashMap<
@@ -367,7 +366,7 @@ impl Libp2pNetwork {
                                                         if let Err(rejected) = response_workers.schedule(channel, request.protocol, peer, request.payload, now_ms(), handler) {
                                                             let protocol = rejected.protocol;
                                                             let peer = rejected.peer;
-                                                            response_workers.send_immediate(rejected.channel, protocol.as_str(), peer, Err(ResponseWorkers::overload_response()), &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
+                                                            response_workers.send_immediate(rejected.channel, protocol.as_str(), peer, Err(rejected.reply), &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
                                                             push_bounded_clone(&event_errors, format!("libp2p response worker queue full protocol={protocol} peer={peer}"), max_error_messages, "lock errors");
                                                         }
                                                         continue;
@@ -1191,6 +1190,7 @@ impl Libp2pNetwork {
             reachability,
             traffic_metrics,
             wire_byte_counters,
+            shutdown_guard: Arc::new(()),
         }
     }
 }

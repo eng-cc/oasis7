@@ -230,6 +230,20 @@ pub(crate) fn load_blob_from_root(
     }
 }
 
+pub(crate) fn load_blob_range_from_root(
+    root_dir: &Path,
+    content_hash: &str,
+    offset: u64,
+    limit: usize,
+) -> Result<Option<(Vec<u8>, bool)>, NodeError> {
+    let store = LocalCasStore::new(root_dir.join("store"));
+    match store.get_range(content_hash, offset, limit) {
+        Ok(range) => Ok(Some(range)),
+        Err(WorldError::BlobNotFound { .. }) => Ok(None),
+        Err(err) => Err(distfs_error_to_node_error(err)),
+    }
+}
+
 pub(super) fn load_json_or_default<T>(path: &Path) -> Result<T, NodeError>
 where
     T: for<'de> Deserialize<'de> + Default,

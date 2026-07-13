@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zstd::stream::{decode_all as zstd_decode_all, encode_all as zstd_encode_all};
@@ -145,6 +146,40 @@ impl LocalCasStore {
             });
         }
         Ok(bytes)
+    }
+
+    pub fn get_range(
+        &self,
+        content_hash: &str,
+        offset: u64,
+        limit: usize,
+    ) -> Result<(Vec<u8>, bool), WorldError> {
+        let path = self.blob_path(content_hash)?;
+        let mut file = match fs::File::open(path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Err(WorldError::BlobNotFound {
+                    content_hash: content_hash.to_string(),
+                });
+            }
+            Err(err) => return Err(err.into()),
+        };
+        let mut prefix = [0u8; COMPRESSED_BLOB_HEADER_LEN];
+        let prefix_len = file.read(&mut prefix)?;
+        if prefix_len == COMPRESSED_BLOB_HEADER_LEN && prefix.starts_with(COMPRESSED_BLOB_MAGIC) {
+            if &prefix[16..COMPRESSED_BLOB_HEADER_LEN] != content_hash.as_bytes() {
+                return Err(WorldError::BlobHashInvalid {
+                    content_hash: content_hash.to_string(),
+                });
+            }
+            let raw_len = u64::from_le_bytes(prefix[8..16].try_into().unwrap_or([0; 8]));
+            let mut decoder = zstd::stream::read::Decoder::new(file)?;
+            return read_range(&mut decoder, offset, limit, raw_len);
+        }
+
+        let raw_len = file.metadata()?.len();
+        file.seek(SeekFrom::Start(offset))?;
+        read_range(&mut file, offset, limit, raw_len)
     }
 
     fn hash_hex(&self, bytes: &[u8]) -> String {
@@ -526,6 +561,36 @@ impl LocalCasStore {
         }
         Ok(hashes)
     }
+}
+
+fn read_range(
+    reader: &mut impl Read,
+    offset: u64,
+    limit: usize,
+    raw_len: u64,
+) -> Result<(Vec<u8>, bool), WorldError> {
+    if offset >= raw_len {
+        return Ok((Vec::new(), true));
+    }
+    let mut skipped = 0u64;
+    let mut discard = [0u8; 8192];
+    while skipped < offset {
+        let remaining = usize::try_from(offset.saturating_sub(skipped)).unwrap_or(usize::MAX);
+        let discard_len = discard.len().min(remaining);
+        let read = reader.read(&mut discard[..discard_len])?;
+        if read == 0 {
+            return Ok((Vec::new(), true));
+        }
+        skipped = skipped.saturating_add(read as u64);
+    }
+    let remaining = usize::try_from(raw_len.saturating_sub(offset)).unwrap_or(usize::MAX);
+    let bytes_to_read = limit.min(remaining);
+    let mut bytes = vec![0; bytes_to_read];
+    reader.read_exact(bytes.as_mut_slice())?;
+    Ok((
+        bytes,
+        offset.saturating_add(bytes_to_read as u64) >= raw_len,
+    ))
 }
 
 impl BlobStore for LocalCasStore {

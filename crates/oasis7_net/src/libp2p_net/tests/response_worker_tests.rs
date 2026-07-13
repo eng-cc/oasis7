@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 const FETCH_BLOB: &str = "/aw/node/replication/fetch-blob/1.0.0";
 const GET_HEAD: &str = "/aw/rr/1.0.0/get_world_head";
 const FETCH_COMMIT: &str = "/aw/node/replication/fetch-commit/1.0.0";
+const FETCH_COMMIT_HEAD: &str = "/aw/node/replication/fetch-commit/head/1.0.0";
 
 fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool) {
     while Instant::now() < deadline {
@@ -21,6 +22,7 @@ fn wait_until(what: &str, deadline: Instant, mut condition: impl FnMut() -> bool
 fn slow_blob_handler_does_not_block_head_or_commit_responses() {
     let server = Libp2pNetwork::new(Libp2pNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen addr")],
+        request_response_timeout: Duration::from_secs(2),
         ..Libp2pNetworkConfig::default()
     });
     wait_until(
@@ -54,6 +56,7 @@ fn slow_blob_handler_does_not_block_head_or_commit_responses() {
 
     let client = Libp2pNetwork::new(Libp2pNetworkConfig {
         bootstrap_peers: vec![server_addr],
+        request_response_timeout: Duration::from_secs(2),
         ..Libp2pNetworkConfig::default()
     });
     wait_until(
@@ -92,6 +95,94 @@ fn slow_blob_handler_does_not_block_head_or_commit_responses() {
             .expect("blob request thread")
             .expect("blob response"),
         b"blob"
+    );
+}
+
+#[test]
+fn slow_fetch_commit_handlers_do_not_block_fetch_commit_head() {
+    let server = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen addr")],
+        request_response_timeout: Duration::from_secs(2),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "server listen",
+        Instant::now() + Duration::from_secs(5),
+        || !server.listening_addrs().is_empty(),
+    );
+    let server_addr = server
+        .listening_addrs()
+        .into_iter()
+        .next()
+        .expect("server address")
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+    let (started_tx, started_rx) = mpsc::channel();
+    server
+        .register_handler(
+            FETCH_COMMIT,
+            Box::new(move |_| {
+                started_tx.send(()).expect("report slow commit start");
+                std::thread::sleep(Duration::from_millis(400));
+                Ok(b"commit".to_vec())
+            }),
+        )
+        .expect("register fetch-commit handler");
+    server
+        .register_handler(FETCH_COMMIT_HEAD, Box::new(|_| Ok(b"head".to_vec())))
+        .expect("register fetch-commit/head handler");
+
+    let client = Libp2pNetwork::new(Libp2pNetworkConfig {
+        bootstrap_peers: vec![server_addr],
+        request_response_timeout: Duration::from_secs(2),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "client connect",
+        Instant::now() + Duration::from_secs(5),
+        || client.connected_peers().contains(&server.peer_id()),
+    );
+
+    let first_client = client.clone();
+    let first_peer = server.peer_id();
+    let first = std::thread::spawn(move || {
+        first_client.request_to_peer(FETCH_COMMIT, b"first", first_peer)
+    });
+    let second_client = client.clone();
+    let second_peer = server.peer_id();
+    let second = std::thread::spawn(move || {
+        second_client.request_to_peer(FETCH_COMMIT, b"second", second_peer)
+    });
+    started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("first slow fetch-commit handler started");
+    started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("second slow fetch-commit handler started");
+
+    let deadline = Instant::now() + Duration::from_millis(300);
+    assert_eq!(
+        client
+            .request_to_peer(FETCH_COMMIT_HEAD, b"head", server.peer_id())
+            .expect("fetch-commit/head response"),
+        b"head"
+    );
+    assert!(
+        Instant::now() < deadline,
+        "fetch-commit/head waited for the saturated fetch-commit workers"
+    );
+    assert_eq!(
+        first
+            .join()
+            .expect("first fetch-commit thread")
+            .expect("first fetch-commit response"),
+        b"commit"
+    );
+    assert_eq!(
+        second
+            .join()
+            .expect("second fetch-commit thread")
+            .expect("second fetch-commit response"),
+        b"commit"
     );
 }
 
@@ -144,6 +235,105 @@ fn timed_out_slow_response_surfaces_as_retryable_transport_failure() {
             ..
         }
     ));
+}
+
+#[test]
+fn expired_queued_requests_skip_handlers_and_release_worker_capacity() {
+    let started_slow_handlers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let server = Libp2pNetwork::new(Libp2pNetworkConfig {
+        listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen addr")],
+        request_response_timeout: Duration::from_millis(50),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "server listen",
+        Instant::now() + Duration::from_secs(5),
+        || !server.listening_addrs().is_empty(),
+    );
+    let server_addr = server
+        .listening_addrs()
+        .into_iter()
+        .next()
+        .expect("server address")
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+    let (started_tx, started_rx) = mpsc::channel();
+    let handler_count = Arc::clone(&started_slow_handlers);
+    server
+        .register_handler(
+            FETCH_COMMIT,
+            Box::new(move |payload| {
+                if payload == b"slow" {
+                    handler_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    started_tx.send(()).expect("report slow handler start");
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+                Ok(payload.to_vec())
+            }),
+        )
+        .expect("register fetch-commit handler");
+
+    let short_client = Libp2pNetwork::new(Libp2pNetworkConfig {
+        bootstrap_peers: vec![server_addr.clone()],
+        request_response_timeout: Duration::from_millis(50),
+        ..Libp2pNetworkConfig::default()
+    });
+    let long_client = Libp2pNetwork::new(Libp2pNetworkConfig {
+        bootstrap_peers: vec![server_addr],
+        request_response_timeout: Duration::from_secs(2),
+        ..Libp2pNetworkConfig::default()
+    });
+    wait_until(
+        "short client connect",
+        Instant::now() + Duration::from_secs(5),
+        || short_client.connected_peers().contains(&server.peer_id()),
+    );
+    wait_until(
+        "long client connect",
+        Instant::now() + Duration::from_secs(5),
+        || long_client.connected_peers().contains(&server.peer_id()),
+    );
+
+    let mut slow_requests = Vec::new();
+    for _ in 0..2 {
+        let client = short_client.clone();
+        let peer = server.peer_id();
+        slow_requests.push(std::thread::spawn(move || {
+            client.request_to_peer(FETCH_COMMIT, b"slow", peer)
+        }));
+    }
+    started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("first slow handler started");
+    started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("second slow handler started");
+    let peer = server.peer_id();
+    let queued_client = short_client.clone();
+    let queued =
+        std::thread::spawn(move || queued_client.request_to_peer(FETCH_COMMIT, b"slow", peer));
+
+    for request in slow_requests {
+        request
+            .join()
+            .expect("slow request thread")
+            .expect_err("slow request must time out");
+    }
+    queued
+        .join()
+        .expect("queued request thread")
+        .expect_err("queued request must time out");
+    std::thread::sleep(Duration::from_millis(250));
+    assert_eq!(
+        started_slow_handlers.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "expired queued request must not execute the expensive handler"
+    );
+    assert_eq!(
+        long_client
+            .request_to_peer(FETCH_COMMIT, b"fast", server.peer_id())
+            .expect("released worker capacity serves the next request"),
+        b"fast"
+    );
 }
 
 #[test]

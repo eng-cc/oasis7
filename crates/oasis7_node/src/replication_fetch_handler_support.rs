@@ -9,6 +9,22 @@ use crate::replication::{
 use crate::replication_state_reconcile::parse_replication_commit_payload;
 use crate::{NodeError, REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL};
 
+pub(super) const FETCH_BLOB_MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
+
+pub(super) fn validated_fetch_blob_range(
+    offset_bytes: Option<u64>,
+    limit_bytes: Option<u64>,
+) -> Result<(u64, usize), String> {
+    let offset = offset_bytes.unwrap_or(0);
+    let limit = limit_bytes.unwrap_or(FETCH_BLOB_MAX_RESPONSE_BYTES);
+    if limit == 0 || limit > FETCH_BLOB_MAX_RESPONSE_BYTES {
+        return Err(format!(
+            "fetch-blob requested response bytes must be within 1..={FETCH_BLOB_MAX_RESPONSE_BYTES}"
+        ));
+    }
+    Ok((offset, usize::try_from(limit).unwrap_or(usize::MAX)))
+}
+
 pub(super) fn attach_checkpoint_for_fetch_commit_if_boundary(
     message: Option<GossipReplicationMessage>,
     execution_hook: Option<&Arc<Mutex<Box<dyn NodeExecutionHook>>>>,

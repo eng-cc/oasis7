@@ -16,17 +16,19 @@ use super::peer_manager_active_set::{
 };
 use super::traffic_metrics::{record_gossip_outbound, record_request_outbound};
 use super::{
-    Behaviour, CommandResponseSender, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, Handler, Keypair,
-    Libp2pReachabilitySnapshot, MembershipDirectorySnapshot, NetworkMessage, NetworkRequest,
-    PeerManagerBlockArtifact, PeerManagerHealthIssue, PeerManagerHealthStatus,
-    PeerManagerPeerHealth, PeerManagerPolicy, PeerRecord, PendingDhtQuery,
-    PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord, TransportPath, WorldError,
-    WorldHeadAnnounce, classify_network_protocol, classify_network_topic,
-    maybe_discover_rendezvous_namespace, maybe_register_rendezvous_namespace,
-    maybe_request_cached_discovery_peers, now_ms, publish_configured_peer_record,
-    publish_discovery_provider, push_bounded_clone, put_record_query, should_republish,
-    start_peer_discovery_query,
+    Behaviour, DEFAULT_SUBSCRIPTION_INBOX_MAX_MESSAGES, Keypair, Libp2pReachabilitySnapshot,
+    MembershipDirectorySnapshot, NetworkMessage, NetworkRequest, PeerManagerBlockArtifact,
+    PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth, PeerManagerPolicy,
+    PeerRecord, PendingDhtQuery, PendingPeerRecordRequest, ProviderRecord, SignedPeerRecord,
+    TransportPath, WorldError, WorldHeadAnnounce, classify_network_protocol,
+    classify_network_topic, maybe_discover_rendezvous_namespace,
+    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers, now_ms,
+    publish_configured_peer_record, publish_discovery_provider, push_bounded_clone,
+    put_record_query, should_republish, start_peer_discovery_query,
 };
+
+pub(super) type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
+pub(super) type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 
 pub(super) enum CommandOutcome {
     Continue,

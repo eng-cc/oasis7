@@ -16,22 +16,29 @@ use super::response_budget::{
 use super::{Behaviour, Handler};
 
 const CONTROL_QUEUE_CAPACITY: usize = 32;
+const HEAD_QUEUE_CAPACITY: usize = 8;
 const BLOB_QUEUE_CAPACITY: usize = 8;
 const CONTROL_WORKERS: usize = 2;
+const HEAD_WORKERS: usize = 1;
 const BLOB_WORKERS: usize = 2;
-const COMPLETION_QUEUE_CAPACITY: usize = CONTROL_WORKERS + BLOB_WORKERS;
+const COMPLETION_QUEUE_CAPACITY: usize = CONTROL_WORKERS + HEAD_WORKERS + BLOB_WORKERS;
 const CONTROL_MAX_IN_FLIGHT: usize = CONTROL_QUEUE_CAPACITY + CONTROL_WORKERS;
+const HEAD_MAX_IN_FLIGHT: usize = HEAD_QUEUE_CAPACITY + HEAD_WORKERS;
 const BLOB_MAX_IN_FLIGHT: usize = BLOB_QUEUE_CAPACITY + BLOB_WORKERS;
-const BLOB_MAX_IN_FLIGHT_BYTES: usize = BLOB_MAX_IN_FLIGHT * FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+const BLOB_MAX_IN_FLIGHT_BYTES: usize = 80 * 1024 * 1024;
+const FETCH_BLOB_MAX_RESPONSE_BYTES: usize = FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+const FETCH_COMMIT_HEAD_PROTOCOL: &str = "/aw/node/replication/fetch-commit/head/1.0.0";
 
 #[derive(Clone, Copy)]
 enum ResponseLane {
     Control,
+    Head,
     Blob,
 }
 
 struct InFlightState {
     control_jobs: usize,
+    head_jobs: usize,
     blob_jobs: usize,
     blob_bytes: usize,
 }
@@ -39,6 +46,7 @@ struct InFlightState {
 struct InFlightReservation {
     state: Arc<Mutex<InFlightState>>,
     lane: ResponseLane,
+    bytes: usize,
 }
 
 impl Drop for InFlightReservation {
@@ -46,11 +54,10 @@ impl Drop for InFlightReservation {
         let mut state = self.state.lock().expect("response worker in-flight state");
         match self.lane {
             ResponseLane::Control => state.control_jobs = state.control_jobs.saturating_sub(1),
+            ResponseLane::Head => state.head_jobs = state.head_jobs.saturating_sub(1),
             ResponseLane::Blob => {
                 state.blob_jobs = state.blob_jobs.saturating_sub(1);
-                state.blob_bytes = state
-                    .blob_bytes
-                    .saturating_sub(FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW);
+                state.blob_bytes = state.blob_bytes.saturating_sub(self.bytes);
             }
         }
     }
@@ -71,6 +78,7 @@ pub(super) struct Job {
     peer: libp2p::PeerId,
     payload: Vec<u8>,
     queued_at_ms: i64,
+    expires_at_ms: i64,
     handler: Handler,
     reservation: InFlightReservation,
 }
@@ -79,32 +87,48 @@ pub(super) struct RejectedResponse {
     pub channel: request_response::ResponseChannel<NetworkResponse>,
     pub protocol: String,
     pub peer: libp2p::PeerId,
+    pub reply: WorldError,
 }
 
 pub(super) struct ResponseWorkers {
     control: mpsc::SyncSender<Job>,
+    head: mpsc::SyncSender<Job>,
     blob: mpsc::SyncSender<Job>,
     in_flight: Arc<Mutex<InFlightState>>,
+    response_deadline_ms: i64,
 }
 
 impl ResponseWorkers {
-    pub(super) fn new() -> (Self, futures_mpsc::Receiver<CompletedResponse>) {
+    pub(super) fn new(
+        response_deadline: std::time::Duration,
+    ) -> (
+        Self,
+        futures_mpsc::Receiver<CompletedResponse>,
+        FetchBlobResponseBudget,
+    ) {
         let (completed, receiver) = futures_mpsc::channel(COMPLETION_QUEUE_CAPACITY);
         let (control, control_rx) = mpsc::sync_channel(CONTROL_QUEUE_CAPACITY);
+        let (head, head_rx) = mpsc::sync_channel(HEAD_QUEUE_CAPACITY);
         let (blob, blob_rx) = mpsc::sync_channel(BLOB_QUEUE_CAPACITY);
         spawn_workers(control_rx, CONTROL_WORKERS, completed.clone());
+        spawn_workers(head_rx, HEAD_WORKERS, completed.clone());
         spawn_workers(blob_rx, BLOB_WORKERS, completed);
         (
             Self {
                 control,
+                head,
                 blob,
                 in_flight: Arc::new(Mutex::new(InFlightState {
                     control_jobs: 0,
+                    head_jobs: 0,
                     blob_jobs: 0,
                     blob_bytes: 0,
                 })),
+                response_deadline_ms: i64::try_from(response_deadline.as_millis())
+                    .unwrap_or(i64::MAX),
             },
             receiver,
+            FetchBlobResponseBudget::default(),
         )
     }
 
@@ -117,11 +141,24 @@ impl ResponseWorkers {
         queued_at_ms: i64,
         handler: Handler,
     ) -> Result<(), RejectedResponse> {
-        let Some(reservation) = self.reserve(protocol.as_str()) else {
+        let response_bytes = match response_reservation_bytes(protocol.as_str(), payload.as_slice())
+        {
+            Ok(bytes) => bytes,
+            Err(reply) => {
+                return Err(RejectedResponse {
+                    channel,
+                    protocol,
+                    peer,
+                    reply,
+                });
+            }
+        };
+        let Some(reservation) = self.reserve(protocol.as_str(), response_bytes) else {
             return Err(RejectedResponse {
                 channel,
                 protocol,
                 peer,
+                reply: Self::overload_response(),
             });
         };
         self.submit(Job {
@@ -130,6 +167,7 @@ impl ResponseWorkers {
             peer,
             payload,
             queued_at_ms,
+            expires_at_ms: queued_at_ms.saturating_add(self.response_deadline_ms),
             handler,
             reservation,
         })
@@ -137,6 +175,7 @@ impl ResponseWorkers {
             channel: job.channel,
             protocol: job.protocol,
             peer: job.peer,
+            reply: Self::overload_response(),
         })
     }
 
@@ -208,30 +247,31 @@ impl ResponseWorkers {
     }
 
     #[cfg(test)]
-    fn pending_limits(&self) -> (usize, usize, usize) {
+    fn pending_limits(&self) -> (usize, usize, usize, usize) {
         let state = self
             .in_flight
             .lock()
             .expect("response worker in-flight state");
-        (state.control_jobs, state.blob_jobs, state.blob_bytes)
+        (
+            state.control_jobs,
+            state.head_jobs,
+            state.blob_jobs,
+            state.blob_bytes,
+        )
     }
 
-    fn reserve(&self, protocol: &str) -> Option<InFlightReservation> {
-        let lane = if protocol.contains("fetch-blob") {
-            ResponseLane::Blob
-        } else {
-            ResponseLane::Control
-        };
+    fn reserve(&self, protocol: &str, bytes: usize) -> Option<InFlightReservation> {
+        let lane = response_lane(protocol);
         let mut state = self
             .in_flight
             .lock()
             .expect("response worker in-flight state");
         match lane {
             ResponseLane::Control if state.control_jobs >= CONTROL_MAX_IN_FLIGHT => return None,
+            ResponseLane::Head if state.head_jobs >= HEAD_MAX_IN_FLIGHT => return None,
             ResponseLane::Blob
                 if state.blob_jobs >= BLOB_MAX_IN_FLIGHT
-                    || state.blob_bytes
-                        > BLOB_MAX_IN_FLIGHT_BYTES - FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW =>
+                    || state.blob_bytes > BLOB_MAX_IN_FLIGHT_BYTES.saturating_sub(bytes) =>
             {
                 return None;
             }
@@ -239,27 +279,70 @@ impl ResponseWorkers {
         }
         match lane {
             ResponseLane::Control => state.control_jobs += 1,
+            ResponseLane::Head => state.head_jobs += 1,
             ResponseLane::Blob => {
                 state.blob_jobs += 1;
-                state.blob_bytes += FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
+                state.blob_bytes += bytes;
             }
         }
         Some(InFlightReservation {
             state: Arc::clone(&self.in_flight),
             lane,
+            bytes,
         })
     }
 
     fn submit(&self, job: Job) -> Result<(), Job> {
-        let sender = if job.protocol.contains("fetch-blob") {
-            &self.blob
-        } else {
-            &self.control
+        let sender = match response_lane(job.protocol.as_str()) {
+            ResponseLane::Control => &self.control,
+            ResponseLane::Head => &self.head,
+            ResponseLane::Blob => &self.blob,
         };
         sender.try_send(job).map_err(|error| match error {
             mpsc::TrySendError::Full(job) | mpsc::TrySendError::Disconnected(job) => job,
         })
     }
+}
+
+fn response_lane(protocol: &str) -> ResponseLane {
+    if protocol.contains("fetch-blob") {
+        ResponseLane::Blob
+    } else if protocol == FETCH_COMMIT_HEAD_PROTOCOL {
+        ResponseLane::Head
+    } else {
+        ResponseLane::Control
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct FetchBlobReservationRequest {
+    #[serde(default)]
+    limit_bytes: Option<u64>,
+}
+
+fn response_reservation_bytes(protocol: &str, payload: &[u8]) -> Result<usize, WorldError> {
+    if !matches!(response_lane(protocol), ResponseLane::Blob) {
+        return Ok(0);
+    }
+    let Ok(request) = serde_json::from_slice::<FetchBlobReservationRequest>(payload) else {
+        // Generic handlers can use this protocol label with non-JSON payloads; the registered
+        // replication handler still rejects malformed requests before any disk read.
+        return Ok(FETCH_BLOB_MAX_RESPONSE_BYTES);
+    };
+    let requested = request
+        .limit_bytes
+        .map(|value| usize::try_from(value).unwrap_or(usize::MAX))
+        .unwrap_or(FETCH_BLOB_MAX_RESPONSE_BYTES);
+    if requested == 0 || requested > FETCH_BLOB_MAX_RESPONSE_BYTES {
+        return Err(WorldError::NetworkRequestFailed {
+            code: DistributedErrorCode::ErrBadRequest,
+            message: format!(
+                "fetch-blob requested response bytes must be within 1..={FETCH_BLOB_MAX_RESPONSE_BYTES}"
+            ),
+            retryable: false,
+        });
+    }
+    Ok(requested)
 }
 
 fn response(
@@ -289,6 +372,10 @@ fn spawn_workers(
                 let Ok(job) = rx.lock().expect("response worker receiver").recv() else {
                     break;
                 };
+                if super::now_ms() >= job.expires_at_ms {
+                    // Dropping the queued job releases its reservation without handler work.
+                    continue;
+                }
                 let reply = (job.handler)(&job.payload);
                 // Backpressure is confined to this worker; the swarm loop drains completions.
                 if futures::executor::block_on(completed.send(CompletedResponse {
@@ -313,31 +400,95 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fetch_blob_is_routed_to_the_bounded_blob_lane() {
-        assert!("/aw/node/replication/fetch-blob/1.0.0".contains("fetch-blob"));
-    }
-
-    #[test]
-    fn in_flight_reservations_bound_blob_jobs_and_bytes_until_release() {
+    fn in_flight_reservations_bound_blob_jobs_and_actual_bytes_until_release() {
         let workers = ResponseWorkers {
             control: mpsc::sync_channel(1).0,
+            head: mpsc::sync_channel(1).0,
             blob: mpsc::sync_channel(1).0,
             in_flight: Arc::new(Mutex::new(InFlightState {
                 control_jobs: 0,
+                head_jobs: 0,
                 blob_jobs: 0,
                 blob_bytes: 0,
             })),
+            response_deadline_ms: 1,
         };
         let mut reservations = Vec::new();
         for _ in 0..BLOB_MAX_IN_FLIGHT {
-            reservations.push(workers.reserve("fetch-blob").expect("within blob capacity"));
+            reservations.push(
+                workers
+                    .reserve("fetch-blob", FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW)
+                    .expect("within blob capacity"),
+            );
         }
-        assert!(workers.reserve("fetch-blob").is_none());
+        assert!(workers.reserve("fetch-blob", 1).is_none());
         assert_eq!(
             workers.pending_limits(),
-            (0, BLOB_MAX_IN_FLIGHT, BLOB_MAX_IN_FLIGHT_BYTES,)
+            (0, 0, BLOB_MAX_IN_FLIGHT, BLOB_MAX_IN_FLIGHT_BYTES)
         );
         reservations.pop();
-        assert!(workers.reserve("fetch-blob").is_some());
+        assert!(
+            workers
+                .reserve("fetch-blob", FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW)
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn blob_reservation_uses_the_validated_requested_range() {
+        let workers = ResponseWorkers {
+            control: mpsc::sync_channel(1).0,
+            head: mpsc::sync_channel(1).0,
+            blob: mpsc::sync_channel(1).0,
+            in_flight: Arc::new(Mutex::new(InFlightState {
+                control_jobs: 0,
+                head_jobs: 0,
+                blob_jobs: 0,
+                blob_bytes: 0,
+            })),
+            response_deadline_ms: 1,
+        };
+        let request = br#"{"content_hash":"blob","offset_bytes":1024,"limit_bytes":4096,"requester_public_key_hex":"key","requester_signature_hex":"signature"}"#;
+        let requested_bytes =
+            response_reservation_bytes("/aw/node/replication/fetch-blob/1.0.0", request)
+                .expect("valid range");
+        let reservation = workers
+            .reserve("/aw/node/replication/fetch-blob/1.0.0", requested_bytes)
+            .expect("validated range fits response budget");
+        assert_eq!(workers.pending_limits(), (0, 0, 1, 4096));
+        drop(reservation);
+        assert_eq!(workers.pending_limits(), (0, 0, 0, 0));
+        assert!(
+            response_reservation_bytes(
+                "/aw/node/replication/fetch-blob/1.0.0",
+                format!(r#"{{"limit_bytes":{}}}"#, FETCH_BLOB_MAX_RESPONSE_BYTES + 1).as_bytes(),
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn oversized_concurrent_blob_reservations_hit_the_80_mib_cap_without_payload_allocation() {
+        let workers = ResponseWorkers {
+            control: mpsc::sync_channel(1).0,
+            head: mpsc::sync_channel(1).0,
+            blob: mpsc::sync_channel(1).0,
+            in_flight: Arc::new(Mutex::new(InFlightState {
+                control_jobs: 0,
+                head_jobs: 0,
+                blob_jobs: 0,
+                blob_bytes: 0,
+            })),
+            response_deadline_ms: 1,
+        };
+        let reservation = workers
+            .reserve("fetch-blob", 64 * 1024 * 1024)
+            .expect("first validated response range fits");
+        assert!(
+            workers.reserve("fetch-blob", 17 * 1024 * 1024).is_none(),
+            "the 80 MiB cap must reject a concurrent range before handler allocation"
+        );
+        drop(reservation);
+        assert!(workers.reserve("fetch-blob", 17 * 1024 * 1024).is_some());
     }
 }

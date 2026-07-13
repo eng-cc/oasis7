@@ -36,6 +36,17 @@ fn fetch_blob_response_slice_honors_offset_and_limit() {
     );
 }
 
+#[test]
+fn fetch_blob_range_rejects_oversized_response_before_loading() {
+    let err = super::replication_fetch_handler_support::validated_fetch_blob_range(
+        Some(0),
+        Some(super::replication_fetch_handler_support::FETCH_BLOB_MAX_RESPONSE_BYTES + 1),
+    )
+    .expect_err("oversized fetch-blob range must be rejected before disk read");
+
+    assert!(err.contains("fetch-blob requested response bytes"));
+}
+
 fn test_fetch_blob_response(
     found: bool,
     blob: Option<Vec<u8>>,
