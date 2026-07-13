@@ -28,7 +28,13 @@ case "$*" in
   issue\ view*) [[ -e "$ISSUE_CLOSED" ]] && printf '%s\n' '{"state":"CLOSED"}' || printf '%s\n' '{"state":"OPEN"}' ;;
   issue\ close*) : >"$ISSUE_CLOSED"; printf '%s\n' '{}' ;;
   api\ graphql*)
-    printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}' ;;
+    if [[ "${WRONG_CONTENT:-0}" == 1 ]]; then
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_ffffffffffffffffffffffffffffffff","number":12,"title":"wrong fixture","url":"https://github.com/fixture/repo/issues/12"},"fieldValues":{"nodes":[]}}]}}'
+    elif [[ -s "$REMOTE_STATE" && "$(wc -l <"$REMOTE_STATE" | tr -d ' ')" == 3 ]]; then
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[{"name":"Done","field":{"name":"Status"}},{"name":"done","field":{"name":"PM Status"}},{"name":"done","field":{"name":"Workflow Phase"}}]}}]}}'
+    else
+      printf '%s\n' '{"data":{"nodes":[{"id":"ITEM1","project":{"id":"P1","number":1},"content":{"body":"task_uid: task_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","number":11,"title":"fixture","url":"https://github.com/fixture/repo/issues/11"},"fieldValues":{"nodes":[]}}]}}'
+    fi ;;
   api*) python3 - "$LIVE_BODY" <<'PY'
 import json,sys
 print(json.dumps([[{"id":1,"html_url":"https://example.invalid/issues/11#issuecomment-1","body":open(sys.argv[1]).read()}]]))
@@ -38,6 +44,11 @@ PY
 esac
 SH
 chmod +x "$TMP/bin/gh"; export PATH="$TMP/bin:$PATH" GH_LOG="$TMP/gh.log" EDIT_LOG="$TMP/edit.log" REMOTE_STATE="$TMP/remote-state" CRASHED="$TMP/crashed" ISSUE_CLOSED="$TMP/issue-closed" LIVE_BODY="$TMP/live-comment-body"
+set +e
+WRONG_CONTENT=1 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
+wrong_content=$?; set -e
+[[ "$wrong_content" != 0 ]]
+[[ ! -s "$EDIT_LOG" ]] || { echo 'wrong bound item content caused Project edits before validation' >&2; cat "$EDIT_LOG" >&2; exit 1; }
 set +e
 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$REPO" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPT_ROOT/terminal-cleanup-receipt.json" >/dev/null 2>&1
 first=$?; set -e; [[ "$first" != 0 ]]

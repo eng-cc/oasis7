@@ -154,9 +154,8 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
                           if k in {"Status","PM Status","Workflow Phase"}}
         if not project_done:
             _ledger_transition(ledger_path,task_uid,"project_update","intent")
-            uncertain=bool(project_entry.get("action"))
             live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
-                                   task_uid,int(record["issue_number"]),str(record["repository"])) if uncertain else {}
+                                   task_uid,int(record["issue_number"]),str(record["repository"]))
             missing={name for name,value in expected_project.items() if live.get(name)!=value}
             if missing:
                 # Action is durable before the first edit. A crash is resolved
