@@ -122,13 +122,13 @@ if extra == "mixed_ready_evidence":
     comments = [
         {"body": f"Pre-PR Local Role Review: passed\nTask UID: {uid}\nReview Findings Disposition: no_findings"},
         {"body": f"<!-- oasis7-pm-claim-verification -->\nTask UID: {other_uid}\nClaim Type: ready_for_pr\nVerification Status: verified"},
-        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: close\nRole: tpm"},
+        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: pre_pr_ready\nRole: tpm"},
     ]
 elif extra != "no_ready_evidence":
     comments = [
         {"body": f"Pre-PR Local Role Review: passed\nTask UID: {uid}\nReview Findings Disposition: no_findings"},
         {"body": f"<!-- oasis7-pm-claim-verification -->\nTask UID: {uid}\nClaim Type: ready_for_pr\nVerification Status: verified"},
-        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: close\nRole: tpm"},
+        {"body": f"<!-- oasis7-pm-evidence -->\nTask UID: {uid}\nEvidence Phase: pre_pr_ready\nRole: tpm"},
     ]
 print(json.dumps({"body": body, "comments": comments, "number": int(number), "state": state, "title": f"issue {number}", "url": f"https://github.com/eng-cc/oasis7/issues/{number}"}))
 PY

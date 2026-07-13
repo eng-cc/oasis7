@@ -47,9 +47,10 @@ class TerminalWorkflowCorrectness(unittest.TestCase):
         self.assertIn("Refs #$TASK_ISSUE_NUMBER", text)
 
     def test_workflow_lint_uses_canonical_pre_pr_ready_evidence(self) -> None:
-        text = (ROOT / "scripts/pm/workflow-lint.sh").read_text(encoding="utf-8")
-        self.assertIn("Evidence Phase: pre_pr_ready", text)
-        self.assertNotIn("Evidence Phase: close", text)
+        for relative in ("scripts/pm/workflow-lint.sh", "scripts/pm/audit-pr-watch-issues.py"):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("Evidence Phase: pre_pr_ready", text, relative)
+            self.assertNotIn("Evidence Phase: close", text, relative)
 
 
 if __name__ == "__main__":

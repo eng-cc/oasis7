@@ -860,7 +860,7 @@ cat > "$NO_CACHE_ISSUE_COMMENTS" <<EOF
       "body": "<!-- oasis7-pm-claim-verification -->\\nTask UID: $TASK_UID\\nClaim Type: ready_for_pr\\nVerification Status: verified"
     },
     {
-      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: pre_pr_ready\\nRole: tpm"
     },
     {
       "body": "## 2026-06-03 00:00:00 CST / tpm\\n- Pre-PR Local Role Review: passed\\n- Task UID: $TASK_UID\\n- Source Worktree: smoke-worktree\\n- Source Branch: $SMOKE_BRANCH\\n- Source Head: $SOURCE_HEAD\\n- Comparison Ref: refs/remotes/origin/main\\n- Reviewed Changed Paths: scripts/prepare-task-pr.sh\\n- Review Package: n/a; no-cache GitHub issue fixture\\n- Role Selection Basis: changed paths include PR helper workflow and GitHub issue fallback; roles repository_health_engineer,qa_engineer.\\n- Review Roles: repository_health_engineer,qa_engineer\\n- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\\n- Review Verdicts: repository_health_engineer scope/spec compliance=approved; role quality/risk=approved; qa_engineer scope/spec compliance=approved; role quality/risk=approved\\n- Review Findings Disposition: no_findings\\n- Finding Disposition Evidence: no-cache fixture evidence\\n- Verification Matrix: no-cache prepare-task-pr --create -> fake gh issue search/view -> observed\\n- Visual Evidence: n/a with exemption reason: workflow helper only; no visible surface\\n- WASM Evidence: n/a; no WASM surface\\n- Ops Evidence: n/a with exemption reason: local PR helper only; no deployment change\\n- LiveOps Evidence: n/a with exemption reason: internal workflow helper only; no public-facing change\\n- Residual Risk: fixture residual risk\\n- Slice Ledger: .pm/scratch/$TASK_UID/slice-ledger.jsonl\\n"
@@ -882,7 +882,7 @@ cat > "$NO_CACHE_ISSUE_FULL" <<EOF
     },
     {
       "url": "https://github.com/example/oasis7/issues/123#issuecomment-3",
-      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: close\\nRole: tpm"
+      "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: pre_pr_ready\\nRole: tpm"
     }
   ],
   "number": 123,
