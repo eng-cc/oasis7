@@ -841,6 +841,10 @@ def command_set_phase(args: argparse.Namespace) -> int:
     return 0
 
 
+def project_refresh_graphql(query: str, variables: list[str]) -> dict[str, Any]:
+    return json.loads(run_text(["gh", "api", "graphql", "-f", f"query={query}", *variables]))
+
+
 def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
@@ -852,11 +856,7 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         args.root.resolve(), args.repo, str(live.get("worktree_hint") or args.root.resolve())
     )
     recovered: dict[str, Any] = {}
-    try:
-        recovered = load_sync_module().recover_project_mapping(args.project_owner, args.project_number).get(args.task_uid) or {}
-    except Exception as exc:
-        die(f"refresh-task: GitHub Project reconciliation failed: {exc}")
-    item_id = str(recovered.get("project_item_id") or existing.get("project_item_id") or "")
+    item_id = str(existing.get("project_item_id") or "")
     project_fields: dict[str, str] = {}
     if item_id:
         query = """
@@ -874,8 +874,38 @@ def command_refresh_task(args: argparse.Namespace) -> int:
           }
         }
         """
-        payload = json.loads(run_text(["gh", "api", "graphql", "-f", f"query={query}", "-F", f"ids[]={item_id}"]))
+        payload = project_refresh_graphql(query, ["-F", f"ids[]={item_id}"])
         nodes = ((payload.get("data") or {}).get("nodes") or [])
+    else:
+        query = """
+        query($q: String!) {
+          search(query: $q, type: ISSUE, first: 2) {
+            nodes { ... on Issue { number url body projectItems(first: 20) { nodes {
+              id project { number }
+              fieldValues(first: 100) { nodes {
+                ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+                ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+              } }
+            } } } }
+          }
+        }
+        """
+        payload = project_refresh_graphql(query, ["-f", f"q=repo:{args.repo} {args.task_uid} in:body"])
+        issues = (((payload.get("data") or {}).get("search") or {}).get("nodes") or [])
+        matches = [issue for issue in issues if re.search(
+            rf"^task_uid:\s*{re.escape(args.task_uid)}$", str(issue.get("body") or ""), re.MULTILINE)]
+        nodes = []
+        if len(matches) == 1:
+            for node in ((matches[0].get("projectItems") or {}).get("nodes") or []):
+                if int((node.get("project") or {}).get("number") or 0) == int(args.project_number):
+                    nodes = [node]
+                    item_id = str(node.get("id") or "")
+                    recovered = {"project_item_id": item_id, "issue_url": matches[0].get("url"),
+                                 "issue_number": matches[0].get("number")}
+                    break
+        if not item_id:
+            die(f"refresh-task: task-scoped Project item recovery failed for {args.task_uid}")
+    if item_id:
         if nodes:
             for value in (((nodes[0] or {}).get("fieldValues") or {}).get("nodes") or []):
                 field_name = str(((value.get("field") or {}).get("name") or ""))

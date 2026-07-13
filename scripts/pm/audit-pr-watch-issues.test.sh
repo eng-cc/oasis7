@@ -76,6 +76,21 @@ cat > "$MAPPING" <<EOF
       "project_item_id": "PVTI_MIXED_EVIDENCE",
       "status": "pr_watch",
       "title": "mixed evidence task"
+    },
+    "task_gggggggggggggggggggggggggggggggg": {
+      "owner_role": "tpm",
+      "priority": "P3",
+      "project_item_id": "PVTI_NO_ISSUE",
+      "status": "pr_watch",
+      "title": "missing issue number task"
+    },
+    "task_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh": {
+      "issue_number": "not-a-number",
+      "owner_role": "tpm",
+      "priority": "P3",
+      "project_item_id": "PVTI_BAD_ISSUE",
+      "status": "pr_watch",
+      "title": "invalid issue number task"
     }
   },
   "version": 1
@@ -134,6 +149,10 @@ print(json.dumps({"body": body, "comments": comments, "number": int(number), "st
 PY
 }
 
+if [[ "\${1:-}" == "api" && "\${2:-}" == "graphql" ]]; then
+  printf '{"data":{"rateLimit":{"remaining":5000,"resetAt":"2099-01-01T00:00:00Z"}}}\n'
+  exit 0
+fi
 if [[ "\${1:-}" == "issue" && "\${2:-}" == "list" ]]; then
   printf '[{"number":123,"state":"OPEN","title":"open merged task","url":"https://github.com/eng-cc/oasis7/issues/123"},{"number":124,"state":"CLOSED","title":"closed merged task","url":"https://github.com/eng-cc/oasis7/issues/124"},{"number":125,"state":"OPEN","title":"ready task","url":"https://github.com/eng-cc/oasis7/issues/125"},{"number":126,"state":"OPEN","title":"hold task","url":"https://github.com/eng-cc/oasis7/issues/126"},{"number":128,"state":"OPEN","title":"blocked task","url":"https://github.com/eng-cc/oasis7/issues/128"},{"number":129,"state":"OPEN","title":"missing evidence task","url":"https://github.com/eng-cc/oasis7/issues/129"},{"number":130,"state":"OPEN","title":"mixed evidence task","url":"https://github.com/eng-cc/oasis7/issues/130"}]\n'
   exit 0
@@ -207,7 +226,27 @@ exit 1
 EOF
 chmod +x "$TMPDIR/bin/gh"
 
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --json > "$TMPDIR/dry-run.json"
+: > "$LOG"
+for selected_uid in task_gggggggggggggggggggggggggggggggg task_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh; do
+  PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" \
+    --mapping "$MAPPING" --task-uid "$selected_uid" --json > "$TMPDIR/missing-issue.json"
+
+  python3 - "$TMPDIR/missing-issue.json" "$selected_uid" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+payload = json.loads(Path(sys.argv[1]).read_text())
+assert payload["status"] == "ok", payload
+assert len(payload["results"]) == 1, payload
+assert payload["results"][0]["status"] == "blocked", payload
+assert payload["results"][0]["task_uid"] == sys.argv[2], payload
+assert "issue_number" in payload["results"][0]["reason"], payload
+PY
+done
+[[ ! -s "$LOG" ]] || { echo "selected invalid issue number unexpectedly called GitHub" >&2; exit 1; }
+
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --json > "$TMPDIR/dry-run.json"
 
 python3 - "$TMPDIR/dry-run.json" <<'PY'
 import json
@@ -225,7 +264,7 @@ assert by_number[130]["status"] == "blocked" and "pre-PR review" in by_number[13
 PY
 
 : > "$LOG"
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --close --json > "$TMPDIR/close.json"
+PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --close --json > "$TMPDIR/close.json"
 
 python3 - "$TMPDIR/close.json" "$MAPPING" "$LOG" <<'PY'
 import json
