@@ -10,6 +10,7 @@ if [[ "$test_case" == "all" ]]; then
   for test_case in \
     canonical_layout \
     reset_owned_restore_retry \
+    reset_owned_restore_retry_path_shim \
     corrupt_file_metadata \
     corrupt_tree_metadata \
     corrupt_tree_file_count \
@@ -23,6 +24,7 @@ if [[ "$test_case" == "all" ]]; then
 fi
 if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "reset_owned_restore_retry" \
+  && "$test_case" != "reset_owned_restore_retry_path_shim" \
   && "$test_case" != "corrupt_file_metadata" \
   && "$test_case" != "corrupt_tree_metadata" \
   && "$test_case" != "corrupt_tree_file_count" \
@@ -38,6 +40,59 @@ cleanup() {
   rm -rf "$tmp_dir"
 }
 trap cleanup EXIT
+
+if [[ "$test_case" == "reset_owned_restore_retry_path_shim" ]]; then
+  stable_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
+  shim_bin="$tmp_dir/path-sensitive-shim-bin"
+  mkdir -p "$shim_bin"
+  cat >"$shim_bin/python3" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n "${OASIS7_REAL_PYTHON3:-}" ]]; then
+  exec python3 "$@"
+fi
+exec "${OASIS7_TEST_STABLE_PYTHON3:?}" "$@"
+EOF
+  chmod +x "$shim_bin/python3"
+
+  "$stable_python3" - "$repo_root/scripts/p2p-public-testnet-local-observer-sync.test.sh" "$shim_bin" "$stable_python3" <<'PY'
+import os
+import signal
+import subprocess
+import sys
+
+script_path, shim_bin, stable_python3 = sys.argv[1:4]
+env = os.environ.copy()
+env["PATH"] = os.pathsep.join((shim_bin, env["PATH"]))
+env["OASIS7_OBSERVER_SYNC_TEST_CASE"] = "reset_owned_restore_retry"
+env["OASIS7_TEST_STABLE_PYTHON3"] = stable_python3
+process = subprocess.Popen(
+    ["bash", script_path],
+    env=env,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    start_new_session=True,
+)
+try:
+    stdout, stderr = process.communicate(timeout=5)
+except subprocess.TimeoutExpired:
+    os.killpg(process.pid, signal.SIGKILL)
+    stdout, stderr = process.communicate()
+    sys.stdout.write(stdout)
+    sys.stderr.write(stderr)
+    raise SystemExit("path-sensitive python3 shim caused restore wrapper recursion/hang")
+if process.returncode != 0:
+    sys.stdout.write(stdout)
+    sys.stderr.write(stderr)
+    raise SystemExit(
+        f"path-sensitive python3 shim restore regression failed with exit {process.returncode}"
+    )
+PY
+  echo "ok: observer reset case $test_case"
+  exit 0
+fi
 
 local_stack="$tmp_dir/local-stack"
 manifest_path="$local_stack/manifest.json"
@@ -356,7 +411,7 @@ test -f "$provenance_path"
 reset_backup="$tmp_dir/reset-backup"
 
 if [[ "$test_case" == "reset_owned_restore_retry" ]]; then
-  real_python3=$(command -v python3)
+  real_python3=$(python3 -c 'import os, sys; print(os.path.realpath(sys.executable))')
   fake_bin="$tmp_dir/fake-bin"
   restore_failure_marker="$tmp_dir/restore-copy-failed-once"
   mkdir -p "$fake_bin"
