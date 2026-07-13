@@ -55,6 +55,12 @@ Pre-PR local role review packet recorded after immutable verification and before
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
+For a one-shot gate inspection/readback, not a polling loop, run:
+
+```bash
+./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
+```
+
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
 9. Merge only with trusted gate evidence and the repository-approved merge path. Do not land locally unless the user explicitly asks for local landing.
 

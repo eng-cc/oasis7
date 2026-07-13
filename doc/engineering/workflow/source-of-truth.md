@@ -12,27 +12,12 @@ Mandatory rule:
 
 ### GitHub query budget and terminal defaults
 
-- Terminal refresh, sync, PR-watch audit, and closeout require the selected
-  `task_uid`; broad Project or repository issue traversal is rejected unless
-  an operator explicitly selects `--global-maintenance`.
-- Selected terminal audit command:
-  `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`.
-  Repository-wide repair is a separate operator action:
-  `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`; it must
-  pass the live GraphQL budget guard before listing issues.
-- A broad GraphQL operation reads live `rateLimit.remaining/resetAt` first and
-  returns a resumable `capability_blocked` result when the budget is unknown or
-  insufficient. Stale local cache is never authority to continue.
-- Project metadata is cached for one process run. Field updates skip values
-  proven unchanged by the same live snapshot.
-- One-task refresh uses at most one Project GraphQL read, including missing-item
-  recovery. One PR-watch poll batches comments, reviews, threads, and checks in
-  one bounded read. Selected-task closeout reuses one audit while task, HEAD,
-  and evidence inputs remain frozen.
-- Long-running PR/CI watches start at 60 seconds, back off to at most 300
-  seconds while state is unchanged, reset on state change, and report only
-  meaningful transitions. Ten-second GraphQL polling is not a supported
-  terminal default.
+- Terminal refresh, sync, PR-watch audit, and closeout require the selected `task_uid`; broad Project or repository issue traversal requires explicit `--global-maintenance`.
+- Selected terminal audit is `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`; repository-wide repair is the separate operator action `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`, guarded by the live GraphQL budget before issue listing.
+- Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.
+- Project metadata is cached per process run; field updates skip values proven unchanged by the same live snapshot.
+- One-task refresh uses at most one Project GraphQL read including missing-item recovery; one PR-watch poll batches comments, reviews, threads, and checks; selected-task closeout reuses one audit while task, HEAD, and evidence inputs remain frozen.
+- Long-running PR/CI watches start at 60 seconds, back off to 300 while unchanged, reset on change, and report only meaningful transitions; ten-second GraphQL polling is unsupported.
 
 <a id="capability-and-ownership"></a>
 ## Capability status
