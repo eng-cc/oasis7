@@ -86,7 +86,7 @@ def verified_evidence(receipt: Any, data: dict[str, Any], head_oid: str, *, task
 def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: dict[str, Any]) -> dict[str, Any]:
     raw = _run_json(["gh","api",f"repos/{repo}/issues/{issue_number}/comments","--paginate","--slurp"])
     comments = [x for page in raw for x in page] if raw and isinstance(raw[0], list) else raw
-    result: dict[str, Any] = {"comment_dispositions":[],"review_dispositions":[]}
+    result: dict[str, Any] = {"comment_dispositions":[],"review_dispositions":[],"admin_merge_authority":None}
     for comment in comments or []:
         body = str(comment.get("body") or "")
         fields = dict(re.findall(r"^- ([a-z_]+): `?([^`\n]+)`?$", body, re.M))
@@ -98,6 +98,8 @@ def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: di
             result["review_dispositions" if fields.get("kind")=="review" else "comment_dispositions"].append(record)
         elif "<!-- oasis7-merge-hold -->" in body:
             result["merge_hold"]={"kind":fields.get("hold_kind"),"active":fields.get("active")=="true","requester":fields.get("requester"),"reason":fields.get("reason"),"resume_authority":fields.get("resume_authority"),"evidence_receipt":receipt}
+        elif "<!-- oasis7-admin-merge-authority -->" in body:
+            result["admin_merge_authority"]={"requester":fields.get("requester"),"scope":fields.get("scope"),"reason":fields.get("reason"),"disposition":fields.get("disposition"),"evidence_receipt":receipt}
     return result
 
 
@@ -118,7 +120,15 @@ def graphql_pages(repo: str, number: int, surface: str) -> list[dict[str, Any]]:
             )
             path = ["data", "repository", "pullRequest", surface]
         else:
-            query = "query($owner:String!,$repo:String!,$number:Int!,$cursor:String){repository(owner:$owner,name:$repo){pullRequest(number:$number){commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{__typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}} ... on StatusContext{context state}}}}}}}}}}}"
+            query = (
+                "query($owner:String!,$repo:String!,$number:Int!,$cursor:String){"
+                "repository(owner:$owner,name:$repo){pullRequest(number:$number){"
+                "commits(last:1){nodes{commit{statusCheckRollup{"
+                "contexts(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{"
+                "__typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}} "
+                "... on StatusContext{context state}"
+                "}}}}}}}}}"
+            )
             path = ["data", "repository", "pullRequest", "commits", "nodes"]
         cmd = ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"repo={name}", "-F", f"number={number}"]
         if cursor:
@@ -151,11 +161,20 @@ def _run_json(cmd: list[str]) -> Any:
 def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
     classic_error = ""
     checks: list[dict[str, Any]] = []
+    active_rule_types: set[str] = set()
     try:
         protection = _run_json(["gh", "api", f"repos/{repo}/branches/{branch}/protection"])
         required = protection.get("required_status_checks") or {}
         checks = [{"context": str(x), "app_id": None} for x in required.get("contexts") or []]
         checks += [{"context": str(x.get("context") or ""), "app_id": x.get("app_id")} for x in required.get("checks") or [] if x.get("context")]
+        if checks:
+            active_rule_types.add("required_status_checks")
+        reviews = protection.get("required_pull_request_reviews") or {}
+        if int(reviews.get("required_approving_review_count") or 0) > 0:
+            active_rule_types.add("required_pull_request_reviews")
+        for field in ("required_signatures", "required_linear_history", "required_conversation_resolution", "lock_branch"):
+            if (protection.get(field) or {}).get("enabled") is True:
+                active_rule_types.add(field)
     except subprocess.CalledProcessError as exc:
         classic_error = str(exc.stderr or exc)
     except json.JSONDecodeError as exc:
@@ -200,13 +219,32 @@ def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
         if not any(matches(value) for value in includes) or any(matches(value) for value in excludes):
             continue
         for rule in ruleset.get("rules") or []:
+            rule_type = str(rule.get("type") or "")
+            if rule_type == "pull_request":
+                parameters = rule.get("parameters") or {}
+                if int(parameters.get("required_approving_review_count") or 0) > 0:
+                    active_rule_types.add("required_pull_request_reviews")
+                if parameters.get("required_review_thread_resolution") is True:
+                    active_rule_types.add("required_conversation_resolution")
+                known = {
+                    "dismiss_stale_reviews_on_push", "require_code_owner_review",
+                    "require_last_push_approval", "required_approving_review_count",
+                    "required_review_thread_resolution", "allowed_merge_methods",
+                }
+                if set(parameters) - known:
+                    active_rule_types.add("unsupported_pull_request_policy")
+                allowed_methods = parameters.get("allowed_merge_methods") or []
+                if allowed_methods and "squash" not in allowed_methods:
+                    active_rule_types.add("unsupported_pull_request_policy")
+            elif rule_type:
+                active_rule_types.add(rule_type)
             if rule.get("type") != "required_status_checks":
                 continue
             for item in (rule.get("parameters") or {}).get("required_status_checks") or []:
                 if item.get("context"):
                     checks.append({"context": str(item["context"]), "app_id": item.get("integration_id")})
     unique = {(x["context"], x.get("app_id")): x for x in checks}
-    return {"status": "resolved", "source": "classic_and_repository_rulesets" if not classic_error and rulesets else ("repository_rulesets" if rulesets else ("classic_branch_protection" if not classic_error else "explicit_no_policy")), "required_status_checks": list(unique.values())}
+    return {"status": "resolved", "source": "classic_and_repository_rulesets" if not classic_error and rulesets else ("repository_rulesets" if rulesets else ("classic_branch_protection" if not classic_error else "explicit_no_policy")), "required_status_checks": list(unique.values()), "active_rule_types": sorted(active_rule_types)}
 
 
 def load_live(selector: str) -> dict[str, Any]:
@@ -293,31 +331,36 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     if any(not bool(item.get("isResolved", item.get("is_resolved", False))) for item in data.get("threads") or []):
         blockers.append("unresolved review threads remain")
     merge_state = str(data.get("mergeStateStatus") or "").upper()
-    receipt = data.get("approval_only_receipt") or {}
-    try:
-        receipt_age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(str(receipt.get("observed_at") or "").replace("Z", "+00:00"))).total_seconds()
-    except ValueError:
-        receipt_age = 10**9
+    allowed_admin_rule_types = {"required_status_checks", "required_pull_request_reviews", "required_conversation_resolution", "deletion", "non_fast_forward"}
+    policy_rule_types = set((policy or {}).get("active_rule_types") or []) if isinstance(policy, dict) else set()
+    policy_proves_approval_only = bool(
+        isinstance(policy, dict)
+        and policy.get("status") == "resolved"
+        and "required_pull_request_reviews" in policy_rule_types
+        and policy_rule_types <= allowed_admin_rule_types
+    )
+    authority = data.get("admin_merge_authority") or {}
+    authority_receipt = authority.get("evidence_receipt") or {}
+    authority_ok = bool(
+        authority.get("disposition") == "authorized"
+        and authority.get("scope") == "review_approval_only"
+        and str(authority.get("requester") or "").strip()
+        and str(authority.get("reason") or "").strip()
+        and (evidence_mode == "fixture" or authority_receipt.get("live_rebuilt") is True)
+    )
     approval_only = (
         merge_state == "BLOCKED"
-        and receipt.get("source") == "github_runtime_complete_ruleset"
-        and receipt.get("runtime_verified") is True
-        and str(receipt.get("pr_number")) == str(data.get("number"))
-        and str(receipt.get("repository")) == str(data.get("repository"))
-        and str(receipt.get("head_oid")) == head_oid
-        and bool(re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("gate_epoch") or "")))
-        and -30 <= receipt_age <= 600
-        and receipt.get("blocking_rules") == ["required_review_approval"]
+        and mergeable in {"MERGEABLE", "TRUE"}
+        and str(data.get("reviewDecision") or "").upper() == "REVIEW_REQUIRED"
+        and policy_proves_approval_only
     )
     use_admin = False
-    capability = None
-    if merge_state == "BLOCKED" and admin_authorized:
-        blockers.append("complete ruleset runtime receipt capability is unavailable")
-        capability = {"reason":"complete_ruleset_runtime_receipt_unavailable","resumable":True}
-    elif approval_only and not admin_authorized:
-        blockers.append("approval-only BLOCKED requires explicit admin authorization")
-    elif merge_state == "BLOCKED" and not approval_only:
-        blockers.append("BLOCKED is not proven approval-only by trusted branch-protection evidence")
+    if approval_only and admin_authorized and authority_ok:
+        use_admin = True
+    elif approval_only:
+        blockers.append("approval-only BLOCKED requires head-bound GitHub task/user admin authorization")
+    elif merge_state == "BLOCKED":
+        blockers.append("BLOCKED is not an authorized review-approval-only state")
     elif merge_state in {"DIRTY", "UNKNOWN", "UNSTABLE"}:
         blockers.append(f"blocking merge state: {merge_state}")
     observed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
@@ -325,7 +368,7 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     gate_epoch = hashlib.sha256(json.dumps(epoch_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     result = {
         "ready_for_merge": not blockers,
-        "status": "ready" if not blockers else ("capability_blocked" if capability else ("held" if isinstance(hold_truth, dict) and hold_truth.get("active") and hold in HOLDS else "blocked")),
+        "status": "ready" if not blockers else ("held" if isinstance(hold_truth, dict) and hold_truth.get("active") and hold in HOLDS else "blocked"),
         "merge_hold": hold,
         "admin_merge_authorized": admin_authorized,
         "use_admin_merge": use_admin,
@@ -334,7 +377,6 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
         "pr_url": data.get("url"),
         "policy_discovery": policy,
     }
-    if capability: result["capability_blocked"] = capability
     if not blockers and evidence_mode == "production":
         result["readiness_receipt"] = {"receipt_type": "oasis7_pr_lifecycle_ready", "issuer": "oasis7_pr_lifecycle_gate/v1", "repository": epoch_input["repository"], "pr_number": data.get("number"), "head_oid": epoch_input["head_oid"], "observed_at": observed_at, "gate_epoch": gate_epoch}
     elif not blockers:
@@ -385,6 +427,7 @@ def main() -> int:
         )
         data["comment_dispositions"] = rebuilt.get("comment_dispositions") or []
         data["review_dispositions"] = rebuilt.get("review_dispositions") or []
+        data["admin_merge_authority"] = rebuilt.get("admin_merge_authority")
         evidence_mode = "production"
         if args.merge_hold:
             parser.error("--merge-hold is fixture-only; live hold truth is rebuilt from the GitHub task issue")

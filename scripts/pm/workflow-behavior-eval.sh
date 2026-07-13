@@ -1119,7 +1119,7 @@ payload = {
         "done closeout refuses to proceed without fresh verification",
         "done closeout updates GitHub issue metadata, Project task fields, and closes the GitHub task issue",
         "PR preflight stays the default GitHub PR entrypoint after local role review evidence",
-        "normal PRs continue after creation into cursor-exhaustive required-check/comment/review/thread/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational, while automatic admin merge fails closed until a GitHub/runtime-verifiable complete-ruleset receipt exists",
+        "normal PRs continue after creation into cursor-exhaustive required-check/comment/review/thread/mergeability watch, failure fixes, comment closeout, merge, and cleanup; REVIEW_REQUIRED is informational, while explicit task/user authority may select admin merge only for a freshly rechecked MERGEABLE review-approval-only BLOCKED state",
         "manual packaging/release CI PRs can pause before merge only when that purpose is explicit",
         "review-thread closeout reports unresolved/resolved thread state without conflating merge readiness",
     ],

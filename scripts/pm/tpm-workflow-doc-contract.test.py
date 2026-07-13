@@ -134,21 +134,12 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("source-of-truth.md#ready-and-done", agents)
         self.assertNotRegex(agents, r"admin merge.{0,700}complete-ruleset")
 
-    def test_admin_merge_sufficient_condition_requires_trusted_complete_ruleset_receipt(self) -> None:
-        for path in (SOURCE,):
-            normalized = re.sub(r"\s+", " ", path.read_text(encoding="utf-8").lower())
-            windows = [normalized[max(0, m.start()-200):m.end()+900]
-                       for m in re.finditer(r"admin merge", normalized)]
-            self.assertTrue(any(
-                "complete-ruleset" in window and "receipt" in window
-                and ("trusted" in window or "可信" in window)
-                for window in windows
-            ), f"{path} must state the trusted complete-ruleset receipt as a necessary condition")
-            self.assertRegex(
-                normalized,
-                r"(missing|without|缺少).{0,180}(producer|complete-ruleset).{0,180}(capability_blocked|fail-closed|禁止)",
-                f"{path} must state the no-producer outcome",
-            )
+    def test_admin_merge_requires_explicit_authority_and_live_pr_recheck(self) -> None:
+        normalized = re.sub(r"\s+", " ", SOURCE.read_text(encoding="utf-8").lower())
+        self.assertRegex(normalized, r"explicit task/user authority.{0,160}admin merge")
+        for marker in ("required checks", "mergeability", "requested changes", "comments", "review threads"):
+            self.assertIn(marker, normalized)
+        self.assertNotIn("complete-ruleset runtime receipt", normalized)
 
     def test_finishing_pre_pr_transition_is_ready_not_task_closeout(self) -> None:
         finishing = FINISHING.read_text(encoding="utf-8")

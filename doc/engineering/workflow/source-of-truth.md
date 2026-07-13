@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.6**
-Last Updated: **2026-07-12**
+Version: **v1.9.7**
+Last Updated: **2026-07-13**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -95,11 +95,19 @@ informational.
 
 A successful gate emits a trusted receipt bound to issuer, repository, PR,
 head, observation time, and gate epoch. Holds and dispositions are accepted
-only from verified GitHub-backed evidence. Admin merge additionally requires a
-fresh, complete-ruleset runtime receipt proving approval is the sole blocker
-plus explicit task/user authority. That producer is unavailable, so admin merge
-is currently `capability_blocked`. Fixture or caller-authored receipts cannot
-enable production merge.
+only from verified GitHub-backed evidence. When GitHub reports the current head
+as `MERGEABLE` but `BLOCKED` with `REVIEW_REQUIRED`, explicit task/user authority
+may select the repository admin merge path after a fresh recheck of required
+checks, mergeability, requested changes, conversation comments, and review
+threads. The authority record lives in the GitHub task issue and binds the task,
+repository, PR, current head, requester, `review_approval_only` scope, and
+reason; `record-admin-merge-authority.sh` writes and reads back the canonical
+`<!-- oasis7-admin-merge-authority -->` record with `disposition: authorized`.
+A caller flag alone is not authority. Admin merge remains forbidden for active holds, failed or missing
+checks, requested changes, actionable comments, unresolved threads,
+non-mergeable heads, or any blocking state not attributable to missing review
+approval. No separate collaboration/runtime producer is required for this
+human-authorized path.
 
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**

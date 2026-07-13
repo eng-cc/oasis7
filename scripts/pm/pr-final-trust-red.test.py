@@ -140,24 +140,53 @@ class FinalTrustRed(unittest.TestCase):
         self.assertIn(("pattern", 2), identities)
         self.assertIn(("all", 3), identities)
 
-    def test_admin_path_without_runtime_ruleset_receipt_is_capability_blocked(self) -> None:
+    def test_ruleset_pull_request_approval_is_normalized_and_unknown_constraints_fail_closed(self) -> None:
+        missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")
+        base = {
+            "id": 1, "target": "branch", "enforcement": "active",
+            "conditions": {"ref_name": {"include": ["refs/heads/main"]}},
+            "rules": [{"type": "pull_request", "parameters": {
+                "required_approving_review_count": 1,
+                "required_review_thread_resolution": True,
+                "allowed_merge_methods": ["squash"],
+            }}],
+        }
+        with mock.patch.object(gate, "_run_json", side_effect=[missing, [[base]]]):
+            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        self.assertEqual(
+            {"required_pull_request_reviews", "required_conversation_resolution"},
+            set(result["active_rule_types"]),
+        )
+
+        constrained = json.loads(json.dumps(base))
+        constrained["rules"][0]["parameters"]["unknown_future_constraint"] = True
+        with mock.patch.object(gate, "_run_json", side_effect=[missing, [[constrained]]]):
+            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        self.assertIn("unsupported_pull_request_policy", result["active_rule_types"])
+
+    def test_admin_path_uses_head_bound_human_authority_without_runtime_producer(self) -> None:
         data = clean_pr()
         data["mergeStateStatus"] = "BLOCKED"
-        data["approval_only_receipt"] = {
-            "source": "github_runtime_complete_ruleset",
-            "runtime_verified": True,
-            "repository": data["repository"],
-            "pr_number": data["number"],
-            "head_oid": data["headRefOid"],
-            "observed_at": "2026-07-11T01:00:00Z",
-            "gate_epoch": "f" * 64,
-            "blocking_rules": ["required_review_approval"],
+        data["reviewDecision"] = "REVIEW_REQUIRED"
+        data["policy_discovery"] = {
+            "status": "resolved",
+            "active_rule_types": ["required_pull_request_reviews"],
+            "required_status_checks": [],
         }
-        result = gate.decision(data, True)
-        self.assertEqual("capability_blocked", result["status"])
-        self.assertFalse(result["ready_for_merge"])
-        self.assertFalse(result["use_admin_merge"])
-        self.assertEqual("complete_ruleset_runtime_receipt_unavailable", result["capability_blocked"]["reason"])
+        without_authority = gate.decision(data, True, evidence_mode="fixture")
+        self.assertEqual("blocked", without_authority["status"])
+        self.assertFalse(without_authority["use_admin_merge"])
+
+        data["admin_merge_authority"] = {
+            "requester": "user",
+            "scope": "review_approval_only",
+            "reason": "explicit fixture authorization",
+            "disposition": "authorized",
+        }
+        result = gate.decision(data, True, evidence_mode="fixture")
+        self.assertEqual("ready", result["status"])
+        self.assertTrue(result["ready_for_merge"])
+        self.assertTrue(result["use_admin_merge"])
 
     def test_canonical_comment_identity_rejects_unrelated_stale_comment(self) -> None:
         """A live comment is not evidence unless its canonical body is for this task/action."""
