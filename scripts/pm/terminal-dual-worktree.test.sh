@@ -30,16 +30,23 @@ python3 - "$TASK/.pm/github-project-sync/tasks.json" "$RECEIPTS/merge-receipt.js
 import hashlib,json,sys
 p=sys.argv[1]; m=json.load(open(p)); r=next(iter(m['tasks'].values())); r['merge_receipt']=json.load(open(sys.argv[2])); r['merge_receipt_sha256']=hashlib.sha256(open(sys.argv[2],'rb').read()).hexdigest(); open(p,'w').write(json.dumps(m)+'\n')
 PY
-# Simulate authoritative refresh/readback into the default worktree; receipts remain one absolute root.
+# Simulate authoritative refresh/readback into the default worktree. The merge
+# receipt is durable local authority and is not recoverable from Issue/Project
+# fields, so the refreshed default-worktree cache does not contain it yet.
 mkdir -p "$DEFAULT/.pm/github-project-sync"; cp "$TASK/.pm/github-project-sync/tasks.json" "$DEFAULT/.pm/github-project-sync/tasks.json"
 python3 - "$DEFAULT/.pm/github-project-sync/tasks.json" <<'PY'
 import json,sys
-r=next(iter(json.load(open(sys.argv[1]))['tasks'].values())); assert r['status']=='done' and r['workflow_phase']=='task_done',r
+p=sys.argv[1]; mapping=json.load(open(p)); r=next(iter(mapping['tasks'].values()))
+r.pop('merge_receipt',None); r.pop('merge_receipt_sha256',None)
+open(p,'w').write(json.dumps(mapping)+'\n')
+assert r['status']=='done' and r['workflow_phase']=='task_done' and not r.get('merge_receipt'),r
 PY
 mkdir -p "$TMPDIR/bin"; cat >"$TMPDIR/bin/gh" <<EOF
 #!/usr/bin/env bash
 if [[ "\$*" == "repo view --json nameWithOwner,defaultBranchRef" ]]; then printf '%s\n' '{"nameWithOwner":"fixture/repo","defaultBranchRef":{"name":"main"}}';
 elif [[ "\$*" == issue\ view* ]]; then printf '%s\n' '{"state":"CLOSED"}';
+elif [[ "\$*" == issue\ comment* ]]; then cp "\${!#}" "$TMPDIR/comment.body"; printf '%s\n' 'https://github.com/fixture/repo/issues/11#issuecomment-1';
+elif [[ "\$*" == api\ repos/fixture/repo/issues/11/comments* ]]; then python3 -c 'import json,pathlib,sys; print(json.dumps([[{"id":1,"html_url":"https://github.com/fixture/repo/issues/11#issuecomment-1","body":pathlib.Path(sys.argv[1]).read_text()}]]))' "$TMPDIR/comment.body";
 else printf '%s\n' '{"number":7,"url":"https://example.invalid/pull/7","state":"MERGED","mergedAt":"$NOW","headRefOid":"$HEAD_OID","baseRefName":"main"}'; fi
 EOF
 chmod +x "$TMPDIR/bin/gh"; export PATH="$TMPDIR/bin:$PATH"
@@ -57,6 +64,12 @@ done
 [[ ! -e "$CALLER_CWD/relative-main-sync.json" ]]
 [[ ! -e "$ROOT_DIR/relative-main-sync.json" ]]
 "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$DEFAULT" --main-ref main --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --receipt-output "$RECEIPTS/main-sync-receipt.json"
+python3 - "$DEFAULT/.pm/github-project-sync/tasks.json" "$RECEIPTS/merge-receipt.json" <<'PY'
+import hashlib,json,pathlib,sys
+r=next(iter(json.load(open(sys.argv[1]))['tasks'].values()))
+assert r['merge_receipt']==json.load(open(sys.argv[2])),r
+assert r['merge_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
+PY
 for bad_output in "relative-terminal.json" "$TASK/terminal.json"; do
   if "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$DEFAULT" --worktree "$TASK" --branch "$BRANCH" --main-ref main \
     --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --main-sync-receipt "$RECEIPTS/main-sync-receipt.json" \

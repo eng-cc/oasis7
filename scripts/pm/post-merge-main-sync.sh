@@ -83,12 +83,17 @@ PY
 mv "$TMP_RECEIPT" "$RECEIPT_OUTPUT"
 trap - EXIT
 # {"workflow_phase":"main_sync"}
-python3 - "$SCRIPT_DIR/workflow-durable-store.py" "$MAPPING" "$TASK_UID" "$RECEIPT_OUTPUT" <<'PY'
+python3 - "$SCRIPT_DIR/workflow-durable-store.py" "$MAPPING" "$TASK_UID" "$RECEIPT_OUTPUT" "$PR_RECEIPT" <<'PY'
 import hashlib,importlib.util,json,pathlib,sys
 spec=importlib.util.spec_from_file_location('workflow_durable_store',sys.argv[1]); store=importlib.util.module_from_spec(spec); spec.loader.exec_module(store)
 receipt_path=pathlib.Path(sys.argv[4]); receipt=json.loads(receipt_path.read_text())
+merge_path=pathlib.Path(sys.argv[5]); merge_receipt=json.loads(merge_path.read_text())
+merge_digest=hashlib.sha256(merge_path.read_bytes()).hexdigest()
 def update(data):
  record=(data.get('tasks') or {}).get(sys.argv[3]) or {}; record['workflow_phase']='main_sync'
+ if record.get('merge_receipt') not in (None,merge_receipt): raise SystemExit('post-merge-main-sync: stored merge receipt conflicts with validated receipt')
+ if record.get('merge_receipt_sha256') not in (None,merge_digest): raise SystemExit('post-merge-main-sync: stored merge receipt digest conflicts with validated receipt')
+ record['merge_receipt']=merge_receipt; record['merge_receipt_sha256']=merge_digest
  record.setdefault('phase_receipts',{})['main_sync']=receipt
  record.setdefault('phase_receipt_sha256',{})['main_sync']=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
  data.setdefault('tasks',{})[sys.argv[3]]=record
