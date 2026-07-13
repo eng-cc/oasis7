@@ -73,30 +73,39 @@ MERGED_HEAD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],enc
 INTEGRATION_MODE="ancestry"
 PATCH_RECEIPT_SHA=""
 PATCH_ID=""
+DELTA_SHA256=""
+PATCH_MAIN_COMMIT=""
+PATCH_MAIN_PARENT=""
 if git -C "$REPO_ROOT" merge-base --is-ancestor "$MERGED_HEAD" "$LOCAL_MAIN"; then
   [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when synchronized main contains merged head"
 else
   [[ -n "$PATCH_RECEIPT" ]] || die "synchronized default branch does not contain merged head and no patch-equivalence receipt was supplied"
-  PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$MERGED_HEAD" "$LOCAL_MAIN" <<'PY'
+  PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$MERGED_HEAD" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
 if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('issuer')!='oasis7_patch_equivalence_helper':
  raise SystemExit('post-merge-main-sync: invalid patch-equivalence receipt type or issuer')
-if p.get('branch_tip')!=sys.argv[2] or p.get('main_commit')!=sys.argv[3]:
+if p.get('branch_tip')!=sys.argv[2]:
  raise SystemExit('post-merge-main-sync: patch-equivalence receipt identity mismatch')
-if not p.get('main_parent') or not p.get('patch_id'):
+if not p.get('main_parent') or not p.get('patch_id') or not p.get('delta_sha256'):
  raise SystemExit('post-merge-main-sync: incomplete patch-equivalence receipt')
-print(p['main_parent']); print(p['patch_id'])
+print(p['main_commit']); print(p['main_parent']); print(p['patch_id']); print(p['delta_sha256'])
 PY
 )" || die "invalid patch-equivalence receipt"
-  PATCH_MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
-  PATCH_ID="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
-  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$LOCAL_MAIN^")" || die "squash main commit has no first parent"
+  PATCH_MAIN_COMMIT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
+  PATCH_MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
+  PATCH_ID="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
+  DELTA_SHA256="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '4p')"
+  git -C "$REPO_ROOT" merge-base --is-ancestor "$PATCH_MAIN_COMMIT" "$LOCAL_MAIN" || die "patch-equivalence integration commit is not contained in synchronized main"
+  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$PATCH_MAIN_COMMIT^")" || die "squash main commit has no first parent"
   [[ "$PATCH_MAIN_PARENT" == "$ACTUAL_MAIN_PARENT" ]] || die "patch-equivalence receipt main parent mismatch"
   PATCH_BASE="$(git -C "$REPO_ROOT" merge-base "$MERGED_HEAD" "$PATCH_MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_BASE..$MERGED_HEAD" | git patch-id --stable | awk '{print $1}')"
-  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_MAIN_PARENT..$LOCAL_MAIN" | git patch-id --stable | awk '{print $1}')"
+  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$PATCH_MAIN_PARENT..$PATCH_MAIN_COMMIT" | git patch-id --stable | awk '{print $1}')"
   [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$MAIN_PATCH" && "$BRANCH_PATCH" == "$PATCH_ID" ]] || die "patch-equivalence receipt failed recomputation"
+  BRANCH_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$PATCH_BASE..$MERGED_HEAD" | shasum -a 256 | awk '{print $1}')"
+  MAIN_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$PATCH_MAIN_PARENT..$PATCH_MAIN_COMMIT" | shasum -a 256 | awk '{print $1}')"
+  [[ "$BRANCH_DELTA_SHA" == "$MAIN_DELTA_SHA" && "$BRANCH_DELTA_SHA" == "$DELTA_SHA256" ]] || die "patch-equivalence exact delta failed recomputation"
   PATCH_RECEIPT_SHA="$(shasum -a 256 "$PATCH_RECEIPT" | awk '{print $1}')"
   INTEGRATION_MODE="patch_equivalence"
 fi
@@ -104,7 +113,7 @@ fi
 mkdir -p "$(dirname "$RECEIPT_OUTPUT")"
 TMP_RECEIPT="$(mktemp "$(dirname "$RECEIPT_OUTPUT")/.main-sync.XXXXXX")"
 trap 'rm -f "$TMP_RECEIPT"' EXIT
-python3 - "$TMP_RECEIPT" "$MAPPING" "$TASK_UID" "$PR_RECEIPT" "$MAIN_REF" "$LOCAL_MAIN" "$INTEGRATION_MODE" "$PATCH_RECEIPT_SHA" "$PATCH_ID" <<'PY'
+python3 - "$TMP_RECEIPT" "$MAPPING" "$TASK_UID" "$PR_RECEIPT" "$MAIN_REF" "$LOCAL_MAIN" "$INTEGRATION_MODE" "$PATCH_RECEIPT_SHA" "$PATCH_ID" "$DELTA_SHA256" "$PATCH_MAIN_COMMIT" "$PATCH_MAIN_PARENT" <<'PY'
 import datetime as d,hashlib,json,pathlib,sys
 mapping=json.load(open(sys.argv[2],encoding='utf-8')); record=(mapping.get('tasks') or {}).get(sys.argv[3]) or {}
 receipt_path=pathlib.Path(sys.argv[4]); digest=hashlib.sha256(receipt_path.read_bytes()).hexdigest()
@@ -114,7 +123,8 @@ out={'receipt_type':'oasis7_main_sync','issuer':'post-merge-main-sync','task_uid
      'merge_receipt_sha256':digest,'integration_mode':sys.argv[7],
      'observed_at':d.datetime.now(d.timezone.utc).isoformat()}
 if sys.argv[7]=='patch_equivalence':
- out['patch_equivalence_receipt_sha256']=sys.argv[8]; out['patch_id']=sys.argv[9]
+ out['patch_equivalence_receipt_sha256']=sys.argv[8]; out['patch_id']=sys.argv[9]; out['delta_sha256']=sys.argv[10]
+ out['integration_commit']=sys.argv[11]; out['integration_parent']=sys.argv[12]
 pathlib.Path(sys.argv[1]).write_text(json.dumps(out,indent=2,sort_keys=True)+'\n',encoding='utf-8')
 PY
 mv "$TMP_RECEIPT" "$RECEIPT_OUTPUT"

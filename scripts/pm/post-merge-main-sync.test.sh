@@ -71,12 +71,16 @@ git -C "$SQUASH_REPO" switch -q main
 git -C "$SQUASH_REPO" diff "$SQUASH_BASE..$SQUASH_BRANCH_TIP" | git -C "$SQUASH_REPO" apply
 git -C "$SQUASH_REPO" commit -qam squash-merge
 SQUASH_MAIN="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
+printf 'later main work\n' >"$SQUASH_REPO/later"
+git -C "$SQUASH_REPO" add later
+git -C "$SQUASH_REPO" commit -qm later-main-commit
+SQUASH_CURRENT_MAIN="$(git -C "$SQUASH_REPO" rev-parse HEAD)"
 git -C "$SQUASH_REPO" push -q origin main
 git -C "$SQUASH_REPO" reset -q --hard "$SQUASH_BASE"
 
-mkdir -p "$SQUASH_REPO/.pm/github-project-sync" "$TMPDIR/squash-task-worktree"
+mkdir -p "$SQUASH_REPO/.pm/github-project-sync"
 cat >"$SQUASH_REPO/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$TASK_UID":{"status":"done","repository":"fixture/repo","default_branch":"main","canonical_worktree":"$TMPDIR/squash-task-worktree","pr_number":8,"pr_url":"https://example.invalid/pull/8"}}}
+{"version":1,"tasks":{"$TASK_UID":{"status":"done","repository":"fixture/repo","default_branch":"main","canonical_worktree":"$TMPDIR/squash-task-worktree","task_branch":"task/change","pr_number":8,"pr_url":"https://example.invalid/pull/8"}}}
 EOF
 SQUASH_RECEIPT_ROOT="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$SQUASH_REPO" --task-uid "$TASK_UID" --create)"
 SQUASH_MERGE_RECEIPT="$SQUASH_RECEIPT_ROOT/merge-receipt.json"
@@ -93,19 +97,69 @@ bash "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.sh" --root "$SQUASH_REPO" \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
   --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
   --receipt-output "$SQUASH_SYNC_RECEIPT" >/dev/null
-python3 - "$SQUASH_SYNC_RECEIPT" "$SQUASH_PATCH_RECEIPT" "$SQUASH_MAIN" <<'PY'
+python3 - "$SQUASH_SYNC_RECEIPT" "$SQUASH_PATCH_RECEIPT" "$SQUASH_CURRENT_MAIN" "$SQUASH_MAIN" <<'PY'
 import hashlib,json,pathlib,sys
 r=json.load(open(sys.argv[1],encoding='utf-8'))
+p=json.load(open(sys.argv[2],encoding='utf-8'))
 assert r['integration_mode']=='patch_equivalence',r
 assert r['main_commit']==sys.argv[3],r
+assert r['integration_commit']==sys.argv[4],r
+assert r['integration_parent']==p['main_parent'],r
+assert r['delta_sha256']==p['delta_sha256'],r
 assert r['patch_equivalence_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
+
+git -C "$SQUASH_REPO" worktree add -q "$TMPDIR/squash-task-worktree" task/change
+mkdir -p "$TMPDIR/squash-bin"
+cat >"$TMPDIR/squash-bin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "repo view --json nameWithOwner,defaultBranchRef")
+    printf '%s\n' '{"nameWithOwner":"fixture/repo","defaultBranchRef":{"name":"main"}}'
+    ;;
+  *)
+    printf '{"number":8,"url":"https://example.invalid/pull/8","state":"MERGED","mergedAt":"%s","headRefOid":"%s","baseRefName":"main"}\n' "${TEST_MERGED_AT:?}" "${TEST_HEAD_OID:?}"
+    ;;
+esac
+EOF
+chmod +x "$TMPDIR/squash-bin/gh"
+
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+  bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
+  --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --main-sync-receipt "$SQUASH_SYNC_RECEIPT" --dry-run \
+  >"$TMPDIR/squash-missing-patch.out" 2>"$TMPDIR/squash-missing-patch.err"; then
+  echo "expected squash cleanup without patch receipt to fail" >&2; exit 1
+fi
+grep -Fqi 'no patch-equivalence receipt' "$TMPDIR/squash-missing-patch.err"
+
+TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+  bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
+  --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --main-sync-receipt "$SQUASH_SYNC_RECEIPT" --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
+  --dry-run >"$TMPDIR/squash-cleanup.out"
+grep -Fq 'worktree remove' "$TMPDIR/squash-cleanup.out"
+test -d "$TMPDIR/squash-task-worktree"
+git -C "$SQUASH_REPO" show-ref --verify --quiet refs/heads/task/change
 
 python3 - "$SQUASH_PATCH_RECEIPT" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8')); p['patch_id']='0'*40
 open(sys.argv[1], 'w', encoding='utf-8').write(json.dumps(p)+'\n')
 PY
+if TEST_MERGED_AT="$OBSERVED_AT" TEST_HEAD_OID="$SQUASH_BRANCH_TIP" PATH="$TMPDIR/squash-bin:$PATH" \
+  bash "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$SQUASH_REPO" \
+  --worktree "$TMPDIR/squash-task-worktree" --branch task/change --main-ref main \
+  --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
+  --main-sync-receipt "$SQUASH_SYNC_RECEIPT" --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \
+  --dry-run >"$TMPDIR/tampered-cleanup.out" 2>"$TMPDIR/tampered-cleanup.err"; then
+  echo "expected cleanup with replaced patch receipt to fail" >&2; exit 1
+fi
+grep -Eqi 'digest mismatch|patch.equivalence binding' "$TMPDIR/tampered-cleanup.err"
+test -d "$TMPDIR/squash-task-worktree"
+git -C "$SQUASH_REPO" show-ref --verify --quiet refs/heads/task/change
 if "$ROOT_DIR/scripts/pm/post-merge-main-sync.sh" --repo-root "$SQUASH_REPO" --main-ref main \
   --task-uid "$TASK_UID" --pr-receipt "$SQUASH_MERGE_RECEIPT" \
   --patch-equivalence-receipt "$SQUASH_PATCH_RECEIPT" \

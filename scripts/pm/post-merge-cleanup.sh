@@ -204,28 +204,41 @@ r=json.load(open(sys.argv[1],encoding='utf-8'))
 if r.get('integration_mode')!='patch_equivalence': raise SystemExit('post-merge-cleanup: main-sync receipt did not authorize patch equivalence')
 digest=hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest()
 if r.get('patch_equivalence_receipt_sha256')!=digest: raise SystemExit('post-merge-cleanup: patch-equivalence receipt digest mismatch')
-print(r.get('patch_id') or '')
+print(r.get('patch_id') or ''); print(r.get('delta_sha256') or '')
+print(r.get('integration_commit') or ''); print(r.get('integration_parent') or '')
 PY
 )" || die "main-sync patch-equivalence binding failed"
-  PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$BRANCH_TIP" "$MAIN_COMMIT" <<'PY'
+  SYNC_PATCH_ID="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '1p')"
+  SYNC_DELTA_SHA="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '2p')"
+  SYNC_INTEGRATION_COMMIT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '3p')"
+  SYNC_INTEGRATION_PARENT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '4p')"
+  PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$BRANCH_TIP" "$SYNC_INTEGRATION_COMMIT" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
-if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('issuer')!='oasis7_patch_equivalence_helper' or p.get('branch_tip')!=sys.argv[2] or p.get('main_commit')!=sys.argv[3] or not p.get('patch_id'):
+if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('issuer')!='oasis7_patch_equivalence_helper' or p.get('branch_tip')!=sys.argv[2] or p.get('main_commit')!=sys.argv[3] or not p.get('patch_id') or not p.get('delta_sha256'):
  raise SystemExit('post-merge-cleanup: invalid patch-equivalence receipt')
 print(p.get('main_parent',''))
 print(p['patch_id'])
+print(p['delta_sha256'])
 PY
 )"
   MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
   EXPECTED_PATCH="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
-  [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_FIELDS" ]] || die "main-sync patch id disagrees with patch-equivalence receipt"
-  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$MAIN_COMMIT^")" || die "squash main commit has no first parent"
+  EXPECTED_DELTA_SHA="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
+  [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_ID" && "$EXPECTED_DELTA_SHA" == "$SYNC_DELTA_SHA" ]] || die "main-sync patch proof disagrees with patch-equivalence receipt"
+  [[ "$MAIN_PARENT" == "$SYNC_INTEGRATION_PARENT" ]] || die "main-sync integration parent disagrees with patch-equivalence receipt"
+  git -C "$REPO_ROOT" merge-base --is-ancestor "$SYNC_INTEGRATION_COMMIT" "$MAIN_COMMIT" || die "patch-equivalence integration commit is not contained in synchronized main"
+  ACTUAL_MAIN_PARENT="$(git -C "$REPO_ROOT" rev-parse "$SYNC_INTEGRATION_COMMIT^")" || die "squash main commit has no first parent"
   [[ "$MAIN_PARENT" == "$ACTUAL_MAIN_PARENT" ]] || die "patch-equivalence receipt main parent mismatch"
   BASE="$(git -C "$REPO_ROOT" merge-base "$BRANCH_TIP" "$MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$BASE..$BRANCH_TIP" | git patch-id --stable | awk '{print $1}')"
-  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$MAIN_PARENT..$MAIN_COMMIT" | git patch-id --stable | awk '{print $1}')"
+  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$MAIN_PARENT..$SYNC_INTEGRATION_COMMIT" | git patch-id --stable | awk '{print $1}')"
   [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$MAIN_PATCH" && "$BRANCH_PATCH" == "$EXPECTED_PATCH" ]] || die "patch-equivalence receipt failed recomputation"
+  BRANCH_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$BASE..$BRANCH_TIP" | shasum -a 256 | awk '{print $1}')"
+  MAIN_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$MAIN_PARENT..$SYNC_INTEGRATION_COMMIT" | shasum -a 256 | awk '{print $1}')"
+  [[ "$BRANCH_DELTA_SHA" == "$MAIN_DELTA_SHA" && "$BRANCH_DELTA_SHA" == "$EXPECTED_DELTA_SHA" ]] || die "patch-equivalence exact delta failed recomputation"
 else
+  [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("integration_mode") or "")' "$MAIN_SYNC_RECEIPT")" == "ancestry" ]] || die "ancestry cleanup requires ancestry main-sync receipt"
   [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when main contains the task branch tip"
 fi
 

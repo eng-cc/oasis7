@@ -610,11 +610,9 @@ cd <canonical-default-worktree>
 ./scripts/pm/post-merge-main-sync.sh --repo-root <canonical-default-worktree> \
   --main-ref <default-branch> --task-uid <TASK-UID> \
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
-  --patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json" \
   --receipt-output "$RECEIPT_ROOT/main-sync-receipt.json"
 ```
-Omit patch equivalence for ancestry. For squash/rebase, generate its canonical receipt against the exact branch tip and synchronized main commit/first parent, then retry step 4.
-Main-sync recomputes equivalence and binds its digest; caller-authored JSON is not authority.
+Squash/rebase retry: run `bash ./scripts/pm/patch-equivalence-receipt.sh --root <canonical-default-worktree> --branch-tip <task-branch-tip> --main-commit <integration-commit-in-main-history> --main-parent <integration-first-parent> > "$RECEIPT_ROOT/patch-equivalence-receipt.json"`, then retry steps 4 and 5 with `--patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json"`. Both helpers recompute the exact binary delta and bind its digest; later main commits are allowed only while the integration commit remains an ancestor, and caller-authored JSON is not authority.
 
 5. Safe cleanup — require journal/receipt readback; resume by retrying this command.
 ```bash
@@ -623,7 +621,6 @@ Main-sync recomputes equivalence and binds its digest; caller-authored JSON is n
   --main-ref <default-branch> --task-uid <TASK-UID> \
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
   --main-sync-receipt "$RECEIPT_ROOT/main-sync-receipt.json" \
-  --patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json" \
   --terminal-receipt-output "$RECEIPT_ROOT/terminal-cleanup-receipt.json"
 ```
 
