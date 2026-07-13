@@ -159,9 +159,10 @@ pub struct NetworkResponse {
 }
 
 pub type NetworkHandler<E> = Box<dyn Fn(&[u8]) -> Result<Vec<u8>, E> + Send + Sync>;
+pub type NetworkAdmission<E> = Box<dyn Fn(&[u8]) -> Result<(), E> + Send + Sync>;
 pub type SubscriptionInbox = Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>;
 
-pub trait DistributedNetwork<E> {
+pub trait DistributedNetwork<E: 'static> {
     fn publish(&self, topic: &str, payload: &[u8]) -> Result<(), E>;
     fn publish_best_effort(&self, topic: &str, payload: &[u8]) -> Result<(), E> {
         self.publish(topic, payload)
@@ -199,6 +200,20 @@ pub trait DistributedNetwork<E> {
         self.request_with_providers(protocol, payload, providers)
     }
     fn register_handler(&self, protocol: &str, handler: NetworkHandler<E>) -> Result<(), E>;
+    fn register_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: NetworkAdmission<E>,
+        handler: NetworkHandler<E>,
+    ) -> Result<(), E> {
+        self.register_handler(
+            protocol,
+            Box::new(move |payload| {
+                admission(payload)?;
+                handler(payload)
+            }),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

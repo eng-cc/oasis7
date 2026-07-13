@@ -324,9 +324,26 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pNetwork {
         self.enqueue_command(Command::RegisterHandler {
             protocol: protocol.to_string(),
             handler: Arc::from(handler),
+            admission: None,
             response: sender,
         })?;
         block_on_command_response(receiver, "register_handler")
+    }
+
+    fn register_handler_with_admission(
+        &self,
+        protocol: &str,
+        admission: oasis7_proto::distributed_net::NetworkAdmission<WorldError>,
+        handler: oasis7_proto::distributed_net::NetworkHandler<WorldError>,
+    ) -> Result<(), WorldError> {
+        let (sender, receiver) = mpsc::channel();
+        self.enqueue_command(Command::RegisterHandler {
+            protocol: protocol.to_string(),
+            handler: Arc::from(handler),
+            admission: Some(Arc::from(admission)),
+            response: sender,
+        })?;
+        block_on_command_response(receiver, "register_handler_with_admission")
     }
 }
 

@@ -142,12 +142,12 @@ use replication::{
     FetchBlobRequest, FetchBlobResponse, FetchCommitRequest, FetchCommitResponse, FetchHeadRequest,
     FetchHeadResponse, REPLICATION_FETCH_BLOB_PROTOCOL, REPLICATION_FETCH_COMMIT_PROTOCOL,
     REPLICATION_GET_HEAD_PROTOCOL, ReplicationHeadSummary, ReplicationRuntime,
-    load_blob_range_from_root, load_commit_message_from_root, load_latest_commit_message_from_root,
+    load_commit_message_from_root, load_latest_commit_message_from_root,
 };
 #[cfg(test)]
 use replication_fetch_handler_support::should_export_checkpoint_for_fetch_commit;
 use replication_fetch_handler_support::{
-    attach_checkpoint_for_fetch_commit_if_boundary, validated_fetch_blob_range,
+    attach_checkpoint_for_fetch_commit_if_boundary, register_fetch_blob_handler,
 };
 use replication_probe_gate::{
     replication_request_waitable_connection_gap, request_fetch_blob_with_route_fallback,
@@ -963,53 +963,7 @@ fn register_replication_fetch_handlers_with_checkpoint_export(
         oasis7_proto::distributed_net::NetworkLane::BlobState,
         oasis7_proto::distributed_net::NetworkLaneOperation::Serve,
     ) {
-        let blob_root_dir = replication.root_dir.clone();
-        let blob_replication_config = replication.clone();
-        network
-            .register_handler(
-                REPLICATION_FETCH_BLOB_PROTOCOL,
-                Box::new(move |payload| {
-                    let request =
-                        serde_json::from_slice::<FetchBlobRequest>(payload).map_err(|err| {
-                            network_bad_request(format!(
-                                "decode fetch-blob request failed: {}",
-                                err
-                            ))
-                        })?;
-                    blob_replication_config
-                        .authorize_fetch_blob_request(&request)
-                        .map_err(|err| {
-                            network_bad_request(format!("fetch-blob authorization failed: {}", err))
-                        })?;
-                    let (offset_bytes, limit_bytes) =
-                        validated_fetch_blob_range(request.offset_bytes, request.limit_bytes)
-                            .map_err(network_bad_request)?;
-                    let blob = load_blob_range_from_root(
-                        blob_root_dir.as_path(),
-                        request.content_hash.as_str(),
-                        offset_bytes,
-                        limit_bytes,
-                    )
-                    .map_err(network_internal_error)?;
-                    let (blob, range_complete) = match blob {
-                        Some((bytes, complete)) => (Some(bytes), Some(complete)),
-                        None => (None, None),
-                    };
-                    let range_offset_bytes = range_complete.map(|_| offset_bytes);
-                    let response = FetchBlobResponse {
-                        found: blob.is_some(),
-                        range_offset_bytes,
-                        range_complete,
-                        blob,
-                    };
-                    serde_json::to_vec(&response).map_err(|err| {
-                        network_internal_error(NodeError::Replication {
-                            reason: format!("encode fetch-blob response failed: {}", err),
-                        })
-                    })
-                }),
-            )
-            .map_err(network_replication_error)?;
+        register_fetch_blob_handler(network, replication).map_err(network_replication_error)?;
     }
 
     Ok(())

@@ -33,7 +33,7 @@ use super::transport_paths::{
     select_preferred_transport_path, sync_known_transport_paths,
 };
 use super::utils::push_bounded_string_with_keyed_cooldown;
-use super::{Handler, push_bounded_clone};
+use super::{HandlerRegistration, push_bounded_clone};
 
 const RR_GET_LOCAL_PEER_RECORD: &str = "/aw/rr/1.0.0/get_local_peer_record";
 pub(super) const RR_GET_CACHED_PEER_RECORD: &str = "/aw/rr/1.0.0/get_cached_peer_record";
@@ -629,7 +629,7 @@ pub(super) fn process_discovered_peer_record(
 
 pub(super) fn handle_request_response_request(
     request: &NetworkRequest,
-    handlers: &HashMap<String, Handler>,
+    handlers: &HashMap<String, HandlerRegistration>,
     peer_record_template: Option<&PeerRecord>,
     keypair: &Keypair,
     listening_addrs: &Arc<Mutex<Vec<Multiaddr>>>,
@@ -688,7 +688,10 @@ pub(super) fn handle_request_response_request(
         }
         _ => {
             if let Some(handler) = handlers.get(&request.protocol) {
-                handler(&request.payload)
+                if let Some(admission) = handler.admission.as_ref() {
+                    admission(&request.payload)?;
+                }
+                (handler.handler)(&request.payload)
             } else {
                 Err(WorldError::NetworkProtocolUnavailable {
                     protocol: request.protocol.clone(),

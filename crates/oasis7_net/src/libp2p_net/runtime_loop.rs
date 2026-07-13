@@ -29,6 +29,12 @@ use super::{
 
 pub(super) type CommandResponseSender<T> = std::sync::mpsc::Sender<Result<T, WorldError>>;
 pub(super) type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+pub(super) type Admission = Arc<dyn Fn(&[u8]) -> Result<(), WorldError> + Send + Sync>;
+
+pub(super) struct HandlerRegistration {
+    pub handler: Handler,
+    pub admission: Option<Admission>,
+}
 
 pub(super) enum CommandOutcome {
     Continue,
@@ -152,6 +158,7 @@ pub(super) enum Command {
     RegisterHandler {
         protocol: String,
         handler: Handler,
+        admission: Option<Admission>,
         response: CommandResponseSender<()>,
     },
     PublishProvider(String, Option<CommandResponseSender<()>>),
@@ -189,7 +196,7 @@ pub(super) struct CommandStateRefs<'a> {
     pub subscriptions: &'a mut HashSet<String>,
     pub topic_map: &'a mut HashMap<TopicHash, String>,
     pub topic_inbox_limits: &'a mut HashMap<String, usize>,
-    pub handlers: &'a mut HashMap<String, Handler>,
+    pub handlers: &'a mut HashMap<String, HandlerRegistration>,
     pub pending: &'a mut HashMap<request_response::OutboundRequestId, PendingResponse>,
     pub pending_peer_record_requests:
         &'a mut HashMap<request_response::OutboundRequestId, PendingPeerRecordRequest>,
@@ -757,7 +764,13 @@ pub(super) fn handle_command(
             if connected_request_peers.is_empty() {
                 if providers.is_empty() {
                     if let Some(handler) = handlers.get(&protocol) {
-                        let _ = response.send(handler(&payload));
+                        let result = match handler.admission.as_ref() {
+                            Some(admission) => {
+                                admission(&payload).and_then(|()| (handler.handler)(&payload))
+                            }
+                            None => (handler.handler)(&payload),
+                        };
+                        let _ = response.send(result);
                     } else {
                         let _ =
                             response.send(Err(WorldError::NetworkProtocolUnavailable { protocol }));
@@ -858,9 +871,10 @@ pub(super) fn handle_command(
         Some(Command::RegisterHandler {
             protocol,
             handler,
+            admission,
             response,
         }) => {
-            handlers.insert(protocol, handler);
+            handlers.insert(protocol, HandlerRegistration { handler, admission });
             let _ = response.send(Ok(()));
             CommandOutcome::Continue
         }

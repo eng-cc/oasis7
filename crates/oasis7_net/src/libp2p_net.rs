@@ -9,6 +9,7 @@ mod constructor_support;
 mod discovery;
 mod drop_support;
 pub(crate) mod error_mapping;
+mod inbound_dispatch;
 mod kad_queries;
 mod peer_manager;
 mod peer_manager_active_set;
@@ -38,14 +39,14 @@ use constructor_support::{
 };
 use discovery::{
     PendingPeerRecordRequest, handle_peer_record_outbound_failure, handle_peer_record_response,
-    handle_rendezvous_discovered, handle_request_response_request, handle_routing_updated,
-    maybe_discover_rendezvous_namespace, maybe_queue_discovery_peer_record,
-    maybe_register_rendezvous_namespace, maybe_request_cached_discovery_peers,
-    maybe_request_cached_peer_record, maybe_request_connected_peer_record,
-    peer_record_enables_rendezvous, peer_record_world_id, process_discovered_peer_record,
-    publish_discovery_provider, start_peer_discovery_query,
+    handle_rendezvous_discovered, handle_routing_updated, maybe_discover_rendezvous_namespace,
+    maybe_queue_discovery_peer_record, maybe_register_rendezvous_namespace,
+    maybe_request_cached_discovery_peers, maybe_request_cached_peer_record,
+    maybe_request_connected_peer_record, peer_record_enables_rendezvous, peer_record_world_id,
+    process_discovered_peer_record, publish_discovery_provider, start_peer_discovery_query,
 };
 use futures::{FutureExt, StreamExt, channel::mpsc};
+use inbound_dispatch::dispatch_inbound_request;
 use kad_queries::{DhtProgressAction, PendingDhtQuery, handle_dht_progress};
 use libp2p::gossipsub::{self, TopicHash};
 use libp2p::identity::Keypair;
@@ -77,7 +78,7 @@ use reachability::{note_hole_punch_result, note_relay_reservation_accepted, snap
 use response_workers::ResponseWorkers;
 use runtime_loop::{
     Command, CommandContext, CommandOutcome, CommandResponseSender, CommandStateRefs, Handler,
-    PendingResponse, fail_pending_request, handle_command,
+    HandlerRegistration, PendingResponse, fail_pending_request, handle_command,
 };
 #[cfg(test)]
 use runtime_loop::{
@@ -123,7 +124,7 @@ pub struct Libp2pNetwork {
     reachability: Arc<Mutex<Libp2pReachabilitySnapshot>>,
     traffic_metrics: SharedLibp2pTrafficMetrics,
     wire_byte_counters: SharedLibp2pWireByteCounters,
-    shutdown_guard: Arc<()>,
+    _shutdown_guard: Arc<drop_support::ShutdownGuard>,
 }
 impl Libp2pNetwork {
     pub fn new(config: Libp2pNetworkConfig) -> Self {
@@ -186,7 +187,7 @@ impl Libp2pNetwork {
             let mut subscriptions = HashSet::new();
             let mut topic_map: HashMap<TopicHash, String> = HashMap::new();
             let mut topic_inbox_limits: HashMap<String, usize> = HashMap::new();
-            let mut handlers: HashMap<String, Handler> = HashMap::new();
+            let mut handlers: HashMap<String, HandlerRegistration> = HashMap::new();
             let (response_workers, mut completed_response_rx, mut fetch_blob_response_budget) =
                 ResponseWorkers::new(config_clone.request_response_timeout);
             let mut pending: HashMap<request_response::OutboundRequestId, PendingResponse> =
@@ -357,32 +358,7 @@ impl Libp2pNetwork {
                                         request_response::Event::Message { message, peer, .. } => {
                                             match message {
                                                 request_response::Message::Request { request, channel, .. } => {
-                                                    record_request_inbound(
-                                                        &event_traffic_metrics,
-                                                        request.protocol.as_str(),
-                                                        request.payload.len(),
-                                                    );
-                                                    if let Some(handler) = handlers.get(&request.protocol).cloned() {
-                                                        if let Err(rejected) = response_workers.schedule(channel, request.protocol, peer, request.payload, now_ms(), handler) {
-                                                            let protocol = rejected.protocol;
-                                                            let peer = rejected.peer;
-                                                            response_workers.send_immediate(rejected.channel, protocol.as_str(), peer, Err(rejected.reply), &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
-                                                            push_bounded_clone(&event_errors, format!("libp2p response worker queue full protocol={protocol} peer={peer}"), max_error_messages, "lock errors");
-                                                        }
-                                                        continue;
-                                                    }
-                                                    let reply = handle_request_response_request(
-                                                        &request,
-                                                        &handlers,
-                                                        peer_record_template.as_ref(),
-                                                        &keypair_clone,
-                                                        &event_listening_addrs,
-                                                        &event_reachability,
-                                                        config_clone
-                                                            .allow_loopback_external_addrs_for_testing,
-                                                        &discovered_peer_records,
-                                                    );
-                                                    response_workers.send_immediate(channel, request.protocol.as_str(), peer, reply, &mut fetch_blob_response_budget, now_ms(), &event_traffic_metrics, &mut swarm);
+                                                    dispatch_inbound_request(request, channel, peer, &handlers, &response_workers, &mut fetch_blob_response_budget, &event_traffic_metrics, &mut swarm, &event_errors, max_error_messages, peer_record_template.as_ref(), &keypair_clone, &event_listening_addrs, &event_reachability, config_clone.allow_loopback_external_addrs_for_testing, &discovered_peer_records);
                                                 }
                                                 request_response::Message::Response { request_id, response } => {
                                                     if let Some(kind) = pending_peer_record_requests.remove(&request_id) {
@@ -1179,7 +1155,7 @@ impl Libp2pNetwork {
         Self {
             peer_id,
             keypair,
-            command_tx,
+            command_tx: command_tx.clone(),
             inbox,
             published,
             listening_addrs,
@@ -1190,7 +1166,7 @@ impl Libp2pNetwork {
             reachability,
             traffic_metrics,
             wire_byte_counters,
-            shutdown_guard: Arc::new(()),
+            _shutdown_guard: Arc::new(drop_support::ShutdownGuard::new(command_tx)),
         }
     }
 }

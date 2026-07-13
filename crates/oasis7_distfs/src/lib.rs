@@ -19,8 +19,10 @@ const COMPRESSED_BLOB_HASH_HEX_LEN: usize = 64;
 const COMPRESSED_BLOB_HEADER_LEN: usize = 16 + COMPRESSED_BLOB_HASH_HEX_LEN;
 const COMPRESSIBLE_BLOB_MIN_BYTES: usize = 1024;
 const COMPRESSED_BLOB_ZSTD_LEVEL: i32 = 3;
+const COMPRESSED_RANGE_CACHE_ENTRY_MAX_BYTES: u64 = compressed_range_cache::ENTRY_MAX_BYTES;
 mod challenge;
 mod challenge_scheduler;
+mod compressed_range_cache;
 mod feedback;
 mod feedback_p2p;
 mod manifest;
@@ -155,7 +157,7 @@ impl LocalCasStore {
         limit: usize,
     ) -> Result<(Vec<u8>, bool), WorldError> {
         let path = self.blob_path(content_hash)?;
-        let mut file = match fs::File::open(path) {
+        let mut file = match fs::File::open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
                 return Err(WorldError::BlobNotFound {
@@ -173,13 +175,18 @@ impl LocalCasStore {
                 });
             }
             let raw_len = u64::from_le_bytes(prefix[8..16].try_into().unwrap_or([0; 8]));
+            if raw_len <= COMPRESSED_RANGE_CACHE_ENTRY_MAX_BYTES {
+                return compressed_range_cache::read_cached_range(
+                    file, path, offset, limit, raw_len,
+                );
+            }
             let mut decoder = zstd::stream::read::Decoder::new(file)?;
             return read_range(&mut decoder, offset, limit, raw_len);
         }
 
         let raw_len = file.metadata()?.len();
         file.seek(SeekFrom::Start(offset))?;
-        read_range(&mut file, offset, limit, raw_len)
+        read_range(&mut file, 0, limit, raw_len.saturating_sub(offset))
     }
 
     fn hash_hex(&self, bytes: &[u8]) -> String {

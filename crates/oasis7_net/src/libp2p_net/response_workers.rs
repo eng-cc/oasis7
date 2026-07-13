@@ -28,6 +28,9 @@ const BLOB_MAX_IN_FLIGHT: usize = BLOB_QUEUE_CAPACITY + BLOB_WORKERS;
 const BLOB_MAX_IN_FLIGHT_BYTES: usize = 80 * 1024 * 1024;
 const FETCH_BLOB_MAX_RESPONSE_BYTES: usize = FETCH_BLOB_RESPONSE_BYTES_PER_WINDOW;
 const FETCH_COMMIT_HEAD_PROTOCOL: &str = "/aw/node/replication/fetch-commit/head/1.0.0";
+// `FetchBlobResponse` is JSON and serializes every byte as a decimal array element. Reserve the
+// truthful worst case (`255,` per byte) plus fixed object fields before a worker allocates it.
+const FETCH_BLOB_JSON_RESPONSE_FIXED_OVERHEAD: usize = 1024;
 
 #[derive(Clone, Copy)]
 enum ResponseLane {
@@ -342,7 +345,9 @@ fn response_reservation_bytes(protocol: &str, payload: &[u8]) -> Result<usize, W
             retryable: false,
         });
     }
-    Ok(requested)
+    Ok(requested
+        .saturating_mul(4)
+        .saturating_add(FETCH_BLOB_JSON_RESPONSE_FIXED_OVERHEAD))
 }
 
 fn response(
@@ -376,6 +381,9 @@ fn spawn_workers(
                     // Dropping the queued job releases its reservation without handler work.
                     continue;
                 }
+                // Synchronous handlers are run only by this fixed worker pool. A remote client
+                // may time out, but a non-cooperative callback retains its execution slot until
+                // it returns; this keeps capacity accounting honest and OS-thread count bounded.
                 let reply = (job.handler)(&job.payload);
                 // Backpressure is confined to this worker; the swarm loop drains completions.
                 if futures::executor::block_on(completed.send(CompletedResponse {
@@ -455,7 +463,7 @@ mod tests {
         let reservation = workers
             .reserve("/aw/node/replication/fetch-blob/1.0.0", requested_bytes)
             .expect("validated range fits response budget");
-        assert_eq!(workers.pending_limits(), (0, 0, 1, 4096));
+        assert_eq!(workers.pending_limits(), (0, 0, 1, 4 * 4096 + 1024));
         drop(reservation);
         assert_eq!(workers.pending_limits(), (0, 0, 0, 0));
         assert!(
@@ -490,5 +498,31 @@ mod tests {
         );
         drop(reservation);
         assert!(workers.reserve("fetch-blob", 17 * 1024 * 1024).is_some());
+    }
+
+    #[test]
+    fn pending_blob_budget_reserves_json_encoded_bytes_not_raw_range_bytes() {
+        let workers = ResponseWorkers {
+            control: mpsc::sync_channel(1).0,
+            head: mpsc::sync_channel(1).0,
+            blob: mpsc::sync_channel(1).0,
+            in_flight: Arc::new(Mutex::new(InFlightState {
+                control_jobs: 0,
+                head_jobs: 0,
+                blob_jobs: 0,
+                blob_bytes: 0,
+            })),
+            response_deadline_ms: 1,
+        };
+        let encoded = response_reservation_bytes(
+            "/aw/node/replication/fetch-blob/1.0.0",
+            format!(r#"{{"limit_bytes":{FETCH_BLOB_MAX_RESPONSE_BYTES}}}"#).as_bytes(),
+        )
+        .expect("valid maximum raw range");
+        assert!(encoded > FETCH_BLOB_MAX_RESPONSE_BYTES);
+        let first = workers.reserve("fetch-blob", encoded).expect("first fits");
+        let second = workers.reserve("fetch-blob", encoded).expect("second fits");
+        assert!(workers.reserve("fetch-blob", encoded).is_none());
+        drop((first, second));
     }
 }
