@@ -10,7 +10,7 @@
 - [x] TASK-P2P-009-T1 (PRD-P2P-NODE-TICK-001/002) [test_tier_required]: 在 `NodePosConfig/PosNodeEngine` 引入 `ticks_per_slot`、`proposal_tick_phase`、logical tick 观测与提案相位门控，并补齐状态快照持久化字段。
 - [x] TASK-P2P-009-T2 (PRD-P2P-NODE-TICK-003) [test_tier_required]: 在 `NodeRuntime` 引入自适应 tick 调度等待计算（动态单 tick 时长），并补齐 runtime 单元测试。
 - [x] TASK-P2P-009-T3 (PRD-P2P-NODE-TICK-001/002/003) [test_tier_required + test_tier_full]: 补齐定向 required/full 回归，回写专题与模块项目文档并沉淀 devlog 证据。
-- [ ] p2p-testnet-clean-rebuild-liveness-corrective (PRD-P2P-NODE-TICK-002) [test_tier_required]: 落地 issue #2264 冻结头评审的纠正项；直接回归必须证明 pending proposal 与 replication successor probe guard 均会消耗 tick-local 恢复边沿，并在新 head 上重跑 CI 与 involved-role review。 Trace: #2264 (task_813a3014b1124abfb09f01e50a4597a4)
+- [x] p2p-testnet-clean-rebuild-liveness-corrective (PRD-P2P-NODE-TICK-002) [test_tier_required]: 落地 issue #2264 冻结头评审的纠正实现，确保 pending proposal 与 replication successor probe guard 均会消耗 tick-local 恢复边沿，并补齐两条路径的直接回归。 Trace: #2264 (task_813a3014b1124abfb09f01e50a4597a4)
 
 ## 依赖
 - `doc/p2p/node/node-pos-subslot-tick-pacing-2026-03-07.prd.md`
@@ -23,9 +23,9 @@
 - `testing-manual.md`
 
 ## 状态
-- 更新日期: 2026-07-14
-- 当前状态: corrective task in progress
+- 更新日期: 2026-07-15
+- 当前状态: corrective implementation complete；CI / involved-role review / merge / package / deploy 生命周期继续由 issue #2264 跟踪
 - 下一任务: `task_813a3014b1124abfb09f01e50a4597a4`
 - 阻塞项: 无
-- 进展: `TASK-P2P-009-T0~T3` 历史实现保持完成；当前纠正任务已补齐 pending proposal 与 replication successor probe guard 消耗 tick-local 恢复边沿的直接回归，并纠正 PRD Executive Summary 表述；待同任务其余已接受 finding 集成后，在新 head 上重跑 CI 与 involved-role review。
+- 进展: `TASK-P2P-009-T0~T3` 历史实现保持完成；当前纠正实现与文档、直接回归均已完成，包括 pending proposal 与 replication successor probe guard 消耗 tick-local 恢复边沿的覆盖，以及 PRD Executive Summary 表述纠正；CI / involved-role review / merge / package / deploy 生命周期继续由 issue #2264 跟踪。
 - 说明: 本文档仅维护执行计划与任务状态；实施过程记录写入 `doc/devlog/README.md`。
