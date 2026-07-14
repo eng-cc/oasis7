@@ -12,8 +12,66 @@ if ! grep -Fq \
   echo "expected --help to describe the safe validator rebuild order" >&2
   exit 1
 fi
+if ! grep -Fq -- '--consumer-impact-record <path>' <<<"$help_output"; then
+  echo "expected --help to require a structured consumer-impact record" >&2
+  exit 1
+fi
 
 mkdir -p "$TMP_DIR/bin" "$TMP_DIR/config/doc/testing/evidence" "$TMP_DIR/world" "$TMP_DIR/remote" "$TMP_DIR/status"
+
+cat >"$TMP_DIR/consumer-impact-none.json" <<'JSON'
+{
+  "impact": "none",
+  "evidence_source": "internal testnet inventory audit #2264",
+  "timestamp": "2026-07-15T10:30:00+08:00",
+  "validators_already_stopped": true,
+  "outage_update_channel": "n/a",
+  "recovery_update_checkpoint": "n/a",
+  "producer_wording_approval": "n/a",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-active.json" <<'JSON'
+{
+  "impact": "active",
+  "evidence_source": "public RPC traffic sample #2264",
+  "timestamp": "2026-07-15T10:31:00+08:00",
+  "validators_already_stopped": false,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-invalid.json" <<'JSON'
+{
+  "impact": "active",
+  "evidence_source": "public RPC traffic sample #2264",
+  "timestamp": "2026-07-15T10:31:00",
+  "validators_already_stopped": false,
+  "outage_update_channel": "n/a",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-hold.json" <<'JSON'
+{
+  "impact": "unknown",
+  "evidence_source": "consumer inventory unavailable",
+  "timestamp": "2026-07-15T10:32:00Z",
+  "validators_already_stopped": true,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "hold"
+}
+JSON
+
+printf '{"impact":' >"$TMP_DIR/consumer-impact-malformed.json"
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<'EOF'
 {
@@ -552,6 +610,56 @@ export TEST_SYSTEMCTL_LOG="$TMP_DIR/systemctl.log"
 export SEQ_PASS="sequencer-pass"
 export STO_PASS="storage-pass"
 
+assert_consumer_impact_rejected_without_host_access() {
+  local label=$1
+  local expected_message=$2
+  shift 2
+  : >"$TEST_SSH_LOG"
+  : >"$TEST_SSH_ARGS_LOG"
+  : >"$TEST_EVENT_LOG"
+  if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+    --config-dir "$TMP_DIR/config" \
+    --world-dir "$TMP_DIR/world" \
+    "$@" \
+    --sequencer-ssh-host root@sequencer \
+    --sequencer-sshpass-env SEQ_PASS \
+    --sequencer-service oasis7-triad-sequencer.service \
+    --sequencer-status-url http://sequencer/status \
+    --storage-ssh-host root@storage \
+    --storage-sshpass-env STO_PASS \
+    --storage-service oasis7-triad-storage.service \
+    --storage-status-url http://storage/status \
+    --stack-root /opt/oasis7/p2p-testnet \
+    --out-dir "$TMP_DIR/out-consumer-impact-$label" \
+    --poll-attempts 1 \
+    --poll-sleep-seconds 0 \
+    >"$TMP_DIR/consumer-impact-$label.stdout" \
+    2>"$TMP_DIR/consumer-impact-$label.stderr"; then
+    echo "expected consumer-impact case to fail: $label" >&2
+    exit 1
+  fi
+  grep -Fq -- "$expected_message" "$TMP_DIR/consumer-impact-$label.stderr"
+  test ! -s "$TEST_SSH_LOG"
+  test ! -s "$TEST_SSH_ARGS_LOG"
+  test ! -s "$TEST_EVENT_LOG"
+}
+
+assert_consumer_impact_rejected_without_host_access \
+  missing \
+  "--consumer-impact-record is required"
+assert_consumer_impact_rejected_without_host_access \
+  malformed \
+  "consumer-impact record must contain valid JSON" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-malformed.json"
+assert_consumer_impact_rejected_without_host_access \
+  invalid \
+  "consumer-impact record is invalid" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-invalid.json"
+assert_consumer_impact_rejected_without_host_access \
+  hold \
+  "consumer-impact decision must be proceed" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-hold.json"
+
 for host in root@sequencer root@storage; do
   host_root="$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet"
   mkdir -p \
@@ -619,6 +727,7 @@ json=$(TEST_SSH_MASTER_FAIL_HOST=root@sequencer \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -843,6 +952,7 @@ test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-wo
 if TEST_FAIL_PREFLIGHT_HOST=root@storage "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-active.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -894,6 +1004,7 @@ if TEST_SEQUENCER_STATUS_OVERRIDE="$TMP_DIR/status/sequencer-not-live.json" \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -920,6 +1031,7 @@ start_count_before=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
 if TEST_REPAIR_WORLD_TIME_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1008,6 +1120,7 @@ rm -f "$TEST_REMOTE_ROOT"/started-*
 if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1082,6 +1195,7 @@ JSON
 if "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1135,6 +1249,7 @@ if TEST_SYSTEMD_RESTART_LOOP_HOST=root@sequencer \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1236,6 +1351,7 @@ if TEST_SYSTEMD_RESTART_LOOP_HOST=root@sequencer \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-testnet-sequencer.service \
@@ -1276,6 +1392,7 @@ rm -f "$TEST_REMOTE_ROOT"/started-*
 if TEST_SPAWN_LATE_CLEANUP_PROCESS_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1299,6 +1416,7 @@ pkill -f "$TEST_REMOTE_ROOT/root@sequencer/opt/oasis7/p2p-testnet/bin/start-node
 if TEST_FAIL_SYSTEMCTL_MASK_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1321,6 +1439,7 @@ grep -q "cleanup failed: systemctl runtime mask failed for oasis7-triad-sequence
 if TEST_FAIL_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1371,6 +1490,7 @@ rm -f "$TEST_REMOTE_ROOT"/started-*
 if TEST_FAIL_CLEANUP_AFTER_START_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
@@ -1419,6 +1539,7 @@ rm -f "$TEST_REMOTE_ROOT"/started-*
 if TEST_STORAGE_STATUS_OVERRIDE="$TMP_DIR/status/storage-not-ready.json" "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
