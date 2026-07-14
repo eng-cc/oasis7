@@ -332,12 +332,15 @@ case "$cmd" in
     else
       stack_root=$(printf '%s\n' "$cmd" | sed -n "s/.*rm -rf '\([^']*\)\/data\/execution-records'.*/\1/p")
       rm -rf "$root$stack_root/data/execution-records" \
+        "$root$stack_root/data/execution-world" \
+        "$root$stack_root/data/execution-world-simulator-mirror" \
         "$root$stack_root/data/storage" \
         "$root$stack_root/data/runtime-root" \
         "$root$stack_root/data/replication-root" \
         "$root$stack_root/output/chain-runtime" \
         "$root$stack_root/output/node-distfs"
       mkdir -p "$root$stack_root/data/execution-records" \
+        "$root$stack_root/data/execution-world" \
         "$root$stack_root/data/storage" \
         "$root$stack_root/data/runtime-root" \
         "$root$stack_root/data/replication-root" \
@@ -497,7 +500,12 @@ export STO_PASS="storage-pass"
 
 for host in root@sequencer root@storage; do
   host_root="$TMP_DIR/remote/$host/opt/oasis7/p2p-testnet"
-  mkdir -p "$host_root/config" "$host_root/current/bin"
+  mkdir -p \
+    "$host_root/config" \
+    "$host_root/current/bin" \
+    "$host_root/data/execution-world-simulator-mirror"
+  printf '{"world_time":13235}\n' \
+    >"$host_root/data/execution-world-simulator-mirror/snapshot.json"
   cat >"$host_root/config/node.env" <<'EOF'
 NODE_ID=triad-testnet-sequencer
 NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:100
@@ -611,14 +619,23 @@ for host in ("root@sequencer", "root@storage"):
         for index, command in enumerate(commands)
         if "oasis7_world_repair_rebuild' --generated-world-dir" in command
     ]
+    cleanup_indexes = [
+        index
+        for index, command in enumerate(commands)
+        if command.startswith("SERVICE_NAME=")
+    ]
+    if not cleanup_indexes:
+        raise SystemExit(f"missing pre-stage process cleanup for {host}")
     if not help_indexes:
         raise SystemExit(f"missing remote repair helper preflight for {host}")
     if not reset_indexes:
         raise SystemExit(f"missing destructive world reset for {host}")
     if not repair_indexes:
         raise SystemExit(f"missing remote repair rebuild for {host}")
-    if not help_indexes[0] < reset_indexes[0] < repair_indexes[0]:
-        raise SystemExit(f"expected repair helper preflight before destructive world reset for {host}")
+    if not cleanup_indexes[0] < help_indexes[0] < reset_indexes[0] < repair_indexes[0]:
+        raise SystemExit(
+            f"expected process cleanup before repair preflight and destructive world reset for {host}"
+        )
 PY
 
 jq -e '
@@ -696,6 +713,8 @@ test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/runtime-root
 test -d "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/replication-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/replication-root"
+test ! -e "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/execution-world-simulator-mirror"
+test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world-simulator-mirror"
 
 start_count_before=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
 if TEST_REPAIR_WORLD_TIME_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \

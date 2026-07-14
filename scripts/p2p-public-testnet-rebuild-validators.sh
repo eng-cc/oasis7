@@ -232,7 +232,7 @@ open_master_connection() {
   SSHPASS="$sshpass_value" sshpass -e ssh \
     -M -N -f \
     -o ControlMaster=yes \
-    -o ControlPersist=600 \
+    -o ControlPersist=3600 \
     -S "$control_path" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
@@ -248,7 +248,8 @@ ssh_run() {
   local control_path=$2
   shift 2
   local ssh_args=()
-  if [[ -n "$control_path" ]]; then
+  if [[ -n "$control_path" && -S "$control_path" ]] \
+    && ssh -S "$control_path" -O check "$host" >/dev/null 2>&1; then
     ssh_args+=(-S "$control_path")
   else
     ssh_args+=(
@@ -837,7 +838,7 @@ reset_host() {
   local service=$3
   cleanup_host_processes "$host" "$control_path" "$service"
   ssh_run "$host" "$control_path" \
-    "rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
+    "rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/execution-world' '$STACK_ROOT/data/execution-world-simulator-mirror' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/execution-world' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
 }
 
 start_host() {
@@ -870,11 +871,11 @@ cleanup_started_hosts() {
   return "$ok"
 }
 
-stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
-stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
-
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
+
+stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
+stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
 
 SEQUENCER_STARTED=1
 if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
