@@ -18,7 +18,8 @@
   `doc/.governance/rust-structural-slicing-baseline.tsv` 已退役，不得恢复为
   放行机制。
 - `scripts/ci-tests.sh required` 必须执行 `scripts/check-rust-file-size.sh`；
-  本地可直接运行同一脚本取得快速、可复现的门禁结果。
+  本地可直接运行同一脚本取得快速、可复现的门禁结果。该扫描必须可在 Linux
+  与 macOS 执行，required tier 中的增量耗时目标不超过 15 秒。
 
 ## 可接受的拆分完成态
 
@@ -41,8 +42,9 @@
    structural slice 与 include target 四项均为零才满足本治理门禁。
 
 紧急修复也不得静默绕过门禁。若修复暴露更大的领域边界问题，由 TPM 派发
-对应 runtime、viewer、WASM、agent、blockchain ops 或其他专业角色复核；
-repository health 只判断仓库结构与治理契约，不替代领域正确性或 QA 放行。
+对应 runtime、viewer、WASM、agent、blockchain ops 或其他专业 owner；领域
+owner 对拆分后的语义边界负责，QA 对验证充分性与放行结论负责。repository
+health 只判断仓库结构与治理契约，不替代领域正确性或 QA 放行。
 
 ## 维护规则
 
