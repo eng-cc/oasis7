@@ -34,6 +34,7 @@ use crate::simulator::{
 };
 use tracing::Level;
 mod authoritative;
+mod branch_commitment;
 #[path = "runtime_live/chain_link.rs"]
 mod chain_link;
 mod claim_snapshot;
