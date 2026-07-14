@@ -3,9 +3,10 @@ use crate::runtime::{
     WorldEventBody as RuntimeWorldEventBody, WorldState,
 };
 use crate::simulator::persist::{
-    PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayCausalityKind,
-    PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
-    PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
+    PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayBranchCommitment,
+    PlayerGameplayCausalityKind, PlayerGameplayExecutionState, PlayerGameplayGoalKind,
+    PlayerGameplayRecentFeedback, PlayerGameplaySnapshot, PlayerGameplayStageId,
+    PlayerGameplayStageStatus,
 };
 use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
 
@@ -429,9 +430,15 @@ fn derive_player_gameplay_causality(
 
 fn finalize_player_gameplay_snapshot(
     mut gameplay: PlayerGameplaySnapshot,
+    industry_stage: IndustryStage,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
 ) -> PlayerGameplaySnapshot {
+    gameplay.branch_recommendations = branch_recommendations(
+        industry_stage,
+        gameplay.stage_status,
+        gameplay.available_actions.as_slice(),
+    );
     gameplay.execution_state =
         derive_player_gameplay_execution_state(gameplay.stage_status, recent_feedback);
     let (causality_kind, causality_detail) =
@@ -464,6 +471,93 @@ fn finalize_player_gameplay_snapshot(
     gameplay
 }
 
+fn branch_recommendations(
+    industry_stage: IndustryStage,
+    stage_status: PlayerGameplayStageStatus,
+    available_actions: &[PlayerGameplayAction],
+) -> Vec<PlayerGameplayBranchCommitment> {
+    if stage_status != PlayerGameplayStageStatus::BranchReady {
+        return Vec::new();
+    }
+
+    let enabled = |action_id: &str| {
+        available_actions
+            .iter()
+            .any(|action| action.action_id == action_id && action.disabled_reason.is_none())
+    };
+    let commitment =
+        |action_id: &str,
+         route_label: &str,
+         immediate_gain: &str,
+         future_beat_changed: &str,
+         risk_or_lockin: &str,
+         next_session_hook: &str| PlayerGameplayBranchCommitment {
+            action_id: action_id.to_string(),
+            route_label: route_label.to_string(),
+            immediate_gain: immediate_gain.to_string(),
+            future_beat_changed: future_beat_changed.to_string(),
+            risk_or_lockin: risk_or_lockin.to_string(),
+            next_session_hook: next_session_hook.to_string(),
+        };
+
+    let scale_out_candidates = [
+        commitment(
+            "schedule_recipe_smelter_alloy_plate",
+            "Deepen the smelter line",
+            "Convert the stable line into higher-tier alloy output.",
+            "The next beat shifts from basic throughput to advanced inputs.",
+            "Consumes line time that could have supplied basic materials.",
+            "Return to turn the alloy output into the next production upgrade.",
+        ),
+        commitment(
+            "build_factory_assembler_mk1",
+            "Open a second production line",
+            "Add the assembler capability and widen the real recipe surface.",
+            "The next beat becomes coordinating two complementary factories.",
+            "Commits construction materials before the new line produces value.",
+            "Return to choose and run the assembler's first recipe.",
+        ),
+    ];
+    let governance_candidates = [
+        commitment(
+            "schedule_recipe_assembler_module_rack",
+            "Produce a module rack",
+            "Create a governance-stage finished component.",
+            "The next beat shifts toward assembling durable industrial modules.",
+            "Uses advanced assembler inputs and occupies the current recipe slot.",
+            "Return to connect the module rack to a factory-core production run.",
+        ),
+        commitment(
+            "schedule_recipe_assembler_factory_core",
+            "Produce a factory core",
+            "Create infrastructure output from the mature assembler line.",
+            "The next beat shifts toward deploying another industrial capability.",
+            "Consumes a module rack and alloy plate before yielding the core.",
+            "Return to decide where the new factory core creates the most leverage.",
+        ),
+        commitment(
+            "schedule_recipe_smelter_alloy_plate",
+            "Sustain alloy throughput",
+            "Produce another alloy plate through the mature smelter line.",
+            "The next beat keeps advanced assembler inputs supplied while other routes unlock.",
+            "Uses the smelter queue and iron inputs without automatically advancing governance.",
+            "Return to inspect the alloy output and choose the next advanced recipe.",
+        ),
+    ];
+
+    let candidates = match industry_stage {
+        IndustryStage::ScaleOut => scale_out_candidates.as_slice(),
+        IndustryStage::Governance => governance_candidates.as_slice(),
+        IndustryStage::Bootstrap => return Vec::new(),
+    };
+    candidates
+        .into_iter()
+        .filter(|candidate| enabled(candidate.action_id.as_str()))
+        .take(3)
+        .cloned()
+        .collect()
+}
+
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,
@@ -490,8 +584,15 @@ pub(super) fn build_player_gameplay_snapshot(
             &mut available_actions,
         );
     }
-    let finalize =
-        |gameplay| finalize_player_gameplay_snapshot(gameplay, recent_feedback, causality_signal);
+    let industry_stage = state.industry_progress.stage;
+    let finalize = |gameplay| {
+        finalize_player_gameplay_snapshot(
+            gameplay,
+            industry_stage,
+            recent_feedback,
+            causality_signal,
+        )
+    };
     if !gameplay_enabled {
         let disabled_reason = gameplay_disabled_reason
             .unwrap_or("gameplay requires runtime live server running with --llm");
@@ -531,6 +632,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -585,8 +687,6 @@ pub(super) fn build_player_gameplay_snapshot(
     let same_loop_repeat_count = primary_factory
         .map(|factory| factory.production.same_recipe_repeat_count)
         .unwrap_or(0);
-    let industry_stage = state.industry_progress.stage;
-
     if !has_confirmed_world_progress
         && !has_material_flow
         && !has_factory_ready
@@ -640,6 +740,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 fallback_action_id: None,
                 fallback_action_label: None,
                 resume_next_step: None,
+                branch_recommendations: Vec::new(),
                 available_actions,
                 recent_feedback: recent_feedback.cloned(),
                 agent_claim,
@@ -701,6 +802,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -773,6 +875,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -848,6 +951,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     fallback_action_id: None,
                     fallback_action_label: None,
                     resume_next_step: None,
+                    branch_recommendations: Vec::new(),
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -898,6 +1002,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     fallback_action_id: None,
                     fallback_action_label: None,
                     resume_next_step: None,
+                    branch_recommendations: Vec::new(),
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -948,6 +1053,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     fallback_action_id: None,
                     fallback_action_label: None,
                     resume_next_step: None,
+                    branch_recommendations: Vec::new(),
                     available_actions,
                     recent_feedback: recent_feedback.cloned(),
                     agent_claim,
@@ -998,6 +1104,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -1046,6 +1153,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -1094,6 +1202,7 @@ pub(super) fn build_player_gameplay_snapshot(
             fallback_action_id: None,
             fallback_action_label: None,
             resume_next_step: None,
+            branch_recommendations: Vec::new(),
             available_actions,
             recent_feedback: recent_feedback.cloned(),
             agent_claim,
@@ -1141,6 +1250,7 @@ pub(super) fn build_player_gameplay_snapshot(
         fallback_action_id: None,
         fallback_action_label: None,
         resume_next_step: None,
+        branch_recommendations: Vec::new(),
         available_actions,
         recent_feedback: recent_feedback.cloned(),
         agent_claim,

@@ -1563,51 +1563,43 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).queryByRole("button", { name: /claim/i })).not.toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
-  it("renders expansion tradeoff cards from branch hint and published action labels", async () => {
-    const { container } = await renderViewerApp({
-      snapshot: sampleSnapshot({
-        player_gameplay: {
-          ...sampleSnapshot().player_gameplay,
-          stage_status: "branch_ready",
-          execution_state: "completed",
-          goal_kind: "ChooseFirstExpansionTradeoff",
-          goal_title: "Choose the first expansion tradeoff",
-          branch_hint: "Choose whether the next branch buys throughput, resilience, or reach.",
-          next_step_hint: "Commit to one branch only after checking the matched action.",
-          available_actions: [
-            {
-              action_id: "build_alloy_factory",
-              label: "Build alloy factory core",
-              protocol_action: "gameplay_action.submit",
-              disabled_reason: null,
-            },
-            {
-              action_id: "install_sensor_pack",
-              label: "Install sensor pack",
-              protocol_action: "gameplay_action.submit",
-              disabled_reason: "missing control chip",
-            },
-            {
-              action_id: "launch_logistics_drone",
-              label: "Launch logistics drone",
-              protocol_action: "gameplay_action.submit",
-              disabled_reason: null,
-            },
-          ],
-        },
-      }),
-    });
-
+  it("wires snapshot branch commitments into the stage panel", async () => {
+    const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+      ...sampleSnapshot().player_gameplay,
+      goal_kind: "ChooseFirstExpansionTradeoff",
+      goal_title: "Choose the first expansion tradeoff",
+      branch_hint: "Compare the published consequences before committing.",
+      next_step_hint: "Choose only after reading the blocker.",
+      branch_recommendations: [{ action_id: "build_alloy_factory", route_label: "Scale alloy throughput",
+        immediate_gain: "Adds a second alloy production lane", future_beat_changed: "The next expansion starts with spare capacity",
+        risk_or_lockin: "Consumes the current structural-frame reserve", next_session_hook: "Return to route the first bulk alloy order" }],
+      available_actions: [{ action_id: "build_alloy_factory", label: "Build alloy factory core",
+        protocol_action: "gameplay_action.submit", disabled_reason: "missing structural frames" }],
+    } }) });
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(within(stagePanel).getByText("Expansion Tradeoffs")).toBeInTheDocument();
-    expect(within(stagePanel).getAllByText("Choose whether the next branch buys throughput, resilience, or reach.").length).toBeGreaterThan(0);
-    expect(within(stagePanel).getByText("Capacity / Throughput")).toBeInTheDocument();
-    expect(within(stagePanel).getAllByText("Build alloy factory core").length).toBeGreaterThan(0);
-    expect(within(stagePanel).getByText("Resilience / Input Protection")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("Install sensor pack: missing control chip")).toBeInTheDocument();
-    expect(within(stagePanel).getByText("Logistics / Reach")).toBeInTheDocument();
-    expect(within(stagePanel).getAllByText("Launch logistics drone").length).toBeGreaterThan(0);
-    expect(within(stagePanel).getAllByText("Commit to one branch only after checking the matched action.").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Scale alloy throughput")).toBeInTheDocument();
+    expect(within(stagePanel).getAllByText("Compare the published consequences before committing.").length).toBeGreaterThan(0);
+    expect(within(stagePanel).getByText("Build alloy factory core: missing structural frames")).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("marks branch-hint-only guidance as legacy and incomplete", async () => {
+    const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+      ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
+      branch_hint: "Choose whether the next branch buys throughput, resilience, or reach.", branch_recommendations: [],
+    } }) });
+    const stagePanel = container.querySelector("#viewer-stage-panel");
+    expect(within(stagePanel).getByText("Legacy / Incomplete")).toBeInTheDocument();
+    expect(within(stagePanel).getByText(/structured branch recommendations are unavailable/i)).toBeInTheDocument();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
+  it("marks partial branch commitments incomplete", async () => {
+    const { container } = await renderViewerApp({ snapshot: sampleSnapshot({ player_gameplay: {
+      ...sampleSnapshot().player_gameplay, goal_kind: "ChooseFirstExpansionTradeoff",
+      branch_recommendations: [{ action_id: "build_alloy_factory", route_label: "Scale alloy throughput",
+        immediate_gain: "Adds a production lane", future_beat_changed: "", risk_or_lockin: "Consumes reserves", next_session_hook: "Return to inspect output" }],
+    } }) });
+    expect(within(container.querySelector("#viewer-stage-panel")).getByText("Incomplete recommendation")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
   it("compresses world scale details into a one-line details-rail summary", async () => {

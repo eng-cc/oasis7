@@ -282,29 +282,25 @@ function expansionBranchCards(gameplay, locale) {
     return [];
   }
   const actions = gameplay?.availableActions || [];
-  const branches = [
-    {
-      id: "throughput",
-      title: tr(locale, "产能 / 吞吐", "Capacity / Throughput"),
-      matcher: /\b(alloy|gear|motor|factory|core|smelter|production|throughput|capacity)\b/i,
-    },
-    {
-      id: "resilience",
-      title: tr(locale, "韧性 / 投入保护", "Resilience / Input Protection"),
-      matcher: /\b(sensor|control chip|chip|upstream|stabil|recover|restore|input|material|power|buffer)\b/i,
-    },
-    {
-      id: "logistics",
-      title: tr(locale, "物流 / 触达", "Logistics / Reach"),
-      matcher: /\b(logistics|drone|distribution|route|reach|transport|dispatch)\b/i,
-    },
-  ];
-  return branches.map((branch) => {
-    const matches = actions.filter((action) => branch.matcher.test(`${action.label || ""} ${action.actionId || ""}`));
+  const recommendations = Array.isArray(gameplay?.branchRecommendations)
+    ? gameplay.branchRecommendations
+    : [];
+  if (recommendations.length === 0) {
+    return gameplay?.branchHint ? [{ legacy: true }] : [];
+  }
+  return recommendations.map((recommendation) => {
+    const action = actions.find((candidate) => candidate.actionId === recommendation.actionId) || null;
+    const complete = [
+      recommendation.routeLabel,
+      recommendation.immediateGain,
+      recommendation.futureBeatChanged,
+      recommendation.riskOrLockin,
+      recommendation.nextSessionHook,
+    ].every((value) => Boolean(String(value || "").trim()));
     return {
-      ...branch,
-      actions: matches,
-      actionable: matches.some((action) => !action.disabledReason),
+      ...recommendation,
+      action,
+      complete,
     };
   });
 }
@@ -387,45 +383,56 @@ function ClaimAgentChoiceCard(props) {
 function ExpansionTradeoffCards(props) {
   const locale = () => props.locale ?? uiLocale();
   const cards = () => expansionBranchCards(props.gameplay, locale());
+  const legacyOnly = () => cards().length === 1 && cards()[0].legacy;
   return (
     <PanelSection
       title={tr(locale(), "扩张取舍", "Expansion Tradeoffs")}
-      eyebrow={tr(locale(), "从已发布动作派生", "Derived From Published Actions")}
+      eyebrow={legacyOnly()
+        ? tr(locale(), "旧版 / 不完整", "Legacy / Incomplete")
+        : tr(locale(), "运行时推荐", "Runtime Recommendations")}
       meta={props.gameplay?.branchHint || tr(locale(), "当前分支提示尚未发布。", "No branch premise is published yet.")}
     >
-      <div class="action-grid">
-        <For each={cards()}>
-          {(card) => (
+      <Show
+        when={!legacyOnly()}
+        fallback={(
+          <div class="feedback-summary">
+            {tr(locale(), "结构化分支推荐不可用；此处仅保留旧版提示，不会从动作文本合成取舍字段。", "Structured branch recommendations are unavailable; only the legacy hint is shown, and no tradeoff fields are synthesized from action text.")}
+          </div>
+        )}
+      >
+        <div class="action-grid">
+          <For each={cards()}>
+            {(card) => (
             <EventCard
               class="event-card event-card--action"
-              title={card.title}
-              badge={card.actionable ? "actionable" : "not yet actionable"}
-              badgeClass={card.actionable ? "badge badge--good" : "badge badge--warn"}
+              title={card.routeLabel || tr(locale(), "未命名路线", "Unnamed route")}
+              badge={card.action
+                ? card.action.disabledReason
+                  ? tr(locale(), "暂不可用", "unavailable")
+                  : tr(locale(), "可执行", "actionable")
+                : tr(locale(), "动作未发布", "action unpublished")}
+              badgeClass={card.action && !card.action.disabledReason ? "badge badge--good" : "badge badge--warn"}
               meta={props.gameplay?.goalTitle || tr(locale(), "当前扩张目标", "Current expansion goal")}
             >
-              <Show
-                when={card.actions.length > 0}
-                fallback={<div class="feedback-summary">{tr(locale(), "当前没有匹配的已发布动作；不要把这个分支当成可执行按钮。", "No matching published action yet; do not treat this branch as an executable button.")}</div>}
-              >
-                <div class="event-list">
-                  <For each={card.actions}>
-                    {(action) => (
-                      <div class="feedback-detail">
-                        {action.disabledReason
-                          ? `${action.label || action.actionId}: ${action.disabledReason}`
-                          : action.label || action.actionId}
-                      </div>
-                    )}
-                  </For>
-                </div>
+              <Show when={!card.complete}>
+                <div class="badge-row"><Badge class="badge badge--warn">{tr(locale(), "推荐信息不完整", "Incomplete recommendation")}</Badge></div>
               </Show>
-              <div class="feedback-detail">
-                {props.gameplay?.nextStepHint || tr(locale(), "选择前先确认对应动作已经正式发布。", "Confirm the matching action is published before committing.")}
+              <div class="feedback-detail">{card.immediateGain || tr(locale(), "即时收益未发布", "Immediate gain unavailable")}</div>
+              <div class="feedback-detail">{card.futureBeatChanged || tr(locale(), "后续变化未发布", "Future beat unavailable")}</div>
+              <div class="feedback-detail">{card.riskOrLockin || tr(locale(), "风险或锁定未发布", "Risk or lock-in unavailable")}</div>
+              <div class="feedback-detail">{card.nextSessionHook || tr(locale(), "下次续玩钩子未发布", "Next-session hook unavailable")}</div>
+              <div class="feedback-summary">
+                {card.action
+                  ? card.action.disabledReason
+                    ? `${card.action.label || card.action.actionId}: ${card.action.disabledReason}`
+                    : card.action.label || card.action.actionId
+                  : card.actionId || tr(locale(), "关联动作未发布", "Linked action unpublished")}
               </div>
             </EventCard>
-          )}
-        </For>
-      </div>
+            )}
+          </For>
+        </div>
+      </Show>
     </PanelSection>
   );
 }
