@@ -496,6 +496,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         causality_kind: Some(PlayerGameplayCausalityKind::WorldConstraint),
         causality_detail: Some("iron input exhausted at factory-0".to_string()),
         branch_hint: None,
+        branch_recommendations: Vec::new(),
         resume_anchor: Some(
             "Recover sustainable capability (post_onboarding.recover_capability)".to_string(),
         ),
@@ -535,11 +536,12 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
     let mut value: serde_json::Value =
         serde_json::from_str(&snapshot.to_json().expect("snapshot to json"))
             .expect("parse snapshot json");
-    value
+    let gameplay_object = value
         .get_mut("player_gameplay")
         .and_then(|gameplay| gameplay.as_object_mut())
-        .expect("player gameplay object")
-        .remove("execution_state");
+        .expect("player gameplay object");
+    gameplay_object.remove("execution_state");
+    gameplay_object.remove("branch_recommendations");
 
     let migrated = WorldSnapshot::from_json(
         &serde_json::to_string(&value).expect("serialize migrated snapshot"),
@@ -555,6 +557,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         gameplay.execution_state,
         PlayerGameplayExecutionState::Blocked
     );
+    assert!(gameplay.branch_recommendations.is_empty());
     assert_eq!(
         gameplay.causality_kind,
         Some(PlayerGameplayCausalityKind::WorldConstraint)

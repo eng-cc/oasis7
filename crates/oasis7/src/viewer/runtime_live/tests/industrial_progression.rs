@@ -525,6 +525,31 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
             .iter()
             .any(|action| action.action_id == "build_factory_assembler_mk1")
     );
+    assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
+    let recommended_action_ids = gameplay
+        .branch_recommendations
+        .iter()
+        .map(|recommendation| recommendation.action_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        recommended_action_ids,
+        vec!["schedule_recipe_smelter_alloy_plate"],
+        "branch-ready recommendations must keep the frozen gameplay-design order while excluding disabled actions",
+    );
+    for recommendation in &gameplay.branch_recommendations {
+        assert!(!recommendation.route_label.trim().is_empty());
+        assert!(!recommendation.immediate_gain.trim().is_empty());
+        assert!(!recommendation.future_beat_changed.trim().is_empty());
+        assert!(!recommendation.risk_or_lockin.trim().is_empty());
+        assert!(!recommendation.next_session_hook.trim().is_empty());
+        assert!(
+            gameplay.available_actions.iter().any(|action| {
+                action.action_id == recommendation.action_id && action.disabled_reason.is_none()
+            }),
+            "recommendation {} must bind a real enabled action",
+            recommendation.action_id,
+        );
+    }
     assert_eq!(
         gameplay.small_player_lane_id.as_deref(),
         Some("local_operator")
@@ -552,6 +577,60 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
 }
 
 #[test]
+fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executable() {
+    let mut state = WorldState::default();
+    state.industry_progress.stage = IndustryStage::ScaleOut;
+    state.industry_progress.completed_recipe_jobs = 4;
+    state.factories.insert(
+        FACTORY_SMELTER_MK1.to_string(),
+        FactoryState {
+            factory_id: FACTORY_SMELTER_MK1.to_string(),
+            site_id: "runtime:10:20:0".to_string(),
+            builder_agent_id: "retired-agent".to_string(),
+            spec: small_player_test_factory_spec(FACTORY_SMELTER_MK1),
+            input_ledger: MaterialLedgerId::world(),
+            output_ledger: MaterialLedgerId::world(),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState {
+                completed_jobs: 4,
+                last_completed_at: Some(12),
+                last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
+                ..FactoryProductionState::default()
+            },
+            built_at: 1,
+        },
+    );
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &state,
+        Some("missing-agent"),
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Blocked);
+    assert_eq!(
+        gameplay.execution_state,
+        crate::simulator::PlayerGameplayExecutionState::Blocked
+    );
+    assert!(gameplay.branch_recommendations.is_empty());
+    assert_eq!(
+        gameplay.blocker_kind.as_deref(),
+        Some("branch_commitment_unavailable")
+    );
+    assert!(
+        gameplay
+            .next_step_hint
+            .contains("Restore the inputs or capability")
+    );
+    assert_eq!(gameplay.branch_hint, None);
+}
+
+#[test]
 fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
@@ -563,6 +642,24 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         PlayerGameplayGoalKind::ChooseMidLoopPath
     );
     assert_eq!(gameplay.progress_percent, 100);
+    assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
+    for recommendation in &gameplay.branch_recommendations {
+        let published_claims = format!(
+            "{} {} {} {} {}",
+            recommendation.route_label,
+            recommendation.immediate_gain,
+            recommendation.future_beat_changed,
+            recommendation.risk_or_lockin,
+            recommendation.next_session_hook,
+        )
+        .to_lowercase();
+        for unsupported_claim in ["vote", "voting", "territory", "territorial", "security"] {
+            assert!(
+                !published_claims.contains(unsupported_claim),
+                "governance-stage recommendation must not claim unsupported {unsupported_claim} mechanics",
+            );
+        }
+    }
     assert!(
         gameplay
             .available_actions
