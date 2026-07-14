@@ -277,12 +277,28 @@ chmod +x "$TMP_DIR/bin/systemctl"
 cat >"$TMP_DIR/bin/ssh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+original_args=("$@")
+master_mode=0
+check_mode=0
+control_path=""
 while [[ $# -gt 0 && "$1" == -* ]]; do
   case "$1" in
-    -o|-S|-O)
+    -o)
       shift 2
       ;;
-    -M|-N|-f)
+    -S)
+      control_path=$2
+      shift 2
+      ;;
+    -O)
+      [[ "$2" == "check" ]] && check_mode=1
+      shift 2
+      ;;
+    -M)
+      master_mode=1
+      shift
+      ;;
+    -N|-f)
       shift
       ;;
     *)
@@ -292,6 +308,28 @@ while [[ $# -gt 0 && "$1" == -* ]]; do
 done
 host=$1
 shift
+if [[ -n "${TEST_SSH_ARGS_LOG:-}" ]]; then
+  printf '%s\t%s\t%s' "$host" "$master_mode" "$check_mode" >>"$TEST_SSH_ARGS_LOG"
+  printf '\t%s' "${original_args[@]}" >>"$TEST_SSH_ARGS_LOG"
+  printf '\n' >>"$TEST_SSH_ARGS_LOG"
+fi
+if [[ "$master_mode" -eq 1 && "${TEST_SSH_MASTER_FAIL_HOST:-}" == "$host" ]]; then
+  exit 255
+fi
+if [[ "$master_mode" -eq 1 ]]; then
+  python3 - "$control_path" <<'PY'
+import socket
+import sys
+
+sock = socket.socket(socket.AF_UNIX)
+sock.bind(sys.argv[1])
+sock.close()
+PY
+  exit 0
+fi
+if [[ "$check_mode" -eq 1 && "${TEST_SSH_STALE_CHECK_HOST:-}" == "$host" ]]; then
+  exit 255
+fi
 if [[ $# -eq 0 ]]; then
   exit 0
 fi
@@ -312,6 +350,9 @@ case "$cmd" in
     mkdir -p "$root$stack_root/config/doc/testing/evidence" "$root$stack_root/staged-world" "$root$stack_root/data/execution-world"
     ;;
   *oasis7_world_repair_rebuild*--help*)
+    if [[ "${TEST_FAIL_PREFLIGHT_HOST:-}" == "$host" ]]; then
+      exit 44
+    fi
     ;;
   cat\ \>*)
     target=$(printf '%s\n' "$cmd" | sed -n "s/cat > '\([^']*\)'/\1/p")
@@ -472,7 +513,11 @@ if [[ -n "${TEST_EVENT_LOG:-}" ]]; then
 fi
 case "$url" in
   http://sequencer/status)
-    cp "${TEST_STATUS_ROOT:?}/sequencer.json" "$out"
+    if [[ -n "${TEST_SEQUENCER_STATUS_OVERRIDE:-}" ]]; then
+      cp "$TEST_SEQUENCER_STATUS_OVERRIDE" "$out"
+    else
+      cp "${TEST_STATUS_ROOT:?}/sequencer.json" "$out"
+    fi
     ;;
   http://storage/status)
     if [[ -n "${TEST_STORAGE_STATUS_OVERRIDE:-}" ]]; then
@@ -493,6 +538,7 @@ export PATH="$TMP_DIR/bin:$PATH"
 export TEST_REMOTE_ROOT="$TMP_DIR/remote"
 export TEST_STATUS_ROOT="$TMP_DIR/status"
 export TEST_SSH_LOG="$TMP_DIR/ssh.log"
+export TEST_SSH_ARGS_LOG="$TMP_DIR/ssh-args.log"
 export TEST_EVENT_LOG="$TMP_DIR/events.log"
 export TEST_SYSTEMCTL_LOG="$TMP_DIR/systemctl.log"
 export SEQ_PASS="sequencer-pass"
@@ -560,7 +606,9 @@ run_id=test-run
 EOF
 done
 
-json=$("$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+json=$(TEST_SSH_MASTER_FAIL_HOST=root@sequencer \
+  TEST_SSH_STALE_CHECK_HOST=root@storage \
+  "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
   --sequencer-ssh-host root@sequencer \
@@ -593,8 +641,45 @@ sequencer_start_index = first_index("systemctl start 'oasis7-triad-sequencer.ser
 storage_start_index = first_index("systemctl start 'oasis7-triad-storage.service'")
 if not sequencer_start_index < first_curl_index:
     raise SystemExit("sequencer was not started before first status poll")
-if not storage_start_index < first_curl_index:
-    raise SystemExit("storage was not started before first status poll")
+if not first_curl_index < storage_start_index:
+    raise SystemExit("storage was started before sequencer liveness was confirmed")
+PY
+
+python3 - "$TEST_SSH_ARGS_LOG" <<'PY'
+import pathlib
+import sys
+
+rows = [line.split("\t") for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()]
+
+def matching(host: str, master_mode: str, check_mode: str) -> list[list[str]]:
+    return [row for row in rows if row[:3] == [host, master_mode, check_mode]]
+
+for host in ("root@sequencer", "root@storage"):
+    if not matching(host, "1", "0"):
+        raise SystemExit(f"missing ControlMaster establishment attempt for {host}")
+    preflight_rows = [
+        row
+        for row in matching(host, "0", "0")
+        if any("oasis7_world_repair_rebuild' --help" in arg for arg in row[3:])
+    ]
+    if not preflight_rows:
+        raise SystemExit(f"missing fallback preflight SSH command for {host}")
+    args = preflight_rows[0][3:]
+    required = {
+        "ControlMaster=no",
+        "ControlPath=none",
+        "PreferredAuthentications=password",
+        "PubkeyAuthentication=no",
+    }
+    missing = sorted(required - set(args))
+    if missing:
+        raise SystemExit(f"fallback SSH command for {host} is missing options: {missing}")
+
+storage_checks = matching("root@storage", "0", "1")
+if not storage_checks:
+    raise SystemExit("missing stale ControlMaster check for storage")
+if not any("-S" in row[3:] for row in storage_checks):
+    raise SystemExit("stale ControlMaster check did not use the established socket")
 PY
 
 python3 - "$TEST_SSH_LOG" <<'PY'
@@ -632,10 +717,38 @@ for host in ("root@sequencer", "root@storage"):
         raise SystemExit(f"missing destructive world reset for {host}")
     if not repair_indexes:
         raise SystemExit(f"missing remote repair rebuild for {host}")
-    if not cleanup_indexes[0] < help_indexes[0] < reset_indexes[0] < repair_indexes[0]:
+    if not help_indexes[0] < cleanup_indexes[0] < reset_indexes[0] < repair_indexes[0]:
         raise SystemExit(
-            f"expected process cleanup before repair preflight and destructive world reset for {host}"
+            f"expected repair preflight before process cleanup and destructive world reset for {host}"
         )
+PY
+
+python3 - "$TEST_EVENT_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+
+def first_index(host: str, needle: str) -> int:
+    for index, line in enumerate(lines):
+        if line.startswith(f"ssh\t{host}\t") and needle in line:
+            return index
+    raise SystemExit(f"missing event for {host}: {needle}")
+
+cleanup_indexes = [
+    first_index(host, "SERVICE_NAME=")
+    for host in ("root@sequencer", "root@storage")
+]
+reset_indexes = [
+    first_index(host, "data/execution-records")
+    for host in ("root@sequencer", "root@storage")
+]
+stage_indexes = [
+    first_index(host, "mkdir -p '/opt/oasis7/p2p-testnet/config/doc/testing/evidence'")
+    for host in ("root@sequencer", "root@storage")
+]
+if not max(cleanup_indexes + reset_indexes) < min(stage_indexes):
+    raise SystemExit("staging began before both hosts were quiesced and destructively reset")
 PY
 
 jq -e '
@@ -715,6 +828,85 @@ test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/runtime-root"
 test -d "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/replication-root"
 test ! -e "$TMP_DIR/remote/root@sequencer/opt/oasis7/p2p-testnet/data/execution-world-simulator-mirror"
 test ! -e "$TMP_DIR/remote/root@storage/opt/oasis7/p2p-testnet/data/execution-world-simulator-mirror"
+
+: >"$TEST_SSH_LOG"
+: >"$TEST_EVENT_LOG"
+: >"$TEST_SSH_ARGS_LOG"
+if TEST_FAIL_PREFLIGHT_HOST=root@storage "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-preflight-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >"$TMP_DIR/preflight-fail.stdout" 2>"$TMP_DIR/preflight-fail.stderr"; then
+  echo "expected rebuild to fail when storage preflight fails" >&2
+  exit 1
+fi
+
+python3 - "$TEST_SSH_LOG" <<'PY'
+import pathlib
+import sys
+
+lines = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
+for host in ("root@sequencer", "root@storage"):
+    host_preflights = [
+        line
+        for line in lines
+        if line.startswith(f"{host}\t") and "oasis7_world_repair_rebuild' --help" in line
+    ]
+    if not host_preflights:
+        raise SystemExit(f"missing preflight attempt for {host}")
+    for required in ("oasis7_governance_registry_import", "command -v python3", "command -v tar", "command -v systemctl", "command -v ps"):
+        if required not in host_preflights[0]:
+            raise SystemExit(f"preflight for {host} is missing required dependency: {required}")
+for forbidden in ("SERVICE_NAME=", "data/execution-records", "mkdir -p"):
+    if any(forbidden in line for line in lines):
+        raise SystemExit(f"preflight failure allowed mutating command containing: {forbidden}")
+PY
+
+cat >"$TMP_DIR/status/sequencer-not-live.json" <<'JSON'
+{
+  "running": false,
+  "last_error": "startup failed"
+}
+JSON
+
+: >"$TEST_SSH_LOG"
+: >"$TEST_EVENT_LOG"
+rm -f "$TEST_REMOTE_ROOT"/started-*
+if TEST_SEQUENCER_STATUS_OVERRIDE="$TMP_DIR/status/sequencer-not-live.json" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
+  --config-dir "$TMP_DIR/config" \
+  --world-dir "$TMP_DIR/world" \
+  --sequencer-ssh-host root@sequencer \
+  --sequencer-sshpass-env SEQ_PASS \
+  --sequencer-service oasis7-triad-sequencer.service \
+  --sequencer-status-url http://sequencer/status \
+  --storage-ssh-host root@storage \
+  --storage-sshpass-env STO_PASS \
+  --storage-service oasis7-triad-storage.service \
+  --storage-status-url http://storage/status \
+  --stack-root /opt/oasis7/p2p-testnet \
+  --out-dir "$TMP_DIR/out-sequencer-liveness-fail" \
+  --poll-attempts 1 \
+  --poll-sleep-seconds 0 >"$TMP_DIR/sequencer-liveness-fail.stdout" 2>"$TMP_DIR/sequencer-liveness-fail.stderr"; then
+  echo "expected rebuild to fail when sequencer liveness check fails" >&2
+  exit 1
+fi
+grep -q "sequencer liveness failed checks after restart" "$TMP_DIR/sequencer-liveness-fail.stderr"
+grep -q "systemctl start 'oasis7-triad-sequencer.service'" "$TEST_EVENT_LOG"
+if grep -q "systemctl start 'oasis7-triad-storage.service'" "$TEST_EVENT_LOG"; then
+  echo "storage started despite failed sequencer liveness" >&2
+  exit 1
+fi
 
 start_count_before=$(grep -c "systemctl start '" "$TEST_EVENT_LOG" || true)
 if TEST_REPAIR_WORLD_TIME_HOST=root@sequencer "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \

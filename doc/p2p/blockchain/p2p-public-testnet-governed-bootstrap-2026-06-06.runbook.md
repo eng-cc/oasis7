@@ -332,11 +332,17 @@ systemctl stop oasis7-triad-sequencer.service
 systemctl stop oasis7-triad-storage.service
 ```
 
+执行任何 stop、process cleanup 或目录删除前，先在两台 validator 上完成非变更 preflight：确认当前 runtime、repair-rebuild helper、governance registry importer 均可执行，repair helper 提供 `--generated-world-dir` 合同，且远端 Python、tar、systemd 与 process inspection 工具可用。任一 host preflight 失败时，两台 host 都不得进入 reset。
+
+必须先 quiesce 并 reset 完两台 validator，之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
+
 必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
 
 标准重建脚本必须清理以下运行态，以保证“从零重建”不会继承旧 peerstore、旧 runtime root 或未释放端口：
 
 - `data/execution-records`
+- `data/execution-world`
+- `data/execution-world-simulator-mirror`
 - `data/storage`
 - `data/runtime-root`
 - `data/replication-root`
@@ -349,7 +355,7 @@ systemctl stop oasis7-triad-storage.service
 固定顺序：
 
 1. start `triad-testnet-sequencer`
-2. confirm sequencer starts cleanly
+2. confirm sequencer liveness（`running=true` 且 `last_error` 为空）
 3. start `triad-testnet-storage`
 4. confirm storage joins sequencer
 

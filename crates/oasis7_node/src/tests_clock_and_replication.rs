@@ -344,21 +344,25 @@ fn pos_engine_proposes_only_on_configured_tick_phase() {
     assert_eq!(phase_nine.consensus_snapshot.tick_phase, 9);
 }
 
-#[test]
-fn pos_engine_recovers_proposal_after_skipping_configured_phase() {
-    let mut config =
-        NodeConfig::new("node-a", "world-phase-recovery", NodeRole::Observer).expect("config");
+fn phase_recovery_config(node_id: &str, world_id: &str) -> NodeConfig {
+    let mut config = NodeConfig::new(node_id, world_id, NodeRole::Observer).expect("config");
     config.pos_config.slot_duration_ms = 100;
     config.pos_config.ticks_per_slot = 10;
     config.pos_config.proposal_tick_phase = 9;
     config.pos_config.slot_clock_genesis_unix_ms = Some(1_000);
-    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    config
+}
 
-    let recovered = engine
+fn tick_phase_recovery(
+    engine: &mut PosNodeEngine,
+    config: &NodeConfig,
+    now_ms: i64,
+) -> NodeEngineTickResult {
+    engine
         .tick(
             &config.node_id,
             &config.world_id,
-            2_000,
+            now_ms,
             None,
             None,
             None,
@@ -366,11 +370,130 @@ fn pos_engine_recovers_proposal_after_skipping_configured_phase() {
             Vec::new(),
             None,
         )
-        .expect("cold-start recovery tick");
+        .expect("phase recovery tick")
+}
+
+#[test]
+fn pos_engine_recovers_proposal_after_skipping_configured_phase() {
+    let config = phase_recovery_config("node-a", "world-phase-recovery");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let recovered = tick_phase_recovery(&mut engine, &config, 2_000);
 
     assert_eq!(recovered.consensus_snapshot.tick_phase, 0);
     assert_eq!(recovered.consensus_snapshot.missed_slot_count, 10);
     assert_eq!(recovered.consensus_snapshot.committed_height, 1);
+}
+
+#[test]
+fn pos_engine_skipped_phase_recovery_is_non_sticky() {
+    let config = phase_recovery_config("node-a", "world-phase-recovery-once");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let recovered = tick_phase_recovery(&mut engine, &config, 2_000);
+    assert_eq!(recovered.consensus_snapshot.committed_height, 1);
+
+    let next_slot_phase_zero = tick_phase_recovery(&mut engine, &config, 2_100);
+    assert_eq!(next_slot_phase_zero.consensus_snapshot.tick_phase, 0);
+    assert_eq!(next_slot_phase_zero.consensus_snapshot.committed_height, 1);
+
+    let next_slot_configured_phase = tick_phase_recovery(&mut engine, &config, 2_190);
+    assert_eq!(next_slot_configured_phase.consensus_snapshot.tick_phase, 9);
+    assert_eq!(
+        next_slot_configured_phase
+            .consensus_snapshot
+            .committed_height,
+        2
+    );
+}
+
+#[test]
+fn pos_engine_disabled_proposals_consume_skipped_phase_recovery() {
+    let config = phase_recovery_config("node-a", "world-phase-recovery-disabled")
+        .with_allow_local_proposals(false);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let guarded = tick_phase_recovery(&mut engine, &config, 2_000);
+    assert_eq!(guarded.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(guarded.consensus_snapshot.committed_height, 0);
+
+    engine.allow_local_proposals = true;
+    let off_phase_retry = tick_phase_recovery(&mut engine, &config, 2_010);
+    assert_eq!(off_phase_retry.consensus_snapshot.tick_phase, 1);
+    assert_eq!(off_phase_retry.consensus_snapshot.committed_height, 0);
+
+    let configured_phase = tick_phase_recovery(&mut engine, &config, 2_090);
+    assert_eq!(configured_phase.consensus_snapshot.committed_height, 1);
+}
+
+#[test]
+fn pos_engine_participation_guard_consumes_skipped_phase_recovery() {
+    let config = phase_recovery_config("node-a", "world-phase-recovery-participation");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.network_committed_height = 1;
+
+    let guarded = tick_phase_recovery(&mut engine, &config, 2_000);
+    assert_eq!(guarded.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(guarded.consensus_snapshot.committed_height, 0);
+
+    engine.network_committed_height = 0;
+    let off_phase_retry = tick_phase_recovery(&mut engine, &config, 2_010);
+    assert_eq!(off_phase_retry.consensus_snapshot.tick_phase, 1);
+    assert_eq!(off_phase_retry.consensus_snapshot.committed_height, 0);
+
+    let configured_phase = tick_phase_recovery(&mut engine, &config, 2_090);
+    assert_eq!(configured_phase.consensus_snapshot.committed_height, 1);
+}
+
+#[test]
+fn pos_engine_skipped_phase_recovery_keeps_expected_proposer_gate() {
+    let validators = vec![
+        PosValidator {
+            validator_id: "node-a".to_string(),
+            stake: 50,
+        },
+        PosValidator {
+            validator_id: "node-b".to_string(),
+            stake: 50,
+        },
+    ];
+    let probe_config = NodeConfig::new("node-a", "world-phase-proposer", NodeRole::Observer)
+        .expect("probe config")
+        .with_pos_validators(validators.clone())
+        .expect("probe validators");
+    let expected = PosNodeEngine::new(&probe_config)
+        .expect("probe engine")
+        .expected_proposer(10)
+        .expect("slot 10 proposer");
+    let non_proposer = validators
+        .iter()
+        .map(|validator| validator.validator_id.as_str())
+        .find(|validator_id| *validator_id != expected.as_str())
+        .expect("non-proposer validator");
+
+    let mut config = NodeConfig::new(non_proposer, "world-phase-proposer", NodeRole::Observer)
+        .expect("config")
+        .with_pos_validators(validators)
+        .expect("validators")
+        .with_auto_attest_all_validators(true);
+    config.pos_config.slot_duration_ms = 100;
+    config.pos_config.ticks_per_slot = 10;
+    config.pos_config.proposal_tick_phase = 9;
+    config.pos_config.slot_clock_genesis_unix_ms = Some(1_000);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let recovered = tick_phase_recovery(&mut engine, &config, 2_000);
+    assert_eq!(recovered.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(recovered.consensus_snapshot.committed_height, 0);
+    assert!(engine.pending.is_none());
+    assert_ne!(
+        engine.expected_proposer(10).as_deref(),
+        Some(config.node_id.as_str())
+    );
+
+    let configured_phase = tick_phase_recovery(&mut engine, &config, 2_090);
+    assert_eq!(configured_phase.consensus_snapshot.committed_height, 0);
+    assert!(engine.pending.is_none());
 }
 
 #[test]

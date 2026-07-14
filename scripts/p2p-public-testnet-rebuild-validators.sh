@@ -229,14 +229,17 @@ open_master_connection() {
   fi
   local sshpass_value=${!sshpass_env_name:-}
   [[ -n "$sshpass_value" ]] || die "ssh password env is empty: $sshpass_env_name"
-  SSHPASS="$sshpass_value" sshpass -e ssh \
+  if ! SSHPASS="$sshpass_value" sshpass -e ssh \
     -M -N -f \
     -o ControlMaster=yes \
     -o ControlPersist=3600 \
     -S "$control_path" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    "$host"
+    "$host"; then
+    printf '\n'
+    return 0
+  fi
   printf '%s\n' "$control_path"
 }
 
@@ -398,6 +401,13 @@ run_repair_rebuild_host() {
   ssh_run "$host" "$control_path" "cat > '$remote_log'" <"$repair_log"
 }
 
+preflight_host() {
+  local host=$1
+  local control_path=$2
+  ssh_run "$host" "$control_path" \
+    "command -v python3 >/dev/null && command -v tar >/dev/null && command -v systemctl >/dev/null && command -v ps >/dev/null && test -x '$STACK_ROOT/current/bin/oasis7_chain_runtime' && test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && test -x '$STACK_ROOT/current/bin/oasis7_governance_registry_import' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
+}
+
 stage_host() {
   local host=$1
   local control_path=$2
@@ -422,8 +432,6 @@ stage_host() {
     done
   fi
 
-  ssh_run "$host" "$control_path" \
-    "test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
   ssh_run "$host" "$control_path" \
     "rm -rf '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world' && mkdir -p '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
   COPYFILE_DISABLE=1 tar -C "$WORLD_DIR" -cf - . \
@@ -871,6 +879,9 @@ cleanup_started_hosts() {
   return "$ok"
 }
 
+preflight_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
+preflight_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
+
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
 
@@ -882,13 +893,14 @@ if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERV
   cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
 fi
 
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
+  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+
 STORAGE_STARTED=1
 if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
   cleanup_after_failed_start "storage start" "$OUT_DIR/storage-liveness.json"
 fi
 
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-liveness.json" "storage liveness" json_liveness_ok \
   || cleanup_after_failed_start "storage liveness" "$OUT_DIR/storage-liveness.json"
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
