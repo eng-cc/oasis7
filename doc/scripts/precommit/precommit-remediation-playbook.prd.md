@@ -14,7 +14,7 @@
 - **范围内**：
   - 新增 `scripts/fix-precommit.sh`。
   - 执行全仓 Rust 格式化并将变更重新加入暂存区。
-  - 调用既有 `scripts/pre-commit.sh` 做 commit baseline 复检，并保留显式 `./scripts/ci-tests.sh required` 作为较重门禁的手动补跑入口。
+  - 不再调用 no-op 的 `scripts/pre-commit.sh` 做复检；显式验证按需运行 `./scripts/ci-tests.sh commit|required`。
 - **范围外**：
   - 不修改 `pre-commit` hook 安装方式。
   - 不新增 lint/type-check 等其他检查项。
@@ -26,7 +26,7 @@
 - 执行顺序：
   1. `env -u RUSTC_WRAPPER cargo fmt --all`
   2. `git add -u`（将已跟踪文件的格式化结果加入暂存区）
-  3. `./scripts/pre-commit.sh`（内部使用 `rustfmt --edition 2024` 处理暂存 Rust 文件，并执行 `./scripts/ci-tests.sh commit`）
+  3. 按失败来源显式运行 `./scripts/ci-tests.sh commit` 或 `./scripts/ci-tests.sh required`；`scripts/pre-commit.sh` 仅为 legacy hook no-op。
   4. 若需要补跑重门禁：`./scripts/ci-tests.sh required`
 
 ## 里程碑
@@ -35,7 +35,7 @@
 - **M3**：更新任务日志并回填状态。
 
 ## 风险
-- **执行耗时**：默认只会触发 commit baseline；若再补跑 `./scripts/ci-tests.sh required`，总耗时取决于机器性能与 `oasis7` required shard 规模。
+- **执行耗时**：只在操作者显式选择验证命令时产生；普通 commit 不触发。
 - **暂存区变化**：`git add -u` 会更新已跟踪文件的暂存状态，提交前需再次确认 diff。
 
 ## 原文约束点映射（内容保真）

@@ -39,13 +39,14 @@ Earlier successful output is background only.
    - `tests_passed`
    - `ready_for_pr`
    - `ready_for_merge`
-2. Choose one concrete verification command that matches the claim.
+2. For `ready_for_pr`, use the trusted same-head CI receipt; other claims choose a matching command/profile.
 3. Prefer the repo helper:
 
 ```bash
 ./scripts/pm/claim-ready.sh \
   --claim-type ready_for_pr \
-  --verify-command "./scripts/doc-governance-check.sh"
+  --verification-profile repository_required \
+  --ci-ready-receipt <receipt.json>
 ```
 
 4. Read both the command output and the exit status.
@@ -73,7 +74,7 @@ Do not collapse multi-check state into a blanket "ready" claim unless every requ
 
 - Current task Doc / PM work: `./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`, `./scripts/doc-governance-check.sh`, `git diff --check`
 - Repo-wide PM governance: `./scripts/pm/lint.sh`
-- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verification-profile <repository-owned-profile> --review-packet-file <canonical-review-packet.json>`
+- Task closeout readiness: `./scripts/pm/task-closeout.sh --role <role> --task-uid <TASK-UID> --verification-profile repository_required --review-packet-file <canonical-review-packet.json> --ci-ready-receipt <receipt.json>`
 - PR readiness: passed pre-PR local role review packet in GitHub task issue evidence comments, then `./scripts/prepare-task-pr.sh`
 
 ## Guardrails

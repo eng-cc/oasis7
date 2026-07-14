@@ -14,7 +14,7 @@
 - 回归治理层：沉淀失败签名、发布影响与后续演进。
 
 ## 3. 关键接口 / 入口
-- `pre-commit` 本地 commit baseline 入口
+- `pre-commit` legacy hook 静默 no-op 入口；`commit` tier 仅供显式调用
 - CI workflow / check 入口
 - `scripts/plan-rust-required-scope.sh`
 - 门禁/required check 配置

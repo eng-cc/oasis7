@@ -95,6 +95,16 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "pr" && "${2:-}" == "view" ]]; then
+  printf '%b\n' "${TEST_PR_STATE_TSV:-true\tOPEN\t}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "pr" && "${2:-}" == "ready" ]]; then
+  printf 'ready\n'
+  exit 0
+fi
+
 if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
   printf 'example/oasis7\n'
   exit 0
@@ -669,6 +679,55 @@ if "missing passed pre-PR local role review evidence" not in stderr:
     raise SystemExit(f"expected missing-review error, got: {stderr}")
 PY
 
+# A fresh task has no role-review packet or provenance ledger yet. The draft
+# candidate exists specifically to obtain same-head CI before those gates.
+reset_smoke_branch_to_base
+write_task_binding
+write_project_trace
+mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
+EOF
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: fresh draft candidate fixture" >/dev/null
+
+draft_log="$TMPDIR/gh-draft-candidate.log"
+draft_git_log="$TMPDIR/git-draft-candidate.log"
+draft_out="$TMPDIR/draft-candidate.out"
+draft_err="$TMPDIR/draft-candidate.err"
+draft_issue_body="$TMPDIR/draft-issue-body.json"
+printf '{"body":"Task UID: %s\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
+if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
+  run_prepare "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
+  cat "$draft_err" >&2
+  exit 1
+fi
+python3 - "$draft_log" "$draft_out" "$draft_err" "$SMOKE_BRANCH" <<'PY'
+import sys
+from pathlib import Path
+gh=Path(sys.argv[1]).read_text(encoding="utf-8")
+out=Path(sys.argv[2]).read_text(encoding="utf-8")
+err=Path(sys.argv[3]).read_text(encoding="utf-8")
+branch=sys.argv[4]
+if f"pr create --base main --head {branch} --fill" not in gh or "--draft" not in gh:
+    raise SystemExit(f"fresh task did not reach draft PR creation: {gh}")
+if "Created PR:" not in out:
+    raise SystemExit(f"fresh draft candidate was not recorded: {out}")
+if "pre-PR local role-return validation failed" in err or "machine-checkable role-return ledger" in err:
+    raise SystemExit(f"draft candidate incorrectly required review provenance: {err}")
+project_writes=[line for line in gh.splitlines() if line.startswith("project item-edit ")]
+if len(project_writes)!=1 or "--field-id FIELD_PR" not in project_writes[0] or "--text https://github.com/example/oasis7/pull/999" not in project_writes[0]:
+    raise SystemExit(f"draft candidate must update exactly the Project PR field: {project_writes}")
+for forbidden in ("FIELD_STATUS","FIELD_PM_STATUS","FIELD_WORKFLOW_PHASE"):
+    if any(forbidden in line for line in project_writes):
+        raise SystemExit(f"draft candidate advanced lifecycle field {forbidden}: {project_writes}")
+PY
+
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(
   python3 - "$GITHUB_FALLBACK_ROOT" <<'PY'
@@ -1024,6 +1083,92 @@ if "- slice ledger: .pm/scratch/" not in stdout:
 if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
 PY
+
+promotion_receipt="$TMPDIR/promotion-receipt.json"
+PROMOTION_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+cat >"$promotion_receipt" <<EOF
+{"repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"check_name":"required-gate","check_app_id":42,"planner_digest":"fixture","head_oid":"$PROMOTION_HEAD"}
+EOF
+promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
+cat >"$promotion_receipt_helper" <<'PY'
+#!/usr/bin/env python3
+import os,sys
+with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("receipt "+" ".join(sys.argv[1:])+"\n")
+PY
+promotion_project_helper="$TMPDIR/promotion-project-helper.py"
+cat >"$promotion_project_helper" <<'PY'
+#!/usr/bin/env python3
+import json,os,pathlib,sys
+root=pathlib.Path(sys.argv[2]); uid=sys.argv[sys.argv.index("--task-uid")+1]
+path=root/".pm/github-project-sync/tasks.json"; data=json.loads(path.read_text())
+data["tasks"][uid]["status"]="pr_watch"; data["tasks"][uid]["workflow_phase"]="pr_watch"
+path.write_text(json.dumps(data)+"\n")
+with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("record-pr ordinary\n")
+PY
+chmod +x "$promotion_receipt_helper" "$promotion_project_helper"
+
+set_promotion_ready_truth() {
+  python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); r=d["tasks"][sys.argv[2]]
+r["status"]="ready"; r["workflow_phase"]="pre_pr_ready"
+open(p,"w").write(json.dumps(d)+"\n")
+PY
+}
+assert_promoted_truth() {
+  python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json,sys
+r=json.load(open(sys.argv[1]))["tasks"][sys.argv[2]]
+assert (r["status"],r["workflow_phase"])==("pr_watch","pr_watch"),r
+PY
+}
+
+"$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --assume-unchanged .pm/github-project-sync/tasks.json
+set_promotion_ready_truth
+promotion_log="$TMPDIR/gh-promotion.log"
+PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+  run_prepare "$promotion_log" "$TMPDIR/git-promotion.log" --promote-draft "$promotion_receipt" >/dev/null
+python3 - "$promotion_log" <<'PY'
+import sys
+lines=open(sys.argv[1]).read().splitlines()
+ready=next(i for i,x in enumerate(lines) if x.startswith("pr ready 999 "))
+record=lines.index("record-pr ordinary")
+assert ready < record,lines
+receipt=next(x for x in lines if x.startswith("receipt "))
+assert "--allow-ready-pr" not in receipt,lines
+PY
+assert_promoted_truth
+
+set_promotion_ready_truth
+recovery_log="$TMPDIR/gh-promotion-recovery.log"
+PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'false\tOPEN\t' \
+  run_prepare "$recovery_log" "$TMPDIR/git-promotion-recovery.log" --promote-draft "$promotion_receipt" >/dev/null
+if grep -q '^pr ready ' "$recovery_log"; then
+  echo "already-ready recovery must not call gh pr ready" >&2
+  exit 1
+fi
+grep -q '^record-pr ordinary$' "$recovery_log"
+grep -q '^receipt .*--allow-ready-pr' "$recovery_log"
+assert_promoted_truth
+
+for unsafe_state in $'false\tCLOSED\t' $'false\tOPEN\t2026-07-14T00:00:00Z'; do
+  set_promotion_ready_truth
+  unsafe_log="$TMPDIR/gh-promotion-unsafe-${unsafe_state//[^a-zA-Z]/_}.log"
+  if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+    PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$unsafe_state" \
+      run_prepare "$unsafe_log" "$TMPDIR/git-promotion-unsafe.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
+    echo "closed/merged promotion recovery must fail" >&2
+    exit 1
+  fi
+  if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$unsafe_log"; then
+    echo "closed/merged recovery reached receipt, ready, or record: $(cat "$unsafe_log")" >&2
+    exit 1
+  fi
+done
+"$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --no-assume-unchanged .pm/github-project-sync/tasks.json
+
 reset_project_mapping_after_record_pr
 
 title_log="$TMPDIR/gh-title.log"

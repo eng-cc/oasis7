@@ -12,10 +12,10 @@
 
 ## 1. Executive Summary
 - Problem Statement: 本地 `pre-commit` 与 PR 门禁若共用同一套较重测试，会显著拉长提交反馈周期并影响开发迭代效率。
-- Proposed Solution: 建立 `commit` / `required` / `full` 分级执行模型，让默认提交路径只跑轻量 commit baseline，PR/CI required gate 保持单一稳定 check context，但可在 job 内按 changed paths 剪裁 viewer/runtime/support 重型分量，并在命中 launcher/shared runtime 路径时按需补 launcher Web `trunk build`，每日定时跑 full，保持“快反馈 + 全覆盖”平衡。
+- Proposed Solution: 保留 `commit` / `required` / `full` 显式命令分级，但普通 `git commit` 不调用任何验证；PR/CI required gate 保持单一稳定 check context，并由 frozen-head Pre-PR Ready 提供本地 lifecycle proof。
 - Success Criteria:
   - SC-1: `scripts/ci-tests.sh` 支持 `commit` / `required` / `full` 分级参数并统一入口。
-  - SC-2: `pre-commit` 默认执行 `commit` baseline，开发反馈时间下降。
+  - SC-2: `pre-commit` 静默成功且不执行验证，普通提交不被本地检查阻塞。
   - SC-3: GitHub Actions 实现 push/PR 跑 stable-context `required-gate`，并在 job 内先规划 changed-path scope；schedule 继续跑 full。
   - SC-3A: `required-gate` 在命中 `crates/oasis7_client_launcher/**`、`crates/oasis7_launcher_ui/**`、`crates/oasis7_proto/**`、`crates/oasis7_wasm_abi/**` 或 `crates/oasis7/**` 的 launcher shared runtime 变更时，必须按需安装 `trunk` 并执行 launcher Web build。
   - SC-4: 分级策略在脚本、workflow、文档三端口径一致。
@@ -27,28 +27,28 @@
   - CI 维护者：希望门禁策略清晰且不漂移。
   - 发布负责人：希望 full 回归仍覆盖主干风险。
 - User Scenarios & Frequency:
-  - 本地提交：每次提交执行 `commit` baseline。
+  - 本地提交：不执行验证。
   - 显式本地重门禁：需要补跑 runtime/simulator 核心 shard 或 viewer Rust 长跑时，手动执行 `required`。
   - PR 门禁：每次 push/PR 先规划 required scope，再执行命中的 required 组件。
   - 每日回归：schedule 执行 full。
 - User Stories:
-  - PRD-TESTING-CI-TIERED-001: As a 开发者, I want pre-commit to run the lightweight `commit` baseline only, so that commit feedback is fast.
+  - PRD-TESTING-CI-TIERED-001: As a 开发者, I want ordinary commits to run no validation, so that CI and frozen-head readiness remain the authoritative gates.
   - PRD-TESTING-CI-TIERED-002: As a CI 维护者, I want one unified test entrypoint with tier flags, so that policy drift is reduced.
   - PRD-TESTING-CI-TIERED-003: As a 发布负责人, I want daily full regression preserved, so that deep regressions are still caught.
 - Critical User Flows:
-  1. Flow-TIERED-001: `本地提交 -> pre-commit 调用 commit -> 快速返回结果`
+  1. Flow-TIERED-001: `本地提交 -> legacy pre-commit no-op -> 成功返回`
   2. Flow-TIERED-002: `push/PR -> planner 基于 changed paths 规划 required scope -> workflow 执行命中的 required 组件 -> 决定是否可合入`
   3. Flow-TIERED-003: `每日定时 -> workflow 执行 full -> 生成重型回归结果`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 分级入口脚本 | `commit` / `required` / `full` 参数 | 调用 `scripts/ci-tests.sh` | `idle -> running -> passed/failed` | commit 优先速度，required 负责较重核心门禁，full 负责低频高覆盖 | CI/开发者可触发 |
-| pre-commit 接线 | 默认等级、执行命令 | `pre-commit.sh` 默认跑 `commit` | `hooked -> executed -> reported` | 以提交速度优先 | 本地开发默认执行 |
+| pre-commit 接线 | 兼容行为 | `pre-commit.sh` 静默成功且不调用检查 | `hooked -> no-op -> success` | 普通提交零验证 | legacy hook 可调用 |
 | workflow 分流 | 触发器类型、执行等级 | push/PR 跑 required，schedule 跑 full | `triggered -> running -> archived` | 时间敏感路径优先 required | 维护者可调整触发策略 |
 | required-gate scope planner | `changed_paths`, `scope`, `run_*` 布尔量 | `required-gate` 先规划 `minimal / targeted / full`，再只执行命中的重型组件，必要时安装 `trunk` 并补 launcher Web build | `planned -> pruned -> executed` | docs-only / 无关元数据走 governance/fmt-only；共享 CI/脚本输入命中时必须回退 full；launcher/shared runtime 路径命中时追加 launcher Web build | workflow 自动执行；本地显式 `required` 不受影响 |
 - Acceptance Criteria:
   - AC-1: `scripts/ci-tests.sh` 分级参数行为明确并可复现。
-  - AC-2: `scripts/pre-commit.sh` 默认执行 `commit`，且不再触发 `cargo test -p oasis7 --tests --features test_tier_required`。
+  - AC-2: `scripts/pre-commit.sh` 不执行格式化、编译、测试、lint 或治理检查。
   - AC-3: `.github/workflows/rust.yml` 按触发器分流 required/full。
   - AC-4: 文档与任务日志回写完整。
   - AC-5: `.github/workflows/rust.yml` 的 `required-gate` 在 push/PR 上先执行 changed-path planner；docs-only / `.pm` / 无关元数据改动只跑 governance/fmt，且 `required-gate` check context 名称保持不变。
@@ -63,7 +63,7 @@
 - Evaluation Strategy: 不适用。
 
 ## 4. Technical Specifications
-- Architecture Overview: 通过统一入口脚本承载分级策略，把 pre-commit commit baseline、CI required gate 与定时 full 回归都收敛到同一执行面。
+- Architecture Overview: 普通 commit 与验证解耦；显式 tier 命令、frozen-head Pre-PR Ready、CI required gate 与定时 full 回归继续使用统一测试入口。
 - Integration Points:
   - `scripts/ci-tests.sh`
   - `scripts/pre-commit.sh`
@@ -100,14 +100,14 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-TESTING-CI-TIERED-001 | T1/T2 | `test_tier_required` | pre-commit `commit` 路径验证 | 本地提交反馈效率 |
+| PRD-TESTING-CI-TIERED-001 | T1/T2 | no-op contract + `test_tier_required` | `bash scripts/pre-commit.test.sh` 验证普通 commit 兼容入口不执行检查；CI required 与 frozen-head readiness evidence 验证 authoritative gates | 本地提交反馈效率与门禁归属 |
 | PRD-TESTING-CI-TIERED-002 | T2/T3/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` | 脚本参数、changed-path planner、launcher Web build planner 输出与 workflow 分流检查 | CI 门禁一致性 |
 | PRD-TESTING-CI-TIERED-003 | T3/T4/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | required-gate scope 剪裁验证、launcher Web build 命中/未命中回归，以及 schedule full 回归与结果审查 | 发布前深度回归覆盖 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-TIERED-001 | `commit` / `required` / `full` 分级执行 | 每次全量执行 | 分级更符合反馈效率目标。 |
-| DEC-TIERED-002 | pre-commit 默认 `commit` | pre-commit 跑 `required` / `full` | 较重门禁会显著阻塞开发节奏。 |
+| DEC-TIERED-002 | pre-commit 静默 no-op；`commit` tier 仅显式调用 | pre-commit 自动执行 `commit` / `required` / `full` | 普通提交与验证解耦，CI required 与 frozen-head readiness 保持 authoritative。 |
 | DEC-TIERED-003 | schedule 承担 full 回归 | 取消 full | 无法保证主干深度质量。 |
 | DEC-TIERED-004 | `required-gate` 保持单一 check context，但在 CI job 内按 changed paths 剪裁重型组件 | 把 docs-only / 元数据 PR 继续送进全量 required，或把 `required-gate` 拆成新 check 名称 | 前者无法改善平均时长，后者会引入分支保护漂移与 required context 迁移成本。 |
 | DEC-TIERED-005 | launcher Web build 继续保持 CI planner 按需触发，不把本地显式 `required` 改成默认 `trunk build` | 无条件把 launcher `trunk build` 加进所有 `required` 执行 | 用户要求“按需跑”，且本地显式 `required` 仍需保持固定重门禁语义，不把 release-only Web 成本扩散到所有场景。 |

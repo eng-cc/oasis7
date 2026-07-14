@@ -19,6 +19,7 @@ Options:
   --claim-type <type>     Claim type (default: ready_for_pr for ready, task_complete for done)
   --comparison-ref <ref>  Immutable diff base; should match the review packet Comparison Ref
   --review-packet-file <path> Passed review packet bound to frozen HEAD (required for ready)
+  --ci-ready-receipt <path> Trusted CI receipt bound to the reviewed draft head
   --pr-receipt <path>    Trusted merged-PR receipt (required for PR-backed done)
   --no-lint               Accepted for compatibility; legacy PM lint is not run
   --json                  Print machine-readable JSON summary only
@@ -45,6 +46,7 @@ CLAIM_TYPE=""
 COMPARISON_REF=""
 OUTPUT_JSON=0
 REVIEW_PACKET_FILE=""
+CI_READY_RECEIPT=""
 PR_MERGE_RECEIPT=""
 
 while [[ $# -gt 0 ]]; do
@@ -75,6 +77,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --review-packet-file) REVIEW_PACKET_FILE="${2:-}"; shift 2 ;;
+    --ci-ready-receipt) CI_READY_RECEIPT="${2:-}"; shift 2 ;;
     --pr-receipt) PR_MERGE_RECEIPT="${2:-}"; shift 2 ;;
     --no-lint)
       shift
@@ -116,6 +119,9 @@ if [[ "$TARGET_STATUS" == "ready" && "$CLAIM_TYPE" != "ready_for_pr" ]]; then
   die "--claim-type must be ready_for_pr when --to-status is ready"
 fi
 if [[ "$TARGET_STATUS" == "ready" ]]; then
+  if [[ "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
+    [[ -n "$CI_READY_RECEIPT" && -f "$CI_READY_RECEIPT" ]] || die "ready closeout requires --ci-ready-receipt"
+  fi
   [[ -n "$REVIEW_PACKET_FILE" && -f "$REVIEW_PACKET_FILE" ]] || die "ready closeout requires --review-packet-file"
   FROZEN_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)"
   grep -q 'Pre-PR Local Role Review: passed' "$REVIEW_PACKET_FILE" || die "review packet is not passed"
@@ -135,6 +141,12 @@ PY
   REVIEW_HEAD="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^head=//p')"
   REVIEW_LEDGER="$(printf '%s\n' "$REVIEW_FIELDS" | sed -n 's/^ledger=//p')"
   REVIEW_LEDGER_PATH="$REVIEW_LEDGER"
+  reviewed_source_head="$REVIEW_HEAD"
+  ci_receipt_head="$FROZEN_HEAD"
+  if [[ -n "$CI_READY_RECEIPT" ]]; then ci_receipt_head="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("head_oid", ""))' "$CI_READY_RECEIPT")"; fi
+  same_head=false
+  [[ "$ci_receipt_head" == "$FROZEN_HEAD" && "$reviewed_source_head" == "$FROZEN_HEAD" ]] && same_head=true
+  [[ "$same_head" == true ]] || die "ci_ready_receipt, reviewed_source_head, and frozen HEAD must satisfy same_head"
   [[ "$REVIEW_LEDGER_PATH" == /* ]] || REVIEW_LEDGER_PATH="$ROOT_DIR/$REVIEW_LEDGER_PATH"
   python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
     || die "ready closeout role-return validation failed"
@@ -194,6 +206,9 @@ AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && shasum -a 256 "$
 AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && shasum -a 256 "$PR_MERGE_RECEIPT" | awk '{print $1}' || printf none)"
 if [[ "$TARGET_STATUS" != "deferred" ]]; then
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
+  if [[ "$CLAIM_TYPE" == "ready_for_pr" && -n "$CI_READY_RECEIPT" ]]; then
+    CLAIM_ARGS+=(--ci-ready-receipt "$CI_READY_RECEIPT")
+  fi
   if [[ -n "$COMPARISON_REF" ]]; then
     CLAIM_ARGS+=(--comparison-ref "$COMPARISON_REF")
   fi

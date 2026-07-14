@@ -78,7 +78,7 @@
   - `cargo test -p oasis7_distfs --lib`
   - `npm --prefix crates/oasis7_viewer run test:feedback-contract`
   - `npm --prefix crates/oasis7_viewer run test:ui`
-  - 用途：本地 `pre-commit` 默认 commit baseline；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
+  - 用途：显式本地诊断 baseline，不由普通 `pre-commit` 自动执行；不包含 `cargo test -p oasis7 --tests --features test_tier_required`，但包含 repo-owned Viewer Web contract + Solid 组件锚点回归。
 - `required`：
   - `./scripts/doc-governance-check.sh`
   - `./scripts/check-script-executable-bits.sh`
@@ -214,7 +214,7 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
   - `oasis7_consensus` / `oasis7_distfs` 轻量 support crate
   - `software_safe` feedback contract regression
 - 边界：
-  - 默认 `pre-commit` 走这一层。
+  - 普通 `pre-commit` 是静默 no-op；这一层仅由操作者显式运行，不是自动提交门禁。
   - 这一层不包含 `cargo test -p oasis7 --tests --features test_tier_required`。
   - 这一层也不包含 `cargo test -p oasis7_viewer` 与 `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`；若改动触达 runtime / simulator 主链，或需要补跑 viewer Rust 长跑，显式执行 S1。
 
@@ -222,6 +222,10 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 ```bash
 ./scripts/ci-tests.sh required
 ```
+
+PR-ready lifecycle does not rerun S1 locally. The frozen draft candidate's
+GitHub `required-gate` supplies the trusted exact-head CI receipt; S1 remains an
+explicit diagnostic command.
 - 覆盖重点：
   - runtime/simulator 大量单元与集成测试
   - `oasis7_viewer_live` 二进制测试

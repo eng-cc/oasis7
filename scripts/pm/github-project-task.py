@@ -377,6 +377,17 @@ def update_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any],
     return int(updated)
 
 
+def update_pr_project_field(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
+    sync = load_sync_module()
+    project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    updated, skipped = sync.update_fields(project_id, project_item_id, task, fields, only_fields={"PR"})
+    if skipped:
+        print(f"github-project-task: skipped draft PR field: {', '.join(skipped)}", file=sys.stderr)
+    if int(updated) != 1:
+        die(f"record-pr: refusing draft candidate because Project PR field was not updated: updated={updated}/1")
+    return int(updated)
+
+
 def update_done_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
     sync = load_sync_module()
     project_id, fields = sync.project_context(args.project_owner, args.project_number)
@@ -961,8 +972,11 @@ def command_record_pr(args: argparse.Namespace) -> int:
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    record["status"] = "pr_watch"
-    record["workflow_phase"] = "pr_watch"
+    is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    target_status = "committed" if is_draft_candidate else "pr_watch"
+    target_phase = "verification" if is_draft_candidate else "pr_watch"
+    record["status"] = target_status
+    record["workflow_phase"] = target_phase
     record.setdefault("merge_hold", {
         "kind": "normal_pr_ci_watch",
         "active": False,
@@ -975,7 +989,10 @@ def command_record_pr(args: argparse.Namespace) -> int:
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
     if record.get("project_item_id"):
-        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+        if is_draft_candidate:
+            updated_fields = update_pr_project_field(args, task, str(record["project_item_id"]))
+        else:
+            updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
     comment_url = issue_comment(
         args.repo,
@@ -983,15 +1000,15 @@ def command_record_pr(args: argparse.Namespace) -> int:
         evidence_body(
             args.task_uid,
             args.role,
-            "pr_watch",
+            target_phase,
             {
-                "Completed": "PR created and task moved to PR watch.",
-                "Pending": "Watch required checks, mergeability, comments, and review threads.",
+                "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
+                "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
                 "Action": "record-pr",
                 "Validation Command": args.validation_command,
-                "Expected Result": "Task status is pr_watch and PR URL is mapped.",
+                "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
                 "Actual Result": args.pr_url,
-                "Blocker / Next Action": "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+                "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
             },
         ),
     )
@@ -1000,7 +1017,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
-        "status": "pr_watch",
+        "status": target_status,
+        "workflow_phase": target_phase,
         "issue_url": record.get("issue_url"),
         "pr_url": args.pr_url,
         "pr_number": record.get("pr_number"),
@@ -1142,6 +1160,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--pr-url", required=True)
     record_pr.add_argument("--role", default="tpm")
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
+    record_pr.add_argument("--draft-candidate", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 

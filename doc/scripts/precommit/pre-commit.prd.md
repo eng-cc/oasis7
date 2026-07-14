@@ -7,11 +7,11 @@
 
 
 ## 目标
-- 在本地提交前执行轻量 commit baseline，尽快反馈常见回归。
+- 普通本地提交不执行格式化、编译、测试、lint 或治理检查；验证由 CI required gate 与 frozen-head Pre-PR Ready 承担。
 - 以单一脚本形式减少重复维护，降低遗漏风险。
 
 ## 范围
-- **范围内**：执行本地提交前格式化（仅格式化已暂存 Rust 文件）与 `commit` 级别测试（文档治理 + 格式校验 + 轻量 support/viewer 套件）。
+- **范围内**：保留 `scripts/pre-commit.sh` 作为已安装 legacy hook 的静默成功兼容入口。
 - **范围内**：`required` 继续保留核心 runtime/simulator shard；凡是需要注册或执行 builtin wasm artifact 的 runtime 闭环用例，统一下放到 `test_tier_full`。
 - **范围外**：lint 或其它包的静态检查。
 - **范围外**：`libp2p`/`wasmtime` 特性回归与 viewer 在线/离线联测（由 `full` 级别承担）。
@@ -19,20 +19,18 @@
 ## 接口 / 数据
 - 脚本路径：`scripts/pre-commit.sh`
 - 运行命令：`./scripts/pre-commit.sh`
-- 执行内容：
-  - 先通过 `git diff --cached --name-only --diff-filter=ACMR -- '*.rs'` 收集已暂存 Rust 文件，再执行 `env -u RUSTC_WRAPPER rustfmt --edition 2024 <files>`，并自动 `git add` 回暂存区。
-  - 调用统一测试清单脚本：`./scripts/ci-tests.sh commit`。
-    - `commit` tier 固定覆盖 `doc-governance + rust-size + fmt --check + oasis7_consensus --lib + oasis7_distfs --lib + software-safe feedback contract`。
-    - `cargo test -p oasis7 --tests --features test_tier_required` 与 `cargo test -p oasis7_viewer` / `cargo check -p oasis7_viewer --target wasm32-unknown-unknown` 都不进入默认提交路径；这些较重校验继续保留在显式 `./scripts/ci-tests.sh required` 与 CI required gate 中，本地 landing 前若需要兜底 viewer Rust 回归，也应显式执行该命令。
+- 执行内容：静默返回成功，不读取或修改暂存区，不调用 `git`、`rustfmt`、`cargo`、`npm`、`ci-tests.sh` 或治理脚本。
+- `./scripts/ci-tests.sh commit` 保留为显式诊断/开发命令，但不由普通 commit 调用，也不是 lifecycle proof。
+- CI required gate 与 `claim-ready --verification-profile repository_required` 的 frozen-head Pre-PR Ready 验证保持不变。
 - 规则归属：
-  - commit baseline 定义：本文件与 `scripts/ci-tests.sh`
+  - 普通 commit no-op 定义：canonical workflow、本文件与 `scripts/pre-commit.sh`
   - required/full 覆盖命令矩阵：`doc/testing/ci/ci-test-coverage.prd.md` 与 `scripts/ci-tests.sh`
   - required/full 分层定义：`doc/testing/ci/ci-tiered-execution.prd.md`
   - case 标签定义（`test_tier_required`/`test_tier_full`）：`doc/testing/ci/ci-testcase-tiering.prd.md`
 
 ## 最小验收命令
 - `./scripts/pre-commit.sh`
-- `./scripts/ci-tests.sh commit`
+- `bash scripts/pre-commit.test.sh`
 - `./scripts/ci-tests.sh required`
 
 ## Git Hook
@@ -57,7 +55,7 @@ test -x .git/hooks/pre-commit && echo "pre-commit hook installed"
 ```
 
 ## 失败修复
-- 当 `pre-commit` 失败时，统一走 `./scripts/fix-precommit.sh`；修复流程与边界以 `doc/scripts/precommit/precommit-remediation-playbook.prd.md` 为准。
+- legacy hook 调用该入口应始终静默成功；显式验证失败的修复流程以 `doc/scripts/precommit/precommit-remediation-playbook.prd.md` 为准。
 
 ## 里程碑
 - **M1**：新增本地提交前联测脚本并纳入文档说明。
@@ -65,7 +63,7 @@ test -x .git/hooks/pre-commit && echo "pre-commit hook installed"
 - **M3**：补充“新仓库需重新注册 hook”文档与操作步骤。
 
 ## 风险
-- **覆盖时延**：`cargo test -p oasis7 --tests --features test_tier_required` 与 viewer Rust 长跑从默认提交路径移出后，相关问题会延后到显式 `required` / CI required gate 暴露。
+- **覆盖时延**：所有回归都可能延后到 frozen-head Pre-PR Ready 或 CI required gate 暴露；不得据此重新把检查塞回普通 commit。
 - **环境差异**：本地与 CI 依赖不同可能造成结果不一致。
 
 ## 原文约束点映射（内容保真）

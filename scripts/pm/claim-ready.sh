@@ -25,12 +25,13 @@ Options:
   --task-uid <task_uid>      Persist the verification result into one task file
   --comparison-ref <ref>     Base ref for immutable range hygiene; derived from origin/main or main when omitted
   --pr-gate-json <path>      Fresh pr-lifecycle-gate JSON (required for ready_for_merge)
+  --ci-ready-receipt <path>  Trusted live CI receipt (required for ready_for_pr)
   --json                     Print machine-readable JSON summary
   -h, --help                 Show help
 
 Examples:
   ./scripts/pm/claim-ready.sh --claim-type tests_passed --verify-command "./scripts/doc-governance-check.sh"
-  ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=false ./scripts/ci-tests.sh required" --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --json
+  ./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verification-profile repository_required --ci-ready-receipt /tmp/ci-ready.json --task-uid task_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx --json
 USAGE
 }
 
@@ -45,6 +46,7 @@ OUTPUT_JSON=0
 TASK_UID=""
 COMPARISON_REF=""
 PR_GATE_JSON=""
+CI_READY_RECEIPT=""
 VERIFICATION_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -71,6 +73,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --pr-gate-json) PR_GATE_JSON="${2:-}"; shift 2 ;;
+    --ci-ready-receipt) CI_READY_RECEIPT="${2:-}"; shift 2 ;;
     -h|--help)
       usage
       exit 0
@@ -86,7 +89,7 @@ if [[ -n "$VERIFICATION_PROFILE" ]]; then
   case "$VERIFICATION_PROFILE" in
     codex_subagent_role_fit) VERIFY_COMMAND="./scripts/pm/verify-codex-subagent-role-fit.sh" ;;
     workflow_behavior) VERIFY_COMMAND="./scripts/pm/workflow-behavior-eval.sh" ;;
-    repository_required) VERIFY_COMMAND="./scripts/ci-tests.sh required" ;;
+    repository_required) VERIFY_COMMAND="true" ;;
     fixture_repository_state)
       [[ "${OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE:-0}" == "1" ]] || die "fixture_repository_state is test-only"
       VERIFY_COMMAND="${OASIS7_FIXTURE_VERIFICATION_COMMAND:-${VERIFY_COMMAND:-test -f .gitignore}}"
@@ -97,6 +100,27 @@ elif [[ "$CLAIM_TYPE" == "task_complete" || "$CLAIM_TYPE" == "ready_for_pr" || "
   die "$CLAIM_TYPE requires --verification-profile; arbitrary --verify-command is not lifecycle proof"
 fi
 [[ -n "$VERIFY_COMMAND" ]] || die "--verify-command or --verification-profile is required"
+
+if [[ "$CLAIM_TYPE" == "ready_for_pr" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
+  # ci_ready_receipt trusted identity: repository task_uid pr_number base_oid
+  # head_oid check_name check_app_id check_run_id planner_digest conclusion observed_at
+  [[ -n "$CI_READY_RECEIPT" && -f "$CI_READY_RECEIPT" ]] || die "ready_for_pr requires --ci-ready-receipt"
+  RECEIPT_ARGS="$(python3 - "$CI_READY_RECEIPT" <<'PY'
+import json,shlex,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+keys=('repository','task_uid','task_issue_number','pr_number','check_name','check_app_id','planner_digest')
+missing=[k for k in keys if r.get(k) in (None,'')]
+if missing: raise SystemExit('ci_ready_receipt missing '+','.join(missing))
+print(' '.join(shlex.quote(str(r[k])) for k in keys))
+PY
+)" || die "invalid ci_ready_receipt"
+  read -r RECEIPT_REPOSITORY RECEIPT_TASK_UID RECEIPT_ISSUE RECEIPT_PR RECEIPT_CHECK RECEIPT_APP RECEIPT_PLANNER <<<"$RECEIPT_ARGS"
+  [[ -z "$TASK_UID" || "$TASK_UID" == "$RECEIPT_TASK_UID" ]] || die "ci_ready_receipt task_uid mismatch"
+  python3 "$SCRIPT_DIR/ci-ready-receipt.py" --repository "$RECEIPT_REPOSITORY" \
+    --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
+    --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" >/dev/null \
+    || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
+fi
 
 CLAIM_LABEL=""
 BLOCKED_PHRASE=""
