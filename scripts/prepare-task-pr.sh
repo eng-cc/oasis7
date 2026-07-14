@@ -1186,7 +1186,9 @@ PY
 )"
   [[ "$TASK_READY" == true ]] || die "promote_draft requires task truth at ready/pre_pr_ready"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
-  PR_IS_DRAFT="$(gh pr view "$PR_TO_PROMOTE" -R "$RR" --json isDraft --jq .isDraft)" || die "promote_draft could not read PR state"
+  PR_STATE_FIELDS="$(gh pr view "$PR_TO_PROMOTE" -R "$RR" --json isDraft,state,merged --jq '[.isDraft,.state,.merged] | @tsv')" || die "promote_draft could not read PR state"
+  IFS=$'\t' read -r PR_IS_DRAFT PR_STATE PR_MERGED <<<"$PR_STATE_FIELDS"
+  [[ "$PR_STATE" == OPEN && "$PR_MERGED" == false ]] || die "promote_draft requires an open, unmerged PR"
   case "$PR_IS_DRAFT" in true|false) ;; *) die "promote_draft received uncertain PR draft state: $PR_IS_DRAFT" ;; esac
   CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
   RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT")

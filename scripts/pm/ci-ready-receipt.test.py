@@ -8,7 +8,7 @@ P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
 UID="task_12345678901234567890123456789012"
 
-def pr(): return {"draft":True,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
+def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40}}
 def plan():
   p={"scope":"targeted","reason_summary":"fixture","changed_path_count":"1"}; p.update({k:"false" for k in M.RUN_FIELDS}); return p
 def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
@@ -35,6 +35,10 @@ class ReceiptTest(unittest.TestCase):
       with self.assertRaisesRegex(SystemExit,"superseded"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
     with self.api(r=ready):
       self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42",allow_ready_pr=True)[3])
+    for state,merged in (("closed",False),("open",True)):
+      bad=pr(); bad.update(draft=False,state=state,merged=merged)
+      with self.api(r=bad):
+        with self.assertRaisesRegex(SystemExit,"superseded"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42",allow_ready_pr=True)
   def test_wrong_app(self):
     with self.api():
       with self.assertRaisesRegex(SystemExit,"wrong_app|uncertain"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","77")

@@ -96,7 +96,7 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
 fi
 
 if [[ "${1:-}" == "pr" && "${2:-}" == "view" ]]; then
-  printf '%s\n' "${TEST_PR_IS_DRAFT:-true}"
+  printf '%b\n' "${TEST_PR_STATE_TSV:-true\tOPEN\tfalse}"
   exit 0
 fi
 
@@ -1127,7 +1127,7 @@ PY
 set_promotion_ready_truth
 promotion_log="$TMPDIR/gh-promotion.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_IS_DRAFT=true \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\tfalse' \
   run_prepare "$promotion_log" "$TMPDIR/git-promotion.log" --promote-draft "$promotion_receipt" >/dev/null
 python3 - "$promotion_log" <<'PY'
 import sys
@@ -1143,7 +1143,7 @@ assert_promoted_truth
 set_promotion_ready_truth
 recovery_log="$TMPDIR/gh-promotion-recovery.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_IS_DRAFT=false \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'false\tOPEN\tfalse' \
   run_prepare "$recovery_log" "$TMPDIR/git-promotion-recovery.log" --promote-draft "$promotion_receipt" >/dev/null
 if grep -q '^pr ready ' "$recovery_log"; then
   echo "already-ready recovery must not call gh pr ready" >&2
@@ -1152,6 +1152,21 @@ fi
 grep -q '^record-pr ordinary$' "$recovery_log"
 grep -q '^receipt .*--allow-ready-pr' "$recovery_log"
 assert_promoted_truth
+
+for unsafe_state in $'false\tCLOSED\tfalse' $'false\tOPEN\ttrue'; do
+  set_promotion_ready_truth
+  unsafe_log="$TMPDIR/gh-promotion-unsafe-${unsafe_state//[^a-zA-Z]/_}.log"
+  if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+    PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$unsafe_state" \
+      run_prepare "$unsafe_log" "$TMPDIR/git-promotion-unsafe.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
+    echo "closed/merged promotion recovery must fail" >&2
+    exit 1
+  fi
+  if grep -Eq '^receipt |^record-pr ordinary$|^pr ready ' "$unsafe_log"; then
+    echo "closed/merged recovery reached receipt, ready, or record: $(cat "$unsafe_log")" >&2
+    exit 1
+  fi
+done
 "$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --no-assume-unchanged .pm/github-project-sync/tasks.json
 
 reset_project_mapping_after_record_pr

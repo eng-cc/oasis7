@@ -84,6 +84,8 @@ def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
 def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id, allow_ready_pr=False):
     pr=gh("api",f"repos/{repository}/pulls/{pr_number}")
     if not pr.get("draft") and not allow_ready_pr: raise SystemExit("ci-ready-receipt: superseded: PR is not a draft candidate")
+    if not pr.get("draft") and (str(pr.get("state") or "").lower()!="open" or bool(pr.get("merged"))):
+        raise SystemExit("ci-ready-receipt: superseded: recovery PR is not open and unmerged")
     body=str(pr.get("body") or "")
     if f"Task: {task_uid}" not in body or f"Refs #{task_issue_number}" not in body:
         raise SystemExit("ci-ready-receipt: uncertain task-to-PR linkage missing")
