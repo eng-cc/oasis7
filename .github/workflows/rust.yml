@@ -65,6 +65,8 @@ jobs:
             --base-ref "${base_ref}" \
             --head-ref "${head_ref}" \
             --github-output "${GITHUB_OUTPUT}"
+          echo "base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
+          echo "head_oid=${head_ref}" >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
           echo "scope=${{ steps.scope.outputs.scope }}"
@@ -84,12 +86,48 @@ jobs:
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
-          cat >>"${GITHUB_STEP_SUMMARY}" <<'PLAN'
-          <!-- oasis7-required-plan-v1 -->
-          ```json
-          {"scope":"${{ steps.scope.outputs.scope }}","reason_summary":"${{ steps.scope.outputs.reason_summary }}","changed_path_count":"${{ steps.scope.outputs.changed_path_count }}","run_oasis7_required_tests":"${{ steps.scope.outputs.run_oasis7_required_tests }}","run_consensus_tests":"${{ steps.scope.outputs.run_consensus_tests }}","run_distfs_tests":"${{ steps.scope.outputs.run_distfs_tests }}","run_oasis7_node_tests":"${{ steps.scope.outputs.run_oasis7_node_tests }}","run_oasis7_net_tests":"${{ steps.scope.outputs.run_oasis7_net_tests }}","run_oasis7_net_libp2p_tests":"${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}","run_viewer_contract_tests":"${{ steps.scope.outputs.run_viewer_contract_tests }}","run_viewer_wasm_check":"${{ steps.scope.outputs.run_viewer_wasm_check }}","run_viewer_perf_smoke":"${{ steps.scope.outputs.run_viewer_perf_smoke }}","run_launcher_web_build":"${{ steps.scope.outputs.run_launcher_web_build }}","run_oasis7_workspace_support_crate_tests":"${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"}
-          ```
-          PLAN
+      - name: Write required planner artifact
+        env:
+          PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
+          REPOSITORY: ${{ github.repository }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+        run: |
+          mkdir -p output/required-plan
+          python3 - <<'PY'
+          import json, os, pathlib
+          source=json.loads(os.environ["PLAN_JSON"])
+          fields=(
+              "scope", "reason_summary", "changed_path_count",
+              "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
+              "run_oasis7_node_tests", "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests",
+              "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
+              "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
+          )
+          missing=[field for field in fields if field not in source]
+          if missing:
+              raise SystemExit(f"missing required planner outputs: {', '.join(missing)}")
+          planner={field:source[field] for field in fields}
+          payload={
+              "schema":"oasis7-required-plan-v1",
+              "repository":os.environ["REPOSITORY"],
+              "workflow_run_id":int(os.environ["WORKFLOW_RUN_ID"]),
+              "head_oid":source["head_oid"],
+              "base_oid":source["base_oid"],
+              "check_name":"required-gate",
+              "planner":planner,
+          }
+          pathlib.Path("output/required-plan/oasis7-required-plan-v1.json").write_text(
+              json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8"
+          )
+          PY
+      - name: Upload required planner artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: oasis7-required-plan-v1
+          path: output/required-plan/oasis7-required-plan-v1.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
       - name: Install pinned Rust toolchains
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy

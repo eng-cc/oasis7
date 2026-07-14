@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import importlib.util, io, json, sys, tempfile, unittest
+import importlib.util, io, json, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +12,17 @@ def pr(): return {"draft":True,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a
 def plan():
   p={"scope":"targeted","reason_summary":"fixture","changed_path_count":"1"}; p.update({k:"false" for k in M.RUN_FIELDS}); return p
 def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
+def null_summary_run(run_id=12345):
+  r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
+def artifact(run_id=12345,expired=False):
+  return {"id":77,"name":"oasis7-required-plan-v1","expired":expired,"workflow_run":{"id":run_id}}
+def envelope(run_id=12345,repository="eng-cc/oasis7",head_oid="a"*40,base_oid="b"*40,check_name="required-gate",planner=None):
+  return {"schema":"oasis7-required-plan-v1","repository":repository,"workflow_run_id":run_id,
+    "head_oid":head_oid,"base_oid":base_oid,"check_name":check_name,"planner":planner if planner is not None else plan()}
+def artifact_zip(payload=None,filename="oasis7-required-plan-v1.json"):
+  out=io.BytesIO()
+  with zipfile.ZipFile(out,"w") as z: z.writestr(filename,json.dumps(payload if payload is not None else envelope()))
+  return out.getvalue()
 
 class ReceiptTest(unittest.TestCase):
   def api(self, r=None, runs=None):
@@ -42,4 +53,36 @@ class ReceiptTest(unittest.TestCase):
   def test_uncertain_missing_planner(self):
     bad=run(); bad["output"]={"summary":"no marker"}
     with self.assertRaisesRegex(SystemExit,"uncertain"): M.planner_from_run(bad)
+  def planner_from_artifact(self,meta=None,payload=None,data=None,run_id=12345):
+    check=null_summary_run(run_id)
+    artifacts={"artifacts":[meta if meta is not None else artifact(run_id)]}
+    blob=artifact_zip(payload) if data is None else data
+    with patch.object(M,"gh",return_value=artifacts),patch.object(M,"artifact_bytes",return_value=blob,create=True):
+      return M.planner_for_run("eng-cc/oasis7",check,base_oid="b"*40,head_oid="a"*40)
+  def test_null_summary_uses_same_workflow_run_planner_artifact(self):
+    self.assertEqual("targeted",self.planner_from_artifact()["scope"])
+  def test_missing_artifact_fails_closed(self):
+    with patch.object(M,"gh",return_value={"artifacts":[]}):
+      with self.assertRaisesRegex(SystemExit,"uncertain.*artifact|artifact.*missing"): M.planner_for_run("eng-cc/oasis7",null_summary_run(),base_oid="b"*40,head_oid="a"*40)
+  def test_expired_artifact_fails_closed(self):
+    with self.assertRaisesRegex(SystemExit,"expired|uncertain"): self.planner_from_artifact(meta=artifact(expired=True))
+  def test_wrong_run_artifact_fails_closed(self):
+    with self.assertRaisesRegex(SystemExit,"wrong.run|uncertain|artifact"): self.planner_from_artifact(meta=artifact(run_id=999),run_id=12345)
+  def test_malformed_artifact_fails_closed(self):
+    for bad in (b"not a zip",artifact_zip(filename="wrong.json"),artifact_zip(payload={"schema":"oasis7-required-plan-v1"})):
+      with self.subTest(data=bad[:16]):
+        with self.assertRaisesRegex(SystemExit,"malformed|incomplete|uncertain"): self.planner_from_artifact(data=bad)
+  def test_artifact_identity_mismatch_fails_closed(self):
+    cases=(
+      {"repository":"wrong/repo"},
+      {"run_id":999},
+      {"head_oid":"c"*40},
+      {"base_oid":"d"*40},
+      {"check_name":"wrong-gate"},
+    )
+    for changed in cases:
+      with self.subTest(changed=changed):
+        payload=envelope(**changed)
+        with self.assertRaisesRegex(SystemExit,"mismatch|wrong|uncertain"):
+          self.planner_from_artifact(payload=payload)
 if __name__=="__main__": unittest.main()
