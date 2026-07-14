@@ -45,15 +45,67 @@ cat >"$TMP_DIR/consumer-impact-active.json" <<'JSON'
 }
 JSON
 
-cat >"$TMP_DIR/consumer-impact-invalid.json" <<'JSON'
+cat >"$TMP_DIR/consumer-impact-unknown.json" <<'JSON'
+{
+  "impact": "unknown",
+  "evidence_source": "consumer inventory unavailable",
+  "timestamp": "2026-07-15T10:31:30+08:00",
+  "validators_already_stopped": true,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-missing-timezone.json" <<'JSON'
 {
   "impact": "active",
   "evidence_source": "public RPC traffic sample #2264",
   "timestamp": "2026-07-15T10:31:00",
   "validators_already_stopped": false,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-invalid-outage-update-channel.json" <<'JSON'
+{
+  "impact": "active",
+  "evidence_source": "public RPC traffic sample #2264",
+  "timestamp": "2026-07-15T10:31:00+08:00",
+  "validators_already_stopped": false,
   "outage_update_channel": "n/a",
   "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
   "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-invalid-recovery-update-checkpoint.json" <<'JSON'
+{
+  "impact": "unknown",
+  "evidence_source": "consumer inventory unavailable",
+  "timestamp": "2026-07-15T10:32:00Z",
+  "validators_already_stopped": true,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "n/a",
+  "producer_wording_approval": "issue #2264 producer approval",
+  "decision": "proceed"
+}
+JSON
+
+cat >"$TMP_DIR/consumer-impact-invalid-producer-wording-approval.json" <<'JSON'
+{
+  "impact": "active",
+  "evidence_source": "public RPC traffic sample #2264",
+  "timestamp": "2026-07-15T10:33:00Z",
+  "validators_already_stopped": false,
+  "outage_update_channel": "ops-status/testnet-outage-2264",
+  "recovery_update_checkpoint": "Phase G fleet snapshot comment for #2264",
+  "producer_wording_approval": "n/a",
   "decision": "proceed"
 }
 JSON
@@ -665,9 +717,21 @@ assert_consumer_impact_rejected_without_host_access \
   "consumer-impact record must contain valid JSON" \
   --consumer-impact-record "$TMP_DIR/consumer-impact-malformed.json"
 assert_consumer_impact_rejected_without_host_access \
-  invalid \
+  missing-timezone \
   "consumer-impact record is invalid" \
-  --consumer-impact-record "$TMP_DIR/consumer-impact-invalid.json"
+  --consumer-impact-record "$TMP_DIR/consumer-impact-missing-timezone.json"
+assert_consumer_impact_rejected_without_host_access \
+  invalid-outage-update-channel \
+  "consumer-impact record is invalid" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-invalid-outage-update-channel.json"
+assert_consumer_impact_rejected_without_host_access \
+  invalid-recovery-update-checkpoint \
+  "consumer-impact record is invalid" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-invalid-recovery-update-checkpoint.json"
+assert_consumer_impact_rejected_without_host_access \
+  invalid-producer-wording-approval \
+  "consumer-impact record is invalid" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-invalid-producer-wording-approval.json"
 assert_consumer_impact_rejected_without_host_access \
   impossible-date \
   "consumer-impact record is invalid" \
@@ -744,7 +808,7 @@ json=$(TEST_SSH_MASTER_FAIL_HOST=root@sequencer \
   "$ROOT_DIR/scripts/p2p-public-testnet-rebuild-validators.sh" \
   --config-dir "$TMP_DIR/config" \
   --world-dir "$TMP_DIR/world" \
-  --consumer-impact-record "$TMP_DIR/consumer-impact-none.json" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-unknown.json" \
   --sequencer-ssh-host root@sequencer \
   --sequencer-sshpass-env SEQ_PASS \
   --sequencer-service oasis7-triad-sequencer.service \
