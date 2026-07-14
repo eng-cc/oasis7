@@ -577,6 +577,60 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
 }
 
 #[test]
+fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executable() {
+    let mut state = WorldState::default();
+    state.industry_progress.stage = IndustryStage::ScaleOut;
+    state.industry_progress.completed_recipe_jobs = 4;
+    state.factories.insert(
+        FACTORY_SMELTER_MK1.to_string(),
+        FactoryState {
+            factory_id: FACTORY_SMELTER_MK1.to_string(),
+            site_id: "runtime:10:20:0".to_string(),
+            builder_agent_id: "retired-agent".to_string(),
+            spec: small_player_test_factory_spec(FACTORY_SMELTER_MK1),
+            input_ledger: MaterialLedgerId::world(),
+            output_ledger: MaterialLedgerId::world(),
+            durability_ppm: 1_000_000,
+            production: FactoryProductionState {
+                completed_jobs: 4,
+                last_completed_at: Some(12),
+                last_completed_recipe_id: Some("recipe.smelter.iron_ingot".to_string()),
+                ..FactoryProductionState::default()
+            },
+            built_at: 1,
+        },
+    );
+    let gameplay = super::super::gameplay_snapshot::build_player_gameplay_snapshot(
+        &state,
+        Some("missing-agent"),
+        true,
+        None,
+        None,
+        true,
+        None,
+        false,
+        true,
+        None,
+    );
+    assert_eq!(gameplay.stage_status, PlayerGameplayStageStatus::Blocked);
+    assert_eq!(
+        gameplay.execution_state,
+        crate::simulator::PlayerGameplayExecutionState::Blocked
+    );
+    assert!(gameplay.branch_recommendations.is_empty());
+    assert_eq!(
+        gameplay.blocker_kind.as_deref(),
+        Some("branch_commitment_unavailable")
+    );
+    assert!(
+        gameplay
+            .next_step_hint
+            .contains("Restore the inputs or capability")
+    );
+    assert_eq!(gameplay.branch_hint, None);
+}
+
+#[test]
 fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() {
     let _guard = lock_test_llm_env();
     let mut server = setup_industrial_gameplay_with_completed_jobs(51, 6);
