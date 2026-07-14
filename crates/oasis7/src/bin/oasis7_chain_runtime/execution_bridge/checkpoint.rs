@@ -695,6 +695,9 @@ fn remove_pruned_execution_bridge_checkpoint_pin_shards(
         else {
             continue;
         };
+        if shard != execution_bridge_checkpoint_pin_shard_id(height) {
+            continue;
+        }
         if retained_heights.contains(&height) {
             continue;
         }

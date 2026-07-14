@@ -744,6 +744,27 @@ fn checkpoint_gc_removes_every_pin_shard_pruned_after_keep_reduction() {
         .expect("publish checkpoint pin shard");
     }
 
+    let noncanonical_ref = store
+        .put_bytes(b"noncanonical checkpoint shard")
+        .expect("persist noncanonical shard blob");
+    store
+        .replace_pin_scope_shard(
+            "execution_bridge_v1",
+            "checkpoint-1",
+            &BTreeSet::from([noncanonical_ref.clone()]),
+        )
+        .expect("publish noncanonical checkpoint-like shard");
+    let unknown_ref = store
+        .put_bytes(b"unknown external shard")
+        .expect("persist unknown shard blob");
+    store
+        .replace_pin_scope_shard(
+            "execution_bridge_v1",
+            "external-owner",
+            &BTreeSet::from([unknown_ref.clone()]),
+        )
+        .expect("publish unknown shard");
+
     let mut record =
         persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, 8);
     record.checkpoint_ref =
@@ -775,6 +796,21 @@ fn checkpoint_gc_removes_every_pin_shard_pruned_after_keep_reduction() {
             .join("checkpoint-00000000000000000008.json")
             .exists()
     );
+    for (shard, content_ref) in [
+        ("checkpoint-1", noncanonical_ref),
+        ("external-owner", unknown_ref),
+    ] {
+        assert!(
+            scope_dir.join(format!("{shard}.json")).exists(),
+            "unknown shard {shard} was removed"
+        );
+        assert!(
+            store
+                .has(content_ref.as_str())
+                .expect("check retained blob"),
+            "blob pinned by unknown shard {shard} was pruned"
+        );
+    }
 
     let _ = fs::remove_dir_all(dir);
 }
