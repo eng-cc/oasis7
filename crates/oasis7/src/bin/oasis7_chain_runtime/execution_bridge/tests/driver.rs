@@ -888,7 +888,6 @@ fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
     };
     persist_execution_bridge_state(state_path.as_path(), &stale_state)
         .expect("persist stale state");
-
     let mut restarted = NodeRuntimeExecutionDriver::new(
         state_path.clone(),
         world_dir.clone(),
@@ -1000,6 +999,11 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
     };
     persist_execution_bridge_state(state_path.as_path(), &stale_state)
         .expect("persist stale state");
+    fs::write(
+        records_dir.join("retention-degraded"),
+        b"interrupted incremental retention\n",
+    )
+    .expect("persist interrupted retention marker");
 
     let mut restarted = NodeRuntimeExecutionDriver::new(
         state_path.clone(),
@@ -1030,6 +1034,10 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
     assert_eq!(
         recovered_height_one.execution_state_root,
         commit_results[0].execution_state_root
+    );
+    assert!(
+        records_dir.join("retention-degraded").exists(),
+        "stale-height recovery must precede destructive full reconciliation"
     );
 
     let continued_height_two = restarted

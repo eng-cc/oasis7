@@ -256,7 +256,10 @@ fn collect_sidecar_orphan_blob_hashes(
     store: &LocalCasStore,
     retained_blob_hashes: &BTreeSet<String>,
 ) -> Result<Vec<String>, WorldError> {
-    let external_pinned_hashes = store.list_pins()?.into_iter().collect::<BTreeSet<_>>();
+    let external_pinned_hashes = store
+        .list_effective_pins()?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
     let orphan_blob_hashes = store
         .list_blob_hashes()?
         .into_iter()

@@ -716,6 +716,7 @@ pub(super) struct ExecutionReplayPlan {
 pub(super) struct ExecutionBridgePinSet {
     pub latest_height: Option<u64>,
     pub hot_window_start_height: Option<u64>,
+    pub archive_window_start_height: Option<u64>,
     pub checkpoint_heights: BTreeSet<u64>,
     pub pinned_refs: BTreeSet<String>,
     pub best_effort_pinned_refs: BTreeSet<String>,

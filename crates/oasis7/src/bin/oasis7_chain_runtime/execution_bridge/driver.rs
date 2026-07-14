@@ -916,10 +916,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 self.checkpoint_keep_latest,
             )
         };
-        if retention_result.is_ok() {
-            self.retention_reconcile_pending = false;
-        }
         if let Err(err) = retention_result {
+            self.retention_reconcile_pending = true;
             oasis7::observability::emit_stderr_or_event(
                 tracing::Level::WARN,
                 format!(
@@ -929,6 +927,8 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .as_str(),
                 "execution bridge retention maintenance failed",
             );
+        } else {
+            self.retention_reconcile_pending = false;
         }
         let retention_ms = retention_started_at.elapsed();
         super::record_execution_bridge_module_tick_routing_metrics(

@@ -3,6 +3,7 @@ use super::super::checkpoint::{
     list_execution_checkpoint_heights, load_execution_bridge_record,
     load_latest_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
     persist_execution_bridge_record, persist_execution_checkpoint_manifest,
+    run_execution_bridge_incremental_retention_maintenance,
     run_execution_bridge_retention_maintenance, sync_execution_bridge_pin_set,
 };
 use super::super::external_effect::build_execution_replay_plan;
@@ -642,8 +643,12 @@ fn steady_state_commits_do_not_run_full_blob_gc_every_block() {
         .has(orphan_after_height_2.as_str())
         .expect("check second orphan");
     assert!(
-        first_survived || second_survived,
-        "full orphan GC ran on both consecutive steady-state commits"
+        first_survived,
+        "full orphan GC ran before checkpoint cadence"
+    );
+    assert!(
+        second_survived,
+        "full orphan GC ran before checkpoint cadence"
     );
 
     run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 64)
@@ -662,6 +667,134 @@ fn steady_state_commits_do_not_run_full_blob_gc_every_block() {
         .expect("build replay plan after explicit GC");
     assert_eq!(plan.start_height, 1);
     assert_eq!(plan.records.len(), 3);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn steady_state_retention_removes_evicted_record_pin_shards() {
+    let dir = temp_dir("execution-driver-record-pin-shard-window");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
+    storage_profile.execution_hot_head_heights = 2;
+    storage_profile.execution_checkpoint_interval = 2;
+    storage_profile.execution_checkpoint_keep = 2;
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root.clone(),
+        &storage_profile,
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    for height in 1..=6 {
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
+                height,
+                slot: height.saturating_sub(1),
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: empty_action_root.clone(),
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: height as i64 * 1_000,
+            })
+            .expect("steady-state commit");
+    }
+
+    let scope_dir = storage_root.join("pin_scopes").join("execution_bridge_v1");
+    assert!(!scope_dir.join("record-00000000000000000001.json").exists());
+    assert!(!scope_dir.join("record-00000000000000000002.json").exists());
+    assert!(scope_dir.join("record-00000000000000000003.json").exists());
+    assert!(scope_dir.join("record-00000000000000000006.json").exists());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn incremental_retention_pin_shard_count_is_bounded_at_ten_thousand_heights() {
+    let dir = temp_dir("execution-retention-pin-shard-scale");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+    let mut record =
+        persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, 1);
+    const HOT_WINDOW: u64 = 64;
+
+    for height in 1..=10_000 {
+        record.height = height;
+        persist_execution_bridge_record(records_dir.as_path(), &record).expect("persist record");
+        run_execution_bridge_incremental_retention_maintenance(
+            records_dir.as_path(),
+            &store,
+            &record,
+            HOT_WINDOW,
+            64,
+            8,
+        )
+        .expect("incremental retention");
+    }
+
+    let scope_dir = store.root().join("pin_scopes").join("execution_bridge_v1");
+    let shard_count = fs::read_dir(scope_dir).expect("read pin scope").count();
+    assert!(
+        shard_count <= 64 * 8 + 63,
+        "record pin shards exceeded the retained checkpoint span plus one cadence: {shard_count}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn retention_failure_schedules_in_process_full_reconciliation() {
+    let dir = temp_dir("execution-driver-retention-reconcile-retry");
+    let storage_root = dir.join("store");
+    fs::create_dir_all(storage_root.as_path()).expect("create storage root");
+    fs::write(
+        storage_root.join("pin_scopes"),
+        b"block pin scope directory",
+    )
+    .expect("block pin scope directory");
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        dir.join("state.json"),
+        dir.join("world"),
+        dir.join("records"),
+        storage_root.clone(),
+        &StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault),
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    let commit = |driver: &mut NodeRuntimeExecutionDriver, height: u64| {
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
+                height,
+                slot: height.saturating_sub(1),
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: empty_action_root.clone(),
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: height as i64 * 1_000,
+            })
+            .expect("commit remains available when retention fails");
+    };
+
+    commit(&mut driver, 1);
+    assert!(driver.retention_reconcile_pending);
+
+    fs::remove_file(storage_root.join("pin_scopes")).expect("unblock pin scope directory");
+    commit(&mut driver, 2);
+    assert!(!driver.retention_reconcile_pending);
+    assert!(!dir.join("records/retention-degraded").exists());
 
     let _ = fs::remove_dir_all(dir);
 }
@@ -701,10 +834,14 @@ fn execution_bridge_pin_set_keeps_latest_head_and_hot_window_refs() {
     assert_eq!(pin_set.hot_window_start_height, Some(3));
 
     let actual_pins = store
-        .list_pins()
+        .list_effective_pins()
         .expect("list pins")
         .into_iter()
         .collect::<BTreeSet<_>>();
+    assert!(
+        store.list_pins().expect("list legacy pins").is_empty(),
+        "full reconciliation left permanent legacy over-pins"
+    );
     let mut expected_pins = BTreeSet::new();
     for record in &records {
         expected_pins.extend(record.external_effect_ref.iter().cloned());

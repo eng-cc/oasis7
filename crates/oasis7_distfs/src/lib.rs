@@ -351,7 +351,7 @@ impl LocalCasStore {
         if file_index.content_hash_ref_count(content_hash) > 0 {
             return Ok(false);
         }
-        if self.is_pinned(content_hash)? {
+        if self.is_effectively_pinned(content_hash)? {
             return Ok(false);
         }
         let path = self.blob_path(content_hash)?;
@@ -383,10 +383,19 @@ impl LocalCasStore {
     }
 
     pub fn list_pins(&self) -> Result<Vec<String>, WorldError> {
-        Ok(self.load_effective_pins()?.into_iter().collect())
+        Ok(self.load_pins()?.pins.into_iter().collect())
     }
 
     pub fn is_pinned(&self, content_hash: &str) -> Result<bool, WorldError> {
+        validate_hash(content_hash)?;
+        Ok(self.load_pins()?.pins.contains(content_hash))
+    }
+
+    pub fn list_effective_pins(&self) -> Result<Vec<String>, WorldError> {
+        Ok(self.load_effective_pins()?.into_iter().collect())
+    }
+
+    pub fn is_effectively_pinned(&self, content_hash: &str) -> Result<bool, WorldError> {
         validate_hash(content_hash)?;
         Ok(self.load_effective_pins()?.contains(content_hash))
     }

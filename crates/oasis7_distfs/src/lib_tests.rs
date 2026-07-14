@@ -63,8 +63,24 @@ fn scoped_pin_shards_are_atomic_effective_pins_and_can_be_cleared() {
         )
         .expect("replace shard");
 
-    assert!(!store.is_pinned(first.as_str()).expect("first pin"));
-    assert!(store.is_pinned(second.as_str()).expect("second pin"));
+    assert!(
+        !store
+            .is_effectively_pinned(first.as_str())
+            .expect("first pin")
+    );
+    assert!(
+        store
+            .is_effectively_pinned(second.as_str())
+            .expect("second pin")
+    );
+    assert!(store.list_pins().expect("legacy pins").is_empty());
+    assert!(!store.is_pinned(second.as_str()).expect("legacy pin state"));
+    assert!(!store.unpin(second.as_str()).expect("legacy unpin"));
+    assert!(
+        store
+            .is_effectively_pinned(second.as_str())
+            .expect("scoped pin remains independently owned")
+    );
     store.prune_orphan_blobs().expect("prune with scoped pin");
     assert!(store.has(second.as_str()).expect("second exists"));
     assert!(!store.has(first.as_str()).expect("first removed"));
@@ -73,7 +89,11 @@ fn scoped_pin_shards_are_atomic_effective_pins_and_can_be_cleared() {
     store
         .clear_pin_scope("execution_bridge_v1")
         .expect("clear scope");
-    assert!(!store.is_pinned(second.as_str()).expect("cleared pin"));
+    assert!(
+        !store
+            .is_effectively_pinned(second.as_str())
+            .expect("cleared pin")
+    );
     let _ = fs::remove_dir_all(&dir);
 }
 

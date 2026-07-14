@@ -377,20 +377,23 @@ fn maybe_insert_pin_ref(pinned_refs: &mut BTreeSet<String>, content_ref: Option<
 
 fn collect_execution_bridge_record_retained_refs(
     record: &ExecutionBridgeRecord,
+    retain_archive: bool,
     retain_latest_head: bool,
     retain_hot_window: bool,
     pinned_refs: &mut BTreeSet<String>,
     best_effort_pinned_refs: &mut BTreeSet<String>,
 ) {
-    maybe_insert_pin_ref(pinned_refs, record.commit_log_ref.as_deref());
-    maybe_insert_pin_ref(
-        best_effort_pinned_refs,
-        record.external_effect_ref.as_deref(),
-    );
-    maybe_insert_pin_ref(
-        best_effort_pinned_refs,
-        record.world_head_proof_ref.as_deref(),
-    );
+    if retain_archive {
+        maybe_insert_pin_ref(pinned_refs, record.commit_log_ref.as_deref());
+        maybe_insert_pin_ref(
+            best_effort_pinned_refs,
+            record.external_effect_ref.as_deref(),
+        );
+        maybe_insert_pin_ref(
+            best_effort_pinned_refs,
+            record.world_head_proof_ref.as_deref(),
+        );
+    }
 
     if retain_latest_head {
         maybe_insert_pin_ref(pinned_refs, record.latest_state_ref.as_deref());
@@ -475,6 +478,7 @@ fn build_execution_bridge_pin_set(
     let mut pin_set = ExecutionBridgePinSet {
         latest_height: Some(latest_height),
         hot_window_start_height: Some(hot_window_start_height),
+        archive_window_start_height: checkpoint_heights.first().copied(),
         checkpoint_heights,
         pinned_refs: BTreeSet::new(),
         best_effort_pinned_refs: BTreeSet::new(),
@@ -486,6 +490,10 @@ fn build_execution_bridge_pin_set(
         )?;
         collect_execution_bridge_record_retained_refs(
             &record,
+            record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+                || pin_set
+                    .archive_window_start_height
+                    .is_none_or(|start_height| record.height >= start_height),
             record.height == latest_height,
             record.height >= hot_window_start_height,
             &mut pin_set.pinned_refs,
@@ -524,6 +532,41 @@ pub(super) fn sync_execution_bridge_pin_set(
     execution_store
         .clear_pin_scope(EXECUTION_BRIDGE_PIN_SCOPE)
         .map_err(|err| format!("clear execution bridge pin scope failed: {:?}", err))?;
+    for height in list_execution_bridge_record_heights(execution_records_dir)? {
+        let record = load_execution_bridge_record(
+            execution_bridge_record_path(execution_records_dir, height).as_path(),
+        )?;
+        let retain_archive = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+            || pin_set
+                .archive_window_start_height
+                .is_none_or(|start_height| height >= start_height);
+        let retain_latest = pin_set.latest_height == Some(height);
+        let retain_hot = pin_set
+            .hot_window_start_height
+            .is_some_and(|start_height| height >= start_height);
+        replace_execution_bridge_record_pin_shard(
+            &record,
+            retain_archive,
+            retain_latest,
+            retain_hot,
+            execution_store,
+        )?;
+    }
+    for height in &pin_set.checkpoint_heights {
+        replace_execution_bridge_checkpoint_pin_shard(
+            execution_records_dir,
+            execution_store,
+            *height,
+        )?;
+    }
+    execution_store
+        .replace_pins(&BTreeSet::new())
+        .map_err(|err| {
+            format!(
+                "clear execution store reconciliation pins failed: {:?}",
+                err
+            )
+        })?;
 
     Ok(ExecutionBridgePinSet {
         pinned_refs: desired_pins,
@@ -541,6 +584,7 @@ fn execution_bridge_checkpoint_pin_shard_id(height: u64) -> String {
 
 fn build_execution_bridge_record_pin_shard(
     record: &ExecutionBridgeRecord,
+    retain_archive: bool,
     retain_latest_head: bool,
     retain_hot_window: bool,
     execution_store: &LocalCasStore,
@@ -549,6 +593,7 @@ fn build_execution_bridge_record_pin_shard(
     let mut best_effort_refs = BTreeSet::new();
     collect_execution_bridge_record_retained_refs(
         record,
+        retain_archive,
         retain_latest_head,
         retain_hot_window,
         &mut required_refs,
@@ -569,16 +614,32 @@ fn build_execution_bridge_record_pin_shard(
 
 fn replace_execution_bridge_record_pin_shard(
     record: &ExecutionBridgeRecord,
+    retain_archive: bool,
     retain_latest_head: bool,
     retain_hot_window: bool,
     execution_store: &LocalCasStore,
 ) -> Result<(), String> {
     let pins = build_execution_bridge_record_pin_shard(
         record,
+        retain_archive,
         retain_latest_head,
         retain_hot_window,
         execution_store,
     )?;
+    if pins.is_empty() {
+        return execution_store
+            .remove_pin_scope_shard(
+                EXECUTION_BRIDGE_PIN_SCOPE,
+                execution_bridge_record_pin_shard_id(record.height).as_str(),
+            )
+            .map(|_| ())
+            .map_err(|err| {
+                format!(
+                    "remove empty execution bridge record pin shard height={} failed: {:?}",
+                    record.height, err
+                )
+            });
+    }
     execution_store
         .replace_pin_scope_shard(
             EXECUTION_BRIDGE_PIN_SCOPE,
@@ -647,6 +708,25 @@ fn compact_execution_bridge_record_at_height(
     Ok(Some(record))
 }
 
+fn prune_execution_bridge_record_archive_at_height(
+    execution_records_dir: &Path,
+    height: u64,
+) -> Result<(), String> {
+    let path = execution_bridge_record_path(execution_records_dir, height);
+    if !path.exists() {
+        return Ok(());
+    }
+    let mut record = load_execution_bridge_record(path.as_path())?;
+    if record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2 {
+        return Ok(());
+    }
+    record.commit_log_ref = None;
+    record.external_effect_ref = None;
+    record.world_head_proof_ref = None;
+    record.world_head_proof_hash = None;
+    persist_execution_bridge_record_only(execution_records_dir, &record).map(|_| ())
+}
+
 /// Advances retention by the delta introduced by one durable record.
 ///
 /// Record/shard publication and compaction are serial within the execution
@@ -662,7 +742,7 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
     checkpoint_keep_latest: usize,
     gc_allowed: bool,
 ) -> Result<u64, String> {
-    replace_execution_bridge_record_pin_shard(record, true, true, execution_store)?;
+    replace_execution_bridge_record_pin_shard(record, true, true, true, execution_store)?;
 
     if record.checkpoint_ref.is_some() {
         replace_execution_bridge_checkpoint_pin_shard(
@@ -677,11 +757,11 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
         && let Some(evicted_record) =
             compact_execution_bridge_record_at_height(execution_records_dir, evicted_height)?
     {
-        let retain_legacy_refs = evicted_record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2;
         replace_execution_bridge_record_pin_shard(
             &evicted_record,
-            retain_legacy_refs,
-            retain_legacy_refs,
+            true,
+            false,
+            false,
             execution_store,
         )?;
     }
@@ -693,6 +773,26 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
         let retained_span =
             checkpoint_interval_heights.saturating_mul(checkpoint_keep_latest.max(1) as u64);
         if let Some(pruned_height) = record.height.checked_sub(retained_span) {
+            let prune_start = pruned_height
+                .saturating_sub(checkpoint_interval_heights.saturating_sub(1))
+                .max(1);
+            for archive_height in prune_start..=pruned_height {
+                prune_execution_bridge_record_archive_at_height(
+                    execution_records_dir,
+                    archive_height,
+                )?;
+                execution_store
+                    .remove_pin_scope_shard(
+                        EXECUTION_BRIDGE_PIN_SCOPE,
+                        execution_bridge_record_pin_shard_id(archive_height).as_str(),
+                    )
+                    .map_err(|err| {
+                        format!(
+                            "remove execution bridge record pin shard height={} failed: {:?}",
+                            archive_height, err
+                        )
+                    })?;
+            }
             execution_store
                 .remove_pin_scope_shard(
                     EXECUTION_BRIDGE_PIN_SCOPE,
@@ -873,6 +973,16 @@ fn compact_execution_bridge_records(
             if !retain_checkpoint {
                 record.checkpoint_ref = None;
             }
+        }
+        let retain_archive = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2
+            || pin_set
+                .archive_window_start_height
+                .is_none_or(|start_height| height >= start_height);
+        if !retain_archive {
+            record.commit_log_ref = None;
+            record.external_effect_ref = None;
+            record.world_head_proof_ref = None;
+            record.world_head_proof_hash = None;
         }
 
         if record != original_record {
