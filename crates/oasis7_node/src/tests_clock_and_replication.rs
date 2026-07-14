@@ -1,19 +1,19 @@
-#[path = "tests_network_gap_sync_execution_failures.rs"]
-mod network_gap_sync_execution_failure_tests;
-#[path = "tests_network_gap_sync_not_found.rs"]
-mod network_gap_sync_not_found_tests;
 #[path = "tests_network_gap_sync_budget.rs"]
 mod network_gap_sync_budget_tests;
-#[path = "tests_network_gap_sync_provider_routing.rs"]
-mod network_gap_sync_provider_routing_tests;
-#[path = "tests_network_gap_sync_peer_head.rs"]
-mod network_gap_sync_peer_head_tests;
-#[path = "tests_network_gap_sync.rs"]
-mod network_gap_sync_tests;
+#[path = "tests_network_gap_sync_execution_failures.rs"]
+mod network_gap_sync_execution_failure_tests;
 #[path = "tests_network_gap_sync_high_checkpoint_probe.rs"]
 mod network_gap_sync_high_checkpoint_probe_tests;
+#[path = "tests_network_gap_sync_not_found.rs"]
+mod network_gap_sync_not_found_tests;
+#[path = "tests_network_gap_sync_peer_head.rs"]
+mod network_gap_sync_peer_head_tests;
+#[path = "tests_network_gap_sync_provider_routing.rs"]
+mod network_gap_sync_provider_routing_tests;
 #[path = "tests_network_gap_sync_successor_probe.rs"]
 mod network_gap_sync_successor_probe_tests;
+#[path = "tests_network_gap_sync.rs"]
+mod network_gap_sync_tests;
 #[path = "tests_storage_challenge_blob_cache.rs"]
 mod storage_challenge_blob_cache_tests;
 
@@ -405,6 +405,158 @@ fn pos_engine_skipped_phase_recovery_is_non_sticky() {
             .committed_height,
         2
     );
+}
+
+#[test]
+fn pos_engine_pending_proposal_guard_consumes_skipped_phase_recovery() {
+    let config = phase_recovery_config("node-a", "world-phase-recovery-pending");
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+    engine.pending = Some(PendingProposal {
+        height: 2,
+        slot: 10,
+        epoch: 0,
+        opened_at_ms: 1_900,
+        proposer_id: "node-b".to_string(),
+        block_hash: "pending-future-block".to_string(),
+        action_root: empty_action_root(),
+        committed_actions: Vec::new(),
+        attestations: BTreeMap::new(),
+        approved_stake: 0,
+        rejected_stake: 0,
+        status: PosConsensusStatus::Pending,
+    });
+
+    let guarded = tick_phase_recovery(&mut engine, &config, 2_000);
+    assert_eq!(guarded.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(guarded.consensus_snapshot.committed_height, 0);
+    assert!(engine.pending.is_some(), "pending guard must be exercised");
+
+    engine.pending = None;
+    let off_phase_retry = tick_phase_recovery(&mut engine, &config, 2_010);
+    assert_eq!(off_phase_retry.consensus_snapshot.tick_phase, 1);
+    assert_eq!(off_phase_retry.consensus_snapshot.committed_height, 0);
+
+    let configured_phase = tick_phase_recovery(&mut engine, &config, 2_090);
+    assert_eq!(configured_phase.consensus_snapshot.committed_height, 1);
+}
+
+#[derive(Clone)]
+struct RecoveryEdgeSuccessorProbeNetwork {
+    request_count: Arc<Mutex<usize>>,
+}
+
+impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
+    for RecoveryEdgeSuccessorProbeNetwork
+{
+    fn publish(&self, _topic: &str, _payload: &[u8]) -> Result<(), WorldError> {
+        Ok(())
+    }
+
+    fn subscribe(&self, topic: &str) -> Result<NetworkSubscription, WorldError> {
+        Ok(NetworkSubscription::new(
+            topic.to_string(),
+            Arc::new(Mutex::new(HashMap::new())),
+        ))
+    }
+
+    fn request(&self, protocol: &str, _payload: &[u8]) -> Result<Vec<u8>, WorldError> {
+        if protocol != super::replication::REPLICATION_FETCH_COMMIT_PROTOCOL {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: protocol.to_string(),
+            });
+        }
+        let mut request_count = self.request_count.lock().expect("lock request count");
+        *request_count += 1;
+        if *request_count == 1 {
+            return Err(WorldError::NetworkProtocolUnavailable {
+                protocol: format!("libp2p-replication no connected peers for protocol {protocol}"),
+            });
+        }
+        serde_json::to_vec(&super::replication::FetchCommitResponse {
+            found: false,
+            message: None,
+        })
+        .map_err(|err| WorldError::DistributedValidationFailed {
+            reason: format!("encode fetch commit response failed: {err}"),
+        })
+    }
+
+    fn register_handler(
+        &self,
+        _protocol: &str,
+        _handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+    ) -> Result<(), WorldError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn pos_engine_successor_probe_guard_consumes_skipped_phase_recovery() {
+    let dir_remote = temp_dir("phase-recovery-probe-remote");
+    let dir_local = temp_dir("phase-recovery-probe-local");
+    let world_id = "world-phase-recovery-probe";
+    let request_count = Arc::new(Mutex::new(0usize));
+    let network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(RecoveryEdgeSuccessorProbeNetwork {
+        request_count: Arc::clone(&request_count),
+    });
+    let (mut engine, mut replication, mut endpoint, _) =
+        network_gap_sync_tests::build_fetch_commit_success_cache_fixture(
+            world_id,
+            dir_remote.as_path(),
+            dir_local.as_path(),
+            138,
+            139,
+            network,
+        );
+    engine.slot_duration_ms = 100;
+    engine.ticks_per_slot = 10;
+    engine.proposal_tick_phase = 9;
+    engine.slot_clock_genesis_unix_ms = Some(1_000);
+    engine.committed_height = 1;
+    engine.network_committed_height = 0;
+    engine.next_height = 2;
+    engine.replication_enabled = false;
+
+    let guarded = engine
+        .tick(
+            "node-a",
+            world_id,
+            2_000,
+            None,
+            Some(&mut replication),
+            Some(&mut endpoint),
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("successor probe guarded recovery tick");
+    assert_eq!(guarded.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(guarded.consensus_snapshot.committed_height, 1);
+    assert_eq!(engine.last_replication_successor_probe_hold, Some(true));
+
+    engine.last_replication_successor_probe_at_ms = None;
+    let off_phase_retry = engine
+        .tick(
+            "node-a",
+            world_id,
+            2_010,
+            None,
+            Some(&mut replication),
+            Some(&mut endpoint),
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("released successor probe off-phase tick");
+    assert_eq!(off_phase_retry.consensus_snapshot.tick_phase, 1);
+    assert_eq!(off_phase_retry.consensus_snapshot.committed_height, 1);
+    assert_eq!(engine.last_replication_successor_probe_hold, Some(false));
+    assert_eq!(*request_count.lock().expect("lock request count"), 2);
+
+    let _ = fs::remove_dir_all(&dir_remote);
+    let _ = fs::remove_dir_all(&dir_local);
 }
 
 #[test]

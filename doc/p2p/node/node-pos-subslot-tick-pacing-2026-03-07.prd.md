@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 - Problem Statement: 现有 PoS 仅按 slot 进行提案门控，缺少槽内 tick 相位语义；运行线程使用固定 `tick_interval`，难以稳定贴合目标的 `10 tick/slot` 节奏。
-- Proposed Solution: 在 `PosNodeEngine` 引入 `ticks_per_slot` 逻辑 tick 公式与槽内相位门控（仅在目标相位允许提案），并在 `NodeRuntime` 增加基于 wall-clock 的自适应调度等待时间计算。
+- Proposed Solution: 在 `PosNodeEngine` 引入 `ticks_per_slot` 逻辑 tick 公式与槽内相位门控：稳态仅在目标相位允许提案，严格 slot 落后对齐的当前 tick 可使用一次 edge-triggered、non-sticky 的 off-phase 恢复窗口；并在 `NodeRuntime` 增加基于 wall-clock 的自适应调度等待时间计算。
 - Success Criteria:
   - SC-1: 相同 `now_ms/genesis/slot_duration_ms/ticks_per_slot` 输入在多节点计算出一致的 `logical_tick/slot/tick_phase`。
   - SC-2: 使用 `config/chain-pos-defaults.env` 中的 `POS_SLOT_DURATION_MS` 与 `POS_TICKS_PER_SLOT` 默认基线时，每个 slot 最多触发一次本地提案窗口。
