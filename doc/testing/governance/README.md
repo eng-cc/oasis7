@@ -10,6 +10,7 @@
 | `L4A synthetic`、`L4B embodied agent`、`L5` 如何区分 | `playability-l4-synthetic-human-split-2026-05-06.prd.md` | L4 分层与可选内部真人校准边界 |
 | 标准角色 subagent 怎么组成内部评审 | `playability-subagent-review-system-2026-05-06.prd.md` | role review packet、触发矩阵、汇总与 stop conditions |
 | 多种玩家风格如何作为内部输入，而不新增正式角色 | `playability-simulated-player-persona-panel-2026-05-06.prd.md` | persona panel 的输入卡、升级边界与 role-review handoff |
+| 质量趋势指标如何定义；当前窗口的样本和结论在哪里 | `testing-quality-trend-tracking-2026-03-11.prd.md` 定义口径；`../evidence/testing-quality-trend-baseline-2026-03-11.md` 保存报告 | PRD 负责公式、阈值与采集边界；evidence 负责可更新的窗口事实，不另设角色 handoff 文档 |
 | release-gate 指标、质量趋势、审计检查或确定性 guard | `doc/testing/prd.index.md` 的 `governance/` 专题表 | 各专项 topic 的精确文件检索；不替代以上 playability authority |
 
 ## 与相邻入口的职责
