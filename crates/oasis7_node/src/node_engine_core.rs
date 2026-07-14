@@ -228,9 +228,9 @@ impl PosNodeEngine {
         })
     }
 
-    fn align_next_slot_to_wall_clock(&mut self, current_slot: u64) -> Result<(), NodeError> {
+    fn align_next_slot_to_wall_clock(&mut self, current_slot: u64) -> Result<bool, NodeError> {
         if self.next_slot >= current_slot {
-            return Ok(());
+            return Ok(false);
         }
         let skipped_slots = current_slot - self.next_slot;
         self.missed_slot_count = self
@@ -243,7 +243,7 @@ impl PosNodeEngine {
                 ),
             })?;
         self.next_slot = current_slot;
-        Ok(())
+        Ok(true)
     }
 
     pub(super) fn next_tick_wait_duration(&self, now_ms: i64, fallback: Duration) -> Duration {

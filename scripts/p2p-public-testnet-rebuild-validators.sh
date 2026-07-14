@@ -7,6 +7,7 @@ Usage:
   ./scripts/p2p-public-testnet-rebuild-validators.sh \
     --config-dir <path> \
     --world-dir <path> \
+    --consumer-impact-record <path> \
     --sequencer-ssh-host <user@host> \
     --sequencer-sshpass-env <env-name> \
     --sequencer-service <name> \
@@ -22,9 +23,15 @@ Usage:
     [--disable-ssh-multiplex]
 
 Description:
-  Stage deployment-truth config/world onto the validator pair, destructively
-  reset old validator chain state, restart the validator services in order,
-  and capture live status evidence after restart.
+  Safely rebuild the validator pair in this order:
+  consumer-impact gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage.
+  Capture live status evidence after both validators restart.
+
+  The consumer-impact record must be valid JSON with impact set to active,
+  none, or unknown; evidence_source; an RFC3339 timestamp
+  with explicit timezone; boolean validators_already_stopped; and
+  decision=proceed. Active/unknown records also require governed outage and
+  recovery communication references plus producer wording approval.
 
   This script assumes the validator hosts already have the intended runtime
   package installed. It rebuilds chain state from the provided config/world
@@ -57,6 +64,7 @@ cd "$repo_root"
 
 CONFIG_DIR=""
 WORLD_DIR=""
+CONSUMER_IMPACT_RECORD=""
 SEQUENCER_SSH_HOST=""
 SEQUENCER_SSHPASS_ENV=""
 SEQUENCER_SERVICE=""
@@ -79,6 +87,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --world-dir)
       WORLD_DIR=${2:-}
+      shift 2
+      ;;
+    --consumer-impact-record)
+      CONSUMER_IMPACT_RECORD=${2:-}
       shift 2
       ;;
     --sequencer-ssh-host)
@@ -153,6 +165,7 @@ require_command shasum
 
 [[ -n "$CONFIG_DIR" ]] || die "--config-dir is required"
 [[ -n "$WORLD_DIR" ]] || die "--world-dir is required"
+[[ -n "$CONSUMER_IMPACT_RECORD" ]] || die "--consumer-impact-record is required"
 [[ -n "$SEQUENCER_SSH_HOST" ]] || die "--sequencer-ssh-host is required"
 [[ -n "$SEQUENCER_SSHPASS_ENV" ]] || die "--sequencer-sshpass-env is required"
 [[ -n "$SEQUENCER_SERVICE" ]] || die "--sequencer-service is required"
@@ -161,6 +174,60 @@ require_command shasum
 [[ -n "$STORAGE_SSHPASS_ENV" ]] || die "--storage-sshpass-env is required"
 [[ -n "$STORAGE_SERVICE" ]] || die "--storage-service is required"
 [[ -n "$STORAGE_STATUS_URL" ]] || die "--storage-status-url is required"
+
+require_file "$CONSUMER_IMPACT_RECORD"
+if ! jq -e . "$CONSUMER_IMPACT_RECORD" >/dev/null 2>&1; then
+  die "consumer-impact record must contain valid JSON: $CONSUMER_IMPACT_RECORD"
+fi
+consumer_impact_decision=$(jq -r '.decision // empty' "$CONSUMER_IMPACT_RECORD")
+if [[ "$consumer_impact_decision" != "proceed" ]]; then
+  die "consumer-impact decision must be proceed"
+fi
+if ! jq -e '
+  def nonempty_string:
+    type == "string" and ((gsub("^[[:space:]]+|[[:space:]]+$"; "")) | length) > 0;
+  def governed_reference:
+    nonempty_string
+    and ((gsub("^[[:space:]]+|[[:space:]]+$"; "") | ascii_downcase) != "n/a");
+  def leap_year($year):
+    ($year % 4 == 0)
+    and (($year % 100 != 0) or ($year % 400 == 0));
+  def days_in_month($year; $month):
+    if $month == 2 then
+      if leap_year($year) then 29 else 28 end
+    elif $month == 1 or $month == 3 or $month == 5 or $month == 7
+      or $month == 8 or $month == 10 or $month == 12 then
+      31
+    else
+      30
+    end;
+  def valid_calendar_date:
+    (.[0:4] | tonumber) as $year
+    | (.[5:7] | tonumber) as $month
+    | (.[8:10] | tonumber) as $day
+    | $day <= days_in_month($year; $month);
+  type == "object"
+  and (.impact == "active" or .impact == "none" or .impact == "unknown")
+  and (.evidence_source | nonempty_string)
+  and (.timestamp | type == "string")
+  and (.timestamp | test("^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"))
+  and (.timestamp | valid_calendar_date)
+  and (.validators_already_stopped | type == "boolean")
+  and (.decision == "proceed")
+  and (.outage_update_channel | nonempty_string)
+  and (.recovery_update_checkpoint | nonempty_string)
+  and (.producer_wording_approval | nonempty_string)
+  and (
+    .impact == "none"
+    or (
+      (.outage_update_channel | governed_reference)
+      and (.recovery_update_checkpoint | governed_reference)
+      and (.producer_wording_approval | governed_reference)
+    )
+  )
+' "$CONSUMER_IMPACT_RECORD" >/dev/null 2>&1; then
+  die "consumer-impact record is invalid"
+fi
 
 require_dir "$CONFIG_DIR"
 require_dir "$WORLD_DIR"
@@ -229,14 +296,17 @@ open_master_connection() {
   fi
   local sshpass_value=${!sshpass_env_name:-}
   [[ -n "$sshpass_value" ]] || die "ssh password env is empty: $sshpass_env_name"
-  SSHPASS="$sshpass_value" sshpass -e ssh \
+  if ! SSHPASS="$sshpass_value" sshpass -e ssh \
     -M -N -f \
     -o ControlMaster=yes \
-    -o ControlPersist=600 \
+    -o ControlPersist=3600 \
     -S "$control_path" \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    "$host"
+    "$host"; then
+    printf '\n'
+    return 0
+  fi
   printf '%s\n' "$control_path"
 }
 
@@ -248,7 +318,8 @@ ssh_run() {
   local control_path=$2
   shift 2
   local ssh_args=()
-  if [[ -n "$control_path" ]]; then
+  if [[ -n "$control_path" && -S "$control_path" ]] \
+    && ssh -S "$control_path" -O check "$host" >/dev/null 2>&1; then
     ssh_args+=(-S "$control_path")
   else
     ssh_args+=(
@@ -397,6 +468,13 @@ run_repair_rebuild_host() {
   ssh_run "$host" "$control_path" "cat > '$remote_log'" <"$repair_log"
 }
 
+preflight_host() {
+  local host=$1
+  local control_path=$2
+  ssh_run "$host" "$control_path" \
+    "command -v python3 >/dev/null && command -v tar >/dev/null && command -v systemctl >/dev/null && command -v ps >/dev/null && test -x '$STACK_ROOT/current/bin/oasis7_chain_runtime' && test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && test -x '$STACK_ROOT/current/bin/oasis7_governance_registry_import' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
+}
+
 stage_host() {
   local host=$1
   local control_path=$2
@@ -421,8 +499,6 @@ stage_host() {
     done
   fi
 
-  ssh_run "$host" "$control_path" \
-    "test -x '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' && '$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --help 2>&1 | grep -F -- '--generated-world-dir' >/dev/null"
   ssh_run "$host" "$control_path" \
     "rm -rf '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world' && mkdir -p '$STACK_ROOT/staged-world' '$STACK_ROOT/data/execution-world'"
   COPYFILE_DISABLE=1 tar -C "$WORLD_DIR" -cf - . \
@@ -837,7 +913,7 @@ reset_host() {
   local service=$3
   cleanup_host_processes "$host" "$control_path" "$service"
   ssh_run "$host" "$control_path" \
-    "rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
+    "rm -rf '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/execution-world' '$STACK_ROOT/data/execution-world-simulator-mirror' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'; mkdir -p '$STACK_ROOT/data/execution-records' '$STACK_ROOT/data/execution-world' '$STACK_ROOT/data/storage' '$STACK_ROOT/data/runtime-root' '$STACK_ROOT/data/replication-root' '$STACK_ROOT/output/chain-runtime' '$STACK_ROOT/output/node-distfs'"
 }
 
 start_host() {
@@ -870,24 +946,28 @@ cleanup_started_hosts() {
   return "$ok"
 }
 
-stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
-stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
+preflight_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
+preflight_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
 
 reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
 reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
+
+stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
+stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
 
 SEQUENCER_STARTED=1
 if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
   cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
 fi
 
+poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
+  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+
 STORAGE_STARTED=1
 if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
   cleanup_after_failed_start "storage start" "$OUT_DIR/storage-liveness.json"
 fi
 
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-liveness.json" "storage liveness" json_liveness_ok \
   || cleanup_after_failed_start "storage liveness" "$OUT_DIR/storage-liveness.json"
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
