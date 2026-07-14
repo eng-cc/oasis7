@@ -5,6 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-rebuild-validators-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+help_output="$("$ROOT_DIR"/scripts/p2p-public-testnet-rebuild-validators.sh --help)"
+if ! grep -Fq \
+  'preflight both -> reset both -> stage both -> sequencer liveness -> storage' \
+  <<<"$help_output"; then
+  echo "expected --help to describe the safe validator rebuild order" >&2
+  exit 1
+fi
+
 mkdir -p "$TMP_DIR/bin" "$TMP_DIR/config/doc/testing/evidence" "$TMP_DIR/world" "$TMP_DIR/remote" "$TMP_DIR/status"
 
 cat >"$TMP_DIR/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<'EOF'

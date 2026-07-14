@@ -22,9 +22,9 @@ Usage:
     [--disable-ssh-multiplex]
 
 Description:
-  Stage deployment-truth config/world onto the validator pair, destructively
-  reset old validator chain state, restart the validator services in order,
-  and capture live status evidence after restart.
+  Safely rebuild the validator pair in this order:
+  preflight both -> reset both -> stage both -> sequencer liveness -> storage.
+  Capture live status evidence after both validators restart.
 
   This script assumes the validator hosts already have the intended runtime
   package installed. It rebuilds chain state from the provided config/world
