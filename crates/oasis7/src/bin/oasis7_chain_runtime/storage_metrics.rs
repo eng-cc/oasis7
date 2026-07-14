@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::RuntimePaths;
+use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct StorageReplaySummary {
@@ -179,6 +180,14 @@ pub(super) fn collect_storage_metrics(
 ) -> StorageMetricsSnapshot {
     let mut snapshot = StorageMetricsSnapshot::empty(profile);
     let mut issues = Vec::new();
+
+    if paths
+        .execution_records_dir
+        .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+        .exists()
+    {
+        issues.push("execution retention reconciliation pending".to_string());
+    }
 
     snapshot.bytes_by_dir = collect_storage_bytes_by_dir(paths);
 
@@ -680,7 +689,7 @@ mod tests {
     use oasis7::runtime::{World as RuntimeWorld, measure_directory_storage_bytes};
     use oasis7_proto::storage_profile::StorageProfile;
 
-    use super::super::RuntimePaths;
+    use super::super::{EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, RuntimePaths};
     use super::{
         ExecutionRefCountCache, collect_storage_metrics, init_shared_storage_metrics,
         refresh_shared_storage_metrics, snapshot_storage_metrics,
@@ -1029,6 +1038,42 @@ mod tests {
             snapshot.degraded_reason.as_deref(),
             Some("storage degraded")
         );
+    }
+
+    #[test]
+    fn retention_degraded_marker_is_reported_by_storage_metrics() {
+        let root = temp_dir("retention-degraded-marker");
+        let paths = RuntimePaths {
+            runtime_root: root.clone(),
+            execution_bridge_state_path: root.join("bridge-state.json"),
+            execution_world_dir: root.join("reward-runtime-execution-world"),
+            execution_records_dir: root.join("reward-runtime-execution-records"),
+            storage_root: root.join("store"),
+            replication_root: root.join("replication"),
+            reward_runtime_state_path: root.join("reward-runtime-state.json"),
+            reward_runtime_distfs_probe_state_path: root
+                .join("reward-runtime-distfs-probe-state.json"),
+            reward_runtime_report_dir: root.join("reward-runtime-report"),
+            reward_runtime_storage_metrics_path: root.join("reward-runtime-storage-metrics.json"),
+        };
+        fs::create_dir_all(paths.execution_records_dir.as_path()).expect("create records dir");
+        fs::write(
+            paths
+                .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER),
+            b"retention interrupted\n",
+        )
+        .expect("write retention marker");
+
+        let mut cache = ExecutionRefCountCache::default();
+        let snapshot =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some("execution retention reconciliation pending")
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

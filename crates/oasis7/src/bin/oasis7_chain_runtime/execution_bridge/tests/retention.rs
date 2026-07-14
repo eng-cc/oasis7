@@ -770,6 +770,7 @@ fn retention_failure_schedules_in_process_full_reconciliation() {
         &StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault),
     )
     .expect("driver");
+    driver.checkpoint_interval_heights = 2;
     let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
     let commit = |driver: &mut NodeRuntimeExecutionDriver, height: u64| {
         driver
@@ -790,11 +791,96 @@ fn retention_failure_schedules_in_process_full_reconciliation() {
 
     commit(&mut driver, 1);
     assert!(driver.retention_reconcile_pending);
+    assert_eq!(driver.retention_reconcile_next_height, Some(3));
+
+    commit(&mut driver, 2);
+    assert!(driver.retention_reconcile_pending);
+    assert_eq!(
+        driver.retention_reconcile_next_height,
+        Some(3),
+        "bounded incremental failure must not postpone the scheduled full reconciliation"
+    );
+
+    commit(&mut driver, 3);
+    assert!(driver.retention_reconcile_pending);
+    assert_eq!(
+        driver.retention_reconcile_next_height,
+        Some(5),
+        "failed full reconciliation must back off by one checkpoint cadence"
+    );
 
     fs::remove_file(storage_root.join("pin_scopes")).expect("unblock pin scope directory");
-    commit(&mut driver, 2);
+    commit(&mut driver, 4);
+    assert!(driver.retention_reconcile_pending);
+    assert_eq!(driver.retention_reconcile_next_height, Some(5));
+
+    commit(&mut driver, 5);
     assert!(!driver.retention_reconcile_pending);
+    assert_eq!(driver.retention_reconcile_next_height, None);
     assert!(!dir.join("records/retention-degraded").exists());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn retention_reconciliation_is_marker_driven_across_restart() {
+    let dir = temp_dir("execution-driver-retention-marker-restart");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+    let state = ExecutionBridgeState {
+        last_applied_committed_height: 10_000,
+        ..ExecutionBridgeState::default()
+    };
+
+    let healthy = NodeRuntimeExecutionDriver::new_with_sandbox(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+        state.clone(),
+        RuntimeWorld::new(),
+        Box::new(FixedSandbox::succeed(ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        })),
+        32,
+        64,
+        8,
+    );
+    assert!(!healthy.retention_reconcile_pending);
+    assert_eq!(healthy.retention_reconcile_next_height, None);
+
+    fs::write(
+        records_dir.join("retention-degraded"),
+        b"interrupted retention\n",
+    )
+    .expect("write degraded marker");
+    let degraded = NodeRuntimeExecutionDriver::new_with_sandbox(
+        state_path,
+        world_dir,
+        records_dir,
+        storage_root,
+        state,
+        RuntimeWorld::new(),
+        Box::new(FixedSandbox::succeed(ModuleOutput {
+            new_state: None,
+            effects: Vec::new(),
+            emits: Vec::new(),
+            tick_lifecycle: None,
+            output_bytes: 0,
+        })),
+        32,
+        64,
+        8,
+    );
+    assert!(degraded.retention_reconcile_pending);
+    assert_eq!(degraded.retention_reconcile_next_height, Some(10_001));
 
     let _ = fs::remove_dir_all(dir);
 }

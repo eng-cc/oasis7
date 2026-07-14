@@ -404,5 +404,8 @@ fn readiness_failed_gates_excludes_warning_when_critical_alert_blocks() {
             .any(|alert| alert.severity == "critical" && alert.code == "runtime_last_error")
     );
     assert_eq!(readiness.status, "not_ready");
-    assert_eq!(readiness.failed_gates, vec!["runtime_last_error"]);
+    assert_eq!(
+        readiness.failed_gates,
+        vec!["runtime_last_error", "storage_degraded"]
+    );
 }

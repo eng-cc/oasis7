@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
+use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
 use oasis7::runtime::{BlobStore, LocalCasStore};
 
 use super::{
@@ -12,8 +13,6 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_PIN_SCOPE: &str = "execution_bridge_v1";
-const EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER: &str = "retention-degraded";
-
 impl ExecutionCheckpointManifest {
     pub(super) fn new(
         world_id: String,

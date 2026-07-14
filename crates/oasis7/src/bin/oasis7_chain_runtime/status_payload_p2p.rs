@@ -113,6 +113,7 @@ pub(crate) fn build_readiness_status(
                             "consensus_network_lag"
                                 | "consensus_peer_head_unavailable"
                                 | "consensus_peer_head_quorum_missing"
+                                | "storage_degraded"
                                 | "storage_challenge_network_degraded"
                                 | "replication_no_connected_peers"
                                 | "replication_transport_unstable"

@@ -53,6 +53,7 @@ use super::{
     ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
     persist_world_head_proof_for_record,
 };
+use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct ExecutionHashPayload<'a> {
@@ -89,6 +90,7 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) checkpoint_interval_heights: u64,
     pub(super) checkpoint_keep_latest: usize,
     pub(super) retention_reconcile_pending: bool,
+    pub(super) retention_reconcile_next_height: Option<u64>,
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -168,7 +170,11 @@ impl NodeRuntimeExecutionDriver {
         checkpoint_keep_latest: usize,
     ) -> Self {
         let simulator_world_dir = simulator_world_dir_from_execution_world_dir(world_dir.as_path());
-        let retention_reconcile_pending = state.last_applied_committed_height > 0;
+        let retention_reconcile_pending = records_dir
+            .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+            .exists();
+        let retention_reconcile_next_height = retention_reconcile_pending
+            .then(|| state.last_applied_committed_height.saturating_add(1));
         Self {
             state_path,
             world_dir,
@@ -183,6 +189,7 @@ impl NodeRuntimeExecutionDriver {
             checkpoint_interval_heights,
             checkpoint_keep_latest,
             retention_reconcile_pending,
+            retention_reconcile_next_height,
         }
     }
 
@@ -900,7 +907,11 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let world_persist_ms = world_persist_started_at.elapsed();
         let persist_world_ms = state_persist_ms + world_persist_ms;
         let retention_started_at = Instant::now();
-        let retention_result = if self.retention_reconcile_pending {
+        let reconcile_due = self.retention_reconcile_pending
+            && self
+                .retention_reconcile_next_height
+                .is_none_or(|height| context.height >= height);
+        let retention_result = if reconcile_due {
             run_execution_bridge_retention_maintenance(
                 self.records_dir.as_path(),
                 &self.execution_store,
@@ -917,7 +928,15 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         };
         if let Err(err) = retention_result {
+            let was_pending = self.retention_reconcile_pending;
             self.retention_reconcile_pending = true;
+            if reconcile_due || !was_pending {
+                self.retention_reconcile_next_height = Some(
+                    context
+                        .height
+                        .saturating_add(self.checkpoint_interval_heights.max(1)),
+                );
+            }
             oasis7::observability::emit_stderr_or_event(
                 tracing::Level::WARN,
                 format!(
@@ -927,8 +946,9 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 .as_str(),
                 "execution bridge retention maintenance failed",
             );
-        } else {
+        } else if reconcile_due || !self.retention_reconcile_pending {
             self.retention_reconcile_pending = false;
+            self.retention_reconcile_next_height = None;
         }
         let retention_ms = retention_started_at.elapsed();
         super::record_execution_bridge_module_tick_routing_metrics(
