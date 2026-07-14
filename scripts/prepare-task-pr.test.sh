@@ -669,6 +669,49 @@ if "missing passed pre-PR local role review evidence" not in stderr:
     raise SystemExit(f"expected missing-review error, got: {stderr}")
 PY
 
+# A fresh task has no role-review packet or provenance ledger yet. The draft
+# candidate exists specifically to obtain same-head CI before those gates.
+reset_smoke_branch_to_base
+write_task_binding
+write_project_trace
+mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
+EOF
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: fresh draft candidate fixture" >/dev/null
+
+draft_log="$TMPDIR/gh-draft-candidate.log"
+draft_git_log="$TMPDIR/git-draft-candidate.log"
+draft_out="$TMPDIR/draft-candidate.out"
+draft_err="$TMPDIR/draft-candidate.err"
+draft_issue_body="$TMPDIR/draft-issue-body.json"
+printf '{"body":"Task UID: %s\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
+if ! TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" TEST_GH_ISSUE_VIEW_JSON="$draft_issue_body" \
+  run_prepare "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
+  cat "$draft_err" >&2
+  exit 1
+fi
+python3 - "$draft_log" "$draft_out" "$draft_err" "$SMOKE_BRANCH" <<'PY'
+import sys
+from pathlib import Path
+gh=Path(sys.argv[1]).read_text(encoding="utf-8")
+out=Path(sys.argv[2]).read_text(encoding="utf-8")
+err=Path(sys.argv[3]).read_text(encoding="utf-8")
+branch=sys.argv[4]
+if f"pr create --base main --head {branch} --fill" not in gh or "--draft" not in gh:
+    raise SystemExit(f"fresh task did not reach draft PR creation: {gh}")
+if "Created PR:" not in out:
+    raise SystemExit(f"fresh draft candidate was not recorded: {out}")
+if "pre-PR local role-return validation failed" in err or "machine-checkable role-return ledger" in err:
+    raise SystemExit(f"draft candidate incorrectly required review provenance: {err}")
+PY
+
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"
 GITHUB_FALLBACK_WORKTREE="$(
   python3 - "$GITHUB_FALLBACK_ROOT" <<'PY'

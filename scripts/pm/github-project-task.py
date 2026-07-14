@@ -994,7 +994,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
                 "Validation Command": args.validation_command,
                 "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
                 "Actual Result": args.pr_url,
-                "Blocker / Next Action": "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+                "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
             },
         ),
     )

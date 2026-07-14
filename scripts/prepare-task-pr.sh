@@ -1154,7 +1154,7 @@ fi
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
   die "pre-PR local role review is missing required semantic evidence for inferred roles: $MISSING_SEMANTIC_REVIEW_EVIDENCE"
 fi
-if [[ "$CREATE_PR" == "1" ]]; then
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" ]]; then
   [[ "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" != n/a* ]] || die "pre-PR local role review requires a machine-checkable role-return ledger"
   python3 "$ROOT_DIR/scripts/pm/validate-review-provenance.py" \
     --root "$SOURCE_WORKTREE" \
