@@ -4,12 +4,12 @@
 - 对应项目管理文档: `doc/scripts/precommit/pre-commit.project.md`
 
 ## 1. 设计定位
-定义 precommit / 提交前门禁脚本专题设计，统一本地检查、修复流程与 commit baseline / required 门禁口径。
+定义 precommit 兼容入口与 required 门禁边界：普通提交不验证，legacy hook 静默成功。
 
 ## 2. 设计结构
-- 本地门禁层：定义提交前执行的轻量 commit baseline、格式化与治理检查。
+- 本地兼容层：`scripts/pre-commit.sh` 不执行格式化或验证，只为 legacy hook 返回成功。
 - 修复辅助层：提供失败后的 remediation/playbook 脚本入口。
-- 口径对齐层：将本地 precommit 的 commit baseline 与 CI required 门禁串成同一命令矩阵。
+- 口径对齐层：CI required 与 frozen-head Pre-PR Ready 是 authoritative gates，普通 commit 不参与。
 - 维护回写层：沉淀脚本更新与失败签名。
 
 ## 3. 关键接口 / 入口

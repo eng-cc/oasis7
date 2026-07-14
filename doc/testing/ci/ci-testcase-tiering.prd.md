@@ -25,7 +25,7 @@
   - 开发者：需要更快获得 required 反馈。
   - 发布负责人：需要 full 回归不缩水。
 - User Scenarios & Frequency:
-  - 日常本地提交：每次执行 `commit` baseline。
+  - 日常本地提交：不执行验证；`commit` baseline 仅可显式调用。
   - PR 门禁：每次执行 required 门禁。
   - 分支合并前回归：高风险变更执行 full。
   - 策略维护：测试新增/迁移时同步更新标签与脚本。
@@ -41,7 +41,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 测试分级标签 | `test_tier_required` / `test_tier_full` | 用 `#[cfg(feature = ...)]` 标记用例 | `unlabeled -> labeled -> validated` | required 为最小闭环，full 追加重型场景 | 测试维护者审核分级 |
-| 命令级基线分流 | `commit` / `required` / `full` | `pre-commit` 默认执行 `commit`，PR/CI 执行 `required`，重型回归执行 `full` | `queued -> running -> passed/failed` | 先压缩默认提交耗时，再把 case 标签用于较重回归分层 | 开发者/CI 可触发 |
+| 命令级基线分流 | `commit` / `required` / `full` | 普通 commit 不验证；显式命令可执行 `commit`，PR/CI 执行 `required`，重型回归执行 `full` | `queued -> running -> passed/failed` | commit 与验证解耦，case 标签用于门禁分层 | 开发者/CI 可触发 |
 | required 执行路径 | `scripts/ci-tests.sh required` | 执行静态门禁 + `--tests` + required feature | `queued -> running -> passed/failed` | 优先速度与关键覆盖 | 开发者按需触发，CI 自动触发 |
 | full 执行路径 | `scripts/ci-tests.sh full` | 在 required 基础上执行扩展回归 | `queued -> running -> passed/failed` | 覆盖优先于耗时 | 发布前必须通过 |
 - Acceptance Criteria:

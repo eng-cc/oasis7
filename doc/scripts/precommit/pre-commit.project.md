@@ -36,7 +36,7 @@
 
 ## 状态
 - 当前阶段：已提交
-- 最近更新：默认 `pre-commit` 已改为调用 `./scripts/ci-tests.sh commit`，现在仅承载文档治理、fmt、support crate 与 software-safe contract 的轻量本地提交基线；`cargo test -p oasis7 --tests --features test_tier_required`、`cargo test -p oasis7_viewer` 与 viewer wasm32 编译检查继续保留在显式 `required` 与 CI required gate（2026-04-10）
+- 最近更新：`scripts/pre-commit.sh` 已改为静默成功 no-op，普通 commit 不再运行格式化或验证；frozen-head Pre-PR Ready 与 CI required gate 保持 authoritative（2026-07-14）。更早 commit-tier 演进记录保留在上方历史完成项。
 - 审计备注（2026-03-05 ROUND-002）：本文件仅保留执行记录；required/full 规则定义与命令矩阵以 `ci-tiered-execution`、`ci-testcase-tiering`、`ci-test-coverage` 及 `scripts/ci-tests.sh` 为准。
 
 ## 迁移记录（2026-03-03）

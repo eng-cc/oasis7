@@ -81,16 +81,16 @@
 ## 2. User Experience & Functionality
 - User Personas:
   - 工程维护者：需要稳定规则来控制技术债。
-  - 贡献开发者：需要清晰门槛和提交前检查路径。
+  - 贡献开发者：需要清晰区分普通提交与 authoritative verification gates。
   - 评审者：需要可量化判断变更是否合规。
 - User Scenarios & Frequency:
-  - 日常提交前检查：每次提交前执行，确认格式、结构与门禁符合要求。
+  - 日常提交：不执行本地验证；冻结 HEAD 的 PR-ready 验证与 CI required gate 负责拦截回归。
   - CI 失败排查：每个异常流水线触发后执行，定位脚本与规则来源。
   - 规范迭代评审：每周至少 1 次，评估误报率和治理收益。
   - 季度治理复盘：每季度 1 次，回看违规趋势与修复效率。
 - User Stories:
   - PRD-ENGINEERING-001: As an 工程维护者, I want enforceable file-size and structure limits, so that maintenance cost stays bounded.
-  - PRD-ENGINEERING-002: As a 开发者, I want deterministic pre-commit checks, so that regressions are caught before CI.
+  - PRD-ENGINEERING-002: As a 开发者, I want ordinary commits decoupled from validation, so that authoritative frozen-head and CI gates own regression detection.
   - PRD-ENGINEERING-003: As a 评审者, I want auditable governance evidence, so that review decisions are defensible.
   - PRD-ENGINEERING-004: As a 文档维护者, I want legacy docs migrated with per-doc manual review, so that content intent is preserved while converging to strict schema.
   - PRD-ENGINEERING-005 (historical): legacy migration collaboration principles were completed and retired; current doc topology rules live in `doc/engineering/doc-governance/doc-structure-standard.design.md`.
@@ -140,7 +140,7 @@
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 文档治理检查 | allowlist、模块根目录规则、根目录规则 | 执行 `doc-governance-check.sh` | `pass/fail` | 按违规严重度输出 | 所有人可执行，治理维护者可更新基线 |
-| 提交前检查 | 格式、静态检查、测试分层触发 | pre-commit 自动执行 `commit` baseline；需要时再显式补跑 `required/full` | `pending -> running -> blocked/passed` | 默认先 `commit`，再按风险升级到 `required/full` | 贡献者可触发，CI 负责人可调整策略 |
+| 提交与验证边界 | ordinary commit、frozen-head verification、CI required | pre-commit 静默 no-op；PR-ready 本地验证与 CI required 保持 authoritative | `commit -> freeze -> verify -> CI` | 普通提交零验证，门禁集中到可追踪阶段 | 贡献者可提交，workflow/CI owner 维护门禁 |
 | 工程趋势统计 | 违规率、修复时长、回归率 | 周期性生成报表并复盘 | `collecting -> reported -> actioned` | 按模块与时间排序 | 评审者与维护者可读写 |
 | PRD 格式迁移 | 文档路径、迁移批次ID、原文关键约束点 | 人工阅读原文后按 strict schema 重写并复核 | `inventory -> migrated -> verified` | 默认按活跃文档优先、按模块分批 | 治理维护者可冻结批次，贡献者可提交迁移 |
 | 并行迁移协作 | Owner、范围、快照日期、燃尽统计 | 依据协作方案分批推进迁移 | `planned -> in_progress -> done` | 目录前缀互斥，按负载均衡调整 | 协调人分配，Owner 执行，复核人抽检 |

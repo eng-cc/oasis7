@@ -11,4 +11,4 @@ run() {
 
 run env -u RUSTC_WRAPPER cargo fmt --all
 run git add -u
-run ./scripts/pre-commit.sh
+run ./scripts/ci-tests.sh commit

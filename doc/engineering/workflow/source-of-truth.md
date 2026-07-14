@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.10**
-Last Updated: **2026-07-13**
+Version: **v1.9.11**
+Last Updated: **2026-07-14**
 
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -65,6 +65,9 @@ resume the typed action, not a role title.
 <a id="canonical-gates"></a>
 ## Ready and Done
 These are the only gate definitions in this specification.
+
+Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy
+compatibility entrypoint. CI required and frozen-head readiness remain authoritative.
 
 <a id="freeze-gate"></a>
 **Freeze gate.**
