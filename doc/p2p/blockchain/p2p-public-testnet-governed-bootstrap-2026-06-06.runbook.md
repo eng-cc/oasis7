@@ -303,6 +303,28 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 
 执行任何 stop、process cleanup、目录删除或 staging 前，先在两台 validator 上完成非变更 preflight：确认当前 runtime、repair-rebuild helper、governance registry importer 均可执行，repair helper 提供 `--generated-world-dir` 合同，且远端 Python、tar、systemd 与 process inspection 工具可用。任一 host preflight 失败时，两台 host 都不得进入 reset。
 
+### C1.5. Consumer-impact checkpoint (hard gate)
+
+在任何 destructive reset 前，必须先完成并留存 consumer-impact determination；结论只能是 `active`、`none` 或 `unknown`，并同时记录 evidence source 和带时区的 timestamp。至少记录：
+
+```text
+consumer_impact: active | none | unknown
+evidence_source: <status/traffic/operator/community evidence reference>
+observed_at: <ISO-8601 timestamp with timezone>
+validators_already_stopped: yes | no
+outage_update_channel: <channel/reference or n/a when consumer_impact=none>
+recovery_update_checkpoint: <Phase G full-fleet snapshot/update reference or n/a when consumer_impact=none>
+producer_wording_approval: <approval reference or n/a when consumer_impact=none>
+decision: proceed | hold
+```
+
+这个 checkpoint 是 reset/redeploy continuation 的硬 gate：
+
+1. `consumer_impact=none` 时，只有 evidence source、timestamp 和 `decision=proceed` 已记录，才可继续。
+2. `consumer_impact=active` 或 `unknown` 时，按存在外部 consumer 处理。TPM 与 LiveOps/community 共同负责 outage 和 recovery updates，`producer_system_designer` 批准对外 wording；outage update channel、recovery update checkpoint 和 wording approval reference 必须在 reset 继续前记录，缺少任一项时 `decision=hold`。
+3. 如果 validator 在本 checkpoint 执行前已经停止，也不能跳过 determination：在任何目录删除、reset、staging、启动或其他 redeploy continuation 前补齐同一记录。已停止这一事实本身不能推断 `active`、`none` 或恢复完成。
+4. 本 checkpoint 只授权继续执行受治理的 testnet reset/redeploy，不改变 `testnet`、`resettable`、`non-mainnet` 边界，也不授权承诺旧 chain state、testnet asset 或 mainnet continuity。
+
 ### C2. Reset both validators
 停止服务并 destructive reset 旧链状态：
 
@@ -565,8 +587,9 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 ### Operator communication boundary
 
 1. **Merge announcement: n/a.** 合并 runbook、代码或 package 变更不等于 live deployment 已执行，不发布“网络已恢复”或“部署已完成”的 merge announcement。
-2. 只有确认当前存在 active external testnet consumers 时，才需要 deployment/outage messaging；没有外部 consumer 时保留内部 operator 记录即可。需要对外说明时，必须使用 `testnet`、`resettable`、`non-mainnet` 边界，例如：`Oasis7 public testnet is undergoing a governed clean rebuild. This testnet is resettable and non-mainnet. Validators are temporarily unavailable; RPC, explorer, and guarded faucet may be unavailable or stale until full-fleet verification completes.`
-3. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足并留存 full-fleet snapshot 后，才可说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
+2. Phase C1.5 的 consumer-impact determination 是 deployment/outage messaging 的来源。`active` 或 `unknown` 都必须按存在外部 consumer 处理：TPM 与 LiveOps/community 负责 outage 和 recovery updates，`producer_system_designer` 批准 wording，并在 destructive reset/redeploy continuation 前记录 update channel、recovery checkpoint 和 approval reference。只有 `none` 且 evidence source 与 timestamp 已留存时，才可只保留内部 operator 记录。validator 已停止也不豁免这项 determination 或沟通 gate。
+3. 需要对外说明时，必须使用 `testnet`、`resettable`、`non-mainnet` 边界，例如：`Oasis7 public testnet is undergoing a governed clean rebuild. This testnet is resettable and non-mainnet. Validators are temporarily unavailable; RPC, explorer, and guarded faucet may be unavailable or stale until full-fleet verification completes.`
+4. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足并留存 full-fleet snapshot 后，才可由已记录的 recovery update checkpoint 说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ## 14. Phase H - Failure Handling and Rollback
 ### Deployment rollback
