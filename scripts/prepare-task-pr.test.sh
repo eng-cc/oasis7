@@ -96,7 +96,7 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
 fi
 
 if [[ "${1:-}" == "pr" && "${2:-}" == "view" ]]; then
-  printf '%b\n' "${TEST_PR_STATE_TSV:-true\tOPEN\tfalse}"
+  printf '%b\n' "${TEST_PR_STATE_TSV:-true\tOPEN\t}"
   exit 0
 fi
 
@@ -1127,7 +1127,7 @@ PY
 set_promotion_ready_truth
 promotion_log="$TMPDIR/gh-promotion.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\tfalse' \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
   run_prepare "$promotion_log" "$TMPDIR/git-promotion.log" --promote-draft "$promotion_receipt" >/dev/null
 python3 - "$promotion_log" <<'PY'
 import sys
@@ -1143,7 +1143,7 @@ assert_promoted_truth
 set_promotion_ready_truth
 recovery_log="$TMPDIR/gh-promotion-recovery.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'false\tOPEN\tfalse' \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'false\tOPEN\t' \
   run_prepare "$recovery_log" "$TMPDIR/git-promotion-recovery.log" --promote-draft "$promotion_receipt" >/dev/null
 if grep -q '^pr ready ' "$recovery_log"; then
   echo "already-ready recovery must not call gh pr ready" >&2
@@ -1153,7 +1153,7 @@ grep -q '^record-pr ordinary$' "$recovery_log"
 grep -q '^receipt .*--allow-ready-pr' "$recovery_log"
 assert_promoted_truth
 
-for unsafe_state in $'false\tCLOSED\tfalse' $'false\tOPEN\ttrue'; do
+for unsafe_state in $'false\tCLOSED\t' $'false\tOPEN\t2026-07-14T00:00:00Z'; do
   set_promotion_ready_truth
   unsafe_log="$TMPDIR/gh-promotion-unsafe-${unsafe_state//[^a-zA-Z]/_}.log"
   if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
