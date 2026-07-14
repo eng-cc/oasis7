@@ -915,7 +915,11 @@ impl ReplicationRuntime {
         {
             referenced_hashes.insert(metadata.content_hash);
         }
-        for pinned_hash in self.store.list_pins().map_err(distfs_error_to_node_error)? {
+        for pinned_hash in self
+            .store
+            .list_effective_pins()
+            .map_err(distfs_error_to_node_error)?
+        {
             referenced_hashes.insert(pinned_hash);
         }
         let cold_index = load_commit_message_cold_index_from_root(self.config.root_dir.as_path())?;

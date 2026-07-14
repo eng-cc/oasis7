@@ -41,6 +41,75 @@ fn cas_roundtrip_and_pin() {
 }
 
 #[test]
+fn scoped_pin_shards_are_atomic_effective_pins_and_can_be_cleared() {
+    let dir = temp_dir("scoped-pins");
+    let store = LocalCasStore::new(&dir);
+    let first = store.put_bytes(b"scoped-first").expect("put first");
+    let second = store.put_bytes(b"scoped-second").expect("put second");
+    let orphan = store.put_bytes(b"scoped-orphan").expect("put orphan");
+
+    store
+        .replace_pin_scope_shard(
+            "execution_bridge_v1",
+            "record-1",
+            &BTreeSet::from([first.clone()]),
+        )
+        .expect("publish first shard");
+    store
+        .replace_pin_scope_shard(
+            "execution_bridge_v1",
+            "record-1",
+            &BTreeSet::from([second.clone()]),
+        )
+        .expect("replace shard");
+    assert_eq!(
+        store
+            .list_pin_scope_shards("execution_bridge_v1")
+            .expect("list shards"),
+        vec!["record-1"]
+    );
+
+    assert!(
+        !store
+            .is_effectively_pinned(first.as_str())
+            .expect("first pin")
+    );
+    assert!(
+        store
+            .is_effectively_pinned(second.as_str())
+            .expect("second pin")
+    );
+    assert!(store.list_pins().expect("legacy pins").is_empty());
+    assert!(!store.is_pinned(second.as_str()).expect("legacy pin state"));
+    assert!(!store.unpin(second.as_str()).expect("legacy unpin"));
+    assert!(
+        store
+            .is_effectively_pinned(second.as_str())
+            .expect("scoped pin remains independently owned")
+    );
+    store.prune_orphan_blobs().expect("prune with scoped pin");
+    assert!(store.has(second.as_str()).expect("second exists"));
+    assert!(!store.has(first.as_str()).expect("first removed"));
+    assert!(!store.has(orphan.as_str()).expect("orphan removed"));
+
+    store
+        .clear_pin_scope("execution_bridge_v1")
+        .expect("clear scope");
+    assert!(
+        store
+            .list_pin_scope_shards("execution_bridge_v1")
+            .expect("list cleared scope")
+            .is_empty()
+    );
+    assert!(
+        !store
+            .is_effectively_pinned(second.as_str())
+            .expect("cleared pin")
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn cas_sha256_roundtrip_and_verify() {
     let dir = temp_dir("cas-sha256");
     let store = LocalCasStore::new_with_hash_algorithm(&dir, HashAlgorithm::Sha256);

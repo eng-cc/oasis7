@@ -221,6 +221,8 @@ mod execution_bridge {
 
 const DEFAULT_RECENT_MINT_RECORD_LIMIT: usize = 20;
 const STORAGE_METRICS_REFRESH_INTERVAL: Duration = Duration::from_secs(30);
+const EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER: &str = "retention-degraded";
+const EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER: &str = "retention-in-progress";
 
 #[derive(Debug, Clone)]
 struct RuntimePaths {

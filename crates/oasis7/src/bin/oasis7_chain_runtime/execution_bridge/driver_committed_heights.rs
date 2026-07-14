@@ -10,7 +10,7 @@ use oasis7_wasm_abi::ModuleSandbox;
 use super::checkpoint::{
     execution_checkpoint_root_dir, load_execution_checkpoint_manifest,
     maybe_persist_execution_checkpoint_for_record, persist_execution_bridge_record,
-    run_execution_bridge_retention_maintenance,
+    run_execution_bridge_incremental_retention_maintenance,
 };
 use super::driver::{
     ExecutionHashPayload, execution_resource_commit_hash, execution_resource_context_hash,
@@ -170,29 +170,30 @@ fn bridge_committed_heights_with_policy(
         }
         persist_execution_bridge_record(execution_records_dir, &record)?;
 
+        if let Err(err) = run_execution_bridge_incremental_retention_maintenance(
+            execution_records_dir,
+            execution_store,
+            &record,
+            hot_window_heights,
+            checkpoint_interval_heights,
+            checkpoint_keep_latest,
+        ) {
+            oasis7::observability::emit_stderr_or_event(
+                tracing::Level::WARN,
+                format!(
+                    "execution bridge incremental retention failed after replay height {}: {}",
+                    height, err
+                )
+                .as_str(),
+                "execution bridge incremental retention failed after replay",
+            );
+        }
+
         state.last_applied_committed_height = height;
         state.last_execution_block_hash = Some(execution_block_hash);
         state.last_execution_state_root = Some(execution_state_root);
         state.last_node_block_hash = node_block_hash;
         records.push(record);
-    }
-
-    if !records.is_empty() {
-        if let Err(err) = run_execution_bridge_retention_maintenance(
-            execution_records_dir,
-            execution_store,
-            hot_window_heights,
-        ) {
-            oasis7::observability::emit_stderr_or_event(
-                tracing::Level::WARN,
-                format!(
-                    "execution bridge retention pin-set sync failed after height {}: {}",
-                    target_height, err
-                )
-                .as_str(),
-                "execution bridge retention maintenance failed after replay",
-            );
-        }
     }
 
     Ok(records)

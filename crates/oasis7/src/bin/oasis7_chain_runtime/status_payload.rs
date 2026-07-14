@@ -817,6 +817,7 @@ fn build_chain_node_observability_status_with_transactions(
 
     let status = observability_status_for_alerts(alerts.as_slice());
     let ready = status != "critical"
+        && !storage_degraded
         && (!snapshot.replication_enabled || network_head_available)
         && !storage_challenge_network_degraded
         && network_head.decision == "ready"

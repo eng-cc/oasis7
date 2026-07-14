@@ -615,7 +615,7 @@ fn delete_legacy_cold_commit_blobs_if_unreferenced(
         .map(|metadata| metadata.content_hash)
         .collect::<BTreeSet<_>>();
     let pin_hashes = store
-        .list_pins()
+        .list_effective_pins()
         .map_err(|err| NodeError::Replication {
             reason: format!(
                 "list store pins for legacy cold blob cleanup failed: {:?}",

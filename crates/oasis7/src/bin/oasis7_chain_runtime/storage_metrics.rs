@@ -11,6 +11,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::RuntimePaths;
+use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
+
+#[path = "storage_metrics_sidecar.rs"]
+mod storage_metrics_sidecar;
+
+use storage_metrics_sidecar::read_sidecar_metrics;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct StorageReplaySummary {
@@ -179,6 +185,14 @@ pub(super) fn collect_storage_metrics(
 ) -> StorageMetricsSnapshot {
     let mut snapshot = StorageMetricsSnapshot::empty(profile);
     let mut issues = Vec::new();
+
+    if paths
+        .execution_records_dir
+        .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+        .exists()
+    {
+        issues.push("execution retention reconciliation pending".to_string());
+    }
 
     snapshot.bytes_by_dir = collect_storage_bytes_by_dir(paths);
 
@@ -580,96 +594,6 @@ fn file_stamp_from_metadata(path: &Path, metadata: &Metadata) -> Result<FileStam
     })
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct SidecarGenerationRecordWire {
-    #[serde(default)]
-    pinned_blob_hashes: Vec<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SidecarGcResultWire {
-    #[serde(default)]
-    status: String,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    updated_at_ms: i64,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SidecarGenerationIndexWire {
-    #[serde(default)]
-    latest_generation: String,
-    #[serde(default)]
-    rollback_safe_generation: Option<String>,
-    #[serde(default)]
-    generations: BTreeMap<String, SidecarGenerationRecordWire>,
-    #[serde(default)]
-    last_gc_result: SidecarGcResultWire,
-}
-
-#[derive(Debug)]
-struct SidecarMetricsSnapshot {
-    pin_count: u64,
-    last_gc_at_ms: Option<i64>,
-    last_gc_result: String,
-    last_gc_error: Option<String>,
-}
-
-fn read_sidecar_metrics(sidecar_store_root: &Path) -> Result<SidecarMetricsSnapshot, String> {
-    let index_path = sidecar_store_root.join("sidecar-generations/index.json");
-    if !index_path.exists() {
-        return Ok(SidecarMetricsSnapshot {
-            pin_count: 0,
-            last_gc_at_ms: None,
-            last_gc_result: "not_available".to_string(),
-            last_gc_error: None,
-        });
-    }
-    let bytes = fs::read(index_path.as_path()).map_err(|err| {
-        format!(
-            "read sidecar generation index {} failed: {err}",
-            index_path.display()
-        )
-    })?;
-    let index: SidecarGenerationIndexWire =
-        serde_json::from_slice(bytes.as_slice()).map_err(|err| {
-            format!(
-                "parse sidecar generation index {} failed: {err}",
-                index_path.display()
-            )
-        })?;
-    let mut active_generation_ids = BTreeSet::new();
-    if !index.latest_generation.trim().is_empty() {
-        active_generation_ids.insert(index.latest_generation.trim().to_string());
-    }
-    if let Some(rollback_safe_generation) = index.rollback_safe_generation.as_ref() {
-        if !rollback_safe_generation.trim().is_empty() {
-            active_generation_ids.insert(rollback_safe_generation.trim().to_string());
-        }
-    }
-    let mut pinned_blob_hashes = BTreeSet::new();
-    for generation_id in active_generation_ids {
-        if let Some(record) = index.generations.get(generation_id.as_str()) {
-            for hash in &record.pinned_blob_hashes {
-                if !hash.trim().is_empty() {
-                    pinned_blob_hashes.insert(hash.trim().to_string());
-                }
-            }
-        }
-    }
-    Ok(SidecarMetricsSnapshot {
-        pin_count: pinned_blob_hashes.len() as u64,
-        last_gc_at_ms: Some(index.last_gc_result.updated_at_ms).filter(|value| *value > 0),
-        last_gc_result: if index.last_gc_result.status.trim().is_empty() {
-            "unknown".to_string()
-        } else {
-            index.last_gc_result.status
-        },
-        last_gc_error: index.last_gc_result.error,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -680,7 +604,10 @@ mod tests {
     use oasis7::runtime::{World as RuntimeWorld, measure_directory_storage_bytes};
     use oasis7_proto::storage_profile::StorageProfile;
 
-    use super::super::RuntimePaths;
+    use super::super::{
+        EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
+        RuntimePaths,
+    };
     use super::{
         ExecutionRefCountCache, collect_storage_metrics, init_shared_storage_metrics,
         refresh_shared_storage_metrics, snapshot_storage_metrics,
@@ -1029,6 +956,62 @@ mod tests {
             snapshot.degraded_reason.as_deref(),
             Some("storage degraded")
         );
+    }
+
+    #[test]
+    fn retention_degraded_marker_is_reported_by_storage_metrics() {
+        let root = temp_dir("retention-degraded-marker");
+        let paths = RuntimePaths {
+            runtime_root: root.clone(),
+            execution_bridge_state_path: root.join("bridge-state.json"),
+            execution_world_dir: root.join("reward-runtime-execution-world"),
+            execution_records_dir: root.join("reward-runtime-execution-records"),
+            storage_root: root.join("store"),
+            replication_root: root.join("replication"),
+            reward_runtime_state_path: root.join("reward-runtime-state.json"),
+            reward_runtime_distfs_probe_state_path: root
+                .join("reward-runtime-distfs-probe-state.json"),
+            reward_runtime_report_dir: root.join("reward-runtime-report"),
+            reward_runtime_storage_metrics_path: root.join("reward-runtime-storage-metrics.json"),
+        };
+        fs::create_dir_all(paths.execution_records_dir.as_path()).expect("create records dir");
+        fs::write(
+            paths
+                .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER),
+            b"healthy maintenance\n",
+        )
+        .expect("write in-progress marker");
+
+        let mut cache = ExecutionRefCountCache::default();
+        let healthy_snapshot =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(
+            healthy_snapshot.degraded_reason, None,
+            "active healthy maintenance must not be reported as persistent degradation"
+        );
+        fs::remove_file(
+            paths
+                .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER),
+        )
+        .expect("remove in-progress marker");
+        fs::write(
+            paths
+                .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER),
+            b"retention interrupted\n",
+        )
+        .expect("write retention marker");
+
+        let snapshot =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(
+            snapshot.degraded_reason.as_deref(),
+            Some("execution retention reconciliation pending")
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

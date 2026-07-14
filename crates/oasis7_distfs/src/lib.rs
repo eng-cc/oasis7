@@ -12,6 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use zstd::stream::{decode_all as zstd_decode_all, encode_all as zstd_encode_all};
 const BLOBS_DIR: &str = "blobs";
 const PINS_FILE: &str = "pins.json";
+const PIN_SCOPES_DIR: &str = "pin_scopes";
 const FILES_INDEX_FILE: &str = "files_index.json";
 const FILE_INDEX_VERSION: u64 = 1;
 const COMPRESSED_BLOB_MAGIC: &[u8; 8] = b"O7CBLOB1";
@@ -26,6 +27,7 @@ mod compressed_range_cache;
 mod feedback;
 mod feedback_p2p;
 mod manifest;
+mod pin_store;
 mod replication;
 
 pub use challenge::*;
@@ -264,18 +266,6 @@ impl LocalCasStore {
         Ok(self.blobs_dir.join(format!("{content_hash}.blob")))
     }
 
-    fn load_pins(&self) -> Result<PinFile, WorldError> {
-        if !self.pins_path.exists() {
-            return Ok(PinFile::default());
-        }
-        read_json_from_path(&self.pins_path)
-    }
-
-    fn save_pins(&self, pins: &PinFile) -> Result<(), WorldError> {
-        self.ensure_dirs()?;
-        write_json_atomic(pins, &self.pins_path)
-    }
-
     fn load_file_index(&self) -> Result<FileIndexFile, WorldError> {
         if !self.files_index_path.exists() {
             return Ok(FileIndexFile::default());
@@ -306,7 +296,7 @@ impl LocalCasStore {
         if file_index.content_hash_ref_count(content_hash) > 0 {
             return Ok(false);
         }
-        if self.is_pinned(content_hash)? {
+        if self.is_effectively_pinned(content_hash)? {
             return Ok(false);
         }
         let path = self.blob_path(content_hash)?;
@@ -317,40 +307,9 @@ impl LocalCasStore {
         Ok(true)
     }
 
-    pub fn pin(&self, content_hash: &str) -> Result<(), WorldError> {
-        validate_hash(content_hash)?;
-        if !self.has(content_hash)? {
-            return Err(WorldError::BlobNotFound {
-                content_hash: content_hash.to_string(),
-            });
-        }
-        let mut pins = self.load_pins()?;
-        pins.pins.insert(content_hash.to_string());
-        self.save_pins(&pins)
-    }
-
-    pub fn unpin(&self, content_hash: &str) -> Result<bool, WorldError> {
-        validate_hash(content_hash)?;
-        let mut pins = self.load_pins()?;
-        let removed = pins.pins.remove(content_hash);
-        self.save_pins(&pins)?;
-        Ok(removed)
-    }
-
-    pub fn list_pins(&self) -> Result<Vec<String>, WorldError> {
-        let pins = self.load_pins()?;
-        Ok(pins.pins.into_iter().collect())
-    }
-
-    pub fn is_pinned(&self, content_hash: &str) -> Result<bool, WorldError> {
-        validate_hash(content_hash)?;
-        let pins = self.load_pins()?;
-        Ok(pins.pins.contains(content_hash))
-    }
-
     pub fn prune_unpinned(&self, max_bytes: u64) -> Result<u64, WorldError> {
         self.ensure_dirs()?;
-        let pins = self.load_pins()?.pins;
+        let pins = self.load_effective_pins()?;
         let mut total_bytes = 0u64;
         let mut entries = Vec::new();
 
@@ -521,7 +480,7 @@ impl LocalCasStore {
     fn load_blob_reference_sets(&self) -> Result<BlobReferenceSets, WorldError> {
         self.ensure_dirs()?;
         let file_index = self.load_file_index()?;
-        let pinned_hashes = self.load_pins()?.pins;
+        let pinned_hashes = self.load_effective_pins()?;
         let blob_hashes = self.scan_blob_hashes()?;
 
         let mut indexed_hashes = BTreeSet::new();
@@ -868,6 +827,19 @@ fn validate_hash(content_hash: &str) -> Result<(), WorldError> {
     {
         return Err(WorldError::BlobHashInvalid {
             content_hash: content_hash.to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_pin_path_component(value: &str, label: &str) -> Result<(), WorldError> {
+    if value.is_empty()
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!("invalid {label}: {value}"),
         });
     }
     Ok(())
