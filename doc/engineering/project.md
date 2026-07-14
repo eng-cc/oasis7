@@ -514,9 +514,7 @@
 - `skills/prd/check.md`
 - `doc/engineering/*.md`
 - historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs 与 git history，当前规则入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`）
-- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`
-- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md`
-- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md`
+- `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`（当前长期契约；已完成 design / project 证据从 live 树退役，保留于 GitHub task 与 git history）
 - `scripts/check-rust-file-size.sh`
 - historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments；退役前 `.pm/tasks/task_<32hex>.execution.md` 仅作历史追溯）
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`

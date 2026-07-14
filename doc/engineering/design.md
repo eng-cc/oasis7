@@ -23,7 +23,7 @@
 - `design.md`：定义规则如何组织、如何落地、由哪些脚本与文档承接。
 - `project.md`：定义治理任务、批次、owner 与验证口径。
 - `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
-- `rust-governance/*`：定义 Rust 体量治理、冻结基线与结构切片 burn-down 规则。
+- `rust-governance/*`：定义 Rust 文件体量、长期零扫描与语义化结构拆分契约；不维护冻结基线或一次性 burn-down 台账。
 - 历史 PRD 审读/治理台账：保留在 `doc/core/reviews/round-*` logs；当前新增/变更文档追踪由模块入口与 doc governance 规则承接。
 - `self-evolution/*`：保留 repo-local memory / working_memory / stage-gate 对象背景、自我进化 memory 补强、legacy/local task-file consolidation 边界，以及外部 agent workflow 借鉴的 adopted / rejected / deferred 治理结论；当前 task truth / evidence sink 以 `doc/engineering/workflow/source-of-truth.md` 的 GitHub Project-backed PM contract 为准。
 

@@ -983,6 +983,20 @@ export function createViewerFeedbackModule({
         "P2 share unit: player intent, AI/world execution, world result, and next branch should form a replayable short story.",
       ),
     };
+    const branchRecommendations = (
+      Array.isArray(gameplay.branch_recommendations)
+        ? gameplay.branch_recommendations
+        : Array.isArray(gameplay.branchRecommendations)
+          ? gameplay.branchRecommendations
+          : []
+    ).map((recommendation) => ({
+      actionId: recommendation.action_id || recommendation.actionId || null,
+      routeLabel: recommendation.route_label || recommendation.routeLabel || null,
+      immediateGain: recommendation.immediate_gain || recommendation.immediateGain || null,
+      futureBeatChanged: recommendation.future_beat_changed || recommendation.futureBeatChanged || null,
+      riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
+      nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
+    }));
 
     return {
       stageId: gameplay.stage_id || null,
@@ -1021,6 +1035,7 @@ export function createViewerFeedbackModule({
           ? emptyEntityBlocker.nextStepHint
           : gameplay.next_step_hint || resumeNextStep || null,
       branchHint: gameplay.branch_hint || null,
+      branchRecommendations,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

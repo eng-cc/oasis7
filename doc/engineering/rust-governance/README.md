@@ -1,18 +1,13 @@
-# Rust 体量治理文档入口
+# Rust 文件结构治理入口
 
-## 从这里开始
+本目录只维护 Rust 文件体量与结构切片的当前治理契约：
 
-- 想了解当前 Rust 文件体量、结构切片与 required gate 的治理边界：先读 [Rust 1200 行根治治理 PRD](rust-1200-line-root-cause-governance-2026-03-29.prd.md)。
-- 想查看职责拆分原则、扫描模型与实现约束：读同专题的 [设计文档](rust-1200-line-root-cause-governance-2026-03-29.design.md)。
-- 想追溯治理批次、完成记录、当前门禁状态或验证链路：读同专题的 [项目记录](rust-1200-line-root-cause-governance-2026-03-29.project.md)。
+- [Rust 1200 行与结构切片治理](rust-1200-line-root-cause-governance-2026-03-29.prd.md)
 
-## 目录职责
+运行时真值由 `scripts/check-rust-file-size.sh` 产生，required gate 通过
+`scripts/ci-tests.sh required` 调用该脚本。文档不复制扫描清单或完成任务
+ledger，避免一次性 burn-down 记录重新成为当前规则。
 
-- 本目录只承载 Rust 文件体量与结构切片治理的正式专题三件套。
-- `README.md` 负责问题分流；PRD / design / project 分别保留规则、实现边界与执行证据，不复制其正文。
-- 当前运行时真值是 `scripts/check-rust-file-size.sh`；required gate 以该脚本的实际扫描结果为准。
-
-## 历史边界
-
-- 已退休的 2026-02 oversized Rust file splitting round3 三件套不在本目录恢复；其审读证据保留于 `doc/core/reviews/round-*` 与 git history。
-- 当前专题仍由 engineering 根入口、文件级索引与 project ledger 直接引用，故保留全部三件套，不进行删除。
+2026-02 round3、2026-03 burn-down 批次及已删除 baseline 的历史证据保留在
+GitHub task、`doc/core/reviews/round-*` 与 git history；它们不是 active task
+入口，也不在本目录恢复。

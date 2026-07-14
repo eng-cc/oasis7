@@ -103,6 +103,16 @@ pub struct PlayerGameplayAction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayBranchCommitment {
+    pub action_id: String,
+    pub route_label: String,
+    pub immediate_gain: String,
+    pub future_beat_changed: String,
+    pub risk_or_lockin: String,
+    pub next_session_hook: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerGameplayRecentFeedback {
     pub action: String,
     pub stage: String,
@@ -230,6 +240,8 @@ pub struct PlayerGameplaySnapshot {
     pub causality_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub branch_hint: Option<String>,
+    #[serde(default)]
+    pub branch_recommendations: Vec<PlayerGameplayBranchCommitment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_anchor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -312,6 +324,8 @@ struct PlayerGameplaySnapshotSerde {
     causality_detail: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     branch_hint: Option<String>,
+    #[serde(default)]
+    branch_recommendations: Vec<PlayerGameplayBranchCommitment>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     resume_anchor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -412,6 +426,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             causality_kind: legacy.causality_kind,
             causality_detail: legacy.causality_detail,
             branch_hint: legacy.branch_hint,
+            branch_recommendations: legacy.branch_recommendations,
             resume_anchor: legacy.resume_anchor,
             primary_blocker: legacy.primary_blocker,
             response_window_class: legacy.response_window_class,
