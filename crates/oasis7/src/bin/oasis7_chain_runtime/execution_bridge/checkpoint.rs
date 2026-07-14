@@ -11,6 +11,9 @@ use super::{
     ExecutionCheckpointManifestHashPayload, write_bytes_atomic,
 };
 
+const EXECUTION_BRIDGE_PIN_SCOPE: &str = "execution_bridge_v1";
+const EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER: &str = "retention-degraded";
+
 impl ExecutionCheckpointManifest {
     pub(super) fn new(
         world_id: String,
@@ -512,27 +515,240 @@ pub(super) fn sync_execution_bridge_pin_set(
             desired_pins.insert(pinned_ref.clone());
         }
     }
-    let current_pins = execution_store
-        .list_pins()
-        .map_err(|err| format!("list execution store pins failed: {:?}", err))?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-
-    for stale_ref in current_pins.difference(&desired_pins) {
-        execution_store
-            .unpin(stale_ref.as_str())
-            .map_err(|err| format!("unpin execution store ref {} failed: {:?}", stale_ref, err))?;
-    }
-    for pinned_ref in desired_pins.difference(&current_pins) {
-        execution_store
-            .pin(pinned_ref.as_str())
-            .map_err(|err| format!("pin execution store ref {} failed: {:?}", pinned_ref, err))?;
-    }
+    execution_store
+        .replace_pins(&desired_pins)
+        .map_err(|err| format!("replace execution store pins failed: {:?}", err))?;
+    // Full maintenance is the authoritative rebuild path. Publish the complete
+    // legacy pin set first, then discard incremental shards so a crash can only
+    // leave redundant pins, never an unprotected live ref.
+    execution_store
+        .clear_pin_scope(EXECUTION_BRIDGE_PIN_SCOPE)
+        .map_err(|err| format!("clear execution bridge pin scope failed: {:?}", err))?;
 
     Ok(ExecutionBridgePinSet {
         pinned_refs: desired_pins,
         ..pin_set
     })
+}
+
+fn execution_bridge_record_pin_shard_id(height: u64) -> String {
+    format!("record-{height:020}")
+}
+
+fn execution_bridge_checkpoint_pin_shard_id(height: u64) -> String {
+    format!("checkpoint-{height:020}")
+}
+
+fn build_execution_bridge_record_pin_shard(
+    record: &ExecutionBridgeRecord,
+    retain_latest_head: bool,
+    retain_hot_window: bool,
+    execution_store: &LocalCasStore,
+) -> Result<BTreeSet<String>, String> {
+    let mut required_refs = BTreeSet::new();
+    let mut best_effort_refs = BTreeSet::new();
+    collect_execution_bridge_record_retained_refs(
+        record,
+        retain_latest_head,
+        retain_hot_window,
+        &mut required_refs,
+        &mut best_effort_refs,
+    );
+    for content_ref in best_effort_refs {
+        if execution_store.has(content_ref.as_str()).map_err(|err| {
+            format!(
+                "check execution store ref {} failed: {:?}",
+                content_ref, err
+            )
+        })? {
+            required_refs.insert(content_ref);
+        }
+    }
+    Ok(required_refs)
+}
+
+fn replace_execution_bridge_record_pin_shard(
+    record: &ExecutionBridgeRecord,
+    retain_latest_head: bool,
+    retain_hot_window: bool,
+    execution_store: &LocalCasStore,
+) -> Result<(), String> {
+    let pins = build_execution_bridge_record_pin_shard(
+        record,
+        retain_latest_head,
+        retain_hot_window,
+        execution_store,
+    )?;
+    execution_store
+        .replace_pin_scope_shard(
+            EXECUTION_BRIDGE_PIN_SCOPE,
+            execution_bridge_record_pin_shard_id(record.height).as_str(),
+            &pins,
+        )
+        .map_err(|err| {
+            format!(
+                "replace execution bridge record pin shard height={} failed: {:?}",
+                record.height, err
+            )
+        })
+}
+
+fn replace_execution_bridge_checkpoint_pin_shard(
+    execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
+    height: u64,
+) -> Result<(), String> {
+    let manifest = load_execution_checkpoint_manifest(
+        execution_checkpoint_manifest_path(execution_records_dir, height).as_path(),
+    )?;
+    let pins = manifest.pinned_refs.into_iter().collect::<BTreeSet<_>>();
+    execution_store
+        .replace_pin_scope_shard(
+            EXECUTION_BRIDGE_PIN_SCOPE,
+            execution_bridge_checkpoint_pin_shard_id(height).as_str(),
+            &pins,
+        )
+        .map_err(|err| {
+            format!(
+                "replace execution bridge checkpoint pin shard height={} failed: {:?}",
+                height, err
+            )
+        })
+}
+
+fn compact_execution_bridge_record_at_height(
+    execution_records_dir: &Path,
+    height: u64,
+) -> Result<Option<ExecutionBridgeRecord>, String> {
+    let path = execution_bridge_record_path(execution_records_dir, height);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let mut record = load_execution_bridge_record(path.as_path())?;
+    if record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2 {
+        return Ok(Some(record));
+    }
+    record.latest_state_ref = None;
+    record.snapshot_ref = None;
+    record.journal_ref = None;
+    record.simulator_mirror = None;
+    if record
+        .checkpoint_ref
+        .as_ref()
+        .is_some_and(|checkpoint_ref| {
+            !execution_checkpoint_root_dir(execution_records_dir)
+                .join(checkpoint_ref)
+                .exists()
+        })
+    {
+        record.checkpoint_ref = None;
+    }
+    persist_execution_bridge_record_only(execution_records_dir, &record)?;
+    Ok(Some(record))
+}
+
+/// Advances retention by the delta introduced by one durable record.
+///
+/// Record/shard publication and compaction are serial within the execution
+/// hook. Full CAS GC runs only at the existing checkpoint cadence, after all
+/// live refs for the height are atomically pinned. This removes the per-block
+/// full record/blob scans without introducing a concurrent put-vs-GC race.
+fn run_execution_bridge_incremental_retention_maintenance_inner(
+    execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
+    record: &ExecutionBridgeRecord,
+    hot_window_heights: u64,
+    checkpoint_interval_heights: u64,
+    checkpoint_keep_latest: usize,
+    gc_allowed: bool,
+) -> Result<u64, String> {
+    replace_execution_bridge_record_pin_shard(record, true, true, execution_store)?;
+
+    if record.checkpoint_ref.is_some() {
+        replace_execution_bridge_checkpoint_pin_shard(
+            execution_records_dir,
+            execution_store,
+            record.height,
+        )?;
+    }
+
+    let retained_hot_window = hot_window_heights.max(1);
+    if let Some(evicted_height) = record.height.checked_sub(retained_hot_window)
+        && let Some(evicted_record) =
+            compact_execution_bridge_record_at_height(execution_records_dir, evicted_height)?
+    {
+        let retain_legacy_refs = evicted_record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V2;
+        replace_execution_bridge_record_pin_shard(
+            &evicted_record,
+            retain_legacy_refs,
+            retain_legacy_refs,
+            execution_store,
+        )?;
+    }
+
+    if gc_allowed
+        && checkpoint_interval_heights > 0
+        && record.height % checkpoint_interval_heights == 0
+    {
+        let retained_span =
+            checkpoint_interval_heights.saturating_mul(checkpoint_keep_latest.max(1) as u64);
+        if let Some(pruned_height) = record.height.checked_sub(retained_span) {
+            execution_store
+                .remove_pin_scope_shard(
+                    EXECUTION_BRIDGE_PIN_SCOPE,
+                    execution_bridge_checkpoint_pin_shard_id(pruned_height).as_str(),
+                )
+                .map_err(|err| {
+                    format!(
+                        "remove execution bridge checkpoint pin shard height={} failed: {:?}",
+                        pruned_height, err
+                    )
+                })?;
+        }
+        return execution_store
+            .prune_orphan_blobs()
+            .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err));
+    }
+
+    Ok(0)
+}
+
+pub(super) fn run_execution_bridge_incremental_retention_maintenance(
+    execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
+    record: &ExecutionBridgeRecord,
+    hot_window_heights: u64,
+    checkpoint_interval_heights: u64,
+    checkpoint_keep_latest: usize,
+) -> Result<u64, String> {
+    let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
+    let was_degraded = degraded_marker.exists();
+    if !was_degraded {
+        write_bytes_atomic(
+            degraded_marker.as_path(),
+            b"incremental retention in progress\n",
+        )?;
+    }
+
+    let result = run_execution_bridge_incremental_retention_maintenance_inner(
+        execution_records_dir,
+        execution_store,
+        record,
+        hot_window_heights,
+        checkpoint_interval_heights,
+        checkpoint_keep_latest,
+        !was_degraded,
+    );
+    if result.is_ok() && !was_degraded {
+        fs::remove_file(degraded_marker.as_path()).map_err(|err| {
+            format!(
+                "clear execution bridge retention degraded marker {} failed: {}",
+                degraded_marker.display(),
+                err
+            )
+        })?;
+    }
+    result
 }
 
 fn list_execution_bridge_pre_v2_heights(execution_records_dir: &Path) -> Result<Vec<u64>, String> {
@@ -686,9 +902,22 @@ pub(super) fn run_execution_bridge_retention_maintenance(
     let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
     compact_execution_bridge_records(execution_records_dir, &pin_set)?;
     sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
-    execution_store
+    let freed_bytes = execution_store
         .prune_orphan_blobs()
-        .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err))
+        .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err))?;
+    let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
+    match fs::remove_file(degraded_marker.as_path()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(format!(
+                "clear execution bridge retention degraded marker {} failed: {}",
+                degraded_marker.display(),
+                err
+            ));
+        }
+    }
+    Ok(freed_bytes)
 }
 
 pub(super) fn load_execution_bridge_record(path: &Path) -> Result<ExecutionBridgeRecord, String> {

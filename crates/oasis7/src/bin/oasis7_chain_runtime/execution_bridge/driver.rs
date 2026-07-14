@@ -28,6 +28,7 @@ use super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_root_dir, load_execution_bridge_record,
     load_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
     persist_execution_bridge_record, persist_execution_bridge_record_only,
+    run_execution_bridge_incremental_retention_maintenance,
     run_execution_bridge_retention_maintenance,
 };
 use super::driver_observability::{
@@ -87,6 +88,7 @@ pub(crate) struct NodeRuntimeExecutionDriver {
     pub(super) hot_window_heights: u64,
     pub(super) checkpoint_interval_heights: u64,
     pub(super) checkpoint_keep_latest: usize,
+    pub(super) retention_reconcile_pending: bool,
 }
 
 impl NodeRuntimeExecutionDriver {
@@ -166,6 +168,7 @@ impl NodeRuntimeExecutionDriver {
         checkpoint_keep_latest: usize,
     ) -> Self {
         let simulator_world_dir = simulator_world_dir_from_execution_world_dir(world_dir.as_path());
+        let retention_reconcile_pending = state.last_applied_committed_height > 0;
         Self {
             state_path,
             world_dir,
@@ -179,6 +182,7 @@ impl NodeRuntimeExecutionDriver {
             hot_window_heights,
             checkpoint_interval_heights,
             checkpoint_keep_latest,
+            retention_reconcile_pending,
         }
     }
 
@@ -896,11 +900,26 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let world_persist_ms = world_persist_started_at.elapsed();
         let persist_world_ms = state_persist_ms + world_persist_ms;
         let retention_started_at = Instant::now();
-        if let Err(err) = run_execution_bridge_retention_maintenance(
-            self.records_dir.as_path(),
-            &self.execution_store,
-            self.hot_window_heights,
-        ) {
+        let retention_result = if self.retention_reconcile_pending {
+            run_execution_bridge_retention_maintenance(
+                self.records_dir.as_path(),
+                &self.execution_store,
+                self.hot_window_heights,
+            )
+        } else {
+            run_execution_bridge_incremental_retention_maintenance(
+                self.records_dir.as_path(),
+                &self.execution_store,
+                &record,
+                self.hot_window_heights,
+                self.checkpoint_interval_heights,
+                self.checkpoint_keep_latest,
+            )
+        };
+        if retention_result.is_ok() {
+            self.retention_reconcile_pending = false;
+        }
+        if let Err(err) = retention_result {
             oasis7::observability::emit_stderr_or_event(
                 tracing::Level::WARN,
                 format!(

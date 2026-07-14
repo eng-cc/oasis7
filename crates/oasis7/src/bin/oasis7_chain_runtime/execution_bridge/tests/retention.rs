@@ -480,6 +480,193 @@ fn node_runtime_execution_driver_uses_storage_profile_hot_window_budget() {
 }
 
 #[test]
+fn steady_state_commit_does_not_reparse_far_history_but_explicit_rebuild_does() {
+    let dir = temp_dir("execution-driver-steady-state-history-tripwire");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root.clone(),
+        &storage_profile,
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+
+    for height in 1..=65 {
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
+                height,
+                slot: height.saturating_sub(1),
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: empty_action_root.clone(),
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: height as i64 * 1_000,
+            })
+            .expect("seed release_default history");
+    }
+
+    let store = LocalCasStore::new(storage_root);
+    let tripwire_ref = store
+        .put_bytes(b"qa-far-history-tripwire")
+        .expect("store far-history tripwire");
+    let record_1_path = execution_bridge_record_path(records_dir.as_path(), 1);
+    let mut record_1_json: serde_json::Value = serde_json::from_slice(
+        fs::read(record_1_path.as_path())
+            .expect("read archived record 1")
+            .as_slice(),
+    )
+    .expect("parse archived record 1");
+    record_1_json["latest_state_ref"] = serde_json::Value::String(tripwire_ref.clone());
+    record_1_json["snapshot_ref"] = serde_json::Value::String(tripwire_ref.clone());
+    record_1_json["qa_history_sentinel"] = serde_json::Value::Bool(true);
+    fs::write(
+        record_1_path.as_path(),
+        serde_json::to_vec_pretty(&record_1_json).expect("serialize tripwire record"),
+    )
+    .expect("write tripwire record");
+
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 66,
+            slot: 65,
+            epoch: 0,
+            node_block_hash: "node-h66".to_string(),
+            action_root: empty_action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 66_000,
+        })
+        .expect("steady-state commit");
+
+    let untouched_record_1: serde_json::Value = serde_json::from_slice(
+        fs::read(record_1_path.as_path())
+            .expect("read record 1 after steady-state commit")
+            .as_slice(),
+    )
+    .expect("parse record 1 after steady-state commit");
+    assert_eq!(
+        untouched_record_1
+            .get("qa_history_sentinel")
+            .and_then(serde_json::Value::as_bool),
+        Some(true),
+        "steady-state commit reparsed and rewrote a far-history record"
+    );
+    assert!(
+        store.has(tripwire_ref.as_str()).expect("check tripwire"),
+        "steady-state commit ran full orphan GC"
+    );
+
+    run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 64)
+        .expect("explicit retention rebuild");
+    let rebuilt_record_1: serde_json::Value = serde_json::from_slice(
+        fs::read(record_1_path.as_path())
+            .expect("read rebuilt record 1")
+            .as_slice(),
+    )
+    .expect("parse rebuilt record 1");
+    assert!(rebuilt_record_1.get("qa_history_sentinel").is_none());
+    assert!(!store.has(tripwire_ref.as_str()).expect("check rebuilt GC"));
+
+    let plan = build_execution_replay_plan(records_dir.as_path(), &store, 66)
+        .expect("build replay plan after explicit retention rebuild");
+    assert_eq!(
+        plan.checkpoint.as_ref().map(|manifest| manifest.height),
+        Some(64)
+    );
+    assert_eq!(plan.start_height, 65);
+    assert_eq!(plan.records.len(), 2);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn steady_state_commits_do_not_run_full_blob_gc_every_block() {
+    let dir = temp_dir("execution-driver-steady-state-gc-cadence");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root.clone(),
+        &storage_profile,
+    )
+    .expect("driver");
+    let empty_action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    let commit = |driver: &mut NodeRuntimeExecutionDriver, height: u64| {
+        driver
+            .on_commit(NodeExecutionCommitContext {
+                world_id: "w1".to_string(),
+                node_id: "node-a".to_string(),
+                proposer_id: "node-a".to_string(),
+                height,
+                slot: height.saturating_sub(1),
+                epoch: 0,
+                node_block_hash: format!("node-h{height}"),
+                action_root: empty_action_root.clone(),
+                committed_actions: Vec::new(),
+                committed_at_unix_ms: height as i64 * 1_000,
+            })
+            .expect("steady-state commit");
+    };
+
+    commit(&mut driver, 1);
+    let store = LocalCasStore::new(storage_root);
+    let orphan_after_height_1 = store
+        .put_bytes(b"qa-orphan-after-height-1")
+        .expect("store first orphan");
+    commit(&mut driver, 2);
+    let orphan_after_height_2 = store
+        .put_bytes(b"qa-orphan-after-height-2")
+        .expect("store second orphan");
+    commit(&mut driver, 3);
+
+    let first_survived = store
+        .has(orphan_after_height_1.as_str())
+        .expect("check first orphan");
+    let second_survived = store
+        .has(orphan_after_height_2.as_str())
+        .expect("check second orphan");
+    assert!(
+        first_survived || second_survived,
+        "full orphan GC ran on both consecutive steady-state commits"
+    );
+
+    run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 64)
+        .expect("explicit retention rebuild");
+    assert!(
+        !store
+            .has(orphan_after_height_1.as_str())
+            .expect("check first orphan after rebuild")
+    );
+    assert!(
+        !store
+            .has(orphan_after_height_2.as_str())
+            .expect("check second orphan after rebuild")
+    );
+    let plan = build_execution_replay_plan(records_dir.as_path(), &store, 3)
+        .expect("build replay plan after explicit GC");
+    assert_eq!(plan.start_height, 1);
+    assert_eq!(plan.records.len(), 3);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn execution_bridge_pin_set_keeps_latest_head_and_hot_window_refs() {
     let dir = temp_dir("execution-bridge-pin-set-hot-window");
     let records_dir = dir.join("records");

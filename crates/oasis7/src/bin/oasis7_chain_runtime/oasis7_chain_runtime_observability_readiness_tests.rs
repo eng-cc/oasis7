@@ -343,3 +343,66 @@ fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validat
         |gate| gate == "replication_recent_errors" || gate == "replication_transport_unstable"
     ));
 }
+
+#[test]
+fn readiness_failed_gates_excludes_warning_when_critical_alert_blocks() {
+    let mut consensus = NodeConsensusSnapshot::default();
+    consensus.committed_height = 0;
+    consensus.network_committed_height = 0;
+    consensus.replication_persisted_height = 0;
+    let snapshot = NodeSnapshot {
+        node_id: "validator-genesis".to_string(),
+        player_id: "player-genesis".to_string(),
+        world_id: "world-public-testnet-genesis".to_string(),
+        role: NodeRole::Sequencer,
+        replication_enabled: false,
+        running: true,
+        tick_count: 1,
+        last_tick_unix_ms: Some(1_700_000_000_000),
+        consensus,
+        last_error: Some("critical runtime failure".to_string()),
+    };
+    let observed_at_ms = 1_700_000_000_000;
+    let network_head =
+        super::status_payload::build_network_head_status(&snapshot, observed_at_ms, None);
+    let policy = super::status_payload::readiness_policy(&snapshot, None);
+    let mut storage_metrics = super::observability_tests::sample_observability_storage_metrics();
+    storage_metrics.degraded_reason = Some("warning-only storage pressure".to_string());
+    let observability = super::status_payload::build_chain_node_observability_status(
+        &snapshot,
+        &storage_metrics,
+        &super::observability_tests::sample_observability_reward_runtime_metrics(),
+        &super::ChainReplicationDebugStatus {
+            local_peer_id: "validator-genesis".to_string(),
+            connected_peers: Vec::new(),
+            peer_healths: Vec::new(),
+            registered_protocols: Vec::new(),
+            protocol_retry_cooldown_peers: BTreeMap::new(),
+            transport_retry_cooldown_peers: Vec::new(),
+            request_peer_scores: BTreeMap::new(),
+            connection_events: Vec::new(),
+            recent_errors: Vec::new(),
+        },
+        &network_head,
+        &super::observability_tests::sample_observability_p2p_status(),
+        &policy,
+        None,
+        observed_at_ms,
+    );
+    let readiness = super::status_payload::build_readiness_status(&observability, policy);
+
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .any(|alert| alert.severity == "warn" && alert.code == "storage_degraded")
+    );
+    assert!(
+        observability
+            .alerts
+            .iter()
+            .any(|alert| alert.severity == "critical" && alert.code == "runtime_last_error")
+    );
+    assert_eq!(readiness.status, "not_ready");
+    assert_eq!(readiness.failed_gates, vec!["runtime_last_error"]);
+}

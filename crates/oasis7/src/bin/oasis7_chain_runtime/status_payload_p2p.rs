@@ -106,6 +106,19 @@ pub(crate) fn build_readiness_status(
             observability
                 .alerts
                 .iter()
+                .filter(|alert| {
+                    alert.severity == "critical"
+                        || matches!(
+                            alert.code.as_str(),
+                            "consensus_network_lag"
+                                | "consensus_peer_head_unavailable"
+                                | "consensus_peer_head_quorum_missing"
+                                | "storage_challenge_network_degraded"
+                                | "replication_no_connected_peers"
+                                | "replication_transport_unstable"
+                                | "p2p_reachability_degraded"
+                        )
+                })
                 .map(|alert| alert.code.clone())
                 .collect()
         })
