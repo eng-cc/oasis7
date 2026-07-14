@@ -25,9 +25,12 @@ use oasis7_wasm_executor::{WasmExecutor, WasmExecutorConfig};
 use serde::Serialize;
 
 use super::checkpoint::{
-    execution_bridge_record_path, execution_checkpoint_root_dir, load_execution_bridge_record,
+    begin_execution_bridge_retention_transaction, complete_execution_bridge_retention_transaction,
+    execution_bridge_record_path, execution_checkpoint_root_dir,
+    fail_execution_bridge_retention_transaction, load_execution_bridge_record,
     load_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
     persist_execution_bridge_record, persist_execution_bridge_record_only,
+    promote_interrupted_execution_bridge_retention,
     run_execution_bridge_incremental_retention_maintenance,
     run_execution_bridge_retention_maintenance,
 };
@@ -53,7 +56,9 @@ use super::{
     ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
     persist_world_head_proof_for_record,
 };
-use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
+use crate::{
+    EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
+};
 
 #[derive(Debug, Clone, Serialize)]
 pub(super) struct ExecutionHashPayload<'a> {
@@ -116,6 +121,7 @@ impl NodeRuntimeExecutionDriver {
         storage_root: std::path::PathBuf,
         storage_profile: &StorageProfileConfig,
     ) -> Result<Self, String> {
+        promote_interrupted_execution_bridge_retention(records_dir.as_path())?;
         let state = load_execution_bridge_state(state_path.as_path())?;
         let release_security_policy =
             release_security_policy_for_storage_profile(storage_profile.profile);
@@ -170,9 +176,12 @@ impl NodeRuntimeExecutionDriver {
         checkpoint_keep_latest: usize,
     ) -> Self {
         let simulator_world_dir = simulator_world_dir_from_execution_world_dir(world_dir.as_path());
-        let retention_reconcile_pending = records_dir
-            .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
-            .exists();
+        let retention_reconcile_pending = [
+            EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER,
+            EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
+        ]
+        .iter()
+        .any(|marker| records_dir.join(marker).exists());
         let retention_reconcile_next_height = retention_reconcile_pending
             .then(|| state.last_applied_committed_height.saturating_add(1));
         Self {
@@ -885,6 +894,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         )?;
         let world_head_proof_ms = world_head_proof_started_at.elapsed();
         let record_persist_started_at = Instant::now();
+        begin_execution_bridge_retention_transaction(self.records_dir.as_path())?;
         persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
         let record_persist_ms = record_persist_started_at.elapsed();
 
@@ -927,6 +937,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 self.checkpoint_keep_latest,
             )
         };
+        let retention_result = retention_result.and_then(|freed_bytes| {
+            complete_execution_bridge_retention_transaction(self.records_dir.as_path())?;
+            Ok(freed_bytes)
+        });
         if let Err(err) = retention_result {
             let was_pending = self.retention_reconcile_pending;
             self.retention_reconcile_pending = true;
@@ -935,6 +949,19 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     context
                         .height
                         .saturating_add(self.checkpoint_interval_heights.max(1)),
+                );
+            }
+            if let Err(marker_err) =
+                fail_execution_bridge_retention_transaction(self.records_dir.as_path())
+            {
+                oasis7::observability::emit_stderr_or_event(
+                    tracing::Level::ERROR,
+                    format!(
+                        "execution driver failed to publish retention degradation at height {}: {}",
+                        context.height, marker_err
+                    )
+                    .as_str(),
+                    "execution bridge retention degradation publication failed",
                 );
             }
             oasis7::observability::emit_stderr_or_event(

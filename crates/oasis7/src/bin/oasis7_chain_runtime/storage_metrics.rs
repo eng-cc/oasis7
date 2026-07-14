@@ -689,7 +689,10 @@ mod tests {
     use oasis7::runtime::{World as RuntimeWorld, measure_directory_storage_bytes};
     use oasis7_proto::storage_profile::StorageProfile;
 
-    use super::super::{EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, RuntimePaths};
+    use super::super::{
+        EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
+        RuntimePaths,
+    };
     use super::{
         ExecutionRefCountCache, collect_storage_metrics, init_shared_storage_metrics,
         refresh_shared_storage_metrics, snapshot_storage_metrics,
@@ -1060,12 +1063,32 @@ mod tests {
         fs::write(
             paths
                 .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER),
+            b"healthy maintenance\n",
+        )
+        .expect("write in-progress marker");
+
+        let mut cache = ExecutionRefCountCache::default();
+        let healthy_snapshot =
+            collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
+        assert_eq!(
+            healthy_snapshot.degraded_reason, None,
+            "active healthy maintenance must not be reported as persistent degradation"
+        );
+        fs::remove_file(
+            paths
+                .execution_records_dir
+                .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER),
+        )
+        .expect("remove in-progress marker");
+        fs::write(
+            paths
+                .execution_records_dir
                 .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER),
             b"retention interrupted\n",
         )
         .expect("write retention marker");
 
-        let mut cache = ExecutionRefCountCache::default();
         let snapshot =
             collect_storage_metrics(&paths, StorageProfile::ReleaseDefault, None, &mut cache);
         assert_eq!(

@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER;
+use crate::{
+    EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
+};
 use oasis7::runtime::{BlobStore, LocalCasStore};
 
 use super::{
@@ -822,14 +824,7 @@ pub(super) fn run_execution_bridge_incremental_retention_maintenance(
 ) -> Result<u64, String> {
     let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
     let was_degraded = degraded_marker.exists();
-    if !was_degraded {
-        write_bytes_atomic(
-            degraded_marker.as_path(),
-            b"incremental retention in progress\n",
-        )?;
-    }
-
-    let result = run_execution_bridge_incremental_retention_maintenance_inner(
+    run_execution_bridge_incremental_retention_maintenance_inner(
         execution_records_dir,
         execution_store,
         record,
@@ -837,17 +832,60 @@ pub(super) fn run_execution_bridge_incremental_retention_maintenance(
         checkpoint_interval_heights,
         checkpoint_keep_latest,
         !was_degraded,
-    );
-    if result.is_ok() && !was_degraded {
-        fs::remove_file(degraded_marker.as_path()).map_err(|err| {
-            format!(
-                "clear execution bridge retention degraded marker {} failed: {}",
-                degraded_marker.display(),
-                err
-            )
-        })?;
+    )
+}
+
+pub(super) fn begin_execution_bridge_retention_transaction(
+    execution_records_dir: &Path,
+) -> Result<(), String> {
+    write_bytes_atomic(
+        execution_records_dir
+            .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER)
+            .as_path(),
+        b"execution retention transaction in progress\n",
+    )
+}
+
+pub(super) fn complete_execution_bridge_retention_transaction(
+    execution_records_dir: &Path,
+) -> Result<(), String> {
+    remove_retention_marker_if_present(
+        execution_records_dir
+            .join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER)
+            .as_path(),
+        "complete execution bridge retention transaction",
+    )
+}
+
+pub(super) fn fail_execution_bridge_retention_transaction(
+    execution_records_dir: &Path,
+) -> Result<(), String> {
+    write_bytes_atomic(
+        execution_records_dir
+            .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+            .as_path(),
+        b"execution retention reconciliation pending\n",
+    )?;
+    complete_execution_bridge_retention_transaction(execution_records_dir)
+}
+
+pub(super) fn promote_interrupted_execution_bridge_retention(
+    execution_records_dir: &Path,
+) -> Result<bool, String> {
+    let in_progress = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER);
+    if !in_progress.exists() {
+        return Ok(false);
     }
-    result
+    fail_execution_bridge_retention_transaction(execution_records_dir)?;
+    Ok(true)
+}
+
+fn remove_retention_marker_if_present(path: &Path, operation: &str) -> Result<(), String> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(format!("{operation} {} failed: {err}", path.display())),
+    }
 }
 
 fn list_execution_bridge_pre_v2_heights(execution_records_dir: &Path) -> Result<Vec<u64>, String> {
@@ -1003,29 +1041,23 @@ pub(super) fn run_execution_bridge_retention_maintenance(
     hot_window_heights: u64,
 ) -> Result<u64, String> {
     let pre_v2_heights = list_execution_bridge_pre_v2_heights(execution_records_dir)?;
-    if !pre_v2_heights.is_empty() {
+    let freed_bytes = if !pre_v2_heights.is_empty() {
         sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
-        return Ok(0);
-    }
-
-    let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
-    compact_execution_bridge_records(execution_records_dir, &pin_set)?;
-    sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
-    let freed_bytes = execution_store
-        .prune_orphan_blobs()
-        .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err))?;
-    let degraded_marker = execution_records_dir.join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER);
-    match fs::remove_file(degraded_marker.as_path()) {
-        Ok(()) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(format!(
-                "clear execution bridge retention degraded marker {} failed: {}",
-                degraded_marker.display(),
-                err
-            ));
-        }
-    }
+        0
+    } else {
+        let pin_set = build_execution_bridge_pin_set(execution_records_dir, hot_window_heights)?;
+        compact_execution_bridge_records(execution_records_dir, &pin_set)?;
+        sync_execution_bridge_pin_set(execution_records_dir, execution_store, hot_window_heights)?;
+        execution_store
+            .prune_orphan_blobs()
+            .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err))?
+    };
+    remove_retention_marker_if_present(
+        execution_records_dir
+            .join(EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+            .as_path(),
+        "clear execution bridge retention degraded marker",
+    )?;
     Ok(freed_bytes)
 }
 

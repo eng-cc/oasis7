@@ -886,6 +886,59 @@ fn retention_reconciliation_is_marker_driven_across_restart() {
 }
 
 #[test]
+fn interrupted_retention_transaction_is_promoted_on_production_startup() {
+    let dir = temp_dir("execution-driver-retention-interrupted-startup");
+    let records_dir = dir.join("records");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let storage_root = dir.join("store");
+    let profile = StorageProfileConfig::for_profile(StorageProfile::ReleaseDefault);
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+        &profile,
+    )
+    .expect("initial production driver startup");
+    fs::create_dir_all(execution_bridge_record_path(records_dir.as_path(), 1))
+        .expect("block record publication with directory");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect_err("record publication failure must abort commit");
+    assert!(records_dir.join("retention-in-progress").exists());
+    drop(driver);
+    fs::remove_dir_all(execution_bridge_record_path(records_dir.as_path(), 1))
+        .expect("remove record publication blocker");
+
+    let driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root,
+        &profile,
+    )
+    .expect("restart production driver");
+
+    assert!(driver.retention_reconcile_pending);
+    assert!(records_dir.join("retention-degraded").exists());
+    assert!(!records_dir.join("retention-in-progress").exists());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn execution_bridge_pin_set_keeps_latest_head_and_hot_window_refs() {
     let dir = temp_dir("execution-bridge-pin-set-hot-window");
     let records_dir = dir.join("records");

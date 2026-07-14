@@ -358,6 +358,13 @@ fn execution_bridge_retention_maintenance_skips_aggressive_sweep_for_legacy_reco
         legacy_bytes.as_slice(),
     )
     .expect("persist legacy latest pointer");
+    crate::write_bytes_atomic(
+        records_dir
+            .join(crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+            .as_path(),
+        b"interrupted legacy retention\n",
+    )
+    .expect("persist retention degraded marker");
 
     let freed_bytes = run_execution_bridge_retention_maintenance(records_dir.as_path(), &store, 1)
         .expect("run retention maintenance");
@@ -367,6 +374,12 @@ fn execution_bridge_retention_maintenance_skips_aggressive_sweep_for_legacy_reco
     )
     .expect("load legacy record after maintenance");
     assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V1);
+    assert!(
+        !records_dir
+            .join(crate::EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER)
+            .exists(),
+        "successful legacy-safe reconciliation must clear the durable degraded marker"
+    );
     assert!(record.snapshot_ref.is_some());
     assert!(record.journal_ref.is_some());
     assert!(
