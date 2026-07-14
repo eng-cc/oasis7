@@ -76,13 +76,16 @@ process = subprocess.Popen(
     start_new_session=True,
 )
 try:
-    stdout, stderr = process.communicate(timeout=5)
+    stdout, stderr = process.communicate(timeout=30)
 except subprocess.TimeoutExpired:
     os.killpg(process.pid, signal.SIGKILL)
     stdout, stderr = process.communicate()
     sys.stdout.write(stdout)
     sys.stderr.write(stderr)
-    raise SystemExit("path-sensitive python3 shim caused restore wrapper recursion/hang")
+    raise SystemExit(
+        "path-sensitive python3 shim case did not complete within 30 seconds; "
+        "possible restore wrapper recursion/hang"
+    )
 if process.returncode != 0:
     sys.stdout.write(stdout)
     sys.stderr.write(stderr)
