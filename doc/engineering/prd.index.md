@@ -19,7 +19,7 @@
 | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.prd.md` | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.design.md` | `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.project.md` |
 | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md` |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md` | `doc/engineering/doc-governance/doc-structure-standard.project.md` |
-| `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.design.md` | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.project.md` |
+| `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
 | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md` |
 | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.prd.md` | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.design.md` | `doc/engineering/self-evolution/role-long-term-memory-2026-03-30.project.md` |
 | `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.prd.md` | `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.design.md` | `doc/engineering/self-evolution/agent-workflow-borrowing-governance-2026-05-19.project.md` |
@@ -29,7 +29,7 @@
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
 - `doc/engineering/doc-governance/README.md` 是 doc-governance 簇级分流入口；本索引保留完整三件套可达性，不再要求读者从长表里判断治理问题归属。
-- `doc/engineering/rust-governance/README.md` 是 Rust 体量治理簇级分流入口；本索引保留同名三件套的精确检索入口。
+- `doc/engineering/rust-governance/README.md` 是 Rust 文件结构治理簇级分流入口；本索引保留单一当前契约的精确检索入口，不再复制已完成专题的 design / project。
 - `engineering` 根目录默认只保留 `README.md / prd.md / design.md / project.md / prd.index.md` 五个模块入口；治理专题已分别下沉到 `doc-governance/`、`rust-governance/`、`governance/` 与 `self-evolution/`。其中 `doc-surface-area-governance` 负责默认阅读面，`doc-corpus-maintenance-governance` 负责入口减重后的存量维护成本，`world-simulator-viewer-path-governance`、`p2p-node-path-governance`、`testing-evidence-path-governance` 与 `readme-governance-path-governance` 分别负责当前四个热点子域的路径级治理；`agent-workflow-borrowing-governance` 负责将外部 agent workflow 方法论映射为 repo-owned adopted / rejected / deferred 治理结论，`skill-surface-replacement-governance` 负责冻结本地 skill inventory 的 keep / replace / retire / defer 边界。`doc/devlog` 的当前入口是 `doc/devlog/README.md` compact archive summary，不再通过 active 专题三件套暴露。
 
 ## 历史审计留痕
