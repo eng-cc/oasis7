@@ -164,7 +164,7 @@ impl PosNodeEngine {
         } else {
             false
         };
-        self.align_next_slot_to_wall_clock(current_slot)?;
+        let recovered_from_skipped_slots = self.align_next_slot_to_wall_clock(current_slot)?;
         let consensus_participation_safe = self.consensus_participation_safe();
 
         let mut decision = if self.pending.is_some() {
@@ -176,7 +176,8 @@ impl PosNodeEngine {
         } else if !self.allow_local_proposals {
             self.idle_pending_decision()?
         } else if self.next_slot <= current_slot
-            && observed_tick.tick_phase == self.proposal_tick_phase
+            && (observed_tick.tick_phase == self.proposal_tick_phase
+                || recovered_from_skipped_slots)
         {
             self.propose_next_head(node_id, world_id, now_ms)?
         } else {

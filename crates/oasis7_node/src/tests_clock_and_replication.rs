@@ -345,6 +345,35 @@ fn pos_engine_proposes_only_on_configured_tick_phase() {
 }
 
 #[test]
+fn pos_engine_recovers_proposal_after_skipping_configured_phase() {
+    let mut config =
+        NodeConfig::new("node-a", "world-phase-recovery", NodeRole::Observer).expect("config");
+    config.pos_config.slot_duration_ms = 100;
+    config.pos_config.ticks_per_slot = 10;
+    config.pos_config.proposal_tick_phase = 9;
+    config.pos_config.slot_clock_genesis_unix_ms = Some(1_000);
+    let mut engine = PosNodeEngine::new(&config).expect("engine");
+
+    let recovered = engine
+        .tick(
+            &config.node_id,
+            &config.world_id,
+            2_000,
+            None,
+            None,
+            None,
+            None,
+            Vec::new(),
+            None,
+        )
+        .expect("cold-start recovery tick");
+
+    assert_eq!(recovered.consensus_snapshot.tick_phase, 0);
+    assert_eq!(recovered.consensus_snapshot.missed_slot_count, 10);
+    assert_eq!(recovered.consensus_snapshot.committed_height, 1);
+}
+
+#[test]
 fn pos_engine_tracks_missed_logical_ticks() {
     let mut config =
         NodeConfig::new("node-a", "world-missed-tick", NodeRole::Observer).expect("config");
