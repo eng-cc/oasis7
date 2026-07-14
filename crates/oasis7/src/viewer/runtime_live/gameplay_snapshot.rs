@@ -439,6 +439,22 @@ fn finalize_player_gameplay_snapshot(
         gameplay.stage_status,
         gameplay.available_actions.as_slice(),
     );
+    let effective_stage_status = effective_branch_stage_status(
+        gameplay.stage_status,
+        gameplay.branch_recommendations.as_slice(),
+    );
+    if effective_stage_status != gameplay.stage_status {
+        gameplay.stage_status = effective_stage_status;
+        gameplay.blocker_kind = Some("branch_commitment_unavailable".to_string());
+        gameplay.blocker_detail = Some(
+            "No executable branch commitment is currently available from the published actions."
+                .to_string(),
+        );
+        gameplay.next_step_hint =
+            "Restore the inputs or capability required by a published branch action, then inspect the choices again."
+                .to_string();
+        gameplay.branch_hint = None;
+    }
     gameplay.execution_state =
         derive_player_gameplay_execution_state(gameplay.stage_status, recent_feedback);
     let (causality_kind, causality_detail) =
@@ -556,6 +572,17 @@ fn branch_recommendations(
         .take(3)
         .cloned()
         .collect()
+}
+
+fn effective_branch_stage_status(
+    stage_status: PlayerGameplayStageStatus,
+    recommendations: &[PlayerGameplayBranchCommitment],
+) -> PlayerGameplayStageStatus {
+    if stage_status == PlayerGameplayStageStatus::BranchReady && recommendations.is_empty() {
+        PlayerGameplayStageStatus::Blocked
+    } else {
+        stage_status
+    }
 }
 
 pub(super) fn build_player_gameplay_snapshot(
@@ -1266,4 +1293,34 @@ pub(super) fn build_player_gameplay_snapshot(
         rebuild_available: None,
         pivot_available: None,
     })
+}
+
+#[cfg(test)]
+mod branch_commitment_tests {
+    use super::*;
+
+    #[test]
+    fn branch_ready_downgrades_when_every_published_candidate_is_disabled() {
+        let actions = vec![PlayerGameplayAction {
+            action_id: "schedule_recipe_smelter_alloy_plate".to_string(),
+            label: "Schedule alloy plate".to_string(),
+            protocol_action: "gameplay_action.submit".to_string(),
+            target_agent_id: None,
+            disabled_reason: Some("missing iron ingot".to_string()),
+        }];
+        let recommendations = branch_recommendations(
+            IndustryStage::ScaleOut,
+            PlayerGameplayStageStatus::BranchReady,
+            actions.as_slice(),
+        );
+
+        assert!(recommendations.is_empty());
+        assert_eq!(
+            effective_branch_stage_status(
+                PlayerGameplayStageStatus::BranchReady,
+                recommendations.as_slice(),
+            ),
+            PlayerGameplayStageStatus::Blocked,
+        );
+    }
 }

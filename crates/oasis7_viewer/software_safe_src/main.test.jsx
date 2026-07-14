@@ -1579,6 +1579,10 @@ describe("viewer web ui automation baseline", () => {
     const stagePanel = container.querySelector("#viewer-stage-panel");
     expect(within(stagePanel).getByText("Expansion Tradeoffs")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Scale alloy throughput")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Immediate gain")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Future beat")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Risk or lock-in")).toBeInTheDocument();
+    expect(within(stagePanel).getByText("Next-session hook")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Compare the published consequences before committing.").length).toBeGreaterThan(0);
     expect(within(stagePanel).getByText("Build alloy factory core: missing structural frames")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);

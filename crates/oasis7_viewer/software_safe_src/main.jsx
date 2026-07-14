@@ -417,10 +417,22 @@ function ExpansionTradeoffCards(props) {
               <Show when={!card.complete}>
                 <div class="badge-row"><Badge class="badge badge--warn">{tr(locale(), "推荐信息不完整", "Incomplete recommendation")}</Badge></div>
               </Show>
-              <div class="feedback-detail">{card.immediateGain || tr(locale(), "即时收益未发布", "Immediate gain unavailable")}</div>
-              <div class="feedback-detail">{card.futureBeatChanged || tr(locale(), "后续变化未发布", "Future beat unavailable")}</div>
-              <div class="feedback-detail">{card.riskOrLockin || tr(locale(), "风险或锁定未发布", "Risk or lock-in unavailable")}</div>
-              <div class="feedback-detail">{card.nextSessionHook || tr(locale(), "下次续玩钩子未发布", "Next-session hook unavailable")}</div>
+              <div class="feedback-detail">
+                <div class="metric__label">{tr(locale(), "即时收益", "Immediate gain")}</div>
+                {card.immediateGain || tr(locale(), "即时收益未发布", "Immediate gain unavailable")}
+              </div>
+              <div class="feedback-detail">
+                <div class="metric__label">{tr(locale(), "后续变化", "Future beat")}</div>
+                {card.futureBeatChanged || tr(locale(), "后续变化未发布", "Future beat unavailable")}
+              </div>
+              <div class="feedback-detail">
+                <div class="metric__label">{tr(locale(), "风险或锁定", "Risk or lock-in")}</div>
+                {card.riskOrLockin || tr(locale(), "风险或锁定未发布", "Risk or lock-in unavailable")}
+              </div>
+              <div class="feedback-detail">
+                <div class="metric__label">{tr(locale(), "下次续玩钩子", "Next-session hook")}</div>
+                {card.nextSessionHook || tr(locale(), "下次续玩钩子未发布", "Next-session hook unavailable")}
+              </div>
               <div class="feedback-summary">
                 {card.action
                   ? card.action.disabledReason
