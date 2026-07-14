@@ -166,7 +166,7 @@ Credential files may be used by an operator as local access aids, but this runbo
 1. Phase A: Preflight and truth capture
 2. Phase B: Build deployment truth
 3. Phase C0: Routine CI package update
-4. Phase C: Stage and rebuild validators when state or signer truth requires it
+4. Phase C: Preflight, reset, stage, and rebuild validators when state or signer truth requires it
 5. Phase D: Verify validator pair
 6. Phase E: Optional recovery seed/state-sync bundle
 7. Phase F: Attach or reseed observers
@@ -293,12 +293,46 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 2. macOS local observer uses the local observer install/upgrade path and launchd label `oasis7.testnet.fourth`; do not verify it with the Linux runtime hash.
 3. Windows observer uses the Windows installer artifact, updates `C:\oasis7-deploy\CURRENT_VERSION` and deploy metadata, and restarts scheduled task `Oasis7Observer`.
 
-## 9. Phase C - Stage and Rebuild Validators
+## 9. Phase C - Clean Rebuild Validators
 ### Goal
 从零重建 validator pair。
 
-### Stage
-把以下内容放到两台 validator：
+本 phase 的顺序是硬约束：`preflight both -> reset both -> stage both -> sequencer liveness -> storage`。任一步未通过，都不得提前执行后一步；特别是不得在只 reset 一台 validator 后向任一 host staging。
+
+### C1. Preflight both validators
+
+执行任何 stop、process cleanup、目录删除或 staging 前，先在两台 validator 上完成非变更 preflight：确认当前 runtime、repair-rebuild helper、governance registry importer 均可执行，repair helper 提供 `--generated-world-dir` 合同，且远端 Python、tar、systemd 与 process inspection 工具可用。任一 host preflight 失败时，两台 host 都不得进入 reset。
+
+### C2. Reset both validators
+停止服务并 destructive reset 旧链状态：
+
+```bash
+systemctl stop oasis7-triad-sequencer.service
+systemctl stop oasis7-triad-storage.service
+```
+
+必须先 quiesce 并 reset 完两台 validator，之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
+
+从第一台 validator 停止开始，到 Phase G full-fleet health criteria 全部通过为止，必须按 testnet outage 窗口处理：validator 服务不可用，依赖 validator 的 public RPC、explorer 和 guarded faucet 可能不可用或返回 stale data。不得把缓存可读、单个 endpoint 恢复或 sequencer 单机存活当作网络恢复。
+
+必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
+
+标准重建脚本必须清理以下运行态，以保证“从零重建”不会继承旧 peerstore、旧 runtime root 或未释放端口：
+
+- `data/execution-records`
+- `data/execution-world`
+- `data/execution-world-simulator-mirror`
+- `data/storage`
+- `data/runtime-root`
+- `data/replication-root`
+- `output/chain-runtime`
+- `output/node-distfs`
+
+在删除目录前，脚本必须等待或终止 stack-local 残留 `start-node.sh` / `oasis7_chain_runtime` 进程，避免旧进程继续占用 gossip/status/replication 端口。若 `systemctl stop` 后端口仍被旧 runtime 占用，本轮 rebuild 必须视为未清干净，不能继续把后续 readiness 失败归因于链同步慢。
+
+### C3. Stage both validators
+
+reset 两台 validator 完成后，才把以下内容放到两台 host：
 
 - current release package/runtime
 - manifest
@@ -324,40 +358,19 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
   --out-dir .tmp/public-testnet-validator-rebuild
 ```
 
-### Reset
-停止服务并 destructive reset 旧链状态：
+两台 host 的 package、config 和 deployment-only world staging 都成功后，才进入启动步骤。
 
-```bash
-systemctl stop oasis7-triad-sequencer.service
-systemctl stop oasis7-triad-storage.service
-```
-
-执行任何 stop、process cleanup 或目录删除前，先在两台 validator 上完成非变更 preflight：确认当前 runtime、repair-rebuild helper、governance registry importer 均可执行，repair helper 提供 `--generated-world-dir` 合同，且远端 Python、tar、systemd 与 process inspection 工具可用。任一 host preflight 失败时，两台 host 都不得进入 reset。
-
-必须先 quiesce 并 reset 完两台 validator，之后才能向任一 host stage config/world。不要在 sequencer reset 后立即 staging，再处理 storage；该交错会让旧 storage runtime 与新 sequencer staging 短暂共存。
-
-必须清理旧链数据目录，但保留受保护的 `config/node-keypair.toml`，除非本轮明确要轮换 key。
-
-标准重建脚本必须清理以下运行态，以保证“从零重建”不会继承旧 peerstore、旧 runtime root 或未释放端口：
-
-- `data/execution-records`
-- `data/execution-world`
-- `data/execution-world-simulator-mirror`
-- `data/storage`
-- `data/runtime-root`
-- `data/replication-root`
-- `output/chain-runtime`
-- `output/node-distfs`
-
-在删除目录前，脚本必须等待或终止 stack-local 残留 `start-node.sh` / `oasis7_chain_runtime` 进程，避免旧进程继续占用 gossip/status/replication 端口。若 `systemctl stop` 后端口仍被旧 runtime 占用，本轮 rebuild 必须视为未清干净，不能继续把后续 readiness 失败归因于链同步慢。
-
-### Start order
-固定顺序：
+### C4. Start sequencer and confirm liveness
 
 1. start `triad-testnet-sequencer`
 2. confirm sequencer liveness（`running=true` 且 `last_error` 为空）
-3. start `triad-testnet-storage`
-4. confirm storage joins sequencer
+
+sequencer liveness 未通过时不得启动 storage，也不得开始恢复 observer 或对外 endpoint。
+
+### C5. Start storage after sequencer liveness
+
+1. start `triad-testnet-storage`
+2. confirm storage joins sequencer
 
 ### Validator launch invariants
 1. `NETWORK_TIER_MANIFEST_PATH` 必须指向 governed bootstrap manifest
@@ -547,7 +560,13 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
    - `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或在允许 lag 内
    - `consensus.network_head.decision=ready`
 
-如果只满足第一条，不得对外宣称“完全健康”。
+如果只满足第一条，不得对外宣称 healthy、恢复完成或“完全健康”。
+
+### Operator communication boundary
+
+1. **Merge announcement: n/a.** 合并 runbook、代码或 package 变更不等于 live deployment 已执行，不发布“网络已恢复”或“部署已完成”的 merge announcement。
+2. 只有确认当前存在 active external testnet consumers 时，才需要 deployment/outage messaging；没有外部 consumer 时保留内部 operator 记录即可。需要对外说明时，必须使用 `testnet`、`resettable`、`non-mainnet` 边界，例如：`Oasis7 public testnet is undergoing a governed clean rebuild. This testnet is resettable and non-mainnet. Validators are temporarily unavailable; RPC, explorer, and guarded faucet may be unavailable or stale until full-fleet verification completes.`
+3. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足并留存 full-fleet snapshot 后，才可说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ## 14. Phase H - Failure Handling and Rollback
 ### Deployment rollback
@@ -557,12 +576,15 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 2. 恢复上一版 manifest/config
 3. 保留失败现场日志和当前 deployment truth 快照
 
+上述 package/config rollback 只恢复 binary 与配置选择，不会恢复 Phase C 已删除的 chain state。只要 destructive reset 已发生，就不得把 symlink/config 回切描述为链状态回滚或完整恢复；canonical recovery 是先修正 package/config/deployment truth，再按 Phase C clean rebuild validator pair，并按 Phase F reset/reseed 所有受旧链状态影响的 observers。
+
 ### Observer rollback
 如果 observer 接入失败：
 
 1. 不改 validator 链真值
 2. 保留 observer 当前 seed/state-sync 失败现场
-3. 回退到上一个 verified seed bundle 或重新导出完整 bundle
+3. reset 受旧链状态影响的 observer，再从 clean-rebuilt storage/sequencer state 自动 catch-up 或重新导出的 current-chain verified bundle reseed
+4. 不得使用绑定旧链状态的 seed bundle，也不得保留旧 observer state 重新接入 clean-rebuilt validator pair
 
 ### What not to do
 1. 不要为 observer attach 问题去修改 validator registry 真值
