@@ -58,6 +58,19 @@ cat >"$TMP_DIR/consumer-impact-invalid.json" <<'JSON'
 }
 JSON
 
+cat >"$TMP_DIR/consumer-impact-impossible-date.json" <<'JSON'
+{
+  "impact": "none",
+  "evidence_source": "internal testnet inventory audit #2264",
+  "timestamp": "2026-02-31T10:30:00+08:00",
+  "validators_already_stopped": true,
+  "outage_update_channel": "n/a",
+  "recovery_update_checkpoint": "n/a",
+  "producer_wording_approval": "n/a",
+  "decision": "proceed"
+}
+JSON
+
 cat >"$TMP_DIR/consumer-impact-hold.json" <<'JSON'
 {
   "impact": "unknown",
@@ -655,6 +668,10 @@ assert_consumer_impact_rejected_without_host_access \
   invalid \
   "consumer-impact record is invalid" \
   --consumer-impact-record "$TMP_DIR/consumer-impact-invalid.json"
+assert_consumer_impact_rejected_without_host_access \
+  impossible-date \
+  "consumer-impact record is invalid" \
+  --consumer-impact-record "$TMP_DIR/consumer-impact-impossible-date.json"
 assert_consumer_impact_rejected_without_host_access \
   hold \
   "consumer-impact decision must be proceed" \

@@ -189,11 +189,29 @@ if ! jq -e '
   def governed_reference:
     nonempty_string
     and ((gsub("^[[:space:]]+|[[:space:]]+$"; "") | ascii_downcase) != "n/a");
+  def leap_year($year):
+    ($year % 4 == 0)
+    and (($year % 100 != 0) or ($year % 400 == 0));
+  def days_in_month($year; $month):
+    if $month == 2 then
+      if leap_year($year) then 29 else 28 end
+    elif $month == 1 or $month == 3 or $month == 5 or $month == 7
+      or $month == 8 or $month == 10 or $month == 12 then
+      31
+    else
+      30
+    end;
+  def valid_calendar_date:
+    (.[0:4] | tonumber) as $year
+    | (.[5:7] | tonumber) as $month
+    | (.[8:10] | tonumber) as $day
+    | $day <= days_in_month($year; $month);
   type == "object"
   and (.impact == "active" or .impact == "none" or .impact == "unknown")
   and (.evidence_source | nonempty_string)
   and (.timestamp | type == "string")
   and (.timestamp | test("^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]+)?(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$"))
+  and (.timestamp | valid_calendar_date)
   and (.validators_already_stopped | type == "boolean")
   and (.decision == "proceed")
   and (.outage_update_channel | nonempty_string)
