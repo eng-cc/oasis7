@@ -38,6 +38,8 @@ Options:
   --remote <name>         Remote name for push / base comparison (default: origin)
   --create                Push branch if needed and run `gh pr create`
   --draft                 Add `--draft` when creating the PR
+  --draft-candidate       Create/resume the frozen-head draft_candidate before readiness
+  --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
   --json                  Print machine-readable JSON summary only
@@ -88,6 +90,8 @@ BASE_BRANCH="main"
 REMOTE_NAME="origin"
 CREATE_PR=0
 DRAFT_PR=0
+DRAFT_CANDIDATE=0
+PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
 BODY_FILE=""
@@ -111,6 +115,8 @@ while [[ $# -gt 0 ]]; do
       DRAFT_PR=1
       shift
       ;;
+    --draft-candidate) CREATE_PR=1; DRAFT_PR=1; DRAFT_CANDIDATE=1; shift ;;
+    --promote-draft) PROMOTE_DRAFT_RECEIPT="${2:-}"; shift 2 ;;
     --title)
       PR_TITLE="${2:-}"
       shift 2
@@ -1003,7 +1009,7 @@ fi
 [[ -n "$SOURCE_WORKTREE" ]] || die "source branch is not checked out in any worktree: $SOURCE_BRANCH"
 ensure_clean_worktree "$SOURCE_WORKTREE" "source"
 
-if [[ "$CREATE_PR" == "1" ]]; then
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" ]]; then
   git fetch --quiet "$REMOTE_NAME" "$BASE_BRANCH"
 fi
 
@@ -1115,19 +1121,37 @@ LOCAL_ROLE_REVIEW_WASM_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "wasm
 LOCAL_ROLE_REVIEW_OPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "ops_evidence")"
 LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "liveops_evidence")"
 LOCAL_ROLE_REVIEW_SOURCE_HEAD="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "reviewed_source_head")"
+if [[ "$DRAFT_CANDIDATE" == "1" && -z "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+  BOUND_TASK_FIELDS="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$SOURCE_WORKTREE" "$SOURCE_BRANCH" <<'PY'
+import json,os,sys
+p,worktree,branch=sys.argv[1:]
+d=json.load(open(p,encoding='utf-8'))
+hits=[]
+for uid,r in (d.get('tasks') or {}).items():
+    hint=os.path.realpath(str(r.get('worktree_hint') or '')) if r.get('worktree_hint') else ''
+    if hint==os.path.realpath(worktree) or str(r.get('branch') or r.get('source_branch') or '')==branch:
+        hits.append((uid,r))
+if len(hits)!=1: raise SystemExit(f'draft_candidate requires exactly one bound task mapping, found {len(hits)}')
+uid,r=hits[0]; print(uid); print(r.get('issue_url') or ''); print(r.get('issue_number') or '')
+PY
+)" || die "cannot infer draft_candidate task truth from mapping"
+  LOCAL_ROLE_REVIEW_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
+  LOCAL_ROLE_REVIEW_LOG_PATH="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
+  BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+fi
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
 MISSING_REQUIRED_REVIEW_ROLES="$(missing_required_review_roles "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_ROLES")"
 MISSING_SEMANTIC_REVIEW_EVIDENCE="$(semantic_review_evidence_missing "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE")"
 
-if [[ "$CREATE_PR" == "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
   die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
 fi
 
-if [[ "$CREATE_PR" == "1" && -n "$MISSING_REQUIRED_REVIEW_ROLES" ]]; then
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && -n "$MISSING_REQUIRED_REVIEW_ROLES" ]]; then
   die "pre-PR local role review is missing required role(s) inferred from changed paths: $MISSING_REQUIRED_REVIEW_ROLES (present: ${LOCAL_ROLE_REVIEW_ROLES:-none}; required: $REQUIRED_REVIEW_ROLES)"
 fi
 
-if [[ "$CREATE_PR" == "1" && -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && -n "$MISSING_SEMANTIC_REVIEW_EVIDENCE" ]]; then
   die "pre-PR local role review is missing required semantic evidence for inferred roles: $MISSING_SEMANTIC_REVIEW_EVIDENCE"
 fi
 if [[ "$CREATE_PR" == "1" ]]; then
@@ -1141,6 +1165,34 @@ if [[ "$CREATE_PR" == "1" ]]; then
     || die "pre-PR local role-return validation failed"
 fi
 
+if [[ -n "$PROMOTE_DRAFT_RECEIPT" ]]; then
+  [[ -f "$PROMOTE_DRAFT_RECEIPT" ]] || die "promote_draft requires an existing ci_ready_receipt"
+  [[ "$LOCAL_ROLE_REVIEW_STATUS" == "passed" ]] || die "promote_draft requires same-head passed role review"
+  PR_TO_PROMOTE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["pr_number"])' "$PROMOTE_DRAFT_RECEIPT")"
+  RECEIPT_HEAD="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8"))["head_oid"])' "$PROMOTE_DRAFT_RECEIPT")"
+  [[ "$RECEIPT_HEAD" == "$SOURCE_HEAD" ]] || die "promote_draft receipt is wrong_head"
+  RECEIPT_VERIFY_ARGS="$(python3 - "$PROMOTE_DRAFT_RECEIPT" <<'PY'
+import json,shlex,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+print(' '.join(shlex.quote(str(r[k])) for k in ('repository','task_uid','task_issue_number','pr_number','check_name','check_app_id','planner_digest')))
+PY
+)"
+  read -r RR RT RI RP RC RA RD <<<"$RECEIPT_VERIFY_ARGS"
+  TASK_READY="$(python3 - "$SOURCE_WORKTREE/.pm/github-project-sync/tasks.json" "$RT" <<'PY'
+import json,sys
+r=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+print('true' if r.get('status')=='ready' and r.get('workflow_phase')=='pre_pr_ready' else 'false')
+PY
+)"
+  [[ "$TASK_READY" == true ]] || die "promote_draft requires task truth at ready/pre_pr_ready"
+  python3 "$ROOT_DIR/scripts/pm/ci-ready-receipt.py" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" >/dev/null \
+    || die "promote_draft ci_ready_receipt live validation failed"
+  command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
+  gh pr ready "$PR_TO_PROMOTE" >/dev/null || die "promote_draft failed"
+  printf '%s\n' "promote_draft: PR $PR_TO_PROMOTE is ready"
+  exit 0
+fi
+
 WORKFLOW_LINT_ARGS=("--phase" "pr-ready" "--allow-unbound")
 if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   WORKFLOW_LINT_ARGS=("--task-uid" "$LOCAL_ROLE_REVIEW_TASK_UID" "${WORKFLOW_LINT_ARGS[@]}")
@@ -1148,7 +1200,7 @@ fi
 
 WORKFLOW_LINT_OUTPUT=""
 WORKFLOW_LINT_BIN="${PREPARE_TASK_PR_WORKFLOW_LINT_PATH:-./scripts/pm/workflow-lint.sh}"
-if ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && PM_ROOT_DIR="$SOURCE_WORKTREE" "$WORKFLOW_LINT_BIN" "${WORKFLOW_LINT_ARGS[@]}" 2>&1)"; then
+if [[ "$DRAFT_CANDIDATE" != "1" ]] && ! WORKFLOW_LINT_OUTPUT="$(cd "$SOURCE_WORKTREE" && PM_ROOT_DIR="$SOURCE_WORKTREE" "$WORKFLOW_LINT_BIN" "${WORKFLOW_LINT_ARGS[@]}" 2>&1)"; then
   if [[ "$WORKFLOW_LINT_OUTPUT" == *"unknown arg: --phase"* ]]; then
     WORKFLOW_LINT_FALLBACK_ARGS=("--allow-unbound")
     if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
@@ -1181,7 +1233,9 @@ fi
 
 TASK_ISSUE_NUMBER=""
 GENERATED_PR_BODY=""
-if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
+if [[ -n "${BOUND_TASK_ISSUE_NUMBER:-}" ]]; then
+  TASK_ISSUE_NUMBER="$BOUND_TASK_ISSUE_NUMBER"
+elif [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   TASK_ISSUE_NUMBER="$(task_issue_number_from_review "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$SOURCE_WORKTREE")"
 fi
 
@@ -1265,6 +1319,7 @@ PY
       --pr-url "$PR_URL" \
       --role tpm \
       --validation-command "$CREATE_CMD_RENDERED" \
+      $([[ "$DRAFT_CANDIDATE" == "1" ]] && printf '%s' --draft-candidate) \
       --json >/dev/null 2>"$RECORD_PR_ERR"; then
       RECORD_PR_FAILURE="$(cat "$RECORD_PR_ERR")"
       rm -f "$RECORD_PR_ERR"

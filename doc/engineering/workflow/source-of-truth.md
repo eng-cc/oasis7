@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.9.11**
+Version: **v1.10.0**
 Last Updated: **2026-07-14**
 
 ## 0. Purpose
@@ -28,7 +28,7 @@ Mandatory rule:
 | Durable reducer/checkpoint and fail-closed phase gates | implemented | Safe local state and validation primitives exist. |
 | Receipt-bound main-sync and safe-cleanup helpers | implemented | Production helpers validate durable receipts and fail closed. |
 | Fake-GitHub lifecycle fixtures | test-only | They test reducers; they are not production evidence. |
-| Human-operated pre-PR role review | implemented | TPM records frozen-head, role-complete review evidence in the GitHub task issue; repo helpers validate the local ledger and artifacts before PR creation. |
+| Human-operated pre-PR role review | implemented | TPM records frozen-head, role-complete review evidence after draft CI and before promotion. |
 | Unattended pre-PR review attestation | blocked | No trusted runtime provenance-attestation producer exists; unattended automation must stop at `capability_blocked`. |
 | Production supervisor from intake through merge | blocked | Without trusted production producers, automation is `capability_blocked`. |
 
@@ -47,7 +47,7 @@ The production supervisor is a target runtime executor and is currently
 blocked; the state machine below defines required order, not implemented
 automation.
 
-`bootstrap -> route -> professional execution -> freeze -> verify -> review -> pre_pr_ready -> create PR -> watch/fix/reverify/review/push -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`
+`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`
 
 ## Workflow states
 - `running`: the recorded action authority is executing its typed action.
@@ -78,20 +78,17 @@ The final implementation head freezes one immutable tree; later code
 <a id="pre-pr-ready-gate"></a>
 **Pre-PR Ready.**
 
-Frozen-head verification and required involved-role review have passed. Ready
-is a pre-PR gate, not PR creation or Done. The human-operated path requires a
+The draft candidate's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Ready is a pre-PR gate, not PR creation or Done. The human-operated path requires a
 GitHub task packet, all-required-role ledger, head binding, artifact digests,
 findings dispositions, and residual risk. Runtime-issued provenance applies
 only to unattended supervision, which remains `capability_blocked`. Fixtures
 never satisfy a live task.
 
 <a id="pr-creation-gate"></a>
-**PR creation gate.**
+**Draft candidate and promotion gate.**
 
-An evidence-only commit may change HEAD but not the frozen implementation tree.
-When it changes HEAD, re-run final-head verification and review, then record a
-new review packet; otherwise PR creation is forbidden. PR creation binds the
-reviewed PR head.
+A draft candidate opens after freeze for exact-head CI. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and time.
+Any head change invalidates CI evidence and review; promotion requires same-head readiness.
 
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
@@ -159,12 +156,14 @@ flowchart TD
   F -- no --> H
   G --> H[Implementation + Slice Verification]
   H --> R[Freeze immutable implementation head]
-  R --> I[Immutable verification\nclaim-ready on frozen head]
+  R --> J[Open or resume draft candidate]
+  J --> I[Trusted CI required gate\nreceipt bound to frozen head]
   I --> M[Pre-PR Local Role Review\nrole-return ledger per required role]
   M --> Q[Pre-PR Ready gate\nhuman-operated evidence validated]
-  Q --> X[Optional evidence-only commit]
-  X --> J[PR creation / resume]
-  J --> N{PR purpose / merge hold?}
+  Q --> X[Optional evidence-only commit\nrestart CI and review if HEAD changes]
+  X --> J
+  Q --> Y[PR creation state confirmed\npromote draft]
+  Y --> N{PR purpose / merge hold?}
   N -- normal --> O[PR Watch/Fix/Merge Gate\nchecks + mergeability + all comment surfaces]
   N -- packaging --> P[Manual CI Hold\nrecord purpose + wait for operator/user]
   N -- user hold --> U[User-requested Merge Hold\nrecord authority + resume criterion]
@@ -193,7 +192,7 @@ This map makes skill reachability explicit. TPM owns the route decision as a wor
 | Behavior changes with a stable automated harness | `tdd-test-writer` | Conditional required when RED criteria are met; otherwise skip reason required | RED command, failing evidence, and handoff contract |
 | Repo truth is ready and implementation proceeds step by step | `executing-project-tasks` | Required for non-trivial execution after route selection | Atomic step evidence in GitHub task issue evidence comments |
 | Bug, failing test, broken script, unexpected diff, or regression appears | `systematic-debugging` | Conditional required before speculative fixes | Reproduction, narrowed hypothesis, fix evidence |
-| Branch is about to create a PR | `requesting-repo-owned-review` | Required before PR creation; TPM must spawn or dispatch fresh local subagents for all involved relevant roles, collect review findings/no-findings/residual risk, and address or explicitly reject actionable findings with evidence before continuing | `Pre-PR Local Role Review: passed` GitHub issue evidence packet with roles, review evidence, finding disposition, and residual risk |
+| Draft CI receipt is ready and branch is about to be promoted | `requesting-repo-owned-review` | Required before draft promotion; TPM dispatches fresh involved-role review against the receipt head | `Pre-PR Local Role Review: passed` packet |
 | About to claim done/tests-pass/ready-for-PR/ready-to-merge | `verification-before-completion` | Required before completion claims | Fresh verification command/output or claim-ready evidence |
 | Implementation is done and branch needs closeout/commit/PR/watch/merge | `finishing-a-development-branch` | Required for development branch closeout | Closeout output, commit, PR linkage, PR purpose decision, CI/review watch evidence, merge/cleanup evidence |
 | GitHub PR receives review comments or requested changes | `receiving-code-review` | Required for actionable PR review feedback | Comment verification, fix evidence, thread status |

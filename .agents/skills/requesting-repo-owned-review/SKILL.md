@@ -7,7 +7,7 @@ description: Use when a branch is about to create a PR and needs fresh involved-
 
 Canonical contract: [pre-PR review packet](../../../doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet), [Freeze](../../../doc/engineering/workflow/source-of-truth.md#freeze-gate), [Pre-PR Ready](../../../doc/engineering/workflow/source-of-truth.md#pre-pr-ready-gate).
 
-Pre-PR local role review is required before PR creation. Use this skill when a branch is about to create a PR or a major feature or workflow helper just landed locally. It supplements, never replaces, GitHub checks, comments, requested changes, or mergeability.
+Pre-PR local role review is required after the draft candidate has same-head CI evidence and before promotion. It supplements, never replaces, GitHub checks, comments, requested changes, or mergeability.
 
 ## When to Use
 

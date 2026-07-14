@@ -222,6 +222,10 @@ env -u RUSTC_WRAPPER cargo check -p oasis7_viewer --target wasm32-unknown-unknow
 ```bash
 ./scripts/ci-tests.sh required
 ```
+
+PR-ready lifecycle does not rerun S1 locally. The frozen draft candidate's
+GitHub `required-gate` supplies the trusted exact-head CI receipt; S1 remains an
+explicit diagnostic command.
 - 覆盖重点：
   - runtime/simulator 大量单元与集成测试
   - `oasis7_viewer_live` 二进制测试

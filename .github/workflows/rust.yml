@@ -84,6 +84,12 @@ jobs:
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
+          cat >>"${GITHUB_STEP_SUMMARY}" <<'PLAN'
+          <!-- oasis7-required-plan-v1 -->
+          ```json
+          {"scope":"${{ steps.scope.outputs.scope }}","reason_summary":"${{ steps.scope.outputs.reason_summary }}","changed_path_count":"${{ steps.scope.outputs.changed_path_count }}","run_oasis7_required_tests":"${{ steps.scope.outputs.run_oasis7_required_tests }}","run_consensus_tests":"${{ steps.scope.outputs.run_consensus_tests }}","run_distfs_tests":"${{ steps.scope.outputs.run_distfs_tests }}","run_oasis7_node_tests":"${{ steps.scope.outputs.run_oasis7_node_tests }}","run_oasis7_net_tests":"${{ steps.scope.outputs.run_oasis7_net_tests }}","run_oasis7_net_libp2p_tests":"${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}","run_viewer_contract_tests":"${{ steps.scope.outputs.run_viewer_contract_tests }}","run_viewer_wasm_check":"${{ steps.scope.outputs.run_viewer_wasm_check }}","run_viewer_perf_smoke":"${{ steps.scope.outputs.run_viewer_perf_smoke }}","run_launcher_web_build":"${{ steps.scope.outputs.run_launcher_web_build }}","run_oasis7_workspace_support_crate_tests":"${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"}
+          ```
+          PLAN
       - name: Install pinned Rust toolchains
         run: |
           rustup toolchain install "${RUST_TOOLCHAIN}" --profile default --component rustfmt --component clippy

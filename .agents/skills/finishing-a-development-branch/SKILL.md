@@ -15,9 +15,9 @@ Use after implementation and its required verification are complete.
 
 ## Freeze-Commit Gates
 
-1. Run fresh verification at the required tier and inspect all output.
-2. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
-3. Use `requesting-repo-owned-review`; resolve findings and obtain the canonical human-operated review packet.
+1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
+2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create` and obtain a trusted `ci_ready_receipt` for its exact head.
+3. Use `requesting-repo-owned-review`; resolve findings against that same head.
 
 ## Optional Evidence-Only Commit / PR-Prep Gates
 
@@ -33,14 +33,14 @@ Use after implementation and its required verification are complete.
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner_role> --task-uid <TASK-UID> \
   --comparison-ref "<Comparison Ref>" --verification-profile <repository-owned-profile> \
-  --review-packet-file <canonical-review-packet.json>
+  --review-packet-file <canonical-review-packet.json> --ci-ready-receipt <receipt.json>
 ```
 
 Partial remote state recovers via refresh -> audit -> retry; do not edit cache JSON.
-6. Create the PR only through:
+6. Promote the existing draft only through:
 
 ```bash
-./scripts/prepare-task-pr.sh --create
+./scripts/prepare-task-pr.sh --promote-draft <receipt.json>
 ```
 
 Pre-PR local role review packet recorded after immutable verification and before PR creation; its schema is only at the canonical review-packet link.
