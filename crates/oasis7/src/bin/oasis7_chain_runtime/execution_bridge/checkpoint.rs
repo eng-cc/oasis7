@@ -678,6 +678,38 @@ fn replace_execution_bridge_checkpoint_pin_shard(
         })
 }
 
+fn remove_pruned_execution_bridge_checkpoint_pin_shards(
+    execution_records_dir: &Path,
+    execution_store: &LocalCasStore,
+) -> Result<(), String> {
+    let retained_heights = list_execution_checkpoint_heights(execution_records_dir)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    for shard in execution_store
+        .list_pin_scope_shards(EXECUTION_BRIDGE_PIN_SCOPE)
+        .map_err(|err| format!("list execution bridge pin shards failed: {:?}", err))?
+    {
+        let Some(height) = shard
+            .strip_prefix("checkpoint-")
+            .and_then(|value| value.parse::<u64>().ok())
+        else {
+            continue;
+        };
+        if retained_heights.contains(&height) {
+            continue;
+        }
+        execution_store
+            .remove_pin_scope_shard(EXECUTION_BRIDGE_PIN_SCOPE, shard.as_str())
+            .map_err(|err| {
+                format!(
+                    "remove pruned execution bridge checkpoint pin shard height={} failed: {:?}",
+                    height, err
+                )
+            })?;
+    }
+    Ok(())
+}
+
 fn compact_execution_bridge_record_at_height(
     execution_records_dir: &Path,
     height: u64,
@@ -794,18 +826,11 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
                         )
                     })?;
             }
-            execution_store
-                .remove_pin_scope_shard(
-                    EXECUTION_BRIDGE_PIN_SCOPE,
-                    execution_bridge_checkpoint_pin_shard_id(pruned_height).as_str(),
-                )
-                .map_err(|err| {
-                    format!(
-                        "remove execution bridge checkpoint pin shard height={} failed: {:?}",
-                        pruned_height, err
-                    )
-                })?;
         }
+        remove_pruned_execution_bridge_checkpoint_pin_shards(
+            execution_records_dir,
+            execution_store,
+        )?;
         return execution_store
             .prune_orphan_blobs()
             .map_err(|err| format!("prune execution store orphan blobs failed: {:?}", err));

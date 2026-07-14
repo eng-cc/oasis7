@@ -149,6 +149,28 @@ impl LocalCasStore {
         }
     }
 
+    /// Lists the published JSON shard ids in one pin scope.
+    pub fn list_pin_scope_shards(&self, scope: &str) -> Result<Vec<String>, WorldError> {
+        let path = self.pin_scope_dir(scope)?;
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let mut shards = Vec::new();
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            if !entry.file_type()?.is_file()
+                || entry.path().extension().and_then(|ext| ext.to_str()) != Some("json")
+            {
+                continue;
+            }
+            if let Some(shard) = entry.path().file_stem().and_then(|stem| stem.to_str()) {
+                shards.push(shard.to_string());
+            }
+        }
+        shards.sort_unstable();
+        Ok(shards)
+    }
+
     pub fn clear_pin_scope(&self, scope: &str) -> Result<(), WorldError> {
         let path = self.pin_scope_dir(scope)?;
         match fs::remove_dir_all(path) {

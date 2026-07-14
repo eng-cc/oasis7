@@ -62,6 +62,12 @@ fn scoped_pin_shards_are_atomic_effective_pins_and_can_be_cleared() {
             &BTreeSet::from([second.clone()]),
         )
         .expect("replace shard");
+    assert_eq!(
+        store
+            .list_pin_scope_shards("execution_bridge_v1")
+            .expect("list shards"),
+        vec!["record-1"]
+    );
 
     assert!(
         !store
@@ -89,6 +95,12 @@ fn scoped_pin_shards_are_atomic_effective_pins_and_can_be_cleared() {
     store
         .clear_pin_scope("execution_bridge_v1")
         .expect("clear scope");
+    assert!(
+        store
+            .list_pin_scope_shards("execution_bridge_v1")
+            .expect("list cleared scope")
+            .is_empty()
+    );
     assert!(
         !store
             .is_effectively_pinned(second.as_str())

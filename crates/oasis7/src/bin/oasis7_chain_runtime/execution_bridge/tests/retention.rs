@@ -719,6 +719,67 @@ fn steady_state_retention_removes_evicted_record_pin_shards() {
 }
 
 #[test]
+fn checkpoint_gc_removes_every_pin_shard_pruned_after_keep_reduction() {
+    let dir = temp_dir("execution-checkpoint-pin-shard-keep-reduction");
+    let records_dir = dir.join("records");
+    let store = LocalCasStore::new(dir.join("store"));
+    fs::create_dir_all(records_dir.as_path()).expect("create records dir");
+
+    for height in [2, 4, 6] {
+        let mut record =
+            persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
+        record.checkpoint_ref =
+            maybe_persist_execution_checkpoint_for_record(records_dir.as_path(), &record, 2, 3)
+                .expect("persist checkpoint with larger keep");
+        persist_execution_bridge_record(records_dir.as_path(), &record)
+            .expect("persist checkpointed record");
+        run_execution_bridge_incremental_retention_maintenance(
+            records_dir.as_path(),
+            &store,
+            &record,
+            64,
+            2,
+            3,
+        )
+        .expect("publish checkpoint pin shard");
+    }
+
+    let mut record =
+        persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, 8);
+    record.checkpoint_ref =
+        maybe_persist_execution_checkpoint_for_record(records_dir.as_path(), &record, 2, 1)
+            .expect("persist checkpoint after keep reduction");
+    persist_execution_bridge_record(records_dir.as_path(), &record)
+        .expect("persist retained checkpoint record");
+    run_execution_bridge_incremental_retention_maintenance(
+        records_dir.as_path(),
+        &store,
+        &record,
+        64,
+        2,
+        1,
+    )
+    .expect("prune stale checkpoint pin shards");
+
+    let scope_dir = store.root().join("pin_scopes").join("execution_bridge_v1");
+    for height in [2, 4, 6] {
+        assert!(
+            !scope_dir
+                .join(format!("checkpoint-{height:020}.json"))
+                .exists(),
+            "checkpoint shard at height {height} survived keep reduction"
+        );
+    }
+    assert!(
+        scope_dir
+            .join("checkpoint-00000000000000000008.json")
+            .exists()
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn incremental_retention_pin_shard_count_is_bounded_at_ten_thousand_heights() {
     let dir = temp_dir("execution-retention-pin-shard-scale");
     let records_dir = dir.join("records");
