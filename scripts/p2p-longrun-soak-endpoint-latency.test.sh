@@ -16,6 +16,7 @@ tmp_root=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-p2p-soak-endpoint-latency.XXXXXX")
 trap 'rm -rf "$tmp_root"' EXIT
 
 "$BASH" ./scripts/p2p-longrun-soak.sh --no-prewarm --dry-run --self-test-field-extraction
+"$BASH" ./scripts/p2p-longrun-soak.sh --no-prewarm --dry-run --self-test-binary-freeze
 
 "$BASH" ./scripts/p2p-longrun-soak.sh \
   --dry-run \

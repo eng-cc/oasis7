@@ -188,6 +188,72 @@ safe_int() {
   fi
 }
 
+sha256_file() {
+  local path=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{print $1}'
+  else
+    shasum -a 256 "$path" | awk '{print $1}'
+  fi
+}
+
+freeze_chain_runtime_bin() {
+  local source_bin=$1
+  local run_dir=$2
+  local frozen_dir="$run_dir/bin"
+  local frozen_bin="$frozen_dir/oasis7_chain_runtime"
+  local staging_bin="$frozen_bin.tmp.$$"
+  local source_sha frozen_sha
+
+  mkdir -p "$frozen_dir"
+  cp "$source_bin" "$staging_bin"
+  chmod +x "$staging_bin"
+  mv -f "$staging_bin" "$frozen_bin"
+  source_sha=$(sha256_file "$source_bin")
+  frozen_sha=$(sha256_file "$frozen_bin")
+  if [[ "$source_sha" != "$frozen_sha" ]]; then
+    echo "frozen oasis7_chain_runtime hash mismatch: source=$source_sha frozen=$frozen_sha" >&2
+    return 1
+  fi
+  if LC_ALL=C grep -aFq 'test.module.release.signer' "$frozen_bin"; then
+    echo "refusing test-tier oasis7_chain_runtime for soak: $frozen_bin" >&2
+    return 1
+  fi
+  printf '%s' "$frozen_bin"
+}
+
+run_binary_freeze_self_test() {
+  local test_root source_bin frozen_bin frozen_sha
+  test_root=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-p2p-soak-binary-freeze.XXXXXX")
+  source_bin="$test_root/source-runtime"
+  printf '#!/usr/bin/env bash\nprintf "v1\\n"\n' > "$source_bin"
+  chmod +x "$source_bin"
+  frozen_bin=$(freeze_chain_runtime_bin "$source_bin" "$test_root/run")
+  frozen_sha=$(sha256_file "$frozen_bin")
+
+  printf '#!/usr/bin/env bash\nprintf "v2\\n"\n' > "$source_bin"
+  chmod +x "$source_bin"
+  [[ "$(sha256_file "$frozen_bin")" == "$frozen_sha" ]] || {
+    echo "binary freeze self-test failed: frozen binary changed with source" >&2
+    rm -rf "$test_root"
+    exit 2
+  }
+  [[ "$($frozen_bin)" == "v1" ]] || {
+    echo "binary freeze self-test failed: relaunch did not use frozen binary" >&2
+    rm -rf "$test_root"
+    exit 2
+  }
+  printf '#!/usr/bin/env bash\n# test.module.release.signer\n' > "$source_bin"
+  chmod +x "$source_bin"
+  if freeze_chain_runtime_bin "$source_bin" "$test_root/rejected-run" >/dev/null 2>&1; then
+    echo "binary freeze self-test failed: test-tier marker was accepted" >&2
+    rm -rf "$test_root"
+    exit 2
+  fi
+  rm -rf "$test_root"
+  echo "p2p longrun binary freeze self-test passed"
+}
+
 slugify() {
   local raw=$1
   local slug
@@ -252,6 +318,7 @@ max_distfs_failure_ratio=""
 prewarm=1
 dry_run=0
 self_test_field_extraction=0
+self_test_binary_freeze=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -431,6 +498,10 @@ while [[ $# -gt 0 ]]; do
       self_test_field_extraction=1
       shift
       ;;
+    --self-test-binary-freeze)
+      self_test_binary_freeze=1
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -527,6 +598,11 @@ if [[ "$feedback_events_enabled" -eq 1 ]]; then
   ensure_positive_int "--feedback-events-interval-secs" "$feedback_events_interval_secs"
 fi
 
+if [[ "$self_test_binary_freeze" -eq 1 ]]; then
+  run_binary_freeze_self_test
+  exit 0
+fi
+
 scenario=$(trim "$scenario")
 if [[ -z "$scenario" ]]; then
   echo "--scenario cannot be empty" >&2
@@ -595,9 +671,9 @@ if [[ "$prewarm" -eq 1 ]] && [[ "$dry_run" -eq 0 ]]; then
   run oasis7_cargo_dev build -p oasis7 --bin oasis7_chain_runtime
 fi
 
-chain_bin="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_chain_runtime"
-if [[ "$dry_run" -eq 0 ]] && [[ ! -x "$chain_bin" ]]; then
-  echo "oasis7_chain_runtime binary not found: $chain_bin" >&2
+chain_bin_source="$(oasis7_cargo_dev_debug_bin_dir "$repo_root")/oasis7_chain_runtime"
+if [[ "$dry_run" -eq 0 ]] && [[ ! -x "$chain_bin_source" ]]; then
+  echo "oasis7_chain_runtime binary not found: $chain_bin_source" >&2
   echo "run with prewarm enabled or build it manually first" >&2
   exit 1
 fi
@@ -605,6 +681,12 @@ fi
 timestamp=$(date +%Y%m%d-%H%M%S)
 run_dir="$out_root/$timestamp"
 run mkdir -p "$run_dir"
+chain_bin="$chain_bin_source"
+chain_bin_sha256=""
+if [[ "$dry_run" -eq 0 ]]; then
+  chain_bin=$(freeze_chain_runtime_bin "$chain_bin_source" "$run_dir")
+  chain_bin_sha256=$(sha256_file "$chain_bin")
+fi
 
 run_config_json="$run_dir/run_config.json"
 summary_md="$run_dir/summary.md"
@@ -620,6 +702,9 @@ jq -n \
   --arg scenario "$scenario" \
   --arg bind_host "$bind_host" \
   --arg out_dir "$out_root" \
+  --arg chain_bin_source "$chain_bin_source" \
+  --arg chain_bin "$chain_bin" \
+  --arg chain_bin_sha256 "$chain_bin_sha256" \
   --arg topologies_csv "$topologies_csv" \
   --arg chaos_plan_path "$chaos_plan_path" \
   --arg chaos_continuous_actions_csv "$chaos_continuous_actions_csv" \
@@ -662,6 +747,11 @@ jq -n \
     duration_secs: $duration_secs,
     bind_host: $bind_host,
     base_port: $base_port,
+    chain_runtime_binary: {
+      source_path: $chain_bin_source,
+      frozen_path: $chain_bin,
+      sha256: (if $chain_bin_sha256 == "" then null else $chain_bin_sha256 end)
+    },
     startup_timeout_secs: $startup_timeout_secs,
     poll_interval_secs: $poll_interval_secs,
     curl_timeout_secs: $curl_timeout_secs,
