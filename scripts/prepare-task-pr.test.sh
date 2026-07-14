@@ -676,7 +676,7 @@ write_task_binding
 write_project_trace
 mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
+{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
 EOF
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
@@ -710,6 +710,12 @@ if "Created PR:" not in out:
     raise SystemExit(f"fresh draft candidate was not recorded: {out}")
 if "pre-PR local role-return validation failed" in err or "machine-checkable role-return ledger" in err:
     raise SystemExit(f"draft candidate incorrectly required review provenance: {err}")
+project_writes=[line for line in gh.splitlines() if line.startswith("project item-edit ")]
+if len(project_writes)!=1 or "--field-id FIELD_PR" not in project_writes[0] or "--text https://github.com/example/oasis7/pull/999" not in project_writes[0]:
+    raise SystemExit(f"draft candidate must update exactly the Project PR field: {project_writes}")
+for forbidden in ("FIELD_STATUS","FIELD_PM_STATUS","FIELD_WORKFLOW_PHASE"):
+    if any(forbidden in line for line in project_writes):
+        raise SystemExit(f"draft candidate advanced lifecycle field {forbidden}: {project_writes}")
 PY
 
 GITHUB_FALLBACK_ROOT="$TMPDIR/github-fallback-root"

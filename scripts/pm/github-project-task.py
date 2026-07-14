@@ -377,6 +377,17 @@ def update_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any],
     return int(updated)
 
 
+def update_pr_project_field(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
+    sync = load_sync_module()
+    project_id, fields = sync.project_context(args.project_owner, args.project_number)
+    updated, skipped = sync.update_fields(project_id, project_item_id, task, fields, only_fields={"PR"})
+    if skipped:
+        print(f"github-project-task: skipped draft PR field: {', '.join(skipped)}", file=sys.stderr)
+    if int(updated) != 1:
+        die(f"record-pr: refusing draft candidate because Project PR field was not updated: updated={updated}/1")
+    return int(updated)
+
+
 def update_done_project_fields(args: argparse.Namespace, task: OrderedDict[str, Any], project_item_id: str) -> int:
     sync = load_sync_module()
     project_id, fields = sync.project_context(args.project_owner, args.project_number)
@@ -977,8 +988,11 @@ def command_record_pr(args: argparse.Namespace) -> int:
     record["updated_at"] = now()
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
-    if record.get("project_item_id") and not is_draft_candidate:
-        updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
+    if record.get("project_item_id"):
+        if is_draft_candidate:
+            updated_fields = update_pr_project_field(args, task, str(record["project_item_id"]))
+        else:
+            updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
     comment_url = issue_comment(
         args.repo,
