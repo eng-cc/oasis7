@@ -1185,11 +1185,22 @@ print('true' if r.get('status')=='ready' and r.get('workflow_phase')=='pre_pr_re
 PY
 )"
   [[ "$TASK_READY" == true ]] || die "promote_draft requires task truth at ready/pre_pr_ready"
-  python3 "$ROOT_DIR/scripts/pm/ci-ready-receipt.py" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" >/dev/null \
+  CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
+  python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" >/dev/null \
     || die "promote_draft ci_ready_receipt live validation failed"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
-  gh pr ready "$PR_TO_PROMOTE" >/dev/null || die "promote_draft failed"
-  printf '%s\n' "promote_draft: PR $PR_TO_PROMOTE is ready"
+  PR_IS_DRAFT="$(gh pr view "$PR_TO_PROMOTE" -R "$RR" --json isDraft --jq .isDraft)" || die "promote_draft could not read PR state"
+  case "$PR_IS_DRAFT" in
+    true) gh pr ready "$PR_TO_PROMOTE" -R "$RR" >/dev/null || die "promote_draft failed" ;;
+    false) ;;
+    *) die "promote_draft received uncertain PR draft state: $PR_IS_DRAFT" ;;
+  esac
+  PROJECT_TASK_HELPER="${PREPARE_TASK_PR_PROJECT_TASK_PATH:-$ROOT_DIR/scripts/pm/github-project-task.py}"
+  python3 "$PROJECT_TASK_HELPER" record-pr "$SOURCE_WORKTREE" --task-uid "$RT" \
+    --pr-url "https://github.com/$RR/pull/$RP" --role tpm \
+    --validation-command "promote_draft same-head CI receipt $PROMOTE_DRAFT_RECEIPT" --json >/dev/null \
+    || die "promote_draft PR is ready but pr_watch transition record failed; retry the same --promote-draft command"
+  printf '%s\n' "promote_draft: PR $PR_TO_PROMOTE is ready and task is in pr_watch"
   exit 0
 fi
 

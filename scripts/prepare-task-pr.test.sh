@@ -95,6 +95,16 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "list" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "pr" && "${2:-}" == "view" ]]; then
+  printf '%s\n' "${TEST_PR_IS_DRAFT:-true}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "pr" && "${2:-}" == "ready" ]]; then
+  printf 'ready\n'
+  exit 0
+fi
+
 if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
   printf 'example/oasis7\n'
   exit 0
@@ -1073,6 +1083,70 @@ if "- slice ledger: .pm/scratch/" not in stdout:
 if stderr:
     raise SystemExit(f"did not expect stderr on success path: {stderr}")
 PY
+
+promotion_receipt="$TMPDIR/promotion-receipt.json"
+PROMOTION_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+cat >"$promotion_receipt" <<EOF
+{"repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"check_name":"required-gate","check_app_id":42,"planner_digest":"fixture","head_oid":"$PROMOTION_HEAD"}
+EOF
+promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
+printf '#!/usr/bin/env python3\n' >"$promotion_receipt_helper"
+promotion_project_helper="$TMPDIR/promotion-project-helper.py"
+cat >"$promotion_project_helper" <<'PY'
+#!/usr/bin/env python3
+import json,os,pathlib,sys
+root=pathlib.Path(sys.argv[2]); uid=sys.argv[sys.argv.index("--task-uid")+1]
+path=root/".pm/github-project-sync/tasks.json"; data=json.loads(path.read_text())
+data["tasks"][uid]["status"]="pr_watch"; data["tasks"][uid]["workflow_phase"]="pr_watch"
+path.write_text(json.dumps(data)+"\n")
+with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("record-pr ordinary\n")
+PY
+chmod +x "$promotion_receipt_helper" "$promotion_project_helper"
+
+set_promotion_ready_truth() {
+  python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); r=d["tasks"][sys.argv[2]]
+r["status"]="ready"; r["workflow_phase"]="pre_pr_ready"
+open(p,"w").write(json.dumps(d)+"\n")
+PY
+}
+assert_promoted_truth() {
+  python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json,sys
+r=json.load(open(sys.argv[1]))["tasks"][sys.argv[2]]
+assert (r["status"],r["workflow_phase"])==("pr_watch","pr_watch"),r
+PY
+}
+
+"$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --assume-unchanged .pm/github-project-sync/tasks.json
+set_promotion_ready_truth
+promotion_log="$TMPDIR/gh-promotion.log"
+PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_IS_DRAFT=true \
+  run_prepare "$promotion_log" "$TMPDIR/git-promotion.log" --promote-draft "$promotion_receipt" >/dev/null
+python3 - "$promotion_log" <<'PY'
+import sys
+lines=open(sys.argv[1]).read().splitlines()
+ready=next(i for i,x in enumerate(lines) if x.startswith("pr ready 999 "))
+record=lines.index("record-pr ordinary")
+assert ready < record,lines
+PY
+assert_promoted_truth
+
+set_promotion_ready_truth
+recovery_log="$TMPDIR/gh-promotion-recovery.log"
+PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_IS_DRAFT=false \
+  run_prepare "$recovery_log" "$TMPDIR/git-promotion-recovery.log" --promote-draft "$promotion_receipt" >/dev/null
+if grep -q '^pr ready ' "$recovery_log"; then
+  echo "already-ready recovery must not call gh pr ready" >&2
+  exit 1
+fi
+grep -q '^record-pr ordinary$' "$recovery_log"
+assert_promoted_truth
+"$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --no-assume-unchanged .pm/github-project-sync/tasks.json
+
 reset_project_mapping_after_record_pr
 
 title_log="$TMPDIR/gh-title.log"
