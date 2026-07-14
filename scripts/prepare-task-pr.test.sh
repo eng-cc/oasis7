@@ -1090,7 +1090,11 @@ cat >"$promotion_receipt" <<EOF
 {"repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"check_name":"required-gate","check_app_id":42,"planner_digest":"fixture","head_oid":"$PROMOTION_HEAD"}
 EOF
 promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
-printf '#!/usr/bin/env python3\n' >"$promotion_receipt_helper"
+cat >"$promotion_receipt_helper" <<'PY'
+#!/usr/bin/env python3
+import os,sys
+with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("receipt "+" ".join(sys.argv[1:])+"\n")
+PY
 promotion_project_helper="$TMPDIR/promotion-project-helper.py"
 cat >"$promotion_project_helper" <<'PY'
 #!/usr/bin/env python3
@@ -1131,6 +1135,8 @@ lines=open(sys.argv[1]).read().splitlines()
 ready=next(i for i,x in enumerate(lines) if x.startswith("pr ready 999 "))
 record=lines.index("record-pr ordinary")
 assert ready < record,lines
+receipt=next(x for x in lines if x.startswith("receipt "))
+assert "--allow-ready-pr" not in receipt,lines
 PY
 assert_promoted_truth
 
@@ -1144,6 +1150,7 @@ if grep -q '^pr ready ' "$recovery_log"; then
   exit 1
 fi
 grep -q '^record-pr ordinary$' "$recovery_log"
+grep -q '^receipt .*--allow-ready-pr' "$recovery_log"
 assert_promoted_truth
 "$REAL_GIT" -C "$SMOKE_WORKTREE" update-index --no-assume-unchanged .pm/github-project-sync/tasks.json
 

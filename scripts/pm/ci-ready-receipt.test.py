@@ -29,6 +29,12 @@ class ReceiptTest(unittest.TestCase):
     return patch.object(M,"gh",side_effect=[r or pr(),{"check_runs":runs if runs is not None else [run()]}])
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
+  def test_ready_pr_requires_explicit_recovery_mode(self):
+    ready=pr(); ready["draft"]=False
+    with self.api(r=ready):
+      with self.assertRaisesRegex(SystemExit,"superseded"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+    with self.api(r=ready):
+      self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42",allow_ready_pr=True)[3])
   def test_wrong_app(self):
     with self.api():
       with self.assertRaisesRegex(SystemExit,"wrong_app|uncertain"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","77")

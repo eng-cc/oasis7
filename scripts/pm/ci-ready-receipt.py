@@ -81,9 +81,9 @@ def planner_for_run(repository, check_run, *, base_oid, head_oid):
 
 def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
 
-def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id):
+def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id, allow_ready_pr=False):
     pr=gh("api",f"repos/{repository}/pulls/{pr_number}")
-    if not pr.get("draft"): raise SystemExit("ci-ready-receipt: superseded: PR is not a draft candidate")
+    if not pr.get("draft") and not allow_ready_pr: raise SystemExit("ci-ready-receipt: superseded: PR is not a draft candidate")
     body=str(pr.get("body") or "")
     if f"Task: {task_uid}" not in body or f"Refs #{task_issue_number}" not in body:
         raise SystemExit("ci-ready-receipt: uncertain task-to-PR linkage missing")
@@ -114,8 +114,8 @@ def main():
     p.add_argument("--task-issue-number",required=True,type=int)
     p.add_argument("--pr-number",required=True,type=int); p.add_argument("--check-name",default="required-gate")
     p.add_argument("--check-app-id"); p.add_argument("--planner-digest",required=True)
-    p.add_argument("--receipt"); p.add_argument("--json",action="store_true")
-    a=p.parse_args(); pr,run,base_oid,head_oid=live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id)
+    p.add_argument("--receipt"); p.add_argument("--allow-ready-pr",action="store_true"); p.add_argument("--json",action="store_true")
+    a=p.parse_args(); pr,run,base_oid,head_oid=live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr)
     old=None
     if a.receipt:
         old=json.loads(Path(a.receipt).read_text(encoding="utf-8"))
