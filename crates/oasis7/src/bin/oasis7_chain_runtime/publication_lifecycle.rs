@@ -76,6 +76,7 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             tick_count: 0,
             last_tick_unix_ms: Some(observed_at_ms),
             consensus: consensus.clone(),
+            consensus_progress_observer_error: None,
             last_error: None,
         };
         reconcile(
@@ -208,13 +209,12 @@ pub(super) fn classify_scope(
         return PublicationScope::Outside;
     }
     let local_height = snapshot.consensus.committed_height;
-    if exact_quorum_at_height(snapshot, network_head, local_height, true) {
+    if has_complete_publication_quorum_at_height(snapshot, network_head, local_height, true) {
         return PublicationScope::EqualHead;
     }
-    if local_height
-        .checked_sub(1)
-        .is_some_and(|parent| exact_quorum_at_height(snapshot, network_head, parent, false))
-    {
+    if local_height.checked_sub(1).is_some_and(|parent| {
+        has_complete_publication_quorum_at_height(snapshot, network_head, parent, false)
+    }) {
         return PublicationScope::OneBlockLag;
     }
     PublicationScope::Outside
@@ -387,7 +387,7 @@ fn derive_retained_episode(
     }
 }
 
-fn exact_quorum_at_height(
+pub(super) fn has_complete_publication_quorum_at_height(
     snapshot: &NodeSnapshot,
     network_head: &ChainConsensusNetworkHeadStatus,
     expected_height: u64,

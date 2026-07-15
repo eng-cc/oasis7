@@ -14,6 +14,7 @@ fn production_release_policy_status_payload_reports_effective_policy() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let reward_runtime = super::super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
@@ -145,6 +146,7 @@ fn status_payload_reports_effective_policy_when_raw_override_differs_from_recomm
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let reward_runtime = super::super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {

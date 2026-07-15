@@ -33,19 +33,25 @@ pub(super) fn publish_runtime_progress_snapshot(
     snapshot: NodeConsensusSnapshot,
     observed_at_ms: i64,
 ) -> Result<(), NodeError> {
-    if let Some(observer) = observer {
-        let mut observer = observer.lock().map_err(|_| NodeError::Execution {
-            reason: "consensus progress observer lock poisoned".to_string(),
-        })?;
-        observer
-            .observe_consensus_progress(&snapshot, observed_at_ms)
-            .map_err(|reason| NodeError::Execution { reason })?;
+    {
+        let mut current = state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        current.consensus = snapshot.clone();
+        current.last_tick_unix_ms = Some(observed_at_ms);
     }
-    let mut current = state
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    current.consensus = snapshot;
-    current.last_tick_unix_ms = Some(observed_at_ms);
+    let observer_result = observer.map(|observer| {
+        observer
+            .lock()
+            .map_err(|_| "consensus progress observer lock poisoned".to_string())?
+            .observe_consensus_progress(&snapshot, observed_at_ms)
+    });
+    if let Some(observer_result) = observer_result {
+        let mut current = state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        current.consensus_progress_observer_error = observer_result.err();
+    }
     Ok(())
 }
 
@@ -55,6 +61,7 @@ pub(super) struct RuntimeState {
     pub(super) last_tick_unix_ms: Option<i64>,
     pub(super) replica_maintenance_last_polled_at_ms: Option<i64>,
     pub(super) consensus: NodeConsensusSnapshot,
+    pub(super) consensus_progress_observer_error: Option<String>,
     pub(super) last_error: Option<String>,
 }
 
@@ -65,6 +72,7 @@ impl Default for RuntimeState {
             last_tick_unix_ms: None,
             replica_maintenance_last_polled_at_ms: None,
             consensus: NodeConsensusSnapshot::default(),
+            consensus_progress_observer_error: None,
             last_error: None,
         }
     }

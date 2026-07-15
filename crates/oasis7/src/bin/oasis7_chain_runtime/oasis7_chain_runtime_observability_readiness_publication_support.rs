@@ -94,6 +94,7 @@ pub(super) fn publication_test_snapshot(role: NodeRole, commit_age_ms: i64) -> N
         tick_count: 1,
         last_tick_unix_ms: Some(PUBLICATION_TEST_OBSERVED_AT_MS),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     }
 }

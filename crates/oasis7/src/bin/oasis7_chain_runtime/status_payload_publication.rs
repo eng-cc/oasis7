@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use super::super::publication_lifecycle::{
     LifecycleError, PublicationHeadBinding, PublicationLifecycleSnapshot,
-    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_authoritative_publication_stake, load_snapshot,
+    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_complete_publication_quorum_at_height, load_snapshot,
 };
 
 use super::{
@@ -57,7 +57,12 @@ pub(super) fn enforce_retained_publication_proof(
     if policy.tier != "public_testnet" || policy.role != "sequencer" {
         return;
     }
-    if is_exact_quorum_at_height(snapshot, network_head, snapshot.consensus.committed_height) {
+    if has_complete_publication_quorum_at_height(
+        snapshot,
+        network_head,
+        snapshot.consensus.committed_height,
+        true,
+    ) {
         return;
     }
 
@@ -365,54 +370,7 @@ fn is_publication_proof_candidate(
     };
     policy.tier == "public_testnet"
         && policy.role == "sequencer"
-        && is_exact_quorum_at_height(snapshot, network_head, parent_height)
-}
-
-fn is_exact_quorum_at_height(
-    snapshot: &NodeSnapshot,
-    network_head: &ChainConsensusNetworkHeadStatus,
-    expected_height: u64,
-) -> bool {
-    let local_height = snapshot.consensus.committed_height;
-    let complete_local_boundary = snapshot.consensus.latest_height == local_height
-        && snapshot.consensus.network_committed_height == local_height
-        && snapshot.consensus.replication_persisted_height == local_height
-        && snapshot.consensus.last_execution_height == local_height;
-    let complete_boundary_bindings = [
-        snapshot.consensus.last_block_hash.as_deref(),
-        snapshot.consensus.last_execution_block_hash.as_deref(),
-        snapshot.consensus.last_execution_state_root.as_deref(),
-        network_head.block_hash.as_deref(),
-        network_head.execution_block_hash.as_deref(),
-        network_head.execution_state_root.as_deref(),
-    ]
-    .into_iter()
-    .all(|value| nonempty_hash(value).is_some());
-    let every_fresh_peer_binds_head = network_head
-        .peer_heads
-        .iter()
-        .filter(|peer| peer.fresh)
-        .all(|peer| {
-            peer.height == expected_height
-                && Some(peer.block_hash.as_str()) == network_head.block_hash.as_deref()
-                && peer.execution_block_hash == network_head.execution_block_hash
-                && peer.execution_state_root == network_head.execution_state_root
-        });
-    let equal_head_binds_local = expected_height != local_height
-        || (network_head.block_hash == snapshot.consensus.last_block_hash
-            && network_head.execution_block_hash == snapshot.consensus.last_execution_block_hash
-            && network_head.execution_state_root == snapshot.consensus.last_execution_state_root);
-    complete_local_boundary
-        && complete_boundary_bindings
-        && network_head.source == "peer_quorum"
-        && network_head.decision == "ready"
-        && network_head.height == Some(expected_height)
-        && network_head.conflicting_peer_count == 0
-        && has_authoritative_publication_stake(snapshot, network_head)
-        && network_head.required_peer_count > 0
-        && network_head.fresh_peer_count >= network_head.required_peer_count
-        && every_fresh_peer_binds_head
-        && equal_head_binds_local
+        && has_complete_publication_quorum_at_height(snapshot, network_head, parent_height, false)
 }
 
 fn validate_state_world(

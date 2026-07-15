@@ -34,6 +34,7 @@ fn build_chain_status_payload_allows_genesis_self_head_cold_start() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let observed_at_ms = 1_700_000_000_000;
@@ -118,6 +119,7 @@ fn build_chain_status_payload_allows_clean_genesis_cold_start() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let observed_at_ms = 10_100;
@@ -200,6 +202,7 @@ fn build_chain_status_payload_blocks_isolated_genesis_validator() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let observed_at_ms = 10_100;
@@ -276,6 +279,7 @@ fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validat
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let observed_at_ms = 10_100;
@@ -375,6 +379,7 @@ fn readiness_failed_gates_excludes_warning_when_critical_alert_blocks() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: Some("critical runtime failure".to_string()),
     };
     let observed_at_ms = 1_700_000_000_000;

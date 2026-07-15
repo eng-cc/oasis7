@@ -720,6 +720,7 @@ impl NodeRuntime {
             tick_count: state.tick_count,
             last_tick_unix_ms: state.last_tick_unix_ms,
             consensus: state.consensus.clone(),
+            consensus_progress_observer_error: state.consensus_progress_observer_error.clone(),
             last_error: state.last_error.clone(),
         };
         let pending_submit_buffer = self

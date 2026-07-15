@@ -197,6 +197,7 @@ fn build_minimal_status_payload_with_world_dir_runtime_perf_wasm_and_traffic(
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
@@ -245,6 +246,7 @@ fn build_minimal_status_payload_for_observability_contract(
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(

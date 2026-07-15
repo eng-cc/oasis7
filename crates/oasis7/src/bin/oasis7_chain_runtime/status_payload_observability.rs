@@ -7,7 +7,7 @@ use oasis7_node::NodeSnapshot;
 use serde::Serialize;
 
 use super::super::publication_lifecycle::{
-    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_authoritative_publication_stake,
+    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_complete_publication_quorum_at_height,
 };
 
 use super::ExecutionBridgeCommitTimingSnapshot;
@@ -305,34 +305,12 @@ pub(crate) fn sequencer_head_publication_pending_summary(
         .saturating_sub(snapshot.consensus.last_committed_at_ms?)
         .max(0);
 
-    let complete_local_boundary = snapshot.consensus.latest_height == local_height
-        && snapshot.consensus.network_committed_height == local_height
-        && snapshot.consensus.replication_persisted_height == local_height
-        && snapshot.consensus.last_execution_height == local_height;
-    let exact_parent_quorum = network_head.source == "peer_quorum"
-        && network_head.decision == "ready"
-        && network_head.height == Some(parent_height)
-        && network_head.conflicting_peer_count == 0
-        && has_authoritative_publication_stake(snapshot, network_head)
-        && network_head.fresh_peer_count >= network_head.required_peer_count
-        && network_head.required_peer_count > 0;
-    let every_fresh_peer_binds_parent = network_head
-        .peer_heads
-        .iter()
-        .filter(|peer| peer.fresh)
-        .all(|peer| {
-            peer.height == parent_height
-                && peer.block_hash == parent_block_hash
-                && peer.execution_block_hash.as_deref() == Some(parent_execution_block_hash)
-                && peer.execution_state_root.as_deref() == Some(parent_execution_state_root)
-        });
+    let exact_parent_quorum =
+        has_complete_publication_quorum_at_height(snapshot, network_head, parent_height, false);
 
     if policy.tier != "public_testnet"
         || policy.role != "sequencer"
-        || !complete_local_boundary
         || !exact_parent_quorum
-        || network_head.fresh_peer_count == 0
-        || !every_fresh_peer_binds_parent
         || commit_age_ms > SEQUENCER_HEAD_PUBLICATION_GRACE_MS
     {
         return None;

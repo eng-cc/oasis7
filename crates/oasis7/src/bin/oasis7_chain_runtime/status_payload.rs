@@ -26,6 +26,8 @@ mod status_payload_network_head;
 mod status_payload_network_tier;
 #[path = "status_payload_publication.rs"]
 mod status_payload_publication;
+#[path = "status_payload_runtime_errors.rs"]
+mod status_payload_runtime_errors;
 use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
 use status_payload_module_tick_routing::{
     ChainModuleTickRoutingStatus, build_module_tick_routing_status,
@@ -38,6 +40,7 @@ use status_payload_network_tier::ChainNetworkTierStatus;
 use status_payload_publication::{
     enforce_retained_publication_proof, push_publication_or_divergence_alert,
 };
+use status_payload_runtime_errors::push_runtime_error_alerts;
 #[path = "status_payload_observability.rs"]
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
@@ -98,6 +101,7 @@ pub(super) struct ChainStatusResponse {
     pub(super) last_tick_unix_ms: Option<i64>,
     pub(super) consensus: ChainConsensusStatus,
     pub(super) chain_proof: ChainProofStatus,
+    pub(super) consensus_progress_observer_error: Option<String>,
     pub(super) last_error: Option<String>,
     pub(super) execution_world_dir: String,
     pub(super) network_tier: Option<ChainNetworkTierStatus>,
@@ -489,14 +493,7 @@ fn build_chain_node_observability_status_with_transactions(
             );
         }
     }
-    if let Some(err) = snapshot.last_error.as_ref() {
-        push_observability_alert(
-            &mut alerts,
-            "critical",
-            "runtime_last_error",
-            format!("runtime last_error is set: {err}"),
-        );
-    }
+    push_runtime_error_alerts(&mut alerts, snapshot);
     if network_height_lag > policy.max_network_height_lag {
         push_observability_alert(
             &mut alerts,
@@ -1181,6 +1178,7 @@ pub(super) fn build_chain_status_payload(
             network_head,
         },
         chain_proof,
+        consensus_progress_observer_error: snapshot.consensus_progress_observer_error,
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
         p2p,

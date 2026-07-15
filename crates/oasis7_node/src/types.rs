@@ -1170,6 +1170,7 @@ pub struct NodeSnapshot {
     pub tick_count: u64,
     pub last_tick_unix_ms: Option<i64>,
     pub consensus: NodeConsensusSnapshot,
+    pub consensus_progress_observer_error: Option<String>,
     pub last_error: Option<String>,
 }
 

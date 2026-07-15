@@ -45,6 +45,7 @@ fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
