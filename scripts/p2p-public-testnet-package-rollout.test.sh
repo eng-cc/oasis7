@@ -421,6 +421,20 @@ if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $by
 }
 }
 
+function Get-FixturePhysicalCaseId([string] $LogicalName) {
+if ([string]::IsNullOrWhiteSpace($LogicalName)) {
+  throw 'fixture logical case name must not be empty'
+}
+$sha = [System.Security.Cryptography.SHA256]::Create()
+try {
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($LogicalName)
+  $digest = ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+} finally {
+  $sha.Dispose()
+}
+return 'c-' + $digest.Substring(0, 16)
+}
+
 function Invoke-FixtureRolloutExpectingFailure([string] $Rollout) {
 $previousErrorActionPreference = $ErrorActionPreference
 try {
@@ -479,7 +493,17 @@ $executables = Write-FixtureExecutables -Directory $fixtureRoot
 
 function New-RolloutFixture {
 param([string] $Name, [switch] $ActiveConfigJunction, [switch] $RollbackRootJunction)
-$root = Join-Path $fixtureRoot $Name
+$physicalCaseId = Get-FixturePhysicalCaseId $Name
+if ($physicalCaseId -notmatch '^c-[0-9a-f]{16}$' -or $physicalCaseId.Length -ne 18) {
+  throw "fixture physical case identifier is not deterministically bounded: logical_case=$Name physical_case=$physicalCaseId"
+}
+if ((Get-FixturePhysicalCaseId $Name) -ne $physicalCaseId) {
+  throw "fixture physical case identifier is not deterministic: logical_case=$Name physical_case=$physicalCaseId"
+}
+$root = Join-Path $fixtureRoot $physicalCaseId
+if (Test-Path -LiteralPath $root) {
+  throw "fixture physical case identifier collision: logical_case=$Name physical_case=$physicalCaseId root=$root"
+}
 $deployReal = Join-Path $root 'deploy-real'
 $deploy = if ($ActiveConfigJunction) { Join-Path $root 'deploy-link' } else { $deployReal }
 $installRoot = Join-Path $root 'install'
@@ -619,7 +643,7 @@ foreach ($stagedAssignmentName in @('installer', 'bundlePath', 'genesisPath', 'm
     Assert-FixturePathUnderSafeBase $stagedAssignmentMatch.Groups[1].Value $stagedAssignmentName | Out-Null
   }
 }
-[Console]::Error.WriteLine("fixture_generated_staging_root name=$Name path=$staging safe_base=$fixtureSafeRootBase package_input=$env:OASIS7_FIXTURE_PACKAGE_DIR")
+[Console]::Error.WriteLine("fixture_generated_staging_root logical_case=$Name physical_case=$physicalCaseId path=$staging safe_base=$fixtureSafeRootBase package_input=$env:OASIS7_FIXTURE_PACKAGE_DIR")
 New-Item -ItemType Directory -Path (Join-Path $staging 'config') -Force | Out-Null
 Copy-Item -LiteralPath $executables.Installer -Destination (Join-Path $staging 'oasis7-windows-x64.exe') -Force
 $packageWindows = Join-Path $env:OASIS7_FIXTURE_PACKAGE_DIR 'windows'
@@ -684,19 +708,27 @@ $longestGovernedPath = @($governedPathCandidates | Sort-Object Length -Descendin
 if ([string]::IsNullOrWhiteSpace($longestGovernedPath)) {
   throw 'fixture governed path budget check found no governed files'
 }
-[Console]::Error.WriteLine("fixture_governed_path_budget longest_length=$($longestGovernedPath.Length) budget=$governedPathBudget path=$longestGovernedPath safe_base=$fixtureSafeRootBase")
+[Console]::Error.WriteLine("fixture_governed_path_budget logical_case=$Name physical_case=$physicalCaseId longest_length=$($longestGovernedPath.Length) budget=$governedPathBudget path=$longestGovernedPath safe_base=$fixtureSafeRootBase")
 if ($longestGovernedPath.Length -gt $governedPathBudget) {
   throw "fixture governed path exceeds Windows PowerShell 5.1 safety budget: length=$($longestGovernedPath.Length) budget=$governedPathBudget path=$longestGovernedPath"
 }
 if (($longestGovernedPath.Length + $atomicPromotionSuffixBudget) -gt $windowsLegacyPathStringBudget) {
   throw "fixture governed path leaves insufficient atomic promotion headroom: length=$($longestGovernedPath.Length) suffix_budget=$atomicPromotionSuffixBudget max=$windowsLegacyPathStringBudget path=$longestGovernedPath"
 }
-return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
+return @{ LogicalName=$Name; PhysicalCaseId=$physicalCaseId; Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
 
 function Get-FixtureSnapshot($Fixture) {
 $files = @($Fixture.Runtime) + $Fixture.Active
 @($files | ForEach-Object { "$($_)=$(Get-Sha256 $_)" }) -join "`n"
+}
+
+function Assert-FixtureCaseIdentity($Fixture, [string] $ExpectedLogicalName) {
+Assert-Equal $Fixture.LogicalName $ExpectedLogicalName 'fixture logical case identity diverged'
+Assert-Equal ([System.IO.Path]::GetFileName($Fixture.Root.TrimEnd('\'))) $Fixture.PhysicalCaseId 'fixture root does not use bounded physical case identity'
+if ($Fixture.PhysicalCaseId.Length -ne 18) {
+  throw "fixture returned unbounded physical case identity: logical_case=$ExpectedLogicalName physical_case=$($Fixture.PhysicalCaseId)"
+}
 }
 
 function Assert-OriginalTaskAction($Fixture) {
@@ -717,6 +749,7 @@ try {
 # is byte-identical.
 foreach ($case in @(@{Name='active-config-junction'; Active=$true; Rollback=$false}, @{Name='rollback-root-junction'; Active=$false; Rollback=$true})) {
   $fixture = New-RolloutFixture -Name $case.Name -ActiveConfigJunction:$case.Active -RollbackRootJunction:$case.Rollback
+  Assert-FixtureCaseIdentity $fixture $case.Name
   try {
     Start-ScheduledTask -TaskName $fixture.Task
     Start-Sleep -Seconds 1
@@ -734,7 +767,9 @@ foreach ($case in @(@{Name='active-config-junction'; Active=$true; Rollback=$fal
 
 $phases = @('installer','governed_copy','bundle_move','genesis_move','manifest_move','current_version_write','deployed_buildinfo_write','task_action_restore')
 foreach ($phase in $phases) {
-  $fixture = New-RolloutFixture -Name "phase-$phase"
+  $logicalCaseName = "phase-$phase"
+  $fixture = New-RolloutFixture -Name $logicalCaseName
+  Assert-FixtureCaseIdentity $fixture $logicalCaseName
   try {
     $before = Get-FixtureSnapshot $fixture
     for ($attempt = 1; $attempt -le 2; $attempt++) {
@@ -819,6 +854,18 @@ assert "Get-FixtureRelativeExistingPath $stagingConfig $_.FullName 'staged gover
 assert ".Substring($packageWindows.Length)" not in fixture
 assert ".Substring($stagingConfig.Length)" not in fixture
 assert "Assert-Equal $representativePackageRelative $representativeGovernedLeaf" in fixture
+assert "function Get-FixturePhysicalCaseId" in fixture
+assert "return 'c-' + $digest.Substring(0, 16)" in fixture
+assert "$physicalCaseId.Length -ne 18" in fixture
+assert "Get-FixturePhysicalCaseId $Name) -ne $physicalCaseId" in fixture
+assert "fixture physical case identifier collision:" in fixture
+assert "$root = Join-Path $fixtureRoot $physicalCaseId" in fixture
+assert "$root = Join-Path $fixtureRoot $Name" not in fixture
+assert "LogicalName=$Name; PhysicalCaseId=$physicalCaseId" in fixture
+assert "function Assert-FixtureCaseIdentity" in fixture
+assert "GetFileName($Fixture.Root.TrimEnd('\\'))" in fixture
+assert fixture.count("Assert-FixtureCaseIdentity $fixture") == 2
+assert "fixture_governed_path_budget logical_case=$Name physical_case=$physicalCaseId" in fixture
 assert "[System.StringComparison]::OrdinalIgnoreCase" in fixture
 assert "reportedReparseItem.Attributes" in fixture
 assert "[System.IO.FileAttributes]::ReparsePoint" in fixture
@@ -831,7 +878,7 @@ assert "function Assert-FixturePathUnderSafeBase" in fixture
 assert "fixture safe-root precondition failed: reparse-point component=" in fixture
 assert "fixture generated mutable path escapes verified safe base:" in fixture
 assert "Assert-FixturePathUnderSafeBase $staging 'stagingRoot'" in fixture
-assert "fixture_generated_staging_root name=$Name path=$staging" in fixture
+assert "fixture_generated_staging_root logical_case=$Name physical_case=$physicalCaseId path=$staging" in fixture
 assert "fixture_expected_reparse case=$($case.Name) staging_root=$($fixture.Staging)" in fixture
 assert "function Invoke-FixtureRolloutExpectingFailure" in fixture
 assert "$ErrorActionPreference = 'Continue'" in fixture
@@ -851,7 +898,7 @@ assert re.search(
 )
 assert 'Join-Path $fixtureDriveRoot ("o7fx-" + $fixtureRunId)' in fixture
 assert "fixture unique drive-root path collision:" in fixture
-assert "fixture_governed_path_budget longest_length=" in fixture
+assert "longest_length=$($longestGovernedPath.Length) budget=$governedPathBudget" in fixture
 assert "$atomicPromotionSuffixBudget = 48" in fixture
 assert "$windowsLegacyPathStringBudget = 259" in fixture
 assert "$governedPathBudget = $windowsLegacyPathStringBudget - $atomicPromotionSuffixBudget" in fixture
