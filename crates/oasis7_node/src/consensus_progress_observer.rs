@@ -1,6 +1,7 @@
+use std::collections::VecDeque;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::{Arc, Condvar, Mutex, TryLockError, Weak};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
@@ -68,6 +69,7 @@ pub trait NodeConsensusProgressObserver: Send {
 
 const CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE: &str =
     "consensus progress observer queue saturated";
+const CONSENSUS_PROGRESS_OBSERVER_PENDING_LIMIT: usize = 2;
 
 struct PendingConsensusProgress {
     sequence: u64,
@@ -78,8 +80,50 @@ struct PendingConsensusProgress {
 #[derive(Default)]
 struct ConsensusProgressObserverQueue {
     next_sequence: u64,
-    pending: Option<PendingConsensusProgress>,
+    pending: VecDeque<PendingConsensusProgress>,
     shutdown: bool,
+}
+
+impl ConsensusProgressObserverQueue {
+    fn enqueue(&mut self, pending: PendingConsensusProgress) -> bool {
+        if self.pending.len() < CONSENSUS_PROGRESS_OBSERVER_PENDING_LIMIT {
+            self.pending.push_back(pending);
+            return false;
+        }
+
+        let equal_head =
+            pending.snapshot.committed_height == pending.snapshot.network_committed_height;
+        if equal_head {
+            if let Some(existing_equal_head) = self.pending.iter().position(|queued| {
+                queued.snapshot.committed_height == queued.snapshot.network_committed_height
+            }) {
+                if existing_equal_head + 1 == self.pending.len() {
+                    self.pending[existing_equal_head] = pending;
+                } else if let Some(latest) = self.pending.back_mut() {
+                    *latest = pending;
+                }
+            } else if let Some(latest) = self.pending.back_mut() {
+                *latest = pending;
+            }
+            return true;
+        }
+
+        if let Some(equal_head) = self.pending.iter().position(|queued| {
+            queued.snapshot.committed_height == queued.snapshot.network_committed_height
+        }) {
+            if equal_head == 0 {
+                if let Some(latest) = self.pending.back_mut() {
+                    *latest = pending;
+                }
+            } else {
+                self.pending.pop_front();
+                self.pending.push_back(pending);
+            }
+        } else if let Some(latest) = self.pending.back_mut() {
+            *latest = pending;
+        }
+        true
+    }
 }
 
 pub(super) struct ConsensusProgressObserverDispatcher {
@@ -120,7 +164,7 @@ impl ConsensusProgressObserverDispatcher {
                         let mut queue = queue_lock
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        while queue.pending.is_none() && !queue.shutdown {
+                        while queue.pending.is_empty() && !queue.shutdown {
                             queue = signal
                                 .wait(queue)
                                 .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -128,7 +172,10 @@ impl ConsensusProgressObserverDispatcher {
                         if queue.shutdown {
                             break;
                         }
-                        queue.pending.take().expect("pending observer snapshot")
+                        queue
+                            .pending
+                            .pop_front()
+                            .expect("pending observer snapshot")
                     };
 
                     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -150,7 +197,7 @@ impl ConsensusProgressObserverDispatcher {
                         }
                         queue
                             .pending
-                            .as_ref()
+                            .back()
                             .is_some_and(|next| next.sequence > pending.sequence)
                     };
                     let Some(worker_state) = worker_state.upgrade() else {
@@ -196,7 +243,7 @@ impl ConsensusProgressObserverDispatcher {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         queue.shutdown = true;
-        queue.pending = None;
+        queue.pending.clear();
         drop(queue);
         signal.notify_all();
 
@@ -215,27 +262,22 @@ impl ConsensusProgressObserverDispatcher {
 impl ConsensusProgressObserverSubmitter {
     pub(super) fn submit(&self, snapshot: NodeConsensusSnapshot, observed_at_ms: i64) {
         let (queue_lock, signal) = &*self.queue;
-        let mut queue = match queue_lock.try_lock() {
-            Ok(queue) => queue,
-            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-            Err(TryLockError::WouldBlock) => {
-                self.record_backpressure();
-                return;
-            }
-        };
+        // This lock covers only bounded queue bookkeeping. Waiting for a concurrent worker
+        // dequeue must not discard a semantic snapshot during startup; observer and state work
+        // remain outside this critical section.
+        let mut queue = queue_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if queue.shutdown {
             return;
         }
         queue.next_sequence = queue.next_sequence.saturating_add(1);
         let sequence = queue.next_sequence;
-        let coalesced = queue
-            .pending
-            .replace(PendingConsensusProgress {
-                sequence,
-                snapshot,
-                observed_at_ms,
-            })
-            .is_some();
+        let coalesced = queue.enqueue(PendingConsensusProgress {
+            sequence,
+            snapshot,
+            observed_at_ms,
+        });
         drop(queue);
         if coalesced {
             self.record_backpressure();
@@ -339,5 +381,118 @@ mod tests {
             "dispatcher drop waited for a blocked observer"
         );
         let _ = release_tx.send(());
+    }
+
+    #[test]
+    fn submit_waits_for_queue_bookkeeping_instead_of_losing_a_snapshot() {
+        let state = Arc::new(Mutex::new(RuntimeState::default()));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (_release_tx, release_rx) = mpsc::channel();
+        let dispatcher = ConsensusProgressObserverDispatcher::spawn(
+            "queue-lock-contention",
+            Arc::clone(&state),
+            0,
+            Box::new(PermanentlyBlockingObserver {
+                entered: entered_tx,
+                release: release_rx,
+            }),
+        )
+        .expect("spawn observer dispatcher");
+        let submitter = dispatcher.submitter();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (submitted_tx, submitted_rx) = mpsc::channel();
+        let queue_guard = dispatcher.queue.0.lock().expect("lock observer queue");
+        let submit_thread = thread::spawn(move || {
+            started_tx.send(()).expect("signal submit start");
+            submitter.submit(NodeConsensusSnapshot::default(), 1);
+            submitted_tx.send(()).expect("signal submit completion");
+        });
+
+        started_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("submit thread started");
+        assert!(
+            submitted_rx
+                .recv_timeout(Duration::from_millis(50))
+                .is_err(),
+            "submit unexpectedly bypassed queue bookkeeping while the queue lock was held"
+        );
+        drop(queue_guard);
+        submitted_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("submit completed after queue lock release");
+        entered_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("observer received the snapshot after queue lock release");
+        submit_thread.join().expect("join submit thread");
+        drop(dispatcher);
+    }
+
+    #[test]
+    fn pending_queue_is_bounded_ordered_and_preserves_equal_head_checkpoints() {
+        let cases = [
+            (
+                "coalesces_lagging_snapshots_to_the_latest",
+                &[(2, false), (3, false), (4, false)][..],
+                &[(2, false), (4, false)][..],
+            ),
+            (
+                "keeps_an_equal_head_checkpoint_before_the_latest_lag",
+                &[(2, false), (3, true), (4, false)][..],
+                &[(3, true), (4, false)][..],
+            ),
+            (
+                "never_reorders_a_new_equal_head_behind_a_queued_lag",
+                &[(2, true), (3, false), (4, true)][..],
+                &[(2, true), (4, true)][..],
+            ),
+        ];
+
+        for (name, inputs, expected) in cases {
+            let mut queue = ConsensusProgressObserverQueue::default();
+            for (sequence, equal_head) in inputs {
+                let committed_height: u64 = *sequence;
+                let network_committed_height = if *equal_head {
+                    committed_height
+                } else {
+                    committed_height.saturating_sub(1)
+                };
+                queue.enqueue(PendingConsensusProgress {
+                    sequence: *sequence,
+                    snapshot: NodeConsensusSnapshot {
+                        committed_height,
+                        network_committed_height,
+                        ..NodeConsensusSnapshot::default()
+                    },
+                    observed_at_ms: *sequence as i64,
+                });
+
+                assert!(
+                    queue.pending.len() <= CONSENSUS_PROGRESS_OBSERVER_PENDING_LIMIT,
+                    "{name}: queue exceeded its fixed pending bound"
+                );
+                assert!(
+                    queue
+                        .pending
+                        .iter()
+                        .zip(queue.pending.iter().skip(1))
+                        .all(|(earlier, later)| earlier.sequence < later.sequence),
+                    "{name}: queue reordered retained snapshots"
+                );
+            }
+
+            let retained = queue
+                .pending
+                .iter()
+                .map(|pending| {
+                    (
+                        pending.sequence,
+                        pending.snapshot.committed_height
+                            == pending.snapshot.network_committed_height,
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(retained, expected, "{name}: unexpected retained snapshots");
+        }
     }
 }

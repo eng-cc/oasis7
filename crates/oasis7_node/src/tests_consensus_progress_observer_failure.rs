@@ -72,6 +72,44 @@ impl NodeConsensusProgressObserver for BlockingConsensusProgressObserver {
 }
 
 #[derive(Default)]
+struct OrderedObserverControl {
+    entered: AtomicBool,
+    release: AtomicBool,
+    observed_progress: Mutex<Vec<(u64, u64)>>,
+    signal: Condvar,
+}
+
+struct OrderedBlockingConsensusProgressObserver {
+    control: Arc<OrderedObserverControl>,
+}
+
+impl NodeConsensusProgressObserver for OrderedBlockingConsensusProgressObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        let mut observed_progress = self
+            .control
+            .observed_progress
+            .lock()
+            .expect("lock ordered observer progress");
+        observed_progress.push((snapshot.committed_height, snapshot.network_committed_height));
+        if !self.control.entered.swap(true, Ordering::SeqCst) {
+            self.control.signal.notify_all();
+            while !self.control.release.load(Ordering::SeqCst) {
+                observed_progress = self
+                    .control
+                    .signal
+                    .wait(observed_progress)
+                    .expect("wait for ordered observer release");
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default)]
 struct RestartGenerationObserverControl {
     entered: AtomicBool,
     release: AtomicBool,
@@ -315,6 +353,79 @@ fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_t
                 "coalescing observer did not receive the latest pending snapshot: heights={observed_heights:?} while_blocked={while_blocked:?}",
             );
             assert_eq!(recovered_snapshot.consensus_progress_observer_error, None);
+        },
+    );
+}
+
+#[test]
+fn blocked_dispatcher_delivers_equal_head_between_lagging_snapshots_in_order() {
+    run_test_with_timeout(
+        "blocked_dispatcher_delivers_equal_head_between_lagging_snapshots_in_order",
+        Duration::from_secs(3),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let control = Arc::new(OrderedObserverControl::default());
+            let dispatcher = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "ordered-publication-transition",
+                Arc::clone(&state),
+                0,
+                Box::new(OrderedBlockingConsensusProgressObserver {
+                    control: Arc::clone(&control),
+                }),
+            )
+            .expect("spawn ordered observer dispatcher");
+            let submitter = dispatcher.submitter();
+
+            let mut lag = NodeConsensusSnapshot::default();
+            lag.committed_height = 10;
+            lag.network_committed_height = 9;
+            let mut equal_head = lag.clone();
+            equal_head.network_committed_height = 10;
+            let mut fresh_lag = equal_head.clone();
+            fresh_lag.committed_height = 11;
+            fresh_lag.network_committed_height = 10;
+
+            submitter.submit(lag, 1);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control.entered.load(Ordering::SeqCst)
+                }),
+                "observer never became occupied by the first lagging snapshot"
+            );
+            submitter.submit(equal_head, 2);
+            submitter.submit(fresh_lag, 3);
+            control.release.store(true, Ordering::SeqCst);
+            control.signal.notify_all();
+
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed_progress
+                        .lock()
+                        .expect("lock ordered observer progress")
+                        .len()
+                        == 3
+                }),
+                "dispatcher lost the equal-head catch-up transition while the observer was occupied: observed={:?}",
+                control
+                    .observed_progress
+                    .lock()
+                    .expect("lock ordered observer progress")
+            );
+            let observed = control
+                .observed_progress
+                .lock()
+                .expect("lock ordered observer progress")
+                .clone();
+            drop(dispatcher);
+
+            assert_eq!(
+                observed,
+                vec![(10, 9), (10, 10), (11, 10)],
+                "publication lifecycle must receive lag -> equal-head -> fresh lag in order"
+            );
         },
     );
 }
