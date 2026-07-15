@@ -623,7 +623,9 @@ $physicalPreflightTargets = @(
   [PSCustomObject]@{{ path = $rollbackBackupRoot; label = 'rollback root' }}
 )
 foreach ($physicalPreflightTarget in $physicalPreflightTargets) {{
-  Assert-NodeLocalPhysicalPath -Path $physicalPreflightTarget.path -Label $physicalPreflightTarget.label | Out-Null
+  Assert-NodeLocalPhysicalPath `
+    -Path ([string]$physicalPreflightTarget.path) `
+    -Label ([string]$physicalPreflightTarget.label) | Out-Null
 }}
 $logRoot = Join-Path $deployRoot 'logs\\package-rollout-attempts'
 Assert-NodeLocalPhysicalPath -Path $logRoot -Label 'active deploy log root' | Out-Null
@@ -833,7 +835,7 @@ function Resolve-RollbackRuntimeSource {{
     throw "rollback runtime ambiguous: multiple backup manifest/provenance files under $backupRootFull"
   }}
   if ($metadataPaths.Count -eq 1) {{
-    Assert-NodeLocalPhysicalPath -Path $metadataPaths[0] -Label 'rollback metadata source' | Out-Null
+    Assert-NodeLocalPhysicalPath -Path ([string]$metadataPaths[0]) -Label 'rollback metadata source' | Out-Null
     $backupMetadata = Get-Content -LiteralPath $metadataPaths[0] -Raw | ConvertFrom-Json
     $runtimeRelativePath = ''
     $expectedRuntimeSha256 = ''

@@ -2035,6 +2035,54 @@ assert set(classifier_fixtures.values()) == {False, True}
 assert "operator_note" not in classifier, (
     "arbitrary non-path JSON text must remain outside node-local path classification"
 )
+
+physical_contract = re.search(
+    r"function Assert-NodeLocalPhysicalPath\s*\{\s*param\((?P<params>.*?)\)\s*if",
+    text,
+    re.DOTALL,
+)
+assert physical_contract, "could not isolate Assert-NodeLocalPhysicalPath parameter contract"
+physical_params = physical_contract.group("params")
+assert re.findall(r"\[string\]\s+\$(\w+)", physical_params) == ["Path", "Label"], (
+    "physical path guard must expose exactly one Path and one Label parameter"
+)
+assert physical_params.count("Mandatory = $true") == 2
+assert "ParameterSetName" not in physical_params
+
+# Windows PowerShell 5.1 argument mode does not reliably bind raw member/index
+# expressions after named parameters. Normalize explicit continuations, then
+# require every generated call to provide exactly one Path/Label pair and to
+# parenthesize any complex expression.
+normalized_calls = re.sub(r"`\r?\n\s*", " ", text)
+physical_calls = [
+    line.strip()
+    for line in normalized_calls.splitlines()
+    if line.lstrip().startswith("Assert-NodeLocalPhysicalPath ")
+]
+assert physical_calls, "generated rollout never invokes its physical path guard"
+for call in physical_calls:
+    assert len(re.findall(r"(?<!\w)-Path\b", call)) == 1, (
+        f"physical path guard call must bind Path exactly once: {call}"
+    )
+    assert len(re.findall(r"(?<!\w)-Label\b", call)) == 1, (
+        f"physical path guard call must bind Label exactly once: {call}"
+    )
+    assert not re.search(r"-(?:Path|Label)\s+\$\w+(?:\.|\[)", call), (
+        "PowerShell 5.1-incompatible ungrouped member/index argument in physical "
+        f"path guard call: {call}"
+    )
+assert any(
+    "-Path ([string]$physicalPreflightTarget.path)" in call
+    and "-Label ([string]$physicalPreflightTarget.label)" in call
+    for call in physical_calls
+), "native preflight fixture must retain the grouped member-expression call form"
+assert any(
+    "-Path ([string]$metadataPaths[0])" in call for call in physical_calls
+), "native rollback fixture must retain the grouped index-expression call form"
+assert any(
+    "-Path $logRoot -Label 'active deploy log root'" in call
+    for call in physical_calls
+), "native fixture must retain the scalar-variable/literal call form"
 PY
 then
   package_contract_failed=1
