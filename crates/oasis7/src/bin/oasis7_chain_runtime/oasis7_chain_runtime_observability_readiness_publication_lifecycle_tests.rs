@@ -446,6 +446,17 @@ fn publication_state_replacement_never_deletes_last_good_destination_before_atom
 }
 
 #[test]
+fn publication_state_persist_failure_has_distinct_status_rejection_reason() {
+    let rejection_reason =
+        super::super::super::status_payload::publication_lifecycle_rejection_reason(
+            "state_persist_failed",
+        );
+
+    assert_eq!(rejection_reason, "state_persist_failed");
+    assert_ne!(rejection_reason, "state_binding_invalid");
+}
+
+#[test]
 fn publication_status_get_and_head_construction_never_mutate_durable_state() {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)

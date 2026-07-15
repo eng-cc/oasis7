@@ -37,6 +37,8 @@ pub(super) use status_payload_network_head::{
     build_network_head_status, pending_slashing_intent_count, readiness_policy,
 };
 use status_payload_network_tier::ChainNetworkTierStatus;
+#[cfg(test)]
+pub(super) use status_payload_publication::publication_lifecycle_rejection_reason;
 use status_payload_publication::{
     enforce_retained_publication_proof, push_publication_or_divergence_alert,
 };

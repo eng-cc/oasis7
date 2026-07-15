@@ -219,12 +219,22 @@ impl PublicationProofRejection {
     }
 
     fn from_lifecycle_error(error: LifecycleError) -> Self {
-        let reason = match error.reason {
-            "state_malformed" => Reason::StateMalformed,
-            _ => Reason::StateBindingInvalid,
-        };
+        let reason = lifecycle_rejection_reason(error.reason);
         Self::new(reason, error.detail)
     }
+}
+
+fn lifecycle_rejection_reason(reason: &str) -> Reason {
+    match reason {
+        "state_malformed" => Reason::StateMalformed,
+        "state_persist_failed" => Reason::StatePersistFailed,
+        _ => Reason::StateBindingInvalid,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn publication_lifecycle_rejection_reason(reason: &str) -> &'static str {
+    lifecycle_rejection_reason(reason).as_str()
 }
 
 impl From<PublicationProofError> for PublicationProofRejection {
@@ -256,6 +266,7 @@ enum Reason {
     ScanLimitExceeded,
     GraceExpired,
     StateMalformed,
+    StatePersistFailed,
     StateBindingInvalid,
 }
 
@@ -272,6 +283,7 @@ impl Reason {
             Self::ScanLimitExceeded => "scan_limit_exceeded",
             Self::GraceExpired => "grace_expired",
             Self::StateMalformed => "state_malformed",
+            Self::StatePersistFailed => "state_persist_failed",
             Self::StateBindingInvalid => "state_binding_invalid",
         }
     }
