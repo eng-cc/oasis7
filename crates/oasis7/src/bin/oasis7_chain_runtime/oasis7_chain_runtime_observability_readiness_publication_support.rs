@@ -333,6 +333,25 @@ pub(super) fn publication_test_full_payload(
     )
     .expect("write local record");
     fs::write(records_dir.join("latest.json"), local_bytes).expect("write latest record");
+    let execution_world_dir = dir.join("execution-world");
+    fs::create_dir_all(&execution_world_dir).expect("create publication lifecycle state dir");
+    let lifecycle_state = serde_json::json!({
+        "schema_version": 1,
+        "world_id": snapshot.world_id.clone(),
+        "episode": null,
+        "catch_up": {
+            "height": parent_height,
+            "node_block_hash": parent_record["node_block_hash"].clone(),
+            "execution_block_hash": parent_record["execution_block_hash"].clone(),
+            "execution_state_root": parent_record["execution_state_root"].clone(),
+            "timestamp_ms": parent_timestamp_ms,
+        },
+    });
+    fs::write(
+        execution_world_dir.join(super::super::publication_lifecycle::PUBLICATION_LAG_STATE_FILE),
+        serde_json::to_vec_pretty(&lifecycle_state).expect("serialize publication lifecycle state"),
+    )
+    .expect("write publication lifecycle state");
     let payload = publication_test_full_payload_from_records(
         snapshot,
         manifest,
@@ -487,6 +506,46 @@ fn publication_payload_for_negative_records(
         records_dir.as_path(),
     );
     fs::remove_dir_all(dir).expect("remove negative publication records dir");
+    payload
+}
+
+fn publication_payload_for_durable_records(
+    label: &str,
+    snapshot: NodeSnapshot,
+    write_records: impl FnOnce(&std::path::Path),
+) -> super::super::status_payload::ChainStatusResponse {
+    let manifest = publication_test_manifest("public_testnet", 2);
+    let dir = publication_test_temp_dir(label);
+    let records_dir = dir.join("records");
+    let execution_world_dir = dir.join("execution-world");
+    fs::create_dir_all(&records_dir).expect("create durable publication records dir");
+    fs::create_dir_all(&execution_world_dir).expect("create durable publication state dir");
+    write_records(&records_dir);
+    let peer = &snapshot.consensus.peer_heads[0];
+    let lifecycle_state = serde_json::json!({
+        "schema_version": 1,
+        "world_id": snapshot.world_id.clone(),
+        "episode": null,
+        "catch_up": {
+            "height": peer.height,
+            "node_block_hash": peer.block_hash.clone(),
+            "execution_block_hash": peer.execution_block_hash.clone(),
+            "execution_state_root": peer.execution_state_root.clone(),
+            "timestamp_ms": peer.committed_at_ms,
+        },
+    });
+    fs::write(
+        execution_world_dir.join(super::super::publication_lifecycle::PUBLICATION_LAG_STATE_FILE),
+        serde_json::to_vec_pretty(&lifecycle_state).expect("serialize durable publication state"),
+    )
+    .expect("write durable publication state");
+    let payload = publication_test_full_payload_from_records(
+        snapshot,
+        &manifest,
+        dir.as_path(),
+        records_dir.as_path(),
+    );
+    fs::remove_dir_all(dir).expect("remove durable publication records dir");
     payload
 }
 
@@ -693,26 +752,12 @@ fn public_testnet_sequencer_publication_proof_negative_matrix_fails_closed_with_
         publication_negative_snapshot(HEIGHT, FUTURE_MS),
         |records| publication_write_chain(records, HEIGHT, 255, FUTURE_MS),
     );
-    if eligible_255.observability.status != "warn"
-        || !eligible_255.observability.ready
-        || !eligible_255.readiness.ready
-        || !eligible_255.observability.alerts.iter().any(|alert| {
-            alert.code == "sequencer_head_publication_pending" && alert.severity == "warn"
-        })
-    {
-        failures.push(format!(
-            "255-record exact scan boundary should remain eligible: observability={{status:{},ready:{},alerts:{:?}}} readiness={{status:{},ready:{}}}",
-            eligible_255.observability.status,
-            eligible_255.observability.ready,
-            eligible_255
-                .observability
-                .alerts
-                .iter()
-                .map(|alert| format!("{}:{}", alert.severity, alert.code))
-                .collect::<Vec<_>>(),
-            eligible_255.readiness.status,
-            eligible_255.readiness.ready,
-        ));
+    if let Some(failure) = publication_rejection_failure(
+        "255-record exact scan boundary persistence gate",
+        "state_persist_pending",
+        &eligible_255,
+    ) {
+        failures.push(failure);
     }
     let rejected_256 = publication_payload_for_negative_records(
         "scan-boundary-256",
@@ -732,7 +777,7 @@ fn public_testnet_sequencer_publication_proof_negative_matrix_fails_closed_with_
         .expect("clock after epoch")
         .as_millis() as i64;
     let expired_ms = now_ms - 30_100;
-    let grace_expired = publication_payload_for_negative_records(
+    let grace_expired = publication_payload_for_durable_records(
         "grace-expired",
         publication_negative_snapshot(HEIGHT, expired_ms),
         |records| publication_write_chain(records, HEIGHT, 2, expired_ms),

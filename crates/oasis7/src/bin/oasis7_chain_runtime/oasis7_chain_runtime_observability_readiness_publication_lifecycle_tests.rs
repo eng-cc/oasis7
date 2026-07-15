@@ -43,12 +43,17 @@ fn lifecycle_snapshot(
 }
 
 fn write_record(records_dir: &std::path::Path, height: u64, timestamp_ms: i64) {
+    let prev_node_block_hash = if height == 0 {
+        "block-before-genesis".to_string()
+    } else {
+        format!("block-h{}", height - 1)
+    };
     publication_test_write_execution_record(
         records_dir,
         &publication_test_execution_record_at(
             height,
             format!("block-h{height}").as_str(),
-            format!("block-h{}", height - 1).as_str(),
+            prev_node_block_hash.as_str(),
             format!("execution-h{height}").as_str(),
             format!("state-h{height}").as_str(),
             timestamp_ms,
@@ -501,6 +506,54 @@ fn publication_lifecycle_observer_preserves_real_persist_failure_code_and_recove
         .expect("successful lifecycle reconciliation must recover after storage repair");
     assert!(execution_world_dir.join(STATE_FILE).is_file());
     fs::remove_dir_all(root).expect("remove persistence recovery fixture");
+}
+
+#[test]
+fn publication_status_fails_closed_until_async_lifecycle_state_is_durable() {
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_millis() as i64;
+    let (root, records_dir, manifest) = prepare_world(
+        "async-persistence-window",
+        &[
+            (0, now_ms - 3_000),
+            (1, now_ms - 2_000),
+            (2, now_ms - 1_000),
+        ],
+    );
+    let snapshot = lifecycle_snapshot(2, now_ms - 1_000, 1, now_ms - 2_000, now_ms - 100);
+
+    let pending = construct_status(
+        StatusMethod::Get,
+        snapshot.clone(),
+        &manifest,
+        &root,
+        &records_dir,
+    );
+    assert!(
+        is_critical_not_ready(&pending),
+        "{}",
+        outcome_diagnostic(&pending)
+    );
+    assert!(
+        pending.observability.alerts.iter().any(|alert| {
+            alert.code == "sequencer_head_publication_proof_rejected"
+                && alert.summary.contains("reason=state_persist_pending")
+                && alert.summary.contains("detail=state_missing")
+        }),
+        "{}",
+        outcome_diagnostic(&pending)
+    );
+
+    install_lifecycle_state(&root, "catch_up", 1, now_ms - 2_000);
+    let durable = construct_status(StatusMethod::Get, snapshot, &manifest, &root, &records_dir);
+    assert!(
+        is_warning_ready(&durable),
+        "{}",
+        outcome_diagnostic(&durable)
+    );
+    fs::remove_dir_all(root).expect("remove async persistence window fixture");
 }
 
 #[test]

@@ -317,7 +317,7 @@ mod tests {
         let (release_tx, release_rx) = mpsc::channel();
         let dispatcher = ConsensusProgressObserverDispatcher::spawn(
             "blocked-shutdown",
-            state,
+            Arc::clone(&state),
             0,
             Box::new(PermanentlyBlockingObserver {
                 entered: entered_tx,

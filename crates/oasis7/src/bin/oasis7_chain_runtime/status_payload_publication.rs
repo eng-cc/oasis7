@@ -123,6 +123,12 @@ fn derive_publication_episode(
         durable_state,
         observed_at_unix_ms,
     )?;
+    if durable_state.is_none() {
+        return Err(PublicationProofRejection::new(
+            Reason::StatePersistPending,
+            "state_missing",
+        ));
+    }
     validate_grace(
         evaluation.episode,
         evaluation.episode_binding,
@@ -267,6 +273,7 @@ enum Reason {
     GraceExpired,
     StateMalformed,
     StatePersistFailed,
+    StatePersistPending,
     StateBindingInvalid,
 }
 
@@ -284,6 +291,7 @@ impl Reason {
             Self::GraceExpired => "grace_expired",
             Self::StateMalformed => "state_malformed",
             Self::StatePersistFailed => "state_persist_failed",
+            Self::StatePersistPending => "state_persist_pending",
             Self::StateBindingInvalid => "state_binding_invalid",
         }
     }
