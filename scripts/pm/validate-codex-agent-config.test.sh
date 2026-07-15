@@ -65,6 +65,25 @@ fixture="$FIXTURE"
   --root "$fixture" --skip-native-probe >/dev/null
 printf 'positive case passed: baseline\n'
 
+new_fixture wrong-adapter-model
+fixture="$FIXTURE"
+rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
+  'model = "gpt-5.6-terra"' \
+  'model = "gpt-5.5"'
+expect_fail wrong_adapter_model "$fixture"
+
+new_fixture wrong-adapter-reasoning
+fixture="$FIXTURE"
+rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
+  'model_reasoning_effort = "medium"' \
+  'model_reasoning_effort = "high"'
+expect_fail wrong_adapter_reasoning "$fixture"
+
+new_fixture unexpected-adapter-key
+fixture="$FIXTURE"
+printf 'unexpected = true\n' >> "$fixture/.codex/agents/runtime_engineer.toml"
+expect_fail unexpected_adapter_key "$fixture"
+
 new_fixture invalid-toml
 fixture="$FIXTURE"
 printf 'invalid = [\n' >> "$fixture/.codex/agents/runtime_engineer.toml"
