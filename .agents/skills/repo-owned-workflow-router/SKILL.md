@@ -39,6 +39,8 @@ Do not treat specialist domain skills as mandatory default workflow phases. Sele
 - role:
 - slice type:
 - model configuration: `inherit current parent selection` by default; record observed runtime or `adapter inactive on this surface`
+- context delivery mode: minimal HEAD-bound task packet by default; record a concrete escalation reason before using full history
+- task packet identity: task UID, canonical worktree, base ref, current/frozen HEAD, producer/time
 - mandatory context checklist:
   - identity and authority:
   - workflow governance:

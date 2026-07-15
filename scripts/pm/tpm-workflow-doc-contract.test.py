@@ -55,10 +55,13 @@ class WorkflowDocumentationContract(unittest.TestCase):
         for term in (
             "required-gate",
             "codex surface",
+            "must stop polling in the active turn",
             "continuation/heartbeat",
             "roughly ten minutes",
             "one batched current-head gate read",
             "unchanged state stays quiet",
+            "workflow violation",
+            "timeout without a meaningful state change",
             "not an unattended production supervisor",
             "finite, bounded",
         ):
@@ -81,6 +84,26 @@ class WorkflowDocumentationContract(unittest.TestCase):
         ):
             with self.subTest(duplicated_policy=duplicated_policy):
                 self.assertNotIn(duplicated_policy, finishing)
+
+    def test_bounded_slices_default_to_head_bound_task_packets(self) -> None:
+        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+        normalized = re.sub(r"\s+", " ", dispatch.lower())
+        for term in (
+            "minimal, head-bound task packet",
+            "use no inherited history or the smallest recent-turn window",
+            "do not copy the full parent conversation by default",
+            "full-thread/full-history delivery is an explicit escalation",
+            "task uid",
+            "frozen/current head",
+            "packet producer/time",
+            "regenerate it rather than append an unbounded transcript",
+        ):
+            with self.subTest(term=term):
+                self.assertIn(term, normalized)
+
+        agents = AGENTS.read_text(encoding="utf-8")
+        self.assertIn("最小 task packet", agents)
+        self.assertIn("full-history fork 仅用于已记录具体原因的升级", agents)
 
     def test_terminal_helpers_are_current_while_supervisor_automation_is_blocked(self) -> None:
         table = self.section("Capability status")

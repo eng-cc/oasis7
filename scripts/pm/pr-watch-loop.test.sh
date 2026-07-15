@@ -24,7 +24,7 @@ chmod +x "$TMP/bin/python3" "$TMP/bin/sleep"
 
 export TEST_COUNT="$TMP/count" TEST_SLEEPS="$TMP/sleeps"
 PATH="$TMP/bin:$PATH" PM_PR_WATCH_INTERVAL_SECONDS=60 PM_PR_WATCH_MAX_INTERVAL_SECONDS=600 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/out"
+  PM_PR_WATCH_MAX_UNCHANGED_POLLS=10 bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/out"
 diff -u <(printf '60\n120\n240\n480\n600\n') "$TMP/sleeps"
 [[ $(wc -l <"$TMP/out" | tr -d ' ') == 2 ]]
 grep -q '"status":"blocked"' "$TMP/out"
@@ -44,9 +44,22 @@ PATH="$TMP/bin:$PATH" TEST_NEVER_READY=1 PM_PR_WATCH_MAX_POLLS=3 \
 rc=$?
 set -e
 [[ "$rc" == 75 ]]
-diff -u <(printf '60\n120\n') "$TMP/sleeps"
+diff -u <(printf '60\n') "$TMP/sleeps"
 [[ $(wc -l <"$TMP/stable-out" | tr -d ' ') == 2 ]]
-grep -q '"reason":"stable_pr_watch_bound_exhausted"' "$TMP/stable-out"
+grep -q '"reason":"stable_pr_watch_unchanged_budget_exhausted"' "$TMP/stable-out"
+grep -q '"unchanged_polls":1' "$TMP/stable-out"
+grep -q '"snapshot_digest":"' "$TMP/stable-out"
+[[ $(cat "$TMP/count") == 2 ]]
+
+rm -f "$TMP/count" "$TMP/sleeps"
+set +e
+PATH="$TMP/bin:$PATH" TEST_NEVER_READY=1 PM_PR_WATCH_MAX_POLLS=4 PM_PR_WATCH_MAX_UNCHANGED_POLLS=2 \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/two-unchanged-out"
+rc=$?
+set -e
+[[ "$rc" == 75 ]]
+[[ $(cat "$TMP/count") == 3 ]]
+grep -q '"unchanged_polls":2' "$TMP/two-unchanged-out"
 
 set +e
 PATH="$TMP/bin:$PATH" PM_PR_WATCH_INTERVAL_SECONDS=0 \
@@ -55,6 +68,14 @@ rc=$?
 set -e
 [[ "$rc" == 64 ]]
 grep -q 'interval must be a positive integer' "$TMP/invalid-err"
+
+set +e
+PATH="$TMP/bin:$PATH" PM_PR_WATCH_MAX_UNCHANGED_POLLS=0 \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/invalid-unchanged-out" 2>"$TMP/invalid-unchanged-err"
+rc=$?
+set -e
+[[ "$rc" == 64 ]]
+grep -q 'max_unchanged_polls must be a positive integer' "$TMP/invalid-unchanged-err"
 
 set +e
 PATH="$TMP/bin:$PATH" TEST_GATE_FAILURE=1 \

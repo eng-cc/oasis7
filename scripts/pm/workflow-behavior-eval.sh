@@ -196,6 +196,9 @@ checks = [
             "non-default specialist library material for professional method skills",
             "route, work items, and downstream handoff must still be recorded",
             "mandatory context checklist",
+            "minimal, HEAD-bound task packet",
+            "Full-thread/full-history delivery is an explicit escalation",
+            "do not copy the full parent conversation by default",
             "identity and authority",
             "workflow governance",
             "task truth",
@@ -808,6 +811,8 @@ scenarios = [
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             "The mandatory context checklist must include:",
+            "Context delivery defaults to a minimal, HEAD-bound task packet",
+            "Full-thread/full-history delivery is an explicit escalation",
             "identity and authority",
             "workflow governance",
             "task truth",
