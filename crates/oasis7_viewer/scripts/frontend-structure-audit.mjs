@@ -19,10 +19,10 @@ const TEST_SOURCE_LINE_LIMIT = 1600;
 
 const knownLineDebt = new Map(Object.entries({
   "crates/oasis7_viewer/viewer.html": {
-    maxLines: 2797,
+    maxLines: 2804,
     owner: "viewer_engineer",
-    reason: "this bounded World Focus visual/a11y/layout change retains the canonical HTML shell's current inline CSS surface until a dedicated Viewer style/token task moves reusable visual rules",
-    nextTrigger: "a genuinely subsequent suitable inline-style or document-shell change, outside this bounded World Focus visual/a11y/layout change, extracts style ownership",
+    reason: "this bounded auth-diagnostic hierarchy polish adds one scoped seven-line style rule while preserving the canonical and compat HTML contract; extracting unrelated shell styles would broaden the task",
+    nextTrigger: "the next Viewer inline-style or document-shell behavior change must extract a coherent style/token boundary or record a narrower owner-tagged exemption",
   },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
     maxLines: 4424,
@@ -37,10 +37,10 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next main.jsx UI behavior change must extract a named widget/feature component or display-model helper",
   },
   "crates/oasis7_viewer/software_safe_src/main.test.jsx": {
-    maxLines: 3359,
+    maxLines: 3360,
     owner: "viewer_engineer",
-    reason: "broad UI regression suite predates the frontend structure standard and covers cross-widget flows",
-    nextTrigger: "next broad UI test addition should extract fixtures/query helpers or create a narrower adjacent test",
+    reason: "this bounded auth-diagnostic hierarchy polish adds one focused semantic assertion to the existing chat-history fixture; moving the fixture would broaden the verified change",
+    nextTrigger: "the next broad UI test addition must extract the chat-history fixture/query helpers or place the new behavior in a narrower adjacent test file",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
     maxLines: 1680,
