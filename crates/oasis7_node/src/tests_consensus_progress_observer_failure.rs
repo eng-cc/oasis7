@@ -1,29 +1,28 @@
 use super::*;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const OBSERVER_FAILURE: &str = "injected consensus progress observer failure";
 
 #[derive(Clone)]
-struct AlwaysFailingConsensusProgressObserver {
+struct ControllableConsensusProgressObserver {
     calls: Arc<AtomicUsize>,
+    should_fail: Arc<AtomicBool>,
 }
 
-impl NodeConsensusProgressObserver for AlwaysFailingConsensusProgressObserver {
+impl NodeConsensusProgressObserver for ControllableConsensusProgressObserver {
     fn observe_consensus_progress(
         &mut self,
         _snapshot: &NodeConsensusSnapshot,
         _observed_at_ms: i64,
     ) -> Result<(), String> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-        Err(OBSERVER_FAILURE.to_string())
+        if self.should_fail.load(Ordering::SeqCst) {
+            Err(OBSERVER_FAILURE.to_string())
+        } else {
+            Ok(())
+        }
     }
-}
-
-fn snapshot_has_dedicated_consensus_progress_observer_error(snapshot: &NodeSnapshot) -> bool {
-    let rendered = format!("{snapshot:?}");
-    rendered.contains("consensus_progress_observer_error: Some(")
-        && rendered.contains(OBSERVER_FAILURE)
 }
 
 fn retained_commit_publication_count(network: &TestInMemoryNetwork, world_id: &str) -> usize {
@@ -48,6 +47,7 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
             let network = Arc::new(TestInMemoryNetwork::default());
             let dht = Arc::new(TestReplicaMaintenanceDht::new("source-a", "node-a"));
             let observer_calls = Arc::new(AtomicUsize::new(0));
+            let observer_should_fail = Arc::new(AtomicBool::new(true));
             let execution_calls = Arc::new(Mutex::new(Vec::new()));
             let pos_config = signed_pos_config_with_signer_seeds(
                 vec![PosValidator {
@@ -74,8 +74,9 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
                 .expect("replica maintenance");
             let mut runtime = NodeRuntime::new(config.clone())
                 .with_execution_hook(RecordingExecutionHook::new(Arc::clone(&execution_calls)))
-                .with_consensus_progress_observer(AlwaysFailingConsensusProgressObserver {
+                .with_consensus_progress_observer(ControllableConsensusProgressObserver {
                     calls: Arc::clone(&observer_calls),
+                    should_fail: Arc::clone(&observer_should_fail),
                 })
                 .with_replication_network(NodeReplicationNetworkHandle::new(network.clone()))
                 .with_replica_maintenance_dht(dht.clone());
@@ -100,6 +101,28 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
                     && !dht.published_records().is_empty()
             });
             let committed_batch_delivered = batches_ready.wait_for_batches(Duration::from_secs(1));
+            let failing_snapshot = runtime.snapshot();
+            assert_eq!(
+                failing_snapshot
+                    .consensus_progress_observer_error
+                    .as_deref(),
+                Some(OBSERVER_FAILURE),
+                "observer failure must remain in the dedicated field",
+            );
+            assert!(
+                failing_snapshot.last_error.is_none(),
+                "observer failure must not become a NodeRuntime tick failure: {:?}",
+                failing_snapshot.last_error,
+            );
+
+            observer_should_fail.store(false, Ordering::SeqCst);
+            let recovered_in_process = wait_until(Instant::now() + Duration::from_secs(2), || {
+                let snapshot = runtime.snapshot();
+                snapshot.consensus.committed_height > failing_snapshot.consensus.committed_height
+                    && snapshot.consensus.last_execution_height
+                        > failing_snapshot.consensus.last_execution_height
+                    && snapshot.consensus_progress_observer_error.is_none()
+            });
             let running_snapshot = runtime.snapshot();
             runtime.stop().expect("stop runtime with failing observer");
             let committed_batches = runtime.drain_committed_action_batches();
@@ -146,6 +169,14 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
                 recovered_snapshot.consensus.committed_height,
             );
             assert!(
+                recovered_in_process,
+                "successful observer call did not clear the dedicated error while progress continued: failing_snapshot={failing_snapshot:?} running_snapshot={running_snapshot:?}",
+            );
+            assert_eq!(
+                running_snapshot.consensus_progress_observer_error, None,
+                "successful observer call must clear the dedicated error in the same process",
+            );
+            assert!(
                 committed_batch_delivered && delivered_action_ids.contains(&1),
                 "observer failure blocked committed-batch delivery: ready={committed_batch_delivered} action_ids={delivered_action_ids:?}"
             );
@@ -161,15 +192,7 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
                 "runtime did not recover from observer failure persistence: persisted_height={} recovered_snapshot={recovered_snapshot:?}",
                 persisted.committed_height,
             );
-            assert!(
-                running_snapshot.last_error.is_none(),
-                "observer failure must not become a NodeRuntime tick failure: {:?}",
-                running_snapshot.last_error,
-            );
-            assert!(
-                snapshot_has_dedicated_consensus_progress_observer_error(&running_snapshot),
-                "observer failure must remain in dedicated observable field for critical readiness classification: {running_snapshot:?}",
-            );
+            assert_eq!(running_snapshot.last_error, None);
         },
     );
 }
