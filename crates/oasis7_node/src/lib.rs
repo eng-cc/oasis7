@@ -267,7 +267,9 @@ impl NodeRuntime {
 
         {
             let mut state = lock_state(&self.state);
+            let lifecycle_generation = state.generation;
             *state = RuntimeState::default();
+            state.generation = lifecycle_generation;
         }
         {
             let (committed_lock, committed_signal) = &*self.committed_action_batches;

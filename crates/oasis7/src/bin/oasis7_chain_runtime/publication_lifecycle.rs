@@ -43,7 +43,11 @@ pub(super) struct PublicationLifecycleObserver {
     execution_records_dir: PathBuf,
     authority: Option<ObserverLifecycleAuthority>,
     #[cfg(test)]
+    before_final_generation_check_hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    #[cfg(test)]
     before_native_replace_hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
+    #[cfg(test)]
+    publication_result_hook: Option<std::sync::Arc<dyn Fn(Option<String>) + Send + Sync>>,
 }
 
 impl PublicationLifecycleObserver {
@@ -68,8 +72,21 @@ impl PublicationLifecycleObserver {
             execution_records_dir,
             authority: None,
             #[cfg(test)]
+            before_final_generation_check_hook: None,
+            #[cfg(test)]
             before_native_replace_hook: None,
+            #[cfg(test)]
+            publication_result_hook: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_before_final_generation_check_hook_for_test(
+        mut self,
+        hook: std::sync::Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        self.before_final_generation_check_hook = Some(hook);
+        self
     }
 
     #[cfg(test)]
@@ -78,6 +95,15 @@ impl PublicationLifecycleObserver {
         hook: std::sync::Arc<dyn Fn() + Send + Sync>,
     ) -> Self {
         self.before_native_replace_hook = Some(hook);
+        self
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_publication_result_hook_for_test(
+        mut self,
+        hook: std::sync::Arc<dyn Fn(Option<String>) + Send + Sync>,
+    ) -> Self {
+        self.publication_result_hook = Some(hook);
         self
     }
 }
@@ -101,15 +127,19 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             consensus_progress_observer_error: None,
             last_error: None,
         };
-        reconcile_with_authority(
+        let result = reconcile_with_authority(
             &snapshot,
             self.manifest.as_ref(),
             self.execution_world_dir.as_path(),
             self.execution_records_dir.as_path(),
             observed_at_ms,
             self.authority.as_ref(),
-        )
-        .map_err(|error| {
+        );
+        #[cfg(test)]
+        if let Some(hook) = self.publication_result_hook.take() {
+            hook(result.as_ref().err().map(|error| error.detail.clone()));
+        }
+        result.map_err(|error| {
             let code = if error.detail == "observer_lifecycle_commit_busy" {
                 "observer_lifecycle_commit_busy"
             } else {
@@ -130,13 +160,19 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
         #[cfg(test)]
         let restarted = {
             let mut restarted = restarted;
+            restarted.before_final_generation_check_hook = None;
             restarted.before_native_replace_hook = None;
+            restarted.publication_result_hook = None;
             restarted
         };
         Some(Box::new(restarted))
     }
 
     fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        #[cfg(test)]
+        if let Some(hook) = self.before_final_generation_check_hook.take() {
+            authority.set_before_final_generation_check_hook_for_test(hook);
+        }
         #[cfg(test)]
         if let Some(hook) = self.before_native_replace_hook.take() {
             authority.set_before_native_replace_hook_for_test(hook);

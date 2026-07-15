@@ -91,6 +91,8 @@ struct ObserverLifecycleAuthorityState {
     active_generation: AtomicU64,
     commit_lock: Mutex<()>,
     #[cfg(any(test, feature = "test-hooks"))]
+    before_final_generation_check_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(any(test, feature = "test-hooks"))]
     before_native_replace_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
@@ -149,6 +151,18 @@ impl ObserverLifecycleAuthority {
     }
 
     #[cfg(any(test, feature = "test-hooks"))]
+    pub fn set_before_final_generation_check_hook_for_test(
+        &self,
+        hook: Arc<dyn Fn() + Send + Sync>,
+    ) {
+        *self
+            .state
+            .before_final_generation_check_hook
+            .lock()
+            .expect("lock observer final generation check test hook") = Some(hook);
+    }
+
+    #[cfg(any(test, feature = "test-hooks"))]
     pub fn set_before_native_replace_hook_for_test(&self, hook: Arc<dyn Fn() + Send + Sync>) {
         *self
             .state
@@ -196,6 +210,17 @@ impl ObserverLifecycleMutationGuard {
                 ));
             }
         };
+        #[cfg(any(test, feature = "test-hooks"))]
+        if let Some(hook) = self
+            .authority
+            .state
+            .before_final_generation_check_hook
+            .lock()
+            .expect("lock observer final generation check test hook")
+            .take()
+        {
+            hook();
+        }
         if self
             .authority
             .state
@@ -396,6 +421,8 @@ impl ConsensusProgressObserverDispatcher {
                 Arc::new(ObserverLifecycleAuthorityState {
                     active_generation: AtomicU64::new(generation),
                     commit_lock: Mutex::new(()),
+                    #[cfg(any(test, feature = "test-hooks"))]
+                    before_final_generation_check_hook: Mutex::new(None),
                     #[cfg(any(test, feature = "test-hooks"))]
                     before_native_replace_hook: Mutex::new(None),
                 })
@@ -846,6 +873,7 @@ mod tests {
         let state = Arc::new(ObserverLifecycleAuthorityState {
             active_generation: AtomicU64::new(0),
             commit_lock: Mutex::new(()),
+            before_final_generation_check_hook: Mutex::new(None),
             before_native_replace_hook: Mutex::new(None),
         });
         let authority = ObserverLifecycleAuthority {
@@ -884,6 +912,7 @@ mod tests {
         let state = Arc::new(ObserverLifecycleAuthorityState {
             active_generation: AtomicU64::new(0),
             commit_lock: Mutex::new(()),
+            before_final_generation_check_hook: Mutex::new(None),
             before_native_replace_hook: Mutex::new(None),
         });
         let poison_state = Arc::clone(&state);
