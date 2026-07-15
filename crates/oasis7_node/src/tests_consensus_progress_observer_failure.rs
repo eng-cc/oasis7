@@ -607,6 +607,7 @@ fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_t
 }
 
 include!("tests_consensus_progress_observer_restart.rs");
+include!("tests_consensus_progress_observer_start_failure.rs");
 #[test]
 fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable() {
     run_test_with_timeout(

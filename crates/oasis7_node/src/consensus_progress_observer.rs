@@ -401,6 +401,32 @@ pub(super) struct ConsensusProgressObserverDispatcher {
     worker: Option<JoinHandle<()>>,
 }
 
+pub(super) struct ConsensusProgressObserverSpawnError {
+    source: io::Error,
+    observer: Box<dyn NodeConsensusProgressObserver>,
+}
+
+impl fmt::Debug for ConsensusProgressObserverSpawnError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConsensusProgressObserverSpawnError")
+            .field("source", &self.source)
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Display for ConsensusProgressObserverSpawnError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.source.fmt(formatter)
+    }
+}
+
+impl ConsensusProgressObserverSpawnError {
+    pub(super) fn into_observer(self) -> Box<dyn NodeConsensusProgressObserver> {
+        self.observer
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct ConsensusProgressObserverSubmitter {
     queue: Arc<(Mutex<ConsensusProgressObserverQueue>, Condvar)>,
@@ -409,12 +435,22 @@ pub(super) struct ConsensusProgressObserverSubmitter {
 }
 
 impl ConsensusProgressObserverDispatcher {
+    #[cfg(test)]
+    pub(super) fn fail_spawn_for_test(
+        observer: Box<dyn NodeConsensusProgressObserver>,
+    ) -> Result<Self, ConsensusProgressObserverSpawnError> {
+        Err(ConsensusProgressObserverSpawnError {
+            source: io::Error::other("injected observer worker spawn failure"),
+            observer,
+        })
+    }
+
     pub(super) fn spawn(
         node_id: &str,
         state: Arc<Mutex<RuntimeState>>,
         generation: u64,
         mut observer: Box<dyn NodeConsensusProgressObserver>,
-    ) -> std::io::Result<Self> {
+    ) -> Result<Self, ConsensusProgressObserverSpawnError> {
         let handoff = observer.take_restart_handoff();
         let authority_state = handoff.as_ref().map_or_else(
             || {
@@ -433,7 +469,7 @@ impl ConsensusProgressObserverDispatcher {
             .active_generation
             .store(generation, Ordering::SeqCst);
         let authority = ObserverLifecycleAuthority {
-            state: authority_state,
+            state: Arc::clone(&authority_state),
             generation,
         };
         observer.bind_lifecycle_authority(authority.clone());
@@ -456,9 +492,16 @@ impl ConsensusProgressObserverDispatcher {
         ));
         let worker_queue = Arc::clone(&queue);
         let worker_state = Arc::downgrade(&state);
-        let worker = thread::Builder::new()
+        let observer_cell = Arc::new(Mutex::new(Some(observer)));
+        let worker_observer = Arc::clone(&observer_cell);
+        let worker = match thread::Builder::new()
             .name(format!("aw-node-observer-{node_id}"))
             .spawn(move || {
+                let mut observer = worker_observer
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .take()
+                    .expect("observer worker owns configured observer");
                 'worker: loop {
                     let pending = {
                         let (queue_lock, signal) = &*worker_queue;
@@ -576,7 +619,22 @@ impl ConsensusProgressObserverDispatcher {
                         }
                     }
                 }
-            })?;
+            }) {
+            Ok(worker) => worker,
+            Err(source) => {
+                if authority_state.active_generation.load(Ordering::SeqCst) == generation {
+                    authority_state
+                        .active_generation
+                        .store(u64::MAX, Ordering::SeqCst);
+                }
+                let observer = observer_cell
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .take()
+                    .expect("failed thread spawn must retain configured observer");
+                return Err(ConsensusProgressObserverSpawnError { source, observer });
+            }
+        };
         Ok(Self {
             queue,
             state: Arc::downgrade(&state),

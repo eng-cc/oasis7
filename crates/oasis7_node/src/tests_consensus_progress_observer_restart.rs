@@ -164,6 +164,76 @@ fn stopped_observer_generation_cannot_write_into_restarted_runtime() {
 }
 
 #[test]
+fn failed_observer_worker_spawn_restores_observer_for_retry() {
+    run_test_with_timeout(
+        "failed_observer_worker_spawn_restores_observer_for_retry",
+        Duration::from_secs(3),
+        || {
+            let control = Arc::new(RestartHandoffControl::default());
+            let config = NodeConfig::new(
+                "node-observer-dispatcher-retry",
+                "world-observer-dispatcher-retry",
+                NodeRole::Sequencer,
+            )
+            .expect("config")
+            .with_tick_interval(Duration::from_secs(5))
+            .expect("tick interval")
+            .with_pos_config(signed_pos_config_with_signer_seeds(
+                vec![PosValidator {
+                    validator_id: "node-observer-dispatcher-retry".to_string(),
+                    stake: 100,
+                }],
+                &[("node-observer-dispatcher-retry", 107)],
+            ))
+            .expect("pos config");
+            let mut runtime = NodeRuntime::new(config).with_consensus_progress_observer(
+                RestartHandoffObserver {
+                    control: Arc::clone(&control),
+                    blocks: false,
+                    generation: 0,
+                },
+            );
+
+            runtime.fail_next_observer_worker_spawn_for_test();
+            assert!(
+                matches!(runtime.start(), Err(NodeError::ThreadSpawnFailed { .. })),
+                "injected observer worker spawn failure must fail the first start"
+            );
+            runtime
+                .start()
+                .expect("observer must survive its own worker spawn failure");
+
+            let mut snapshot = NodeConsensusSnapshot::default();
+            snapshot.committed_height = 1;
+            runtime
+                .submit_consensus_progress_for_test(snapshot, 1)
+                .expect("submit progress after retried observer spawn");
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    !control
+                        .observed_progress
+                        .lock()
+                        .expect("lock observer spawn retry progress")
+                        .is_empty()
+                }),
+                "retried runtime lost the observer after its worker spawn failure"
+            );
+            runtime.stop().expect("stop retried runtime");
+
+            assert_eq!(
+                control
+                    .observed_progress
+                    .lock()
+                    .expect("lock observer spawn retry progress")[0]
+                    .0,
+                0,
+                "observer worker spawn failure must preserve the original observer"
+            );
+        },
+    );
+}
+
+#[test]
 fn bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_order() {
     run_test_with_timeout(
         "bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_order",

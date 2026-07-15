@@ -234,6 +234,10 @@ pub struct NodeRuntime {
     state: Arc<Mutex<RuntimeState>>,
     stop_tx: Option<mpsc::Sender<()>>,
     worker: Option<JoinHandle<()>>,
+    #[cfg(test)]
+    fail_next_worker_spawn: bool,
+    #[cfg(test)]
+    fail_next_observer_worker_spawn: bool,
 }
 
 #[derive(Clone)]
@@ -507,25 +511,7 @@ impl NodeRuntime {
         let running = Arc::clone(&self.running);
         let state = Arc::clone(&self.state);
         let execution_hook = self.execution_hook.clone();
-        if self.consensus_progress_observer_dispatcher.is_none()
-            && let Some(observer) = self.consensus_progress_observer.take()
-        {
-            let generation = lock_state(&self.state).generation;
-            self.consensus_progress_observer_dispatcher = Some(
-                ConsensusProgressObserverDispatcher::spawn(
-                    self.config.node_id.as_str(),
-                    Arc::clone(&self.state),
-                    generation,
-                    observer,
-                )
-                .map_err(|error| {
-                    self.running.store(false, Ordering::SeqCst);
-                    NodeError::ThreadSpawnFailed {
-                        reason: error.to_string(),
-                    }
-                })?,
-            );
-        }
+        self.start_consensus_progress_observer_dispatcher()?;
         let consensus_progress_observer = self
             .consensus_progress_observer_dispatcher
             .as_ref()
@@ -539,6 +525,15 @@ impl NodeRuntime {
         let world_id = self.config.world_id.clone();
         let max_committed_action_batches = self.config.max_committed_action_batches.max(1);
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
+
+        #[cfg(test)]
+        if std::mem::take(&mut self.fail_next_worker_spawn) {
+            self.restore_consensus_progress_observer_after_start_failure();
+            self.running.store(false, Ordering::SeqCst);
+            return Err(NodeError::ThreadSpawnFailed {
+                reason: "injected runtime worker spawn failure".to_string(),
+            });
+        }
 
         let worker = thread::Builder::new()
             .name(worker_name)
@@ -705,6 +700,7 @@ impl NodeRuntime {
                 running.store(false, Ordering::SeqCst);
             })
             .map_err(|err| {
+                self.restore_consensus_progress_observer_after_start_failure();
                 self.running.store(false, Ordering::SeqCst);
                 NodeError::ThreadSpawnFailed {
                     reason: err.to_string(),

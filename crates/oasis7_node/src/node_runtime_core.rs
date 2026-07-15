@@ -265,6 +265,10 @@ impl NodeRuntime {
             state: Arc::new(Mutex::new(RuntimeState::default())),
             stop_tx: None,
             worker: None,
+            #[cfg(test)]
+            fail_next_worker_spawn: false,
+            #[cfg(test)]
+            fail_next_observer_worker_spawn: false,
         }
     }
 
