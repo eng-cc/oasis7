@@ -613,6 +613,27 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 3. reset 受旧链状态影响的 observer，再从 clean-rebuilt storage/sequencer state 自动 catch-up 或重新导出的 current-chain verified bundle reseed
 4. 不得使用绑定旧链状态的 seed bundle，也不得保留旧 observer state 重新接入 clean-rebuilt validator pair
 
+### Windows package rollback 后的人工 handoff
+
+Windows package rollout 只要输出 `rollback_required=true`，就进入仍在进行中的 incident；`rollback_applied=true` 只证明已尝试恢复 known-good binary/config/deployment provenance，不代表 observer 已恢复，也不得触发 recovery messaging。值班 operator 必须按以下顺序 handoff：
+
+1. 保留 rollout 输出列出的 `attempt_stdout`、`attempt_stderr`、`attempt_exit_marker` 及 `C:\oasis7-deploy\logs\package-rollout-attempts\` 下对应 attempt 文件；不得在 incident closeout 前删除 attempt staging、覆盖日志或只摘录最后一行替代原始证据。
+2. 检查 rollback 输出、installed/known-good runtime SHA-256、active governed config 与 `CURRENT_VERSION` / `DEPLOYED_BUILDINFO`，并确认 scheduled task action 已恢复为预期的 `Oasis7Observer` runtime/arguments。任何 `lock_remains=true`、缺失 component、hash 不闭合或 action 漂移都继续保持 incident active，禁止启动任务。
+3. 上述检查通过后，由 Windows node operator 人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`；rollout 的“不自动重启”是安全边界，不得用修改脚本或删除诊断绕过。
+4. 运行本 runbook `Current five-node status` 的现有 Windows/fleet status checks，并记录 scheduled task `State=Running`、RPC `running=true`、`last_error=null`、`readiness.status=ready`、`readiness.failed_gates=[]`，以及 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或处于允许 lag 内。任一项不满足时，`rollback_required=true` incident 继续 active。
+5. 在 task running、error clear、readiness 和 head-height checks 全部通过且证据已留存前，禁止发布“已恢复”“healthy”或同义 external messaging。外部 recovery update 仍遵循上文 `Operator communication boundary`：TPM 与 LiveOps/community 准备并发布 update，`producer_system_designer` 批准 wording；Windows operator 的本机检查结果本身不构成对外发布批准。
+
+最小 Windows handoff 命令：
+
+```powershell
+Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State,Actions
+Get-Content -LiteralPath '<attempt_stdout>','<attempt_stderr>','<attempt_exit_marker>'
+Start-ScheduledTask -TaskName Oasis7Observer
+Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State
+Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
+  ConvertTo-Json -Depth 8
+```
+
 ### What not to do
 1. 不要为 observer attach 问题去修改 validator registry 真值
 2. 不要在 peer id 已变的情况下继续使用旧 bootstrap peer list

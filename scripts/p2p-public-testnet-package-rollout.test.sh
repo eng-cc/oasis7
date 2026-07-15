@@ -435,7 +435,7 @@ try {
 return 'c-' + $digest.Substring(0, 16)
 }
 
-function Invoke-FixtureRolloutExpectingFailure([string] $Rollout) {
+function Invoke-FixtureRollout([string] $Rollout) {
 $previousErrorActionPreference = $ErrorActionPreference
 try {
   $ErrorActionPreference = 'Continue'
@@ -445,6 +445,10 @@ try {
   $ErrorActionPreference = $previousErrorActionPreference
 }
 return [PSCustomObject]@{ ExitCode = $exitCode; Output = @($output) }
+}
+
+function Invoke-FixtureRolloutExpectingFailure([string] $Rollout) {
+return Invoke-FixtureRollout $Rollout
 }
 
 function Write-FixtureExecutables {
@@ -461,7 +465,7 @@ public static void Main(string[] args) {
   listener.Start();
   while (true) {
     var context = listener.GetContext();
-    byte[] payload = Encoding.UTF8.GetBytes("{\"running\":true}");
+    byte[] payload = Encoding.UTF8.GetBytes("{\"running\":true,\"fixture\":\"candidate\"}");
     context.Response.ContentType = "application/json";
     context.Response.OutputStream.Write(payload, 0, payload.Length);
     context.Response.Close();
@@ -483,10 +487,13 @@ public static void Main() {
 }
 '@
 $runtime = Join-Path $Directory 'oasis7_chain_runtime.exe'
+$knownGoodRuntime = Join-Path $Directory 'known-good-oasis7_chain_runtime.exe'
 $installer = Join-Path $Directory 'fixture-installer.exe'
 Add-Type -TypeDefinition $runtimeSource -OutputAssembly $runtime -OutputType ConsoleApplication
+$knownGoodRuntimeSource = $runtimeSource.Replace('FixtureRuntime', 'FixtureKnownGoodRuntime').Replace('{\"running\":true,\"fixture\":\"candidate\"}', '{\"running\":true,\"fixture\":\"known-good\"}')
+Add-Type -TypeDefinition $knownGoodRuntimeSource -OutputAssembly $knownGoodRuntime -OutputType ConsoleApplication
 Add-Type -TypeDefinition $installerSource -OutputAssembly $installer -OutputType ConsoleApplication
-return @{ Runtime = $runtime; Installer = $installer }
+return @{ Runtime = $runtime; KnownGoodRuntime = $knownGoodRuntime; Installer = $installer }
 }
 
 $executables = Write-FixtureExecutables -Directory $fixtureRoot
@@ -532,8 +539,8 @@ $activeGenesis = Join-Path $config 'public-testnet-governed-bootstrap-genesis-20
 $activeManifest = Join-Path $config 'public-testnet-governed-bootstrap-manifest-2026-06-06.windows.json'
 $activeBootstrap = Join-Path $config 'public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt'
 New-Item -ItemType Directory -Path $config, (Join-Path $installRoot 'bin'), (Join-Path $rollbackRoot 'runtime'), (Join-Path $rollbackRoot 'config') -Force | Out-Null
-Copy-Item -LiteralPath $executables.Runtime -Destination (Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') -Force
-Copy-Item -LiteralPath $executables.Runtime -Destination (Join-Path $rollbackRoot 'runtime/oasis7_chain_runtime.exe') -Force
+Copy-Item -LiteralPath $executables.KnownGoodRuntime -Destination (Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') -Force
+Copy-Item -LiteralPath $executables.KnownGoodRuntime -Destination (Join-Path $rollbackRoot 'runtime/oasis7_chain_runtime.exe') -Force
 Set-Content -LiteralPath (Join-Path $deploy 'CURRENT_VERSION') -Value 'known-good-version' -NoNewline
 Set-Content -LiteralPath (Join-Path $deploy 'DEPLOYED_BUILDINFO') -Value 'known-good-buildinfo' -NoNewline
 Copy-Item -LiteralPath (Join-Path $deploy 'CURRENT_VERSION') -Destination (Join-Path $rollbackRoot 'CURRENT_VERSION') -Force
@@ -715,7 +722,7 @@ if ($longestGovernedPath.Length -gt $governedPathBudget) {
 if (($longestGovernedPath.Length + $atomicPromotionSuffixBudget) -gt $windowsLegacyPathStringBudget) {
   throw "fixture governed path leaves insufficient atomic promotion headroom: length=$($longestGovernedPath.Length) suffix_budget=$atomicPromotionSuffixBudget max=$windowsLegacyPathStringBudget path=$longestGovernedPath"
 }
-return @{ LogicalName=$Name; PhysicalCaseId=$physicalCaseId; Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
+return @{ LogicalName=$Name; PhysicalCaseId=$physicalCaseId; Root=$root; Deploy=$deploy; Config=$config; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; StagingConfig=$stagingConfig; Task=$taskName; Port=$port; Rollout=$rollout; ActiveGovernedFiles=$activeGovernedFiles; ActiveBundle=$activeBundle; ActiveGenesis=$activeGenesis; ActiveManifest=$activeManifest; ActiveBootstrap=$activeBootstrap; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
 
 function Get-FixtureSnapshot($Fixture) {
@@ -796,6 +803,124 @@ foreach ($phase in $phases) {
     Remove-RolloutFixture $fixture
   }
 }
+
+$positiveLogicalCaseName = 'positive-rollout'
+$fixture = New-RolloutFixture -Name $positiveLogicalCaseName
+Assert-FixtureCaseIdentity $fixture $positiveLogicalCaseName
+try {
+  $candidateRuntimeHash = Get-Sha256 $executables.Runtime
+  $knownGoodRuntimeHash = Get-Sha256 $executables.KnownGoodRuntime
+  if ($candidateRuntimeHash -eq $knownGoodRuntimeHash) {
+    throw 'positive fixture candidate and known-good runtimes must have distinct hashes'
+  }
+  Assert-Equal (Get-Sha256 $fixture.Runtime) $knownGoodRuntimeHash 'positive fixture did not begin on known-good runtime'
+
+  $stagedHashesBefore = [System.Collections.Generic.Dictionary[string, string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+  )
+  $activeHashesBefore = [System.Collections.Generic.Dictionary[string, string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase
+  )
+  Get-ChildItem -LiteralPath $fixture.StagingConfig -Recurse -File | ForEach-Object {
+    $relative = Get-FixtureRelativeExistingPath $fixture.StagingConfig $_.FullName 'positive staged governed file'
+    $activePath = Join-Path $fixture.Config $relative
+    if (!(Test-Path -LiteralPath $activePath -PathType Leaf)) {
+      throw "positive fixture active governed baseline missing: relative=$relative active=$activePath"
+    }
+    $stagedHashesBefore[$relative] = Get-Sha256 $_.FullName
+    $activeHashesBefore[$relative] = Get-Sha256 $activePath
+  }
+  if ($stagedHashesBefore.Count -eq 0) {
+    throw 'positive fixture staged governed closure is empty'
+  }
+
+  $env:OASIS7_FIXTURE_INSTALL_ROOT = $fixture.Install
+  $env:OASIS7_FIXTURE_RUNTIME_TEMPLATE = $executables.Runtime
+  Remove-Item Env:OASIS7_ROLLOUT_FAIL_PHASE -ErrorAction SilentlyContinue
+  Remove-Item Env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE -ErrorAction SilentlyContinue
+  $invocation = Invoke-FixtureRollout $fixture.Rollout
+  $rolloutOutput = $invocation.Output -join "`n"
+  [Console]::Error.WriteLine("fixture_positive_rollout logical_case=$positiveLogicalCaseName physical_case=$($fixture.PhysicalCaseId) output=$rolloutOutput")
+  if ($invocation.ExitCode -ne 0) {
+    throw "positive fixture rollout failed: exit_code=$($invocation.ExitCode) output=$rolloutOutput"
+  }
+  foreach ($successMarker in @(
+    'staged_sha_closure_complete=true',
+    'promotion_begin=true',
+    'installer_exit_code=0',
+    'promotion_complete=true',
+    'startup_verified=true'
+  )) {
+    if ($rolloutOutput -notmatch [regex]::Escape($successMarker)) {
+      throw "positive fixture rollout omitted success marker: marker=$successMarker output=$rolloutOutput"
+    }
+  }
+  if ($rolloutOutput -match '(?i)rollback_required\s*=\s*true') {
+    throw "positive fixture rollout emitted rollback-required output: $rolloutOutput"
+  }
+
+  Assert-Equal (Get-Sha256 $fixture.Runtime) $candidateRuntimeHash 'positive fixture installer did not promote candidate runtime bytes'
+  if ($rolloutOutput -notmatch [regex]::Escape("new_runtime_sha256=$candidateRuntimeHash")) {
+    throw "positive fixture rollout omitted promoted runtime hash: expected=$candidateRuntimeHash output=$rolloutOutput"
+  }
+  $transformedGovernedLeaves = @(
+    [System.IO.Path]::GetFileName($fixture.ActiveBundle),
+    [System.IO.Path]::GetFileName($fixture.ActiveGenesis),
+    [System.IO.Path]::GetFileName($fixture.ActiveManifest)
+  )
+  foreach ($relative in @($stagedHashesBefore.Keys)) {
+    $stagedPath = Join-Path $fixture.StagingConfig $relative
+    $activePath = Join-Path $fixture.Config $relative
+    Assert-Equal (Get-Sha256 $stagedPath) $stagedHashesBefore[$relative] "positive rollout mutated staged governed source: $relative"
+    if (!(Test-Path -LiteralPath $activePath -PathType Leaf)) {
+      throw "positive rollout omitted promoted governed target: relative=$relative active=$activePath"
+    }
+    $activeHash = Get-Sha256 $activePath
+    if ([System.IO.Path]::GetFileName($relative) -in $transformedGovernedLeaves) {
+      if ($activeHash -eq $activeHashesBefore[$relative]) {
+        throw "positive rollout did not transform governed config: relative=$relative hash=$activeHash"
+      }
+    } else {
+      Assert-Equal $activeHash $stagedHashesBefore[$relative] "positive rollout governed hash diverged: $relative"
+    }
+  }
+  $provenanceRelative = 'generated-world\world-generation-provenance.json'
+  Assert-Equal (Get-Sha256 (Join-Path $fixture.Config $provenanceRelative)) $stagedHashesBefore[$provenanceRelative] 'positive rollout provenance hash diverged'
+
+  Assert-Equal ((Get-Content -LiteralPath (Join-Path $fixture.Deploy 'CURRENT_VERSION') -Raw).Trim()) $env:OASIS7_FIXTURE_PACKAGE_VERSION 'positive rollout current version diverged'
+  $deployedBuildInfoLines = @(Get-Content -LiteralPath (Join-Path $fixture.Deploy 'DEPLOYED_BUILDINFO'))
+  foreach ($buildInfoLine in @(
+    "package_version=$env:OASIS7_FIXTURE_PACKAGE_VERSION",
+    "runtime_sha256=$candidateRuntimeHash"
+  )) {
+    if ($deployedBuildInfoLines -notcontains $buildInfoLine) {
+      throw "positive rollout deployment provenance omitted expected line: line=$buildInfoLine buildinfo=$($deployedBuildInfoLines -join ',')"
+    }
+  }
+  Assert-OriginalTaskAction $fixture
+  if ((Get-ScheduledTask -TaskName $fixture.Task).State -ne 'Running') {
+    throw "positive rollout scheduled task is not running: task=$($fixture.Task)"
+  }
+  $status = Invoke-RestMethod -Uri "http://127.0.0.1:$($fixture.Port)/v1/chain/status" -TimeoutSec 8
+  if ($status.running -ne $true -or $status.fixture -ne 'candidate') {
+    throw "positive rollout RPC did not come from promoted candidate runtime: payload=$($status | ConvertTo-Json -Compress)"
+  }
+  $attemptLogRoot = Join-Path $fixture.Deploy 'logs\package-rollout-attempts'
+  $attemptDiagnostics = @(
+    Get-ChildItem -LiteralPath $attemptLogRoot -File -ErrorAction Stop | ForEach-Object {
+      Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+    }
+  ) -join "`n"
+  if ($attemptDiagnostics -match '(?i)rollback_required\s*=\s*true') {
+    throw "positive fixture attempt diagnostics contain rollback-required state: $attemptDiagnostics"
+  }
+} finally {
+  Remove-Item Env:OASIS7_FIXTURE_INSTALL_ROOT -ErrorAction SilentlyContinue
+  Remove-Item Env:OASIS7_FIXTURE_RUNTIME_TEMPLATE -ErrorAction SilentlyContinue
+  Remove-Item Env:OASIS7_ROLLOUT_FAIL_PHASE -ErrorAction SilentlyContinue
+  Remove-Item Env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE -ErrorAction SilentlyContinue
+  Remove-RolloutFixture $fixture
+}
 [System.IO.File]::WriteAllText(
   $env:OASIS7_FIXTURE_COMPLETION_MARKER,
   'OASIS7_WINDOWS_POWERSHELL_ROLLOUT_BEHAVIOR_COMPLETE=true',
@@ -820,6 +945,7 @@ fi
 set +e
 OASIS7_FIXTURE_WORKSPACE_ROOT="$(cygpath -w "$ROOT_DIR")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
+  OASIS7_FIXTURE_PACKAGE_VERSION="$package_version" \
   OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
   OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
   "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$powershell_fixture_script_windows" >"$powershell_output" 2>&1
@@ -864,7 +990,7 @@ assert "$root = Join-Path $fixtureRoot $Name" not in fixture
 assert "LogicalName=$Name; PhysicalCaseId=$physicalCaseId" in fixture
 assert "function Assert-FixtureCaseIdentity" in fixture
 assert "GetFileName($Fixture.Root.TrimEnd('\\'))" in fixture
-assert fixture.count("Assert-FixtureCaseIdentity $fixture") == 2
+assert fixture.count("Assert-FixtureCaseIdentity $fixture") == 3
 assert "fixture_governed_path_budget logical_case=$Name physical_case=$physicalCaseId" in fixture
 assert "[System.StringComparison]::OrdinalIgnoreCase" in fixture
 assert "reportedReparseItem.Attributes" in fixture
@@ -881,9 +1007,19 @@ assert "Assert-FixturePathUnderSafeBase $staging 'stagingRoot'" in fixture
 assert "fixture_generated_staging_root logical_case=$Name physical_case=$physicalCaseId path=$staging" in fixture
 assert "fixture_expected_reparse case=$($case.Name) staging_root=$($fixture.Staging)" in fixture
 assert "function Invoke-FixtureRolloutExpectingFailure" in fixture
+assert "function Invoke-FixtureRollout([string] $Rollout)" in fixture
 assert "$ErrorActionPreference = 'Continue'" in fixture
 assert "$ErrorActionPreference = $previousErrorActionPreference" in fixture
 assert fixture.count("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout") == 2
+assert fixture.count("Invoke-FixtureRollout $fixture.Rollout") == 1
+assert "positive fixture candidate and known-good runtimes must have distinct hashes" in fixture
+assert "staged_sha_closure_complete=true" in fixture
+assert "promotion_complete=true" in fixture
+assert "startup_verified=true" in fixture
+assert "positive fixture rollout emitted rollback-required output" in fixture
+assert "positive rollout provenance hash diverged" in fixture
+assert "positive rollout RPC did not come from promoted candidate runtime" in fixture
+assert "positive fixture attempt diagnostics contain rollback-required state" in fixture
 safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureDriveRoot\n")
 fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
 intentional_junction = fixture.index("New-Item -ItemType Junction")
