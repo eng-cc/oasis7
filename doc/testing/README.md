@@ -42,7 +42,7 @@
 - `evidence/`：发布证据、趋势基线与审计留痕；当前已补 `evidence/README.md` 作为热点子域入口。
 - `ci/`：CI、wasm determinism、tiering 与 gate 保护。
 - `longrun/`：长稳、chaos、soak 与在线稳定性。
-- `launcher/`：启动器链路测试、playtest 与配置自动接线。
+- [`launcher/`](launcher/README.md)：启动器人工验证清单与 bundle-first playtest 入口。
 - `governance/`：质量趋势、release-gate 指标、审计检查与 playability 证据治理；先读 `doc/testing/governance/README.md` 再按问题下钻。
 - `templates/`：证据包、报告、模型视觉评审卡与检查清单模板；默认按需进入。
 - `performance/`：runtime / viewer 性能观测与方法学。

@@ -282,6 +282,43 @@ MODULE_SLUG="$(slugify "$MODULE_INPUT")"
 TASK_SLUG="$(slugify "$TASK_INPUT")"
 [[ -n "$MODULE_SLUG" ]] || { echo "error: <module> becomes empty after slug normalization" >&2; exit 2; }
 [[ -n "$TASK_SLUG" ]] || { echo "error: <task> becomes empty after slug normalization" >&2; exit 2; }
+if [[ "$PM_BOOTSTRAP" == "1" ]]; then
+  PM_STORE_PATH="$ROOT_DIR/scripts/pm/pm_store.py"
+  if ! CANONICAL_MODULES="$(python3 - "$PM_STORE_PATH" <<'PY'
+import ast
+import pathlib
+import sys
+
+tree = ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+for node in tree.body:
+    if isinstance(node, ast.Assign) and any(
+        isinstance(target, ast.Name) and target.id == "TASK_MODULE_VALUES"
+        for target in node.targets
+    ):
+        values = ast.literal_eval(node.value)
+        if not isinstance(values, set) or not values or not all(isinstance(value, str) and value for value in values):
+            break
+        print("\n".join(sorted(values)))
+        raise SystemExit(0)
+raise SystemExit("TASK_MODULE_VALUES is missing or invalid")
+PY
+  )" || [[ -z "$CANONICAL_MODULES" ]]; then
+    echo "error: cannot load canonical Project Module values from $PM_STORE_PATH" >&2
+    exit 2
+  fi
+  MODULE_SUPPORTED=0
+  while IFS= read -r supported_module; do
+    if [[ "$MODULE_SLUG" == "$supported_module" ]]; then
+      MODULE_SUPPORTED=1
+      break
+    fi
+  done <<< "$CANONICAL_MODULES"
+  if [[ "$MODULE_SUPPORTED" != "1" ]]; then
+    echo "error: unsupported Project Module: $MODULE_SLUG" >&2
+    echo "supported values: ${CANONICAL_MODULES//$'\n'/, }" >&2
+    exit 2
+  fi
+fi
 
 REPO_ROOT="$(wh_repo_root)"
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"

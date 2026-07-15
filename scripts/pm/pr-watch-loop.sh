@@ -5,7 +5,8 @@ PR="${1:?usage: pr-watch-loop.sh <pr> [--task-uid task_uid]}"; shift
 interval="${PM_PR_WATCH_INTERVAL_SECONDS:-60}"
 max_interval="${PM_PR_WATCH_MAX_INTERVAL_SECONDS:-600}"
 max_polls="${PM_PR_WATCH_MAX_POLLS:-6}"
-for value_name in interval max_interval max_polls; do
+max_unchanged_polls="${PM_PR_WATCH_MAX_UNCHANGED_POLLS:-1}"
+for value_name in interval max_interval max_polls max_unchanged_polls; do
   value="${!value_name}"
   if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
     printf 'pr-watch-loop: %s must be a positive integer, got %q\n' "$value_name" "$value" >&2
@@ -17,6 +18,7 @@ if (( interval > max_interval )); then
   exit 64
 fi
 previous=""
+unchanged_polls=0
 for ((poll = 1; poll <= max_polls; poll++)); do
   set +e
   snapshot="$(python3 "$SCRIPT_DIR/pr-lifecycle-gate.py" "$PR" "$@" --json)"
@@ -41,6 +43,14 @@ print(hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":")).enc
       exit 0
     fi
     previous="$digest"
+    unchanged_polls=0
+  else
+    unchanged_polls=$((unchanged_polls + 1))
+    if (( unchanged_polls >= max_unchanged_polls )); then
+      printf '{"status":"external_wait","reason":"stable_pr_watch_unchanged_budget_exhausted","resume_after_seconds":%s,"polls":%s,"unchanged_polls":%s,"snapshot_digest":"%s"}\n' \
+        "$interval" "$poll" "$unchanged_polls" "$digest"
+      exit 75
+    fi
   fi
   if (( poll == max_polls )); then
     printf '{"status":"external_wait","reason":"stable_pr_watch_bound_exhausted","resume_after_seconds":%s,"polls":%s}\n' "$interval" "$max_polls"

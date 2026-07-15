@@ -2,7 +2,7 @@
 
 审计轮次: 1
 
-- 对应项目管理文档: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md`
+- 目录入口: `doc/testing/launcher/README.md`
 
 ## 1. Executive Summary
 - Problem Statement: 启动器虽然已有较多单元/定向测试，但发布前若缺少传统互联网产品视角的人工测试清单，容易遗漏“真实用户会遇到、但代码层不易暴露”的安装、配置、交互、异常恢复与兼容性问题。若清单只停留在模块级 smoke，又会把 `Explorer`、`Transfer` 这类依赖真实数据与状态迁移的功能测得过粗。
@@ -92,7 +92,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP (LMTC-1): 建立专题 PRD / project 与首版人工测试清单。
+  - MVP (LMTC-1): 建立专题规格、项目拆解与首版人工测试清单；专题完成后，本 PRD 保留当前执行口径，完成态拆解由 GitHub task evidence 与 Git 历史承接。
   - v1.1 (LMTC-2): 对齐 `P0/P1/P2`、证据要求与发布 verdict 口径。
   - v2.0 (LMTC-3): 与主测试手册、启动器审查专题建立互链并收口。
   - v2.1 (LMTC-4): 后续按逃逸缺陷持续补充清单项。

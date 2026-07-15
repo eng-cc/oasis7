@@ -8,7 +8,8 @@
 - model configuration: fill the intended/actual fields below.
 - intended model configuration: `inherit current parent selection` by default; record reason for any explicit model/reasoning request.
 - actual dispatched model/reasoning: selected model/reasoning when the tool permits and reports it; otherwise `inherited/unverified` plus connector/tool limitation, including cases where selection was requested but actual dispatch cannot be verified.
-- context delivery mode: full-thread/full-history fork by default; explicit context packet is delivery supplement/fallback only, with reason recorded.
+- context delivery mode: minimal HEAD-bound task packet by default; full-thread/full-history is escalation-only, with reason recorded.
+- task packet identity: task UID + canonical worktree + base ref + current/frozen HEAD + packet producer/time.
 - role activation: named-role selector evidence when adapter-backed, otherwise `message-assigned; adapter inactive on this surface`.
 - mandatory context checklist: fill the mandatory context checklist below.
 - mandatory context checklist:
@@ -39,7 +40,8 @@
 - model configuration: see intended/actual fields
 - intended model configuration: `inherit current parent selection`
 - actual dispatched model/reasoning: `inherited/unverified` because this dispatch surface cannot report the inherited runtime
-- context delivery mode: full-thread/full-history fork
+- context delivery mode: minimal HEAD-bound task packet
+- task packet identity: `<task_uid>` + `<canonical_worktree>` + `<base_ref>` + `<head_sha>` + `<producer/time>`
 - role activation: `message-assigned; adapter inactive on this surface`
 - mandatory context checklist: `AGENTS.md` + `.agents/roles/gameplay_designer.md` + `doc/engineering/workflow/source-of-truth.md` + `doc/game/prd.md` + `doc/game/project.md` + relevant `doc/world-simulator/**` and playability evidence + GitHub task issue evidence + `.pm/github-project-sync/tasks.json` mapping record + current branch/diff summary
 - write scope: `crates/foo/**`（disjoint）
@@ -50,7 +52,8 @@
 - context exemption: none
 
 ## Notes
+- 使用 `./scripts/pm/subagent-task-packet.py create|validate` 生成并验证不可覆盖的 packet；派工记录写入 packet 路径与 digest。
 - 一个 slice 一张卡；多角色并行时，必须逐张卡校验 disjoint scope checklist。
 - slice card 链接/引用必须回写 GitHub task issue evidence comments 对应条目；未写入 GitHub-backed task evidence 的派工不视为有效派工。
-- 除窄范围只读 explorer 且写明豁免原因外，`AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub-backed task truth 与 issue evidence 必须包含在 mandatory context checklist 中。手工显式 context packet 仅作为 fallback 交付物。
+- 除窄范围只读 explorer 且写明豁免原因外，最小 task packet 必须用精确路径/链接提供 `AGENTS.md`、对应 role card、workflow source-of-truth、当前 GitHub-backed task truth 与 issue evidence；不要把这些长文本重复嵌入 packet。full-history 只用于有记录原因的升级。
 - 标准角色名以 `.agents/roles/*.md` 为准；当前包含 `producer_system_designer`、`gameplay_designer`、`game_visual_interaction_designer`、`runtime_engineer`、`blockchain_ops_engineer`、`wasm_platform_engineer`、`agent_engineer`、`viewer_engineer`、`qa_engineer`、`repository_health_engineer`、`liveops_community`。

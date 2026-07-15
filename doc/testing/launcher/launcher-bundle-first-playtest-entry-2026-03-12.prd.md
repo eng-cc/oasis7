@@ -8,12 +8,12 @@
 
 ## 范围
 - 覆盖 `scripts/run-launcher-stack.sh --bundle-dir`、`scripts/run-producer-playtest.sh`、`scripts/run-game-test-ab.sh` 在启动器 bundle-first 场景中的职责划分。
-- 覆盖 `testing-manual.md`、启动器人工测试清单、`doc/testing/project.md`、`doc/testing/prd.index.md` 与本专题项目文档的回写要求。
+- 覆盖 `testing-manual.md`、启动器人工测试清单、`doc/testing/launcher/README.md`、`doc/testing/project.md` 与 `doc/testing/prd.index.md` 的回写要求；已完成的专题执行拆解回到 GitHub task evidence 与 Git 历史追溯。
 - 不覆盖 `oasis7_game_launcher` / `oasis7_web_launcher` 的业务功能扩展，也不新增独立第四条自动化链路。
 
 ## 接口 / 数据
 - PRD 主入口: `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`
-- 项目管理入口: `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md`
+- 目录入口: `doc/testing/launcher/README.md`
 - 模块主 PRD: `doc/testing/prd.md`
 - 模块主项目: `doc/testing/project.md`
 - 文件级索引: `doc/testing/prd.index.md`
@@ -21,12 +21,12 @@
 - 关联清单: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`
 
 ## 里程碑
-- M1 (2026-03-12): 建立启动器 bundle-first 专题三件套并回写 testing 索引。
+- M1 (2026-03-12): 建立启动器 bundle-first 专题规格与执行拆解并回写 testing 索引；完成后将当前决策收敛到本 PRD，目录分流收敛到 `doc/testing/launcher/README.md`。
 - M2 (2026-03-12): 为 bundle-first 试玩入口补齐 headed / renderer / freshness guardrail 口径与验证。
 - M3: 继续观察不同图形环境下的 bundle-first 默认稳定性，必要时再拆专项治理。
 
 ## 风险
-- 若专题 PRD 缺少 paired project 追溯或 legacy 头部章节，将直接触发文档门禁失败，导致测试结论无法放行。
+- 若当前规格、目录入口、模块项目态和索引之间失去互链，或删除完成态拆解时未保留 GitHub task evidence / Git 历史追溯，后续操作者将无法判断当前入口与历史执行边界。
 - 若 bundle-first 与源码模式口径再次混淆，制作人试玩仍可能退回开发态链路，削弱证据可信度。
 - 若 freshness / renderer 阻断规则未同步到手册与自动化，容易重复出现环境阻断与真实玩法回归混淆。
 
@@ -109,7 +109,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP (LBFP-1): 建立专题 PRD / design / project，并更新 testing 主索引。
+  - MVP (LBFP-1): 建立专题规格、设计与项目拆解并更新 testing 主索引；专题完成后，当前设计与验收口径并入本 PRD，完成态拆解由 GitHub task evidence 与 Git 历史承接。
   - v1.1 (LBFP-2): 为 `run-launcher-stack.sh` 增加 `--bundle-dir` 并同步帮助文本。
   - v1.2 (LBFP-3): 更新主手册与人工清单，将 bundle-first 明确为人工验收默认入口。
   - v1.3 (LBFP-4): 完成 bundle 实机闭环验证与 devlog 收口。
