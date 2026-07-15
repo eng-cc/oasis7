@@ -19,7 +19,7 @@ const TEST_SOURCE_LINE_LIMIT = 1600;
 
 const knownLineDebt = new Map(Object.entries({
   "crates/oasis7_viewer/viewer.html": {
-    maxLines: 2804,
+    maxLines: 2803,
     owner: "viewer_engineer",
     reason: "this bounded auth-diagnostic hierarchy polish adds one scoped style rule while preserving the canonical and compat HTML contract; extracting unrelated shell styles would broaden the task",
     nextTrigger: "the next Viewer inline-style or document-shell behavior change must extract a coherent style/token boundary or record a narrower owner-tagged exemption",
