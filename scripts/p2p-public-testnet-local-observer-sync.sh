@@ -1186,25 +1186,26 @@ seed_local_state_from_remote() {
 localize_manifest_runtime_refs() {
   local manifest_source=$1
   local manifest_dest=$2
+  local governance_stage=${3:-}
 
-  python3 - "$manifest_source" "$manifest_dest" "$repo_root" <<'PY'
+  python3 - "$manifest_source" "$manifest_dest" "$repo_root" "$governance_stage" <<'PY'
 import json
 import os
 import shutil
 import sys
 
-manifest_source, manifest_dest, repo_root = sys.argv[1:4]
+manifest_source, manifest_dest, repo_root, governance_stage = sys.argv[1:5]
 manifest_dest = os.path.abspath(manifest_dest)
 manifest_dir = os.path.dirname(manifest_dest)
 manifest_source = os.path.abspath(manifest_source)
 manifest_source_dir = os.path.dirname(manifest_source)
 
-def resolve_ref(raw_ref):
+def resolve_ref(raw_ref, context_dir=manifest_source_dir):
     if os.path.isabs(raw_ref):
         return raw_ref
     candidates = [
-        os.path.join(manifest_source_dir, raw_ref),
-        os.path.join(os.path.dirname(manifest_source_dir), raw_ref),
+        os.path.join(context_dir, raw_ref),
+        os.path.join(os.path.dirname(context_dir), raw_ref),
         os.path.join(repo_root, raw_ref),
     ]
     for candidate in candidates:
@@ -1216,6 +1217,7 @@ with open(manifest_source, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 runtime_refs = data.get("runtime_refs", {})
+localized_sources = {}
 for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref"):
     ref = runtime_refs.get(key)
     if not ref:
@@ -1223,11 +1225,54 @@ for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref")
     source = resolve_ref(ref)
     if not os.path.isfile(source):
         raise SystemExit(f"missing manifest runtime ref source: {source}")
+    source = os.path.abspath(source)
     target_name = os.path.basename(ref)
     target = os.path.join(manifest_dir, target_name)
     os.makedirs(os.path.dirname(target), exist_ok=True)
-    shutil.copy2(source, target)
+    if source != os.path.abspath(target):
+        shutil.copy2(source, target)
+    localized_sources[key] = source
     runtime_refs[key] = target_name
+
+genesis_ref = runtime_refs.get("genesis_ref")
+genesis_source = localized_sources.get("genesis_ref")
+if genesis_ref and genesis_source:
+    genesis_path = os.path.join(manifest_dir, genesis_ref)
+    with open(genesis_path, "r", encoding="utf-8") as fh:
+        genesis = json.load(fh)
+    bootstrap_refs = genesis.get("governance_bootstrap_refs")
+    if isinstance(bootstrap_refs, dict):
+        evidence_dir = os.path.join(manifest_dir, "doc", "testing", "evidence")
+        target_sources = {}
+        for key, ref in bootstrap_refs.items():
+            if not isinstance(ref, str) or not ref:
+                continue
+            source = os.path.abspath(resolve_ref(ref, os.path.dirname(genesis_source)))
+            if not os.path.isfile(source):
+                raise SystemExit(f"missing genesis governance ref source for {key}: {source}")
+            target_name = os.path.basename(os.path.normpath(ref))
+            if not target_name or target_name in (".", os.path.sep):
+                raise SystemExit(f"invalid genesis governance ref for {key}: {ref}")
+            target = os.path.abspath(os.path.join(evidence_dir, target_name))
+            previous_source = target_sources.get(target)
+            if previous_source and previous_source != source:
+                raise SystemExit(
+                    f"genesis governance refs collide at localized target {target}: "
+                    f"{previous_source} and {source}"
+                )
+            target_sources[target] = source
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            staged_source = os.path.join(governance_stage, target_name) if governance_stage else source
+            if not os.path.isfile(staged_source):
+                raise SystemExit(f"staged genesis governance ref source missing for {key}: {staged_source}")
+            if os.path.abspath(staged_source) != target:
+                shutil.copy2(staged_source, target)
+            if not os.path.isfile(target):
+                raise SystemExit(f"localized genesis governance ref target missing for {key}: {target}")
+            bootstrap_refs[key] = target
+        with open(genesis_path, "w", encoding="utf-8") as fh:
+            json.dump(genesis, fh, ensure_ascii=True, indent=2)
+            fh.write("\n")
 
 for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
     ref = runtime_refs.get(key)
@@ -1273,6 +1318,67 @@ if bundle_ref:
 with open(manifest_dest, "w", encoding="utf-8") as fh:
     json.dump(data, fh, ensure_ascii=True, indent=2)
     fh.write("\n")
+PY
+}
+
+preflight_manifest_governance_refs() {
+  local manifest_source=$1
+  local stage_dir=$2
+
+  python3 - "$manifest_source" "$repo_root" "$stage_dir" <<'PY'
+import hashlib
+import json
+import os
+import shutil
+import sys
+
+manifest_source, repo_root, stage_dir = map(os.path.abspath, sys.argv[1:4])
+manifest_dir = os.path.dirname(manifest_source)
+
+def resolve_ref(raw_ref, context_dir):
+    if os.path.isabs(raw_ref):
+        return os.path.abspath(raw_ref)
+    candidates = (
+        os.path.join(context_dir, raw_ref),
+        os.path.join(os.path.dirname(context_dir), raw_ref),
+        os.path.join(repo_root, raw_ref),
+    )
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return os.path.abspath(candidate)
+    return os.path.abspath(candidates[0])
+
+with open(manifest_source, "r", encoding="utf-8") as fh:
+    manifest = json.load(fh)
+genesis_ref = manifest.get("runtime_refs", {}).get("genesis_ref")
+if not genesis_ref:
+    raise SystemExit("manifest missing runtime_refs.genesis_ref")
+genesis_source = resolve_ref(str(genesis_ref), manifest_dir)
+if not os.path.isfile(genesis_source):
+    raise SystemExit(f"missing manifest runtime ref source: {genesis_source}")
+with open(genesis_source, "r", encoding="utf-8") as fh:
+    genesis = json.load(fh)
+refs = genesis.get("governance_bootstrap_refs", {})
+if not isinstance(refs, dict):
+    raise SystemExit("genesis governance_bootstrap_refs must be an object")
+targets = {}
+for key, raw_ref in refs.items():
+    if not isinstance(raw_ref, str) or not raw_ref:
+        continue
+    source = resolve_ref(raw_ref, os.path.dirname(genesis_source))
+    if not os.path.isfile(source):
+        raise SystemExit(f"missing genesis governance ref source for {key}: {source}")
+    target_name = os.path.basename(os.path.normpath(raw_ref))
+    target = os.path.join(stage_dir, target_name)
+    previous = targets.get(target_name)
+    if previous and previous != source:
+        raise SystemExit(
+            f"genesis governance refs collide at localized target {target_name}: {previous} and {source}"
+        )
+    targets[target_name] = source
+    shutil.copy2(source, target)
+    if hashlib.sha256(open(source, "rb").read()).digest() != hashlib.sha256(open(target, "rb").read()).digest():
+        raise SystemExit(f"staged genesis governance ref integrity mismatch for {key}: {source}")
 PY
 }
 
@@ -1394,6 +1500,15 @@ case "$mode" in
       backup_dir="$local_stack_root/backups/local-observer-contract-sync-$(date +%Y%m%d-%H%M%S)"
     fi
 
+    governance_stage=""
+    if [[ -n "$manifest_source" ]]; then
+      require_file "$manifest_source"
+      [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
+      governance_stage=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-observer-governance-stage.XXXXXX")
+      trap 'rm -rf "${governance_stage:-}"' EXIT
+      preflight_manifest_governance_refs "$manifest_source" "$governance_stage"
+    fi
+
     mkdir -p "$backup_dir"
 
     cp "$local_env" "$backup_dir/node.env.before"
@@ -1406,13 +1521,11 @@ case "$mode" in
       "$genesis_validator_registry_path"
 
     if [[ -n "$manifest_source" ]]; then
-      require_file "$manifest_source"
-      [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
       mkdir -p "$(dirname "$manifest_dest")"
       if [[ -f "$manifest_dest" ]]; then
         cp "$manifest_dest" "$backup_dir/$(basename "$manifest_dest").before"
       fi
-      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest"
+      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest" "$governance_stage"
     fi
 
     if [[ -n "$start_script_dest" ]]; then

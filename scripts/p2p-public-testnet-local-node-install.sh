@@ -139,6 +139,60 @@ if [[ -n "$state_backup_dir" && "$state_mode" != "reset" ]]; then
   die "--state-backup-dir requires --reset-state"
 fi
 
+governance_stage=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-local-node-governance-stage.XXXXXX")
+trap 'rm -rf "$governance_stage"' EXIT
+python3 - "$source_manifest" "$repo_root" "$governance_stage" <<'PY'
+import hashlib
+import json
+import shutil
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+repo_root = Path(sys.argv[2])
+stage_dir = Path(sys.argv[3])
+
+def resolve_ref(context_path: Path, raw_ref: str) -> Path:
+    candidate = Path(raw_ref).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    candidates = (context_path.parent / candidate, context_path.parent.parent / candidate, repo_root / candidate)
+    for item in candidates:
+        if item.exists():
+            return item.resolve()
+    return candidates[0].resolve()
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+genesis_ref = manifest.get("runtime_refs", {}).get("genesis_ref")
+if not genesis_ref:
+    raise SystemExit("manifest missing runtime_refs.genesis_ref")
+genesis_source = resolve_ref(manifest_path, str(genesis_ref))
+if not genesis_source.is_file():
+    raise SystemExit(f"manifest runtime ref source missing: {genesis_source}")
+genesis = json.loads(genesis_source.read_text(encoding="utf-8"))
+refs = genesis.get("governance_bootstrap_refs", {})
+if not isinstance(refs, dict):
+    raise SystemExit("genesis governance_bootstrap_refs must be an object")
+targets: dict[str, Path] = {}
+for key, raw_ref in refs.items():
+    if not isinstance(raw_ref, str) or not raw_ref:
+        continue
+    source = resolve_ref(genesis_source, raw_ref)
+    if not source.is_file():
+        raise SystemExit(f"genesis governance ref source missing for {key}: {source}")
+    target_name = Path(raw_ref).name
+    previous = targets.get(target_name)
+    if previous is not None and previous != source:
+        raise SystemExit(
+            f"genesis governance refs collide at localized target {target_name}: {previous} and {source}"
+        )
+    targets[target_name] = source
+    target = stage_dir / target_name
+    shutil.copy2(source, target)
+    if hashlib.sha256(source.read_bytes()).digest() != hashlib.sha256(target.read_bytes()).digest():
+        raise SystemExit(f"staged genesis governance ref integrity mismatch for {key}: {source}")
+PY
+
 path_has_state() {
   local path=$1
   [[ -e "$path" ]] || return 1
@@ -190,7 +244,7 @@ mkdir -p "$node_root/bin" "$node_root/config" "$node_root/logs"
 install -m 0755 "$runtime_build_ref" "$node_root/bin/oasis7_chain_runtime"
 install -m 0755 "$start_script_source" "$node_root/bin/start-node.sh"
 
-python3 - "$source_env" "$source_manifest" "$node_root" <<'PY'
+python3 - "$source_env" "$source_manifest" "$node_root" "$repo_root" "$governance_stage" <<'PY'
 from __future__ import annotations
 
 import hashlib
@@ -204,6 +258,8 @@ from pathlib import Path
 source_env = Path(sys.argv[1])
 source_manifest = Path(sys.argv[2])
 node_root = Path(sys.argv[3])
+repo_root = Path(sys.argv[4])
+governance_stage = Path(sys.argv[5])
 
 
 def parse_env(path: Path) -> dict[str, str]:
@@ -250,7 +306,7 @@ def resolve_ref(manifest_path: Path, raw_ref: str) -> Path:
     candidates = [
         manifest_path.parent / candidate,
         manifest_path.parent.parent / candidate,
-        Path.cwd() / candidate,
+        repo_root / candidate,
     ]
     for item in candidates:
         if item.exists():
@@ -269,6 +325,7 @@ runtime_sha = sha256_file(runtime_bin)
 
 manifest = json.loads(source_manifest.read_text(encoding="utf-8"))
 runtime_refs = manifest.setdefault("runtime_refs", {})
+localized_sources: dict[str, Path] = {}
 
 for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref"):
     raw_ref = runtime_refs.get(key)
@@ -279,6 +336,7 @@ for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref")
         raise SystemExit(f"manifest runtime ref source missing: {source}")
     target = node_root / source.name
     copy_if_file(source, target)
+    localized_sources[key] = source
     runtime_refs[key] = target.name
 
 for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
@@ -299,20 +357,43 @@ for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
     runtime_refs[key] = str(raw_ref)
 
 genesis_ref = runtime_refs.get("genesis_ref")
-if genesis_ref:
+genesis_source = localized_sources.get("genesis_ref")
+if genesis_ref and genesis_source:
     genesis_path = node_root / str(genesis_ref)
     genesis = json.loads(genesis_path.read_text(encoding="utf-8"))
     bootstrap_refs = genesis.get("governance_bootstrap_refs", {})
     if isinstance(bootstrap_refs, dict):
-        for raw_ref in bootstrap_refs.values():
+        evidence_dir = node_root / "config" / "doc" / "testing" / "evidence"
+        target_sources: dict[Path, Path] = {}
+        for key, raw_ref in bootstrap_refs.items():
             if not isinstance(raw_ref, str) or not raw_ref:
                 continue
-            source = Path(raw_ref).expanduser()
-            if not source.is_absolute():
-                source = Path.cwd() / source
-            if source.is_file():
-                target = node_root / raw_ref
-                copy_if_file(source, target)
+            source = resolve_ref(genesis_source, raw_ref).resolve()
+            if not source.is_file():
+                raise SystemExit(f"genesis governance ref source missing for {key}: {source}")
+            target_name = Path(raw_ref).name
+            if not target_name:
+                raise SystemExit(f"invalid genesis governance ref for {key}: {raw_ref}")
+            target = (evidence_dir / target_name).resolve()
+            previous_source = target_sources.get(target)
+            if previous_source is not None and previous_source != source:
+                raise SystemExit(
+                    f"genesis governance refs collide at localized target {target}: "
+                    f"{previous_source} and {source}"
+                )
+            target_sources[target] = source
+            staged_source = governance_stage / target_name
+            if not staged_source.is_file():
+                raise SystemExit(f"staged genesis governance ref source missing for {key}: {staged_source}")
+            if staged_source.resolve() != target:
+                copy_if_file(staged_source, target)
+            if not target.is_file():
+                raise SystemExit(f"localized genesis governance ref target missing for {key}: {target}")
+            bootstrap_refs[key] = str(target)
+        genesis_path.write_text(
+            json.dumps(genesis, ensure_ascii=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
 bundle_ref = runtime_refs.get("release_candidate_bundle_ref")
 if not bundle_ref:

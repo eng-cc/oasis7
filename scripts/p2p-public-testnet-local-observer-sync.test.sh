@@ -9,6 +9,9 @@ test_case=${OASIS7_OBSERVER_SYNC_TEST_CASE:-all}
 if [[ "$test_case" == "all" ]]; then
   for test_case in \
     canonical_layout \
+    governance_refs_localized \
+    governance_missing_source_no_mutation \
+    governance_basename_collision_no_mutation \
     reset_owned_restore_retry \
     reset_owned_restore_retry_path_shim \
     corrupt_file_metadata \
@@ -23,6 +26,9 @@ if [[ "$test_case" == "all" ]]; then
   exit 0
 fi
 if [[ "$test_case" != "canonical_layout" \
+  && "$test_case" != "governance_refs_localized" \
+  && "$test_case" != "governance_missing_source_no_mutation" \
+  && "$test_case" != "governance_basename_collision_no_mutation" \
   && "$test_case" != "reset_owned_restore_retry" \
   && "$test_case" != "reset_owned_restore_retry_path_shim" \
   && "$test_case" != "corrupt_file_metadata" \
@@ -160,7 +166,10 @@ EOF
   exit 0
 fi
 
-if [[ "$test_case" == "canonical_layout" ]]; then
+if [[ "$test_case" == "canonical_layout" \
+  || "$test_case" == "governance_refs_localized" \
+  || "$test_case" == "governance_missing_source_no_mutation" \
+  || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
   sidecar_ref="generated-world/generated-scenario-world"
   provenance_ref="generated-world/world-generation-provenance.json"
 else
@@ -216,7 +225,7 @@ REWARD_RUNTIME_EPOCH_DURATION_SECS=60
 REWARD_POINTS_PER_CREDIT=100
 REWARD_RUNTIME_AUTO_REDEEM=0
 NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:50
-NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:65c27d,triad-testnet-storage:858e97
+NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,triad-testnet-storage:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
 
 cat >"$tmp_dir/storage.env" <<EOF
@@ -238,7 +247,7 @@ REWARD_RUNTIME_EPOCH_DURATION_SECS=60
 REWARD_POINTS_PER_CREDIT=100
 REWARD_RUNTIME_AUTO_REDEEM=0
 NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:50
-NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:65c27d,triad-testnet-storage:858e97
+NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,triad-testnet-storage:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
 
 cat >"$manifest_path" <<EOF
@@ -359,6 +368,172 @@ bundle["world_generation_provenance"].update(
 )
 bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
 PY
+
+if [[ "$test_case" == "governance_refs_localized" \
+  || "$test_case" == "governance_missing_source_no_mutation" \
+  || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+  build_worktree="$tmp_dir/build-worktree"
+  build_config="$build_worktree/config"
+  build_evidence="$build_worktree/doc/testing/evidence"
+  localized_config="$tmp_dir/localized-observer/config"
+  mkdir -p "$build_config" "$build_evidence" "$localized_config"
+
+  for evidence_name in \
+    governance-public-signers.json \
+    liveops-public-signers.json \
+    signer-truth-binding.md \
+    genesis-validator-registry.json \
+    governed-bootstrap-topology.md; do
+    printf 'governed evidence: %s\n' "$evidence_name" >"$build_evidence/$evidence_name"
+  done
+
+  cat >"$build_config/genesis.json" <<EOF
+{
+  "schema_version": "test",
+  "governance_bootstrap_refs": {
+    "governance_public_manifest_ref": "$build_evidence/governance-public-signers.json",
+    "liveops_public_manifest_ref": "$build_evidence/liveops-public-signers.json",
+    "binding_notes_ref": "$build_evidence/signer-truth-binding.md",
+    "genesis_validator_registry_ref": "$build_evidence/genesis-validator-registry.json",
+    "topology_ref": "$build_evidence/governed-bootstrap-topology.md"
+  }
+}
+EOF
+  cat >"$build_config/manifest.json" <<EOF
+{
+  "network_id": "public_testnet",
+  "runtime_refs": {
+    "release_candidate_bundle_ref": "$bundle_path",
+    "genesis_ref": "$build_config/genesis.json",
+    "generated_world_sidecar_ref": "$sidecar_path",
+    "world_generation_provenance_ref": "$provenance_path"
+  }
+}
+EOF
+
+  localized_manifest="$localized_config/manifest.json"
+  if [[ "$test_case" == "governance_missing_source_no_mutation" ]]; then
+    rm "$build_evidence/liveops-public-signers.json"
+  elif [[ "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+    collision_source="$build_worktree/collision/governance-public-signers.json"
+    mkdir -p "$(dirname "$collision_source")"
+    printf 'different governed evidence\n' >"$collision_source"
+    python3 - "$build_config/genesis.json" "$collision_source" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["governance_bootstrap_refs"]["liveops_public_manifest_ref"] = sys.argv[2]
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+  fi
+
+  apply_localization() {
+    ./scripts/p2p-public-testnet-local-observer-sync.sh apply \
+      --local-env "$tmp_dir/local.env" \
+      --sequencer-env "$tmp_dir/sequencer.env" \
+      --storage-env "$tmp_dir/storage.env" \
+      --manifest-path "$localized_manifest" \
+      --manifest-source "$build_config/manifest.json" \
+      --manifest-dest "$localized_manifest" \
+      --start-script-dest "$tmp_dir/localized-observer/bin/start-node.sh" \
+      --backup-dir "$tmp_dir/localization-backup" >/dev/null
+  }
+
+  if [[ "$test_case" == "governance_missing_source_no_mutation" \
+    || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+    registry_path="$local_stack/config/genesis-validator-registry.json"
+    start_script_path="$tmp_dir/localized-observer/bin/start-node.sh"
+    mkdir -p "$(dirname "$registry_path")" "$(dirname "$start_script_path")"
+    printf 'original manifest\n' >"$localized_manifest"
+    printf 'original registry\n' >"$registry_path"
+    printf 'original start script\n' >"$start_script_path"
+    local_env_sha=$(shasum -a 256 "$tmp_dir/local.env" | awk '{print $1}')
+    manifest_sha=$(shasum -a 256 "$localized_manifest" | awk '{print $1}')
+    registry_sha=$(shasum -a 256 "$registry_path" | awk '{print $1}')
+    start_script_sha=$(shasum -a 256 "$start_script_path" | awk '{print $1}')
+
+    if apply_localization >"$tmp_dir/preflight.stdout" 2>"$tmp_dir/preflight.stderr"; then
+      echo "expected governed-ref preflight failure before observer mutation" >&2
+      exit 1
+    fi
+    if [[ "$test_case" == "governance_missing_source_no_mutation" ]]; then
+      grep -q 'missing genesis governance ref source' "$tmp_dir/preflight.stderr"
+    else
+      grep -q 'genesis governance refs collide at localized target' "$tmp_dir/preflight.stderr"
+    fi
+    mutation_detected=0
+    if [[ "$(shasum -a 256 "$tmp_dir/local.env" | awk '{print $1}')" != "$local_env_sha" ]]; then
+      echo "observer preflight failure mutated node.env" >&2
+      mutation_detected=1
+    fi
+    if [[ "$(shasum -a 256 "$localized_manifest" | awk '{print $1}')" != "$manifest_sha" ]]; then
+      echo "observer preflight failure mutated manifest config" >&2
+      mutation_detected=1
+    fi
+    if [[ "$(shasum -a 256 "$registry_path" | awk '{print $1}')" != "$registry_sha" ]]; then
+      echo "observer preflight failure mutated genesis validator registry" >&2
+      mutation_detected=1
+    fi
+    if [[ "$(shasum -a 256 "$start_script_path" | awk '{print $1}')" != "$start_script_sha" ]]; then
+      echo "observer preflight failure mutated start script" >&2
+      mutation_detected=1
+    fi
+    if [[ -e "$tmp_dir/localization-backup" ]]; then
+      echo "observer preflight failure created backup/mutation staging" >&2
+      mutation_detected=1
+    fi
+    if [[ -e "$localized_config/doc/testing/evidence" ]]; then
+      echo "observer preflight failure partially copied governed evidence" >&2
+      mutation_detected=1
+    fi
+    if [[ "$mutation_detected" -ne 0 ]]; then
+      exit 1
+    fi
+    echo "ok: observer sync $test_case rejects before mutation"
+    exit 0
+  fi
+
+  apply_localization
+  localized_genesis="$localized_config/genesis.json"
+  first_sha=$(shasum -a 256 "$localized_genesis" | awk '{print $1}')
+  apply_localization
+  test "$(shasum -a 256 "$localized_genesis" | awk '{print $1}')" = "$first_sha"
+
+  python3 - "$localized_genesis" "$localized_config" "$build_worktree" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+genesis_path = Path(sys.argv[1])
+config_dir = Path(sys.argv[2])
+build_worktree = sys.argv[3]
+genesis = json.loads(genesis_path.read_text(encoding="utf-8"))
+refs = genesis["governance_bootstrap_refs"]
+expected_names = {
+    "governance_public_manifest_ref": "governance-public-signers.json",
+    "liveops_public_manifest_ref": "liveops-public-signers.json",
+    "binding_notes_ref": "signer-truth-binding.md",
+    "genesis_validator_registry_ref": "genesis-validator-registry.json",
+    "topology_ref": "governed-bootstrap-topology.md",
+}
+assert set(refs) == set(expected_names), f"unexpected governed ref keys: {sorted(refs)}"
+for key, name in expected_names.items():
+    expected = config_dir / "doc" / "testing" / "evidence" / name
+    assert refs[key] == str(expected), f"{key} was not localized: {refs[key]!r}"
+    assert expected.is_file(), f"localized governed evidence missing: {expected}"
+assert build_worktree not in genesis_path.read_text(encoding="utf-8"), (
+    "build-worktree absolute governance ref survived observer sync"
+)
+assert not genesis_path.read_bytes().startswith(b"\xef\xbb\xbf"), (
+    "localized observer genesis must be UTF-8 without BOM"
+)
+PY
+  echo "ok: observer sync localizes governed bootstrap refs idempotently"
+  exit 0
+fi
 
 if [[ "$test_case" == "corrupt_file_metadata" \
   || "$test_case" == "corrupt_tree_metadata" \

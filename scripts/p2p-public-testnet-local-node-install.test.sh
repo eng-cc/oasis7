@@ -3,15 +3,25 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-local-node-install-test.XXXXXX")"
-REPO_TMP_FIXTURE="$ROOT_DIR/.tmp/local-node-install-test"
-trap 'rm -rf "$TMP_DIR" "$REPO_TMP_FIXTURE"' EXIT
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 source_stack="$TMP_DIR/source-stack"
 node_root="$TMP_DIR/dedicated-node"
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 mkdir -p "$source_stack/config"
 mkdir -p "$source_stack/generated-world/generated-scenario-world"
-mkdir -p "$REPO_TMP_FIXTURE"
+
+build_worktree="$TMP_DIR/build-worktree"
+build_evidence="$build_worktree/doc/testing/evidence"
+mkdir -p "$build_evidence"
+for evidence_name in \
+  governance-public-signers.json \
+  liveops-public-signers.json \
+  signer-truth-binding.md \
+  genesis-validator-registry.json \
+  governed-bootstrap-topology.md; do
+  printf 'governed evidence: %s\n' "$evidence_name" >"$build_evidence/$evidence_name"
+done
 
 printf 'runtime-v1\n' >"$TMP_DIR/oasis7_chain_runtime"
 chmod +x "$TMP_DIR/oasis7_chain_runtime"
@@ -41,14 +51,15 @@ EOF
 printf '{"snapshot":"generated"}\n' >"$source_stack/generated-world/generated-scenario-world/snapshot.json"
 printf '{"journal":"generated"}\n' >"$source_stack/generated-world/generated-scenario-world/journal.json"
 printf '{"scenario_id":"asteroid_fragment_bootstrap"}\n' >"$source_stack/generated-world/world-generation-provenance.json"
-cat >"$REPO_TMP_FIXTURE/governance-public-signers.json" <<'EOF'
-{"signers":[]}
-EOF
-cat >"$source_stack/genesis.json" <<'EOF'
+cat >"$source_stack/genesis.json" <<EOF
 {
   "schema_version": "test",
   "governance_bootstrap_refs": {
-    "governance_public_manifest_ref": ".tmp/local-node-install-test/governance-public-signers.json"
+    "governance_public_manifest_ref": "$build_evidence/governance-public-signers.json",
+    "liveops_public_manifest_ref": "$build_evidence/liveops-public-signers.json",
+    "binding_notes_ref": "$build_evidence/signer-truth-binding.md",
+    "genesis_validator_registry_ref": "$build_evidence/genesis-validator-registry.json",
+    "topology_ref": "$build_evidence/governed-bootstrap-topology.md"
   }
 }
 EOF
@@ -97,7 +108,6 @@ test -f "$node_root_abs/runtime-bundle.json"
 test -f "$node_root_abs/generated-world/generated-scenario-world/snapshot.json"
 test -f "$node_root_abs/generated-world/generated-scenario-world/journal.json"
 test -f "$node_root_abs/generated-world/world-generation-provenance.json"
-test -f "$node_root_abs/.tmp/local-node-install-test/governance-public-signers.json"
 test -f "$node_root_abs/config.toml"
 test -f "$node_root_abs/config/genesis-validator-registry.json"
 test -f "$node_root_abs/oasis7.testnet.smoke.plist"
@@ -117,6 +127,7 @@ jq -e \
   '.generated_world_sidecar.resolved_path == $sidecar
     and .world_generation_provenance.resolved_path == $provenance' \
   "$node_root_abs/runtime-bundle.json" >/dev/null
+genesis_sha_after_first=$(shasum -a 256 "$node_root_abs/genesis.json" | awk '{print $1}')
 
 grep -q "^STACK_ROOT=$node_root_abs$" "$node_root_abs/node.env"
 grep -q "^BIN=$node_root_abs/bin/oasis7_chain_runtime$" "$node_root_abs/node.env"
@@ -172,6 +183,8 @@ grep -q 'conflicts with --preserve-state' <<<"$conflicting_output"
   --node-root "$node_root" \
   --preserve-state >/dev/null
 
+test "$(shasum -a 256 "$node_root_abs/genesis.json" | awk '{print $1}')" = "$genesis_sha_after_first"
+
 test -f "$node_root_abs/replication-root/node_pos_state.json"
 test -f "$node_root_abs/execution-records/latest.json"
 test -f "$node_root_abs/store/blobs/old"
@@ -200,5 +213,137 @@ test ! -e "$node_root_abs/store/blobs/old"
 test ! -e "$node_root_abs/world-simulator-mirror/snapshot.json"
 test ! -e "$node_root_abs/world/snapshot.json"
 test ! -e "$node_root_abs/runtime-root/reward-runtime-execution-bridge-state.json"
+
+test "$(shasum -a 256 "$node_root_abs/genesis.json" | awk '{print $1}')" = "$genesis_sha_after_first"
+python3 - "$node_root_abs" "$build_worktree" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+node_root = Path(sys.argv[1])
+build_worktree = sys.argv[2]
+genesis_path = node_root / "genesis.json"
+genesis = json.loads(genesis_path.read_text(encoding="utf-8"))
+refs = genesis["governance_bootstrap_refs"]
+expected_names = {
+    "governance_public_manifest_ref": "governance-public-signers.json",
+    "liveops_public_manifest_ref": "liveops-public-signers.json",
+    "binding_notes_ref": "signer-truth-binding.md",
+    "genesis_validator_registry_ref": "genesis-validator-registry.json",
+    "topology_ref": "governed-bootstrap-topology.md",
+}
+assert set(refs) == set(expected_names), f"unexpected governed ref keys: {sorted(refs)}"
+for key, name in expected_names.items():
+    expected = node_root / "config" / "doc" / "testing" / "evidence" / name
+    assert refs[key] == str(expected), f"{key} was not localized: {refs[key]!r}"
+    assert expected.is_file(), f"localized governed evidence missing: {expected}"
+assert build_worktree not in genesis_path.read_text(encoding="utf-8"), (
+    "build-worktree absolute governance ref survived local install"
+)
+assert not genesis_path.read_bytes().startswith(b"\xef\xbb\xbf"), (
+    "localized installed genesis must be UTF-8 without BOM"
+)
+PY
+
+tree_digest() {
+  python3 - "$1" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+
+root = Path(sys.argv[1])
+digest = hashlib.sha256()
+if root.exists():
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            kind = b"link"
+            payload = path.readlink().as_posix().encode()
+        elif path.is_dir():
+            kind = b"dir"
+            payload = b""
+        else:
+            kind = b"file"
+            payload = path.read_bytes()
+        digest.update(kind + b"\0" + relative.encode() + b"\0" + payload + b"\0")
+print(digest.hexdigest())
+PY
+}
+
+negative_contract_failures=0
+for negative_case in missing_source basename_collision; do
+  negative_source="$TMP_DIR/$negative_case-source"
+  negative_root="$TMP_DIR/$negative_case-node"
+  negative_backup="$TMP_DIR/$negative_case-backup"
+  cp -R "$source_stack" "$negative_source"
+  sed -i.bak "s|^STACK_ROOT=.*|STACK_ROOT=$negative_source|" "$negative_source/node.env"
+  rm "$negative_source/node.env.bak"
+
+  if [[ "$negative_case" == "missing_source" ]]; then
+    python3 - "$negative_source/genesis.json" "$negative_source/missing-governance.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+data["governance_bootstrap_refs"]["liveops_public_manifest_ref"] = sys.argv[2]
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+    expected_failure='genesis governance ref source missing'
+  else
+    first_source="$negative_source/collision-a/shared-governance.json"
+    second_source="$negative_source/collision-b/shared-governance.json"
+    mkdir -p "$(dirname "$first_source")" "$(dirname "$second_source")"
+    printf 'first\n' >"$first_source"
+    printf 'second\n' >"$second_source"
+    python3 - "$negative_source/genesis.json" "$first_source" "$second_source" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+refs = data["governance_bootstrap_refs"]
+refs["governance_public_manifest_ref"] = sys.argv[2]
+refs["liveops_public_manifest_ref"] = sys.argv[3]
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+    expected_failure='genesis governance refs collide at localized target'
+  fi
+
+  mkdir -p "$negative_root/world" "$negative_root/config"
+  printf 'persisted state must survive\n' >"$negative_root/world/sentinel"
+  printf 'existing config must survive\n' >"$negative_root/config/sentinel"
+  before_digest=$(tree_digest "$negative_root")
+  if "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+    --source-env "$negative_source/node.env" \
+    --source-manifest "$negative_source/config/manifest.json" \
+    --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+    --node-root "$negative_root" \
+    --reset-state \
+    --state-backup-dir "$negative_backup" \
+    >"$TMP_DIR/$negative_case.stdout" 2>"$TMP_DIR/$negative_case.stderr"; then
+    echo "expected $negative_case governed-ref preflight failure" >&2
+    exit 1
+  fi
+  grep -q "$expected_failure" "$TMP_DIR/$negative_case.stderr"
+  mutation_detected=0
+  if [[ "$(tree_digest "$negative_root")" != "$before_digest" ]]; then
+    echo "local install $negative_case preflight mutated node root" >&2
+    mutation_detected=1
+  fi
+  if [[ -e "$negative_backup" ]]; then
+    echo "local install $negative_case preflight moved persisted state into backup" >&2
+    mutation_detected=1
+  fi
+  if [[ "$mutation_detected" -ne 0 ]]; then
+    negative_contract_failures=1
+  fi
+done
+
+if [[ "$negative_contract_failures" -ne 0 ]]; then
+  exit 1
+fi
 
 echo "ok: local testnet node install pins runtime artifact under dedicated root"

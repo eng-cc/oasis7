@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -15,6 +16,15 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[1]
 WINDOWS_GOVERNED_BUNDLE = (
     r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"
+)
+WINDOWS_GOVERNED_GENESIS = (
+    r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json"
+)
+WINDOWS_GOVERNED_MANIFEST = (
+    r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-manifest-2026-06-06.windows.json"
+)
+WINDOWS_GOVERNED_BOOTSTRAP = (
+    r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt"
 )
 
 
@@ -105,6 +115,104 @@ def require_verified_files(platform: str, platform_dir: Path, buildinfo: Path, a
     for rel_name in required:
         if rel_name not in verified_set:
             die(f"{platform} checksum file does not cover required artifact: {rel_name}")
+
+
+def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tuple[Path, str]]:
+    bundle = platform_dir / WINDOWS_GOVERNED_BUNDLE.rsplit("\\", 1)[-1]
+    genesis = platform_dir / WINDOWS_GOVERNED_GENESIS.rsplit("\\", 1)[-1]
+    manifest = platform_dir / WINDOWS_GOVERNED_MANIFEST.rsplit("\\", 1)[-1]
+    bootstrap = platform_dir / WINDOWS_GOVERNED_BOOTSTRAP.rsplit("\\", 1)[-1]
+    for path in (bundle, genesis, manifest, bootstrap):
+        if not path.is_file():
+            die(f"missing Windows governed bootstrap artifact: {path}")
+    bundle_data = json.loads(bundle.read_text(encoding="utf-8"))
+    manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+    genesis_data = json.loads(genesis.read_text(encoding="utf-8"))
+    refs = genesis_data.get("governance_bootstrap_refs")
+    if not isinstance(refs, dict):
+        die(f"Windows governed genesis missing governance_bootstrap_refs: {genesis}")
+    public_testnet = manifest_data.get("tier") == "public_testnet" or bundle_data.get("track") == "public_testnet"
+    runtime_refs = manifest_data.get("runtime_refs")
+    if not isinstance(runtime_refs, dict):
+        die(f"Windows governed manifest missing runtime_refs: {manifest}")
+    if public_testnet:
+        for field in ("generated_world_sidecar", "world_generation_provenance"):
+            if not isinstance(bundle_data.get(field), dict) or not runtime_refs.get(f"{field}_ref"):
+                die(f"public_testnet Windows source missing {field}")
+
+    files_by_remote: dict[str, Path] = {
+        bundle.name: bundle,
+        genesis.name: genesis,
+        manifest.name: manifest,
+        bootstrap.name: bootstrap,
+    }
+
+    def add_file(source: Path, remote_relative: str) -> None:
+        source = source.resolve()
+        if not source.is_file():
+            die(f"Windows runtime truth source missing: {source}")
+        previous = files_by_remote.get(remote_relative)
+        if previous is not None and previous.resolve() != source:
+            die(f"Windows runtime truth paths collide at localized target {remote_relative}")
+        files_by_remote[remote_relative] = source
+
+    def add_artifact(metadata: Any, label: str) -> None:
+        if not isinstance(metadata, dict):
+            return
+        raw_ref = metadata.get("ref")
+        if not isinstance(raw_ref, str) or not raw_ref:
+            die(f"Windows bundle {label} missing ref")
+        relative = Path(raw_ref.replace("\\", "/"))
+        source = (platform_dir / relative).resolve()
+        if metadata.get("kind") == "directory":
+            if not source.is_dir():
+                die(f"Windows runtime truth directory missing for {label}: {source}")
+            members = sorted(path for path in source.rglob("*") if path.is_file())
+            if not members:
+                die(f"Windows runtime truth directory empty for {label}: {source}")
+            for member in members:
+                add_file(member, (relative / member.relative_to(source)).as_posix())
+        else:
+            add_file(source, relative.as_posix())
+
+    targets: dict[str, Path] = {}
+    for key, raw_ref in refs.items():
+        if not isinstance(raw_ref, str) or not raw_ref:
+            continue
+        source = Path(raw_ref)
+        if not source.is_absolute():
+            source = platform_dir / source
+        source = source.resolve()
+        if not source.is_file():
+            die(f"Windows genesis governance ref source missing for {key}: {source}")
+        target_name = source.name
+        previous = targets.get(target_name)
+        if previous is not None and previous != source:
+            die(f"Windows genesis governance refs collide at localized target {target_name}")
+        targets[target_name] = source
+        add_file(source, f"doc/testing/evidence/{target_name}")
+
+    for field in (
+        "world_snapshot",
+        "generated_world_sidecar",
+        "world_generation_provenance",
+        "governance_manifest",
+        "network_manifest",
+    ):
+        add_artifact(bundle_data.get(field), field)
+    evidence_refs = bundle_data.get("evidence_refs", [])
+    if not isinstance(evidence_refs, list):
+        die("Windows bundle evidence_refs must be an array")
+    for index, metadata in enumerate(evidence_refs):
+        add_artifact(metadata, f"evidence_refs[{index}]")
+
+    files = sorted(((source, remote) for remote, source in files_by_remote.items()), key=lambda item: item[1])
+    verified_set = set(verified)
+    for source, _ in files:
+        relative = source.relative_to(platform_dir).as_posix()
+        if relative not in verified_set:
+            die(f"windows-x64 checksum file does not cover required artifact: {relative}")
+    return files
 
 
 def require_same_build(platform_infos: dict[str, dict[str, str]]) -> dict[str, str]:
@@ -218,19 +326,67 @@ def windows_script(
     version: str,
     commit: str,
     run_id: str,
+    governed_hashes: dict[str, str],
+    readiness_policy: str,
 ) -> str:
     deploy_root = str(node.get("deploy_root") or r"C:\oasis7-deploy")
+    staging_root = str(
+        node.get("staging_root")
+        or (deploy_root.rstrip("\\/") + r"\staging\package-rollout\manual")
+    )
     task_name = str(node.get("scheduled_task") or "Oasis7Observer")
     status_url = str(node.get("status_url") or "")
     install_root = str(node.get("install_root") or "$env:LOCALAPPDATA\\Programs\\oasis7")
     installer_path = str(node.get("installer_path") or f"$env:USERPROFILE\\{installer_name}")
+    configured_installer_path = str(node.get("configured_installer_path") or installer_path)
     governed_bundle_path = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
+    governed_genesis_path = str(node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS)
+    governed_manifest_path = str(node.get("governed_manifest_path") or WINDOWS_GOVERNED_MANIFEST)
+    governed_bootstrap_path = str(node.get("governed_bootstrap_path") or WINDOWS_GOVERNED_BOOTSTRAP)
+    active_governed_bundle_path = str(
+        node.get("active_governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE
+    )
+    active_governed_genesis_path = str(
+        node.get("active_governed_genesis_path") or WINDOWS_GOVERNED_GENESIS
+    )
+    active_governed_manifest_path = str(
+        node.get("active_governed_manifest_path") or WINDOWS_GOVERNED_MANIFEST
+    )
+    active_governed_bootstrap_path = str(
+        node.get("active_governed_bootstrap_path") or WINDOWS_GOVERNED_BOOTSTRAP
+    )
+    rollback_backup_root = str(
+        node.get("rollback_backup_root")
+        or (deploy_root.rstrip("\\/") + r"\backups\known-good")
+    )
+    try:
+        rollback_unlock_timeout_secs = int(node.get("rollback_unlock_timeout_secs") or 30)
+    except (TypeError, ValueError):
+        die(f"windows node {node.get('name', '<unnamed>')} has invalid rollback_unlock_timeout_secs")
+    if not 1 <= rollback_unlock_timeout_secs <= 30:
+        die(
+            f"windows node {node.get('name', '<unnamed>')} rollback_unlock_timeout_secs "
+            "must be between 1 and 30"
+        )
     ref = artifact_ref("windows-x64", version, installer_name, "oasis7_chain_runtime.exe")
-    status_block = (
-        f"Invoke-RestMethod -Uri '{status_url}' -TimeoutSec 8 | "
-        "Select-Object running,last_error,readiness,consensus | ConvertTo-Json -Compress -Depth 8"
-        if status_url
-        else "Write-Output 'status_check=skipped'"
+    if readiness_policy in ("rpc-running", "strict-ready") and not status_url:
+        die(
+            f"windows node {node.get('name', '<unnamed>')} uses {readiness_policy} "
+            "but has no status_url"
+        )
+    try:
+        verification_timeout_secs = int(node.get("post_restart_timeout_secs") or 120)
+    except (TypeError, ValueError):
+        die(f"windows node {node.get('name', '<unnamed>')} has invalid post_restart_timeout_secs")
+    if not 60 <= verification_timeout_secs <= 300:
+        die(
+            f"windows node {node.get('name', '<unnamed>')} post_restart_timeout_secs "
+            "must be between 60 and 300"
+        )
+    require_strict_ready = "$true" if readiness_policy == "strict-ready" else "$false"
+    require_rpc_running = "$true" if readiness_policy in ("rpc-running", "strict-ready") else "$false"
+    integrity_entries = "\n".join(
+        f"  '{path}' = '{digest}'" for path, digest in sorted(governed_hashes.items())
     )
     return f"""$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -248,21 +404,543 @@ function Set-JsonProperty {{
   }}
 }}
 
+function Get-TreeMetadata {{
+  param([Parameter(Mandatory = $true)] [string] $Root)
+  $rootItem = Get-Item -LiteralPath $Root -ErrorAction Stop
+  $files = @(Get-ChildItem -LiteralPath $rootItem.FullName -File -Recurse | Sort-Object FullName)
+  $stream = New-Object System.IO.MemoryStream
+  $totalBytes = [int64]0
+  foreach ($file in $files) {{
+    $relative = $file.FullName.Substring($rootItem.FullName.Length).TrimStart('\\').Replace('\\', '/')
+    $fileHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    $payload = [System.Text.Encoding]::UTF8.GetBytes($relative + [char]0 + $fileHash + "`n")
+    $stream.Write($payload, 0, $payload.Length)
+    $totalBytes += $file.Length
+  }}
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try {{
+    $treeHash = ([System.BitConverter]::ToString($sha.ComputeHash($stream.ToArray()))).Replace('-', '').ToLowerInvariant()
+  }} finally {{
+    $sha.Dispose()
+    $stream.Dispose()
+  }}
+  return [PSCustomObject]@{{ sha256_tree = $treeHash; file_count = $files.Count; total_bytes = $totalBytes }}
+}}
+
+function Assert-TreeIntegrity {{
+  param([object] $Metadata, [string] $Path, [string] $Label)
+  # Dynamic labels produce "world_snapshot tree integrity mismatch" and
+  # "generated_world_sidecar tree integrity mismatch" diagnostics.
+  $actual = Get-TreeMetadata -Root $Path
+  if ($actual.sha256_tree -ne $Metadata.sha256_tree -or
+      $actual.file_count -ne $Metadata.file_count -or
+      $actual.total_bytes -ne $Metadata.total_bytes) {{
+    throw "$Label tree integrity mismatch: path=$Path expected_hash=$($Metadata.sha256_tree) actual_hash=$($actual.sha256_tree) expected_files=$($Metadata.file_count) actual_files=$($actual.file_count) expected_bytes=$($Metadata.total_bytes) actual_bytes=$($actual.total_bytes)"
+  }}
+}}
+
+function Assert-FileMetadata {{
+  param([object] $Metadata, [string] $Path, [string] $Label)
+  if (!(Test-Path -LiteralPath $Path -PathType Leaf)) {{ throw "$Label file missing: $Path" }}
+  $actualHash = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+  $actualSize = (Get-Item -LiteralPath $Path).Length
+  if ($actualHash -ne $Metadata.sha256 -or $actualSize -ne $Metadata.size_bytes) {{
+    throw "$Label file integrity mismatch: path=$Path expected_hash=$($Metadata.sha256) actual_hash=$actualHash expected_bytes=$($Metadata.size_bytes) actual_bytes=$actualSize"
+  }}
+}}
+
+function Set-ArtifactLocation {{
+  param([object] $Metadata, [string] $Path, [string] $Ref)
+  if ($null -eq $Metadata) {{ return }}
+  Set-JsonProperty $Metadata 'ref' $Ref
+  Set-JsonProperty $Metadata 'resolved_path' $Path
+  Set-JsonProperty $Metadata 'path' $Path
+}}
+
+function Test-NodeLocalPath {{
+  param([Parameter(Mandatory = $true)] [string] $Path)
+  if ([string]::IsNullOrWhiteSpace($Path) -or ![System.IO.Path]::IsPathRooted($Path)) {{
+    return $false
+  }}
+  try {{
+    $candidate = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($Path)).TrimEnd('\\')
+  }} catch {{
+    return $false
+  }}
+  $allowedRoots = @($deployRoot, $installRoot)
+  foreach ($allowedRoot in $allowedRoots) {{
+    if ([string]::IsNullOrWhiteSpace($allowedRoot) -or ![System.IO.Path]::IsPathRooted($allowedRoot)) {{ continue }}
+    $root = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($allowedRoot)).TrimEnd('\\')
+    if ($candidate.Equals($root, [System.StringComparison]::OrdinalIgnoreCase) -or
+        $candidate.StartsWith($root + '\\', [System.StringComparison]::OrdinalIgnoreCase)) {{
+      return $true
+    }}
+  }}
+  return $false
+}}
+
+function Preserve-AttemptDiagnostics {{
+  param([string] $StdoutPath, [string] $StderrPath, [string] $ExitMarkerPath)
+  foreach ($diagnosticPath in @($StdoutPath, $StderrPath, $ExitMarkerPath)) {{
+    if (![string]::IsNullOrWhiteSpace($diagnosticPath) -and (Test-Path -LiteralPath $diagnosticPath)) {{
+      Write-Output "preserved_attempt_diagnostic=$diagnosticPath"
+    }}
+  }}
+}}
+
 $version = '{version}'
 $commit = '{commit}'
 $runId = '{run_id}'
 $artifactRef = '{ref}'
 $installRoot = "{install_root}"
 $runtime = Join-Path $installRoot 'bin\\oasis7_chain_runtime.exe'
+$installer = "{configured_installer_path}"
+# Preserve the configured destination as plan evidence, then consume only the staged closure.
 $installer = "{installer_path}"
 $deployRoot = '{deploy_root}'
+$stagingRoot = '{staging_root}'
 $taskName = '{task_name}'
 $bundlePath = '{governed_bundle_path}'
+$genesisPath = '{governed_genesis_path}'
+$manifestPath = '{governed_manifest_path}'
+$bootstrapPath = '{governed_bootstrap_path}'
+$activeBundlePath = '{active_governed_bundle_path}'
+$activeGenesisPath = '{active_governed_genesis_path}'
+$activeManifestPath = '{active_governed_manifest_path}'
+$activeBootstrapPath = '{active_governed_bootstrap_path}'
+$rollbackBackupRoot = '{rollback_backup_root.replace("'", "''")}'
+$rollbackUnlockTimeoutSeconds = {rollback_unlock_timeout_secs}
+$statusUrl = '{status_url}'
+$requireStrictReady = {require_strict_ready}
+$requireRpcRunning = {require_rpc_running}
+$verificationTimeoutSeconds = {verification_timeout_secs}
+$logRoot = Join-Path $deployRoot 'logs\package-rollout-attempts'
+New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
+$attemptId = [Guid]::NewGuid().ToString('N')
+$attemptStdoutPath = Join-Path $logRoot "$attemptId.stdout.log"
+$attemptStderrPath = Join-Path $logRoot "$attemptId.stderr.log"
+$attemptExitMarkerPath = Join-Path $logRoot "$attemptId.exit"
+$attemptWrapperPath = Join-Path $logRoot "$attemptId.wrapper.ps1"
+[System.IO.File]::AppendAllText($attemptStdoutPath, "attempt_id=$attemptId phase=staging_preflight" + [Environment]::NewLine)
+$expectedGovernedSha256 = @{{
+{integrity_entries}
+}}
+
+foreach ($entry in $expectedGovernedSha256.GetEnumerator()) {{
+  try {{
+    if (!(Test-Path -LiteralPath $entry.Key -PathType Leaf)) {{
+      throw "staged governed bootstrap source missing: $($entry.Key)"
+    }}
+    $actual = (Get-FileHash -LiteralPath $entry.Key -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actual -ne $entry.Value) {{
+      throw "staged governed bootstrap integrity mismatch: $($entry.Key)"
+    }}
+  }} catch {{
+    $stagingPreflightDiagnostic = @(
+      'failure_phase=staging_preflight',
+      "staging_preflight_failed_path=$($entry.Key)",
+      "staging_preflight_error=$($_.Exception.Message)",
+      'staging_preflight_exit_code=1',
+      'rollback_required=true'
+    ) -join ' '
+    [System.IO.File]::AppendAllText($attemptStderrPath, $stagingPreflightDiagnostic + [Environment]::NewLine)
+    [System.IO.File]::AppendAllText($attemptExitMarkerPath, '1' + [Environment]::NewLine)
+    Write-Output 'rollback_required=true'
+    throw
+  }}
+}}
 
 $bundle = Get-Item $bundlePath -ErrorAction Stop
 $json = Get-Content $bundle.FullName -Raw | ConvertFrom-Json
 if ($null -eq $json.runtime_build) {{
   throw "governed bundle missing runtime_build: $($bundle.FullName)"
+}}
+$manifestItem = Get-Item $manifestPath -ErrorAction Stop
+$manifestJson = Get-Content $manifestItem.FullName -Raw | ConvertFrom-Json
+if ($null -eq $manifestJson.runtime_refs) {{
+  throw "governed network manifest missing runtime_refs: $($manifestItem.FullName)"
+}}
+
+$genesis = Get-Item $genesisPath -ErrorAction Stop
+$genesisJson = Get-Content $genesis.FullName -Raw | ConvertFrom-Json
+if ($null -eq $genesisJson.governance_bootstrap_refs) {{
+  throw "governed genesis missing governance_bootstrap_refs: $($genesis.FullName)"
+}}
+$evidenceDir = Join-Path $genesis.Directory.FullName 'doc\\testing\\evidence'
+$activeConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $deployRoot 'config')).TrimEnd('\\')
+$activeEvidenceDir = Join-Path $activeConfigRoot 'doc\\testing\\evidence'
+$localizedTargets = @{{}}
+$localizedGovernedRefCount = 0
+$currentGovernedRefKeys = @(
+  'governance_public_manifest_ref',
+  'liveops_public_manifest_ref',
+  'binding_notes_ref',
+  'genesis_validator_registry_ref',
+  'topology_ref'
+)
+foreach ($property in @($genesisJson.governance_bootstrap_refs.PSObject.Properties)) {{
+  if ($property.Value -isnot [string] -or [string]::IsNullOrEmpty($property.Value)) {{ continue }}
+  $sourcePath = [Environment]::ExpandEnvironmentVariables($property.Value)
+  if (![System.IO.Path]::IsPathRooted($sourcePath)) {{
+    $sourcePath = Join-Path $genesis.Directory.FullName $sourcePath
+  }}
+  $sourcePath = [System.IO.Path]::GetFullPath($sourcePath)
+  if (!(Test-Path -LiteralPath $sourcePath -PathType Leaf)) {{
+    throw "genesis governance ref source missing for $($property.Name): $sourcePath"
+  }}
+  $targetPath = [System.IO.Path]::GetFullPath((Join-Path $evidenceDir ([System.IO.Path]::GetFileName($sourcePath))))
+  if ($localizedTargets.ContainsKey($targetPath) -and $localizedTargets[$targetPath] -ne $sourcePath) {{
+    throw "genesis governance refs collide at localized target $targetPath"
+  }}
+  $localizedTargets[$targetPath] = $sourcePath
+  if (!(Test-Path -LiteralPath $targetPath -PathType Leaf)) {{
+    throw "localized genesis governance ref target missing for $($property.Name): $targetPath"
+  }}
+  $property.Value = Join-Path $activeEvidenceDir ([System.IO.Path]::GetFileName($sourcePath))
+  $localizedGovernedRefCount += 1
+}}
+$genesisText = $genesisJson | ConvertTo-Json -Depth 100
+
+$worldSnapshotPath = Join-Path $genesis.Directory.FullName 'generated-world\world'
+$sidecarPath = Join-Path $genesis.Directory.FullName 'generated-world\generated-scenario-world'
+$provenancePath = Join-Path $genesis.Directory.FullName 'generated-world\world-generation-provenance.json'
+$activeWorldSnapshotPath = Join-Path $activeConfigRoot 'generated-world\world'
+$activeSidecarPath = Join-Path $activeConfigRoot 'generated-world\generated-scenario-world'
+$activeProvenancePath = Join-Path $activeConfigRoot 'generated-world\world-generation-provenance.json'
+if ($manifestJson.tier -eq 'public_testnet') {{
+  if ($null -eq $json.generated_world_sidecar -or $null -eq $json.world_generation_provenance) {{
+    throw 'public_testnet Windows source missing generated_world_sidecar or world_generation_provenance'
+  }}
+}}
+Assert-TreeIntegrity $json.world_snapshot $worldSnapshotPath 'world_snapshot'
+Assert-TreeIntegrity $json.generated_world_sidecar $sidecarPath 'generated_world_sidecar'
+Assert-FileMetadata $json.world_generation_provenance $provenancePath 'world_generation_provenance'
+Assert-FileMetadata $json.governance_manifest (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) 'governance_manifest'
+Assert-FileMetadata $json.network_manifest $manifestItem.FullName 'network_manifest'
+foreach ($entry in @($json.evidence_refs)) {{
+  Assert-FileMetadata $entry (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($entry.ref))) 'evidence_refs'
+}}
+
+Set-ArtifactLocation $json.runtime_build $runtime 'bin\oasis7_chain_runtime.exe'
+Set-ArtifactLocation $json.world_snapshot $activeWorldSnapshotPath 'generated-world/world'
+Set-ArtifactLocation $json.generated_world_sidecar $activeSidecarPath 'generated-world/generated-scenario-world'
+Set-ArtifactLocation $json.world_generation_provenance $activeProvenancePath 'generated-world/world-generation-provenance.json'
+Set-ArtifactLocation $json.governance_manifest (Join-Path $activeEvidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) ('doc/testing/evidence/' + [System.IO.Path]::GetFileName($json.governance_manifest.ref))
+Set-ArtifactLocation $json.network_manifest $activeManifestPath ([System.IO.Path]::GetFileName($activeManifestPath))
+foreach ($entry in @($json.evidence_refs)) {{
+  $entryName = [System.IO.Path]::GetFileName($entry.ref)
+  Set-ArtifactLocation $entry (Join-Path $activeEvidenceDir $entryName) ('doc/testing/evidence/' + $entryName)
+}}
+if ($json.PSObject.Properties.Name -contains 'repo_root') {{ $json.repo_root = $deployRoot }}
+$manifestJson.runtime_refs.release_candidate_bundle_ref = $activeBundlePath
+$manifestJson.runtime_refs.genesis_ref = $activeGenesisPath
+$manifestJson.runtime_refs.bootstrap_peer_ref = $activeBootstrapPath
+$manifestJson.runtime_refs.generated_world_sidecar_ref = $activeSidecarPath
+$manifestJson.runtime_refs.world_generation_provenance_ref = $activeProvenancePath
+$manifestText = $manifestJson | ConvertTo-Json -Depth 100
+
+$structuredPaths = @(
+  [PSCustomObject]@{{ field = 'runtime_build.path'; path = $json.runtime_build.path }},
+  [PSCustomObject]@{{ field = 'runtime_build.resolved_path'; path = $json.runtime_build.resolved_path }},
+  [PSCustomObject]@{{ field = 'world_snapshot.path'; path = $json.world_snapshot.path }},
+  [PSCustomObject]@{{ field = 'world_snapshot.resolved_path'; path = $json.world_snapshot.resolved_path }},
+  [PSCustomObject]@{{ field = 'generated_world_sidecar.path'; path = $json.generated_world_sidecar.path }},
+  [PSCustomObject]@{{ field = 'generated_world_sidecar.resolved_path'; path = $json.generated_world_sidecar.resolved_path }},
+  [PSCustomObject]@{{ field = 'world_generation_provenance.path'; path = $json.world_generation_provenance.path }},
+  [PSCustomObject]@{{ field = 'world_generation_provenance.resolved_path'; path = $json.world_generation_provenance.resolved_path }},
+  [PSCustomObject]@{{ field = 'governance_manifest.path'; path = $json.governance_manifest.path }},
+  [PSCustomObject]@{{ field = 'governance_manifest.resolved_path'; path = $json.governance_manifest.resolved_path }},
+  [PSCustomObject]@{{ field = 'network_manifest.path'; path = $json.network_manifest.path }},
+  [PSCustomObject]@{{ field = 'network_manifest.resolved_path'; path = $json.network_manifest.resolved_path }},
+  [PSCustomObject]@{{ field = 'runtime_refs.release_candidate_bundle_ref'; path = $manifestJson.runtime_refs.release_candidate_bundle_ref }},
+  [PSCustomObject]@{{ field = 'runtime_refs.genesis_ref'; path = $manifestJson.runtime_refs.genesis_ref }},
+  [PSCustomObject]@{{ field = 'runtime_refs.bootstrap_peer_ref'; path = $manifestJson.runtime_refs.bootstrap_peer_ref }},
+  [PSCustomObject]@{{ field = 'runtime_refs.generated_world_sidecar_ref'; path = $manifestJson.runtime_refs.generated_world_sidecar_ref }},
+  [PSCustomObject]@{{ field = 'runtime_refs.world_generation_provenance_ref'; path = $manifestJson.runtime_refs.world_generation_provenance_ref }}
+)
+foreach ($entry in @($json.evidence_refs)) {{
+  $structuredPaths += [PSCustomObject]@{{ field = 'evidence_refs.path'; path = $entry.path }}
+  $structuredPaths += [PSCustomObject]@{{ field = 'evidence_refs.resolved_path'; path = $entry.resolved_path }}
+}}
+foreach ($property in @($genesisJson.governance_bootstrap_refs.PSObject.Properties)) {{
+  if ($property.Value -is [string] -and ![string]::IsNullOrEmpty($property.Value)) {{
+    $structuredPaths += [PSCustomObject]@{{ field = 'governance_bootstrap_refs.' + $property.Name; path = $property.Value }}
+  }}
+}}
+foreach ($entry in $structuredPaths) {{
+  if (!(Test-NodeLocalPath -Path $entry.path)) {{
+    throw "staged target path is not node-local: field=$($entry.field) path=$($entry.path); build-host absolute path survived Windows localization"
+  }}
+}}
+
+function Resolve-RollbackRuntimeSource {{
+  param([Parameter(Mandatory = $true)] [string] $BackupRoot)
+  $backupRootFull = [System.IO.Path]::GetFullPath($BackupRoot).TrimEnd('\\')
+  $backupRootPrefix = $backupRootFull + '\\'
+  $backupManifestPath = Join-Path $backupRootFull 'backup-manifest.json'
+  $backupProvenancePath = Join-Path $backupRootFull 'backup-provenance.json'
+  $runtimeCandidate = Join-Path $backupRootFull 'runtime\oasis7_chain_runtime.exe'
+  $binCandidate = Join-Path $backupRootFull 'bin\oasis7_chain_runtime.exe'
+  $metadataPaths = @(
+    @($backupManifestPath, $backupProvenancePath) |
+      Where-Object {{ Test-Path -LiteralPath $_ -PathType Leaf }}
+  )
+  if ($metadataPaths.Count -gt 1) {{
+    throw "rollback runtime ambiguous: multiple backup manifest/provenance files under $backupRootFull"
+  }}
+  if ($metadataPaths.Count -eq 1) {{
+    $backupMetadata = Get-Content -LiteralPath $metadataPaths[0] -Raw | ConvertFrom-Json
+    $runtimeRelativePath = ''
+    $expectedRuntimeSha256 = ''
+    $usesTopLevelRuntimePath = $false
+    if ($backupMetadata.PSObject.Properties.Name -contains 'runtime_path') {{
+      $usesTopLevelRuntimePath = $true
+      $runtimeRelativePath = [string]$backupMetadata.runtime_path
+      if ($backupMetadata.PSObject.Properties.Name -contains 'runtime_sha256') {{
+        $expectedRuntimeSha256 = [string]$backupMetadata.runtime_sha256
+      }}
+    }} else {{
+      $runtimeMetadata = $backupMetadata.runtime
+      if ($null -eq $runtimeMetadata -and $null -ne $backupMetadata.provenance) {{
+        $runtimeMetadata = $backupMetadata.provenance.runtime
+      }}
+      if ($null -eq $runtimeMetadata) {{
+        throw "known-good rollback runtime missing from backup manifest/provenance: $($metadataPaths[0])"
+      }}
+      $runtimeRelativePath = if ($runtimeMetadata.PSObject.Properties.Name -contains 'relative_path') {{
+        [string]$runtimeMetadata.relative_path
+      }} elseif ($runtimeMetadata.PSObject.Properties.Name -contains 'path') {{
+        [string]$runtimeMetadata.path
+      }} else {{
+        ''
+      }}
+      if ($runtimeMetadata.PSObject.Properties.Name -contains 'sha256') {{
+        $expectedRuntimeSha256 = [string]$runtimeMetadata.sha256
+      }}
+    }}
+    if ([string]::IsNullOrWhiteSpace($runtimeRelativePath)) {{
+      throw "known-good rollback runtime missing path in backup manifest/provenance: $($metadataPaths[0])"
+    }}
+    $manifestCandidate = if ([System.IO.Path]::IsPathRooted($runtimeRelativePath)) {{
+      [System.IO.Path]::GetFullPath($runtimeRelativePath)
+    }} else {{
+      [System.IO.Path]::GetFullPath((Join-Path $backupRootFull $runtimeRelativePath))
+    }}
+    $manifestCandidateIsConfined = $manifestCandidate.StartsWith(
+      $backupRootPrefix,
+      [System.StringComparison]::OrdinalIgnoreCase
+    )
+    if ($usesTopLevelRuntimePath -and
+        ([System.IO.Path]::IsPathRooted($runtimeRelativePath) -or !$manifestCandidateIsConfined)) {{
+      $legacyConfinedCandidates = @(
+        @($runtimeCandidate, $binCandidate) |
+          Where-Object {{ Test-Path -LiteralPath $_ -PathType Leaf }}
+      )
+      if ($legacyConfinedCandidates.Count -eq 0) {{
+        throw "confined backup runtime candidate missing for legacy rooted runtime_path: declared=$runtimeRelativePath root=$backupRootFull"
+      }}
+      if ($legacyConfinedCandidates.Count -gt 1) {{
+        throw "confined backup runtime candidate ambiguous for legacy rooted runtime_path: declared=$runtimeRelativePath root=$backupRootFull"
+      }}
+      $legacyConfinedCandidate = [System.IO.Path]::GetFullPath([string]$legacyConfinedCandidates[0])
+      if (!$legacyConfinedCandidate.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+        throw "rollback runtime path escapes backup root: path=$legacyConfinedCandidate root=$backupRootFull"
+      }}
+      if ($expectedRuntimeSha256 -notmatch '^[0-9a-fA-F]{{64}}$') {{
+        throw "confined backup runtime sha256 mismatch for legacy rooted runtime_path: declared runtime_sha256 is missing or invalid"
+      }}
+      $legacyCandidateSha256 = (Get-FileHash -LiteralPath $legacyConfinedCandidate -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($legacyCandidateSha256 -ne $expectedRuntimeSha256.ToLowerInvariant()) {{
+        throw "confined backup runtime sha256 mismatch for legacy rooted runtime_path: candidate=$legacyConfinedCandidate expected=$expectedRuntimeSha256 actual=$legacyCandidateSha256"
+      }}
+      return $legacyConfinedCandidate
+    }}
+    if (!$manifestCandidate.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+      throw "rollback runtime path escapes backup root: path=$manifestCandidate root=$backupRootFull"
+    }}
+    if (!(Test-Path -LiteralPath $manifestCandidate -PathType Leaf)) {{
+      throw "known-good rollback runtime missing: $manifestCandidate"
+    }}
+    if (![string]::IsNullOrWhiteSpace($expectedRuntimeSha256)) {{
+      if ($expectedRuntimeSha256 -notmatch '^[0-9a-fA-F]{{64}}$') {{
+        throw "invalid rollback runtime sha256 in backup manifest/provenance: $expectedRuntimeSha256"
+      }}
+      $actualRuntimeSha256 = (Get-FileHash -LiteralPath $manifestCandidate -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($actualRuntimeSha256 -ne $expectedRuntimeSha256.ToLowerInvariant()) {{
+        throw "rollback runtime sha256 mismatch: path=$manifestCandidate expected=$expectedRuntimeSha256 actual=$actualRuntimeSha256"
+      }}
+    }}
+    return $manifestCandidate
+  }}
+
+  $fallbackCandidates = @(
+    @($runtimeCandidate, $binCandidate) |
+      Where-Object {{ Test-Path -LiteralPath $_ -PathType Leaf }}
+  )
+  if ($fallbackCandidates.Count -gt 1) {{
+    throw "rollback runtime ambiguous: both supported fallback candidates exist under $backupRootFull"
+  }}
+  if ($fallbackCandidates.Count -eq 0) {{
+    throw "known-good rollback runtime missing: expected runtime\oasis7_chain_runtime.exe or bin\oasis7_chain_runtime.exe under $backupRootFull"
+  }}
+  $resolvedFallback = [System.IO.Path]::GetFullPath([string]$fallbackCandidates[0])
+  if (!$resolvedFallback.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+    throw "rollback runtime path escapes backup root: path=$resolvedFallback root=$backupRootFull"
+  }}
+  return $resolvedFallback
+}}
+
+$configRoot = $activeConfigRoot
+$configRootPrefix = $configRoot + '\\'
+$rollbackConfigTargets = @(
+  [System.IO.Path]::GetFullPath($activeBundlePath),
+  [System.IO.Path]::GetFullPath($activeGenesisPath),
+  [System.IO.Path]::GetFullPath($activeManifestPath)
+)
+$rollbackProvenanceTargets = @(
+  (Join-Path $deployRoot 'CURRENT_VERSION'),
+  (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
+)
+try {{
+  if (!(Test-NodeLocalPath -Path $rollbackBackupRoot)) {{
+    throw "configured rollback backup root is not node-local: $rollbackBackupRoot"
+  }}
+  $rollbackRuntimeSource = Resolve-RollbackRuntimeSource -BackupRoot $rollbackBackupRoot
+  foreach ($rollbackConfigTarget in $rollbackConfigTargets) {{
+    if (!$rollbackConfigTarget.StartsWith($configRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+      throw "rollback config target is outside node config root: $rollbackConfigTarget"
+    }}
+    $rollbackRelativePath = $rollbackConfigTarget.Substring($configRootPrefix.Length)
+    $rollbackConfigSource = Join-Path (Join-Path $rollbackBackupRoot 'config') $rollbackRelativePath
+    if (!(Test-Path -LiteralPath $rollbackConfigSource -PathType Leaf)) {{
+      throw "known-good rollback config missing: $rollbackConfigSource"
+    }}
+  }}
+  foreach ($rollbackProvenanceTarget in $rollbackProvenanceTargets) {{
+    $rollbackProvenanceSource = Join-Path $rollbackBackupRoot ([System.IO.Path]::GetFileName($rollbackProvenanceTarget))
+    if (!(Test-Path -LiteralPath $rollbackProvenanceSource -PathType Leaf)) {{
+      throw "known-good rollback provenance missing: $rollbackProvenanceSource"
+    }}
+  }}
+}} catch {{
+  $rollbackPreflightDiagnostic = "failure_phase=rollback_preflight rollback_path=$rollbackBackupRoot rollback_error=$($_.Exception.Message) rollback_exit_code=1 rollback_required=true"
+  [System.IO.File]::AppendAllText($attemptStderrPath, $rollbackPreflightDiagnostic + [Environment]::NewLine)
+  [System.IO.File]::AppendAllText($attemptExitMarkerPath, '1' + [Environment]::NewLine)
+  Write-Output 'rollback_required=true'
+  throw
+}}
+
+Write-Output 'staged_sha_closure_complete=true'
+Write-Output 'promotion_begin=true'
+
+function Copy-StagedFileAtomically {{
+  param([Parameter(Mandatory = $true)] [string] $Source, [Parameter(Mandatory = $true)] [string] $Destination)
+  $destinationParent = [System.IO.Path]::GetDirectoryName($Destination)
+  New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
+  $destinationTemp = "$Destination.rollout-$attemptId.tmp"
+  Copy-Item -LiteralPath $Source -Destination $destinationTemp -Force
+  Move-Item -LiteralPath $destinationTemp -Destination $Destination -Force
+}}
+
+function Invoke-KnownGoodRollback {{
+  param([object] $OriginalTaskAction, [string] $FailurePhase, [string] $FailureError, [int] $FailureExitCode = 1)
+  Write-Output 'rollback_begin=true'
+  $rollbackDiagnostic = "failure_phase=$FailurePhase rollback_path=$rollbackBackupRoot rollback_error=$FailureError rollback_exit_code=$FailureExitCode rollback_required=true"
+  [System.IO.File]::AppendAllText($attemptStderrPath, $rollbackDiagnostic + [Environment]::NewLine)
+  [System.IO.File]::AppendAllText($attemptExitMarkerPath, [string]$FailureExitCode + [Environment]::NewLine)
+  Preserve-AttemptDiagnostics $attemptStdoutPath $attemptStderrPath $attemptExitMarkerPath
+
+  $rollbackRuntimeSourceAtRestore = Resolve-RollbackRuntimeSource -BackupRoot $rollbackBackupRoot
+  if (!$rollbackRuntimeSourceAtRestore.Equals($rollbackRuntimeSource, [System.StringComparison]::OrdinalIgnoreCase)) {{
+    throw "rollback runtime source changed after preflight: preflight=$rollbackRuntimeSource restore=$rollbackRuntimeSourceAtRestore"
+  }}
+  $rollbackRuntimeSourceSha256 = (Get-FileHash -LiteralPath $rollbackRuntimeSourceAtRestore -Algorithm SHA256).Hash.ToLowerInvariant()
+  $installedRuntimeSha256 = if (Test-Path -LiteralPath $runtime -PathType Leaf) {{
+    (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+  }} else {{
+    'missing'
+  }}
+  $rollbackRuntimeRestoreRequired = $installedRuntimeSha256 -ne $rollbackRuntimeSourceSha256
+  Write-Output "rollback_runtime_restore_required=$($rollbackRuntimeRestoreRequired.ToString().ToLowerInvariant()) installed_sha256=$installedRuntimeSha256 backup_sha256=$rollbackRuntimeSourceSha256"
+
+  Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  $rollbackProcessExitDeadline = (Get-Date).AddSeconds($rollbackUnlockTimeoutSeconds)
+  while ((Get-Date) -lt $rollbackProcessExitDeadline -and
+         $null -ne (Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue | Select-Object -First 1)) {{
+    Start-Sleep -Milliseconds 250
+  }}
+  if ($null -ne (Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue | Select-Object -First 1)) {{
+    throw "rollback_required=true process_remains=true runtime=$runtime"
+  }}
+
+  if ($rollbackRuntimeRestoreRequired) {{
+    $rollbackFileUnlockDeadline = (Get-Date).AddSeconds($rollbackUnlockTimeoutSeconds)
+    $runtimeUnlocked = $false
+    while ((Get-Date) -lt $rollbackFileUnlockDeadline) {{
+      if (!(Test-Path -LiteralPath $runtime -PathType Leaf)) {{
+        $runtimeUnlocked = $true
+        break
+      }}
+      try {{
+        $lockProbe = [System.IO.File]::Open(
+          $runtime,
+          [System.IO.FileMode]::Open,
+          [System.IO.FileAccess]::ReadWrite,
+          [System.IO.FileShare]::None
+        )
+        $lockProbe.Dispose()
+        $runtimeUnlocked = $true
+        break
+      }} catch {{
+        Start-Sleep -Milliseconds 250
+      }}
+    }}
+    if (!$runtimeUnlocked) {{
+      $lockDiagnostic = "failure_phase=rollback_unlock rollback_path=$runtime rollback_error=exclusive_file_unlock_timeout rollback_exit_code=1 rollback_required=true lock_remains=true"
+      [System.IO.File]::AppendAllText($attemptStderrPath, $lockDiagnostic + [Environment]::NewLine)
+      throw "rollback_required=true lock_remains=true runtime=$runtime"
+    }}
+    New-Item -ItemType Directory -Path ([System.IO.Path]::GetDirectoryName($runtime)) -Force | Out-Null
+    Copy-Item -LiteralPath $rollbackRuntimeSourceAtRestore -Destination $runtime -Force
+    Write-Output "rollback_component_restored=runtime path=$runtime"
+  }} else {{
+    Write-Output "rollback_component_unchanged=runtime path=$runtime"
+  }}
+  foreach ($rollbackConfigTarget in $rollbackConfigTargets) {{
+    $rollbackRelativePath = $rollbackConfigTarget.Substring($configRootPrefix.Length)
+    $rollbackConfigSource = Join-Path (Join-Path $rollbackBackupRoot 'config') $rollbackRelativePath
+    $rollbackConfigSourceHash = (Get-FileHash -LiteralPath $rollbackConfigSource -Algorithm SHA256).Hash.ToLowerInvariant()
+    $rollbackConfigTargetHash = if (Test-Path -LiteralPath $rollbackConfigTarget -PathType Leaf) {{
+      (Get-FileHash -LiteralPath $rollbackConfigTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+    }} else {{
+      'missing'
+    }}
+    if ($rollbackConfigTargetHash -ne $rollbackConfigSourceHash) {{
+      Copy-Item -LiteralPath $rollbackConfigSource -Destination $rollbackConfigTarget -Force
+      Write-Output "rollback_component_restored=config path=$rollbackConfigTarget"
+    }} else {{
+      Write-Output "rollback_component_unchanged=config path=$rollbackConfigTarget"
+    }}
+  }}
+  foreach ($rollbackProvenanceTarget in $rollbackProvenanceTargets) {{
+    $rollbackProvenanceSource = Join-Path $rollbackBackupRoot ([System.IO.Path]::GetFileName($rollbackProvenanceTarget))
+    $rollbackProvenanceSourceHash = (Get-FileHash -LiteralPath $rollbackProvenanceSource -Algorithm SHA256).Hash.ToLowerInvariant()
+    $rollbackProvenanceTargetHash = if (Test-Path -LiteralPath $rollbackProvenanceTarget -PathType Leaf) {{
+      (Get-FileHash -LiteralPath $rollbackProvenanceTarget -Algorithm SHA256).Hash.ToLowerInvariant()
+    }} else {{
+      'missing'
+    }}
+    if ($rollbackProvenanceTargetHash -ne $rollbackProvenanceSourceHash) {{
+      Copy-Item -LiteralPath $rollbackProvenanceSource -Destination $rollbackProvenanceTarget -Force
+      Write-Output "rollback_component_restored=provenance path=$rollbackProvenanceTarget"
+    }} else {{
+      Write-Output "rollback_component_unchanged=provenance path=$rollbackProvenanceTarget"
+    }}
+  }}
+  Set-ScheduledTask -TaskName $taskName -Action $OriginalTaskAction -ErrorAction Stop | Out-Null
+  Write-Output 'rollback_applied=true restart_required=true'
 }}
 
 $oldHash = if (Test-Path $runtime) {{
@@ -272,6 +950,67 @@ $oldHash = if (Test-Path $runtime) {{
 }}
 Write-Output "old_runtime_sha256=$oldHash"
 
+$scheduledTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+$originalTaskAction = @($scheduledTask.Actions)[0]
+if ($null -eq $originalTaskAction) {{ throw "scheduled task has no action: $taskName" }}
+$childExecute = [string]$originalTaskAction.Execute
+$childArguments = [string]$originalTaskAction.Arguments
+$wrapperTemplate = @'
+$attemptStdoutPath = '__ATTEMPT_STDOUT__'
+$attemptStderrPath = '__ATTEMPT_STDERR__'
+$attemptExitMarkerPath = '__ATTEMPT_EXIT__'
+$childExecute = '__CHILD_EXECUTE__'
+$childArguments = '__CHILD_ARGUMENTS__'
+[System.IO.File]::AppendAllText($attemptStdoutPath, "attempt_started=" + [DateTime]::UtcNow.ToString('o') + [Environment]::NewLine)
+[System.IO.File]::AppendAllText($attemptStderrPath, "attempt_id=__ATTEMPT_ID__" + [Environment]::NewLine)
+$processStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+$processStartInfo.FileName = $childExecute
+$processStartInfo.Arguments = $childArguments
+$processStartInfo.UseShellExecute = $false
+$processStartInfo.CreateNoWindow = $true
+$processStartInfo.RedirectStandardOutput = $true
+$processStartInfo.RedirectStandardError = $true
+$childProcess = [System.Diagnostics.Process]::new()
+$childProcess.StartInfo = $processStartInfo
+$stdoutHandler = [System.Diagnostics.DataReceivedEventHandler] {{
+  param($sender, $eventArgs)
+  if ($null -ne $eventArgs.Data) {{
+    [System.IO.File]::AppendAllText($attemptStdoutPath, $eventArgs.Data + [Environment]::NewLine)
+  }}
+}}
+$stderrHandler = [System.Diagnostics.DataReceivedEventHandler] {{
+  param($sender, $eventArgs)
+  if ($null -ne $eventArgs.Data) {{
+    [System.IO.File]::AppendAllText($attemptStderrPath, $eventArgs.Data + [Environment]::NewLine)
+  }}
+}}
+$childProcess.add_OutputDataReceived($stdoutHandler)
+$childProcess.add_ErrorDataReceived($stderrHandler)
+try {{
+  if (!$childProcess.Start()) {{ throw "failed to start scheduled-task child: $childExecute" }}
+  $childProcess.BeginOutputReadLine()
+  $childProcess.BeginErrorReadLine()
+  $childProcess.WaitForExit()
+  $childExitCode = $childProcess.ExitCode
+}} finally {{
+  $childProcess.remove_OutputDataReceived($stdoutHandler)
+  $childProcess.remove_ErrorDataReceived($stderrHandler)
+  $childProcess.Dispose()
+}}
+[System.IO.File]::AppendAllText($attemptExitMarkerPath, [string]$childExitCode + [Environment]::NewLine)
+exit $childExitCode
+'@
+$wrapperText = $wrapperTemplate.Replace('__ATTEMPT_STDOUT__', $attemptStdoutPath.Replace("'", "''"))
+$wrapperText = $wrapperText.Replace('__ATTEMPT_STDERR__', $attemptStderrPath.Replace("'", "''"))
+$wrapperText = $wrapperText.Replace('__ATTEMPT_EXIT__', $attemptExitMarkerPath.Replace("'", "''"))
+$wrapperText = $wrapperText.Replace('__ATTEMPT_ID__', $attemptId)
+$wrapperText = $wrapperText.Replace('__CHILD_EXECUTE__', $childExecute.Replace("'", "''"))
+$wrapperText = $wrapperText.Replace('__CHILD_ARGUMENTS__', $childArguments.Replace("'", "''"))
+[System.IO.File]::WriteAllText($attemptWrapperPath, $wrapperText, [System.Text.UTF8Encoding]::new($false))
+$attemptTaskAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$attemptWrapperPath`""
+Preserve-AttemptDiagnostics $attemptStdoutPath $attemptStderrPath $attemptExitMarkerPath
+Set-ScheduledTask -TaskName $taskName -Action $attemptTaskAction -ErrorAction Stop | Out-Null
+
 Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue |
   Stop-Process -Force -ErrorAction SilentlyContinue
@@ -280,9 +1019,11 @@ Start-Sleep -Seconds 3
 $install = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
 Write-Output "installer_exit_code=$($install.ExitCode)"
 if ($install.ExitCode -ne 0) {{
+  Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'installer' -FailureError "installer exit code $($install.ExitCode)" -FailureExitCode $install.ExitCode
   throw "installer failed with exit code $($install.ExitCode)"
 }}
 if (!(Test-Path $runtime)) {{
+  Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'installer' -FailureError "runtime missing after install: $runtime" -FailureExitCode 1
   throw "runtime missing after install: $runtime"
 }}
 
@@ -290,6 +1031,21 @@ $hash = (Get-FileHash $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item $runtime).Length
 Write-Output "new_runtime_sha256=$hash"
 Write-Output "new_runtime_size=$size"
+
+$stagingConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $stagingRoot 'config')).TrimEnd('\\')
+$stagingConfigPrefix = $stagingConfigRoot + '\\'
+$transformedConfigTargets = @($activeBundlePath, $activeGenesisPath, $activeManifestPath)
+foreach ($stagedConfigSource in @($expectedGovernedSha256.Keys)) {{
+  $stagedConfigSourceFull = [System.IO.Path]::GetFullPath([string]$stagedConfigSource)
+  if (!$stagedConfigSourceFull.StartsWith($stagingConfigPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+    Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'promotion' -FailureError "staged config source escapes staging root: $stagedConfigSourceFull" -FailureExitCode 1
+    throw "staged config source escapes staging root: $stagedConfigSourceFull"
+  }}
+  $stagedConfigRelativePath = $stagedConfigSourceFull.Substring($stagingConfigPrefix.Length)
+  $activeConfigTarget = [System.IO.Path]::GetFullPath((Join-Path $activeConfigRoot $stagedConfigRelativePath))
+  if ($transformedConfigTargets -contains $activeConfigTarget) {{ continue }}
+  Copy-StagedFileAtomically -Source $stagedConfigSourceFull -Destination $activeConfigTarget
+}}
 
 Set-JsonProperty $json.runtime_build 'git_commit' $commit
 Set-JsonProperty $json.runtime_build 'kind' 'file'
@@ -302,12 +1058,38 @@ Set-JsonProperty $json.runtime_build 'updated_by' "windows package upgrade $vers
 Set-JsonProperty $json 'git_commit' $commit
 Set-JsonProperty $json 'updated_by' "windows package upgrade $version (run $runId, commit $commit)"
 $jsonText = $json | ConvertTo-Json -Depth 100
+$bundleTemp = "$activeBundlePath.rollout-$attemptId.tmp"
 [System.IO.File]::WriteAllText(
-  $bundle.FullName,
+  $bundleTemp,
   $jsonText + [Environment]::NewLine,
   [System.Text.UTF8Encoding]::new($false)
 )
+Move-Item -LiteralPath $bundleTemp -Destination $activeBundlePath -Force
 $updated = 1
+
+$genesisTemp = "$activeGenesisPath.rollout-$attemptId.tmp"
+[System.IO.File]::WriteAllText(
+  $genesisTemp,
+  $genesisText + [Environment]::NewLine,
+  [System.Text.UTF8Encoding]::new($false)
+)
+Move-Item -LiteralPath $genesisTemp -Destination $activeGenesisPath -Force
+$manifestTemp = "$activeManifestPath.rollout-$attemptId.tmp"
+[System.IO.File]::WriteAllText(
+  $manifestTemp,
+  $manifestText + [Environment]::NewLine,
+  [System.Text.UTF8Encoding]::new($false)
+)
+Move-Item -LiteralPath $manifestTemp -Destination $activeManifestPath -Force
+foreach ($key in $currentGovernedRefKeys) {{
+  $property = $genesisJson.governance_bootstrap_refs.PSObject.Properties[$key]
+  if ($null -ne $property -and $property.Value -is [string] -and ![string]::IsNullOrEmpty($property.Value)) {{
+    if (!(Test-Path -LiteralPath $property.Value -PathType Leaf)) {{
+      throw "localized current-schema governance ref target missing for $key`: $($property.Value)"
+    }}
+  }}
+}}
+Write-Output "localized_governed_ref_count=$localizedGovernedRefCount"
 
 Set-Content -Encoding UTF8 (Join-Path $deployRoot 'CURRENT_VERSION') $version
 @(
@@ -321,20 +1103,98 @@ Set-Content -Encoding UTF8 (Join-Path $deployRoot 'CURRENT_VERSION') $version
   "runtime_size=$size"
 ) | Set-Content -Encoding UTF8 (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
 Write-Output "updated_bundle_count=$updated"
+Write-Output 'promotion_complete=true'
 
+$taskStartTime = Get-Date
 Start-ScheduledTask -TaskName $taskName
-Start-Sleep -Seconds 10
-Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue |
+$verificationDeadline = (Get-Date).AddSeconds($verificationTimeoutSeconds)
+$verified = $false
+$processRunning = $false
+$statusRunning = $false
+$statusReady = $false
+$lastStatusError = 'not_attempted'
+$lastStatusPayload = 'none'
+while ((Get-Date) -lt $verificationDeadline) {{
+  $processRunning = $null -ne (Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue | Select-Object -First 1)
+  $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
+  $lastTaskResult = if ($null -ne $taskInfo) {{ $taskInfo.LastTaskResult }} else {{ $null }}
+  $attemptChildExitCode = $null
+  if (Test-Path -LiteralPath $attemptExitMarkerPath -PathType Leaf) {{
+    $markerValue = Get-Content -LiteralPath $attemptExitMarkerPath -Tail 1 -ErrorAction SilentlyContinue
+    $parsedExitCode = 0
+    if ([int]::TryParse([string]$markerValue, [ref]$parsedExitCode)) {{ $attemptChildExitCode = $parsedExitCode }}
+  }}
+  $terminalExitCode = if ($null -ne $attemptChildExitCode) {{ $attemptChildExitCode }} else {{ $lastTaskResult }}
+  $newTaskResult = $null -ne $taskInfo -and $taskInfo.LastRunTime -ge $taskStartTime
+  if (($null -ne $attemptChildExitCode -or $newTaskResult) -and
+      $null -ne $terminalExitCode -and $terminalExitCode -ne 0) {{
+    Preserve-AttemptDiagnostics $attemptStdoutPath $attemptStderrPath $attemptExitMarkerPath
+    $diagnosticLines = @(
+      "task=$taskName",
+      "attempt_id=$attemptId",
+      "attempt_stdout=$attemptStdoutPath",
+      "attempt_stderr=$attemptStderrPath",
+      "attempt_exit_marker=$attemptExitMarkerPath",
+      "last_task_result=$lastTaskResult",
+      "child_exit_code=$attemptChildExitCode"
+    )
+    foreach ($diagnosticPath in @($attemptStdoutPath, $attemptStderrPath, $attemptExitMarkerPath)) {{
+      if (Test-Path -LiteralPath $diagnosticPath -PathType Leaf) {{
+        $diagnosticLines += @(Get-Content -LiteralPath $diagnosticPath -Tail 40 -ErrorAction SilentlyContinue)
+      }}
+    }}
+    $failureDiagnostics = ($diagnosticLines -join ' | ')
+    Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'startup' -FailureError $failureDiagnostics -FailureExitCode $terminalExitCode
+    Write-Output 'rollback_required=true'
+    Write-Output "failure_diagnostics=$failureDiagnostics"
+    throw "terminal task child exited nonzero; rollback_required=true task=$taskName result=$terminalExitCode"
+  }}
+  $statusRunning = $false
+  $statusReady = $false
+  if (![string]::IsNullOrEmpty($statusUrl)) {{
+    try {{
+      $status = Invoke-RestMethod -Uri $statusUrl -TimeoutSec 8
+      $lastStatusPayload = $status | ConvertTo-Json -Compress -Depth 8
+      $lastStatusError = 'none'
+      $statusRunning = $status.running -eq $true
+      if ($status.PSObject.Properties.Name -contains 'ready') {{
+        $statusReady = $status.ready -eq $true
+      }} elseif ($status.PSObject.Properties.Name -contains 'readiness') {{
+        if ($status.readiness -is [bool]) {{
+          $statusReady = $status.readiness -eq $true
+        }} elseif ($null -ne $status.readiness -and $status.readiness.PSObject.Properties.Name -contains 'ready') {{
+          $statusReady = $status.readiness.ready -eq $true
+        }}
+      }}
+    }} catch {{
+      $lastStatusError = $_.Exception.Message
+    }}
+  }}
+  if ($processRunning -and $statusRunning) {{
+    if (!$requireStrictReady -or $statusReady) {{
+      $verified = $true
+      break
+    }}
+  }} elseif ($processRunning -and !$requireRpcRunning) {{
+    $verified = $true
+    break
+  }}
+  Start-Sleep -Seconds 2
+}}
+if (!$verified) {{
+  Preserve-AttemptDiagnostics $attemptStdoutPath $attemptStderrPath $attemptExitMarkerPath
+  Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'startup_timeout' -FailureError $lastStatusError -FailureExitCode 1
+  throw "Windows observer startup verification timed out; rollback_required=true after=$verificationTimeoutSeconds seconds process_running=$processRunning status_running=$statusRunning status_ready=$statusReady rpc_error=$lastStatusError payload=$lastStatusPayload"
+}}
+Set-ScheduledTask -TaskName $taskName -Action $originalTaskAction -ErrorAction Stop | Out-Null
+Write-Output "startup_verified=true process_running=$processRunning status_running=$statusRunning status_ready=$statusReady"
+Get-Process oasis7_chain_runtime -ErrorAction Stop |
   Select-Object -First 1 Id,Path |
   ConvertTo-Json -Compress
 Get-ScheduledTask -TaskName $taskName |
   Select-Object TaskName,State |
   ConvertTo-Json -Compress
-try {{
-  {status_block}
-}} catch {{
-  Write-Output "STATUS_ERROR=$($_.Exception.Message)"
-}}
+Write-Output $lastStatusPayload
 """
 
 
@@ -345,6 +1205,8 @@ def write_windows_plan(
     version: str,
     commit: str,
     run_id: str,
+    governed_files: list[tuple[Path, str]],
+    readiness_policy: str,
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "windows-node")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -354,25 +1216,127 @@ def write_windows_plan(
     remote_script = str(node.get("remote_script") or f"{safe_name}-windows-upgrade.ps1")
     remote_installer = str(node.get("remote_installer") or windows_asset.name)
     script_node = dict(node)
-    if host and not script_node.get("installer_path"):
-        script_node["installer_path"] = remote_installer
-    script_text = windows_script(script_node, windows_asset.name, version, commit, run_id)
+    if host:
+        rollback_backup_root = node.get("rollback_backup_root")
+        if not isinstance(rollback_backup_root, str) or not rollback_backup_root.strip():
+            die(
+                f"remote windows node {name} must declare a non-empty "
+                "rollback_backup_root"
+            )
+        script_node["rollback_backup_root"] = rollback_backup_root.strip()
+    deploy_root = str(node.get("deploy_root") or r"C:\oasis7-deploy").replace("\\", "/").rstrip("/")
+    attempt_seed = "\0".join((safe_name, version, commit, run_id))
+    attempt_id = hashlib.sha256(attempt_seed.encode("utf-8")).hexdigest()[:24]
+    staging_root = f"{deploy_root}/staging/package-rollout/{attempt_id}"
+    remote_installer_name = Path(remote_installer.replace("\\", "/")).name
+    remote_script_name = Path(remote_script.replace("\\", "/")).name
+    staged_installer = f"{staging_root}/{remote_installer_name}"
+    staged_script = f"{staging_root}/{remote_script_name}"
+    active_bundle_path = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
+    active_genesis_path = str(node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS)
+    active_manifest_path = str(node.get("governed_manifest_path") or WINDOWS_GOVERNED_MANIFEST)
+    active_bootstrap_path = str(node.get("governed_bootstrap_path") or WINDOWS_GOVERNED_BOOTSTRAP)
+    active_bundle_name = Path(active_bundle_path.replace("\\", "/")).name
+    active_genesis_name = Path(active_genesis_path.replace("\\", "/")).name
+    active_manifest_name = Path(active_manifest_path.replace("\\", "/")).name
+    active_bootstrap_name = Path(active_bootstrap_path.replace("\\", "/")).name
+    script_node.update(
+        {
+            "staging_root": staging_root,
+            "installer_path": staged_installer,
+            "configured_installer_path": remote_installer,
+            "governed_bundle_path": f"{staging_root}/config/{active_bundle_name}",
+            "governed_genesis_path": f"{staging_root}/config/{active_genesis_name}",
+            "governed_manifest_path": f"{staging_root}/config/{active_manifest_name}",
+            "governed_bootstrap_path": f"{staging_root}/config/{active_bootstrap_name}",
+            "active_governed_bundle_path": active_bundle_path,
+            "active_governed_genesis_path": active_genesis_path,
+            "active_governed_manifest_path": active_manifest_path,
+            "active_governed_bootstrap_path": active_bootstrap_path,
+        }
+    )
+    remote_governed = {
+        f"{staging_root}/config/{remote_relative}": sha256_file(source)
+        for source, remote_relative in governed_files
+    }
+    script_text = windows_script(
+        script_node,
+        windows_asset.name,
+        version,
+        commit,
+        run_id,
+        remote_governed,
+        readiness_policy,
+    )
     script_path.write_text(script_text, encoding="utf-8")
     # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
     script_path.write_bytes(script_text.encode("utf-8"))
     commands: list[str] = []
     if host:
-        commands.append(shell_join(["scp", str(windows_asset), f"{user}@{host}:{remote_installer}"]))
-        commands.append(shell_join(["scp", str(script_path), f"{user}@{host}:{remote_script}"]))
-        commands.append(
-            shell_join(
-                [
-                    "ssh",
-                    f"{user}@{host}",
-                    f"powershell -NoProfile -ExecutionPolicy Bypass -File {remote_script}",
-                ]
+        remote_target = f"{user}@{host}"
+
+        def ps_literal(value: str) -> str:
+            return "'" + value.replace("'", "''") + "'"
+
+        def encoded_powershell_argv(statement: str) -> list[str]:
+            encoded = base64.b64encode(statement.encode("utf-16le")).decode("ascii")
+            return [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-EncodedCommand",
+                encoded,
+            ]
+
+        def remote_staging_command(statement: str, plan_annotation: str) -> str:
+            encoded_command = shell_join(
+                ["command", "ssh", remote_target, *encoded_powershell_argv(statement)]
             )
+            return f": {shlex.quote(plan_annotation)} && {encoded_command}"
+
+        def append_verified_transfer(source: Path, remote_path: str) -> None:
+            normalized_remote = remote_path.replace("\\", "/")
+            remote_parent = str(Path(normalized_remote).parent).replace("\\", "/")
+            expected_sha256 = sha256_file(source)
+            commands.append(
+                remote_staging_command(
+                    f"$parent={ps_literal(remote_parent)}; "
+                    "$null = New-Item -ItemType Directory -Path $parent -Force; "
+                    f"Write-Output ('staging_parent_ready=' + $parent + ' path=' + {ps_literal(normalized_remote)} + "
+                    f"' transfer_target={remote_target}:{normalized_remote}')",
+                    (
+                        f"staging_parent_ready={remote_parent} "
+                        f"path={normalized_remote} transfer_target={remote_target}:{normalized_remote} "
+                        "operation=New-Item -ItemType Directory"
+                    ),
+                )
+            )
+            commands.append(shell_join(["scp", str(source), f"{remote_target}:{normalized_remote}"]))
+            commands.append(
+                remote_staging_command(
+                    f"$path={ps_literal(normalized_remote)}; $expected={ps_literal(expected_sha256)}; "
+                    "$actual=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); "
+                    "if ($actual -ne $expected) { throw ('staging transfer checksum mismatch: path=' + $path + "
+                    "' expected=' + $expected + ' actual=' + $actual) }; "
+                    "Write-Output ('staging_transfer_ack=' + $path + ' sha256=' + $actual)",
+                    (
+                        f"staging_transfer_ack={normalized_remote} sha256={expected_sha256} "
+                        "operation=Get-FileHash SHA256 throw_on_mismatch=true"
+                    ),
+                )
+            )
+
+        append_verified_transfer(windows_asset, staged_installer)
+        for source, remote_relative in governed_files:
+            remote_path = f"{staging_root}/config/{remote_relative}"
+            append_verified_transfer(source, remote_path)
+        append_verified_transfer(script_path, staged_script)
+        apply_statement = (
+            "$rolloutEvidenceMarker='task-2269-windows-upgrade.ps1'; "
+            "& powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "
+            f"{ps_literal(staged_script)} ; exit $LASTEXITCODE"
         )
+        commands.append(shell_join(["ssh", remote_target, *encoded_powershell_argv(apply_statement)]))
     else:
         commands.append(
             shell_join(
@@ -496,6 +1460,9 @@ def main() -> int:
                 node_plan["apply_output"] = applied.stdout.strip().splitlines()
                 node_plan["applied"] = True
         elif platform == "windows-x64":
+            governed_files = windows_governed_files(
+                platform_dirs[platform], verified_files[platform]
+            )
             script_path, commands = write_windows_plan(
                 out_dir,
                 node,
@@ -503,9 +1470,14 @@ def main() -> int:
                 version,
                 commit,
                 run_id,
+                governed_files,
+                args.readiness_policy,
             )
             node_plan["windows_script"] = str(script_path)
             node_plan["governed_bundle_path"] = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
+            node_plan["governed_genesis_path"] = str(
+                node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS
+            )
             node_plan["commands"].extend(commands)
         elif platform == "macos-x64":
             node_plan["note"] = (
