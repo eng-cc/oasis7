@@ -411,6 +411,18 @@ $rollbackRoot = if ($RollbackRootJunction) { Join-Path $deploy 'backups/rollback
 New-Item -ItemType Directory -Path $deployReal, $installRoot, $rollbackReal -Force | Out-Null
 if ($ActiveConfigJunction) { New-Item -ItemType Junction -Path $deploy -Target $deployReal | Out-Null }
 if ($RollbackRootJunction) { New-Item -ItemType Junction -Path $rollbackRoot -Target $rollbackReal | Out-Null }
+if ($ActiveConfigJunction) {
+  $deployJunction = Get-Item -LiteralPath $deploy -Force -ErrorAction Stop
+  if (($deployJunction.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+    throw "fixture active deploy root is not a reparse point: $deploy"
+  }
+}
+if ($RollbackRootJunction) {
+  $rollbackJunction = Get-Item -LiteralPath $rollbackRoot -Force -ErrorAction Stop
+  if (($rollbackJunction.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+    throw "fixture rollback root is not a reparse point: $rollbackRoot"
+  }
+}
 $taskName = "Oasis7Fixture2269_" + [Guid]::NewGuid().ToString('N')
 $port = Get-Random -Minimum 20000 -Maximum 45000
 $config = Join-Path $deploy 'config'
@@ -460,6 +472,19 @@ Assert-Utf8NoBom $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
 $scriptText = [IO.File]::ReadAllText($rollout)
+$requiredActiveAssignments = @{
+  activeBundlePath = $activeBundle
+  activeGenesisPath = $activeGenesis
+  activeManifestPath = $activeManifest
+  activeBootstrapPath = $activeBootstrap
+}
+foreach ($requiredActiveAssignment in $requiredActiveAssignments.GetEnumerator()) {
+  $assignmentPattern = '\$' + [regex]::Escape($requiredActiveAssignment.Key) + ' = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
+  $assignmentMatch = [regex]::Match($scriptText, $assignmentPattern)
+  if (!$assignmentMatch.Success -or $assignmentMatch.Groups[1].Value -ne $requiredActiveAssignment.Value) {
+    throw "fixture generated active destination diverged: variable=$($requiredActiveAssignment.Key) expected=$($requiredActiveAssignment.Value) actual=$($assignmentMatch.Groups[1].Value)"
+  }
+}
 $stagingRootAssignmentPattern = '\$stagingRoot = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
 $representativeStagingAssignment = '$stagingRoot = [Environment]::ExpandEnvironmentVariables(''C:\oasis7-deploy\staging\package-rollout\manual'')'
 $representativeStagingMatch = [regex]::Match($representativeStagingAssignment, $stagingRootAssignmentPattern)
@@ -508,11 +533,13 @@ foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest
   if ($projectedActivePaths.Count -ne 1) {
     throw "fixture staged governed closure has ambiguous required active target: $requiredActiveLeaf"
   }
-  $projectedActivePath = $projectedActivePaths[0]
-  if (!(Test-Path -LiteralPath $requiredActivePath -PathType Leaf)) {
-    throw "fixture logical active target is not reachable through its configured path: $requiredActivePath"
+  if (!$ActiveConfigJunction) {
+    $projectedActivePath = $projectedActivePaths[0]
+    if (!(Test-Path -LiteralPath $requiredActivePath -PathType Leaf)) {
+      throw "fixture logical active target is not reachable through its configured path: $requiredActivePath"
+    }
+    Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
   }
-  Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
 }
 return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
