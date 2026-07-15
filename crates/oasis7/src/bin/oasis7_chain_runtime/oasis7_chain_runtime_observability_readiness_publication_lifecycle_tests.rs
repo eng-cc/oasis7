@@ -557,6 +557,121 @@ fn publication_status_fails_closed_until_async_lifecycle_state_is_durable() {
 }
 
 #[test]
+fn equal_head_quorum_requires_a_current_durable_catch_up_binding() {
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_millis() as i64;
+    let snapshot = lifecycle_snapshot(2, now_ms - 1_000, 2, now_ms - 1_000, now_ms - 100);
+    let mut failures = Vec::new();
+
+    for (label, expected_reason, install_state, persist_failure) in [
+        ("missing", "state_persist_pending", None, false),
+        (
+            "stale-episode",
+            "state_binding_invalid",
+            Some("episode"),
+            false,
+        ),
+        (
+            "stale-catch-up",
+            "state_binding_invalid",
+            Some("catch_up"),
+            false,
+        ),
+        ("malformed", "state_malformed", Some("malformed"), false),
+        ("persist-failed", "state_persist_failed", None, true),
+        (
+            "matching-catch-up",
+            "ready",
+            Some("matching-catch_up"),
+            false,
+        ),
+    ] {
+        let (root, records_dir, manifest) = prepare_world(
+            format!("equal-head-durable-catch-up-{label}").as_str(),
+            &[
+                (0, now_ms - 3_000),
+                (1, now_ms - 2_000),
+                (2, now_ms - 1_000),
+            ],
+        );
+        match install_state {
+            Some("episode") => install_lifecycle_state(&root, "episode", 1, now_ms - 2_000),
+            Some("catch_up") => install_lifecycle_state(&root, "catch_up", 1, now_ms - 2_000),
+            Some("malformed") => {
+                fs::write(root.join("execution-world").join(STATE_FILE), b"{not-json")
+                    .expect("write malformed lifecycle state")
+            }
+            Some("matching-catch_up") => {
+                install_lifecycle_state(&root, "catch_up", 2, now_ms - 1_000)
+            }
+            None => {}
+            Some(other) => panic!("unsupported equal-head lifecycle state: {other}"),
+        }
+
+        let mut snapshot = snapshot.clone();
+        if persist_failure {
+            snapshot.consensus_progress_observer_error = Some(
+                oasis7_node::NodeConsensusProgressObserverError::coded(
+                    "state_persist_failed",
+                    "publication lifecycle reconciliation failed: reason=state_persist_failed detail=state_replace_failed",
+                ),
+            );
+        }
+        let before = tree_snapshot(&root);
+        for method in [StatusMethod::Get, StatusMethod::Head] {
+            let payload =
+                construct_status(method, snapshot.clone(), &manifest, &root, &records_dir);
+            let has_rejection = payload.observability.alerts.iter().any(|alert| {
+                alert.code == "sequencer_head_publication_proof_rejected"
+                    && alert
+                        .summary
+                        .contains(format!("reason={expected_reason}").as_str())
+            });
+            let accepted = payload.observability.ready
+                && payload.readiness.ready
+                && !payload
+                    .observability
+                    .alerts
+                    .iter()
+                    .any(|alert| alert.code == "sequencer_head_publication_proof_rejected");
+            let expected_acceptance = expected_reason == "ready";
+            let missing_expected_rejection =
+                !expected_acceptance && !persist_failure && !has_rejection;
+            if accepted != expected_acceptance || missing_expected_rejection {
+                failures.push(format!(
+                    "{label} {method:?}: expected {expected_reason}, {}",
+                    outcome_diagnostic(&payload)
+                ));
+            }
+            if persist_failure
+                && payload.readiness.failed_gates.first().map(String::as_str)
+                    != Some("state_persist_failed")
+            {
+                failures.push(format!(
+                    "{label} {method:?}: state_persist_failed lost first-gate precedence, {}",
+                    outcome_diagnostic(&payload)
+                ));
+            }
+        }
+        let changed = changed_tree_paths(&before, &tree_snapshot(&root));
+        if !changed.is_empty() {
+            failures.push(format!(
+                "{label}: GET/HEAD mutated lifecycle paths: {changed:?}"
+            ));
+        }
+        fs::remove_dir_all(root).expect("remove equal-head lifecycle fixture");
+    }
+
+    assert!(
+        failures.is_empty(),
+        "equal-head readiness accepted without a matching durable catch-up binding:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
 fn publication_status_get_and_head_construction_never_mutate_durable_state() {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)

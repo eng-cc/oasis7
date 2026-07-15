@@ -3,6 +3,7 @@ use std::path::Path;
 use super::super::publication_lifecycle::{
     LifecycleError, PublicationHeadBinding, PublicationLifecycleSnapshot,
     SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_complete_publication_quorum_at_height, load_snapshot,
+    validate_current_catch_up_binding,
 };
 use super::super::publication_proof::{
     PublicationExecutionRecord, PublicationProofError, PublicationProofErrorKind,
@@ -63,6 +64,15 @@ pub(super) fn enforce_retained_publication_proof(
         snapshot.consensus.committed_height,
         true,
     ) {
+        if let Err(error) = validate_current_catch_up_binding(snapshot, execution_world_dir) {
+            reject_publication_proof(
+                snapshot,
+                network_head,
+                None,
+                PublicationProofRejection::from_lifecycle_error(error),
+                observability,
+            );
+        }
         return;
     }
 
@@ -234,6 +244,7 @@ fn lifecycle_rejection_reason(reason: &str) -> Reason {
     match reason {
         "state_malformed" => Reason::StateMalformed,
         "state_persist_failed" => Reason::StatePersistFailed,
+        "state_persist_pending" => Reason::StatePersistPending,
         _ => Reason::StateBindingInvalid,
     }
 }

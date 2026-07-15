@@ -232,6 +232,24 @@ pub(super) fn load_snapshot(
     Ok(Some(state))
 }
 
+pub(super) fn validate_current_catch_up_binding(
+    snapshot: &NodeSnapshot,
+    execution_world_dir: &Path,
+) -> Result<(), LifecycleError> {
+    let state = load_snapshot(execution_world_dir)?
+        .ok_or_else(|| LifecycleError::persist_pending("state_missing"))?;
+    validate_world(&state, snapshot.world_id.as_str())?;
+    let expected = PublicationHeadBinding::from_snapshot(snapshot)?;
+    let actual = state
+        .catch_up
+        .as_ref()
+        .ok_or_else(|| LifecycleError::binding("catch_up_missing"))?;
+    if !bindings_equal(actual, &expected) {
+        return Err(LifecycleError::binding("catch_up_binding_mismatch"));
+    }
+    Ok(())
+}
+
 pub(super) fn reconcile(
     snapshot: &NodeSnapshot,
     manifest: Option<&LoadedNetworkTierManifest>,
@@ -529,6 +547,13 @@ impl LifecycleError {
     fn persist(detail: impl Into<String>) -> Self {
         Self {
             reason: "state_persist_failed",
+            detail: detail.into(),
+        }
+    }
+
+    fn persist_pending(detail: impl Into<String>) -> Self {
+        Self {
+            reason: "state_persist_pending",
             detail: detail.into(),
         }
     }
