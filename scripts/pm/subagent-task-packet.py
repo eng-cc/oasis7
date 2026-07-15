@@ -17,6 +17,7 @@ SCHEMA = "oasis7-subagent-task-packet/v1"
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 SLICE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 MAX_SUMMARY_BYTES = 4096
+DELIVERY_MODES = {"minimal_head_bound_task_packet", "full_history_escalation"}
 
 
 class PacketError(RuntimeError):
@@ -119,7 +120,8 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
         mapping_field = "status" if field == "task_status" else field
         if identity.get(field) != task.get(mapping_field):
             fail(f"packet {field} does not match task mapping")
-    for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "write_scope", "return_contract", "validation_command", "formal_sink"):
+    bounded(str(identity.get("packet_producer") or ""), "identity.packet_producer")
+    for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "write_scope", "return_contract", "validation_command", "formal_sink"):
         bounded(str(slice_contract.get(field) or ""), f"slice.{field}")
     if slice_contract.get("owner_role") != task.get("owner_role"):
         fail("packet owner role does not match task mapping")
@@ -127,6 +129,14 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
         fail("slice.slice_id must be a safe immutable identifier")
     if slice_contract.get("formal_sink") != task.get("issue_url"):
         fail("packet formal sink does not match task issue URL")
+    delivery_mode = str(slice_contract.get("context_delivery_mode"))
+    if delivery_mode not in DELIVERY_MODES:
+        fail(f"unsupported context delivery mode: {delivery_mode}")
+    escalation_reason = str(slice_contract.get("full_history_escalation_reason") or "").strip()
+    if delivery_mode == "full_history_escalation":
+        bounded(escalation_reason, "slice.full_history_escalation_reason")
+    elif escalation_reason:
+        fail("full-history escalation reason is only valid with full_history_escalation mode")
     for field in ("user_intent", "work_item", "non_goals", "acceptance_target", "evidence_summary", "collaboration_boundary"):
         bounded(str(context.get(field) or ""), f"context.{field}")
     governance = context.get("governance_refs")
@@ -154,6 +164,10 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--slice-type", required=True)
     create.add_argument("--owner-role", required=True)
     create.add_argument("--integration-owner", required=True)
+    create.add_argument("--integration-order", required=True)
+    create.add_argument("--packet-producer", required=True)
+    create.add_argument("--context-delivery-mode", choices=sorted(DELIVERY_MODES), required=True)
+    create.add_argument("--full-history-escalation-reason", default="")
     create.add_argument("--base", required=True)
     create.add_argument("--user-intent", required=True)
     create.add_argument("--work-item", required=True)
@@ -201,11 +215,12 @@ def main() -> int:
             "repository": task.get("repository"),
             "project_item_id": task.get("project_item_id"),
             "task_status": task.get("status"),
+            "packet_producer": bounded(args.packet_producer, "identity.packet_producer"),
             **facts,
         },
         "slice": {
             key: bounded(str(getattr(args, key)), f"slice.{key}")
-            for key in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "write_scope", "return_contract", "validation_command", "formal_sink")
+            for key in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "write_scope", "return_contract", "validation_command", "formal_sink")
         },
         "context": {
             "user_intent": bounded(args.user_intent, "context.user_intent"),
@@ -218,6 +233,10 @@ def main() -> int:
             "collaboration_boundary": bounded(args.collaboration_boundary, "context.collaboration_boundary"),
         },
     }
+    packet["slice"]["full_history_escalation_reason"] = bounded(
+        args.full_history_escalation_reason,
+        "slice.full_history_escalation_reason",
+    ) if args.context_delivery_mode == "full_history_escalation" else ""
     packet["packet_digest"] = canonical_digest(packet)
     validate_packet(root, packet)
     packet_dir = (root / f".pm/scratch/{args.task_uid}/slice-packets").resolve()

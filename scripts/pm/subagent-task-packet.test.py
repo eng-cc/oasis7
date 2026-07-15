@@ -43,7 +43,7 @@ class PacketTest(unittest.TestCase):
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
 
     def create_args(self) -> list[str]:
-        return ["create", "--task-uid", TASK_UID, "--slice-id", "qa-review", "--role", "qa_engineer", "--slice-type", "review", "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
+        return ["create", "--task-uid", TASK_UID, "--slice-id", "qa-review", "--role", "qa_engineer", "--slice-type", "review", "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--context-delivery-mode", "minimal_head_bound_task_packet", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
 
     def invoke(self, args: list[str], ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
@@ -55,6 +55,9 @@ class PacketTest(unittest.TestCase):
         packet_path = result.stdout.splitlines()[0]
         packet = json.loads((self.repo / packet_path).read_text())
         self.assertEqual(subprocess.check_output(["git", "-C", str(self.repo), "rev-parse", "HEAD"], text=True).strip(), packet["identity"]["head"])
+        self.assertEqual("tpm", packet["identity"]["packet_producer"])
+        self.assertEqual("minimal_head_bound_task_packet", packet["slice"]["context_delivery_mode"])
+        self.assertEqual("1/1", packet["slice"]["integration_order"])
         self.assertNotIn("embedded_docs", packet)
         self.invoke(["validate", packet_path])
 
@@ -65,6 +68,29 @@ class PacketTest(unittest.TestCase):
         result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
         self.assertNotEqual(0, result.returncode)
         self.assertIn("--work-item", result.stderr)
+
+        for option in ("--packet-producer", "--context-delivery-mode", "--integration-order"):
+            args = self.create_args()
+            index = args.index(option)
+            del args[index:index + 2]
+            result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn(option, result.stderr)
+
+    def test_delivery_mode_escalation_and_digest_tamper(self) -> None:
+        args = self.create_args()
+        args[args.index("minimal_head_bound_task_packet")] = "full_history_escalation"
+        result = self.invoke(args, ok=False)
+        self.assertIn("full_history_escalation_reason", result.stderr)
+
+        args.extend(["--full-history-escalation-reason", "prior user authority is absent from scoped evidence"])
+        result = self.invoke(args)
+        packet_path = result.stdout.splitlines()[0]
+        packet_file = self.repo / packet_path
+        packet = json.loads(packet_file.read_text())
+        packet["identity"]["packet_producer"] = "tampered"
+        packet_file.write_text(json.dumps(packet), encoding="utf-8")
+        self.assertIn("packet digest mismatch", self.invoke(["validate", packet_path], ok=False).stderr)
 
     def test_wrong_task_and_worktree_fail(self) -> None:
         args = self.create_args(); args[args.index(TASK_UID)] = "task_22222222222222222222222222222222"
