@@ -319,15 +319,22 @@ if ! command -v cygpath >/dev/null 2>&1; then
 fi
 local powershell_output="$TMP_DIR/windows-powershell-behavior.log"
 local powershell_completion_marker
+local powershell_fixture_script
+local powershell_fixture_script_windows
 local powershell_status
+if ! awk '
+  /^[[:space:]]*"\$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "\$powershell_fixture_script_windows"/ {
+    found = 1
+  }
+  END { exit !found }
+' "${BASH_SOURCE[0]}"; then
+  echo "Windows PowerShell behavior harness must invoke its fixture with -File" >&2
+  exit 1
+fi
 powershell_completion_marker="$(mktemp "$TMP_DIR/windows-powershell-behavior-completion-marker.XXXXXX")"
 rm -f "$powershell_completion_marker"
-set +e
-OASIS7_FIXTURE_ROOT_DIR="$(cygpath -w "$TMP_DIR")" \
-  OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
-  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
-  OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
-  "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -Command - >"$powershell_output" 2>&1 <<'PS'
+powershell_fixture_script="$(mktemp "$TMP_DIR/windows-powershell-behavior-fixture.XXXXXX.ps1")"
+cat >"$powershell_fixture_script" <<'PS'
 $ErrorActionPreference = 'Stop'
 
 $fixtureRoot = Join-Path $env:OASIS7_FIXTURE_ROOT_DIR ("windows-rollout-behavior-" + [Guid]::NewGuid().ToString('N'))
@@ -544,6 +551,23 @@ foreach ($taskName in $fixtureTasks) { Unregister-ScheduledTask -TaskName $taskN
 Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 PS
+
+if [[ "$(od -An -v -t x1 -N 3 "$powershell_fixture_script")" == *"ef bb bf"* ]]; then
+  echo "Windows PowerShell behavior fixture must be UTF-8 without a BOM: $powershell_fixture_script" >&2
+  exit 1
+fi
+powershell_fixture_script_windows="$(cygpath -w "$powershell_fixture_script")"
+if [[ "$powershell_fixture_script_windows" != *.ps1 ]]; then
+  echo "Windows PowerShell behavior fixture did not retain its .ps1 path: $powershell_fixture_script_windows" >&2
+  exit 1
+fi
+
+set +e
+OASIS7_FIXTURE_ROOT_DIR="$(cygpath -w "$TMP_DIR")" \
+  OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
+  OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
+  "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$powershell_fixture_script_windows" >"$powershell_output" 2>&1
 powershell_status=$?
 set -e
 cat "$powershell_output"
