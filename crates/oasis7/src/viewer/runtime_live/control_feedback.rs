@@ -84,31 +84,4 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn confirm_player_gameplay_progress(&mut self) {
         self.confirmed_player_gameplay_progress_time = Some(self.world.state().time);
     }
-
-    pub(super) fn confirm_chain_linked_player_gameplay_progress(
-        &mut self,
-        delta_logical_time: u64,
-        delta_event_seq: u64,
-    ) {
-        self.confirm_player_gameplay_progress();
-        if delta_logical_time == 0 && delta_event_seq == 0 {
-            return;
-        }
-
-        let Some(feedback) = self.latest_player_gameplay_feedback.as_mut() else {
-            return;
-        };
-        if feedback.stage != "submitted" {
-            return;
-        }
-
-        feedback.stage = "completed_advanced".to_string();
-        feedback.effect = format!(
-            "committed world sync resolved the submitted gameplay action: logicalTime +{delta_logical_time}, eventSeq +{delta_event_seq}"
-        );
-        feedback.reason = None;
-        feedback.hint = None;
-        feedback.delta_logical_time = delta_logical_time;
-        feedback.delta_event_seq = delta_event_seq;
-    }
 }

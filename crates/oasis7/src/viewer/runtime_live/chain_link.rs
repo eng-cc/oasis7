@@ -208,7 +208,7 @@ impl ViewerRuntimeLiveServer {
 
         self.world = prepared.world;
         self.last_chain_committed_height = prepared.committed_height;
-        self.confirm_chain_linked_player_gameplay_progress(delta_logical_time, delta_event_seq);
+        self.confirm_player_gameplay_progress();
 
         let mapped_events: Vec<_> = self
             .world
