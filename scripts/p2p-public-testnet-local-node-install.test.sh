@@ -93,6 +93,29 @@ GENESIS_VALIDATOR_REGISTRY_PATH=\${STACK_ROOT}/config/genesis-validator-registry
 TRAFFIC_MONITOR_OUTPUT_DIR=\$STACK_ROOT/output/traffic-monitor
 EOF
 
+escape_node_root="$TMP_DIR/symlink-escape-node"
+escape_external="$TMP_DIR/symlink-escape-external"
+mkdir -p "$escape_node_root/config" "$escape_external"
+printf 'external sentinel\n' >"$escape_external/sentinel"
+ln -s "$escape_external" "$escape_node_root/config/doc"
+set +e
+escape_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/config/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$escape_node_root" \
+  --launchd-label oasis7.testnet.symlink-escape 2>&1)
+escape_status=$?
+set -e
+if [[ "$escape_status" -eq 0 ]]; then
+  echo "expected local node install to reject governed-evidence symlink escape" >&2
+  exit 1
+fi
+grep -q 'local node install target contains symlink component' <<<"$escape_output"
+test ! -e "$escape_node_root/bin/oasis7_chain_runtime"
+test "$(cat "$escape_external/sentinel")" = 'external sentinel'
+test ! -e "$escape_external/governance-public-signers.json"
+
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \
   --source-manifest "$source_stack/config/manifest.json" \

@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -83,6 +84,12 @@ def find_platform_dir(package_dir: Path, platform: str) -> Path:
     buildinfo = package_dir / f"{platform}-BUILDINFO"
     if buildinfo.is_file():
         return package_dir
+    for candidate in package_dir.rglob("*"):
+        if not candidate.is_symlink():
+            continue
+        resolved = candidate.resolve()
+        if resolved.is_dir() and any(resolved.rglob(f"{platform}-BUILDINFO")):
+            die(f"platform package path contains symlink component: {candidate}")
     matches = sorted(path.parent for path in package_dir.rglob(f"{platform}-BUILDINFO"))
     if not matches:
         die(f"cannot find {platform}-BUILDINFO under {package_dir}")
@@ -122,7 +129,18 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
     genesis = platform_dir / WINDOWS_GOVERNED_GENESIS.rsplit("\\", 1)[-1]
     manifest = platform_dir / WINDOWS_GOVERNED_MANIFEST.rsplit("\\", 1)[-1]
     bootstrap = platform_dir / WINDOWS_GOVERNED_BOOTSTRAP.rsplit("\\", 1)[-1]
+
+    def reject_symlink_component(path: Path) -> None:
+        current = platform_dir
+        if current.is_symlink():
+            die(f"Windows governed bootstrap artifact contains symlink component: {current}")
+        for component in path.relative_to(platform_dir).parts:
+            current /= component
+            if current.is_symlink():
+                die(f"Windows governed bootstrap artifact contains symlink component: {current}")
+
     for path in (bundle, genesis, manifest, bootstrap):
+        reject_symlink_component(path)
         if not path.is_file():
             die(f"missing Windows governed bootstrap artifact: {path}")
     bundle_data = json.loads(bundle.read_text(encoding="utf-8"))
@@ -364,6 +382,18 @@ def windows_script(
     governed_hashes: dict[str, str],
     readiness_policy: str,
 ) -> str:
+    def ps_literal(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    def ps_expanded_path(value: str) -> str:
+        environment_form = re.sub(
+            r"\$env:([A-Za-z_][A-Za-z0-9_]*)",
+            lambda match: f"%{match.group(1)}%",
+            value,
+            flags=re.IGNORECASE,
+        )
+        return f"[Environment]::ExpandEnvironmentVariables({ps_literal(environment_form)})"
+
     deploy_root = str(node.get("deploy_root") or r"C:\oasis7-deploy")
     staging_root = str(
         node.get("staging_root")
@@ -421,7 +451,8 @@ def windows_script(
     require_strict_ready = "$true" if readiness_policy == "strict-ready" else "$false"
     require_rpc_running = "$true" if readiness_policy in ("rpc-running", "strict-ready") else "$false"
     integrity_entries = "\n".join(
-        f"  '{path}' = '{digest}'" for path, digest in sorted(governed_hashes.items())
+        f"  {ps_literal(path)} = {ps_literal(digest)}"
+        for path, digest in sorted(governed_hashes.items())
     )
     return f"""$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -523,29 +554,29 @@ function Preserve-AttemptDiagnostics {{
   }}
 }}
 
-$version = '{version}'
-$commit = '{commit}'
-$runId = '{run_id}'
-$artifactRef = '{ref}'
-$installRoot = "{install_root}"
+$version = {ps_literal(version)}
+$commit = {ps_literal(commit)}
+$runId = {ps_literal(run_id)}
+$artifactRef = {ps_literal(ref)}
+$installRoot = {ps_expanded_path(install_root)}
 $runtime = Join-Path $installRoot 'bin\\oasis7_chain_runtime.exe'
-$installer = "{configured_installer_path}"
+$installer = {ps_expanded_path(configured_installer_path)}
 # Preserve the configured destination as plan evidence, then consume only the staged closure.
-$installer = "{installer_path}"
-$deployRoot = '{deploy_root}'
-$stagingRoot = '{staging_root}'
-$taskName = '{task_name}'
-$bundlePath = '{governed_bundle_path}'
-$genesisPath = '{governed_genesis_path}'
-$manifestPath = '{governed_manifest_path}'
-$bootstrapPath = '{governed_bootstrap_path}'
-$activeBundlePath = '{active_governed_bundle_path}'
-$activeGenesisPath = '{active_governed_genesis_path}'
-$activeManifestPath = '{active_governed_manifest_path}'
-$activeBootstrapPath = '{active_governed_bootstrap_path}'
-$rollbackBackupRoot = '{rollback_backup_root.replace("'", "''")}'
+$installer = {ps_expanded_path(installer_path)}
+$deployRoot = {ps_expanded_path(deploy_root)}
+$stagingRoot = {ps_expanded_path(staging_root)}
+$taskName = {ps_literal(task_name)}
+$bundlePath = {ps_expanded_path(governed_bundle_path)}
+$genesisPath = {ps_expanded_path(governed_genesis_path)}
+$manifestPath = {ps_expanded_path(governed_manifest_path)}
+$bootstrapPath = {ps_expanded_path(governed_bootstrap_path)}
+$activeBundlePath = {ps_expanded_path(active_governed_bundle_path)}
+$activeGenesisPath = {ps_expanded_path(active_governed_genesis_path)}
+$activeManifestPath = {ps_expanded_path(active_governed_manifest_path)}
+$activeBootstrapPath = {ps_expanded_path(active_governed_bootstrap_path)}
+$rollbackBackupRoot = {ps_expanded_path(rollback_backup_root)}
 $rollbackUnlockTimeoutSeconds = {rollback_unlock_timeout_secs}
-$statusUrl = '{status_url}'
+$statusUrl = {ps_literal(status_url)}
 $requireStrictReady = {require_strict_ready}
 $requireRpcRunning = {require_rpc_running}
 $verificationTimeoutSeconds = {verification_timeout_secs}
@@ -879,6 +910,11 @@ function Copy-StagedFileAtomically {{
 
 function Invoke-KnownGoodRollback {{
   param([object] $OriginalTaskAction, [string] $FailurePhase, [string] $FailureError, [int] $FailureExitCode = 1)
+  if ($script:rollbackInvoked) {{
+    Write-Output "rollback_already_invoked=true failure_phase=$FailurePhase"
+    return
+  }}
+  $script:rollbackInvoked = $true
   Write-Output 'rollback_begin=true'
   $rollbackDiagnostic = "failure_phase=$FailurePhase rollback_path=$rollbackBackupRoot rollback_error=$FailureError rollback_exit_code=$FailureExitCode rollback_required=true"
   [System.IO.File]::AppendAllText($attemptStderrPath, $rollbackDiagnostic + [Environment]::NewLine)
@@ -978,6 +1014,15 @@ function Invoke-KnownGoodRollback {{
   Write-Output 'rollback_applied=true restart_required=true'
 }}
 
+function Invoke-RolloutFailureInjection {{
+  param([Parameter(Mandatory = $true)] [string] $Phase)
+  if ($env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE -eq $Phase) {{
+    throw "injected rollout failure: phase=$Phase"
+  }}
+}}
+
+$script:rollbackInvoked = $false
+
 $oldHash = if (Test-Path $runtime) {{
   (Get-FileHash $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
 }} else {{
@@ -1051,6 +1096,8 @@ Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue |
   Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 3
 
+try {{
+Invoke-RolloutFailureInjection -Phase 'installer'
 $install = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
 Write-Output "installer_exit_code=$($install.ExitCode)"
 if ($install.ExitCode -ne 0) {{
@@ -1079,6 +1126,7 @@ foreach ($stagedConfigSource in @($expectedGovernedSha256.Keys)) {{
   $stagedConfigRelativePath = $stagedConfigSourceFull.Substring($stagingConfigPrefix.Length)
   $activeConfigTarget = [System.IO.Path]::GetFullPath((Join-Path $activeConfigRoot $stagedConfigRelativePath))
   if ($transformedConfigTargets -contains $activeConfigTarget) {{ continue }}
+  Invoke-RolloutFailureInjection -Phase 'governed_copy'
   Copy-StagedFileAtomically -Source $stagedConfigSourceFull -Destination $activeConfigTarget
 }}
 
@@ -1099,6 +1147,7 @@ $bundleTemp = "$activeBundlePath.rollout-$attemptId.tmp"
   $jsonText + [Environment]::NewLine,
   [System.Text.UTF8Encoding]::new($false)
 )
+Invoke-RolloutFailureInjection -Phase 'bundle_move'
 Move-Item -LiteralPath $bundleTemp -Destination $activeBundlePath -Force
 $updated = 1
 
@@ -1108,6 +1157,7 @@ $genesisTemp = "$activeGenesisPath.rollout-$attemptId.tmp"
   $genesisText + [Environment]::NewLine,
   [System.Text.UTF8Encoding]::new($false)
 )
+Invoke-RolloutFailureInjection -Phase 'genesis_move'
 Move-Item -LiteralPath $genesisTemp -Destination $activeGenesisPath -Force
 $manifestTemp = "$activeManifestPath.rollout-$attemptId.tmp"
 [System.IO.File]::WriteAllText(
@@ -1115,6 +1165,7 @@ $manifestTemp = "$activeManifestPath.rollout-$attemptId.tmp"
   $manifestText + [Environment]::NewLine,
   [System.Text.UTF8Encoding]::new($false)
 )
+Invoke-RolloutFailureInjection -Phase 'manifest_move'
 Move-Item -LiteralPath $manifestTemp -Destination $activeManifestPath -Force
 foreach ($key in $currentGovernedRefKeys) {{
   $property = $genesisJson.governance_bootstrap_refs.PSObject.Properties[$key]
@@ -1126,8 +1177,9 @@ foreach ($key in $currentGovernedRefKeys) {{
 }}
 Write-Output "localized_governed_ref_count=$localizedGovernedRefCount"
 
+Invoke-RolloutFailureInjection -Phase 'current_version_write'
 Set-Content -Encoding UTF8 (Join-Path $deployRoot 'CURRENT_VERSION') $version
-@(
+$deployedBuildInfo = @(
   'workflow=Testnet Packages',
   "run_id=$runId",
   'repository=eng-cc/oasis7',
@@ -1136,7 +1188,9 @@ Set-Content -Encoding UTF8 (Join-Path $deployRoot 'CURRENT_VERSION') $version
   'platform=windows-x64',
   "runtime_sha256=$hash",
   "runtime_size=$size"
-) | Set-Content -Encoding UTF8 (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
+)
+Invoke-RolloutFailureInjection -Phase 'deployed_buildinfo_write'
+$deployedBuildInfo | Set-Content -Encoding UTF8 (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
 Write-Output "updated_bundle_count=$updated"
 Write-Output 'promotion_complete=true'
 
@@ -1223,6 +1277,7 @@ if (!$verified) {{
   Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'startup_timeout' -FailureError $lastStatusError -FailureExitCode 1
   throw "Windows observer startup verification timed out; rollback_required=true after=$verificationTimeoutSeconds seconds process_running=$processRunning status_running=$statusRunning status_ready=$statusReady rpc_error=$lastStatusError payload=$lastStatusPayload"
 }}
+Invoke-RolloutFailureInjection -Phase 'task_action_restore'
 Set-ScheduledTask -TaskName $taskName -Action $originalTaskAction -ErrorAction Stop | Out-Null
 Write-Output "startup_verified=true process_running=$processRunning status_running=$statusRunning status_ready=$statusReady"
 Get-Process oasis7_chain_runtime -ErrorAction Stop |
@@ -1232,6 +1287,13 @@ Get-ScheduledTask -TaskName $taskName |
   Select-Object TaskName,State |
   ConvertTo-Json -Compress
 Write-Output $lastStatusPayload
+}} catch {{
+  $postStopFailure = $_
+  if (!$script:rollbackInvoked) {{
+    Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'post_stop_mutation' -FailureError $postStopFailure.Exception.Message -FailureExitCode 1
+  }}
+  throw $postStopFailure
+}}
 """
 
 

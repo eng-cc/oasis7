@@ -240,6 +240,35 @@ if [[ "$state_mode" == "reset" && ${#existing_state_paths[@]} -gt 0 ]]; then
   done
 fi
 
+python3 - "$node_root" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).expanduser().absolute()
+root_resolved = root.resolve(strict=False)
+targets = (
+    root,
+    root / "bin",
+    root / "config",
+    root / "config" / "doc",
+    root / "config" / "doc" / "testing",
+    root / "config" / "doc" / "testing" / "evidence",
+    root / "logs",
+)
+for target in targets:
+    current = root
+    if root.is_symlink():
+        raise SystemExit(f"local node install target contains symlink component: {root}")
+    for component in target.relative_to(root).parts:
+        current /= component
+        if current.is_symlink():
+            raise SystemExit(f"local node install target contains symlink component: {current}")
+    try:
+        target.resolve(strict=False).relative_to(root_resolved)
+    except ValueError:
+        raise SystemExit(f"local node install target escapes node root: {target}")
+PY
+
 mkdir -p "$node_root/bin" "$node_root/config" "$node_root/logs"
 install -m 0755 "$runtime_build_ref" "$node_root/bin/oasis7_chain_runtime"
 install -m 0755 "$start_script_source" "$node_root/bin/start-node.sh"
@@ -257,7 +286,7 @@ from pathlib import Path
 
 source_env = Path(sys.argv[1])
 source_manifest = Path(sys.argv[2])
-node_root = Path(sys.argv[3])
+node_root = Path(sys.argv[3]).resolve()
 repo_root = Path(sys.argv[4])
 governance_stage = Path(sys.argv[5])
 
@@ -282,7 +311,25 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def confined_node_target(target: Path) -> Path:
+    try:
+        relative = target.relative_to(node_root)
+    except ValueError:
+        raise SystemExit(f"local node install target escapes node root: {target}")
+    current = node_root
+    for component in relative.parts:
+        current /= component
+        if current.is_symlink():
+            raise SystemExit(f"local node install target contains symlink component: {current}")
+    try:
+        target.resolve(strict=False).relative_to(node_root)
+    except ValueError:
+        raise SystemExit(f"local node install target escapes node root: {target}")
+    return target
+
+
 def copy_if_file(source: Path, target: Path) -> None:
+    target = confined_node_target(target)
     if source.is_file():
         if source.resolve() == target.resolve():
             return
@@ -291,6 +338,7 @@ def copy_if_file(source: Path, target: Path) -> None:
 
 
 def copy_tree(source: Path, target: Path) -> None:
+    target = confined_node_target(target)
     if source.resolve() == target.resolve():
         return
     if target.exists():
@@ -374,7 +422,7 @@ if genesis_ref and genesis_source:
             target_name = Path(raw_ref).name
             if not target_name:
                 raise SystemExit(f"invalid genesis governance ref for {key}: {raw_ref}")
-            target = (evidence_dir / target_name).resolve()
+            target = confined_node_target(evidence_dir / target_name)
             previous_source = target_sources.get(target)
             if previous_source is not None and previous_source != source:
                 raise SystemExit(

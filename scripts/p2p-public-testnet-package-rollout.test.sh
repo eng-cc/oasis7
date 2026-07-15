@@ -357,6 +357,88 @@ EOF
   --out-dir "$TMP_DIR/plan-only-out" \
   --json >"$TMP_DIR/plan-only.json"
 
+python3 - \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  "$TMP_DIR/powershell-injection.ps1" <<'PY'
+import importlib.util
+from pathlib import Path
+import re
+import sys
+
+module_path = Path(sys.argv[1])
+output_path = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("package_rollout", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+injected = r"C:\safe'; Write-Output INJECTED; #"
+node = {
+    key: injected
+    for key in (
+        "deploy_root",
+        "staging_root",
+        "install_root",
+        "installer_path",
+        "configured_installer_path",
+        "scheduled_task",
+        "status_url",
+        "governed_bundle_path",
+        "governed_genesis_path",
+        "governed_manifest_path",
+        "governed_bootstrap_path",
+        "active_governed_bundle_path",
+        "active_governed_genesis_path",
+        "active_governed_manifest_path",
+        "active_governed_bootstrap_path",
+        "rollback_backup_root",
+    )
+}
+text = module.windows_script(
+    node,
+    injected,
+    injected,
+    injected,
+    injected,
+    {injected: "a" * 64},
+    "rpc-running",
+)
+output_path.write_text(text, encoding="utf-8")
+assignments = (
+    "$version",
+    "$commit",
+    "$runId",
+    "$artifactRef",
+    "$installRoot",
+    "$installer",
+    "$deployRoot",
+    "$stagingRoot",
+    "$taskName",
+    "$bundlePath",
+    "$genesisPath",
+    "$manifestPath",
+    "$bootstrapPath",
+    "$activeBundlePath",
+    "$activeGenesisPath",
+    "$activeManifestPath",
+    "$activeBootstrapPath",
+    "$rollbackBackupRoot",
+    "$statusUrl",
+)
+for variable in assignments:
+    lines = [line for line in text.splitlines() if line.startswith(variable + " =")]
+    assert lines, f"missing generated assignment for {variable}"
+    for line in lines:
+        assert "''; Write-Output INJECTED; #" in line, (
+            f"manifest value was not encoded as one PowerShell single-quoted literal: {line}"
+        )
+        assert not re.search(r"(?<!')'; Write-Output INJECTED", line), (
+            f"manifest value escaped its PowerShell literal: {line}"
+        )
+integrity_lines = [line for line in text.splitlines() if "INJECTED" in line and " = " in line]
+assert integrity_lines
+assert all("''; Write-Output INJECTED; #" in line for line in integrity_lines)
+PY
+
 node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$node_root")
 plan_current_target=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(readlink "$node_root/current")")
 test "$plan_current_target" = "$node_root_abs/releases/old"
@@ -861,6 +943,46 @@ then
   package_contract_failed=1
 fi
 
+if ! python3 - "$TMP_DIR/plan-only-out/windows-observer-windows-upgrade.ps1" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+try_start = text.index("try {\nInvoke-RolloutFailureInjection -Phase 'installer'")
+catch_start = text.index("} catch {\n  $postStopFailure = $_", try_start)
+mutation_boundary = text[try_start:catch_start]
+phases = (
+    "installer",
+    "governed_copy",
+    "bundle_move",
+    "genesis_move",
+    "manifest_move",
+    "current_version_write",
+    "deployed_buildinfo_write",
+    "task_action_restore",
+)
+for phase in phases:
+    token = f"Invoke-RolloutFailureInjection -Phase '{phase}'"
+    assert token in mutation_boundary, (
+        f"post-stop mutation lacks rollback-boundary failure injection: {phase}"
+    )
+assert "if (!$script:rollbackInvoked)" in text[catch_start:], (
+    "post-stop catch must guard against duplicate rollback"
+)
+rollback_function = text[
+    text.index("function Invoke-KnownGoodRollback"):
+    text.index("function Invoke-RolloutFailureInjection")
+]
+assert "$script:rollbackInvoked = $true" in rollback_function
+assert "rollback_already_invoked=true" in rollback_function
+assert "Invoke-KnownGoodRollback" in text[catch_start:], (
+    "post-stop catch does not invoke known-good rollback"
+)
+PY
+then
+  package_contract_failed=1
+fi
+
 for missing_runtime_truth in generated_world_sidecar world_generation_provenance; do
   missing_package="$TMP_DIR/missing-$missing_runtime_truth-package"
   cp -R "$package_dir" "$missing_package"
@@ -1022,6 +1144,63 @@ for symlink_kind in file directory; do
   fi
 done
 
+# Top-level governed truth is parsed before the recursive artifact graph, so it
+# needs the same no-symlink contract as every nested runtime-truth member.
+for governed_name in \
+  public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json \
+  public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json \
+  public-testnet-governed-bootstrap-manifest-2026-06-06.windows.json \
+  public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt; do
+  symlink_package="$TMP_DIR/governed-$(basename "$governed_name")-symlink-package"
+  cp -R "$package_dir" "$symlink_package"
+  governed_path="$symlink_package/windows/$governed_name"
+  mv "$governed_path" "$governed_path.real"
+  ln -s "$(basename "$governed_path").real" "$governed_path"
+  symlink_out="$TMP_DIR/governed-$(basename "$governed_name")-symlink-out"
+  if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+    --manifest "$TMP_DIR/manifest.json" \
+    --package-dir "$symlink_package" \
+    --out-dir "$symlink_out" \
+    >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
+    echo "expected top-level governed symlink to fail before rollout generation: $governed_name" >&2
+    package_contract_failed=1
+  elif ! grep -q 'Windows governed bootstrap artifact contains symlink component' \
+    "$symlink_out.stderr"; then
+    echo "top-level governed symlink did not produce stable rejection: $governed_name" >&2
+    cat "$symlink_out.stderr" >&2
+    package_contract_failed=1
+  fi
+  if [[ -e "$symlink_out/windows-observer-windows-upgrade.ps1" \
+    || -e "$symlink_out/rollout-plan.json" ]]; then
+    echo "top-level governed symlink generated rollout output: $governed_name" >&2
+    package_contract_failed=1
+  fi
+done
+
+ancestor_package="$TMP_DIR/governed-ancestor-symlink-package"
+cp -R "$package_dir" "$ancestor_package"
+mv "$ancestor_package/windows" "$ancestor_package/windows-real"
+ln -s windows-real "$ancestor_package/windows"
+ancestor_out="$TMP_DIR/governed-ancestor-symlink-out"
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$ancestor_package" \
+  --out-dir "$ancestor_out" \
+  >"$ancestor_out.stdout" 2>"$ancestor_out.stderr"; then
+  echo "expected governed ancestor symlink to fail before rollout generation" >&2
+  package_contract_failed=1
+elif ! grep -Eq 'Windows governed bootstrap artifact contains symlink component|platform package path contains symlink component' \
+  "$ancestor_out.stderr"; then
+  echo "governed ancestor symlink did not produce stable rejection" >&2
+  cat "$ancestor_out.stderr" >&2
+  package_contract_failed=1
+fi
+if [[ -e "$ancestor_out/windows-observer-windows-upgrade.ps1" \
+  || -e "$ancestor_out/rollout-plan.json" ]]; then
+  echo "governed ancestor symlink generated rollout output" >&2
+  package_contract_failed=1
+fi
+
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
@@ -1119,7 +1298,7 @@ assert legacy_backup_manifest["runtime_sha256"] == hashlib.sha256(
     (legacy_backup_root / "runtime/oasis7_chain_runtime.exe").read_bytes()
 ).hexdigest()
 assert not (legacy_backup_root / "bin/oasis7_chain_runtime.exe").exists()
-assert "$rollbackBackupRoot = 'C:\\oasis7-deploy\\backups\\task-2269-fixture'" in text, (
+assert "$rollbackBackupRoot = [Environment]::ExpandEnvironmentVariables('C:\\oasis7-deploy\\backups\\task-2269-fixture')" in text, (
     "Windows rollback omits the configured known-good backup root"
 )
 resolver_match = re.search(
@@ -1228,7 +1407,7 @@ data = Path(sys.argv[1]).read_bytes()
 assert not data.startswith(b"\xef\xbb\xbf"), "PowerShell script must be UTF-8 without BOM"
 text = data.decode("utf-8")
 assert "Set-JsonProperty $json.runtime_build 'sha256' $hash" in text
-assert '$installer = "C:/oasis7-deploy/oasis7-windows-x64.exe"' in text
+assert "$installer = [Environment]::ExpandEnvironmentVariables('C:/oasis7-deploy/oasis7-windows-x64.exe')" in text
 assert 'throw "governed bundle missing runtime_build' in text
 assert "[System.Text.UTF8Encoding]::new($false)" in text
 assert "Start-ScheduledTask -TaskName $taskName" in text
@@ -1423,7 +1602,7 @@ import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-assert '$installRoot = "C:\\Users\\Observer\\AppData\\Local\\Programs\\oasis7"' in text, (
+assert "$installRoot = [Environment]::ExpandEnvironmentVariables('C:\\Users\\Observer\\AppData\\Local\\Programs\\oasis7')" in text, (
     "configured node-local install root must survive plan generation"
 )
 
