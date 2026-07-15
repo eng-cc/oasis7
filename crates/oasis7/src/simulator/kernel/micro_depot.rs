@@ -186,6 +186,8 @@ pub struct MicroDepotEffectPreview {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MicroDepotPlayerFacilitySnapshot {
     pub facility_id: FacilityId,
+    #[serde(default)]
+    pub owner_claim_id: String,
     pub status: String,
     pub location_id: LocationId,
     pub service_radius_cm: i64,

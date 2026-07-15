@@ -226,6 +226,8 @@ fn micro_depot_reachable_exhaustion_rejects_upkeep_then_reclaims_and_reinstalls_
         .micro_depot_player_facility_snapshots()
         .pop()
         .expect("commissioned depot snapshot");
+    assert_eq!(initial_snapshot.owner_claim_id, "claim-install");
+    assert_eq!(initial_snapshot.status, "active");
     assert_eq!(
         initial_snapshot.available_units_by_kind.get("data"),
         Some(&8)
@@ -261,6 +263,8 @@ fn micro_depot_reachable_exhaustion_rejects_upkeep_then_reclaims_and_reinstalls_
         .micro_depot_player_facility_snapshots()
         .pop()
         .expect("depleted depot snapshot");
+    assert_eq!(depleted_snapshot.owner_claim_id, "claim-install");
+    assert_eq!(depleted_snapshot.status, "depleted");
     assert_eq!(
         depleted_snapshot.available_units_by_kind.get("data"),
         Some(&0)

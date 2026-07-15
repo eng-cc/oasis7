@@ -161,16 +161,13 @@ type MicroDepotEvalInput = {
   module_id: string
   module_version: string
   action: {
-    action_id: string
+    action_id: number
     kind: "repair" | "logistics"
     target_id: string
-    base_cost_class: number
-    base_risk_class: number
-    blocker_type?:
-      | "supply_missing"
-      | "route_blocked"
-      | "upkeep_unpaid"
-      | "permission_denied"
+    base_cost_class: "none" | "low" | "medium" | "high" | "critical"
+    base_risk_class: "none" | "low" | "medium" | "high" | "critical"
+    // serde: absent on encode when None; absent on decode defaults to None.
+    blocker_type?: string
   }
   player: {
     account_id: string
@@ -180,20 +177,27 @@ type MicroDepotEvalInput = {
     facility_id: string
     status: "active" | "degraded" | "upkeep_grace" | "suspended"
     owner_claim_id: string
-    capacity_class: number
+    capacity_class: "none" | "low" | "medium" | "high" | "critical"
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    inventory_revision: number
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    current_epoch: number
+    // serde(default): an absent field decodes to {}; canonical v2 producers emit it.
+    available_units_by_kind: Record<string, number>
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    throughput_remaining_units: number
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    throughput_limit_units_per_epoch: number
+    // serde(default): an absent field decodes to []; canonical v2 producers emit it.
     supported_resource_kinds: string[]
     service_radius_cm: number
     upkeep_paid: boolean
-    inventory_revision: number
-    current_epoch: number
-    available_units_by_kind: Record<string, number>
-    throughput_remaining_units: number
   }
   context: {
     distance_to_target_cm: number
-    resource_gap_class: number
-    route_pressure_class: number
-    region_pressure_class: number
+    resource_gap_class: "none" | "low" | "medium" | "high" | "critical"
+    route_pressure_class: "none" | "low" | "medium" | "high" | "critical"
+    region_pressure_class: "none" | "low" | "medium" | "high" | "critical"
   }
 }
 ```
@@ -202,36 +206,40 @@ type MicroDepotEvalInput = {
 
 ```ts
 type MicroDepotProposal = {
+  action_id: number
+  facility_id: string
   decision: "applicable" | "not_applicable" | "blocked"
-  proposal_id: string
-  effect: {
-    cost_delta_class?: number
-    risk_delta_class?: number
-    wait_delta_class?: number
-    blocker_change?: {
-      from: string
-      to: string
-    }
-  }
-  resource_debits: Array<{
+  cost_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  risk_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  wait_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  // serde: absent on encode when None; absent on decode defaults to None.
+  blocker_change?: string
+  // Legacy mirror. serde(default) accepts absence as []; canonical serialization emits [].
+  // v2 validation requires this array to be empty; only v1 may carry class debits.
+  consumed_resource_classes: Array<{
     resource_kind: string
+    amount_class: "none" | "low" | "medium" | "high" | "critical"
+  }>
+  // serde(default) accepts absence as []; canonical serialization emits the field.
+  resource_debits: Array<{
+    resource_kind: "electricity" | "data"
     units: number
   }>
+  // Both evaluated fields use serde(default): absence decodes as 0; producers emit both.
   evaluated_inventory_revision: number
   evaluated_epoch: number
-  explanation_code:
-    | "DEPOT_WITHIN_RANGE"
-    | "DEPOT_OUT_OF_RANGE"
-    | "DEPOT_UPKEEP_MISSING"
-    | "RESOURCE_KIND_UNSUPPORTED"
-    | "DEPOT_INVENTORY_INSUFFICIENT"
-    | "DEPOT_THROUGHPUT_EXHAUSTED"
-    | "ROUTE_STILL_BLOCKED"
+  explanation_code: string
   proposal_hash: string
 }
 ```
 
-所有 `units` 都是 runtime 定义的非负整数最小计量单位；MVP 不允许浮点、负数、隐式单位换算或只报资源类别不报数量。`resource_debits` 按 `resource_kind` 唯一且排序后参与 `proposal_hash`；`applicable` proposal 必须至少包含一项正数 debit，其他 decision 必须为空。
+上述字段次序与类型是当前 Rust `Serialize` / `Deserialize` wire contract，而不是效果对象草案：output 不存在 `proposal_id` 或嵌套 `effect`。`action_id` 与 `facility_id` 必须逐字匹配 input。所有 pressure、delta、status、decision、action kind 和 resource kind enum 均编码为上列 snake_case 字符串。所有 `units` 都是 runtime 定义的正整数最小计量单位；MVP 不允许浮点、零/负数、隐式单位换算或只报资源类别不报数量。`resource_debits` 按 `resource_kind` 唯一且严格 canonical 顺序参与 `proposal_hash`；`applicable` proposal 必须至少包含一项 debit，其他 decision 必须为空。
+
+兼容字段规则不可混用：v1 proposal 必须只使用 `consumed_resource_classes` 且 `resource_debits = []`；v2 proposal 必须 `consumed_resource_classes = []` 且只使用 exact `resource_debits`。两字段均有 `serde(default)`，所以 decoder 可把缺失字段投影为空数组，但 canonical producer 会显式序列化字段。v1 input/action/hash projection 继续严格排除所有 v2 measured fields，保持历史 golden hash 与 action payload 不变。
+
+### 6.3 Golden contract
+
+Executable golden 位于 `crates/oasis7/src/simulator/tests/micro_depot_schema_compatibility.rs` 的 `micro_depot_eval_v2_wire_shape_and_hash_are_fixed_goldens`。Fixture 固定 `action_id = 73`、`facility_id = "depot-v2-golden"`、`inventory_revision = 7`、`current_epoch = 11`、`available_units_by_kind = { "data": 13 }`、`throughput_remaining_units = 17`、`throughput_limit_units_per_epoch = 23`，并固定 proposal 的 `resource_debits = [{ "resource_kind": "data", "units": 3 }]`、空 `consumed_resource_classes` 与相同 evaluated revision/epoch；其 golden `proposal_hash` 是 `sha256:04b0b917ff7dadfb1d84e984cd17978dabfe17de020fd0620040d47977640204`。测试同时锁定 input/proposal canonical CBOR、module-call action bytes 与该 hash；fixture 或 ABI 发生任何变化都必须显式更新该 golden，不允许由文档另造投影。
 
 WASM 不允许输出真实库存变更、扣费结果、ownership 变更或 canonical world-state patch。它只基于 runtime 提供的同一库存快照提出 debit；runtime 是余额与吞吐扣减的唯一 authority。
 

@@ -6,7 +6,18 @@ use super::micro_depot_measured_supply::{
 };
 use super::*;
 use oasis7_wasm_abi::ModuleLimits;
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
+
+fn canonical_test_cbor<T: serde::Serialize>(value: &T) -> Vec<u8> {
+    let value = serde_cbor::value::to_value(value).expect("convert golden value to CBOR");
+    let mut bytes = Vec::new();
+    let mut serializer = serde_cbor::ser::Serializer::new(&mut bytes);
+    value
+        .serialize(&mut serializer)
+        .expect("serialize golden canonical CBOR");
+    bytes
+}
 
 fn proposal(input: &MicroDepotEvalInput) -> MicroDepotProposal {
     MicroDepotProposal {
@@ -139,6 +150,112 @@ fn micro_depot_eval_v1_matches_origin_main_golden_hash_and_action_payload() {
     ] {
         assert!(!debug.contains(v2_only), "legacy action leaked {v2_only}");
     }
+}
+
+#[test]
+fn micro_depot_eval_v2_wire_shape_and_hash_are_fixed_goldens() {
+    let mut input = empty_micro_depot_input(73);
+    input.schema_version = "micro_depot.eval.v2".to_string();
+    input.module_version = "0.2.0".to_string();
+    input.action.target_id = "repair-target-9".to_string();
+    input.action.base_cost_class = MicroDepotPressureClass::Critical;
+    input.action.base_risk_class = MicroDepotPressureClass::High;
+    input.action.blocker_type = Some("supply_missing".to_string());
+    input.depot.facility_id = "depot-v2-golden".to_string();
+    input.depot.owner_claim_id = "claim-v2-owner".to_string();
+    input.player.claim_id = "claim-v2-owner".to_string();
+    input.depot.capacity_class = MicroDepotPressureClass::High;
+    input.depot.inventory_revision = 7;
+    input.depot.current_epoch = 11;
+    input.depot.available_units_by_kind = [("data".to_string(), 13)].into();
+    input.depot.throughput_remaining_units = 17;
+    input.depot.throughput_limit_units_per_epoch = 23;
+    input.depot.supported_resource_kinds = vec!["data".to_string()];
+    input.depot.service_radius_cm = 345_000;
+    input.context.distance_to_target_cm = 123_456;
+    input.context.resource_gap_class = MicroDepotPressureClass::Critical;
+    input.context.route_pressure_class = MicroDepotPressureClass::High;
+    input.context.region_pressure_class = MicroDepotPressureClass::Low;
+
+    let mut proposal = MicroDepotProposal {
+        action_id: 73,
+        facility_id: "depot-v2-golden".to_string(),
+        decision: MicroDepotDecision::Applicable,
+        cost_delta_class: MicroDepotDeltaClass::MajorDecrease,
+        risk_delta_class: MicroDepotDeltaClass::MinorDecrease,
+        wait_delta_class: MicroDepotDeltaClass::None,
+        blocker_change: Some("supply_missing_cleared".to_string()),
+        consumed_resource_classes: Vec::new(),
+        resource_debits: vec![MicroDepotProposalResourceDebit {
+            resource_kind: ResourceKind::Data,
+            units: 3,
+        }],
+        evaluated_inventory_revision: 7,
+        evaluated_epoch: 11,
+        explanation_code: "v2_golden_applied".to_string(),
+        proposal_hash: String::new(),
+    };
+
+    let input_json = serde_json::to_value(&input).expect("serialize v2 input JSON");
+    assert_eq!(input_json["action"]["action_id"], 73);
+    assert_eq!(input_json["action"]["kind"], "repair");
+    assert_eq!(input_json["action"]["base_cost_class"], "critical");
+    assert_eq!(input_json["depot"]["facility_id"], "depot-v2-golden");
+    assert_eq!(input_json["depot"]["owner_claim_id"], "claim-v2-owner");
+    assert_eq!(input_json["depot"]["status"], "active");
+    assert_eq!(input_json["depot"]["throughput_remaining_units"], 17);
+    assert_eq!(input_json["depot"]["throughput_limit_units_per_epoch"], 23);
+
+    let proposal_json = serde_json::to_value(&proposal).expect("serialize v2 proposal JSON");
+    assert_eq!(proposal_json["action_id"], 73);
+    assert_eq!(proposal_json["facility_id"], "depot-v2-golden");
+    assert_eq!(proposal_json["decision"], "applicable");
+    assert_eq!(proposal_json["cost_delta_class"], "major_decrease");
+    assert_eq!(proposal_json["risk_delta_class"], "minor_decrease");
+    assert_eq!(proposal_json["wait_delta_class"], "none");
+    assert_eq!(proposal_json["blocker_change"], "supply_missing_cleared");
+    assert_eq!(proposal_json["resource_debits"][0]["resource_kind"], "data");
+    assert_eq!(proposal_json["resource_debits"][0]["units"], 3);
+    assert_eq!(proposal_json["evaluated_inventory_revision"], 7);
+    assert_eq!(proposal_json["evaluated_epoch"], 11);
+
+    assert_eq!(
+        hex::encode(canonical_test_cbor(&input)),
+        "a7656465706f74ac66737461747573666163746976656b666163696c6974795f69646f6465706f742d76322d676f6c64656e6b75706b6565705f70616964f56d63757272656e745f65706f63680b6e63617061636974795f636c61737364686967686e6f776e65725f636c61696d5f69646e636c61696d2d76322d6f776e657271736572766963655f7261646975735f636d1a000543a872696e76656e746f72795f7265766973696f6e0777617661696c61626c655f756e6974735f62795f6b696e64a164646174610d7818737570706f727465645f7265736f757263655f6b696e6473816464617461781a7468726f7567687075745f72656d61696e696e675f756e6974731178207468726f7567687075745f6c696d69745f756e6974735f7065725f65706f63681766616374696f6ea6646b696e646672657061697269616374696f6e5f69641849697461726765745f69646f7265706169722d7461726765742d396c626c6f636b65725f747970656e737570706c795f6d697373696e676f626173655f636f73745f636c61737368637269746963616c6f626173655f7269736b5f636c617373646869676866706c61796572a268636c61696d5f69646e636c61696d2d76322d6f776e65726a6163636f756e745f696468706c617965722d3167636f6e74657874a4727265736f757263655f6761705f636c61737368637269746963616c74726f7574655f70726573737572655f636c61737364686967687564697374616e63655f746f5f7461726765745f636d1a0001e24075726567696f6e5f70726573737572655f636c617373636c6f77696d6f64756c655f696474726567696f6e616c2e6d6963726f5f6465706f746e6d6f64756c655f76657273696f6e65302e322e306e736368656d615f76657273696f6e736d6963726f5f6465706f742e6576616c2e7632"
+    );
+    assert_eq!(
+        hex::encode(canonical_test_cbor(&proposal)),
+        "ad686465636973696f6e6a6170706c696361626c6569616374696f6e5f696418496b666163696c6974795f69646f6465706f742d76322d676f6c64656e6d70726f706f73616c5f68617368606e626c6f636b65725f6368616e676576737570706c795f6d697373696e675f636c65617265646f6576616c75617465645f65706f63680b6f7265736f757263655f64656269747381a265756e697473036d7265736f757263655f6b696e64646461746170636f73745f64656c74615f636c6173736e6d616a6f725f6465637265617365706578706c616e6174696f6e5f636f64657176325f676f6c64656e5f6170706c696564707269736b5f64656c74615f636c6173736e6d696e6f725f646563726561736570776169745f64656c74615f636c617373646e6f6e657819636f6e73756d65645f7265736f757263655f636c617373657380781c6576616c75617465645f696e76656e746f72795f7265766973696f6e07"
+    );
+    let proposal_hash = compute_micro_depot_proposal_hash(&input, &proposal).unwrap();
+    assert_eq!(
+        proposal_hash,
+        "sha256:04b0b917ff7dadfb1d84e984cd17978dabfe17de020fd0620040d47977640204"
+    );
+    proposal.proposal_hash = proposal_hash;
+
+    let sandbox = Arc::new(Mutex::new(CapturingSandbox::new(Ok(
+        micro_depot_output_for(proposal),
+    ))));
+    evaluate_micro_depot_quote_with_module(
+        &input,
+        "regional.micro_depot",
+        "hash-micro-depot",
+        "evaluate_quote",
+        vec![1],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    )
+    .expect("v2 golden request is accepted");
+    let request = &sandbox.lock().unwrap().requests[0];
+    let call_input: oasis7_wasm_abi::ModuleCallInput =
+        serde_cbor::from_slice(&request.input).expect("decode v2 module call wrapper");
+    let action = call_input.action.expect("v2 action payload");
+    let action_hex = hex::encode(&action);
+    assert_eq!(&action_hex[..6], "d9d9f7");
+    let decoded_action: MicroDepotEvalInput =
+        serde_cbor::from_slice(&action).expect("decode v2 action payload");
+    assert_eq!(decoded_action, input);
 }
 
 #[test]

@@ -23,7 +23,12 @@ impl WorldKernel {
                 }
                 MicroDepotPlayerFacilitySnapshot {
                     facility_id: facility.facility_id.clone(),
-                    status: facility.status.clone(),
+                    owner_claim_id: facility.owner_claim_id.clone(),
+                    status: if measured_micro_depot_inventory_depleted(facility) {
+                        "depleted".to_string()
+                    } else {
+                        facility.status.clone()
+                    },
                     location_id: facility.location_id.clone(),
                     service_radius_cm: facility.service_radius_cm,
                     inventory_revision: facility.inventory_revision,
