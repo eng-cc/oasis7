@@ -71,6 +71,24 @@ impl ViewerRuntimeLiveServer {
         ));
     }
 
+    pub(super) fn record_gameplay_action_rejection(&mut self, error: &GameplayActionError) {
+        let action_id = error.action_id.as_deref().unwrap_or("unknown");
+        self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
+            format!("gameplay_action:{action_id}"),
+            "rejected",
+            format!(
+                "gameplay action {action_id} was rejected: {}",
+                error.message
+            ),
+            Some(format!("submit gameplay action {action_id}")),
+            error.target_agent_id.clone(),
+            Some(format!("{}: {}", error.code, error.message)),
+            Some("correct the rejected request before retrying".to_string()),
+            0,
+            0,
+        ));
+    }
+
     pub(super) fn clear_chain_sync_failure_feedback(&mut self) {
         if self
             .latest_player_gameplay_feedback
