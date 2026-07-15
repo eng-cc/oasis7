@@ -39,6 +39,7 @@ use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 use serde::Deserialize;
 
+mod consensus_progress_observer;
 mod consensus_support;
 mod error;
 mod execution_hook;
@@ -63,6 +64,7 @@ mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_engine_transfer_filter;
 mod node_runtime_core;
+mod node_runtime_lifecycle;
 mod pos_engine_gossip;
 mod pos_schedule;
 mod pos_state_store;
@@ -131,6 +133,12 @@ pub use types_consensus::{
     NodeValidatorStakeProofStepSnapshot,
 };
 
+use consensus_progress_observer::{
+    ConsensusProgressObserverDispatcher, publish_runtime_progress_snapshot,
+};
+pub use consensus_progress_observer::{
+    NodeConsensusProgressObserver, NodeConsensusProgressObserverError, ObserverLifecycleAuthority,
+};
 use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,
 };
@@ -208,16 +216,6 @@ fn with_execution_hook<T>(
     }
 }
 
-fn publish_runtime_progress_snapshot(
-    state: &Arc<Mutex<RuntimeState>>,
-    snapshot: NodeConsensusSnapshot,
-    observed_at_ms: i64,
-) {
-    let mut current = lock_state(state);
-    current.consensus = snapshot;
-    current.last_tick_unix_ms = Some(observed_at_ms);
-}
-
 pub struct NodeRuntime {
     config: NodeConfig,
     replication_network: Option<NodeReplicationNetworkHandle>,
@@ -226,6 +224,8 @@ pub struct NodeRuntime {
     feedback_store: Option<Arc<FeedbackStore>>,
     pending_feedback_announces: Arc<Mutex<Vec<FeedbackAnnounce>>>,
     execution_hook: Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeExecutionHook>>>>,
+    consensus_progress_observer: Option<Box<dyn NodeConsensusProgressObserver>>,
+    consensus_progress_observer_dispatcher: Option<ConsensusProgressObserverDispatcher>,
     replica_maintenance_dht:
         Option<Arc<dyn proto_dht::DistributedDht<ProtoWorldError> + Send + Sync>>,
     pending_consensus_actions: Arc<Mutex<Vec<NodeConsensusAction>>>,
@@ -234,6 +234,10 @@ pub struct NodeRuntime {
     state: Arc<Mutex<RuntimeState>>,
     stop_tx: Option<mpsc::Sender<()>>,
     worker: Option<JoinHandle<()>>,
+    #[cfg(test)]
+    fail_next_worker_spawn: bool,
+    #[cfg(test)]
+    fail_next_observer_worker_spawn: bool,
 }
 
 #[derive(Clone)]
@@ -267,7 +271,9 @@ impl NodeRuntime {
 
         {
             let mut state = lock_state(&self.state);
+            let lifecycle_generation = state.generation;
             *state = RuntimeState::default();
+            state.generation = lifecycle_generation;
         }
         {
             let (committed_lock, committed_signal) = &*self.committed_action_batches;
@@ -380,6 +386,8 @@ impl NodeRuntime {
         }
         {
             let mut current = lock_state(&self.state);
+            current.generation = current.generation.saturating_add(1);
+            current.consensus_progress_observer_error = None;
             match engine.restored_consensus_snapshot() {
                 Ok(snapshot) => current.consensus = snapshot,
                 Err(err) => {
@@ -503,6 +511,11 @@ impl NodeRuntime {
         let running = Arc::clone(&self.running);
         let state = Arc::clone(&self.state);
         let execution_hook = self.execution_hook.clone();
+        self.start_consensus_progress_observer_dispatcher()?;
+        let consensus_progress_observer = self
+            .consensus_progress_observer_dispatcher
+            .as_ref()
+            .map(ConsensusProgressObserverDispatcher::submitter);
         let replica_maintenance = self.config.replica_maintenance;
         let replica_maintenance_dht = self.replica_maintenance_dht.clone();
         let pending_consensus_actions = Arc::clone(&self.pending_consensus_actions);
@@ -513,8 +526,8 @@ impl NodeRuntime {
         let max_committed_action_batches = self.config.max_committed_action_batches.max(1);
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
-        let worker = thread::Builder::new()
-            .name(worker_name)
+        let worker = self
+            .runtime_worker_spawner(thread::Builder::new().name(worker_name))
             .spawn(move || {
                 loop {
                     let wait_duration =
@@ -561,9 +574,10 @@ impl NodeRuntime {
                                             |snapshot: NodeConsensusSnapshot| {
                                                 publish_runtime_progress_snapshot(
                                                     &progress_state,
+                                                    consensus_progress_observer.as_ref(),
                                                     snapshot,
                                                     now_ms,
-                                                );
+                                                )
                                             };
                                         engine.tick_with_progress(
                                             &node_id,
@@ -587,9 +601,10 @@ impl NodeRuntime {
                                 let mut publish_progress = |snapshot: NodeConsensusSnapshot| {
                                     publish_runtime_progress_snapshot(
                                         &progress_state,
+                                        consensus_progress_observer.as_ref(),
                                         snapshot,
                                         now_ms,
-                                    );
+                                    )
                                 };
                                 engine.tick_with_progress(
                                     &node_id,
@@ -676,6 +691,7 @@ impl NodeRuntime {
                 running.store(false, Ordering::SeqCst);
             })
             .map_err(|err| {
+                self.restore_consensus_progress_observer_after_start_failure();
                 self.running.store(false, Ordering::SeqCst);
                 NodeError::ThreadSpawnFailed {
                     reason: err.to_string(),
@@ -685,31 +701,6 @@ impl NodeRuntime {
         self.stop_tx = Some(stop_tx);
         self.worker = Some(worker);
         Ok(())
-    }
-
-    pub fn stop(&mut self) -> Result<(), NodeError> {
-        if !self.running.load(Ordering::SeqCst) {
-            return Err(NodeError::NotRunning {
-                node_id: self.config.node_id.clone(),
-            });
-        }
-        let (_, committed_signal) = &*self.committed_action_batches;
-        committed_signal.notify_all();
-        if let Some(stop_tx) = self.stop_tx.take() {
-            let _ = stop_tx.send(());
-        }
-        let join_result = if let Some(worker) = self.worker.take() {
-            worker.join().map_err(|_| NodeError::ThreadJoinFailed {
-                node_id: self.config.node_id.clone(),
-            })
-        } else {
-            Ok(())
-        };
-        // Always drop the bound gossip socket and clear the runtime flag, even if the
-        // worker thread already panicked and `join` surfaces an error.
-        self.gossip_endpoint = None;
-        self.running.store(false, Ordering::SeqCst);
-        join_result
     }
 
     pub fn snapshot(&self) -> NodeSnapshot {
@@ -724,6 +715,7 @@ impl NodeRuntime {
             tick_count: state.tick_count,
             last_tick_unix_ms: state.last_tick_unix_ms,
             consensus: state.consensus.clone(),
+            consensus_progress_observer_error: state.consensus_progress_observer_error.clone(),
             last_error: state.last_error.clone(),
         };
         let pending_submit_buffer = self
@@ -748,25 +740,28 @@ impl NodeRuntime {
         snapshot
     }
 
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn submit_consensus_progress_for_test(
+        &self,
+        snapshot: NodeConsensusSnapshot,
+        observed_at_ms: i64,
+    ) -> Result<(), NodeError> {
+        if !self.running.load(Ordering::SeqCst) {
+            return Err(NodeError::NotRunning {
+                node_id: self.config.node_id.clone(),
+            });
+        }
+        let observer = self
+            .consensus_progress_observer_dispatcher
+            .as_ref()
+            .map(ConsensusProgressObserverDispatcher::submitter);
+        publish_runtime_progress_snapshot(&self.state, observer.as_ref(), snapshot, observed_at_ms)
+    }
+
     pub fn gossip_traffic_snapshot(&self) -> Option<GossipTrafficMetricsSnapshot> {
         self.gossip_endpoint
             .as_ref()
             .map(|endpoint| endpoint.traffic_metrics_snapshot())
-    }
-}
-
-impl Drop for NodeRuntime {
-    fn drop(&mut self) {
-        if !self.running.load(Ordering::SeqCst) {
-            return;
-        }
-        if let Some(stop_tx) = self.stop_tx.take() {
-            let _ = stop_tx.send(());
-        }
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
-        self.running.store(false, Ordering::SeqCst);
     }
 }
 

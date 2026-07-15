@@ -933,6 +933,7 @@ mod tests {
             tick_count: 42,
             last_tick_unix_ms: Some(1_000),
             consensus: NodeConsensusSnapshot::default(),
+            consensus_progress_observer_error: None,
             last_error: Some("hash mismatch for sampled chunk".to_string()),
         };
 
@@ -966,6 +967,7 @@ mod tests {
             tick_count: 7,
             last_tick_unix_ms: Some(50),
             consensus: NodeConsensusSnapshot::default(),
+            consensus_progress_observer_error: None,
             last_error: None,
         };
 

@@ -3286,6 +3286,11 @@ describe("viewer web ui automation baseline", () => {
     const commandSurface = detailsPanel.querySelector(".command-surface");
     expect(commandSurface).toHaveAttribute("data-command-agent", "agent-0");
     expect(commandSurface).toHaveAttribute("data-command-chat-history", "3");
+    const diagnosticStrip = commandSurface.querySelector(".command-surface__diagnostic-strip");
+    expect(diagnosticStrip).toBeTruthy();
+    expect(within(diagnosticStrip).getByText("prompt=enabled")).toHaveClass("badge--good");
+    expect(within(diagnosticStrip).getByText("chat=enabled")).toHaveClass("badge--good");
+    expect(within(diagnosticStrip).getByText(/mainToken=/)).toHaveClass("badge--good");
     expect(commandSurface.querySelector(".command-surface__chat-panel")).toBeTruthy();
     expect(elementPrecedes(
       commandSurface.querySelector(".command-surface__chat-panel"),

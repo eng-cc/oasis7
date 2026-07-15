@@ -432,6 +432,7 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
@@ -596,6 +597,7 @@ fn public_testnet_validator_network_head_uses_manifest_quorum() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -633,6 +635,7 @@ fn public_testnet_validator_genesis_cold_start_uses_self_head() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -665,6 +668,7 @@ fn public_testnet_observer_clean_start_waits_for_peer_head() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -707,6 +711,7 @@ fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -752,6 +757,7 @@ fn public_testnet_validator_accepts_old_peer_heads_that_match_current_local_head
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -798,6 +804,7 @@ fn public_testnet_validator_keeps_old_peer_heads_stale_when_local_head_differs()
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -843,6 +850,7 @@ fn public_testnet_validator_keeps_old_peer_heads_stale_when_execution_binding_di
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -888,6 +896,7 @@ fn public_testnet_validator_keeps_old_peer_heads_stale_while_local_node_is_catch
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -922,6 +931,7 @@ fn local_devnet_network_head_honors_zero_peer_quorum() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus: NodeConsensusSnapshot::default(),
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -971,6 +981,7 @@ fn mainnet_validator_network_head_uses_stake_weighted_quorum() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -1025,6 +1036,7 @@ fn mainnet_validator_keeps_old_peer_heads_stale_even_when_they_match_current_loc
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -1070,6 +1082,7 @@ fn mainnet_validator_readiness_blocks_when_stake_mapping_is_unavailable() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let p2p = public_p2p_status();
@@ -1136,6 +1149,7 @@ fn mainnet_sync_lag_stalls_after_policy_window() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_020_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let policy = super::status_payload::readiness_policy(&snapshot, Some(&loaded));

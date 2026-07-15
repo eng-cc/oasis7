@@ -149,26 +149,25 @@ Runtime validation includes:
 - module hash / schema version
 - replay-safe proposal hash
 
-## 6. Minimal ABI
+## 6. Minimal ABI (`micro_depot.eval.v2`)
+
+Measured-service 的 normative ABI 是 `schema_version = "micro_depot.eval.v2"`。Runtime 继续接受 `micro_depot.eval.v1` 作为 legacy compatibility input/output，并把 v1 的 class-based consumption 通过既有 adapter 转成 runtime debit；新 module、fixture 和 receipt producer 必须使用 v2 的 exact `resource_debits`，不得继续扩展 v1。v1 compatibility 必须使用变更前历史版本的精确 wire 字段集合、字段名、默认值、canonical serialization 与 input/proposal hash projection；v2 新增字段不得进入 v1 hash/action projection。Schema-bound migration 规则是：legacy v1 persisted state 缺失 measured fields 时按 `inventory_revision = 0`、空库存、吞吐 `0` 解码，不追溯赠送 commissioning stock；只有 v2 新安装设施获得下述版本化 commissioning bundle。
 
 ### 6.1 Input
 
 ```ts
 type MicroDepotEvalInput = {
-  schema_version: string
+  schema_version: "micro_depot.eval.v2"
   module_id: string
   module_version: string
   action: {
-    action_id: string
+    action_id: number
     kind: "repair" | "logistics"
     target_id: string
-    base_cost_class: number
-    base_risk_class: number
-    blocker_type?:
-      | "supply_missing"
-      | "route_blocked"
-      | "upkeep_unpaid"
-      | "permission_denied"
+    base_cost_class: "none" | "low" | "medium" | "high" | "critical"
+    base_risk_class: "none" | "low" | "medium" | "high" | "critical"
+    // serde: absent on encode when None; absent on decode defaults to None.
+    blocker_type?: string
   }
   player: {
     account_id: string
@@ -178,16 +177,27 @@ type MicroDepotEvalInput = {
     facility_id: string
     status: "active" | "degraded" | "upkeep_grace" | "suspended"
     owner_claim_id: string
-    capacity_class: number
+    capacity_class: "none" | "low" | "medium" | "high" | "critical"
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    inventory_revision: number
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    current_epoch: number
+    // serde(default): an absent field decodes to {}; canonical v2 producers emit it.
+    available_units_by_kind: Record<string, number>
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    throughput_remaining_units: number
+    // serde(default): an absent field decodes to 0; canonical v2 producers emit it.
+    throughput_limit_units_per_epoch: number
+    // serde(default): an absent field decodes to []; canonical v2 producers emit it.
     supported_resource_kinds: string[]
     service_radius_cm: number
     upkeep_paid: boolean
   }
   context: {
     distance_to_target_cm: number
-    resource_gap_class: number
-    route_pressure_class: number
-    region_pressure_class: number
+    resource_gap_class: "none" | "low" | "medium" | "high" | "critical"
+    route_pressure_class: "none" | "low" | "medium" | "high" | "critical"
+    region_pressure_class: "none" | "low" | "medium" | "high" | "critical"
   }
 }
 ```
@@ -196,29 +206,42 @@ type MicroDepotEvalInput = {
 
 ```ts
 type MicroDepotProposal = {
+  action_id: number
+  facility_id: string
   decision: "applicable" | "not_applicable" | "blocked"
-  proposal_id: string
-  effect: {
-    cost_delta_class?: number
-    risk_delta_class?: number
-    wait_delta_class?: number
-    blocker_change?: {
-      from: string
-      to: string
-    }
-  }
-  consumed_resource_classes: string[]
-  explanation_code:
-    | "DEPOT_WITHIN_RANGE"
-    | "DEPOT_OUT_OF_RANGE"
-    | "DEPOT_UPKEEP_MISSING"
-    | "RESOURCE_KIND_UNSUPPORTED"
-    | "ROUTE_STILL_BLOCKED"
+  cost_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  risk_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  wait_delta_class: "major_decrease" | "minor_decrease" | "none" | "minor_increase"
+  // serde: absent on encode when None; absent on decode defaults to None.
+  blocker_change?: string
+  // Legacy mirror. serde(default) accepts absence as []; canonical serialization emits [].
+  // v2 validation requires this array to be empty; only v1 may carry class debits.
+  consumed_resource_classes: Array<{
+    resource_kind: string
+    amount_class: "none" | "low" | "medium" | "high" | "critical"
+  }>
+  // serde(default) accepts absence as []; canonical serialization emits the field.
+  resource_debits: Array<{
+    resource_kind: "electricity" | "data"
+    units: number
+  }>
+  // Both evaluated fields use serde(default): absence decodes as 0; producers emit both.
+  evaluated_inventory_revision: number
+  evaluated_epoch: number
+  explanation_code: string
   proposal_hash: string
 }
 ```
 
-WASM 不允许输出真实库存变更、扣费结果、ownership 变更或 canonical world-state patch。
+上述字段次序与类型是当前 Rust `Serialize` / `Deserialize` wire contract，而不是效果对象草案：output 不存在 `proposal_id` 或嵌套 `effect`。`action_id` 与 `facility_id` 必须逐字匹配 input。所有 pressure、delta、status、decision、action kind 和 resource kind enum 均编码为上列 snake_case 字符串。所有 `units` 都是 runtime 定义的正整数最小计量单位；MVP 不允许浮点、零/负数、隐式单位换算或只报资源类别不报数量。`resource_debits` 按 `resource_kind` 唯一且严格 canonical 顺序参与 `proposal_hash`；`applicable` proposal 必须至少包含一项 debit，其他 decision 必须为空。
+
+兼容字段规则不可混用：v1 proposal 必须只使用 `consumed_resource_classes` 且 `resource_debits = []`；v2 proposal 必须 `consumed_resource_classes = []` 且只使用 exact `resource_debits`。两字段均有 `serde(default)`，所以 decoder 可把缺失字段投影为空数组，但 canonical producer 会显式序列化字段。v1 input/action/hash projection 继续严格排除所有 v2 measured fields，保持历史 golden hash 与 action payload 不变。
+
+### 6.3 Golden contract
+
+Executable golden 位于 `crates/oasis7/src/simulator/tests/micro_depot_schema_compatibility.rs` 的 `micro_depot_eval_v2_wire_shape_and_hash_are_fixed_goldens`。Fixture 固定 `action_id = 73`、`facility_id = "depot-v2-golden"`、`inventory_revision = 7`、`current_epoch = 11`、`available_units_by_kind = { "data": 13 }`、`throughput_remaining_units = 17`、`throughput_limit_units_per_epoch = 23`，并固定 proposal 的 `resource_debits = [{ "resource_kind": "data", "units": 3 }]`、空 `consumed_resource_classes` 与相同 evaluated revision/epoch；其 golden `proposal_hash` 是 `sha256:04b0b917ff7dadfb1d84e984cd17978dabfe17de020fd0620040d47977640204`。测试同时锁定 input/proposal canonical CBOR、module-call action bytes 与该 hash；fixture 或 ABI 发生任何变化都必须显式更新该 golden，不允许由文档另造投影。
+
+WASM 不允许输出真实库存变更、扣费结果、ownership 变更或 canonical world-state patch。它只基于 runtime 提供的同一库存快照提出 debit；runtime 是余额与吞吐扣减的唯一 authority。
 
 ## 7. Canonical Runtime Model
 
@@ -239,6 +262,11 @@ RegionalInfrastructure {
   capacity_class
   service_radius_cm
   supported_resource_kinds
+  inventory_revision
+  available_units_by_kind
+  throughput_limit_units_per_epoch
+  throughput_epoch
+  throughput_remaining_units
   upkeep_per_epoch
   upkeep_paid_through_epoch
   funding_provenance
@@ -253,6 +281,21 @@ RegionalInfrastructure {
   updated_tick
 }
 ```
+
+### 7.1.1 Measured Supply Contract
+
+- `available_units_by_kind[resource_kind]` 是设施内可服务库存；缺失 key 等价于 `0`。每个值和总量都必须是非负整数，且不得超过 runtime 配置的 per-kind / facility capacity。
+- v2 MVP 的 install request 必须且只能声明 canonical `supported_resource_kinds == ["data"]`。空列表、任何非 `data` 值、mixed/duplicate 列表，以及 `Data`、`DATA` 等大小写变体都必须原子拒绝；MVP 不做输入 canonicalization，也不承诺多资源 commissioning。
+- v2 当前 install debit 固定为 `10 Data`：其中 `2 Data` 是不可退还的 deployment sink，`8 Data` 从玩家余额转入设施成为 commissioned inventory；同时初始化 throughput limit/remaining `16` units、epoch `0`。`10/8/16` 是当前实现与 replay 的版本化事实，不是最终平衡承诺。
+- 当前 v2 MVP 是 **single-commission consumable depot**：这次安装只获得上述 `8 Data` commissioned inventory，库存耗尽即结束本次设施的可服务生命。它不是持续生产、周期补货或可无限续费的设施。
+- `MicroDepotInstalled` receipt 通过 `install_cost_resources`、`commissioning_sink_resources`、`commissioned_inventory_by_kind`、`initial_throughput_limit_units_per_epoch` 与 `initial_throughput_remaining_units` 明确证明同一次 accepted install 的 `10 Data` debit、`2 Data` sink、`8 Data` commissioned transfer 和初始 `16/16` throughput；replay 必须校验这些事件值严格对账并使用事件值重建状态，不得从当前常量重新推导历史 commissioning。不得把“支付 2、系统赠送 8”或任何低于 10 Data 获得 bundle 的路径写入实现或玩家口径。
+- reclaim refund 固定为零，并销毁设施内所有剩余 inventory 与 throughput；销毁余额不得转回玩家、其他设施或后续安装。reinstall 是全新的 `10 Data` install，重新产生 fresh `8/16` state，不 carry over，也不是 refill。
+- upkeep 只维持尚有库存的设施处于可服务状态，不补充 inventory 或 throughput。库存为零时，upkeep 请求必须拒绝且不收费；玩家唯一的当前恢复路径是 destructive reclaim，再支付完整 `10 Data` 安装成本创建全新设施。
+- `throughput_limit_units_per_epoch`、`throughput_epoch` 与 `throughput_remaining_units` 是 measured-service canonical state；当前固定 `16` 仅作为内部 defense-in-depth accounting ceiling 与 replay invariant。由于同一 commissioning 只有 `8 Data` 库存，当前玩法不能在库存之前自然触达 throughput exhaustion；不得把它写成独立玩家 blocker、恢复循环、epoch playability 或周期续航承诺。
+- 当前 acceptance 不包含补货 action、canonical epoch clock 或吞吐 reset。库存来源授权、补货扣转、epoch clock、rollover/reset 触发与事件必须由 `gameplay_designer + runtime_engineer` 后续联合设计后才能实现；commissioning initialization 之外，upkeep、任意 tick/epoch 变化都不得增加库存或吞吐。
+- 每次成功 service debit 都递增 `inventory_revision`。同步 service action 内的 evaluator input 与 proposal 必须具有一致的 `evaluated_inventory_revision + evaluated_epoch`；这是 evaluator input consistency validation，不是跨 action 的 preview reservation 或并发确认合同。
+- service apply 必须原子重验 owner/claim、upkeep、range、module/schema/proposal hash、各 kind 库存和总吞吐；全部成立才同时扣减 `available_units_by_kind` 与 `throughput_remaining_units` 并应用 service effect。任一失败则两者和 service world state 都不改变。
+- evaluator preview 永不 reserve 或 debit。库存不足为 `DEPOT_INVENTORY_INSUFFICIENT`，吞吐不足为 `DEPOT_THROUGHPUT_EXHAUSTED`；当前同步 action 不承诺独立 preview-confirm concurrency 或 `DEPOT_SUPPLY_SNAPSHOT_STALE` player-facing blocker。
 
 ### 7.2 Actions
 
@@ -287,6 +330,9 @@ RegionalInfrastructure {
 - `world_change_summary`
 - `receipt_id`
 - `module_id / module_version / module_hash / proposal_hash`
+- `evaluated_epoch / inventory_revision_before / inventory_revision_after`
+- `resource_debits[] / inventory_units_before_by_kind / inventory_units_after_by_kind`
+- `throughput_units_before / throughput_units_after`
 
 ## 8. Viewer / Pure API DTO
 
@@ -297,15 +343,16 @@ Viewer 和 pure API 不读取 WASM，不猜测收益，只渲染 runtime DTO。
 - `infrastructure_nodes[]`
   - id, kind, status, anchor, owner claim, upkeep state, visible effect
 - `facility_details`
-  - upkeep, service radius, supported actions, module identity, provenance, next useful action
+  - upkeep, service radius, supported actions, module identity, provenance, inventory by kind, current epoch throughput remaining/limit, next useful action
 - `action_previews[]`
   - before quote, after quote, depot contribution, remaining blockers
 - `player_action_receipts[]`
-  - before / after cost, risk, wait, route, repair/logistics outcome
+  - before / after cost, risk, wait, route, repair/logistics outcome, resource debit quantities, inventory and throughput before/after
 - `depot_contributions[]`
   - depot id, proposal hash, effect class, explanation code
 - `bottlenecks[]`
-  - missing resource, unpaid upkeep, out of range, permission denied, degraded
+- missing resource, insufficient inventory/depleted, unpaid upkeep while stocked, out of range, permission denied, degraded
+- `throughput exhausted` 仅保留为 malformed/corrupt canonical state 的 fail-closed defense；当前 `8` stock / `16` ceiling 不能自然进入该玩家流程，也没有独立恢复动词
 - `module_evidence`
   - module id, version, hash, schema version, proposal hash
 
@@ -368,7 +415,7 @@ Runtime 必须：
 6. receipt / audit
    - Gate: every applied service records module hash, proposal hash, before / after quote, world change summary.
 7. gameplay smoke
-   - Gate: one repair / logistics action becomes measurably cheaper, faster, or less risky because of depot, and player can identify the remaining blocker.
+   - Gate: reachable lifecycle runs end to end: fresh install (`10 = 2 sink + 8 inventory`) -> measured repair/logistics service(s) -> stock reaches zero -> further service and upkeep both reject without charge or mutation -> destructive reclaim -> optional fresh full-cost reinstall. Receipts reconcile stock/throughput before/after; throughput remains an internal ceiling, not a separately claimed reachable gameplay blocker.
 
 ## 12. Post-first-capability 10 分钟验证切片
 
@@ -394,6 +441,7 @@ Runtime 必须：
 - 玩家能说明 depot 花了什么。
 - 玩家能指出哪一次行动被 depot 改变。
 - 玩家能看到 remaining blocker 或下一步建议。
+- QA 另以确定性 lifecycle smoke 覆盖 `install -> service until stock=0 -> service blocked -> upkeep rejected/no charge -> reclaim -> fresh full-cost reinstall`；该 smoke 是 consumable lifecycle/accounting evidence，不是 epoch rollover、refill 或长期 playability evidence。
 - QA / smoke evidence 明确标注该样本发生在 first capability 之后，不能用于证明首局 0-10 分钟 onboarding 通过。
 
 失败/防漂移条件：

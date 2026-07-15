@@ -16,8 +16,8 @@ use super::protocol::{
     AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackRequest,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
-    ViewerResponse, ViewerStream, viewer_event_kind_matches,
+    GameplayActionError, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream, viewer_event_kind_matches,
 };
 use crate::geometry::GeoPos;
 use crate::observability::emit_stderr_or_event;
@@ -580,7 +580,12 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
                 Err(error) => {
+                    self.record_gameplay_action_rejection(&error);
                     send_response(writer, &ViewerResponse::GameplayActionError { error })?;
+                    if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
+                        let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                        send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                    }
                 }
             },
             ViewerRequest::AuthoritativeChallenge { command } => {

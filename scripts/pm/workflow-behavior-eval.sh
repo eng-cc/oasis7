@@ -109,6 +109,7 @@ OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
 "$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/review-provenance-trust.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/new-task-worktree-module-validation.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/new-task-worktree-partial-bootstrap.test.sh" >/dev/null
 "$ROOT_DIR/scripts/prepare-task-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pr-review-thread-closeout.test.sh" >/dev/null
@@ -195,6 +196,9 @@ checks = [
             "non-default specialist library material for professional method skills",
             "route, work items, and downstream handoff must still be recorded",
             "mandatory context checklist",
+            "minimal, HEAD-bound task packet",
+            "Full-thread/full-history delivery is an explicit escalation",
+            "do not copy the full parent conversation by default",
             "identity and authority",
             "workflow governance",
             "task truth",
@@ -442,7 +446,7 @@ checks = [
     (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
-            "Pre-PR local role review is required before PR creation",
+            "Pre-PR local role review is required after the draft candidate has same-head CI evidence and before promotion",
             "findings",
             "no_findings",
             "residual_risk",
@@ -784,7 +788,7 @@ scenarios = [
         "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
         "required_markers": [
             "a branch is about to create a PR",
-            "a major feature or workflow helper just landed locally",
+            "Use after implementation freeze and before the canonical Pre-PR Ready gate.",
             "Record the canonical packet in the GitHub task issue and validate its frozen-head, role-complete ledger and artifacts with the repository helper.",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
@@ -807,6 +811,8 @@ scenarios = [
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
             "The mandatory context checklist must include:",
+            "Context delivery defaults to a minimal, HEAD-bound task packet",
+            "Full-thread/full-history delivery is an explicit escalation",
             "identity and authority",
             "workflow governance",
             "task truth",
@@ -942,11 +948,11 @@ scenarios = [
         "expected_route": "finishing-a-development-branch -> local role review -> prepare-task-pr -> GitHub required checks/review -> merge/cleanup",
         "surface": ".agents/skills/finishing-a-development-branch/SKILL.md",
         "required_markers": [
-            "obtain the canonical human-operated review packet",
+            "Use `requesting-repo-owned-review`; resolve findings against that same head.",
             "--verification-profile <repository-owned-profile>",
             "--review-packet-file <canonical-review-packet.json>",
             "its schema is only at the canonical review-packet link",
-            "./scripts/prepare-task-pr.sh --create",
+            "./scripts/prepare-task-pr.sh --draft-candidate --create",
             "source-of-truth.md#canonical-state-machine",
             "source-of-truth.md#workflow-states",
             "source-of-truth.md#ready-and-done",

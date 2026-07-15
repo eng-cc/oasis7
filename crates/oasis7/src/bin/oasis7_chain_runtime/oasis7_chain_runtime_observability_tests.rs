@@ -234,6 +234,7 @@ fn assert_chain_status_payload_consensus_health_metrics() {
         tick_count: 42,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let reward_runtime = super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
@@ -685,6 +686,7 @@ fn build_chain_status_payload_marks_local_chain_ahead_of_network_head() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head =
@@ -731,6 +733,7 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head =
@@ -853,6 +856,7 @@ fn build_chain_status_payload_marks_stale_peer_heads_not_ready() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head = super::status_payload::build_network_head_status(&snapshot, 20_000, None);
@@ -901,6 +905,7 @@ fn build_chain_status_payload_marks_peer_head_hash_conflict_critical() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head = super::status_payload::build_network_head_status(&snapshot, 10_100, None);
@@ -936,6 +941,7 @@ fn build_chain_status_payload_marks_validator_unknown_reachability_not_ready() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head = super::status_payload::build_network_head_status(&snapshot, 10_100, None);
@@ -1063,6 +1069,7 @@ fn build_chain_status_payload_clamps_future_ages_to_zero() {
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(

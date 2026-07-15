@@ -101,6 +101,7 @@ mod tests {
             tick_count: 1,
             last_tick_unix_ms: None,
             consensus,
+            consensus_progress_observer_error: None,
             last_error: None,
         }
     }

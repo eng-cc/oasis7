@@ -3,6 +3,7 @@ use oasis7_wasm_abi::{
     ModuleCallErrorCode, ModuleCallFailure, ModuleCallInput, ModuleCallRequest, ModuleEmit,
     ModuleLimits, ModuleOutput, ModuleSandbox,
 };
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 fn register_location_action(location_id: &str) -> Action {
@@ -38,13 +39,13 @@ fn decision_output(decision: KernelRuleDecision) -> ModuleOutput {
 }
 
 #[derive(Clone)]
-struct CapturingSandbox {
+pub(super) struct CapturingSandbox {
     response: Result<ModuleOutput, ModuleCallFailure>,
-    requests: Vec<ModuleCallRequest>,
+    pub(super) requests: Vec<ModuleCallRequest>,
 }
 
 impl CapturingSandbox {
-    fn new(response: Result<ModuleOutput, ModuleCallFailure>) -> Self {
+    pub(super) fn new(response: Result<ModuleOutput, ModuleCallFailure>) -> Self {
         Self {
             response,
             requests: Vec::new(),
@@ -301,7 +302,7 @@ fn kernel_wasm_artifact_registry_activation_uses_registered_bytes() {
     assert_eq!(request.wasm_bytes, wasm_bytes.into());
 }
 
-fn empty_micro_depot_input(action_id: ActionId) -> MicroDepotEvalInput {
+pub(super) fn empty_micro_depot_input(action_id: ActionId) -> MicroDepotEvalInput {
     MicroDepotEvalInput {
         schema_version: "micro_depot.eval.v1".to_string(),
         module_id: "regional.micro_depot".to_string(),
@@ -323,6 +324,11 @@ fn empty_micro_depot_input(action_id: ActionId) -> MicroDepotEvalInput {
             status: MicroDepotStatus::Active,
             owner_claim_id: "claim-1".to_string(),
             capacity_class: MicroDepotPressureClass::Medium,
+            inventory_revision: 7,
+            current_epoch: 3,
+            available_units_by_kind: BTreeMap::from([("data".to_string(), 4)]),
+            throughput_limit_units_per_epoch: 6,
+            throughput_remaining_units: 6,
             supported_resource_kinds: vec!["hardware".to_string(), "data".to_string()],
             service_radius_cm: 250_000,
             upkeep_paid: true,
@@ -336,7 +342,7 @@ fn empty_micro_depot_input(action_id: ActionId) -> MicroDepotEvalInput {
     }
 }
 
-fn micro_depot_output_for(proposal: MicroDepotProposal) -> ModuleOutput {
+pub(super) fn micro_depot_output_for(proposal: MicroDepotProposal) -> ModuleOutput {
     ModuleOutput {
         new_state: None,
         effects: Vec::new(),
@@ -350,9 +356,10 @@ fn micro_depot_output_for(proposal: MicroDepotProposal) -> ModuleOutput {
 }
 
 #[derive(Clone, Default)]
-struct DynamicMicroDepotSandbox {
-    requests: Vec<ModuleCallRequest>,
-    consumed_resource_classes: Option<Vec<MicroDepotConsumedResourceClass>>,
+pub(super) struct DynamicMicroDepotSandbox {
+    pub(super) requests: Vec<ModuleCallRequest>,
+    pub(super) consumed_resource_classes: Option<Vec<MicroDepotConsumedResourceClass>>,
+    pub(super) resource_debits: Option<Vec<MicroDepotProposalResourceDebit>>,
 }
 
 impl ModuleSandbox for DynamicMicroDepotSandbox {
@@ -373,12 +380,28 @@ impl ModuleSandbox for DynamicMicroDepotSandbox {
             blocker_change: Some("repair_parts_gap_reduced".to_string()),
             consumed_resource_classes: self.consumed_resource_classes.clone().unwrap_or_else(
                 || {
-                    vec![MicroDepotConsumedResourceClass {
-                        resource_kind: "data".to_string(),
-                        amount_class: MicroDepotPressureClass::Low,
-                    }]
+                    if input.schema_version == "micro_depot.eval.v1" {
+                        vec![MicroDepotConsumedResourceClass {
+                            resource_kind: "data".to_string(),
+                            amount_class: MicroDepotPressureClass::Low,
+                        }]
+                    } else {
+                        Vec::new()
+                    }
                 },
             ),
+            resource_debits: self.resource_debits.clone().unwrap_or_else(|| {
+                if input.schema_version == "micro_depot.eval.v2" {
+                    vec![MicroDepotProposalResourceDebit {
+                        resource_kind: ResourceKind::Data,
+                        units: 1,
+                    }]
+                } else {
+                    Vec::new()
+                }
+            }),
+            evaluated_inventory_revision: input.depot.inventory_revision,
+            evaluated_epoch: input.depot.current_epoch,
             explanation_code: "depot_reserved_local_parts".to_string(),
             proposal_hash: String::new(),
         };
@@ -403,6 +426,9 @@ fn micro_depot_wasm_quote_captures_input_and_returns_runtime_validated_preview()
             resource_kind: "hardware".to_string(),
             amount_class: MicroDepotPressureClass::Low,
         }],
+        resource_debits: Vec::new(),
+        evaluated_inventory_revision: input.depot.inventory_revision,
+        evaluated_epoch: input.depot.current_epoch,
         explanation_code: "depot_local_stock_available".to_string(),
         proposal_hash: String::new(),
     };
@@ -454,7 +480,18 @@ fn micro_depot_wasm_quote_captures_input_and_returns_runtime_validated_preview()
     let payload = call_input.action.expect("micro depot payload");
     let decoded: MicroDepotEvalInput =
         serde_cbor::from_slice(&payload).expect("decode micro depot input");
-    assert_eq!(decoded, input);
+    let mut expected_legacy_projection = input;
+    expected_legacy_projection.depot.inventory_revision = 0;
+    expected_legacy_projection.depot.current_epoch = 0;
+    expected_legacy_projection
+        .depot
+        .available_units_by_kind
+        .clear();
+    expected_legacy_projection
+        .depot
+        .throughput_limit_units_per_epoch = 0;
+    expected_legacy_projection.depot.throughput_remaining_units = 0;
+    assert_eq!(decoded, expected_legacy_projection);
 }
 
 #[test]
@@ -469,6 +506,9 @@ fn micro_depot_wasm_quote_rejects_mismatched_proposal_hash() {
         wait_delta_class: MicroDepotDeltaClass::None,
         blocker_change: None,
         consumed_resource_classes: Vec::new(),
+        resource_debits: Vec::new(),
+        evaluated_inventory_revision: input.depot.inventory_revision,
+        evaluated_epoch: input.depot.current_epoch,
         explanation_code: "tampered".to_string(),
         proposal_hash: "sha256:not-the-runtime-hash".to_string(),
     };
@@ -511,7 +551,7 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
             agent_id: "agent-builder".to_string(),
         },
         ResourceKind::Data,
-        5,
+        13,
     );
     let replay_base_snapshot = kernel.snapshot();
 
@@ -580,6 +620,14 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
             proposal_hash,
             receipt_id,
             consumed_resources,
+            evaluated_epoch,
+            inventory_revision_before,
+            inventory_revision_after,
+            resource_debits,
+            inventory_units_before_by_kind,
+            inventory_units_after_by_kind,
+            throughput_units_before,
+            throughput_units_after,
             explanation_code,
             ..
         } => {
@@ -600,6 +648,16 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
                 }]
             );
             assert_eq!(explanation_code, "depot_reserved_local_parts");
+            assert_eq!(evaluated_epoch, 0);
+            assert_eq!(inventory_revision_before, 0);
+            assert_eq!(inventory_revision_after, 1);
+            assert_eq!(resource_debits.len(), consumed_resources.len());
+            assert_eq!(resource_debits[0].resource_kind, consumed_resources[0].kind);
+            assert_eq!(resource_debits[0].units, consumed_resources[0].amount);
+            assert_eq!(inventory_units_before_by_kind.get("data"), Some(&8));
+            assert_eq!(inventory_units_after_by_kind.get("data"), Some(&7));
+            assert_eq!(throughput_units_before, 16);
+            assert_eq!(throughput_units_after, 15);
         }
         other => panic!("unexpected service event: {other:?}"),
     }
@@ -627,8 +685,11 @@ fn micro_depot_full_chain_installs_services_and_records_receipt() {
             .expect("agent")
             .resources
             .get(ResourceKind::Data),
-        2
+        3
     );
+    assert_eq!(depot.available_units_by_kind.get("data"), Some(&7));
+    assert_eq!(depot.throughput_remaining_units, 15);
+    assert_eq!(depot.inventory_revision, 1);
     assert_eq!(sandbox.lock().expect("lock sandbox").requests.len(), 1);
 
     let replayed =
@@ -658,7 +719,7 @@ fn micro_depot_registry_logistics_and_player_snapshot_close_loop() {
             agent_id: "agent-builder".to_string(),
         },
         ResourceKind::Data,
-        5,
+        10,
     );
 
     let wasm_bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x6d, 0x64];
@@ -690,7 +751,6 @@ fn micro_depot_registry_logistics_and_player_snapshot_close_loop() {
         supported_resource_kinds: vec!["data".to_string()],
     });
     kernel.step().expect("install depot");
-
     let logistics_action_id = kernel.submit_action(Action::ServiceMicroDepotLogistics {
         agent_id: "agent-builder".to_string(),
         facility_id: "depot-alpha".to_string(),
@@ -770,10 +830,16 @@ fn micro_depot_service_rejects_non_owner_module_mismatch_and_unsupported_resourc
             agent_id: "agent-builder".to_string(),
         },
         ResourceKind::Data,
-        8,
+        10,
     );
 
-    let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox::default()));
+    let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox {
+        resource_debits: Some(vec![MicroDepotProposalResourceDebit {
+            resource_kind: ResourceKind::Electricity,
+            units: 1,
+        }]),
+        ..DynamicMicroDepotSandbox::default()
+    }));
     kernel.set_micro_depot_wasm_module_evaluator(
         "regional.micro_depot",
         "hash-micro-depot",
@@ -793,7 +859,7 @@ fn micro_depot_service_rejects_non_owner_module_mismatch_and_unsupported_resourc
         wasm_hash: "hash-micro-depot".to_string(),
         entrypoint: "evaluate_quote".to_string(),
         service_radius_cm: 250_000,
-        supported_resource_kinds: vec!["electricity".to_string()],
+        supported_resource_kinds: vec!["data".to_string()],
     });
     kernel.step().expect("install depot");
 
@@ -860,7 +926,7 @@ fn micro_depot_service_rejects_non_owner_module_mismatch_and_unsupported_resourc
             .expect("builder")
             .resources
             .get(ResourceKind::Data),
-        6
+        0
     );
 }
 
@@ -885,7 +951,7 @@ fn micro_depot_service_preflights_all_debits_before_mutating_stock() {
             agent_id: "agent-builder".to_string(),
         },
         ResourceKind::Data,
-        5,
+        13,
     );
 
     let sandbox = Arc::new(Mutex::new(DynamicMicroDepotSandbox {
@@ -898,6 +964,16 @@ fn micro_depot_service_preflights_all_debits_before_mutating_stock() {
             MicroDepotConsumedResourceClass {
                 resource_kind: "electricity".to_string(),
                 amount_class: MicroDepotPressureClass::High,
+            },
+        ]),
+        resource_debits: Some(vec![
+            MicroDepotProposalResourceDebit {
+                resource_kind: ResourceKind::Data,
+                units: 1,
+            },
+            MicroDepotProposalResourceDebit {
+                resource_kind: ResourceKind::Electricity,
+                units: 5,
             },
         ]),
     }));
@@ -920,9 +996,15 @@ fn micro_depot_service_preflights_all_debits_before_mutating_stock() {
         wasm_hash: "hash-micro-depot".to_string(),
         entrypoint: "evaluate_quote".to_string(),
         service_radius_cm: 250_000,
-        supported_resource_kinds: vec!["data".to_string(), "electricity".to_string()],
+        supported_resource_kinds: vec!["data".to_string()],
     });
     kernel.step().expect("install depot");
+    let facility_before = kernel
+        .model()
+        .regional_infrastructure
+        .get("depot-alpha")
+        .expect("installed depot before multi-resource rejection")
+        .clone();
 
     kernel.submit_action(Action::ServiceMicroDepotRepair {
         agent_id: "agent-builder".to_string(),
@@ -949,6 +1031,13 @@ fn micro_depot_service_preflights_all_debits_before_mutating_stock() {
             .get(ResourceKind::Data),
         3
     );
+    let facility_after = kernel
+        .model()
+        .regional_infrastructure
+        .get("depot-alpha")
+        .expect("depot remains after multi-resource rejection");
+    assert_eq!(facility_after, &facility_before);
+    assert_eq!(facility_after.last_receipt_id, None);
 }
 
 #[test]
@@ -972,7 +1061,7 @@ fn micro_depot_lifecycle_suspend_pay_and_reclaim_replays() {
             agent_id: "agent-builder".to_string(),
         },
         ResourceKind::Data,
-        3,
+        11,
     );
     let replay_base_snapshot = kernel.snapshot();
 
