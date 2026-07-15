@@ -409,8 +409,8 @@ fn is_exact_quorum_at_height(
         && network_head.height == Some(expected_height)
         && network_head.conflicting_peer_count == 0
         && network_head.stake_quorum_met
-        && (snapshot.consensus.required_stake == 0
-            || network_head.observed_stake >= snapshot.consensus.required_stake)
+        && snapshot.consensus.required_stake > 0
+        && network_head.observed_stake >= snapshot.consensus.required_stake
         && network_head.required_peer_count > 0
         && network_head.fresh_peer_count >= network_head.required_peer_count
         && every_fresh_peer_binds_head

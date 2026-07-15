@@ -312,8 +312,8 @@ pub(crate) fn sequencer_head_publication_pending_summary(
         && network_head.height == Some(parent_height)
         && network_head.conflicting_peer_count == 0
         && network_head.stake_quorum_met
-        && (snapshot.consensus.required_stake == 0
-            || network_head.observed_stake >= snapshot.consensus.required_stake)
+        && snapshot.consensus.required_stake > 0
+        && network_head.observed_stake >= snapshot.consensus.required_stake
         && network_head.fresh_peer_count >= network_head.required_peer_count
         && network_head.required_peer_count > 0;
     let every_fresh_peer_binds_parent = network_head

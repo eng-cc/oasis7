@@ -149,6 +149,81 @@ pub(super) fn publication_test_status(
     let readiness = super::super::status_payload::build_readiness_status(&observability, policy);
     (network_head, observability, readiness)
 }
+
+#[test]
+fn public_testnet_sequencer_publication_grace_requires_authoritative_nonzero_stake() {
+    let manifest = publication_test_manifest("public_testnet", 2);
+    let mut zero_required_stake = publication_test_snapshot(NodeRole::Sequencer, 1_000);
+    zero_required_stake.consensus.required_stake = 0;
+    let mut missing_stake_authority = zero_required_stake.clone();
+    missing_stake_authority.consensus.total_stake = 0;
+    missing_stake_authority.consensus.validator_stakes.clear();
+    missing_stake_authority.consensus.validator_set_hash.clear();
+    missing_stake_authority
+        .consensus
+        .validator_stake_root
+        .clear();
+    missing_stake_authority
+        .consensus
+        .validator_stake_proofs
+        .clear();
+    let mut failures = Vec::new();
+
+    for (label, snapshot) in [
+        (
+            "zero authoritative required stake despite count quorum",
+            &zero_required_stake,
+        ),
+        (
+            "missing authoritative stake configuration despite count quorum",
+            &missing_stake_authority,
+        ),
+    ] {
+        let (network_head, observability, readiness) =
+            publication_test_status(snapshot, Some(&manifest));
+        assert_eq!(network_head.quorum_mode, "count", "{label}");
+        assert_eq!(network_head.source, "peer_quorum", "{label}");
+        assert_eq!(network_head.decision, "ready", "{label}");
+        assert_eq!(network_head.conflicting_peer_count, 0, "{label}");
+        assert!(
+            network_head.fresh_peer_count >= network_head.required_peer_count,
+            "{label}"
+        );
+        assert!(network_head.stake_quorum_met, "{label}");
+
+        let has_publication_warning = observability.alerts.iter().any(|alert| {
+            alert.severity == "warn" && alert.code == "sequencer_head_publication_pending"
+        });
+        if observability.status != "critical"
+            || observability.ready
+            || readiness.status != "not_ready"
+            || readiness.ready
+            || has_publication_warning
+        {
+            failures.push(format!(
+                "{label}: required_stake={} observed_stake={} observability={{status:{},ready:{},alerts:{:?}}} readiness={{status:{},ready:{},failed_gates:{:?}}}",
+                snapshot.consensus.required_stake,
+                network_head.observed_stake,
+                observability.status,
+                observability.ready,
+                observability
+                    .alerts
+                    .iter()
+                    .map(|alert| format!("{}:{}", alert.severity, alert.code))
+                    .collect::<Vec<_>>(),
+                readiness.status,
+                readiness.ready,
+                readiness.failed_gates,
+            ));
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "publication grace accepted missing or zero authoritative stake:\n{}",
+        failures.join("\n")
+    );
+}
 pub(super) fn publication_test_temp_dir(label: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
