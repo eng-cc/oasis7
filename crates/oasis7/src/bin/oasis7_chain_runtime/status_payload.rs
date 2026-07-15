@@ -1,3 +1,11 @@
+use super::execution_bridge::{
+    ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
+};
+use super::p2p_status::peer_reachability_as_str;
+use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
+use super::storage_metrics;
+use super::traffic_status::ChainTrafficStatus;
+use super::wasm_status::ChainWasmStatus;
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7::simulator::RuntimePerfSnapshot;
@@ -7,15 +15,6 @@ use oasis7_node::{
 };
 use serde::Serialize;
 use std::path::Path;
-
-use super::execution_bridge::{
-    ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
-};
-use super::p2p_status::peer_reachability_as_str;
-use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
-use super::storage_metrics;
-use super::traffic_status::ChainTrafficStatus;
-use super::wasm_status::ChainWasmStatus;
 #[path = "status_payload_chain_proof.rs"]
 mod status_payload_chain_proof;
 #[path = "status_payload_module_tick_routing.rs"]
