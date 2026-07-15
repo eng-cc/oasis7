@@ -64,6 +64,7 @@ mod node_engine_slashing;
 mod node_engine_storage_challenge;
 mod node_engine_transfer_filter;
 mod node_runtime_core;
+mod node_runtime_lifecycle;
 mod pos_engine_gossip;
 mod pos_schedule;
 mod pos_state_store;
@@ -377,6 +378,8 @@ impl NodeRuntime {
         }
         {
             let mut current = lock_state(&self.state);
+            current.generation = current.generation.saturating_add(1);
+            current.consensus_progress_observer_error = None;
             match engine.restored_consensus_snapshot() {
                 Ok(snapshot) => current.consensus = snapshot,
                 Err(err) => {
@@ -503,10 +506,12 @@ impl NodeRuntime {
         if self.consensus_progress_observer_dispatcher.is_none()
             && let Some(observer) = self.consensus_progress_observer.take()
         {
+            let generation = lock_state(&self.state).generation;
             self.consensus_progress_observer_dispatcher = Some(
                 ConsensusProgressObserverDispatcher::spawn(
                     self.config.node_id.as_str(),
                     Arc::clone(&self.state),
+                    generation,
                     observer,
                 )
                 .map_err(|error| {
@@ -707,31 +712,6 @@ impl NodeRuntime {
         Ok(())
     }
 
-    pub fn stop(&mut self) -> Result<(), NodeError> {
-        if !self.running.load(Ordering::SeqCst) {
-            return Err(NodeError::NotRunning {
-                node_id: self.config.node_id.clone(),
-            });
-        }
-        let (_, committed_signal) = &*self.committed_action_batches;
-        committed_signal.notify_all();
-        if let Some(stop_tx) = self.stop_tx.take() {
-            let _ = stop_tx.send(());
-        }
-        let join_result = if let Some(worker) = self.worker.take() {
-            worker.join().map_err(|_| NodeError::ThreadJoinFailed {
-                node_id: self.config.node_id.clone(),
-            })
-        } else {
-            Ok(())
-        };
-        // Always drop the bound gossip socket and clear the runtime flag, even if the
-        // worker thread already panicked and `join` surfaces an error.
-        self.gossip_endpoint = None;
-        self.running.store(false, Ordering::SeqCst);
-        join_result
-    }
-
     pub fn snapshot(&self) -> NodeSnapshot {
         let state = lock_state(&self.state);
         let mut snapshot = NodeSnapshot {
@@ -773,21 +753,6 @@ impl NodeRuntime {
         self.gossip_endpoint
             .as_ref()
             .map(|endpoint| endpoint.traffic_metrics_snapshot())
-    }
-}
-
-impl Drop for NodeRuntime {
-    fn drop(&mut self) {
-        if !self.running.load(Ordering::SeqCst) {
-            return;
-        }
-        if let Some(stop_tx) = self.stop_tx.take() {
-            let _ = stop_tx.send(());
-        }
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
-        self.running.store(false, Ordering::SeqCst);
     }
 }
 

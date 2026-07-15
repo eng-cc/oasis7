@@ -8,8 +8,8 @@ use oasis7_node::{NodeConsensusProgressObserver, NodeConsensusSnapshot, NodeRole
 use serde::{Deserialize, Serialize};
 
 use super::publication_proof::{
-    PublicationExecutionRecord, PublicationProofError, load_record, scan_contiguous_history,
-    validate_edge, validate_record,
+    PublicationExecutionRecord, PublicationProofError, evaluate_publication_episode, load_record,
+    validate_record,
 };
 use super::status_payload::{
     ChainConsensusNetworkHeadStatus, build_network_head_status, readiness_policy,
@@ -28,6 +28,7 @@ pub(super) fn has_authoritative_publication_stake(
         && network_head.observed_stake >= snapshot.consensus.required_stake
 }
 
+#[derive(Clone)]
 pub(super) struct PublicationLifecycleObserver {
     node_id: String,
     player_id: String,
@@ -96,6 +97,10 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             )
         })
     }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(self.clone()))
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -114,23 +119,6 @@ impl PublicationHeadBinding {
             && self.execution_block_hash == record.execution_block_hash
             && self.execution_state_root == record.execution_state_root
             && self.timestamp_ms == record.timestamp_ms
-    }
-
-    fn from_record(record: &PublicationExecutionRecord) -> Result<Self, LifecycleError> {
-        let node_block_hash = nonempty(record.node_block_hash.as_deref())
-            .ok_or_else(|| LifecycleError::binding("record_block_hash"))?;
-        if record.execution_block_hash.trim().is_empty()
-            || record.execution_state_root.trim().is_empty()
-        {
-            return Err(LifecycleError::binding("record_execution_binding"));
-        }
-        Ok(Self {
-            height: record.height,
-            node_block_hash: node_block_hash.to_string(),
-            execution_block_hash: record.execution_block_hash.clone(),
-            execution_state_root: record.execution_state_root.clone(),
-            timestamp_ms: record.timestamp_ms,
-        })
     }
 
     fn from_snapshot(snapshot: &NodeSnapshot) -> Result<Self, LifecycleError> {
@@ -262,6 +250,7 @@ pub(super) fn reconcile(
             &network_head,
             execution_world_dir,
             execution_records_dir,
+            observed_at_unix_ms,
         ),
     }
 }
@@ -307,71 +296,26 @@ fn reconcile_episode(
     network_head: &ChainConsensusNetworkHeadStatus,
     execution_world_dir: &Path,
     execution_records_dir: &Path,
+    observed_at_unix_ms: i64,
 ) -> Result<(), LifecycleError> {
-    let local_height = snapshot.consensus.committed_height;
-    let parent_height = local_height
-        .checked_sub(1)
-        .ok_or_else(|| LifecycleError::binding("local_height_zero"))?;
-    let local = load_record(execution_records_dir, local_height)?;
-    let parent = load_record(execution_records_dir, parent_height)?;
-    validate_record(&local, local_height, snapshot.world_id.as_str())?;
-    validate_record(&parent, parent_height, snapshot.world_id.as_str())?;
-    validate_edge(&local, &parent)?;
-    if Some(local.timestamp_ms) != snapshot.consensus.last_committed_at_ms {
-        return Err(LifecycleError::binding("local_timestamp_mismatch"));
-    }
-    validate_boundary_bindings(snapshot, network_head, &local, &parent)?;
-
     let current = load_snapshot(execution_world_dir)?;
-    let episode = match current.as_ref() {
-        Some(state) => {
-            validate_world(state, snapshot.world_id.as_str())?;
-            if let Some(episode) = state.episode.as_ref() {
-                if episode.height > local_height {
-                    return Err(LifecycleError::binding("episode_height_rollback"));
-                }
-                let retained = load_record(execution_records_dir, episode.height)?;
-                if !episode.matches_record(&retained) {
-                    return Err(LifecycleError::binding("episode_binding_mismatch"));
-                }
-                validate_contiguous_binding(
-                    snapshot.world_id.as_str(),
-                    execution_records_dir,
-                    &local,
-                    episode,
-                )?;
-                return Ok(());
-            }
-            let catch_up = state
-                .catch_up
-                .as_ref()
-                .ok_or_else(|| LifecycleError::malformed("state_phase_missing"))?;
-            if !catch_up.matches_record(&parent) {
-                return Err(LifecycleError::binding("catch_up_parent_mismatch"));
-            }
-            PublicationHeadBinding::from_record(&local)?
-        }
-        None => derive_retained_episode(
-            snapshot.world_id.as_str(),
-            execution_records_dir,
-            local,
-            parent,
-        )?,
-    };
+    let evaluation = evaluate_publication_episode(
+        snapshot,
+        network_head,
+        execution_records_dir,
+        current.as_ref(),
+        observed_at_unix_ms,
+    )?;
+    if evaluation.retained {
+        return Ok(());
+    }
     save_snapshot(
         execution_world_dir,
-        &PublicationLifecycleSnapshot::episode(snapshot.world_id.as_str(), episode),
+        &PublicationLifecycleSnapshot::episode(
+            snapshot.world_id.as_str(),
+            evaluation.episode_binding,
+        ),
     )
-}
-
-fn derive_retained_episode(
-    world_id: &str,
-    records_dir: &Path,
-    local: PublicationExecutionRecord,
-    parent: PublicationExecutionRecord,
-) -> Result<PublicationHeadBinding, LifecycleError> {
-    let records = scan_contiguous_history(records_dir, world_id, local, parent, None)?;
-    PublicationHeadBinding::from_record(&records[records.len() - 2])
 }
 
 pub(super) fn has_complete_publication_quorum_at_height(
@@ -420,56 +364,6 @@ pub(super) fn has_complete_publication_quorum_at_height(
         && network_head.fresh_peer_count >= network_head.required_peer_count
         && every_fresh_peer_binds
         && equal_local_binding
-}
-
-fn validate_boundary_bindings(
-    snapshot: &NodeSnapshot,
-    network_head: &ChainConsensusNetworkHeadStatus,
-    local: &PublicationExecutionRecord,
-    parent: &PublicationExecutionRecord,
-) -> Result<(), LifecycleError> {
-    let valid = local.node_block_hash == snapshot.consensus.last_block_hash
-        && Some(local.execution_block_hash.as_str())
-            == snapshot.consensus.last_execution_block_hash.as_deref()
-        && Some(local.execution_state_root.as_str())
-            == snapshot.consensus.last_execution_state_root.as_deref()
-        && local.prev_node_block_hash == network_head.block_hash
-        && parent.node_block_hash == network_head.block_hash
-        && Some(parent.execution_block_hash.as_str())
-            == network_head.execution_block_hash.as_deref()
-        && Some(parent.execution_state_root.as_str())
-            == network_head.execution_state_root.as_deref();
-    if !valid {
-        return Err(LifecycleError::binding("boundary_binding_mismatch"));
-    }
-    Ok(())
-}
-
-fn validate_contiguous_binding(
-    world_id: &str,
-    records_dir: &Path,
-    local: &PublicationExecutionRecord,
-    episode: &PublicationHeadBinding,
-) -> Result<(), LifecycleError> {
-    let parent_height = local
-        .height
-        .checked_sub(1)
-        .ok_or_else(|| LifecycleError::binding("episode_before_genesis"))?;
-    let parent = load_record(records_dir, parent_height)?;
-    let records = scan_contiguous_history(
-        records_dir,
-        world_id,
-        local.clone(),
-        parent,
-        Some(episode.height),
-    )?;
-    if !records
-        .last()
-        .is_some_and(|record| episode.matches_record(record))
-    {
-        return Err(LifecycleError::binding("episode_binding_mismatch"));
-    }
-    Ok(())
 }
 
 fn save_snapshot(

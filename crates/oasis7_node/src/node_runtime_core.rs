@@ -22,6 +22,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeState {
+    pub(super) generation: u64,
     pub(super) tick_count: u64,
     pub(super) last_tick_unix_ms: Option<i64>,
     pub(super) replica_maintenance_last_polled_at_ms: Option<i64>,
@@ -33,6 +34,7 @@ pub(super) struct RuntimeState {
 impl Default for RuntimeState {
     fn default() -> Self {
         Self {
+            generation: 0,
             tick_count: 0,
             last_tick_unix_ms: None,
             replica_maintenance_last_polled_at_ms: None,

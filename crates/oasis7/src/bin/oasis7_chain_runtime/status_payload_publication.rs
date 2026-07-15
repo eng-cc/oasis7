@@ -5,8 +5,8 @@ use super::super::publication_lifecycle::{
     SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_complete_publication_quorum_at_height, load_snapshot,
 };
 use super::super::publication_proof::{
-    PublicationExecutionRecord, PublicationProofError, PublicationProofErrorKind, load_record,
-    scan_contiguous_history, validate_edge, validate_record,
+    PublicationExecutionRecord, PublicationProofError, PublicationProofErrorKind,
+    evaluate_publication_episode,
 };
 use oasis7_node::NodeSnapshot;
 
@@ -116,116 +116,23 @@ fn derive_publication_episode(
     durable_state: Option<&PublicationLifecycleSnapshot>,
     observed_at_unix_ms: i64,
 ) -> Result<PublicationEpisodeProof, PublicationProofRejection> {
-    let local_height = snapshot.consensus.committed_height;
-    let parent_height = local_height.checked_sub(1).ok_or_else(|| {
-        PublicationProofRejection::new(Reason::ContinuityInvalid, "local_height_zero")
-    })?;
-    let local = load_record(records_dir, local_height)?;
-    let parent = load_record(records_dir, parent_height)?;
-    validate_record(&local, local_height, snapshot.world_id.as_str())?;
-    validate_record(&parent, parent_height, snapshot.world_id.as_str())?;
-    validate_edge(&local, &parent)?;
-
-    if Some(local.timestamp_ms) != snapshot.consensus.last_committed_at_ms {
-        return Err(PublicationProofRejection::new(
-            Reason::TimestampMismatch,
-            format!("height={local_height}"),
-        ));
-    }
-    validate_boundary_bindings(snapshot, network_head, &local, &parent)?;
-
-    if let Some(state) = durable_state {
-        validate_state_world(state, snapshot.world_id.as_str())?;
-        if let Some(episode) = state.episode.as_ref() {
-            return derive_from_durable_episode(
-                snapshot,
-                records_dir,
-                local,
-                parent,
-                episode,
-                observed_at_unix_ms,
-            );
-        }
-        if state
-            .catch_up
-            .as_ref()
-            .is_some_and(|marker| catch_up_binds_parent(marker, &parent))
-        {
-            return validate_grace(local, observed_at_unix_ms);
-        }
-    }
-
-    derive_from_retained_history(
+    let evaluation = evaluate_publication_episode(
         snapshot,
+        network_head,
         records_dir,
-        vec![local, parent],
+        durable_state,
+        observed_at_unix_ms,
+    )?;
+    validate_grace(
+        evaluation.episode,
+        evaluation.episode_binding,
         observed_at_unix_ms,
     )
 }
 
-fn derive_from_durable_episode(
-    snapshot: &NodeSnapshot,
-    records_dir: &Path,
-    local: PublicationExecutionRecord,
-    parent: PublicationExecutionRecord,
-    episode: &PublicationHeadBinding,
-    observed_at_unix_ms: i64,
-) -> Result<PublicationEpisodeProof, PublicationProofRejection> {
-    if episode.height > local.height {
-        return Err(PublicationProofRejection::new(
-            Reason::StateBindingInvalid,
-            format!("episode_height={}", episode.height),
-        ));
-    }
-    let records = scan_contiguous_history(
-        records_dir,
-        snapshot.world_id.as_str(),
-        local,
-        parent,
-        Some(episode.height),
-    )?;
-    let retained_episode = records
-        .iter()
-        .find(|record| record.height == episode.height)
-        .ok_or_else(|| {
-            PublicationProofRejection::new(
-                Reason::StateBindingInvalid,
-                format!("episode_height={}", episode.height),
-            )
-        })?;
-    if !binding_matches_record(episode, retained_episode) {
-        return Err(PublicationProofRejection::new(
-            Reason::StateBindingInvalid,
-            format!("episode_height={}", episode.height),
-        ));
-    }
-    validate_grace(retained_episode.clone(), observed_at_unix_ms)
-}
-
-fn derive_from_retained_history(
-    snapshot: &NodeSnapshot,
-    records_dir: &Path,
-    records: Vec<PublicationExecutionRecord>,
-    observed_at_unix_ms: i64,
-) -> Result<PublicationEpisodeProof, PublicationProofRejection> {
-    let [local, parent] = records.as_slice() else {
-        return Err(PublicationProofRejection::new(
-            Reason::ContinuityInvalid,
-            "boundary_record_count",
-        ));
-    };
-    let history = scan_contiguous_history(
-        records_dir,
-        snapshot.world_id.as_str(),
-        local.clone(),
-        parent.clone(),
-        None,
-    )?;
-    validate_grace(history[history.len() - 2].clone(), observed_at_unix_ms)
-}
-
 fn validate_grace(
     episode: PublicationExecutionRecord,
+    episode_binding: PublicationHeadBinding,
     observed_at_unix_ms: i64,
 ) -> Result<PublicationEpisodeProof, PublicationProofRejection> {
     let episode_age_ms = observed_at_unix_ms
@@ -238,49 +145,9 @@ fn validate_grace(
         ));
     }
     Ok(PublicationEpisodeProof {
-        episode: binding_from_record(&episode),
+        episode: episode_binding,
         episode_age_ms,
     })
-}
-
-fn validate_boundary_bindings(
-    snapshot: &NodeSnapshot,
-    network_head: &ChainConsensusNetworkHeadStatus,
-    local: &PublicationExecutionRecord,
-    parent: &PublicationExecutionRecord,
-) -> Result<(), PublicationProofRejection> {
-    let valid = local.node_block_hash.as_deref() == snapshot.consensus.last_block_hash.as_deref()
-        && local.execution_block_hash
-            == snapshot
-                .consensus
-                .last_execution_block_hash
-                .as_deref()
-                .unwrap_or_default()
-        && local.execution_state_root
-            == snapshot
-                .consensus
-                .last_execution_state_root
-                .as_deref()
-                .unwrap_or_default()
-        && local.prev_node_block_hash.as_deref() == network_head.block_hash.as_deref()
-        && parent.node_block_hash.as_deref() == network_head.block_hash.as_deref()
-        && parent.execution_block_hash
-            == network_head
-                .execution_block_hash
-                .as_deref()
-                .unwrap_or_default()
-        && parent.execution_state_root
-            == network_head
-                .execution_state_root
-                .as_deref()
-                .unwrap_or_default();
-    if !valid {
-        return Err(PublicationProofRejection::new(
-            Reason::BindingInvalid,
-            format!("local_height={}", local.height),
-        ));
-    }
-    Ok(())
 }
 
 fn is_publication_proof_candidate(
@@ -295,26 +162,6 @@ fn is_publication_proof_candidate(
     policy.tier == "public_testnet"
         && policy.role == "sequencer"
         && has_complete_publication_quorum_at_height(snapshot, network_head, parent_height, false)
-}
-
-fn validate_state_world(
-    state: &PublicationLifecycleSnapshot,
-    world_id: &str,
-) -> Result<(), PublicationProofRejection> {
-    if state.world_id != world_id {
-        return Err(PublicationProofRejection::new(
-            Reason::StateBindingInvalid,
-            "world_mismatch",
-        ));
-    }
-    Ok(())
-}
-
-fn catch_up_binds_parent(
-    catch_up: &PublicationHeadBinding,
-    parent: &PublicationExecutionRecord,
-) -> bool {
-    binding_matches_record(catch_up, parent)
 }
 
 fn reject_publication_proof(
@@ -388,6 +235,9 @@ impl From<PublicationProofError> for PublicationProofRejection {
             PublicationProofErrorKind::ContinuityInvalid => Reason::ContinuityInvalid,
             PublicationProofErrorKind::AncestryInvalid => Reason::AncestryInvalid,
             PublicationProofErrorKind::ChronologyInvalid => Reason::ChronologyInvalid,
+            PublicationProofErrorKind::TimestampMismatch => Reason::TimestampMismatch,
+            PublicationProofErrorKind::BindingInvalid => Reason::BindingInvalid,
+            PublicationProofErrorKind::StateBindingInvalid => Reason::StateBindingInvalid,
             PublicationProofErrorKind::ScanLimitExceeded => Reason::ScanLimitExceeded,
         };
         Self::new(reason, error.detail)
@@ -425,25 +275,4 @@ impl Reason {
             Self::StateBindingInvalid => "state_binding_invalid",
         }
     }
-}
-
-fn binding_from_record(record: &PublicationExecutionRecord) -> PublicationHeadBinding {
-    PublicationHeadBinding {
-        height: record.height,
-        node_block_hash: record.node_block_hash.clone().unwrap_or_default(),
-        execution_block_hash: record.execution_block_hash.clone(),
-        execution_state_root: record.execution_state_root.clone(),
-        timestamp_ms: record.timestamp_ms,
-    }
-}
-
-fn binding_matches_record(
-    binding: &PublicationHeadBinding,
-    record: &PublicationExecutionRecord,
-) -> bool {
-    binding.height == record.height
-        && Some(binding.node_block_hash.as_str()) == record.node_block_hash.as_deref()
-        && binding.execution_block_hash == record.execution_block_hash
-        && binding.execution_state_root == record.execution_state_root
-        && binding.timestamp_ms == record.timestamp_ms
 }

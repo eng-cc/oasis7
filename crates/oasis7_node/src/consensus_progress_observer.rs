@@ -1,4 +1,4 @@
-use std::sync::{Arc, Condvar, Mutex, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, TryLockError, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
@@ -10,6 +10,10 @@ pub trait NodeConsensusProgressObserver: Send {
         snapshot: &NodeConsensusSnapshot,
         observed_at_ms: i64,
     ) -> Result<(), String>;
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        None
+    }
 }
 
 const CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE: &str =
@@ -30,28 +34,33 @@ struct ConsensusProgressObserverQueue {
 
 pub(super) struct ConsensusProgressObserverDispatcher {
     queue: Arc<(Mutex<ConsensusProgressObserverQueue>, Condvar)>,
-    state: Arc<Mutex<RuntimeState>>,
+    state: Weak<Mutex<RuntimeState>>,
+    generation: u64,
+    restart_observer: Option<Box<dyn NodeConsensusProgressObserver>>,
     worker: Option<JoinHandle<()>>,
 }
 
 #[derive(Clone)]
 pub(super) struct ConsensusProgressObserverSubmitter {
     queue: Arc<(Mutex<ConsensusProgressObserverQueue>, Condvar)>,
-    state: Arc<Mutex<RuntimeState>>,
+    state: Weak<Mutex<RuntimeState>>,
+    generation: u64,
 }
 
 impl ConsensusProgressObserverDispatcher {
     pub(super) fn spawn(
         node_id: &str,
         state: Arc<Mutex<RuntimeState>>,
+        generation: u64,
         mut observer: Box<dyn NodeConsensusProgressObserver>,
     ) -> std::io::Result<Self> {
+        let restart_observer = observer.recreate_for_restart();
         let queue = Arc::new((
             Mutex::new(ConsensusProgressObserverQueue::default()),
             Condvar::new(),
         ));
         let worker_queue = Arc::clone(&queue);
-        let worker_state = Arc::clone(&state);
+        let worker_state = Arc::downgrade(&state);
         let worker = thread::Builder::new()
             .name(format!("aw-node-observer-{node_id}"))
             .spawn(move || {
@@ -82,14 +91,23 @@ impl ConsensusProgressObserverDispatcher {
                         let queue = queue_lock
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        if queue.shutdown {
+                            break;
+                        }
                         queue
                             .pending
                             .as_ref()
                             .is_some_and(|next| next.sequence > pending.sequence)
                     };
+                    let Some(worker_state) = worker_state.upgrade() else {
+                        break;
+                    };
                     let mut current = worker_state
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    if current.generation != generation {
+                        break;
+                    }
                     match result {
                         Ok(()) if !has_newer_snapshot => {
                             current.consensus_progress_observer_error = None;
@@ -103,7 +121,9 @@ impl ConsensusProgressObserverDispatcher {
             })?;
         Ok(Self {
             queue,
-            state,
+            state: Arc::downgrade(&state),
+            generation,
+            restart_observer,
             worker: Some(worker),
         })
     }
@@ -111,8 +131,30 @@ impl ConsensusProgressObserverDispatcher {
     pub(super) fn submitter(&self) -> ConsensusProgressObserverSubmitter {
         ConsensusProgressObserverSubmitter {
             queue: Arc::clone(&self.queue),
-            state: Arc::clone(&self.state),
+            state: Weak::clone(&self.state),
+            generation: self.generation,
         }
+    }
+
+    pub(super) fn shutdown(&mut self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        let (queue_lock, signal) = &*self.queue;
+        let mut queue = queue_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        queue.shutdown = true;
+        queue.pending = None;
+        drop(queue);
+        signal.notify_all();
+
+        if self.worker.as_ref().is_some_and(JoinHandle::is_finished) {
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        } else {
+            // External observer code can block forever; detaching keeps stop bounded.
+            let _ = self.worker.take();
+        }
+        self.restart_observer.take()
     }
 }
 
@@ -148,10 +190,15 @@ impl ConsensusProgressObserverSubmitter {
     }
 
     fn record_backpressure(&self) {
-        let mut current = self
-            .state
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        let mut current = state
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if current.generation != self.generation {
+            return;
+        }
         current.consensus_progress_observer_error =
             Some(CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE.to_string());
     }
@@ -159,16 +206,7 @@ impl ConsensusProgressObserverSubmitter {
 
 impl Drop for ConsensusProgressObserverDispatcher {
     fn drop(&mut self) {
-        let (queue_lock, signal) = &*self.queue;
-        let mut queue = queue_lock
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        queue.shutdown = true;
-        queue.pending = None;
-        drop(queue);
-        signal.notify_all();
-        // A blocked external observer must not make runtime shutdown unbounded.
-        let _ = self.worker.take();
+        let _ = self.shutdown();
     }
 }
 
@@ -223,6 +261,7 @@ mod tests {
         let dispatcher = ConsensusProgressObserverDispatcher::spawn(
             "blocked-shutdown",
             state,
+            0,
             Box::new(PermanentlyBlockingObserver {
                 entered: entered_tx,
                 release: release_rx,

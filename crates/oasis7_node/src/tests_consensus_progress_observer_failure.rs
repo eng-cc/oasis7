@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const OBSERVER_FAILURE: &str = "injected consensus progress observer failure";
 const OBSERVER_BACKPRESSURE: &str = "consensus progress observer queue saturated";
+const STALE_GENERATION_FAILURE: &str = "stale observer generation failure";
 
 #[derive(Clone)]
 struct ControllableConsensusProgressObserver {
@@ -64,6 +65,64 @@ impl NodeConsensusProgressObserver for BlockingConsensusProgressObserver {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Default)]
+struct RestartGenerationObserverControl {
+    entered: AtomicBool,
+    release: AtomicBool,
+    calls: AtomicUsize,
+    dropped: AtomicBool,
+    signal: Condvar,
+    wait_lock: Mutex<()>,
+}
+
+struct RestartGenerationConsensusProgressObserver {
+    control: Arc<RestartGenerationObserverControl>,
+}
+
+impl NodeConsensusProgressObserver for RestartGenerationConsensusProgressObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        _snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), String> {
+        let call = self.control.calls.fetch_add(1, Ordering::SeqCst);
+        if call == 0 {
+            let mut guard = self
+                .control
+                .wait_lock
+                .lock()
+                .expect("lock restart observer");
+            self.control.entered.store(true, Ordering::SeqCst);
+            self.control.signal.notify_all();
+            while !self.control.release.load(Ordering::SeqCst) {
+                guard = self
+                    .control
+                    .signal
+                    .wait(guard)
+                    .expect("wait for restart observer release");
+            }
+            return Err(STALE_GENERATION_FAILURE.to_string());
+        }
+        Ok(())
+    }
+}
+
+impl Drop for RestartGenerationConsensusProgressObserver {
+    fn drop(&mut self) {
+        self.control.dropped.store(true, Ordering::SeqCst);
+        self.control.signal.notify_all();
+    }
+}
+
+struct RestartObserverReleaseGuard(Arc<RestartGenerationObserverControl>);
+
+impl Drop for RestartObserverReleaseGuard {
+    fn drop(&mut self) {
+        self.0.release.store(true, Ordering::SeqCst);
+        self.0.signal.notify_all();
     }
 }
 
@@ -253,6 +312,98 @@ fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_t
                 "coalescing observer did not receive the latest pending snapshot: heights={observed_heights:?} while_blocked={while_blocked:?}",
             );
             assert_eq!(recovered_snapshot.consensus_progress_observer_error, None);
+        },
+    );
+}
+
+#[test]
+fn stopped_observer_generation_cannot_write_into_restarted_runtime() {
+    run_test_with_timeout(
+        "stopped_observer_generation_cannot_write_into_restarted_runtime",
+        Duration::from_secs(8),
+        || {
+            let observer = Arc::new(RestartGenerationObserverControl::default());
+            let release_guard = RestartObserverReleaseGuard(Arc::clone(&observer));
+            let config = NodeConfig::new(
+                "node-observer-restart-generation",
+                "world-observer-restart-generation",
+                NodeRole::Sequencer,
+            )
+            .expect("config")
+            .with_tick_interval(Duration::from_millis(10))
+            .expect("tick interval")
+            .with_pos_config(signed_pos_config_with_signer_seeds(
+                vec![PosValidator {
+                    validator_id: "node-observer-restart-generation".to_string(),
+                    stake: 100,
+                }],
+                &[("node-observer-restart-generation", 101)],
+            ))
+            .expect("pos config");
+            let mut runtime = NodeRuntime::new(config).with_consensus_progress_observer(
+                RestartGenerationConsensusProgressObserver {
+                    control: Arc::clone(&observer),
+                },
+            );
+
+            runtime.start().expect("start first generation");
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(2), || {
+                    observer.entered.load(Ordering::SeqCst)
+                }),
+                "first-generation observer never entered"
+            );
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(2), || {
+                    runtime
+                        .snapshot()
+                        .consensus_progress_observer_error
+                        .as_deref()
+                        == Some(OBSERVER_BACKPRESSURE)
+                }),
+                "first generation never accumulated a pending/coalesced observer snapshot"
+            );
+
+            let stop_started = Instant::now();
+            runtime.stop().expect("bounded first-generation stop");
+            let first_stop_elapsed = stop_started.elapsed();
+            assert!(
+                first_stop_elapsed < Duration::from_millis(500),
+                "stop joined a blocked observer: elapsed={first_stop_elapsed:?}"
+            );
+
+            // Keep the restarted generation quiescent while the old observer returns. Any second
+            // observer call therefore came from pending work that stop was required to discard.
+            runtime.config.tick_interval = Duration::from_secs(5);
+            runtime.start().expect("start second generation");
+            let restarted_before_release = runtime.snapshot();
+            assert_eq!(
+                restarted_before_release.consensus_progress_observer_error, None,
+                "restart must begin with generation-local observer state"
+            );
+
+            release_guard.0.release.store(true, Ordering::SeqCst);
+            release_guard.0.signal.notify_all();
+            let old_worker_released = wait_until(Instant::now() + Duration::from_secs(2), || {
+                observer.dropped.load(Ordering::SeqCst)
+            });
+            let restarted_after_release = runtime.snapshot();
+            let calls_after_release = observer.calls.load(Ordering::SeqCst);
+            runtime.stop().expect("stop second generation");
+            drop(release_guard);
+
+            assert!(
+                old_worker_released,
+                "stopped observer worker/resource remained alive after its bounded call returned"
+            );
+            assert_eq!(
+                calls_after_release, 1,
+                "stop did not clear old-generation pending observer work"
+            );
+            assert_eq!(
+                restarted_after_release.consensus_progress_observer_error, None,
+                "stale observer result changed the restarted generation: {restarted_after_release:?}"
+            );
         },
     );
 }

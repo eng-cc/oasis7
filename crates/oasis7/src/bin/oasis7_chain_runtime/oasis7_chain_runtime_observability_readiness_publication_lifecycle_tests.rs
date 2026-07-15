@@ -237,6 +237,75 @@ fn remove_stake_authority(snapshot: &mut NodeSnapshot) {
 }
 
 #[test]
+fn publication_lifecycle_and_readiness_share_final_proof_decisions() {
+    let manifest = publication_test_manifest("public_testnet", 2);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_millis() as i64;
+    let mut divergences = Vec::new();
+
+    for (label, corrupt_parent_binding) in [
+        ("valid-parent-proof", false),
+        ("invalid-parent-binding", true),
+    ] {
+        let (root, records_dir, _) = prepare_world(
+            label,
+            &[
+                (1_299, now_ms - 3_000),
+                (1_300, now_ms - 2_000),
+                (1_301, now_ms - 1_000),
+            ],
+        );
+        install_lifecycle_state(&root, "catch_up", 1_300, now_ms - 2_000);
+        if corrupt_parent_binding {
+            let state_path = root.join("execution-world").join(STATE_FILE);
+            let mut state = serde_json::from_slice::<serde_json::Value>(
+                &fs::read(&state_path).expect("read lifecycle state"),
+            )
+            .expect("parse lifecycle state");
+            state["catch_up"]["node_block_hash"] =
+                serde_json::Value::String("conflicting-parent-binding".to_string());
+            fs::write(
+                &state_path,
+                serde_json::to_vec_pretty(&state).expect("serialize corrupt lifecycle state"),
+            )
+            .expect("write corrupt lifecycle state");
+        }
+
+        let snapshot =
+            lifecycle_snapshot(1_301, now_ms - 1_000, 1_300, now_ms - 2_000, now_ms - 100);
+        let lifecycle_result = super::super::super::publication_lifecycle::reconcile(
+            &snapshot,
+            Some(&manifest),
+            root.join("execution-world").as_path(),
+            records_dir.as_path(),
+            now_ms,
+        );
+        let payload = construct_status(StatusMethod::Get, snapshot, &manifest, &root, &records_dir);
+        let lifecycle_accepts = lifecycle_result.is_ok();
+        let readiness_accepts = is_warning_ready(&payload);
+        if lifecycle_accepts != readiness_accepts {
+            divergences.push(format!(
+                "{label}: lifecycle_accepts={lifecycle_accepts} lifecycle_error={:?} readiness_accepts={readiness_accepts} {}",
+                lifecycle_result
+                    .as_ref()
+                    .err()
+                    .map(|error| (error.reason, error.detail.clone())),
+                outcome_diagnostic(&payload),
+            ));
+        }
+        fs::remove_dir_all(root).expect("remove cross-entry decision fixture");
+    }
+
+    assert!(
+        divergences.is_empty(),
+        "publication lifecycle/readiness final proof decisions drifted:\n{}",
+        divergences.join("\n")
+    );
+}
+
+#[test]
 fn publication_lifecycle_rejects_zero_or_missing_stake_authority_before_persisting_state() {
     let manifest = publication_test_manifest("public_testnet", 2);
     let now_ms = SystemTime::now()
