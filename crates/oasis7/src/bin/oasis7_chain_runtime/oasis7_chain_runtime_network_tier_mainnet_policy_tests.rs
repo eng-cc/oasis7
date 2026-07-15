@@ -33,6 +33,7 @@ fn mainnet_validator_relay_policy_requires_governed_redundancy_and_surfaces_slas
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let mut p2p = public_p2p_status();

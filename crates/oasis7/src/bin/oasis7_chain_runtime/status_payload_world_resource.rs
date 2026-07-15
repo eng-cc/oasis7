@@ -344,6 +344,7 @@ mod tests {
                 last_block_hash: Some("block-a".to_string()),
                 ..NodeConsensusSnapshot::default()
             },
+            consensus_progress_observer_error: None,
             last_error: None,
         };
 
@@ -415,6 +416,7 @@ mod tests {
                 last_block_hash: Some("block-h3".to_string()),
                 ..NodeConsensusSnapshot::default()
             },
+            consensus_progress_observer_error: None,
             last_error: None,
         };
 
@@ -489,6 +491,7 @@ mod tests {
                 last_block_hash: Some("block-h3".to_string()),
                 ..NodeConsensusSnapshot::default()
             },
+            consensus_progress_observer_error: None,
             last_error: None,
         };
 

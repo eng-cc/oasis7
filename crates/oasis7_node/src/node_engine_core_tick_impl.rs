@@ -36,7 +36,9 @@ impl PosNodeEngine {
         consensus_network: Option<&mut ConsensusNetworkEndpoint>,
         queued_actions: Vec<NodeConsensusAction>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
-        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+        mut progress_callback: Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
     ) -> Result<NodeEngineTickResult, NodeError> {
         merge_pending_consensus_actions(
             &mut self.pending_consensus_actions,
@@ -141,6 +143,10 @@ impl PosNodeEngine {
                     )?;
                 }
             }
+        }
+        if let Some(callback) = progress_callback.as_deref_mut() {
+            let observed = self.idle_pending_decision()?;
+            callback(self.snapshot_from_decision(&observed))?;
         }
         self.rebroadcast_replicated_commit_head(
             consensus_network.as_deref(),
@@ -385,8 +391,12 @@ impl PosNodeEngine {
             None
         };
 
+        let consensus_snapshot = self.snapshot_from_decision(&decision);
+        if let Some(callback) = progress_callback.as_deref_mut() {
+            callback(consensus_snapshot.clone())?;
+        }
         Ok(NodeEngineTickResult {
-            consensus_snapshot: self.snapshot_from_decision(&decision),
+            consensus_snapshot,
             committed_action_batch,
         })
     }

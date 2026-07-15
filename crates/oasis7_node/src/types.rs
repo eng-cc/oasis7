@@ -14,7 +14,9 @@ use crate::types_consensus::{
     NodeConsensusMisbehaviorEvidenceSnapshot, NodeConsensusSlashingIntentSnapshot,
     NodeConsensusSlashingReceiptSnapshot, NodeValidatorStakeProofSnapshot,
 };
-use crate::{NodeConsensusAction, NodeError, NodeReplicationConfig};
+use crate::{
+    NodeConsensusAction, NodeConsensusProgressObserverError, NodeError, NodeReplicationConfig,
+};
 
 mod main_token_controller_binding;
 mod node_config_flags;
@@ -1170,6 +1172,7 @@ pub struct NodeSnapshot {
     pub tick_count: u64,
     pub last_tick_unix_ms: Option<i64>,
     pub consensus: NodeConsensusSnapshot,
+    pub consensus_progress_observer_error: Option<NodeConsensusProgressObserverError>,
     pub last_error: Option<String>,
 }
 

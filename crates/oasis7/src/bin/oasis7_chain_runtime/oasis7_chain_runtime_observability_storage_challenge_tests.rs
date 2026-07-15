@@ -34,6 +34,7 @@ fn build_chain_status_payload_marks_storage_challenge_network_degraded_not_ready
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head =

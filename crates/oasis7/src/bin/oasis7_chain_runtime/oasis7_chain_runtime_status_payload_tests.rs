@@ -35,7 +35,8 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("oasis7-status-payload-{prefix}-{unique}"))
 }
 
-fn minimal_reward_runtime_metrics() -> super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
+pub(super) fn minimal_reward_runtime_metrics()
+-> super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
     super::reward_runtime_worker::RewardRuntimeMetricsSnapshot {
         enabled: true,
         metrics_available: true,
@@ -57,7 +58,7 @@ fn minimal_reward_runtime_metrics() -> super::reward_runtime_worker::RewardRunti
     }
 }
 
-fn minimal_storage_metrics() -> super::storage_metrics::StorageMetricsSnapshot {
+pub(super) fn minimal_storage_metrics() -> super::storage_metrics::StorageMetricsSnapshot {
     super::storage_metrics::StorageMetricsSnapshot {
         storage_profile: "dev_local".to_string(),
         effective_budget: StorageProfileConfig::from(StorageProfile::DevLocal),
@@ -76,7 +77,7 @@ fn minimal_storage_metrics() -> super::storage_metrics::StorageMetricsSnapshot {
     }
 }
 
-fn minimal_wasm_status() -> super::wasm_status::ChainWasmStatus {
+pub(super) fn minimal_wasm_status() -> super::wasm_status::ChainWasmStatus {
     super::wasm_status::ChainWasmStatus {
         metrics_available: true,
         observed_since_unix_ms: None,
@@ -98,7 +99,7 @@ fn minimal_wasm_status() -> super::wasm_status::ChainWasmStatus {
     }
 }
 
-fn minimal_transfer_status() -> super::transfer_submit_api::ChainTransferMetricsStatus {
+pub(super) fn minimal_transfer_status() -> super::transfer_submit_api::ChainTransferMetricsStatus {
     super::transfer_submit_api::ChainTransferMetricsStatus {
         tracked_records: 0,
         accepted_count: 0,
@@ -187,47 +188,13 @@ fn build_minimal_status_payload_with_world_dir_runtime_perf_wasm_and_traffic(
     wasm: super::wasm_status::ChainWasmStatus,
     traffic: super::ChainTrafficStatus,
 ) -> super::status_payload::ChainStatusResponse {
-    let snapshot = NodeSnapshot {
-        node_id: "node-a".to_string(),
-        player_id: "player-a".to_string(),
-        world_id: "live-a".to_string(),
-        role: NodeRole::Sequencer,
-        replication_enabled: false,
-        running: true,
-        tick_count: 1,
-        last_tick_unix_ms: Some(1_700_000_000_000),
-        consensus: NodeConsensusSnapshot::default(),
-        last_error: None,
-    };
-    let recommendation = NodeNetworkPolicy::recommend_for_user_mode(
-        NodeRole::Sequencer,
-        NodeUserMode::PrivateSafe,
-        NodeReachabilityAutoDetection::default(),
-        false,
-    )
-    .expect("recommendation");
-
-    build_chain_status_payload(
-        snapshot,
+    super::status_payload_observer_tests::build_minimal_status_payload_with_world_dir_runtime_perf_wasm_traffic_and_observer_error(
         execution_world_dir,
         execution_records_dir,
-        None,
-        &recommendation,
-        None,
-        NodeNetworkPolicy {
-            deployment_mode: PeerDeploymentMode::Private,
-            node_role_claim: PeerNodeRole::ValidatorCore,
-        },
-        &Libp2pReachabilitySnapshot::default(),
-        NodeReachabilityAutoDetection::default(),
-        ReleaseSecurityPolicy::default(),
-        minimal_reward_runtime_metrics(),
-        minimal_storage_metrics(),
-        wasm,
         runtime_perf,
+        wasm,
         traffic,
-        minimal_transfer_status(),
-        super::ChainReplicationDebugStatus::default(),
+        None,
     )
 }
 
@@ -245,6 +212,7 @@ fn build_minimal_status_payload_for_observability_contract(
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let recommendation = NodeNetworkPolicy::recommend_for_user_mode(

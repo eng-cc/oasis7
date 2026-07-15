@@ -18,6 +18,7 @@ fn build_chain_status_payload_zeroes_replication_gap_when_replication_disabled()
         tick_count: 1,
         last_tick_unix_ms: None,
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head =

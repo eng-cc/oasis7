@@ -115,6 +115,7 @@ fn sample_snapshot(committed_height: u64, block_hash: Option<&str>) -> NodeSnaps
             last_block_hash: block_hash.map(ToOwned::to_owned),
             ..NodeConsensusSnapshot::default()
         },
+        consensus_progress_observer_error: None,
         last_error: None,
     }
 }
