@@ -363,14 +363,20 @@ if (!$candidate.StartsWith($safeRoot + '\', [System.StringComparison]::OrdinalIg
 return $candidate
 }
 
-$fixtureSafeRootBase = [System.IO.Path]::GetFullPath($env:OASIS7_FIXTURE_SAFE_ROOT_BASE)
-if (!(Test-Path -LiteralPath $fixtureSafeRootBase -PathType Container)) {
-  throw "fixture safe-root base does not exist: $fixtureSafeRootBase"
+$fixtureWorkspaceRoot = [System.IO.Path]::GetFullPath($env:OASIS7_FIXTURE_WORKSPACE_ROOT)
+if (!(Test-Path -LiteralPath $fixtureWorkspaceRoot -PathType Container)) {
+  throw "fixture workspace root does not exist: $fixtureWorkspaceRoot"
 }
-Assert-FixtureNoReparseAncestor $fixtureSafeRootBase
-$fixtureRoot = Join-Path $fixtureSafeRootBase ("windows-rollout-behavior-" + [Guid]::NewGuid().ToString('N'))
+$fixtureDriveRoot = [System.IO.Path]::GetPathRoot($fixtureWorkspaceRoot)
+Assert-FixtureNoReparseAncestor $fixtureDriveRoot
+$fixtureRunId = [Guid]::NewGuid().ToString('N')
+$fixtureRoot = Join-Path $fixtureDriveRoot ("o7fx-" + $fixtureRunId)
+if (Test-Path -LiteralPath $fixtureRoot) {
+  throw "fixture unique drive-root path collision: $fixtureRoot"
+}
 New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
 Assert-FixtureNoReparseAncestor $fixtureRoot
+$fixtureSafeRootBase = $fixtureRoot
 $fixtureTasks = [System.Collections.Generic.List[string]]::new()
 
 function Get-Sha256([string] $Path) {
@@ -640,10 +646,32 @@ foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest
   if (!$ActiveConfigJunction) {
     $projectedActivePath = $projectedActivePaths[0]
     if (!(Test-Path -LiteralPath $requiredActivePath -PathType Leaf)) {
-      throw "fixture logical active target is not reachable through its configured path: $requiredActivePath"
+      throw "fixture logical active target is not reachable through its configured path: required=$requiredActivePath required_length=$($requiredActivePath.Length) projected=$projectedActivePath projected_length=$($projectedActivePath.Length) safe_base=$fixtureSafeRootBase"
     }
     Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
   }
+}
+$governedPathBudget = 200
+$atomicPromotionSuffixBudget = 48
+$windowsLegacyPathStringBudget = 259
+if (($governedPathBudget + $atomicPromotionSuffixBudget) -gt $windowsLegacyPathStringBudget) {
+  throw 'fixture governed path budget leaves insufficient room for atomic promotion suffixes'
+}
+$governedPathCandidates = @(
+  Get-ChildItem -LiteralPath $stagingConfig -Recurse -File | ForEach-Object { $_.FullName }
+  $activeGovernedFiles
+  Get-ChildItem -LiteralPath (Join-Path $rollbackRoot 'config') -Recurse -File | ForEach-Object { $_.FullName }
+)
+$longestGovernedPath = @($governedPathCandidates | Sort-Object Length -Descending | Select-Object -First 1)[0]
+if ([string]::IsNullOrWhiteSpace($longestGovernedPath)) {
+  throw 'fixture governed path budget check found no governed files'
+}
+[Console]::Error.WriteLine("fixture_governed_path_budget longest_length=$($longestGovernedPath.Length) budget=$governedPathBudget path=$longestGovernedPath safe_base=$fixtureSafeRootBase")
+if ($longestGovernedPath.Length -gt $governedPathBudget) {
+  throw "fixture governed path exceeds Windows PowerShell 5.1 safety budget: length=$($longestGovernedPath.Length) budget=$governedPathBudget path=$longestGovernedPath"
+}
+if (($longestGovernedPath.Length + $atomicPromotionSuffixBudget) -gt $windowsLegacyPathStringBudget) {
+  throw "fixture governed path leaves insufficient atomic promotion headroom: length=$($longestGovernedPath.Length) suffix_budget=$atomicPromotionSuffixBudget max=$windowsLegacyPathStringBudget path=$longestGovernedPath"
 }
 return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
@@ -736,9 +764,8 @@ if [[ "$powershell_fixture_script_windows" != *.ps1 ]]; then
   exit 1
 fi
 
-mkdir -p "$ROOT_DIR/.tmp"
 set +e
-OASIS7_FIXTURE_SAFE_ROOT_BASE="$(cygpath -w "$ROOT_DIR/.tmp")" \
+OASIS7_FIXTURE_WORKSPACE_ROOT="$(cygpath -w "$ROOT_DIR")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
   OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
   OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
@@ -784,18 +811,25 @@ assert "function Invoke-FixtureRolloutExpectingFailure" in fixture
 assert "$ErrorActionPreference = 'Continue'" in fixture
 assert "$ErrorActionPreference = $previousErrorActionPreference" in fixture
 assert fixture.count("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout") == 2
-safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureSafeRootBase\n")
+safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureDriveRoot\n")
 fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
 intentional_junction = fixture.index("New-Item -ItemType Junction")
 assert safe_root_check < fixture_root_check < intentional_junction, (
     "native fixture must verify its workspace root before constructing intentional junctions"
 )
-assert not re.search(r'^OASIS7_FIXTURE_ROOT_DIR=', source, re.MULTILINE)
+assert not re.search(r'^OASIS7_FIXTURE_(?:ROOT_DIR|SAFE_ROOT_BASE)=', source, re.MULTILINE)
 assert re.search(
-    r'^OASIS7_FIXTURE_SAFE_ROOT_BASE="\$\(cygpath -w "\$ROOT_DIR/\.tmp"\)" \\$',
+    r'^OASIS7_FIXTURE_WORKSPACE_ROOT="\$\(cygpath -w "\$ROOT_DIR"\)" \\$',
     source,
     re.MULTILINE,
 )
+assert 'Join-Path $fixtureDriveRoot ("o7fx-" + $fixtureRunId)' in fixture
+assert "fixture unique drive-root path collision:" in fixture
+assert "fixture_governed_path_budget longest_length=" in fixture
+assert "$governedPathBudget = 200" in fixture
+assert "$atomicPromotionSuffixBudget = 48" in fixture
+assert "$windowsLegacyPathStringBudget = 259" in fixture
+assert "required_length=$($requiredActivePath.Length)" in fixture
 staging_descendant_check = fixture.index("Assert-FixturePathUnderSafeBase $staging 'stagingRoot'")
 generated_script_execution = fixture.index("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout")
 assert staging_descendant_check < generated_script_execution, (
