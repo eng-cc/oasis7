@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7_node::{
     NodeConsensusProgressObserver, NodeConsensusProgressObserverError, NodeConsensusSnapshot,
-    NodeRole, NodeSnapshot,
+    NodeRole, NodeSnapshot, ObserverLifecycleAuthority,
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +41,7 @@ pub(super) struct PublicationLifecycleObserver {
     manifest: Option<LoadedNetworkTierManifest>,
     execution_world_dir: PathBuf,
     execution_records_dir: PathBuf,
+    authority: Option<ObserverLifecycleAuthority>,
 }
 
 impl PublicationLifecycleObserver {
@@ -63,6 +64,7 @@ impl PublicationLifecycleObserver {
             manifest,
             execution_world_dir,
             execution_records_dir,
+            authority: None,
         }
     }
 }
@@ -86,12 +88,13 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             consensus_progress_observer_error: None,
             last_error: None,
         };
-        reconcile(
+        reconcile_with_authority(
             &snapshot,
             self.manifest.as_ref(),
             self.execution_world_dir.as_path(),
             self.execution_records_dir.as_path(),
             observed_at_ms,
+            self.authority.as_ref(),
         )
         .map_err(|error| {
             NodeConsensusProgressObserverError::coded(
@@ -106,6 +109,10 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
 
     fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
         Some(Box::new(self.clone()))
+    }
+
+    fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        self.authority = Some(authority);
     }
 }
 
@@ -257,6 +264,24 @@ pub(super) fn reconcile(
     execution_records_dir: &Path,
     observed_at_unix_ms: i64,
 ) -> Result<(), LifecycleError> {
+    reconcile_with_authority(
+        snapshot,
+        manifest,
+        execution_world_dir,
+        execution_records_dir,
+        observed_at_unix_ms,
+        None,
+    )
+}
+
+fn reconcile_with_authority(
+    snapshot: &NodeSnapshot,
+    manifest: Option<&LoadedNetworkTierManifest>,
+    execution_world_dir: &Path,
+    execution_records_dir: &Path,
+    observed_at_unix_ms: i64,
+    authority: Option<&ObserverLifecycleAuthority>,
+) -> Result<(), LifecycleError> {
     let policy = readiness_policy(snapshot, manifest);
     let network_head = build_network_head_status(snapshot, observed_at_unix_ms, manifest);
     match classify_scope(
@@ -266,15 +291,19 @@ pub(super) fn reconcile(
         policy.role.as_str(),
     ) {
         PublicationScope::Outside => Ok(()),
-        PublicationScope::EqualHead => {
-            reconcile_catch_up(snapshot, execution_world_dir, execution_records_dir)
-        }
+        PublicationScope::EqualHead => reconcile_catch_up(
+            snapshot,
+            execution_world_dir,
+            execution_records_dir,
+            authority,
+        ),
         PublicationScope::OneBlockLag => reconcile_episode(
             snapshot,
             &network_head,
             execution_world_dir,
             execution_records_dir,
             observed_at_unix_ms,
+            authority,
         ),
     }
 }
@@ -283,6 +312,7 @@ fn reconcile_catch_up(
     snapshot: &NodeSnapshot,
     execution_world_dir: &Path,
     execution_records_dir: &Path,
+    authority: Option<&ObserverLifecycleAuthority>,
 ) -> Result<(), LifecycleError> {
     let next_binding = PublicationHeadBinding::from_snapshot(snapshot)?;
     if let Some(current) = load_snapshot(execution_world_dir)? {
@@ -312,6 +342,7 @@ fn reconcile_catch_up(
     save_snapshot(
         execution_world_dir,
         &PublicationLifecycleSnapshot::catch_up(snapshot.world_id.as_str(), next_binding),
+        authority,
     )
 }
 
@@ -321,6 +352,7 @@ fn reconcile_episode(
     execution_world_dir: &Path,
     execution_records_dir: &Path,
     observed_at_unix_ms: i64,
+    authority: Option<&ObserverLifecycleAuthority>,
 ) -> Result<(), LifecycleError> {
     let current = load_snapshot(execution_world_dir)?;
     let evaluation = evaluate_publication_episode(
@@ -339,6 +371,7 @@ fn reconcile_episode(
             snapshot.world_id.as_str(),
             evaluation.episode_binding,
         ),
+        authority,
     )
 }
 
@@ -393,7 +426,12 @@ pub(super) fn has_complete_publication_quorum_at_height(
 fn save_snapshot(
     execution_world_dir: &Path,
     snapshot: &PublicationLifecycleSnapshot,
+    authority: Option<&ObserverLifecycleAuthority>,
 ) -> Result<(), LifecycleError> {
+    let mutation_guard = authority.and_then(ObserverLifecycleAuthority::acquire_durable_mutation);
+    if authority.is_some() && mutation_guard.is_none() {
+        return Err(LifecycleError::persist("observer_lifecycle_revoked"));
+    }
     fs::create_dir_all(execution_world_dir)
         .map_err(|_| LifecycleError::persist("state_dir_create_failed"))?;
     let bytes = serde_json::to_vec_pretty(snapshot)

@@ -1,7 +1,8 @@
 use std::collections::VecDeque;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
@@ -65,6 +66,41 @@ pub trait NodeConsensusProgressObserver: Send {
     fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
         None
     }
+
+    /// Bind the generation-scoped authority used to fence durable observer work.
+    /// Observers without durable side effects may ignore it.
+    fn bind_lifecycle_authority(&mut self, _authority: ObserverLifecycleAuthority) {}
+
+    fn take_restart_handoff(&mut self) -> Option<ObserverRestartHandoff> {
+        None
+    }
+}
+
+#[derive(Clone)]
+pub struct ObserverLifecycleAuthority {
+    state: Arc<ObserverLifecycleAuthorityState>,
+    generation: u64,
+}
+
+struct ObserverLifecycleAuthorityState {
+    active_generation: AtomicU64,
+    mutation_lock: Mutex<()>,
+}
+
+pub struct ObserverLifecycleMutationGuard<'a> {
+    _lock: MutexGuard<'a, ()>,
+}
+
+impl ObserverLifecycleAuthority {
+    pub fn acquire_durable_mutation(&self) -> Option<ObserverLifecycleMutationGuard<'_>> {
+        let lock = self
+            .state
+            .mutation_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        (self.state.active_generation.load(Ordering::SeqCst) == self.generation)
+            .then_some(ObserverLifecycleMutationGuard { _lock: lock })
+    }
 }
 
 const CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE: &str =
@@ -75,6 +111,39 @@ struct PendingConsensusProgress {
     sequence: u64,
     snapshot: NodeConsensusSnapshot,
     observed_at_ms: i64,
+}
+
+pub struct ObserverRestartHandoff {
+    pending: VecDeque<PendingConsensusProgress>,
+    authority_state: Arc<ObserverLifecycleAuthorityState>,
+}
+
+struct RestartHandoffObserver {
+    observer: Box<dyn NodeConsensusProgressObserver>,
+    handoff: Option<ObserverRestartHandoff>,
+}
+
+impl NodeConsensusProgressObserver for RestartHandoffObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        self.observer
+            .observe_consensus_progress(snapshot, observed_at_ms)
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        self.observer.recreate_for_restart()
+    }
+
+    fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        self.observer.bind_lifecycle_authority(authority);
+    }
+
+    fn take_restart_handoff(&mut self) -> Option<ObserverRestartHandoff> {
+        self.handoff.take()
+    }
 }
 
 #[derive(Default)]
@@ -131,6 +200,7 @@ pub(super) struct ConsensusProgressObserverDispatcher {
     state: Weak<Mutex<RuntimeState>>,
     generation: u64,
     restart_observer: Option<Box<dyn NodeConsensusProgressObserver>>,
+    authority: ObserverLifecycleAuthority,
     worker: Option<JoinHandle<()>>,
 }
 
@@ -148,9 +218,40 @@ impl ConsensusProgressObserverDispatcher {
         generation: u64,
         mut observer: Box<dyn NodeConsensusProgressObserver>,
     ) -> std::io::Result<Self> {
+        let handoff = observer.take_restart_handoff();
+        let authority_state = handoff.as_ref().map_or_else(
+            || {
+                Arc::new(ObserverLifecycleAuthorityState {
+                    active_generation: AtomicU64::new(generation),
+                    mutation_lock: Mutex::new(()),
+                })
+            },
+            |handoff| Arc::clone(&handoff.authority_state),
+        );
+        {
+            let _mutation_lock = authority_state
+                .mutation_lock
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            authority_state
+                .active_generation
+                .store(generation, Ordering::SeqCst);
+        }
+        let authority = ObserverLifecycleAuthority {
+            state: authority_state,
+            generation,
+        };
+        observer.bind_lifecycle_authority(authority.clone());
         let restart_observer = observer.recreate_for_restart();
+        // The dispatcher owns observer generation identity.  Publishing the new identity before
+        // its worker starts fences a detached predecessor without requiring callers to infer or
+        // synchronize observer lifecycle state themselves.
+        lock_state_generation(&state, generation);
         let queue = Arc::new((
-            Mutex::new(ConsensusProgressObserverQueue::default()),
+            Mutex::new(ConsensusProgressObserverQueue {
+                pending: handoff.map_or_else(VecDeque::new, |handoff| handoff.pending),
+                ..ConsensusProgressObserverQueue::default()
+            }),
             Condvar::new(),
         ));
         let worker_queue = Arc::clone(&queue);
@@ -225,6 +326,7 @@ impl ConsensusProgressObserverDispatcher {
             state: Arc::downgrade(&state),
             generation,
             restart_observer,
+            authority,
             worker: Some(worker),
         })
     }
@@ -243,8 +345,28 @@ impl ConsensusProgressObserverDispatcher {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         queue.shutdown = true;
-        queue.pending.clear();
+        let pending = std::mem::take(&mut queue.pending);
         drop(queue);
+        {
+            let _mutation_lock = self
+                .authority
+                .state
+                .mutation_lock
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if self
+                .authority
+                .state
+                .active_generation
+                .load(Ordering::SeqCst)
+                == self.generation
+            {
+                self.authority
+                    .state
+                    .active_generation
+                    .store(u64::MAX, Ordering::SeqCst);
+            }
+        }
         signal.notify_all();
 
         if self.worker.as_ref().is_some_and(JoinHandle::is_finished) {
@@ -255,8 +377,23 @@ impl ConsensusProgressObserverDispatcher {
             // External observer code can block forever; detaching keeps stop bounded.
             let _ = self.worker.take();
         }
-        self.restart_observer.take()
+        self.restart_observer.take().map(|observer| {
+            Box::new(RestartHandoffObserver {
+                observer,
+                handoff: Some(ObserverRestartHandoff {
+                    pending,
+                    authority_state: Arc::clone(&self.authority.state),
+                }),
+            }) as Box<dyn NodeConsensusProgressObserver>
+        })
     }
+}
+
+fn lock_state_generation(state: &Arc<Mutex<RuntimeState>>, generation: u64) {
+    let mut current = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    current.generation = generation;
 }
 
 impl ConsensusProgressObserverSubmitter {

@@ -167,6 +167,122 @@ impl Drop for RestartObserverReleaseGuard {
     }
 }
 
+#[derive(Default)]
+struct RestartHandoffControl {
+    entered: AtomicBool,
+    release: AtomicBool,
+    observed_progress: Mutex<Vec<(usize, u64, u64)>>,
+    signal: Condvar,
+}
+
+struct RestartHandoffObserver {
+    control: Arc<RestartHandoffControl>,
+    blocks: bool,
+    generation: usize,
+}
+
+impl NodeConsensusProgressObserver for RestartHandoffObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        let mut observed = self
+            .control
+            .observed_progress
+            .lock()
+            .expect("lock restart handoff progress");
+        observed.push((
+            self.generation,
+            snapshot.committed_height,
+            snapshot.network_committed_height,
+        ));
+        if self.blocks && !self.control.entered.swap(true, Ordering::SeqCst) {
+            self.control.signal.notify_all();
+            while !self.control.release.load(Ordering::SeqCst) {
+                observed = self
+                    .control
+                    .signal
+                    .wait(observed)
+                    .expect("wait for restart handoff release");
+            }
+        }
+        Ok(())
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(Self {
+            control: Arc::clone(&self.control),
+            blocks: false,
+            generation: self.generation + 1,
+        }))
+    }
+}
+
+#[derive(Default)]
+struct RestartAuthorityControl {
+    entered: AtomicUsize,
+    resumed: AtomicUsize,
+    release: AtomicBool,
+    next_owner: AtomicUsize,
+    active_owner: AtomicUsize,
+    mutation_owners: Mutex<Vec<usize>>,
+    signal: Condvar,
+    wait_lock: Mutex<()>,
+}
+
+struct RestartAuthorityObserver {
+    control: Arc<RestartAuthorityControl>,
+    owner: usize,
+    authority: Option<ObserverLifecycleAuthority>,
+}
+
+impl NodeConsensusProgressObserver for RestartAuthorityObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        _snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        if self.owner != self.control.active_owner.load(Ordering::SeqCst) {
+            let mut guard = self.control.wait_lock.lock().expect("lock authority gate");
+            self.control.entered.fetch_add(1, Ordering::SeqCst);
+            self.control.signal.notify_all();
+            while !self.control.release.load(Ordering::SeqCst) {
+                guard = self
+                    .control
+                    .signal
+                    .wait(guard)
+                    .expect("wait for authority release");
+            }
+            self.control.resumed.fetch_add(1, Ordering::SeqCst);
+        }
+        let Some(authority) = self.authority.as_ref() else {
+            return Err("missing observer lifecycle authority".into());
+        };
+        let Some(_mutation_guard) = authority.acquire_durable_mutation() else {
+            return Ok(());
+        };
+        self.control
+            .mutation_owners
+            .lock()
+            .expect("lock durable mutation owners")
+            .push(self.owner);
+        Ok(())
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(Self {
+            control: Arc::clone(&self.control),
+            owner: self.control.next_owner.fetch_add(1, Ordering::SeqCst) + 1,
+            authority: None,
+        }))
+    }
+
+    fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        self.authority = Some(authority);
+    }
+}
+
 fn retained_commit_publication_count(network: &TestInMemoryNetwork, world_id: &str) -> usize {
     let topic = super::super::network_bridge::default_consensus_commit_topic(world_id);
     network
@@ -517,6 +633,187 @@ fn stopped_observer_generation_cannot_write_into_restarted_runtime() {
             assert_eq!(
                 restarted_after_release.consensus_progress_observer_error, None,
                 "stale observer result changed the restarted generation: {restarted_after_release:?}"
+            );
+        },
+    );
+}
+
+#[test]
+fn bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_order() {
+    run_test_with_timeout(
+        "bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_order",
+        Duration::from_secs(3),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let control = Arc::new(RestartHandoffControl::default());
+            let mut dispatcher = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "restart-publication-handoff",
+                Arc::clone(&state),
+                0,
+                Box::new(RestartHandoffObserver {
+                    control: Arc::clone(&control),
+                    blocks: true,
+                    generation: 0,
+                }),
+            )
+            .expect("spawn blocked restart dispatcher");
+            let submitter = dispatcher.submitter();
+
+            let mut lag = NodeConsensusSnapshot::default();
+            lag.committed_height = 10;
+            lag.network_committed_height = 9;
+            let mut equal_head = lag.clone();
+            equal_head.network_committed_height = 10;
+            let mut fresh_lag = equal_head.clone();
+            fresh_lag.committed_height = 11;
+            fresh_lag.network_committed_height = 10;
+
+            submitter.submit(lag, 1);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control.entered.load(Ordering::SeqCst)
+                }),
+                "first-generation observer never became occupied"
+            );
+            submitter.submit(equal_head, 2);
+            submitter.submit(fresh_lag, 3);
+
+            let stop_started = Instant::now();
+            let recreated = dispatcher
+                .shutdown()
+                .expect("restartable observer must survive bounded stop");
+            assert!(
+                stop_started.elapsed() < Duration::from_millis(500),
+                "bounded stop joined a blocked observer: elapsed={:?}",
+                stop_started.elapsed()
+            );
+            let restarted = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "restart-publication-handoff",
+                Arc::clone(&state),
+                1,
+                recreated,
+            )
+            .expect("spawn recreated observer");
+
+            control.release.store(true, Ordering::SeqCst);
+            control.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed_progress
+                        .lock()
+                        .expect("lock restart handoff progress")
+                        .len()
+                        == 3
+                }),
+                "bounded restart discarded pending publication transitions instead of handing them to the recreated observer: observed={:?}",
+                control
+                    .observed_progress
+                    .lock()
+                    .expect("lock restart handoff progress")
+            );
+            assert_eq!(
+                *control
+                    .observed_progress
+                    .lock()
+                    .expect("lock restart handoff progress"),
+                vec![(0, 10, 9), (1, 10, 10), (1, 11, 10)],
+                "recreated observer must receive pending equal-head -> fresh lag in order after the original lag"
+            );
+            drop(restarted);
+        },
+    );
+}
+
+#[test]
+fn repeated_bounded_restarts_fence_old_durable_mutation_owners() {
+    run_test_with_timeout(
+        "repeated_bounded_restarts_fence_old_durable_mutation_owners",
+        Duration::from_secs(4),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let control = Arc::new(RestartAuthorityControl::default());
+            control.active_owner.store(usize::MAX, Ordering::SeqCst);
+            let mut observer: Box<dyn NodeConsensusProgressObserver> =
+                Box::new(RestartAuthorityObserver {
+                    control: Arc::clone(&control),
+                    owner: 0,
+                    authority: None,
+                });
+
+            for generation in 0..3_u64 {
+                let mut dispatcher = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                    "restart-publication-authority",
+                    Arc::clone(&state),
+                    generation,
+                    observer,
+                )
+                .expect("spawn restart generation");
+                dispatcher
+                    .submitter()
+                    .submit(NodeConsensusSnapshot::default(), generation as i64);
+                assert!(
+                    wait_until(Instant::now() + Duration::from_secs(1), || {
+                        control.entered.load(Ordering::SeqCst) == generation as usize + 1
+                    }),
+                    "generation {generation} never reached the controlled durable mutation gate"
+                );
+                let stop_started = Instant::now();
+                observer = dispatcher
+                    .shutdown()
+                    .expect("restartable observer must remain available after bounded stop");
+                assert!(
+                    stop_started.elapsed() < Duration::from_millis(500),
+                    "restart generation {generation} exceeded bounded stop: elapsed={:?}",
+                    stop_started.elapsed()
+                );
+            }
+
+            control.active_owner.store(3, Ordering::SeqCst);
+            let current = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "restart-publication-authority",
+                Arc::clone(&state),
+                3,
+                observer,
+            )
+            .expect("spawn current generation");
+            current
+                .submitter()
+                .submit(NodeConsensusSnapshot::default(), 3);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .mutation_owners
+                        .lock()
+                        .expect("lock durable mutation owners")
+                        .contains(&3)
+                }),
+                "current generation never acquired durable mutation authority"
+            );
+
+            control.release.store(true, Ordering::SeqCst);
+            control.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control.resumed.load(Ordering::SeqCst) == 3
+                }),
+                "old blocked observers did not resume for the authority-fence regression"
+            );
+            let owners = control
+                .mutation_owners
+                .lock()
+                .expect("lock durable mutation owners")
+                .clone();
+            drop(current);
+
+            assert_eq!(
+                owners,
+                vec![3],
+                "after new ownership begins, old generations must not mutate durable lifecycle state or accumulate mutation owners"
             );
         },
     );

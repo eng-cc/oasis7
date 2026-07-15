@@ -137,7 +137,7 @@ use consensus_progress_observer::{
     ConsensusProgressObserverDispatcher, publish_runtime_progress_snapshot,
 };
 pub use consensus_progress_observer::{
-    NodeConsensusProgressObserver, NodeConsensusProgressObserverError,
+    NodeConsensusProgressObserver, NodeConsensusProgressObserverError, ObserverLifecycleAuthority,
 };
 use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,
