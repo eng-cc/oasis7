@@ -1018,3 +1018,6 @@ fn lifecycle_owned_episode_survives_restart_replay_and_reorgs_fail_closed_withou
     );
     fs::remove_dir_all(root).expect("remove lifecycle restart fixture");
 }
+
+#[path = "oasis7_chain_runtime_observability_readiness_publication_restart_tests.rs"]
+mod restart_tests;

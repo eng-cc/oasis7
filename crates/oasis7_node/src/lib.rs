@@ -751,6 +751,24 @@ impl NodeRuntime {
         snapshot
     }
 
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn submit_consensus_progress_for_test(
+        &self,
+        snapshot: NodeConsensusSnapshot,
+        observed_at_ms: i64,
+    ) -> Result<(), NodeError> {
+        if !self.running.load(Ordering::SeqCst) {
+            return Err(NodeError::NotRunning {
+                node_id: self.config.node_id.clone(),
+            });
+        }
+        let observer = self
+            .consensus_progress_observer_dispatcher
+            .as_ref()
+            .map(ConsensusProgressObserverDispatcher::submitter);
+        publish_runtime_progress_snapshot(&self.state, observer.as_ref(), snapshot, observed_at_ms)
+    }
+
     pub fn gossip_traffic_snapshot(&self) -> Option<GossipTrafficMetricsSnapshot> {
         self.gossip_endpoint
             .as_ref()

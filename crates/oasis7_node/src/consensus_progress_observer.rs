@@ -90,7 +90,7 @@ pub struct ObserverLifecycleAuthority {
 struct ObserverLifecycleAuthorityState {
     active_generation: AtomicU64,
     commit_lock: Mutex<()>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-hooks"))]
     before_native_replace_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
@@ -148,11 +148,8 @@ impl ObserverLifecycleAuthority {
         )
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_before_native_replace_hook_for_test(
-        &self,
-        hook: Arc<dyn Fn() + Send + Sync>,
-    ) {
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn set_before_native_replace_hook_for_test(&self, hook: Arc<dyn Fn() + Send + Sync>) {
         *self
             .state
             .before_native_replace_hook
@@ -210,7 +207,7 @@ impl ObserverLifecycleMutationGuard {
                 "observer_lifecycle_revoked",
             ));
         }
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-hooks"))]
         if let Some(hook) = self
             .authority
             .state
@@ -399,7 +396,7 @@ impl ConsensusProgressObserverDispatcher {
                 Arc::new(ObserverLifecycleAuthorityState {
                     active_generation: AtomicU64::new(generation),
                     commit_lock: Mutex::new(()),
-                    #[cfg(test)]
+                    #[cfg(any(test, feature = "test-hooks"))]
                     before_native_replace_hook: Mutex::new(None),
                 })
             },

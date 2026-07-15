@@ -42,6 +42,8 @@ pub(super) struct PublicationLifecycleObserver {
     execution_world_dir: PathBuf,
     execution_records_dir: PathBuf,
     authority: Option<ObserverLifecycleAuthority>,
+    #[cfg(test)]
+    before_native_replace_hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl PublicationLifecycleObserver {
@@ -65,7 +67,18 @@ impl PublicationLifecycleObserver {
             execution_world_dir,
             execution_records_dir,
             authority: None,
+            #[cfg(test)]
+            before_native_replace_hook: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_before_native_replace_hook_for_test(
+        mut self,
+        hook: std::sync::Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        self.before_native_replace_hook = Some(hook);
+        self
     }
 }
 
@@ -97,8 +110,13 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             self.authority.as_ref(),
         )
         .map_err(|error| {
+            let code = if error.detail == "observer_lifecycle_commit_busy" {
+                "observer_lifecycle_commit_busy"
+            } else {
+                error.reason
+            };
             NodeConsensusProgressObserverError::coded(
-                error.reason,
+                code,
                 format!(
                     "publication lifecycle reconciliation failed: reason={} detail={}",
                     error.reason, error.detail
@@ -108,10 +126,21 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
     }
 
     fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
-        Some(Box::new(self.clone()))
+        let restarted = self.clone();
+        #[cfg(test)]
+        let restarted = {
+            let mut restarted = restarted;
+            restarted.before_native_replace_hook = None;
+            restarted
+        };
+        Some(Box::new(restarted))
     }
 
     fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        #[cfg(test)]
+        if let Some(hook) = self.before_native_replace_hook.take() {
+            authority.set_before_native_replace_hook_for_test(hook);
+        }
         self.authority = Some(authority);
     }
 }
