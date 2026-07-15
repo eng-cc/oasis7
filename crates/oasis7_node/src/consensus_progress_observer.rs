@@ -1,8 +1,12 @@
 use std::collections::VecDeque;
+use std::error::Error;
 use std::fmt;
+use std::fs::{self, File};
+use std::io;
 use std::ops::Deref;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, TryLockError, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
@@ -87,8 +91,45 @@ struct ObserverLifecycleAuthorityState {
     commit_lock: Mutex<()>,
 }
 
-pub struct ObserverLifecycleMutationGuard<'a> {
-    authority: &'a ObserverLifecycleAuthority,
+pub struct ObserverLifecycleMutationGuard {
+    authority: ObserverLifecycleAuthority,
+}
+
+#[derive(Debug)]
+pub struct ObserverLifecyclePublicationError {
+    code: &'static str,
+    source: Option<io::Error>,
+}
+
+impl ObserverLifecyclePublicationError {
+    pub fn code(&self) -> &'static str {
+        self.code
+    }
+
+    fn new(code: &'static str) -> Self {
+        Self { code, source: None }
+    }
+
+    fn io(code: &'static str, source: io::Error) -> Self {
+        Self {
+            code,
+            source: Some(source),
+        }
+    }
+}
+
+impl fmt::Display for ObserverLifecyclePublicationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.code)
+    }
+}
+
+impl Error for ObserverLifecyclePublicationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_ref()
+            .map(|source| source as &(dyn Error + 'static))
+    }
 }
 
 impl ObserverLifecycleAuthority {
@@ -96,32 +137,113 @@ impl ObserverLifecycleAuthority {
     ///
     /// This deliberately does not hold the commit lock while callers write or fsync a temporary
     /// file. Restart must be able to revoke a stalled predecessor without waiting for that I/O.
-    pub fn acquire_durable_mutation(&self) -> Option<ObserverLifecycleMutationGuard<'_>> {
-        (self.state.active_generation.load(Ordering::SeqCst) == self.generation)
-            .then_some(ObserverLifecycleMutationGuard { authority: self })
+    pub fn acquire_durable_mutation(&self) -> Option<ObserverLifecycleMutationGuard> {
+        (self.state.active_generation.load(Ordering::SeqCst) == self.generation).then_some(
+            ObserverLifecycleMutationGuard {
+                authority: self.clone(),
+            },
+        )
     }
 }
 
-impl ObserverLifecycleMutationGuard<'_> {
-    /// Revalidates authority while serializing only the final durable publication.
+impl ObserverLifecycleMutationGuard {
+    /// Publishes `target` from a fully written and synced same-directory staging file.
     ///
-    /// A predecessor revoked before this point cannot enter `commit`. A commit already inside
-    /// this closure linearizes before the handoff; activation and shutdown never wait for it.
-    pub fn commit<T>(&self, commit: impl FnOnce() -> T) -> Option<T> {
-        let _commit_lock = self
-            .authority
-            .state
-            .commit_lock
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        (self
+    /// Callers cannot run arbitrary side effects after the authority check. The commit lock is
+    /// non-blocking so a stalled publisher cannot make a successor wait; poisoned state fails
+    /// closed. The only non-cancellable operation after the final generation check is the native
+    /// same-directory replacement itself.
+    pub fn publish_staged_file(
+        &self,
+        staged: &Path,
+        target: &Path,
+    ) -> Result<(), ObserverLifecyclePublicationError> {
+        let Some(parent) = staged
+            .parent()
+            .filter(|parent| Some(*parent) == target.parent())
+        else {
+            return Err(ObserverLifecyclePublicationError::new(
+                "observer_lifecycle_invalid_staging",
+            ));
+        };
+        if staged == target {
+            return Err(ObserverLifecyclePublicationError::new(
+                "observer_lifecycle_invalid_staging",
+            ));
+        }
+        let _commit_lock = match self.authority.state.commit_lock.try_lock() {
+            Ok(lock) => lock,
+            Err(TryLockError::WouldBlock) => {
+                return Err(ObserverLifecyclePublicationError::new(
+                    "observer_lifecycle_commit_busy",
+                ));
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(ObserverLifecyclePublicationError::new(
+                    "observer_lifecycle_commit_poisoned",
+                ));
+            }
+        };
+        if self
             .authority
             .state
             .active_generation
             .load(Ordering::SeqCst)
-            == self.authority.generation)
-            .then(commit)
+            != self.authority.generation
+        {
+            return Err(ObserverLifecyclePublicationError::new(
+                "observer_lifecycle_revoked",
+            ));
+        }
+        platform_replace_staged_file(staged, target).map_err(|source| {
+            ObserverLifecyclePublicationError::io("state_replace_failed", source)
+        })?;
+        sync_parent_dir(parent).map_err(|source| {
+            ObserverLifecyclePublicationError::io("state_parent_fsync_failed", source)
+        })
     }
+}
+
+#[cfg(windows)]
+fn platform_replace_staged_file(staged: &Path, target: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = staged
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = target
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    // SAFETY: both paths are owned, NUL-terminated UTF-16 buffers that remain alive for the
+    // duration of the call.
+    let replaced = unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), flags) };
+    if replaced == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn platform_replace_staged_file(staged: &Path, target: &Path) -> io::Result<()> {
+    fs::rename(staged, target)
+}
+
+#[cfg(unix)]
+fn sync_parent_dir(parent: &Path) -> io::Result<()> {
+    File::open(parent)?.sync_all()
+}
+
+#[cfg(not(unix))]
+fn sync_parent_dir(_parent: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 const CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE: &str =
@@ -135,6 +257,7 @@ struct PendingConsensusProgress {
 }
 
 pub struct ObserverRestartHandoff {
+    next_sequence: u64,
     pending: VecDeque<PendingConsensusProgress>,
     authority_state: Arc<ObserverLifecycleAuthorityState>,
 }
@@ -262,19 +385,15 @@ impl ConsensusProgressObserverDispatcher {
         // its worker starts fences a detached predecessor without requiring callers to infer or
         // synchronize observer lifecycle state themselves.
         lock_state_generation(&state, generation);
+        let (next_sequence, pending) = handoff.map_or_else(
+            || (0, VecDeque::new()),
+            |handoff| (handoff.next_sequence, handoff.pending),
+        );
         let queue = Arc::new((
-            Mutex::new({
-                let pending = handoff.map_or_else(VecDeque::new, |handoff| handoff.pending);
-                let next_sequence = pending
-                    .iter()
-                    .map(|pending| pending.sequence)
-                    .max()
-                    .unwrap_or_default();
-                ConsensusProgressObserverQueue {
-                    next_sequence,
-                    pending,
-                    ..ConsensusProgressObserverQueue::default()
-                }
+            Mutex::new(ConsensusProgressObserverQueue {
+                next_sequence,
+                pending,
+                ..ConsensusProgressObserverQueue::default()
             }),
             Condvar::new(),
         ));
@@ -369,6 +488,7 @@ impl ConsensusProgressObserverDispatcher {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         queue.shutdown = true;
+        let next_sequence = queue.next_sequence;
         let pending = std::mem::take(&mut queue.pending);
         drop(queue);
         if self
@@ -397,6 +517,7 @@ impl ConsensusProgressObserverDispatcher {
             Box::new(RestartHandoffObserver {
                 observer,
                 handoff: Some(ObserverRestartHandoff {
+                    next_sequence,
                     pending,
                     authority_state: Arc::clone(&self.authority.state),
                 }),
@@ -413,6 +534,15 @@ fn lock_state_generation(state: &Arc<Mutex<RuntimeState>>, generation: u64) {
 }
 
 impl ConsensusProgressObserverSubmitter {
+    #[cfg(test)]
+    pub(super) fn current_sequence_for_test(&self) -> u64 {
+        let (queue_lock, _) = &*self.queue;
+        queue_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .next_sequence
+    }
+
     pub(super) fn submit(&self, snapshot: NodeConsensusSnapshot, observed_at_ms: i64) {
         let (queue_lock, signal) = &*self.queue;
         // This lock covers only bounded queue bookkeeping. Waiting for a concurrent worker
@@ -583,6 +713,16 @@ mod tests {
 
     #[test]
     fn revoked_durable_mutation_cannot_enter_final_commit() {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-revoked-observer-publication-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create revoked publication fixture");
+        let staged = root.join("state.tmp");
+        let target = root.join("state.json");
+        fs::write(&staged, b"stale").expect("write staged stale publication");
+        fs::write(&target, b"current").expect("write current publication");
         let state = Arc::new(ObserverLifecycleAuthorityState {
             active_generation: AtomicU64::new(0),
             commit_lock: Mutex::new(()),
@@ -596,10 +736,61 @@ mod tests {
             .expect("active generation starts durable work");
 
         state.active_generation.store(1, Ordering::SeqCst);
-        assert!(
-            mutation.commit(|| ()).is_none(),
-            "a generation revoked during temporary-file work must not reach final commit"
+        let error = mutation
+            .publish_staged_file(&staged, &target)
+            .expect_err("revoked generation must not publish staged state");
+        assert_eq!(error.code(), "observer_lifecycle_revoked");
+        assert_eq!(
+            fs::read(&target).expect("read current publication"),
+            b"current",
+            "a generation revoked during temporary-file work reached final commit"
         );
+        fs::remove_dir_all(root).expect("remove revoked publication fixture");
+    }
+
+    #[test]
+    fn poisoned_publication_state_fails_closed_without_replacing_target() {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-poisoned-observer-publication-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create poisoned publication fixture");
+        let staged = root.join("state.tmp");
+        let target = root.join("state.json");
+        fs::write(&staged, b"replacement").expect("write staged replacement");
+        fs::write(&target, b"last-good").expect("write last-good publication");
+        let state = Arc::new(ObserverLifecycleAuthorityState {
+            active_generation: AtomicU64::new(0),
+            commit_lock: Mutex::new(()),
+        });
+        let poison_state = Arc::clone(&state);
+        let _ = thread::spawn(move || {
+            let _commit = poison_state
+                .commit_lock
+                .lock()
+                .expect("lock publication state before poison");
+            panic!("poison publication state");
+        })
+        .join();
+        let authority = ObserverLifecycleAuthority {
+            state,
+            generation: 0,
+        };
+        let mutation = authority
+            .acquire_durable_mutation()
+            .expect("active generation starts durable work");
+
+        let error = mutation
+            .publish_staged_file(&staged, &target)
+            .expect_err("poisoned publication state must fail closed");
+        assert_eq!(error.code(), "observer_lifecycle_commit_poisoned");
+        assert_eq!(
+            fs::read(&target).expect("read last-good publication"),
+            b"last-good",
+            "poisoned publication state replaced the last-good target"
+        );
+        fs::remove_dir_all(root).expect("remove poisoned publication fixture");
     }
 
     #[test]

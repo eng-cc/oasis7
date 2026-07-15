@@ -453,11 +453,8 @@ fn save_snapshot(
             },
             |guard| {
                 guard
-                    .commit(|| {
-                        replace_file(temp_path.as_path(), target.as_path())?;
-                        sync_parent_dir(execution_world_dir)
-                    })
-                    .ok_or_else(|| LifecycleError::persist("observer_lifecycle_revoked"))?
+                    .publish_staged_file(temp_path.as_path(), target.as_path())
+                    .map_err(|error| LifecycleError::persist(error.code()))
             },
         )?;
         Ok(())
