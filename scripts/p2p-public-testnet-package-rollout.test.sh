@@ -337,8 +337,31 @@ powershell_fixture_script="$(mktemp "$TMP_DIR/windows-powershell-behavior-fixtur
 cat >"$powershell_fixture_script" <<'PS'
 $ErrorActionPreference = 'Stop'
 
-$fixtureRoot = Join-Path $env:OASIS7_FIXTURE_ROOT_DIR ("windows-rollout-behavior-" + [Guid]::NewGuid().ToString('N'))
+function Assert-FixtureNoReparseAncestor([string] $Path) {
+$probe = [System.IO.Path]::GetFullPath($Path)
+while (![string]::IsNullOrWhiteSpace($probe)) {
+  $item = Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+  if ($null -ne $item -and
+      (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {
+    throw "fixture safe-root precondition failed: reparse-point component=$probe configured_base=$Path"
+  }
+  $parent = [System.IO.Path]::GetDirectoryName($probe)
+  if ([string]::IsNullOrWhiteSpace($parent) -or
+      $parent.Equals($probe, [System.StringComparison]::OrdinalIgnoreCase)) {
+    break
+  }
+  $probe = $parent
+}
+}
+
+$fixtureSafeRootBase = [System.IO.Path]::GetFullPath($env:OASIS7_FIXTURE_SAFE_ROOT_BASE)
+if (!(Test-Path -LiteralPath $fixtureSafeRootBase -PathType Container)) {
+  throw "fixture safe-root base does not exist: $fixtureSafeRootBase"
+}
+Assert-FixtureNoReparseAncestor $fixtureSafeRootBase
+$fixtureRoot = Join-Path $fixtureSafeRootBase ("windows-rollout-behavior-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
+Assert-FixtureNoReparseAncestor $fixtureRoot
 $fixtureTasks = [System.Collections.Generic.List[string]]::new()
 
 function Get-Sha256([string] $Path) {
@@ -674,8 +697,9 @@ if [[ "$powershell_fixture_script_windows" != *.ps1 ]]; then
   exit 1
 fi
 
+mkdir -p "$ROOT_DIR/.tmp"
 set +e
-OASIS7_FIXTURE_ROOT_DIR="$(cygpath -w "$TMP_DIR")" \
+OASIS7_FIXTURE_SAFE_ROOT_BASE="$(cygpath -w "$ROOT_DIR/.tmp")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
   OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
   OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
@@ -709,6 +733,20 @@ assert "[System.IO.FileAttributes]::ReparsePoint" in fixture
 assert "Assert-FixtureSameExistingPath $reportedReparseAncestor $expectedReparseAncestor" in fixture
 assert "-notmatch [regex]::Escape($expectedReparseAncestor)" not in fixture, (
     "fixture must not compare raw short/long Windows path spellings"
+)
+assert "function Assert-FixtureNoReparseAncestor" in fixture
+assert "fixture safe-root precondition failed: reparse-point component=" in fixture
+safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureSafeRootBase\n")
+fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
+intentional_junction = fixture.index("New-Item -ItemType Junction")
+assert safe_root_check < fixture_root_check < intentional_junction, (
+    "native fixture must verify its workspace root before constructing intentional junctions"
+)
+assert not re.search(r'^OASIS7_FIXTURE_ROOT_DIR=', source, re.MULTILINE)
+assert re.search(
+    r'^OASIS7_FIXTURE_SAFE_ROOT_BASE="\$\(cygpath -w "\$ROOT_DIR/\.tmp"\)" \\$',
+    source,
+    re.MULTILINE,
 )
 PY
 if [[ "${OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST:-0}" == "1" ]]; then
