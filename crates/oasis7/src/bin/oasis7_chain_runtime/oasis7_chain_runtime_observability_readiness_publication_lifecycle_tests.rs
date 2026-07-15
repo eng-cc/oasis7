@@ -236,30 +236,6 @@ fn remove_stake_authority(snapshot: &mut NodeSnapshot) {
     snapshot.consensus.validator_stake_proofs.clear();
 }
 
-fn non_unix_replace_body() -> &'static str {
-    let source = include_str!("publication_lifecycle.rs");
-    source
-        .split_once("#[cfg(not(unix))]\nfn replace_file")
-        .expect("non-Unix publication replacement implementation exists")
-        .1
-        .split_once("#[cfg(unix)]\nfn sync_parent_dir")
-        .expect("non-Unix publication replacement implementation is bounded")
-        .0
-}
-
-fn destination_after_injected_replace_failure(replace_body: &str) -> Option<&'static [u8]> {
-    const LAST_GOOD: &[u8] = b"last-good-durable-publication-state";
-    let remove_at = replace_body.find("remove_file(target)");
-    let replace_at = replace_body
-        .find("rename(temp, target)")
-        .expect("replacement operation remains explicit");
-    if remove_at.is_some_and(|position| position < replace_at) {
-        None
-    } else {
-        Some(LAST_GOOD)
-    }
-}
-
 #[test]
 fn publication_lifecycle_rejects_zero_or_missing_stake_authority_before_persisting_state() {
     let manifest = publication_test_manifest("public_testnet", 2);
@@ -361,25 +337,41 @@ fn publication_lifecycle_rejects_zero_or_missing_stake_authority_before_persisti
 #[test]
 fn publication_state_replacement_never_deletes_last_good_destination_before_atomic_success() {
     const LAST_GOOD: &[u8] = b"last-good-durable-publication-state";
+    const NEXT_STATE: &[u8] = b"next-durable-publication-state";
     let root = publication_test_temp_dir("atomic-replace-contract");
     fs::create_dir_all(&root).expect("create replacement contract fixture");
     let destination = root.join("destination.json");
     let replacement = root.join("replacement.tmp");
     fs::write(&destination, LAST_GOOD).expect("write last good destination");
-    fs::write(&replacement, b"next-durable-publication-state").expect("write replacement");
+    fs::write(&replacement, NEXT_STATE).expect("write replacement");
 
     fs::rename(&replacement, &destination).expect("platform atomic replacement success control");
     assert_eq!(
         fs::read(&destination).expect("read successful replacement"),
-        b"next-durable-publication-state"
+        NEXT_STATE
     );
 
-    let destination_after_failure =
-        destination_after_injected_replace_failure(non_unix_replace_body());
+    fs::write(&destination, LAST_GOOD).expect("restore last good destination");
+    fs::write(&replacement, NEXT_STATE).expect("restore replacement source");
+    let result = super::super::super::publication_lifecycle::replace_file_with(
+        replacement.as_path(),
+        destination.as_path(),
+        |_source, _destination| Err(std::io::Error::other("injected atomic replace failure")),
+    );
+    let error = result.expect_err("injected replacement failure must propagate");
     assert_eq!(
-        destination_after_failure,
-        Some(LAST_GOOD),
-        "non-Unix replacement deletes the last good destination before the injected atomic replace failure"
+        (error.reason, error.detail),
+        ("state_persist_failed", "state_replace_failed")
+    );
+    assert_eq!(
+        fs::read(&destination).expect("read destination after replacement failure"),
+        LAST_GOOD,
+        "replacement failure changed or deleted the last good destination"
+    );
+    assert_eq!(
+        fs::read(&replacement).expect("read source after replacement failure"),
+        NEXT_STATE,
+        "replacement orchestration changed or deleted the source after the injected operation failed"
     );
     fs::remove_dir_all(root).expect("remove replacement contract fixture");
 }

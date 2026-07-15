@@ -544,8 +544,8 @@ fn replace_file(temp: &Path, target: &Path) -> Result<(), LifecycleError> {
     replace_file_with(temp, target, platform_atomic_replace)
 }
 
-#[cfg(not(unix))]
-fn replace_file_with(
+#[cfg(any(not(unix), test))]
+pub(super) fn replace_file_with(
     temp: &Path,
     target: &Path,
     replace: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
