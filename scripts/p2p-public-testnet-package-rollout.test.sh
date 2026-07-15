@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! command -v shasum >/dev/null 2>&1; then
+  shasum() {
+    [[ "${1:-}" == "-a" && "${2:-}" == "256" ]] || {
+      echo "test shasum shim supports only -a 256" >&2
+      return 2
+    }
+    shift 2
+    sha256sum "$@"
+  }
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-package-rollout-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
