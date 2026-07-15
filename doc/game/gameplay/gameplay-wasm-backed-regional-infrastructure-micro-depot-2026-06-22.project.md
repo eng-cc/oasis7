@@ -40,11 +40,12 @@
 
 | Lane | Owner role | Required tier | Entry condition | Done signal |
 | --- | --- | --- | --- | --- |
-| `micro-depot-wasm-abi-host-adapter` | `wasm_platform_engineer` + `runtime_engineer` | `test_tier_required` | PRD-GAME-016 accepted for implementation | Same input snapshot + module hash produces byte-identical proposal hash; schema/hash mismatch rejects. |
+| `micro-depot-wasm-abi-host-adapter` | `wasm_platform_engineer` + `runtime_engineer` | `test_tier_required` | PRD-GAME-016 accepted for implementation | Same `micro_depot.eval.v2` input snapshot + module hash produces byte-identical measured proposal hash; schema/hash mismatch rejects; v1 legacy fixture remains compatible. |
 | `micro-depot-runtime-state-events` | `runtime_engineer` | `test_tier_required` | ABI/adapter boundary ready | Install/service/reclaim replay produces identical state; duplicate, out-of-range, unsupported-resource and unpaid-upkeep blockers are structured. |
 | `micro-depot-quote-pipeline` | `runtime_engineer` + `gameplay_designer` | `test_tier_required` | runtime state/events available | Repair/logistics quote preview shows before/after with capped depot contribution and remaining blocker. |
 | `micro-depot-viewer-api-surface` | `viewer_engineer` + `agent_engineer` | `test_tier_required` | canonical DTO and receipt fields available | Viewer and pure API show same quote, blocker, receipt, module evidence and next useful action; agent action remains explainable. |
 | `micro-depot-gameplay-smoke` | `qa_engineer` + `gameplay_designer` | `test_tier_required` + `test_tier_full` | visible service path available | One repair/logistics action becomes cheaper, faster or less risky because of depot, and player can identify remaining blocker. |
+| `micro-depot-measured-supply-accounting` | `runtime_engineer` + `wasm_platform_engineer` + `qa_engineer` | `test_tier_required` + `test_tier_full` | canonical state/events and v2 ABI adapter available | v2 install-funded commissioning constants are data `8` / throughput `16` / epoch `0`; synchronous evaluator performs no debit and validates input consistency; service atomically debits stock + throughput + effect or changes none; receipt/replay reconcile before/after; v1 absent measured fields remain zero. Refill, rollover/reset and preview-confirm concurrency are excluded. |
 
 ## Validation Entry
 
@@ -60,6 +61,8 @@
 - Do not route this topic into first-10-minute onboarding or free build UI.
 - Do not expose arbitrary player-uploaded WASM before security/governance owner lanes exist.
 - Do not let depot effects bypass claim scope, upkeep, resource accounting or restricted starter funding provenance.
+- Do not treat upkeep as service inventory, invent refill/rollover authority, reserve stock during preview, accept class-only consumption as the v2 norm, or allow partial stock/throughput debit.
+- Current-version commissioning constants `data=8` and throughput `16` are funded by the existing install cost and recorded through install provenance; reclaim/reinstall pays the full install cost and is not refill. Migrating these constants to configurable balance, authorized refill, epoch clock/rollover/reset, refill costs and repair/logistics debit curves remains follow-up gameplay/runtime work.
 - Do not use this PRD/project to claim closed beta, production readiness, or live release.
 - If future edits change stage, gate verdict, preview cadence or public claim wording, route through `producer_system_designer`, `qa_engineer`, and `liveops_community`.
 

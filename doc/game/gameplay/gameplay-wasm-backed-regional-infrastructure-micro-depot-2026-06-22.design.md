@@ -149,13 +149,15 @@ Runtime validation includes:
 - module hash / schema version
 - replay-safe proposal hash
 
-## 6. Minimal ABI
+## 6. Minimal ABI (`micro_depot.eval.v2`)
+
+Measured-service 的 normative ABI 是 `schema_version = "micro_depot.eval.v2"`。Runtime 继续接受 `micro_depot.eval.v1` 作为 legacy compatibility input/output，并把 v1 的 class-based consumption 通过既有 adapter 转成 runtime debit；新 module、fixture 和 receipt producer 必须使用 v2 的 exact `resource_debits`，不得继续扩展 v1。Schema-bound migration 规则是：legacy v1 persisted state 缺失 measured fields 时按 `inventory_revision = 0`、空库存、吞吐 `0` 解码，不追溯赠送 commissioning stock；只有 v2 新安装设施获得下述版本化 commissioning bundle。
 
 ### 6.1 Input
 
 ```ts
 type MicroDepotEvalInput = {
-  schema_version: string
+  schema_version: "micro_depot.eval.v2"
   module_id: string
   module_version: string
   action: {
@@ -182,6 +184,10 @@ type MicroDepotEvalInput = {
     supported_resource_kinds: string[]
     service_radius_cm: number
     upkeep_paid: boolean
+    inventory_revision: number
+    current_epoch: number
+    available_units_by_kind: Record<string, number>
+    throughput_remaining_units: number
   }
   context: {
     distance_to_target_cm: number
@@ -207,18 +213,27 @@ type MicroDepotProposal = {
       to: string
     }
   }
-  consumed_resource_classes: string[]
+  resource_debits: Array<{
+    resource_kind: string
+    units: number
+  }>
+  evaluated_inventory_revision: number
+  evaluated_epoch: number
   explanation_code:
     | "DEPOT_WITHIN_RANGE"
     | "DEPOT_OUT_OF_RANGE"
     | "DEPOT_UPKEEP_MISSING"
     | "RESOURCE_KIND_UNSUPPORTED"
+    | "DEPOT_INVENTORY_INSUFFICIENT"
+    | "DEPOT_THROUGHPUT_EXHAUSTED"
     | "ROUTE_STILL_BLOCKED"
   proposal_hash: string
 }
 ```
 
-WASM 不允许输出真实库存变更、扣费结果、ownership 变更或 canonical world-state patch。
+所有 `units` 都是 runtime 定义的非负整数最小计量单位；MVP 不允许浮点、负数、隐式单位换算或只报资源类别不报数量。`resource_debits` 按 `resource_kind` 唯一且排序后参与 `proposal_hash`；`applicable` proposal 必须至少包含一项正数 debit，其他 decision 必须为空。
+
+WASM 不允许输出真实库存变更、扣费结果、ownership 变更或 canonical world-state patch。它只基于 runtime 提供的同一库存快照提出 debit；runtime 是余额与吞吐扣减的唯一 authority。
 
 ## 7. Canonical Runtime Model
 
@@ -239,6 +254,11 @@ RegionalInfrastructure {
   capacity_class
   service_radius_cm
   supported_resource_kinds
+  inventory_revision
+  available_units_by_kind
+  throughput_limit_units_per_epoch
+  throughput_epoch
+  throughput_remaining_units
   upkeep_per_epoch
   upkeep_paid_through_epoch
   funding_provenance
@@ -253,6 +273,17 @@ RegionalInfrastructure {
   updated_tick
 }
 ```
+
+### 7.1.1 Measured Supply Contract
+
+- `available_units_by_kind[resource_kind]` 是设施内可服务库存；缺失 key 等价于 `0`。每个值和总量都必须是非负整数，且不得超过 runtime 配置的 per-kind / facility capacity。
+- v2 当前版本 commissioning constants 为每个受支持的 `data` kind `8` units，以及 throughput limit/remaining `16` units、epoch `0`。这两个常量是当前实现与 replay 的版本化事实，不是最终平衡承诺；迁移到可配置值前必须保留 schema/version binding 和旧 receipt replay。
+- commissioning bundle 已包含在既有 install cost 中，不是免费 refill。`MicroDepotInstalled` receipt 与设施 provenance 必须把初始 `8/16` 绑定到同一次 accepted install、installer/owner 和 install payment；reclaim 后 reinstall 必须重新满足完整 install quote/cost/permission，不能被解释为 refill action，也不能继承已回收设施的 bundle。
+- `throughput_limit_units_per_epoch`、`throughput_epoch` 与 `throughput_remaining_units` 是 measured-service canonical state；当前 slice 初始化并在成功 service 时扣减这些值，但没有 canonical epoch clock、自动 rollover 或 reset action。
+- 当前 acceptance 不包含补货 action 或吞吐 reset。库存来源授权、补货扣转、epoch clock、rollover/reset 触发与事件必须由 `gameplay_designer + runtime_engineer` 后续联合设计后才能实现；commissioning initialization 之外，upkeep、任意 tick/epoch 变化都不得增加库存或吞吐。
+- 每次成功 service debit 都递增 `inventory_revision`。同步 service action 内的 evaluator input 与 proposal 必须具有一致的 `evaluated_inventory_revision + evaluated_epoch`；这是 evaluator input consistency validation，不是跨 action 的 preview reservation 或并发确认合同。
+- service apply 必须原子重验 owner/claim、upkeep、range、module/schema/proposal hash、各 kind 库存和总吞吐；全部成立才同时扣减 `available_units_by_kind` 与 `throughput_remaining_units` 并应用 service effect。任一失败则两者和 service world state 都不改变。
+- evaluator preview 永不 reserve 或 debit。库存不足为 `DEPOT_INVENTORY_INSUFFICIENT`，吞吐不足为 `DEPOT_THROUGHPUT_EXHAUSTED`；当前同步 action 不承诺独立 preview-confirm concurrency 或 `DEPOT_SUPPLY_SNAPSHOT_STALE` player-facing blocker。
 
 ### 7.2 Actions
 
@@ -287,6 +318,9 @@ RegionalInfrastructure {
 - `world_change_summary`
 - `receipt_id`
 - `module_id / module_version / module_hash / proposal_hash`
+- `evaluated_epoch / inventory_revision_before / inventory_revision_after`
+- `resource_debits[] / inventory_units_before_by_kind / inventory_units_after_by_kind`
+- `throughput_units_before / throughput_units_after`
 
 ## 8. Viewer / Pure API DTO
 
@@ -297,15 +331,15 @@ Viewer 和 pure API 不读取 WASM，不猜测收益，只渲染 runtime DTO。
 - `infrastructure_nodes[]`
   - id, kind, status, anchor, owner claim, upkeep state, visible effect
 - `facility_details`
-  - upkeep, service radius, supported actions, module identity, provenance, next useful action
+  - upkeep, service radius, supported actions, module identity, provenance, inventory by kind, current epoch throughput remaining/limit, next useful action
 - `action_previews[]`
   - before quote, after quote, depot contribution, remaining blockers
 - `player_action_receipts[]`
-  - before / after cost, risk, wait, route, repair/logistics outcome
+  - before / after cost, risk, wait, route, repair/logistics outcome, resource debit quantities, inventory and throughput before/after
 - `depot_contributions[]`
   - depot id, proposal hash, effect class, explanation code
 - `bottlenecks[]`
-  - missing resource, unpaid upkeep, out of range, permission denied, degraded
+- missing resource, insufficient inventory, throughput exhausted, unpaid upkeep, out of range, permission denied, degraded
 - `module_evidence`
   - module id, version, hash, schema version, proposal hash
 
@@ -368,7 +402,7 @@ Runtime 必须：
 6. receipt / audit
    - Gate: every applied service records module hash, proposal hash, before / after quote, world change summary.
 7. gameplay smoke
-   - Gate: one repair / logistics action becomes measurably cheaper, faster, or less risky because of depot, and player can identify the remaining blocker.
+   - Gate: one repair / logistics action becomes measurably cheaper, faster, or less risky because of depot, exact stock/throughput debit is visible, and player can identify the remaining blocker.
 
 ## 12. Post-first-capability 10 分钟验证切片
 

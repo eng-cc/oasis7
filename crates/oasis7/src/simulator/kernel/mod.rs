@@ -3,6 +3,7 @@
 mod actions;
 mod fragment_replenish;
 mod micro_depot;
+mod micro_depot_validation;
 mod module_lifecycle;
 mod module_market_lifecycle;
 mod observation;
@@ -68,13 +69,15 @@ pub use micro_depot::{
 };
 #[allow(unused_imports)]
 pub use step::{IntentBatchReport, IntentConflictResolution};
+#[allow(unused_imports)]
 pub use types::{
     ChunkGenerationCause, FragmentReplenishedEntry, KernelRuleCost, KernelRuleDecision,
     KernelRuleDecisionMergeError, KernelRuleModuleContext, KernelRuleModuleInput,
-    KernelRuleModuleOutput, KernelRuleVerdict, MicroDepotResourceDebit, Observation, ObservedAgent,
-    ObservedLocation, ObservedModuleArtifactRecord, ObservedModuleLifecycleState,
-    ObservedModuleMarketState, ObservedPowerMarketState, ObservedSocialState, PowerOrderFill,
-    PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind, merge_kernel_rule_decisions,
+    KernelRuleModuleOutput, KernelRuleVerdict, MicroDepotProposalResourceDebit,
+    MicroDepotResourceDebit, Observation, ObservedAgent, ObservedLocation,
+    ObservedModuleArtifactRecord, ObservedModuleLifecycleState, ObservedModuleMarketState,
+    ObservedPowerMarketState, ObservedSocialState, PowerOrderFill, PromptUpdateOperation,
+    RejectReason, WorldEvent, WorldEventKind, merge_kernel_rule_decisions,
 };
 
 type PreActionRuleHook =

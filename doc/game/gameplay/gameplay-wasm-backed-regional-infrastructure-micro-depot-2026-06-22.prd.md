@@ -29,7 +29,7 @@
 ## 里程碑
 
 - M0 (2026-07-05): topic PRD/design/project triplet formalized and rooted in `PRD-GAME-016` routes.
-- M1: WASM ABI + host adapter proves deterministic proposal hash.
+- M1: `micro_depot.eval.v2` WASM ABI + host adapter proves deterministic measured proposal hash while retaining v1 legacy compatibility.
 - M2: runtime state/events and quote pipeline support install/service/reclaim with structured blockers.
 - M3: Viewer / pure API / agent surfaces expose quote, receipt, module evidence and next useful action.
 - M4: QA smoke proves one repair/logistics action becomes cheaper, faster or less risky because of depot, while remaining blocker is visible.
@@ -53,6 +53,7 @@
   - SC-4: topic PRD / design / project、根 PRD、gameplay README 与 `prd.index.md` 可互相定位，不把详细规则塞回 root PRD。
   - SC-5: 本专题不升级当前阶段或对外 claim envelope；当前仍为 `internal_playable_alpha_late` / `limited playable technical preview`。
   - SC-6: 任何 10 分钟验证样本必须写作 `post-first-capability 10-minute slice` 或 `regional-specialist 10-minute scenario`，并显式列出 first capability、稳定 claim、repair/logistics blocker receipt、regional specialist lane 与玩家可读 surface 前置条件。
+  - SC-7: 每次 service preview 明确给出按资源种类计量的整数 debit 和当前 epoch 吞吐消耗；apply 原子扣减库存与吞吐，receipt 显示两者 before/after，杜绝固定 upkeep 换无限服务。
 
 ## 2. User Experience & Functionality
 
@@ -75,17 +76,17 @@
   1. Flow-MD-001: `regional pressure card -> repair/logistics blocker explanation -> suggested intervention: deploy micro_depot`
   2. Flow-MD-002: `install quote + upkeep + service radius preview -> player confirms -> MicroDepotInstalled receipt`
   3. Flow-MD-003: `repair/logistics quote request -> micro_depot.wasm evaluates proposal -> runtime validates -> before/after preview`
-  4. Flow-MD-004: `player executes service action -> receipt shows depot contribution -> remaining blocker / next regional option`
-  5. Flow-MD-005: `upkeep missing / out of range / unsupported resource / duplicate facility -> structured blocker -> pay upkeep, move target, reclaim, or choose another action`
+  4. Flow-MD-004: `player confirms measured debit -> runtime atomically revalidates and debits stock + epoch throughput -> receipt shows before/after -> remaining blocker / next regional option`
+  5. Flow-MD-005: `upkeep missing / out of range / unsupported resource / insufficient inventory / throughput exhausted / duplicate facility -> structured blocker -> pay upkeep, reclaim, reinstall at full install cost, or choose another action`; refill/reset recovery remains a future jointly designed action surface.
 - Functional Specification Matrix:
 
 | Surface | Required fields / signals | Player verb | State transition | Rule / computation boundary | Owner |
 | --- | --- | --- | --- | --- | --- |
 | Install quote | `install_cost`, `upkeep_per_epoch`, `service_radius_cm`, `supported_resource_kinds`, `expected_effect`, `remaining_blockers`, `expected_future_blockers_covered`, `break_even_uses`, `upkeep_horizon_epochs`, `low_use_warning`, `recommendation_reason` | inspect quote, compare ROI, deploy | `suggested -> quoted -> installed / rejected` | Quote must come from runtime, not Viewer guesswork; ROI fields are coarse gameplay guidance, not final economic tuning | `runtime_engineer` + `viewer_engineer` + `gameplay_designer` |
-| Facility state | `facility_id`, `owner_claim_id`, `location_id`, `status`, `module_id`, `wasm_hash`, `last_receipt_id` | inspect depot, pay upkeep, reclaim | `active -> upkeep_grace -> suspended -> reclaimed` | One `owner_claim_id + location_id` active micro_depot; status must be replay-safe | `runtime_engineer` |
-| WASM proposal | `proposal_hash`, `effect_delta`, `explanation_code`, `consumed_resource_classes` | service repair/logistics | `not_applicable / blocked / applicable` | WASM cannot mint resources, mutate ownership, bypass upkeep, or write canonical world state | `wasm_platform_engineer` + `runtime_engineer` |
-| Service preview | before/after cost, risk, wait, route, repair/logistics outcome | compare before/after, confirm service | `previewed -> applied / blocked` | Runtime caps all deltas and validates resource mutation / permission before applying | `runtime_engineer` |
-| Receipt | `accepted_intent_id`, `execution_status`, `blocker_type`, `world_change_summary`, `module_hash`, `proposal_hash` | inspect receipt, choose next action | `applied -> next_blocker_visible / resolved` | Receipt must make depot contribution and remaining blocker legible | `viewer_engineer` + `qa_engineer` |
+| Facility state | `facility_id`, `owner_claim_id`, `location_id`, `status`, `module_id`, `wasm_hash`, `inventory_revision`, `available_units_by_kind`, `throughput_limit_units_per_epoch`, `throughput_epoch`, `throughput_remaining_units`, `last_receipt_id` | inspect depot, pay upkeep, reclaim | `active -> upkeep_grace -> suspended -> reclaimed` | v2 install cost funds a versioned commissioning bundle: data stock `8`, throughput `16`, epoch `0`; reclaim/reinstall pays full install cost again and is not refill; v1 legacy missing fields decode to zero measured state | `runtime_engineer` |
+| WASM proposal | `schema_version = micro_depot.eval.v2`, `proposal_hash`, `effect_delta`, `explanation_code`, `resource_debits[{resource_kind, units}]`, `evaluated_inventory_revision`, `evaluated_epoch` | service repair/logistics | `not_applicable / blocked / applicable` | v2 proposes exact integer quantities against one runtime snapshot; v1 remains legacy adapter compatibility only; WASM cannot mint/debit resources, mutate ownership, bypass upkeep, or write canonical world state | `wasm_platform_engineer` + `runtime_engineer` |
+| Service evaluation | before/after cost, risk, wait, route, repair/logistics outcome, exact resource debit, stock/throughput availability | inspect evaluated effect, execute service | `evaluated -> applied / blocked` within one synchronous action | Evaluation never reserves; proposal revision/epoch must match its evaluator input, then runtime atomically validates and debits stock and throughput with the service effect | `runtime_engineer` |
+| Receipt | `accepted_intent_id`, `execution_status`, `blocker_type`, `world_change_summary`, `module_hash`, `proposal_hash`, `evaluated_epoch`, `inventory_revision_before`, `inventory_revision_after`, `resource_debits`, `inventory_units_before_by_kind`, `inventory_units_after_by_kind`, `throughput_units_before`, `throughput_units_after` | inspect receipt, choose next action | `applied -> next_blocker_visible / resolved` | Receipt must prove exact depot contribution; failed apply records blocker but no partial debit or service mutation | `viewer_engineer` + `qa_engineer` |
 
 - Acceptance Criteria:
   - AC-1: `micro_depot` is formally registered as `PRD-GAME-016` and reachable from root/gameplay/index routes.
@@ -97,6 +98,10 @@
   - AC-7: Every applied service records module id/version/hash, schema version and proposal hash for replay/audit.
   - AC-8: QA smoke proves one repair/logistics action becomes measurably cheaper, faster, or less risky because of depot, and the player can identify remaining blocker.
   - AC-9: Install quote must include a minimal ROI strip: expected future blockers covered, break-even uses, upkeep horizon, low-use warning and recommendation reason; if the player can only see one before/after quote improvement, the depot is not yet a strategic facility choice.
+  - AC-10: Canonical state exposes non-negative integer `available_units_by_kind`, `inventory_revision`, throughput limit/remaining and throughput epoch. v2 install initializes the current versioned commissioning constants `data=8`, `throughput_limit=16`, `throughput_remaining=16`, `epoch=0`, funded by and traceable to the existing install cost/receipt; reclaim/reinstall incurs the full install cost again and is not refill.
+  - AC-11: `micro_depot.eval.v2` evaluator output binds exact debits to `proposal_hash + evaluated_inventory_revision + evaluated_epoch`, and those snapshot fields must equal its synchronous evaluator input. Runtime atomically debits stock + throughput with the service effect, or changes none of them. Runtime retains schema-bound v1 legacy compatibility: absent measured fields decode as revision/stock/throughput zero, without retroactive commissioning grant or new class-only producer.
+  - AC-12: Applied receipts expose exact debit and inventory/throughput before/after; insufficient inventory and exhausted throughput are distinct structured blockers with alternate-action recovery. Independent preview-confirm concurrency and stale-preview recovery are not current acceptance.
+  - Future follow-up, not current acceptance: authorized refill, canonical epoch clock and throughput rollover/reset action/event semantics require gameplay/runtime joint design and their own acceptance/tests.
 - Non-Goals:
   - No block placement, digging, terraforming, free-build construction, or direct embodied control.
   - No arbitrary player-uploaded WASM in MVP; only repo-authored allowlisted module hashes.
@@ -130,6 +135,8 @@
   - Unpaid upkeep: service is blocked or degraded; player can pay upkeep, reclaim, or choose another intervention.
   - Out of range: proposal returns not applicable; UI must show distance/radius explanation and next valid target when known.
   - Unsupported resource: proposal is blocked; UI must name unsupported resource class without suggesting arbitrary resource minting.
+  - Insufficient inventory: apply is blocked as `DEPOT_INVENTORY_INSUFFICIENT`; UI names the kind, required units and available units without claiming an unimplemented refill path.
+  - Throughput exhausted: apply is blocked as `DEPOT_THROUGHPUT_EXHAUSTED`; UI shows the measured throughput state without claiming an unimplemented reset boundary.
   - Insufficient funds: quote remains visible but install/action cannot proceed; restricted starter funding cannot become infinite facility subsidy.
   - Low expected use: if the regional pressure card predicts fewer follow-up blockers than `break_even_uses`, install remains possible only with a low-use warning and an explicit recommendation reason; the UI must not present the depot as an always-correct buff.
   - Phase boundary missing: if a sample, smoke test or QA script schedules `micro_depot` deployment before first capability completion, stable claim, repair/logistics blocker receipt or equivalent regional pressure evidence, active/eligible regional specialist lane, and claim/upkeep + repair/logistics blocker literacy, mark `micro_depot_phase_boundary_missing` and do not count the run as onboarding evidence.
@@ -140,6 +147,7 @@
   - NFR-MD-3: 100% of player-facing previews must include remaining blocker or next useful action.
   - NFR-MD-4: Any formal playability or release claim must cite QA/playtest evidence; this PRD alone is not release evidence.
   - NFR-MD-5: 100% of install quotes must expose a coarse break-even judgment; missing ROI fields are a gameplay readability regression, even when before/after service preview works.
+  - NFR-MD-6: 100% of applied services must reconcile integer debit quantities with inventory and throughput before/after; no negative balance, partial debit, floating-point quantity or preview-side reservation is permitted.
 - Security & Privacy:
   - WASM has no wall clock, network, filesystem, host escape, nondeterministic RNG, ownership mutation, resource minting or canonical state write authority.
   - Runtime preserves funding provenance and rejects restricted starter fund transfer or scope bypass.
@@ -148,7 +156,7 @@
 
 - Phased Rollout:
   - R0: Formalize `PRD-GAME-016` triplet and routing without changing stage or claim envelope.
-  - R1: Implement WASM ABI + host adapter with deterministic proposal hash.
+  - R1: Implement `micro_depot.eval.v2` measured WASM ABI + host adapter with deterministic proposal hash and v1 legacy compatibility.
   - R2: Add canonical state/events and replay-safe install/service/reclaim.
   - R3: Integrate repair/logistics quote pipeline and before/after preview.
   - R4: Add Viewer / pure API DTOs, receipt surface, module evidence, and blocker taxonomy.
@@ -167,11 +175,12 @@
 | PRD-ID | Corresponding task / slice | Evidence tier | Validation method | Regression scope |
 | --- | --- | --- | --- | --- |
 | PRD-GAME-016 | `micro-depot-topic-triplet-formalization` | `test_tier_required` | doc governance, root/gameplay/index triplet reachability, no stage/claim drift | topic authority and design-bible completeness |
-| PRD-GAME-016 | `micro-depot-wasm-abi-host-adapter` | `test_tier_required` | same input produces byte-identical proposal hash; schema/hash mismatch rejects | WASM determinism and adapter boundary |
+| PRD-GAME-016 | `micro-depot-wasm-abi-host-adapter` | `test_tier_required` | same v2 input produces byte-identical measured proposal hash; schema/hash mismatch rejects; v1 legacy fixture remains accepted | WASM determinism and adapter boundary |
 | PRD-GAME-016 | `micro-depot-runtime-state-events` | `test_tier_required` | install/service/reclaim replay produces identical state and structured blockers | canonical facility state |
 | PRD-GAME-016 | `micro-depot-quote-pipeline` | `test_tier_required` | repair/logistics preview shows before/after with capped depot contribution | player quote readability |
 | PRD-GAME-016 | `micro-depot-viewer-api-surface` | `test_tier_required` | Viewer and pure API show same quote, blocker, receipt and module evidence | player-facing receipt and parity |
 | PRD-GAME-016 | `micro-depot-gameplay-smoke` | `test_tier_required` + `test_tier_full` | one repair/logistics action becomes cheaper/faster/less risky and remaining blocker is visible | regional specialist leverage |
+| PRD-GAME-016 | `micro-depot-measured-supply-accounting` | `test_tier_required` + `test_tier_full` | v2 synchronous evaluator/apply and replay tests prove commissioning `8/16`, exact atomic service debit, before/after reconciliation, distinct stock/throughput blockers and schema-bound v1 zero-state compatibility; refill/reset and preview-confirm races excluded | inventory, throughput and replay accounting |
 
 - Decision Log:
 
@@ -184,3 +193,4 @@
 | DEC-MD-005 | Depot affects one bounded repair/logistics quote and receipt | Treat depot as global buff or governance power | Bounded quote contribution preserves small-player regional leverage without global power creep. |
 | DEC-MD-006 | Install quote includes coarse ROI guidance: expected future blockers, break-even uses, upkeep horizon, low-use warning and recommendation reason | Only show install/upkeep plus one before/after service improvement | 2026-07-08 gameplay slice flagged that without break-even guidance, a depot can feel like a tax or an always-correct buff rather than a regional specialization choice. |
 | DEC-MD-007 | Treat 10-minute depot verification as a `post-first-capability` slice | Label the sample as generic `0-10 min` onboarding | The depot loop requires first capability, stable claim, prior blocker evidence and regional specialist eligibility; otherwise QA can mistake it for an early onboarding gate. |
+| DEC-MD-008 | Use `micro_depot.eval.v2` exact non-negative integer units with install-funded commissioning constants `data=8`, throughput `16`, epoch `0`; synchronous evaluation is read-only and service apply atomically debits stock + throughput, while v1 missing measured fields stay zero | Fixed upkeep grants unlimited service, class-only consumption as the new norm, free reinstall refill, retroactive v1 grants, or claiming refill/reset/concurrent confirmation without canonical authority | This is the smallest implemented deterministic contract that prevents unlimited use while preserving install provenance and replay. The constants are current-version facts pending a gameplay-reviewed config migration; refill authorization, epoch clock/reset and per-action debit curves remain future work. |

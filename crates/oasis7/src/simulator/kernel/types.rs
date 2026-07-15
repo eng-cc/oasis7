@@ -144,6 +144,12 @@ pub struct MicroDepotResourceDebit {
     pub amount: i64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MicroDepotProposalResourceDebit {
+    pub resource_kind: ResourceKind,
+    pub units: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum WorldEventKind {
@@ -265,6 +271,8 @@ pub enum WorldEventKind {
         supported_resource_kinds: Vec<String>,
         #[serde(default)]
         install_cost_resources: Vec<MicroDepotResourceDebit>,
+        #[serde(default)]
+        measured_supply_schema_version: u8,
     },
     MicroDepotServiceApplied {
         facility_id: FacilityId,
@@ -286,6 +294,22 @@ pub enum WorldEventKind {
         blocker_change: Option<String>,
         #[serde(default)]
         consumed_resources: Vec<MicroDepotResourceDebit>,
+        #[serde(default)]
+        evaluated_epoch: u64,
+        #[serde(default)]
+        inventory_revision_before: u64,
+        #[serde(default)]
+        inventory_revision_after: u64,
+        #[serde(default)]
+        resource_debits: Vec<MicroDepotProposalResourceDebit>,
+        #[serde(default)]
+        inventory_units_before_by_kind: BTreeMap<String, i64>,
+        #[serde(default)]
+        inventory_units_after_by_kind: BTreeMap<String, i64>,
+        #[serde(default)]
+        throughput_units_before: i64,
+        #[serde(default)]
+        throughput_units_after: i64,
         explanation_code: String,
     },
     MicroDepotUpkeepPaid {

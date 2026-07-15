@@ -66,6 +66,8 @@ mod kernel_rule_invariants;
 mod kernel_wasm_rule_bridge;
 mod kernel_wasm_sandbox_bridge;
 mod memory;
+mod micro_depot_measured_supply;
+mod micro_depot_schema_compatibility;
 mod module_lifecycle;
 mod module_visual;
 mod monotonicity;

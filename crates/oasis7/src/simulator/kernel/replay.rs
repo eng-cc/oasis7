@@ -7,6 +7,7 @@ use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;
+use super::micro_depot_validation::validate_micro_depot_exact_resource_debits;
 use super::types::{WorldEvent, WorldEventKind};
 
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";
@@ -729,6 +730,7 @@ impl WorldKernel {
                 service_radius_cm,
                 supported_resource_kinds,
                 install_cost_resources,
+                measured_supply_schema_version,
             } => {
                 if self.model.regional_infrastructure.contains_key(facility_id) {
                     return Err(PersistError::ReplayConflict {
@@ -749,6 +751,17 @@ impl WorldKernel {
                     .map_err(|reason| PersistError::ReplayConflict {
                         message: format!("invalid micro_depot owner: {reason:?}"),
                     })?;
+                let measured_supply_v2 = match measured_supply_schema_version {
+                    0 | 1 => false,
+                    2 => true,
+                    version => {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!(
+                                "unsupported micro_depot measured supply schema version {version}: {facility_id}"
+                            ),
+                        });
+                    }
+                };
                 for debit in install_cost_resources {
                     self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
                 }
@@ -768,6 +781,33 @@ impl WorldKernel {
                         entrypoint: entrypoint.clone(),
                         service_radius_cm: *service_radius_cm,
                         supported_resource_kinds: supported_resource_kinds.clone(),
+                        measured_supply_schema_version: *measured_supply_schema_version,
+                        inventory_revision: 0,
+                        available_units_by_kind: if measured_supply_v2 {
+                            supported_resource_kinds
+                                .iter()
+                                .filter(|kind| kind.as_str() == "data")
+                                .map(|kind| {
+                                    (
+                                        kind.clone(),
+                                        super::micro_depot::MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND,
+                                    )
+                                })
+                                .collect()
+                        } else {
+                            Default::default()
+                        },
+                        throughput_limit_units_per_epoch: if measured_supply_v2 {
+                            super::micro_depot::MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH
+                        } else {
+                            0
+                        },
+                        throughput_epoch: 0,
+                        throughput_remaining_units: if measured_supply_v2 {
+                            super::micro_depot::MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH
+                        } else {
+                            0
+                        },
                         upkeep_paid: true,
                         last_proposal_hash: None,
                         last_receipt_id: None,
@@ -780,20 +820,90 @@ impl WorldKernel {
                 target_id,
                 proposal_hash,
                 receipt_id,
+                schema_version,
                 consumed_resources,
+                resource_debits,
+                evaluated_epoch,
+                inventory_revision_before,
+                inventory_revision_after,
+                inventory_units_before_by_kind,
+                inventory_units_after_by_kind,
+                throughput_units_before,
+                throughput_units_after,
                 ..
             } => {
-                let owner = self
-                    .model
-                    .regional_infrastructure
-                    .get(facility_id)
-                    .ok_or_else(|| PersistError::ReplayConflict {
-                        message: format!("micro_depot not found: {facility_id}"),
-                    })?
-                    .owner
-                    .clone();
-                for debit in consumed_resources {
-                    self.remove_from_owner_for_replay(&owner, debit.kind, debit.amount)?;
+                if schema_version == "micro_depot.eval.v1" {
+                    if !resource_debits.is_empty() {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!(
+                                "micro_depot v1 receipt has exact debits: {facility_id}"
+                            ),
+                        });
+                    }
+                    let owner = self
+                        .model
+                        .regional_infrastructure
+                        .get(facility_id)
+                        .ok_or_else(|| PersistError::ReplayConflict {
+                            message: format!("micro_depot not found: {facility_id}"),
+                        })?
+                        .owner
+                        .clone();
+                    for debit in consumed_resources {
+                        self.remove_from_owner_for_replay(&owner, debit.kind, debit.amount)?;
+                    }
+                    let depot = self
+                        .model
+                        .regional_infrastructure
+                        .get_mut(facility_id)
+                        .ok_or_else(|| PersistError::ReplayConflict {
+                            message: format!("micro_depot not found: {facility_id}"),
+                        })?;
+                    depot.last_proposal_hash = Some(proposal_hash.clone());
+                    depot.last_receipt_id = Some(receipt_id.clone());
+                    depot.last_serviced_target_id = Some(target_id.clone());
+                    return Ok(());
+                }
+                if schema_version != "micro_depot.eval.v2" || resource_debits.is_empty() {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 service requires exact resource debits: {facility_id}"
+                        ),
+                    });
+                }
+                validate_micro_depot_exact_resource_debits(resource_debits).map_err(|message| {
+                    PersistError::ReplayConflict {
+                        message: format!("{message}: {facility_id}"),
+                    }
+                })?;
+                if *throughput_units_before < 0
+                    || *throughput_units_after < 0
+                    || inventory_units_before_by_kind
+                        .values()
+                        .any(|units| *units < 0)
+                    || inventory_units_after_by_kind
+                        .values()
+                        .any(|units| *units < 0)
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 receipt contains negative measured supply: {facility_id}"
+                        ),
+                    });
+                }
+                let consumed_matches_exact = consumed_resources.len() == resource_debits.len()
+                    && consumed_resources
+                        .iter()
+                        .zip(resource_debits)
+                        .all(|(consumed, exact)| {
+                            consumed.kind == exact.resource_kind && consumed.amount == exact.units
+                        });
+                if !consumed_matches_exact {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 consumed resources do not match exact resource debits: {facility_id}"
+                        ),
+                    });
                 }
                 let depot = self
                     .model
@@ -802,6 +912,90 @@ impl WorldKernel {
                     .ok_or_else(|| PersistError::ReplayConflict {
                         message: format!("micro_depot not found: {facility_id}"),
                     })?;
+                if depot.throughput_limit_units_per_epoch < 0 {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 throughput limit is negative: {facility_id}"
+                        ),
+                    });
+                }
+                if depot.throughput_remaining_units > depot.throughput_limit_units_per_epoch
+                    || *throughput_units_before > depot.throughput_limit_units_per_epoch
+                    || *throughput_units_after > depot.throughput_limit_units_per_epoch
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 throughput balance exceeds epoch limit: {facility_id}"
+                        ),
+                    });
+                }
+                if depot.throughput_epoch != *evaluated_epoch
+                    || depot.inventory_revision != *inventory_revision_before
+                    || depot.available_units_by_kind != *inventory_units_before_by_kind
+                    || depot.throughput_remaining_units != *throughput_units_before
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("micro_depot supply receipt mismatch: {facility_id}"),
+                    });
+                }
+                let expected_revision_after =
+                    inventory_revision_before.checked_add(1).ok_or_else(|| {
+                        PersistError::ReplayConflict {
+                            message: format!(
+                                "micro_depot inventory revision overflow: {facility_id}"
+                            ),
+                        }
+                    })?;
+                let total_units = resource_debits
+                    .iter()
+                    .try_fold(0_i64, |total, debit| total.checked_add(debit.units))
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot resource debit overflow: {facility_id}"),
+                    })?;
+                if total_units > *throughput_units_before {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot resource debits exceed throughput before balance: {facility_id}"
+                        ),
+                    });
+                }
+                let expected_throughput_after = throughput_units_before
+                    .checked_sub(total_units)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot throughput underflow: {facility_id}"),
+                    })?;
+                let mut expected_inventory_after = inventory_units_before_by_kind.clone();
+                for debit in resource_debits {
+                    let kind = match debit.resource_kind {
+                        ResourceKind::Data => "data",
+                        ResourceKind::Electricity => "electricity",
+                    };
+                    let available = expected_inventory_after.get(kind).copied().unwrap_or(0);
+                    let remaining = available.checked_sub(debit.units).ok_or_else(|| {
+                        PersistError::ReplayConflict {
+                            message: format!("micro_depot inventory underflow: {facility_id}"),
+                        }
+                    })?;
+                    if remaining < 0 {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!("micro_depot inventory insufficient: {facility_id}"),
+                        });
+                    }
+                    expected_inventory_after.insert(kind.to_string(), remaining);
+                }
+                if *inventory_revision_after != expected_revision_after
+                    || *throughput_units_after != expected_throughput_after
+                    || *inventory_units_after_by_kind != expected_inventory_after
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot supply receipt after-state mismatch: {facility_id}"
+                        ),
+                    });
+                }
+                depot.inventory_revision = *inventory_revision_after;
+                depot.available_units_by_kind = inventory_units_after_by_kind.clone();
+                depot.throughput_remaining_units = *throughput_units_after;
                 depot.last_proposal_hash = Some(proposal_hash.clone());
                 depot.last_receipt_id = Some(receipt_id.clone());
                 depot.last_serviced_target_id = Some(target_id.clone());
