@@ -17,6 +17,7 @@ BRANCH="task/engineering-partial-bootstrap"
 mkdir -p "$REPO/scripts/pm"
 cp "$ROOT_DIR/scripts/new-task-worktree.sh" "$REPO/scripts/new-task-worktree.sh"
 cp "$ROOT_DIR/scripts/worktree-harness-lib.sh" "$REPO/scripts/worktree-harness-lib.sh"
+cp "$ROOT_DIR/scripts/pm/pm_store.py" "$REPO/scripts/pm/pm_store.py"
 chmod +x "$REPO/scripts/new-task-worktree.sh"
 
 cat >"$REPO/scripts/cargo-dev.sh" <<'EOF'

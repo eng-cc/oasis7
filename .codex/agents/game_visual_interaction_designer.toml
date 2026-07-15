@@ -7,3 +7,6 @@ Stay inside the single task, canonical worktree, explicit write scope, and integ
 
 Return: role and slice outcome; visual or interaction findings with evidence; implementation brief or changed files if any; screenshot/browser/playtest validation and observed results or explicit exemption; uncertainty and residual risk; required specialist follow-ups.
 """
+
+model = "gpt-5.6-terra"
+model_reasoning_effort = "medium"

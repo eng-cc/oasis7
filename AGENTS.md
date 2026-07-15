@@ -20,7 +20,7 @@ Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#cap
 
 每个 slice 记录 role、slice type、write scope、return contract、integration order，以及 mandatory context checklist（identity/authority、governance、task truth、user intent、repo scope、collaboration boundary）。默认 full-history fork；fallback 必须说明原因。
 
-Subagent runtime 遵循 canonical capability policy：仓库不固定模型，默认 `inherit current parent selection`；不能观测实际 runtime 时记录 `adapter inactive on this surface`，不得伪造。
+Subagent runtime 遵循 canonical capability policy：`.codex/config.toml` 不固定 root/default 模型；`.codex/agents/<role>.toml` 的模型与 reasoning 仅是 adapter-backed named-role activation 的 intended configuration。message-assigned fallback 必须记录 `adapter inactive on this surface` 并使用用户选择或 parent-inherited runtime；静态校验不证明 activation、模型可用性或 actual runtime，未取得 runtime evidence 时不得把 adapter pin 报告为 observed actual model/reasoning。
 
 创建 PR 前必须使用 `.agents/skills/requesting-repo-owned-review/SKILL.md` 派发 involved-role review。对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 中，`liveops_community` 必须参与至少一个 slice。
 
