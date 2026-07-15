@@ -252,7 +252,10 @@ fn micro_depot_eval_v2_wire_shape_and_hash_are_fixed_goldens() {
         serde_cbor::from_slice(&request.input).expect("decode v2 module call wrapper");
     let action = call_input.action.expect("v2 action payload");
     let action_hex = hex::encode(&action);
-    assert_eq!(&action_hex[..6], "d9d9f7");
+    assert_eq!(
+        action_hex,
+        "d9d9f7a7656465706f74ac66737461747573666163746976656b666163696c6974795f69646f6465706f742d76322d676f6c64656e6b75706b6565705f70616964f56d63757272656e745f65706f63680b6e63617061636974795f636c61737364686967686e6f776e65725f636c61696d5f69646e636c61696d2d76322d6f776e657271736572766963655f7261646975735f636d1a000543a872696e76656e746f72795f7265766973696f6e0777617661696c61626c655f756e6974735f62795f6b696e64a164646174610d7818737570706f727465645f7265736f757263655f6b696e6473816464617461781a7468726f7567687075745f72656d61696e696e675f756e6974731178207468726f7567687075745f6c696d69745f756e6974735f7065725f65706f63681766616374696f6ea6646b696e646672657061697269616374696f6e5f69641849697461726765745f69646f7265706169722d7461726765742d396c626c6f636b65725f747970656e737570706c795f6d697373696e676f626173655f636f73745f636c61737368637269746963616c6f626173655f7269736b5f636c617373646869676866706c61796572a268636c61696d5f69646e636c61696d2d76322d6f776e65726a6163636f756e745f696468706c617965722d3167636f6e74657874a4727265736f757263655f6761705f636c61737368637269746963616c74726f7574655f70726573737572655f636c61737364686967687564697374616e63655f746f5f7461726765745f636d1a0001e24075726567696f6e5f70726573737572655f636c617373636c6f77696d6f64756c655f696474726567696f6e616c2e6d6963726f5f6465706f746e6d6f64756c655f76657273696f6e65302e322e306e736368656d615f76657273696f6e736d6963726f5f6465706f742e6576616c2e7632"
+    );
     let decoded_action: MicroDepotEvalInput =
         serde_cbor::from_slice(&action).expect("decode v2 action payload");
     assert_eq!(decoded_action, input);
@@ -317,6 +320,44 @@ fn micro_depot_v2_replay_without_exact_debits_fails_closed() {
     let err = WorldKernel::replay_from_snapshot(base, journal)
         .expect_err("v2 replay without exact debits must fail closed");
     assert!(format!("{err:?}").contains("v2 service requires exact resource debits"));
+}
+
+#[test]
+fn micro_depot_v1_receipt_replay_rejects_v2_measured_facility() {
+    let mut kernel = installed_micro_depot_with_measured_supply(5, 4, 2);
+    let base = kernel.snapshot();
+    submit_measured_service(&mut kernel);
+    let mut journal = kernel.journal_snapshot();
+    let service = journal.events.last_mut().unwrap();
+    match &mut service.kind {
+        WorldEventKind::MicroDepotServiceApplied {
+            schema_version,
+            resource_debits,
+            ..
+        } => {
+            *schema_version = "micro_depot.eval.v1".to_string();
+            resource_debits.clear();
+        }
+        other => panic!("expected service event, got {other:?}"),
+    }
+    let err = WorldKernel::replay_from_snapshot(base, journal)
+        .expect_err("v1 receipt must not replay against a v2 measured facility");
+    assert!(format!("{err:?}").contains("v1 receipt does not match measured supply schema 2"));
+}
+
+#[test]
+fn micro_depot_v2_receipt_replay_rejects_legacy_measured_facility() {
+    let mut kernel = installed_micro_depot_with_measured_supply(5, 4, 2);
+    let mut base = kernel.snapshot();
+    let mut value = serde_json::to_value(&base).unwrap();
+    value["model"]["regional_infrastructure"]["depot-measured"]["measured_supply_schema_version"] =
+        serde_json::json!(1);
+    base = serde_json::from_value(value).unwrap();
+    submit_measured_service(&mut kernel);
+    let journal = kernel.journal_snapshot();
+    let err = WorldKernel::replay_from_snapshot(base, journal)
+        .expect_err("v2 receipt must not replay against a legacy measured facility");
+    assert!(format!("{err:?}").contains("v2 receipt does not match measured supply schema 1"));
 }
 
 #[test]

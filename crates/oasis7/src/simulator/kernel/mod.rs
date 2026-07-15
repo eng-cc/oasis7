@@ -3,6 +3,7 @@
 mod actions;
 mod fragment_replenish;
 mod micro_depot;
+mod micro_depot_commissioning;
 mod micro_depot_snapshot;
 mod micro_depot_v1;
 mod micro_depot_validation;

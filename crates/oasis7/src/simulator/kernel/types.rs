@@ -273,6 +273,14 @@ pub enum WorldEventKind {
         install_cost_resources: Vec<MicroDepotResourceDebit>,
         #[serde(default)]
         measured_supply_schema_version: u8,
+        #[serde(default)]
+        commissioning_sink_resources: Vec<MicroDepotResourceDebit>,
+        #[serde(default)]
+        commissioned_inventory_by_kind: BTreeMap<String, i64>,
+        #[serde(default)]
+        initial_throughput_limit_units_per_epoch: i64,
+        #[serde(default)]
+        initial_throughput_remaining_units: i64,
     },
     MicroDepotServiceApplied {
         facility_id: FacilityId,

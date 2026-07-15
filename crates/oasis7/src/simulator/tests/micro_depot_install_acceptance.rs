@@ -122,6 +122,10 @@ fn micro_depot_install_requires_ten_data_and_commissions_eight_inventory_sixteen
             install_cost_resources,
             measured_supply_schema_version,
             supported_resource_kinds,
+            commissioning_sink_resources,
+            commissioned_inventory_by_kind,
+            initial_throughput_limit_units_per_epoch,
+            initial_throughput_remaining_units,
             ..
         } => {
             assert_eq!(
@@ -133,6 +137,16 @@ fn micro_depot_install_requires_ten_data_and_commissions_eight_inventory_sixteen
             );
             assert_eq!(measured_supply_schema_version, 2);
             assert_eq!(supported_resource_kinds, vec!["data"]);
+            assert_eq!(
+                commissioning_sink_resources,
+                vec![MicroDepotResourceDebit {
+                    kind: ResourceKind::Data,
+                    amount: 2,
+                }]
+            );
+            assert_eq!(commissioned_inventory_by_kind.get("data"), Some(&8));
+            assert_eq!(initial_throughput_limit_units_per_epoch, 16);
+            assert_eq!(initial_throughput_remaining_units, 16);
         }
         other => panic!("unexpected install event: {other:?}"),
     }
@@ -149,6 +163,28 @@ fn micro_depot_install_requires_ten_data_and_commissions_eight_inventory_sixteen
     let replayed = WorldKernel::replay_from_snapshot(base, kernel.journal_snapshot())
         .expect("replay commissioned install");
     assert_eq!(replayed.model(), kernel.model());
+}
+
+#[test]
+fn micro_depot_v2_replay_rejects_malformed_commissioning_provenance() {
+    let (mut kernel, base) = install_fixture(10);
+    assert!(matches!(
+        install(&mut kernel, "depot-bad-provenance"),
+        WorldEventKind::MicroDepotInstalled { .. }
+    ));
+    let mut journal = kernel.journal_snapshot();
+    let WorldEventKind::MicroDepotInstalled {
+        commissioned_inventory_by_kind,
+        ..
+    } = &mut journal.events.last_mut().unwrap().kind
+    else {
+        panic!("expected install event");
+    };
+    commissioned_inventory_by_kind.insert("data".to_string(), 9);
+
+    let error = WorldKernel::replay_from_snapshot(base, journal)
+        .expect_err("malformed commissioning evidence must fail closed");
+    assert!(format!("{error:?}").contains("invalid commissioning provenance"));
 }
 
 #[test]

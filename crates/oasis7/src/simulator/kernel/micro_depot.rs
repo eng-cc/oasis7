@@ -13,6 +13,7 @@ use super::super::types::{
     Action, ActionId, AgentId, FacilityId, LocationId, ResourceKind, ResourceOwner,
 };
 use super::super::world_model::RegionalInfrastructure;
+use super::micro_depot_commissioning::MicroDepotCommissioning;
 use super::micro_depot_validation::{
     measured_micro_depot_inventory_depleted, validate_micro_depot_input,
     validate_micro_depot_proposal,
@@ -29,6 +30,7 @@ pub const MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM: i64 = 3;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_HIGH: i64 = 5;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL: i64 = 8;
 pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 10;
+pub const MICRO_DEPOT_INSTALL_SINK_DATA_COST: i64 = 2;
 pub const MICRO_DEPOT_UPKEEP_DATA_COST: i64 = 1;
 pub const MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND: i64 = 8;
 pub const MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH: i64 = 16;
@@ -547,11 +549,8 @@ impl WorldKernel {
         let owner = ResourceOwner::Agent {
             agent_id: installer_agent_id.clone(),
         };
-        let install_cost_resources = vec![MicroDepotResourceDebit {
-            kind: ResourceKind::Data,
-            amount: MICRO_DEPOT_INSTALL_DATA_COST,
-        }];
-        for debit in &install_cost_resources {
+        let commissioning = MicroDepotCommissioning::v2();
+        for debit in &commissioning.install_cost_resources {
             if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
                 return WorldEventKind::ActionRejected { reason };
             }
@@ -572,14 +571,10 @@ impl WorldKernel {
             supported_resource_kinds: supported_resource_kinds.clone(),
             measured_supply_schema_version: 2,
             inventory_revision: 0,
-            available_units_by_kind: supported_resource_kinds
-                .iter()
-                .filter(|kind| kind.as_str() == "data")
-                .map(|kind| (kind.clone(), MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND))
-                .collect(),
-            throughput_limit_units_per_epoch: MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH,
+            available_units_by_kind: commissioning.inventory_by_kind.clone(),
+            throughput_limit_units_per_epoch: commissioning.throughput_limit_units_per_epoch,
             throughput_epoch: 0,
-            throughput_remaining_units: MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH,
+            throughput_remaining_units: commissioning.throughput_remaining_units,
             upkeep_paid: true,
             last_proposal_hash: None,
             last_receipt_id: None,
@@ -601,8 +596,13 @@ impl WorldKernel {
             entrypoint,
             service_radius_cm,
             supported_resource_kinds,
-            install_cost_resources,
+            install_cost_resources: commissioning.install_cost_resources,
             measured_supply_schema_version: 2,
+            commissioning_sink_resources: commissioning.sink_resources,
+            commissioned_inventory_by_kind: commissioning.inventory_by_kind,
+            initial_throughput_limit_units_per_epoch: commissioning
+                .throughput_limit_units_per_epoch,
+            initial_throughput_remaining_units: commissioning.throughput_remaining_units,
         }
     }
 

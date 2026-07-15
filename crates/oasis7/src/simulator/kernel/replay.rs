@@ -7,6 +7,7 @@ use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;
+use super::micro_depot_commissioning::validate_v2_commissioning;
 use super::micro_depot_validation::validate_micro_depot_exact_resource_debits;
 use super::types::{WorldEvent, WorldEventKind};
 
@@ -731,6 +732,10 @@ impl WorldKernel {
                 supported_resource_kinds,
                 install_cost_resources,
                 measured_supply_schema_version,
+                commissioning_sink_resources,
+                commissioned_inventory_by_kind,
+                initial_throughput_limit_units_per_epoch,
+                initial_throughput_remaining_units,
             } => {
                 if self.model.regional_infrastructure.contains_key(facility_id) {
                     return Err(PersistError::ReplayConflict {
@@ -763,25 +768,16 @@ impl WorldKernel {
                     }
                 };
                 if measured_supply_v2 {
-                    if supported_resource_kinds.as_slice() != ["data"] {
-                        return Err(PersistError::ReplayConflict {
-                            message: format!(
-                                "micro_depot v2 install requires canonical supported resources [data]: {facility_id}"
-                            ),
-                        });
-                    }
-                    if install_cost_resources.as_slice()
-                        != [super::types::MicroDepotResourceDebit {
-                            kind: ResourceKind::Data,
-                            amount: super::micro_depot::MICRO_DEPOT_INSTALL_DATA_COST,
-                        }]
-                    {
-                        return Err(PersistError::ReplayConflict {
-                            message: format!(
-                                "micro_depot v2 install requires exact Data commissioning debit: {facility_id}"
-                            ),
-                        });
-                    }
+                    validate_v2_commissioning(
+                        facility_id,
+                        supported_resource_kinds,
+                        install_cost_resources,
+                        commissioning_sink_resources,
+                        commissioned_inventory_by_kind,
+                        *initial_throughput_limit_units_per_epoch,
+                        *initial_throughput_remaining_units,
+                    )
+                    .map_err(|message| PersistError::ReplayConflict { message })?;
                 }
                 for debit in install_cost_resources {
                     self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
@@ -805,27 +801,18 @@ impl WorldKernel {
                         measured_supply_schema_version: *measured_supply_schema_version,
                         inventory_revision: 0,
                         available_units_by_kind: if measured_supply_v2 {
-                            supported_resource_kinds
-                                .iter()
-                                .filter(|kind| kind.as_str() == "data")
-                                .map(|kind| {
-                                    (
-                                        kind.clone(),
-                                        super::micro_depot::MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND,
-                                    )
-                                })
-                                .collect()
+                            commissioned_inventory_by_kind.clone()
                         } else {
                             Default::default()
                         },
                         throughput_limit_units_per_epoch: if measured_supply_v2 {
-                            super::micro_depot::MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH
+                            *initial_throughput_limit_units_per_epoch
                         } else {
                             0
                         },
                         throughput_epoch: 0,
                         throughput_remaining_units: if measured_supply_v2 {
-                            super::micro_depot::MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH
+                            *initial_throughput_remaining_units
                         } else {
                             0
                         },
@@ -853,7 +840,22 @@ impl WorldKernel {
                 throughput_units_after,
                 ..
             } => {
+                let measured_supply_schema_version = self
+                    .model
+                    .regional_infrastructure
+                    .get(facility_id)
+                    .ok_or_else(|| PersistError::ReplayConflict {
+                        message: format!("micro_depot not found: {facility_id}"),
+                    })?
+                    .measured_supply_schema_version;
                 if schema_version == "micro_depot.eval.v1" {
+                    if measured_supply_schema_version > 1 {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!(
+                                "micro_depot v1 receipt does not match measured supply schema {measured_supply_schema_version}: {facility_id}"
+                            ),
+                        });
+                    }
                     if !resource_debits.is_empty() {
                         return Err(PersistError::ReplayConflict {
                             message: format!(
@@ -889,6 +891,13 @@ impl WorldKernel {
                     return Err(PersistError::ReplayConflict {
                         message: format!(
                             "micro_depot v2 service requires exact resource debits: {facility_id}"
+                        ),
+                    });
+                }
+                if measured_supply_schema_version != 2 {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "micro_depot v2 receipt does not match measured supply schema {measured_supply_schema_version}: {facility_id}"
                         ),
                     });
                 }
