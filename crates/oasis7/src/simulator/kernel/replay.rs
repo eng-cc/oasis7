@@ -7,7 +7,7 @@ use super::super::persist::PersistError;
 use super::super::types::{ResourceKind, ResourceOwner, StockError};
 use super::super::world_model::{Factory, Location, RegionalInfrastructure};
 use super::WorldKernel;
-use super::micro_depot_commissioning::validate_v2_commissioning;
+use super::micro_depot_commissioning::validate_install_commissioning;
 use super::micro_depot_validation::validate_micro_depot_exact_resource_debits;
 use super::types::{WorldEvent, WorldEventKind};
 
@@ -756,29 +756,17 @@ impl WorldKernel {
                     .map_err(|reason| PersistError::ReplayConflict {
                         message: format!("invalid micro_depot owner: {reason:?}"),
                     })?;
-                let measured_supply_v2 = match measured_supply_schema_version {
-                    0 | 1 => false,
-                    2 => true,
-                    version => {
-                        return Err(PersistError::ReplayConflict {
-                            message: format!(
-                                "unsupported micro_depot measured supply schema version {version}: {facility_id}"
-                            ),
-                        });
-                    }
-                };
-                if measured_supply_v2 {
-                    validate_v2_commissioning(
-                        facility_id,
-                        supported_resource_kinds,
-                        install_cost_resources,
-                        commissioning_sink_resources,
-                        commissioned_inventory_by_kind,
-                        *initial_throughput_limit_units_per_epoch,
-                        *initial_throughput_remaining_units,
-                    )
-                    .map_err(|message| PersistError::ReplayConflict { message })?;
-                }
+                let measured_supply_v2 = validate_install_commissioning(
+                    *measured_supply_schema_version,
+                    facility_id,
+                    supported_resource_kinds,
+                    install_cost_resources,
+                    commissioning_sink_resources,
+                    commissioned_inventory_by_kind,
+                    *initial_throughput_limit_units_per_epoch,
+                    *initial_throughput_remaining_units,
+                )
+                .map_err(|message| PersistError::ReplayConflict { message })?;
                 for debit in install_cost_resources {
                     self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
                 }

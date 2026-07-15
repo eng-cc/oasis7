@@ -568,6 +568,26 @@ fn legacy_snapshot_and_v1_install_journal_converge_to_zero_measured_supply() {
         }
         other => panic!("expected install event, got {other:?}"),
     }
+    let downgrade_error = WorldKernel::replay_from_snapshot(base.clone(), journal.clone())
+        .expect_err("v2 commissioning provenance must not be accepted as legacy");
+    assert!(
+        format!("{downgrade_error:?}")
+            .contains("legacy install carries v2 commissioning provenance")
+    );
+    let WorldEventKind::MicroDepotInstalled {
+        commissioning_sink_resources,
+        commissioned_inventory_by_kind,
+        initial_throughput_limit_units_per_epoch,
+        initial_throughput_remaining_units,
+        ..
+    } = &mut journal.events.last_mut().unwrap().kind
+    else {
+        panic!("expected install event");
+    };
+    commissioning_sink_resources.clear();
+    commissioned_inventory_by_kind.clear();
+    *initial_throughput_limit_units_per_epoch = 0;
+    *initial_throughput_remaining_units = 0;
     let current = WorldKernel::replay_from_snapshot(base, journal.clone()).unwrap();
     let legacy = WorldKernel::replay_from_snapshot(legacy_base, journal).unwrap();
     assert_eq!(legacy.model(), current.model());

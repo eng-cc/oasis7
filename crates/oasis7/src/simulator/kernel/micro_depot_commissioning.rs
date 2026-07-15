@@ -37,7 +37,8 @@ impl MicroDepotCommissioning {
     }
 }
 
-pub(super) fn validate_v2_commissioning(
+pub(super) fn validate_install_commissioning(
+    measured_supply_schema_version: u8,
     facility_id: &str,
     supported_resource_kinds: &[String],
     install_cost_resources: &[MicroDepotResourceDebit],
@@ -45,7 +46,27 @@ pub(super) fn validate_v2_commissioning(
     inventory_by_kind: &BTreeMap<String, i64>,
     throughput_limit_units_per_epoch: i64,
     throughput_remaining_units: i64,
-) -> Result<(), String> {
+) -> Result<bool, String> {
+    match measured_supply_schema_version {
+        0 | 1 => {
+            if !sink_resources.is_empty()
+                || !inventory_by_kind.is_empty()
+                || throughput_limit_units_per_epoch != 0
+                || throughput_remaining_units != 0
+            {
+                return Err(format!(
+                    "micro_depot legacy install carries v2 commissioning provenance: {facility_id}"
+                ));
+            }
+            return Ok(false);
+        }
+        2 => {}
+        version => {
+            return Err(format!(
+                "unsupported micro_depot measured supply schema version {version}: {facility_id}"
+            ));
+        }
+    }
     let expected = MicroDepotCommissioning::v2();
     if supported_resource_kinds != ["data"] {
         return Err(format!(
@@ -77,5 +98,5 @@ pub(super) fn validate_v2_commissioning(
             "micro_depot v2 commissioning provenance does not reconcile: {facility_id}"
         ));
     }
-    Ok(())
+    Ok(true)
 }
