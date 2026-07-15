@@ -392,6 +392,20 @@ $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
 return [System.IO.Path]::GetFullPath($item.FullName).TrimEnd('\')
 }
 
+function Get-FixtureRelativeExistingPath([string] $Root, [string] $Path, [string] $Label) {
+$rootCanonical = Get-FixtureCanonicalExistingPath $Root
+$pathCanonical = Get-FixtureCanonicalExistingPath $Path
+$rootPrefix = $rootCanonical + '\'
+if (!$pathCanonical.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "fixture relative path escapes canonical root: label=$Label root=$Root root_canonical=$rootCanonical path=$Path path_canonical=$pathCanonical"
+}
+$relative = $pathCanonical.Substring($rootPrefix.Length)
+if ([string]::IsNullOrWhiteSpace($relative)) {
+  throw "fixture relative path is empty: label=$Label root=$Root path=$Path"
+}
+return $relative
+}
+
 function Assert-FixtureSameExistingPath([string] $Actual, [string] $Expected, [string] $Label) {
 $actualCanonical = Get-FixtureCanonicalExistingPath $Actual
 $expectedCanonical = Get-FixtureCanonicalExistingPath $Expected
@@ -609,8 +623,12 @@ foreach ($stagedAssignmentName in @('installer', 'bundlePath', 'genesisPath', 'm
 New-Item -ItemType Directory -Path (Join-Path $staging 'config') -Force | Out-Null
 Copy-Item -LiteralPath $executables.Installer -Destination (Join-Path $staging 'oasis7-windows-x64.exe') -Force
 $packageWindows = Join-Path $env:OASIS7_FIXTURE_PACKAGE_DIR 'windows'
+$representativeGovernedLeaf = 'public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json'
+$representativePackagePath = Join-Path $packageWindows $representativeGovernedLeaf
+$representativePackageRelative = Get-FixtureRelativeExistingPath $packageWindows $representativePackagePath 'representative package governed file'
+Assert-Equal $representativePackageRelative $representativeGovernedLeaf 'fixture package projection introduced a spurious directory component'
 Get-ChildItem -LiteralPath $packageWindows -Recurse -File | Where-Object { $_.Name -notin @('oasis7-windows-x64.exe', 'windows-x64-BUILDINFO', 'windows-x64-SHA256SUMS') } | ForEach-Object {
-  $relative = $_.FullName.Substring($packageWindows.Length).TrimStart('\\')
+  $relative = Get-FixtureRelativeExistingPath $packageWindows $_.FullName 'package governed file'
   $destination = Join-Path (Join-Path $staging 'config') $relative
   New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
   Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
@@ -621,7 +639,7 @@ Get-ChildItem -LiteralPath $packageWindows -Recurse -File | Where-Object { $_.Na
 $stagingConfig = Join-Path $staging 'config'
 $activeGovernedFiles = @(
   Get-ChildItem -LiteralPath $stagingConfig -Recurse -File | ForEach-Object {
-    $relative = $_.FullName.Substring($stagingConfig.Length).TrimStart('\\')
+    $relative = Get-FixtureRelativeExistingPath $stagingConfig $_.FullName 'staged governed file'
     $activePath = Join-Path $config $relative
     $backupPath = Join-Path (Join-Path $rollbackRoot 'config') $relative
     New-Item -ItemType Directory -Path (Split-Path $activePath -Parent), (Split-Path $backupPath -Parent) -Force | Out-Null
@@ -793,6 +811,14 @@ fixture = fixture_match.group("body")
 assert "function Get-FixtureCanonicalExistingPath" in fixture
 assert "Get-Item -LiteralPath $Path -Force -ErrorAction Stop" in fixture
 assert "$item.FullName" in fixture
+assert "function Get-FixtureRelativeExistingPath" in fixture
+assert "$rootPrefix = $rootCanonical + '\\'" in fixture
+assert "fixture relative path escapes canonical root:" in fixture
+assert "Get-FixtureRelativeExistingPath $packageWindows $_.FullName 'package governed file'" in fixture
+assert "Get-FixtureRelativeExistingPath $stagingConfig $_.FullName 'staged governed file'" in fixture
+assert ".Substring($packageWindows.Length)" not in fixture
+assert ".Substring($stagingConfig.Length)" not in fixture
+assert "Assert-Equal $representativePackageRelative $representativeGovernedLeaf" in fixture
 assert "[System.StringComparison]::OrdinalIgnoreCase" in fixture
 assert "reportedReparseItem.Attributes" in fixture
 assert "[System.IO.FileAttributes]::ReparsePoint" in fixture
