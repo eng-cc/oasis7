@@ -2122,7 +2122,7 @@ if [[ "$package_contract_failed" -ne 0 ]]; then
 fi
 
 
-"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --help >/tmp/oasis7-package-rollout-help.out
+python3 -W error::SyntaxWarning "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --help >/tmp/oasis7-package-rollout-help.out
 grep -q "mode is plan-only" /tmp/oasis7-package-rollout-help.out
 grep -q "Mutation requires" /tmp/oasis7-package-rollout-help.out
 grep -q "never reads or stores credentials" /tmp/oasis7-package-rollout-help.out

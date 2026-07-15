@@ -625,7 +625,7 @@ $physicalPreflightTargets = @(
 foreach ($physicalPreflightTarget in $physicalPreflightTargets) {{
   Assert-NodeLocalPhysicalPath -Path $physicalPreflightTarget.path -Label $physicalPreflightTarget.label | Out-Null
 }}
-$logRoot = Join-Path $deployRoot 'logs\package-rollout-attempts'
+$logRoot = Join-Path $deployRoot 'logs\\package-rollout-attempts'
 Assert-NodeLocalPhysicalPath -Path $logRoot -Label 'active deploy log root' | Out-Null
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $attemptId = [Guid]::NewGuid().ToString('N')
@@ -744,12 +744,12 @@ foreach ($property in @($genesisJson.governance_bootstrap_refs.PSObject.Properti
 }}
 $genesisText = $genesisJson | ConvertTo-Json -Depth 100
 
-$worldSnapshotPath = Join-Path $genesis.Directory.FullName 'generated-world\world'
-$sidecarPath = Join-Path $genesis.Directory.FullName 'generated-world\generated-scenario-world'
-$provenancePath = Join-Path $genesis.Directory.FullName 'generated-world\world-generation-provenance.json'
-$activeWorldSnapshotPath = Join-Path $activeConfigRoot 'generated-world\world'
-$activeSidecarPath = Join-Path $activeConfigRoot 'generated-world\generated-scenario-world'
-$activeProvenancePath = Join-Path $activeConfigRoot 'generated-world\world-generation-provenance.json'
+$worldSnapshotPath = Join-Path $genesis.Directory.FullName 'generated-world\\world'
+$sidecarPath = Join-Path $genesis.Directory.FullName 'generated-world\\generated-scenario-world'
+$provenancePath = Join-Path $genesis.Directory.FullName 'generated-world\\world-generation-provenance.json'
+$activeWorldSnapshotPath = Join-Path $activeConfigRoot 'generated-world\\world'
+$activeSidecarPath = Join-Path $activeConfigRoot 'generated-world\\generated-scenario-world'
+$activeProvenancePath = Join-Path $activeConfigRoot 'generated-world\\world-generation-provenance.json'
 if ($manifestJson.tier -eq 'public_testnet') {{
   if ($null -eq $json.generated_world_sidecar -or $null -eq $json.world_generation_provenance) {{
     throw 'public_testnet Windows source missing generated_world_sidecar or world_generation_provenance'
@@ -764,7 +764,7 @@ foreach ($entry in @($json.evidence_refs)) {{
   Assert-FileMetadata $entry (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($entry.ref))) 'evidence_refs'
 }}
 
-Set-ArtifactLocation $json.runtime_build $runtime 'bin\oasis7_chain_runtime.exe'
+Set-ArtifactLocation $json.runtime_build $runtime 'bin\\oasis7_chain_runtime.exe'
 Set-ArtifactLocation $json.world_snapshot $activeWorldSnapshotPath 'generated-world/world'
 Set-ArtifactLocation $json.generated_world_sidecar $activeSidecarPath 'generated-world/generated-scenario-world'
 Set-ArtifactLocation $json.world_generation_provenance $activeProvenancePath 'generated-world/world-generation-provenance.json'
@@ -823,8 +823,8 @@ function Resolve-RollbackRuntimeSource {{
   $backupRootPrefix = $backupRootFull + '\\'
   $backupManifestPath = Join-Path $backupRootFull 'backup-manifest.json'
   $backupProvenancePath = Join-Path $backupRootFull 'backup-provenance.json'
-  $runtimeCandidate = Join-Path $backupRootFull 'runtime\oasis7_chain_runtime.exe'
-  $binCandidate = Join-Path $backupRootFull 'bin\oasis7_chain_runtime.exe'
+  $runtimeCandidate = Join-Path $backupRootFull 'runtime\\oasis7_chain_runtime.exe'
+  $binCandidate = Join-Path $backupRootFull 'bin\\oasis7_chain_runtime.exe'
   $metadataPaths = @(
     @($backupManifestPath, $backupProvenancePath) |
       Where-Object {{ Test-Path -LiteralPath $_ -PathType Leaf }}
@@ -928,7 +928,7 @@ function Resolve-RollbackRuntimeSource {{
     throw "rollback runtime ambiguous: both supported fallback candidates exist under $backupRootFull"
   }}
   if ($fallbackCandidates.Count -eq 0) {{
-    throw "known-good rollback runtime missing: expected runtime\oasis7_chain_runtime.exe or bin\oasis7_chain_runtime.exe under $backupRootFull"
+    throw "known-good rollback runtime missing: expected runtime\\oasis7_chain_runtime.exe or bin\\oasis7_chain_runtime.exe under $backupRootFull"
   }}
   $resolvedFallback = [System.IO.Path]::GetFullPath([string]$fallbackCandidates[0])
   if (!$resolvedFallback.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
