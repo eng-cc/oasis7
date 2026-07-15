@@ -651,11 +651,11 @@ foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest
     Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
   }
 }
-$governedPathBudget = 200
 $atomicPromotionSuffixBudget = 48
 $windowsLegacyPathStringBudget = 259
-if (($governedPathBudget + $atomicPromotionSuffixBudget) -gt $windowsLegacyPathStringBudget) {
-  throw 'fixture governed path budget leaves insufficient room for atomic promotion suffixes'
+$governedPathBudget = $windowsLegacyPathStringBudget - $atomicPromotionSuffixBudget
+if ($governedPathBudget -le 0) {
+  throw 'fixture derived governed path budget must be positive'
 }
 $governedPathCandidates = @(
   Get-ChildItem -LiteralPath $stagingConfig -Recurse -File | ForEach-Object { $_.FullName }
@@ -826,9 +826,12 @@ assert re.search(
 assert 'Join-Path $fixtureDriveRoot ("o7fx-" + $fixtureRunId)' in fixture
 assert "fixture unique drive-root path collision:" in fixture
 assert "fixture_governed_path_budget longest_length=" in fixture
-assert "$governedPathBudget = 200" in fixture
 assert "$atomicPromotionSuffixBudget = 48" in fixture
 assert "$windowsLegacyPathStringBudget = 259" in fixture
+assert "$governedPathBudget = $windowsLegacyPathStringBudget - $atomicPromotionSuffixBudget" in fixture
+assert "$governedPathBudget = 200" not in fixture
+assert "$longestGovernedPath.Length -gt $governedPathBudget" in fixture
+assert "$longestGovernedPath.Length + $atomicPromotionSuffixBudget" in fixture
 assert "required_length=$($requiredActivePath.Length)" in fixture
 staging_descendant_check = fixture.index("Assert-FixturePathUnderSafeBase $staging 'stagingRoot'")
 generated_script_execution = fixture.index("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout")
