@@ -628,10 +628,7 @@ fn chain_linked_runtime_material_progress_resolves_submitted_gameplay_feedback()
     let delta_logical_time = server.world.state().time.saturating_sub(baseline_time);
     let delta_event_seq =
         latest_runtime_event_seq(&server.world).saturating_sub(baseline_event_seq);
-    assert!(
-        progressed,
-        "material world/event delta should report progress"
-    );
+    assert!(progressed, "material world/event delta should report progress");
     assert!(
         delta_logical_time > 0 || delta_event_seq > 0,
         "committed height alone must not resolve submitted feedback"
