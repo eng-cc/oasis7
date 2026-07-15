@@ -25,7 +25,7 @@ pub const MICRO_DEPOT_DEBIT_AMOUNT_LOW: i64 = 1;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM: i64 = 3;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_HIGH: i64 = 5;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL: i64 = 8;
-pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 2;
+pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 10;
 pub const MICRO_DEPOT_UPKEEP_DATA_COST: i64 = 1;
 pub const MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND: i64 = 8;
 pub const MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH: i64 = 16;
@@ -210,6 +210,9 @@ pub fn compute_micro_depot_proposal_hash(
     input: &MicroDepotEvalInput,
     proposal: &MicroDepotProposal,
 ) -> Result<String, String> {
+    if input.schema_version == "micro_depot.eval.v1" {
+        return super::micro_depot_v1::proposal_hash(input, proposal);
+    }
     let mut canonical_proposal = proposal.clone();
     canonical_proposal.proposal_hash.clear();
     if input.schema_version == "micro_depot.eval.v2" {
@@ -538,12 +541,12 @@ impl WorldKernel {
             || wasm_hash.trim().is_empty()
             || entrypoint.trim().is_empty()
             || service_radius_cm <= 0
-            || supported_resource_kinds.is_empty()
+            || supported_resource_kinds.as_slice() != ["data"]
         {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "install_micro_depot requires owner claim, regional blocker receipt, module identity, entrypoint, positive radius, and supported resources"
+                        "install_micro_depot requires owner claim, regional blocker receipt, module identity, entrypoint, positive radius, and canonical supported resources [data]"
                             .to_string(),
                     ],
                 },
@@ -1128,7 +1131,11 @@ fn build_micro_depot_wasm_call_request(
     wasm_bytes: Vec<u8>,
     limits: ModuleLimits,
 ) -> Result<ModuleCallRequest, String> {
-    let action_bytes = to_canonical_cbor(input)?;
+    let action_bytes = if input.schema_version == "micro_depot.eval.v1" {
+        super::micro_depot_v1::input_bytes(input)?
+    } else {
+        to_canonical_cbor(input)?
+    };
     let trace_id = format!(
         "micro-depot-quote-{}-{}",
         input.depot.facility_id, input.action.action_id

@@ -151,7 +151,7 @@ Runtime validation includes:
 
 ## 6. Minimal ABI (`micro_depot.eval.v2`)
 
-Measured-service 的 normative ABI 是 `schema_version = "micro_depot.eval.v2"`。Runtime 继续接受 `micro_depot.eval.v1` 作为 legacy compatibility input/output，并把 v1 的 class-based consumption 通过既有 adapter 转成 runtime debit；新 module、fixture 和 receipt producer 必须使用 v2 的 exact `resource_debits`，不得继续扩展 v1。Schema-bound migration 规则是：legacy v1 persisted state 缺失 measured fields 时按 `inventory_revision = 0`、空库存、吞吐 `0` 解码，不追溯赠送 commissioning stock；只有 v2 新安装设施获得下述版本化 commissioning bundle。
+Measured-service 的 normative ABI 是 `schema_version = "micro_depot.eval.v2"`。Runtime 继续接受 `micro_depot.eval.v1` 作为 legacy compatibility input/output，并把 v1 的 class-based consumption 通过既有 adapter 转成 runtime debit；新 module、fixture 和 receipt producer 必须使用 v2 的 exact `resource_debits`，不得继续扩展 v1。v1 compatibility 必须使用变更前历史版本的精确 wire 字段集合、字段名、默认值、canonical serialization 与 input/proposal hash projection；v2 新增字段不得进入 v1 hash/action projection。Schema-bound migration 规则是：legacy v1 persisted state 缺失 measured fields 时按 `inventory_revision = 0`、空库存、吞吐 `0` 解码，不追溯赠送 commissioning stock；只有 v2 新安装设施获得下述版本化 commissioning bundle。
 
 ### 6.1 Input
 
@@ -277,8 +277,10 @@ RegionalInfrastructure {
 ### 7.1.1 Measured Supply Contract
 
 - `available_units_by_kind[resource_kind]` 是设施内可服务库存；缺失 key 等价于 `0`。每个值和总量都必须是非负整数，且不得超过 runtime 配置的 per-kind / facility capacity。
-- v2 当前版本 commissioning constants 为每个受支持的 `data` kind `8` units，以及 throughput limit/remaining `16` units、epoch `0`。这两个常量是当前实现与 replay 的版本化事实，不是最终平衡承诺；迁移到可配置值前必须保留 schema/version binding 和旧 receipt replay。
-- commissioning bundle 已包含在既有 install cost 中，不是免费 refill。`MicroDepotInstalled` receipt 与设施 provenance 必须把初始 `8/16` 绑定到同一次 accepted install、installer/owner 和 install payment；reclaim 后 reinstall 必须重新满足完整 install quote/cost/permission，不能被解释为 refill action，也不能继承已回收设施的 bundle。
+- v2 MVP 的 install request 必须且只能声明 canonical `supported_resource_kinds == ["data"]`。空列表、任何非 `data` 值、mixed/duplicate 列表，以及 `Data`、`DATA` 等大小写变体都必须原子拒绝；MVP 不做输入 canonicalization，也不承诺多资源 commissioning。
+- v2 当前 install debit 固定为 `10 Data`：其中 `2 Data` 是不可退还的 deployment sink，`8 Data` 从玩家余额转入设施成为 commissioned inventory；同时初始化 throughput limit/remaining `16` units、epoch `0`。`10/8/16` 是当前实现与 replay 的版本化事实，不是最终平衡承诺。
+- `MicroDepotInstalled` receipt 与设施 provenance 必须证明同一次 accepted install 的 `10 Data` debit、`2 Data` sink、`8 Data` commissioned transfer 和初始 `16` throughput。不得把“支付 2、系统赠送 8”或任何低于 10 Data 获得 bundle 的路径写入实现或玩家口径。
+- reclaim refund 固定为零，并销毁设施内所有剩余 inventory 与 throughput；销毁余额不得转回玩家、其他设施或后续安装。reinstall 是全新的 `10 Data` install，重新产生 fresh `8/16` state，不 carry over，也不是 refill。
 - `throughput_limit_units_per_epoch`、`throughput_epoch` 与 `throughput_remaining_units` 是 measured-service canonical state；当前 slice 初始化并在成功 service 时扣减这些值，但没有 canonical epoch clock、自动 rollover 或 reset action。
 - 当前 acceptance 不包含补货 action 或吞吐 reset。库存来源授权、补货扣转、epoch clock、rollover/reset 触发与事件必须由 `gameplay_designer + runtime_engineer` 后续联合设计后才能实现；commissioning initialization 之外，upkeep、任意 tick/epoch 变化都不得增加库存或吞吐。
 - 每次成功 service debit 都递增 `inventory_revision`。同步 service action 内的 evaluator input 与 proposal 必须具有一致的 `evaluated_inventory_revision + evaluated_epoch`；这是 evaluator input consistency validation，不是跨 action 的 preview reservation 或并发确认合同。

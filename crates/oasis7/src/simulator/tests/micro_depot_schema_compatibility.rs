@@ -90,6 +90,58 @@ fn micro_depot_historical_kind_amount_debit_decodes() {
 }
 
 #[test]
+fn micro_depot_eval_v1_matches_origin_main_golden_hash_and_action_payload() {
+    let input = empty_micro_depot_input(42);
+    let mut historical_proposal = proposal(&input);
+    historical_proposal.consumed_resource_classes = vec![MicroDepotConsumedResourceClass {
+        resource_kind: "data".to_string(),
+        amount_class: MicroDepotPressureClass::Low,
+    }];
+    historical_proposal.explanation_code = "origin_main_golden".to_string();
+
+    let actual_hash = compute_micro_depot_proposal_hash(&input, &historical_proposal).unwrap();
+    assert_eq!(
+        actual_hash,
+        "sha256:bce86fce70e024232fc8bf2199e51fe23af9c9a34b54f33d1a9edc5aab83522a"
+    );
+    historical_proposal.proposal_hash = actual_hash;
+
+    let sandbox = Arc::new(Mutex::new(CapturingSandbox::new(Ok(
+        micro_depot_output_for(historical_proposal),
+    ))));
+    evaluate_micro_depot_quote_with_module(
+        &input,
+        "regional.micro_depot",
+        "hash-micro-depot",
+        "evaluate_quote",
+        vec![1],
+        ModuleLimits::unbounded(),
+        Arc::clone(&sandbox),
+    )
+    .expect("new runtime accepts the historical v1 hash and proposal shape");
+
+    let request = &sandbox.lock().unwrap().requests[0];
+    let call_input: oasis7_wasm_abi::ModuleCallInput =
+        serde_cbor::from_slice(&request.input).expect("decode module call wrapper");
+    let action = call_input.action.expect("historical action payload");
+    assert_eq!(
+        hex::encode(&action),
+        "d9d9f7a7656465706f74a766737461747573666163746976656b666163696c6974795f69646b6465706f742d616c7068616b75706b6565705f70616964f56e63617061636974795f636c617373666d656469756d6e6f776e65725f636c61696d5f696467636c61696d2d3171736572766963655f7261646975735f636d1a0003d0907818737570706f727465645f7265736f757263655f6b696e647382686861726477617265646461746166616374696f6ea6646b696e646672657061697269616374696f6e5f6964182a697461726765745f696469666163746f72792d376c626c6f636b65725f747970656f6c6f63616c5f70617274735f6761706f626173655f636f73745f636c61737364686967686f626173655f7269736b5f636c617373666d656469756d66706c61796572a268636c61696d5f696467636c61696d2d316a6163636f756e745f696468706c617965722d3167636f6e74657874a4727265736f757263655f6761705f636c617373646869676874726f7574655f70726573737572655f636c617373666d656469756d7564697374616e63655f746f5f7461726765745f636d1a0001e84875726567696f6e5f70726573737572655f636c617373666d656469756d696d6f64756c655f696474726567696f6e616c2e6d6963726f5f6465706f746e6d6f64756c655f76657273696f6e65302e312e306e736368656d615f76657273696f6e736d6963726f5f6465706f742e6576616c2e7631"
+    );
+    let value: serde_cbor::Value = serde_cbor::from_slice(&action).unwrap();
+    let debug = format!("{value:?}");
+    for v2_only in [
+        "inventory_revision",
+        "current_epoch",
+        "available_units_by_kind",
+        "throughput_limit_units_per_epoch",
+        "throughput_remaining_units",
+    ] {
+        assert!(!debug.contains(v2_only), "legacy action leaked {v2_only}");
+    }
+}
+
+#[test]
 fn micro_depot_proposal_hash_ignores_map_insertion_order() {
     let mut left = empty_micro_depot_input(10);
     left.schema_version = "micro_depot.eval.v2".to_string();
@@ -329,7 +381,7 @@ fn legacy_snapshot_and_v1_install_journal_converge_to_zero_measured_supply() {
             agent_id: "agent-legacy".to_string(),
         },
         ResourceKind::Data,
-        5,
+        10,
     );
     let base = kernel.snapshot();
     let legacy_base = serde_json::from_value(serde_json::to_value(&base).unwrap()).unwrap();
@@ -392,7 +444,7 @@ fn unknown_install_measured_supply_schema_fails_closed() {
             agent_id: "agent-unknown".to_string(),
         },
         ResourceKind::Data,
-        5,
+        10,
     );
     let base = kernel.snapshot();
     kernel.submit_action(Action::InstallMicroDepot {

@@ -762,6 +762,27 @@ impl WorldKernel {
                         });
                     }
                 };
+                if measured_supply_v2 {
+                    if supported_resource_kinds.as_slice() != ["data"] {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!(
+                                "micro_depot v2 install requires canonical supported resources [data]: {facility_id}"
+                            ),
+                        });
+                    }
+                    if install_cost_resources.as_slice()
+                        != [super::types::MicroDepotResourceDebit {
+                            kind: ResourceKind::Data,
+                            amount: super::micro_depot::MICRO_DEPOT_INSTALL_DATA_COST,
+                        }]
+                    {
+                        return Err(PersistError::ReplayConflict {
+                            message: format!(
+                                "micro_depot v2 install requires exact Data commissioning debit: {facility_id}"
+                            ),
+                        });
+                    }
+                }
                 for debit in install_cost_resources {
                     self.remove_from_owner_for_replay(owner, debit.kind, debit.amount)?;
                 }
