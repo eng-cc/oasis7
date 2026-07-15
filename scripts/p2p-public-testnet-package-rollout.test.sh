@@ -472,6 +472,31 @@ Assert-Utf8NoBom $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
 $scriptText = [IO.File]::ReadAllText($rollout)
+$pathGuardStart = $scriptText.IndexOf('function Test-NodeLocalPath')
+$pathGuardEnd = $scriptText.IndexOf('function Preserve-AttemptDiagnostics', $pathGuardStart)
+if ($pathGuardStart -lt 0 -or $pathGuardEnd -le $pathGuardStart) {
+  throw 'fixture could not isolate generated node-local physical path guards'
+}
+$pathGuardDefinitions = [scriptblock]::Create($scriptText.Substring($pathGuardStart, $pathGuardEnd - $pathGuardStart))
+. $pathGuardDefinitions
+$deployRoot = $deploy
+if ($ActiveConfigJunction -or $RollbackRootJunction) {
+  $expectedReparseAncestor = if ($ActiveConfigJunction) { $deploy } else { $rollbackRoot }
+  $nestedReparseProbe = Join-Path $expectedReparseAncestor 'nested-parent-traversal/leaf.txt'
+  $ancestorRejected = $false
+  try {
+    Assert-NodeLocalPhysicalPath -Path $nestedReparseProbe -Label 'fixture parent traversal probe' | Out-Null
+  } catch {
+    if ($_.Exception.Message -notmatch 'reparse-point component' -or
+        $_.Exception.Message -notmatch [regex]::Escape($expectedReparseAncestor)) {
+      throw "fixture parent traversal did not identify its reparse ancestor: expected=$expectedReparseAncestor error=$($_.Exception.Message)"
+    }
+    $ancestorRejected = $true
+  }
+  if (!$ancestorRejected) {
+    throw "fixture parent traversal accepted nested path below reparse ancestor: $nestedReparseProbe"
+  }
+}
 $requiredActiveAssignments = @{
   activeBundlePath = $activeBundle
   activeGenesisPath = $activeGenesis
@@ -2048,11 +2073,28 @@ assert re.findall(r"\[string\]\s+\$(\w+)", physical_params) == ["Path", "Label"]
 )
 assert physical_params.count("Mandatory = $true") == 2
 assert "ParameterSetName" not in physical_params
+physical_guard = text[
+    physical_contract.start():text.index("function Preserve-AttemptDiagnostics")
+]
+assert "Split-Path -LiteralPath $probe -Parent" not in physical_guard, (
+    "PowerShell 5.1 places LiteralPath and Parent in incompatible Split-Path parameter sets"
+)
+assert "$parent = [System.IO.Path]::GetDirectoryName($probe)" in physical_guard, (
+    "physical path guard must use wildcard-safe .NET lexical parent traversal"
+)
+reparse_check = physical_guard.index("[System.IO.FileAttributes]::ReparsePoint")
+parent_step = physical_guard.index("[System.IO.Path]::GetDirectoryName($probe)")
+probe_advance = physical_guard.index("$probe = $parent")
+assert reparse_check < parent_step < probe_advance, (
+    "physical path guard must inspect each path before walking to its parent"
+)
+assert "$parent.Equals($probe, [System.StringComparison]::OrdinalIgnoreCase)" in physical_guard, (
+    "physical path guard must retain explicit root/self-parent termination"
+)
 
-# Windows PowerShell 5.1 argument mode does not reliably bind raw member/index
-# expressions after named parameters. Normalize explicit continuations, then
-# require every generated call to provide exactly one Path/Label pair and to
-# parenthesize any complex expression.
+# Keep the explicit string casts at object/array call boundaries as independent
+# enforcement of the function's declared string contract. They are not the
+# cause or fix for the Split-Path parameter-set failure above.
 normalized_calls = re.sub(r"`\r?\n\s*", " ", text)
 physical_calls = [
     line.strip()

@@ -561,7 +561,7 @@ function Assert-NodeLocalPhysicalPath {{
         (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {{
       throw "$Label contains reparse-point component: $probe"
     }}
-    $parent = Split-Path -LiteralPath $probe -Parent
+    $parent = [System.IO.Path]::GetDirectoryName($probe)
     if ([string]::IsNullOrWhiteSpace($parent) -or
         $parent.Equals($probe, [System.StringComparison]::OrdinalIgnoreCase)) {{
       break
