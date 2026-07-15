@@ -255,6 +255,18 @@ pub struct RegionalInfrastructure {
     pub service_radius_cm: i64,
     #[serde(default)]
     pub supported_resource_kinds: Vec<String>,
+    #[serde(default)]
+    pub measured_supply_schema_version: u8,
+    #[serde(default)]
+    pub inventory_revision: u64,
+    #[serde(default)]
+    pub available_units_by_kind: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub throughput_limit_units_per_epoch: i64,
+    #[serde(default)]
+    pub throughput_epoch: u64,
+    #[serde(default)]
+    pub throughput_remaining_units: i64,
     pub upkeep_paid: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_proposal_hash: Option<String>,
