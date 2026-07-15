@@ -92,7 +92,7 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP (LMTC-1): 建立专题 PRD / project 与首版人工测试清单。
+  - MVP (LMTC-1): 建立专题规格、项目拆解与首版人工测试清单；专题完成后，本 PRD 保留当前执行口径，完成态拆解由 GitHub task evidence 与 Git 历史承接。
   - v1.1 (LMTC-2): 对齐 `P0/P1/P2`、证据要求与发布 verdict 口径。
   - v2.0 (LMTC-3): 与主测试手册、启动器审查专题建立互链并收口。
   - v2.1 (LMTC-4): 后续按逃逸缺陷持续补充清单项。
