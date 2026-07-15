@@ -43,7 +43,7 @@ class PacketTest(unittest.TestCase):
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
 
     def create_args(self) -> list[str]:
-        return ["create", "--task-uid", TASK_UID, "--slice-id", "qa-review", "--role", "qa_engineer", "--slice-type", "review", "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--context-delivery-mode", "minimal_head_bound_task_packet", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
+        return ["create", "--task-uid", TASK_UID, "--slice-id", "qa-review", "--role", "qa_engineer", "--slice-type", "review", "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--context-delivery-mode", "minimal_head_bound_task_packet", "--intended-model-configuration", "inherit current parent selection", "--actual-dispatched-model-reasoning", "inherited/unverified", "--actual-runtime-evidence-reason", "dispatch surface does not report inherited runtime", "--role-activation", "message_assigned_adapter_inactive", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
 
     def invoke(self, args: list[str], ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
@@ -58,6 +58,8 @@ class PacketTest(unittest.TestCase):
         self.assertEqual("tpm", packet["identity"]["packet_producer"])
         self.assertEqual("minimal_head_bound_task_packet", packet["slice"]["context_delivery_mode"])
         self.assertEqual("1/1", packet["slice"]["integration_order"])
+        self.assertEqual("inherited/unverified", packet["slice"]["actual_dispatched_model_reasoning"])
+        self.assertEqual("message_assigned_adapter_inactive", packet["slice"]["role_activation"])
         self.assertNotIn("embedded_docs", packet)
         self.invoke(["validate", packet_path])
 
@@ -69,13 +71,19 @@ class PacketTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("--work-item", result.stderr)
 
-        for option in ("--packet-producer", "--context-delivery-mode", "--integration-order"):
+        for option in ("--packet-producer", "--context-delivery-mode", "--integration-order", "--intended-model-configuration", "--actual-dispatched-model-reasoning", "--actual-runtime-evidence-reason", "--role-activation"):
             args = self.create_args()
             index = args.index(option)
             del args[index:index + 2]
             result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
             self.assertNotEqual(0, result.returncode)
             self.assertIn(option, result.stderr)
+
+        args = self.create_args()
+        args[args.index("message_assigned_adapter_inactive")] = "unsupported_activation"
+        result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("invalid choice", result.stderr)
 
     def test_delivery_mode_escalation_and_digest_tamper(self) -> None:
         args = self.create_args()

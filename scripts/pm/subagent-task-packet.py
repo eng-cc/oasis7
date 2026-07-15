@@ -18,6 +18,7 @@ TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 SLICE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 MAX_SUMMARY_BYTES = 4096
 DELIVERY_MODES = {"minimal_head_bound_task_packet", "full_history_escalation"}
+ROLE_ACTIVATIONS = {"message_assigned_adapter_inactive", "named_role_adapter_backed"}
 
 
 class PacketError(RuntimeError):
@@ -121,7 +122,7 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
         if identity.get(field) != task.get(mapping_field):
             fail(f"packet {field} does not match task mapping")
     bounded(str(identity.get("packet_producer") or ""), "identity.packet_producer")
-    for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "write_scope", "return_contract", "validation_command", "formal_sink"):
+    for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "intended_model_configuration", "actual_dispatched_model_reasoning", "actual_runtime_evidence_reason", "role_activation", "write_scope", "return_contract", "validation_command", "formal_sink"):
         bounded(str(slice_contract.get(field) or ""), f"slice.{field}")
     if slice_contract.get("owner_role") != task.get("owner_role"):
         fail("packet owner role does not match task mapping")
@@ -132,6 +133,9 @@ def validate_packet(root: Path, packet: dict[str, object]) -> None:
     delivery_mode = str(slice_contract.get("context_delivery_mode"))
     if delivery_mode not in DELIVERY_MODES:
         fail(f"unsupported context delivery mode: {delivery_mode}")
+    role_activation = str(slice_contract.get("role_activation"))
+    if role_activation not in ROLE_ACTIVATIONS:
+        fail(f"unsupported role activation: {role_activation}")
     escalation_reason = str(slice_contract.get("full_history_escalation_reason") or "").strip()
     if delivery_mode == "full_history_escalation":
         bounded(escalation_reason, "slice.full_history_escalation_reason")
@@ -168,6 +172,10 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--packet-producer", required=True)
     create.add_argument("--context-delivery-mode", choices=sorted(DELIVERY_MODES), required=True)
     create.add_argument("--full-history-escalation-reason", default="")
+    create.add_argument("--intended-model-configuration", required=True)
+    create.add_argument("--actual-dispatched-model-reasoning", required=True)
+    create.add_argument("--actual-runtime-evidence-reason", required=True)
+    create.add_argument("--role-activation", choices=sorted(ROLE_ACTIVATIONS), required=True)
     create.add_argument("--base", required=True)
     create.add_argument("--user-intent", required=True)
     create.add_argument("--work-item", required=True)
@@ -220,7 +228,7 @@ def main() -> int:
         },
         "slice": {
             key: bounded(str(getattr(args, key)), f"slice.{key}")
-            for key in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "write_scope", "return_contract", "validation_command", "formal_sink")
+            for key in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "intended_model_configuration", "actual_dispatched_model_reasoning", "actual_runtime_evidence_reason", "role_activation", "write_scope", "return_contract", "validation_command", "formal_sink")
         },
         "context": {
             "user_intent": bounded(args.user_intent, "context.user_intent"),
