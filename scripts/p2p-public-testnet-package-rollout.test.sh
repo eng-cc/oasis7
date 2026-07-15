@@ -2743,6 +2743,49 @@ for raw_path in sys.argv[1:]:
     assert not path.read_bytes().startswith(b"\xef\xbb\xbf"), f"UTF-8 BOM forbidden: {path}"
 PY
 
+if ! python3 - "$ROOT_DIR/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+health_start = text.index("### Verdict rules")
+health_end = text.index("### Operator communication boundary", health_start)
+health = text[health_start:health_end]
+assert "consensus.network_head.decision=ready" in health, (
+    "fleet-healthy recovery updates must require ready network-head decisions"
+)
+assert "same capture window" in health, (
+    "fleet-healthy recovery updates need one concrete same-window head criterion"
+)
+assert "exactly equal" in health, (
+    "without a repository-defined lag threshold, fleet heads must be exact-equality gated"
+)
+
+handoff_start = text.index("### Windows package rollback 后的人工 handoff")
+handoff_end = text.index("### What not to do", handoff_start)
+handoff = text[handoff_start:handoff_end]
+for marker in (
+    "staged_sha_closure_complete=true",
+    "promotion_begin=true",
+    "promotion_complete=true",
+):
+    assert marker in handoff, f"Windows rollback handoff omits marker branch: {marker}"
+for state in ("State=Running", "State=Ready"):
+    assert state in handoff, f"Windows rollback handoff omits observed task state: {state}"
+assert "不得执行 `Start-ScheduledTask`" in handoff, (
+    "preflight failures must be remediated without restart"
+)
+assert "`rollback_applied=true`" in handoff and "`promotion_begin=true`" in handoff, (
+    "manual restart eligibility must bind rollback and promotion evidence"
+)
+assert "`State=Ready`" in handoff and "可人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`" in handoff, (
+    "manual restart must be limited to a restored, stopped task"
+)
+PY
+then
+  package_contract_failed=1
+fi
+
 if [[ "$package_contract_failed" -ne 0 ]]; then
   exit 1
 fi

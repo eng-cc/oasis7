@@ -569,6 +569,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 6. `connected_peers`
 7. `readiness.ready`
 8. `readiness.failed_gates`
+9. `consensus.network_head.decision`
 
 ### Verdict rules
 1. **Fleet live**
@@ -585,6 +586,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
    - `readiness.failed_gates=[]`
    - `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或在允许 lag 内
    - `consensus.network_head.decision=ready`
+   - 没有 repository-defined lag threshold 时，所有 current operator inventory 节点必须在**同一个 same capture window** 的快照中，使 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 都与 sequencer validator head **exactly equal**；不得把不同采样时间的“分别已追平”拼成 fleet healthy 结论
 
 如果只满足第一条，不得对外宣称 healthy、恢复完成或“完全健康”。
 
@@ -593,7 +595,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 1. **Merge announcement: n/a.** 合并 runbook、代码或 package 变更不等于 live deployment 已执行，不发布“网络已恢复”或“部署已完成”的 merge announcement。
 2. Phase C0 的 consumer-impact record 是 deployment/outage messaging 的来源。`active` 或 `unknown` 都必须按存在外部 consumer 处理：TPM 与 LiveOps/community 负责 outage 和 recovery updates，`producer_system_designer` 批准 wording，并在任何 host preflight/reset/redeploy continuation 前记录 update channel、recovery checkpoint 和 approval reference。只有 `none` 且 evidence source 与 timestamp 已留存时，才可只保留内部 operator 记录。validator 已停止也不豁免这项 determination 或沟通 gate。
 3. 需要对外说明时，必须使用 `testnet`、`resettable`、`non-mainnet` 边界，例如：`Oasis7 public testnet is undergoing a governed clean rebuild. This testnet is resettable and non-mainnet. Validators are temporarily unavailable; RPC, explorer, and guarded faucet may be unavailable or stale until full-fleet verification completes.`
-4. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足并留存 full-fleet snapshot 后，才可由已记录的 recovery update checkpoint 说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
+4. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足、每个节点的 `consensus.network_head.decision=ready`、并留存满足上述 exact-equality same-capture-window head criterion 的 full-fleet snapshot 后，才可由已记录的 recovery update checkpoint 说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ## 14. Phase H - Failure Handling and Rollback
 ### Deployment rollback
@@ -615,13 +617,13 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 
 ### Windows package rollback 后的人工 handoff
 
-Windows package rollout 只要输出 `rollback_required=true`，就进入仍在进行中的 incident；`rollback_applied=true` 只证明已尝试恢复 known-good binary/config/deployment provenance，不代表 observer 已恢复，也不得触发 recovery messaging。值班 operator 必须按以下顺序 handoff：
+Windows package rollout 只要输出 `rollback_required=true`，就进入仍在进行中的 incident；`rollback_applied=true` 只证明已尝试恢复 known-good binary/config/deployment provenance，不代表 observer 已恢复，也不得触发 recovery messaging。值班 operator 必须先保留 rollout 输出列出的 `attempt_stdout`、`attempt_stderr`、`attempt_exit_marker` 及 `C:\oasis7-deploy\logs\package-rollout-attempts\` 下对应 attempt 文件；不得在 incident closeout 前删除 attempt staging、覆盖日志或只摘录最后一行替代原始证据。随后采集 `staged_sha_closure_complete=true`、`promotion_begin=true`、`promotion_complete=true` 三个 marker 是否存在，以及 `Get-ScheduledTask` 的实际 state/action，并按下列分支 handoff：
 
-1. 保留 rollout 输出列出的 `attempt_stdout`、`attempt_stderr`、`attempt_exit_marker` 及 `C:\oasis7-deploy\logs\package-rollout-attempts\` 下对应 attempt 文件；不得在 incident closeout 前删除 attempt staging、覆盖日志或只摘录最后一行替代原始证据。
-2. 检查 rollback 输出、installed/known-good runtime SHA-256、active governed config 与 `CURRENT_VERSION` / `DEPLOYED_BUILDINFO`，并确认 scheduled task action 已恢复为预期的 `Oasis7Observer` runtime/arguments。任何 `lock_remains=true`、缺失 component、hash 不闭合或 action 漂移都继续保持 incident active，禁止启动任务。
-3. 上述检查通过后，由 Windows node operator 人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`；rollout 的“不自动重启”是安全边界，不得用修改脚本或删除诊断绕过。
-4. 运行本 runbook `Current five-node status` 的现有 Windows/fleet status checks，并记录 scheduled task `State=Running`、RPC `running=true`、`last_error=null`、`readiness.status=ready`、`readiness.failed_gates=[]`，以及 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或处于允许 lag 内。任一项不满足时，`rollback_required=true` incident 继续 active。
-5. 在 task running、error clear、readiness 和 head-height checks 全部通过且证据已留存前，禁止发布“已恢复”“healthy”或同义 external messaging。外部 recovery update 仍遵循上文 `Operator communication boundary`：TPM 与 LiveOps/community 准备并发布 update，`producer_system_designer` 批准 wording；Windows operator 的本机检查结果本身不构成对外发布批准。
+1. **Preflight / closure failure, no restart.** 若缺少 `staged_sha_closure_complete=true` 或 `promotion_begin=true`，则 promotion/stop boundary 未获证明；即使 task 当前为 `State=Ready`，也不得执行 `Start-ScheduledTask`。保留 preflight/closure diagnostics，修复 staging closure、路径、hash、rollback root 或 task-action precondition 后重新生成并执行一次受控 rollout；若观察到 `State=Running`，也只保留现场并排查，不得以手工 restart 覆盖 preflight failure。
+2. **Promotion entered but not completed.** 若有 `promotion_begin=true` 但没有 `promotion_complete=true`，保留所有 marker 和 attempt diagnostics，并把 observed task state 作为 stop 的事实来源：生成器没有独立的 stop marker，不能从 `promotion_begin=true` 推断 task 已停止。只有同时得到 `rollback_required=true`、`rollback_applied=true`，并确认 task 为已停止的 `State=Ready` 时，才进入下一分支；`State=Running`、缺失 state 或任何其他 state 都继续 incident，禁止手工 start。
+3. **Restored post-stop rollback.** 仅当 `promotion_begin=true` 已记录、`rollback_applied=true` 已记录、installed/known-good runtime SHA-256、active governed config、`CURRENT_VERSION` / `DEPLOYED_BUILDINFO` 和 scheduled task action 都已闭合，且当前观察到 `State=Ready` 时，Windows node operator 才可人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`。rollout 的“不自动重启”是安全边界；不得用修改脚本或删除诊断绕过。若已观察到 `State=Running`，不得再次 Start，先采集状态和日志。
+4. 在任何手工 start 后，运行本 runbook `Current five-node status` 的现有 Windows/fleet status checks，并记录 scheduled task `State=Running`、RPC `running=true`、`last_error=null`、`readiness.status=ready`、`readiness.failed_gates=[]`、每个节点 `consensus.network_head.decision=ready`，以及满足本 Phase exact-equality same-capture-window criterion 的 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height`。任一项不满足时，`rollback_required=true` incident 继续 active。
+5. 在 task running、error clear、readiness、network-head decision 和 full-fleet same-window head checks 全部通过且证据已留存前，禁止发布“已恢复”“healthy”或同义 external messaging。外部 recovery update 仍遵循上文 `Operator communication boundary`：TPM 与 LiveOps/community 准备并发布 update，`producer_system_designer` 批准 wording；Windows operator 的本机检查结果本身不构成对外发布批准。
 
 最小 Windows handoff 命令：
 
