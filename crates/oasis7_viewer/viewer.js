@@ -13110,11 +13110,13 @@ function InteractionPanel() {
         }
       }), _el$303);
       insert(_el$303, createComponent(Badge, {
+        "class": "badge badge--diagnostic",
         get children() {
           return `boundPlayer=${binding()?.playerId || "-"}`;
         }
       }), null);
       insert(_el$303, createComponent(Badge, {
+        "class": "badge badge--diagnostic",
         get children() {
           return `boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`;
         }
