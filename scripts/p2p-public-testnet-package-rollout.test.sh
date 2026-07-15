@@ -982,6 +982,46 @@ PY
   done
 done
 
+# A runtime-truth directory may not smuggle a host-owned member into the
+# staged closure through either kind of symlink.  Both must fail before the
+# rollout helper emits a plan, PowerShell script, or transfer command.
+for symlink_kind in file directory; do
+  symlink_package="$TMP_DIR/runtime-truth-$symlink_kind-symlink-package"
+  cp -R "$package_dir" "$symlink_package"
+  symlink_windows="$symlink_package/windows"
+  symlink_sidecar="$symlink_windows/generated-world/generated-scenario-world"
+  external_root="$TMP_DIR/runtime-truth-$symlink_kind-external"
+  mkdir -p "$external_root"
+  if [[ "$symlink_kind" == "file" ]]; then
+    printf 'outside platform root\n' >"$external_root/outside.json"
+    ln -s "$external_root/outside.json" "$symlink_sidecar/outside-file-link.json"
+  else
+    mkdir -p "$external_root/outside-dir"
+    printf 'outside platform root\n' >"$external_root/outside-dir/outside.json"
+    ln -s "$external_root/outside-dir" "$symlink_sidecar/outside-directory-link"
+  fi
+
+  symlink_out="$TMP_DIR/runtime-truth-$symlink_kind-symlink-out"
+  if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+    --manifest "$TMP_DIR/manifest.json" \
+    --package-dir "$symlink_package" \
+    --out-dir "$symlink_out" \
+    >"$symlink_out.stdout" 2>"$symlink_out.stderr"; then
+    echo "expected runtime-truth $symlink_kind symlink to fail before rollout generation" >&2
+    package_contract_failed=1
+  elif ! grep -q 'Windows runtime truth tree contains symlink for generated_world_sidecar' \
+    "$symlink_out.stderr"; then
+    echo "runtime-truth $symlink_kind symlink did not produce the stable containment diagnostic" >&2
+    cat "$symlink_out.stderr" >&2
+    package_contract_failed=1
+  fi
+  if [[ -e "$symlink_out/windows-observer-windows-upgrade.ps1" \
+    || -e "$symlink_out/rollout-plan.json" ]]; then
+    echo "runtime-truth $symlink_kind symlink generated rollout output before rejection" >&2
+    package_contract_failed=1
+  fi
+done
+
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \

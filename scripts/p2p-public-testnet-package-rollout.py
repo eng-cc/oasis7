@@ -163,15 +163,24 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
         relative = Path(*posix_ref.parts)
         if relative == Path("."):
             die(f"Windows runtime truth ref escapes platform closure for {label}: {raw_ref}")
-        source = (platform_root / relative).resolve()
+        unresolved_source = platform_root / relative
+        if unresolved_source.is_symlink():
+            die(f"Windows runtime truth tree contains symlink for {label}: {raw_ref}")
+        source = unresolved_source.resolve()
         try:
             source.relative_to(platform_root)
         except ValueError:
             die(f"Windows runtime truth ref escapes platform closure for {label}: {raw_ref}")
         return relative, source
 
-    def add_file(source: Path, remote_relative: str) -> None:
+    def add_file(source: Path, remote_relative: str, label: str) -> None:
+        if source.is_symlink():
+            die(f"Windows runtime truth tree contains symlink for {label}: {source}")
         source = source.resolve()
+        try:
+            source.relative_to(platform_root)
+        except ValueError:
+            die(f"Windows runtime truth ref escapes platform closure for {label}: {source}")
         if not source.is_file():
             die(f"Windows runtime truth source missing: {source}")
         previous = files_by_remote.get(remote_relative)
@@ -189,13 +198,17 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
         if metadata.get("kind") == "directory":
             if not source.is_dir():
                 die(f"Windows runtime truth directory missing for {label}: {source}")
-            members = sorted(path for path in source.rglob("*") if path.is_file())
+            tree_entries = sorted(source.rglob("*"))
+            symlink = next((path for path in tree_entries if path.is_symlink()), None)
+            if symlink is not None:
+                die(f"Windows runtime truth tree contains symlink for {label}: {symlink}")
+            members = [path for path in tree_entries if path.is_file()]
             if not members:
                 die(f"Windows runtime truth directory empty for {label}: {source}")
             for member in members:
-                add_file(member, (relative / member.relative_to(source)).as_posix())
+                add_file(member, (relative / member.relative_to(source)).as_posix(), label)
         else:
-            add_file(source, relative.as_posix())
+            add_file(source, relative.as_posix(), label)
 
     targets: dict[str, Path] = {}
     for key, raw_ref in refs.items():
@@ -212,7 +225,7 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
         if previous is not None and previous != source:
             die(f"Windows genesis governance refs collide at localized target {target_name}")
         targets[target_name] = source
-        add_file(source, f"doc/testing/evidence/{target_name}")
+        add_file(source, f"doc/testing/evidence/{target_name}", key)
 
     for field in (
         "world_snapshot",
