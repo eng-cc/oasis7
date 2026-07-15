@@ -266,14 +266,20 @@ windows_powershell_behavior_success_marker='OASIS7_WINDOWS_POWERSHELL_ROLLOUT_BE
 require_windows_powershell_behavior_success() {
   local status="$1"
   local output_path="$2"
+  local marker_path="$3"
 
   if [[ "$status" -ne 0 ]]; then
     echo "Windows PowerShell rollout behavior harness failed with exit status $status" >&2
     cat "$output_path" >&2
     return 1
   fi
-  if ! grep -Fxq "$windows_powershell_behavior_success_marker" "$output_path"; then
-    echo "Windows PowerShell rollout behavior harness did not emit completion marker: $windows_powershell_behavior_success_marker" >&2
+  if [[ ! -f "$marker_path" ]]; then
+    echo "Windows PowerShell rollout behavior harness did not write completion marker: $marker_path" >&2
+    cat "$output_path" >&2
+    return 1
+  fi
+  if ! printf '%s' "$windows_powershell_behavior_success_marker" | cmp -s - "$marker_path"; then
+    echo "Windows PowerShell rollout behavior harness wrote an invalid completion marker: $marker_path" >&2
     cat "$output_path" >&2
     return 1
   fi
@@ -281,19 +287,21 @@ require_windows_powershell_behavior_success() {
 
 verify_windows_powershell_behavior_boundary_fails_closed() {
   local output_path="$TMP_DIR/windows-powershell-boundary-negative-self-check.log"
+  local marker_path="$TMP_DIR/windows-powershell-boundary-negative-self-check.marker"
 
   printf 'ParserError: simulated fixture parser failure\n' >"$output_path"
-  if require_windows_powershell_behavior_success 0 "$output_path" >/dev/null 2>&1; then
-    echo "Windows PowerShell behavior boundary accepted parser output without marker" >&2
+  rm -f "$marker_path"
+  if require_windows_powershell_behavior_success 0 "$output_path" "$marker_path" >/dev/null 2>&1; then
+    echo "Windows PowerShell behavior boundary accepted missing marker file" >&2
     return 1
   fi
-  printf 'simulated fixture output without completion marker\n' >"$output_path"
-  if require_windows_powershell_behavior_success 0 "$output_path" >/dev/null 2>&1; then
-    echo "Windows PowerShell behavior boundary accepted missing completion marker" >&2
+  printf 'OASIS7_WINDOWS_POWERSHELL_ROLLOUT_BEHAVIOR_COMPLETE=false' >"$marker_path"
+  if require_windows_powershell_behavior_success 0 "$output_path" "$marker_path" >/dev/null 2>&1; then
+    echo "Windows PowerShell behavior boundary accepted wrong marker file content" >&2
     return 1
   fi
-  printf '%s\n' "$windows_powershell_behavior_success_marker" >"$output_path"
-  if require_windows_powershell_behavior_success 17 "$output_path" >/dev/null 2>&1; then
+  printf '%s' "$windows_powershell_behavior_success_marker" >"$marker_path"
+  if require_windows_powershell_behavior_success 17 "$output_path" "$marker_path" >/dev/null 2>&1; then
     echo "Windows PowerShell behavior boundary accepted nonzero PowerShell status" >&2
     return 1
   fi
@@ -310,11 +318,15 @@ if ! command -v cygpath >/dev/null 2>&1; then
   exit 1
 fi
 local powershell_output="$TMP_DIR/windows-powershell-behavior.log"
+local powershell_completion_marker
 local powershell_status
+powershell_completion_marker="$(mktemp "$TMP_DIR/windows-powershell-behavior-completion-marker.XXXXXX")"
+rm -f "$powershell_completion_marker"
 set +e
 OASIS7_FIXTURE_ROOT_DIR="$(cygpath -w "$TMP_DIR")" \
   OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
   OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+  OASIS7_FIXTURE_COMPLETION_MARKER="$(cygpath -w "$powershell_completion_marker")" \
   "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -Command - >"$powershell_output" 2>&1 <<'PS'
 $ErrorActionPreference = 'Stop'
 
@@ -522,7 +534,11 @@ foreach ($phase in $phases) {
     Remove-RolloutFixture $fixture
   }
 }
-Write-Output 'OASIS7_WINDOWS_POWERSHELL_ROLLOUT_BEHAVIOR_COMPLETE=true'
+[System.IO.File]::WriteAllText(
+  $env:OASIS7_FIXTURE_COMPLETION_MARKER,
+  'OASIS7_WINDOWS_POWERSHELL_ROLLOUT_BEHAVIOR_COMPLETE=true',
+  [System.Text.ASCIIEncoding]::new()
+)
 } finally {
 foreach ($taskName in $fixtureTasks) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
 Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -531,7 +547,8 @@ PS
 powershell_status=$?
 set -e
 cat "$powershell_output"
-require_windows_powershell_behavior_success "$powershell_status" "$powershell_output"
+require_windows_powershell_behavior_success \
+  "$powershell_status" "$powershell_output" "$powershell_completion_marker"
 }
 verify_windows_powershell_behavior_boundary_fails_closed
 if [[ "${OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST:-0}" == "1" ]]; then
