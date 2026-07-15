@@ -1,595 +1,7 @@
 // Generated canonical Viewer bundle; source truth lives in ./software_safe_src/.
-const IS_DEV$1 = false;
-const equalFn$1 = (a, b) => a === b;
-const $PROXY = /* @__PURE__ */ Symbol("solid-proxy");
-const $TRACK$1 = /* @__PURE__ */ Symbol("solid-track");
-const signalOptions$1 = {
-  equals: equalFn$1
-};
-let runEffects$1 = runQueue$1;
-const STALE$1 = 1;
-const PENDING$1 = 2;
-const UNOWNED$1 = {
-  owned: null,
-  cleanups: null,
-  context: null,
-  owner: null
-};
-var Owner$1 = null;
-let Transition$1 = null;
-let ExternalSourceConfig$1 = null;
-let Listener$1 = null;
-let Updates$1 = null;
-let Effects$1 = null;
-let ExecCount$1 = 0;
-function createRoot$1(fn, detachedOwner) {
-  const listener = Listener$1, owner = Owner$1, unowned = fn.length === 0, current = detachedOwner === void 0 ? owner : detachedOwner, root = unowned ? UNOWNED$1 : {
-    owned: null,
-    cleanups: null,
-    context: current ? current.context : null,
-    owner: current
-  }, updateFn = unowned ? fn : () => fn(() => untrack$1(() => cleanNode$1(root)));
-  Owner$1 = root;
-  Listener$1 = null;
-  try {
-    return runUpdates$1(updateFn, true);
-  } finally {
-    Listener$1 = listener;
-    Owner$1 = owner;
-  }
-}
-function createSignal$1(value, options) {
-  options = options ? Object.assign({}, signalOptions$1, options) : signalOptions$1;
-  const s = {
-    value,
-    observers: null,
-    observerSlots: null,
-    comparator: options.equals || void 0
-  };
-  const setter = (value2) => {
-    if (typeof value2 === "function") {
-      value2 = value2(s.value);
-    }
-    return writeSignal$1(s, value2);
-  };
-  return [readSignal$1.bind(s), setter];
-}
-function createRenderEffect(fn, value, options) {
-  const c = createComputation$1(fn, value, false, STALE$1);
-  updateComputation$1(c);
-}
-function createMemo$1(fn, value, options) {
-  options = options ? Object.assign({}, signalOptions$1, options) : signalOptions$1;
-  const c = createComputation$1(fn, value, true, 0);
-  c.observers = null;
-  c.observerSlots = null;
-  c.comparator = options.equals || void 0;
-  updateComputation$1(c);
-  return readSignal$1.bind(c);
-}
-function batch(fn) {
-  return runUpdates$1(fn, false);
-}
-function untrack$1(fn) {
-  if (Listener$1 === null) return fn();
-  const listener = Listener$1;
-  Listener$1 = null;
-  try {
-    if (ExternalSourceConfig$1) ;
-    return fn();
-  } finally {
-    Listener$1 = listener;
-  }
-}
-function getListener() {
-  return Listener$1;
-}
-function readSignal$1() {
-  if (this.sources && this.state) {
-    if (this.state === STALE$1) updateComputation$1(this);
-    else {
-      const updates = Updates$1;
-      Updates$1 = null;
-      runUpdates$1(() => lookUpstream$1(this), false);
-      Updates$1 = updates;
-    }
-  }
-  if (Listener$1) {
-    const sSlot = this.observers ? this.observers.length : 0;
-    if (!Listener$1.sources) {
-      Listener$1.sources = [this];
-      Listener$1.sourceSlots = [sSlot];
-    } else {
-      Listener$1.sources.push(this);
-      Listener$1.sourceSlots.push(sSlot);
-    }
-    if (!this.observers) {
-      this.observers = [Listener$1];
-      this.observerSlots = [Listener$1.sources.length - 1];
-    } else {
-      this.observers.push(Listener$1);
-      this.observerSlots.push(Listener$1.sources.length - 1);
-    }
-  }
-  return this.value;
-}
-function writeSignal$1(node, value, isComp) {
-  let current = node.value;
-  if (!node.comparator || !node.comparator(current, value)) {
-    node.value = value;
-    if (node.observers && node.observers.length) {
-      runUpdates$1(() => {
-        for (let i = 0; i < node.observers.length; i += 1) {
-          const o = node.observers[i];
-          const TransitionRunning = Transition$1 && Transition$1.running;
-          if (TransitionRunning && Transition$1.disposed.has(o)) ;
-          if (TransitionRunning ? !o.tState : !o.state) {
-            if (o.pure) Updates$1.push(o);
-            else Effects$1.push(o);
-            if (o.observers) markDownstream$1(o);
-          }
-          if (!TransitionRunning) o.state = STALE$1;
-        }
-        if (Updates$1.length > 1e6) {
-          Updates$1 = [];
-          if (IS_DEV$1) ;
-          throw new Error();
-        }
-      }, false);
-    }
-  }
-  return value;
-}
-function updateComputation$1(node) {
-  if (!node.fn) return;
-  cleanNode$1(node);
-  const time = ExecCount$1;
-  runComputation$1(node, node.value, time);
-}
-function runComputation$1(node, value, time) {
-  let nextValue;
-  const owner = Owner$1, listener = Listener$1;
-  Listener$1 = Owner$1 = node;
-  try {
-    nextValue = node.fn(value);
-  } catch (err) {
-    if (node.pure) {
-      {
-        node.state = STALE$1;
-        node.owned && node.owned.forEach(cleanNode$1);
-        node.owned = null;
-      }
-    }
-    node.updatedAt = time + 1;
-    return handleError$1(err);
-  } finally {
-    Listener$1 = listener;
-    Owner$1 = owner;
-  }
-  if (!node.updatedAt || node.updatedAt <= time) {
-    if (node.updatedAt != null && "observers" in node) {
-      writeSignal$1(node, nextValue);
-    } else node.value = nextValue;
-    node.updatedAt = time;
-  }
-}
-function createComputation$1(fn, init, pure, state2 = STALE$1, options) {
-  const c = {
-    fn,
-    state: state2,
-    updatedAt: null,
-    owned: null,
-    sources: null,
-    sourceSlots: null,
-    cleanups: null,
-    value: init,
-    owner: Owner$1,
-    context: Owner$1 ? Owner$1.context : null,
-    pure
-  };
-  if (Owner$1 === null) ;
-  else if (Owner$1 !== UNOWNED$1) {
-    {
-      if (!Owner$1.owned) Owner$1.owned = [c];
-      else Owner$1.owned.push(c);
-    }
-  }
-  return c;
-}
-function runTop$1(node) {
-  if (node.state === 0) return;
-  if (node.state === PENDING$1) return lookUpstream$1(node);
-  if (node.suspense && untrack$1(node.suspense.inFallback)) return node.suspense.effects.push(node);
-  const ancestors = [node];
-  while ((node = node.owner) && (!node.updatedAt || node.updatedAt < ExecCount$1)) {
-    if (node.state) ancestors.push(node);
-  }
-  for (let i = ancestors.length - 1; i >= 0; i--) {
-    node = ancestors[i];
-    if (node.state === STALE$1) {
-      updateComputation$1(node);
-    } else if (node.state === PENDING$1) {
-      const updates = Updates$1;
-      Updates$1 = null;
-      runUpdates$1(() => lookUpstream$1(node, ancestors[0]), false);
-      Updates$1 = updates;
-    }
-  }
-}
-function runUpdates$1(fn, init) {
-  if (Updates$1) return fn();
-  let wait = false;
-  if (!init) Updates$1 = [];
-  if (Effects$1) wait = true;
-  else Effects$1 = [];
-  ExecCount$1++;
-  try {
-    const res = fn();
-    completeUpdates$1(wait);
-    return res;
-  } catch (err) {
-    if (!wait) Effects$1 = null;
-    Updates$1 = null;
-    handleError$1(err);
-  }
-}
-function completeUpdates$1(wait) {
-  if (Updates$1) {
-    runQueue$1(Updates$1);
-    Updates$1 = null;
-  }
-  if (wait) return;
-  const e = Effects$1;
-  Effects$1 = null;
-  if (e.length) runUpdates$1(() => runEffects$1(e), false);
-}
-function runQueue$1(queue) {
-  for (let i = 0; i < queue.length; i++) runTop$1(queue[i]);
-}
-function lookUpstream$1(node, ignore) {
-  node.state = 0;
-  for (let i = 0; i < node.sources.length; i += 1) {
-    const source = node.sources[i];
-    if (source.sources) {
-      const state2 = source.state;
-      if (state2 === STALE$1) {
-        if (source !== ignore && (!source.updatedAt || source.updatedAt < ExecCount$1)) runTop$1(source);
-      } else if (state2 === PENDING$1) lookUpstream$1(source, ignore);
-    }
-  }
-}
-function markDownstream$1(node) {
-  for (let i = 0; i < node.observers.length; i += 1) {
-    const o = node.observers[i];
-    if (!o.state) {
-      o.state = PENDING$1;
-      if (o.pure) Updates$1.push(o);
-      else Effects$1.push(o);
-      o.observers && markDownstream$1(o);
-    }
-  }
-}
-function cleanNode$1(node) {
-  let i;
-  if (node.sources) {
-    while (node.sources.length) {
-      const source = node.sources.pop(), index = node.sourceSlots.pop(), obs = source.observers;
-      if (obs && obs.length) {
-        const n = obs.pop(), s = source.observerSlots.pop();
-        if (index < obs.length) {
-          n.sourceSlots[s] = index;
-          obs[index] = n;
-          source.observerSlots[index] = s;
-        }
-      }
-    }
-  }
-  if (node.tOwned) {
-    for (i = node.tOwned.length - 1; i >= 0; i--) cleanNode$1(node.tOwned[i]);
-    delete node.tOwned;
-  }
-  if (node.owned) {
-    for (i = node.owned.length - 1; i >= 0; i--) cleanNode$1(node.owned[i]);
-    node.owned = null;
-  }
-  if (node.cleanups) {
-    for (i = node.cleanups.length - 1; i >= 0; i--) node.cleanups[i]();
-    node.cleanups = null;
-  }
-  node.state = 0;
-}
-function castError$1(err) {
-  if (err instanceof Error) return err;
-  return new Error(typeof err === "string" ? err : "Unknown error", {
-    cause: err
-  });
-}
-function handleError$1(err, owner = Owner$1) {
-  const error = castError$1(err);
-  throw error;
-}
-function createComponent(Comp, props) {
-  return untrack$1(() => Comp(props || {}));
-}
-const memo = (fn) => createMemo$1(() => fn());
-function reconcileArrays(parentNode, a, b) {
-  let bLength = b.length, aEnd = a.length, bEnd = bLength, aStart = 0, bStart = 0, after = a[aEnd - 1].nextSibling, map = null;
-  while (aStart < aEnd || bStart < bEnd) {
-    if (a[aStart] === b[bStart]) {
-      aStart++;
-      bStart++;
-      continue;
-    }
-    while (a[aEnd - 1] === b[bEnd - 1]) {
-      aEnd--;
-      bEnd--;
-    }
-    if (aEnd === aStart) {
-      const node = bEnd < bLength ? bStart ? b[bStart - 1].nextSibling : b[bEnd - bStart] : after;
-      while (bStart < bEnd) parentNode.insertBefore(b[bStart++], node);
-    } else if (bEnd === bStart) {
-      while (aStart < aEnd) {
-        if (!map || !map.has(a[aStart])) a[aStart].remove();
-        aStart++;
-      }
-    } else if (a[aStart] === b[bEnd - 1] && b[bStart] === a[aEnd - 1]) {
-      const node = a[--aEnd].nextSibling;
-      parentNode.insertBefore(b[bStart++], a[aStart++].nextSibling);
-      parentNode.insertBefore(b[--bEnd], node);
-      a[aEnd] = b[bEnd];
-    } else {
-      if (!map) {
-        map = /* @__PURE__ */ new Map();
-        let i = bStart;
-        while (i < bEnd) map.set(b[i], i++);
-      }
-      const index = map.get(a[aStart]);
-      if (index != null) {
-        if (bStart < index && index < bEnd) {
-          let i = aStart, sequence = 1, t;
-          while (++i < aEnd && i < bEnd) {
-            if ((t = map.get(a[i])) == null || t !== index + sequence) break;
-            sequence++;
-          }
-          if (sequence > index - bStart) {
-            const node = a[aStart];
-            while (bStart < index) parentNode.insertBefore(b[bStart++], node);
-          } else parentNode.replaceChild(b[bStart++], a[aStart++]);
-        } else aStart++;
-      } else a[aStart++].remove();
-    }
-  }
-}
-const $$EVENTS = "_$DX_DELEGATE";
-function render$1(code, element, init, options = {}) {
-  let disposer;
-  createRoot$1((dispose2) => {
-    disposer = dispose2;
-    element === document ? code() : insert(element, code(), element.firstChild ? null : void 0, init);
-  }, options.owner);
-  return () => {
-    disposer();
-    element.textContent = "";
-  };
-}
-function template(html, isImportNode, isSVG, isMathML) {
-  let node;
-  const create = () => {
-    const t = document.createElement("template");
-    t.innerHTML = html;
-    return t.content.firstChild;
-  };
-  const fn = () => (node || (node = create())).cloneNode(true);
-  fn.cloneNode = fn;
-  return fn;
-}
-function delegateEvents(eventNames, document2 = window.document) {
-  const e = document2[$$EVENTS] || (document2[$$EVENTS] = /* @__PURE__ */ new Set());
-  for (let i = 0, l = eventNames.length; i < l; i++) {
-    const name = eventNames[i];
-    if (!e.has(name)) {
-      e.add(name);
-      document2.addEventListener(name, eventHandler);
-    }
-  }
-}
-function setAttribute(node, name, value) {
-  if (value == null) node.removeAttribute(name);
-  else node.setAttribute(name, value);
-}
-function className(node, value) {
-  if (value == null) node.removeAttribute("class");
-  else node.className = value;
-}
-function addEventListener(node, name, handler, delegate) {
-  {
-    if (Array.isArray(handler)) {
-      node[`$$${name}`] = handler[0];
-      node[`$$${name}Data`] = handler[1];
-    } else node[`$$${name}`] = handler;
-  }
-}
-function style(node, value, prev) {
-  if (!value) return prev ? setAttribute(node, "style") : value;
-  const nodeStyle = node.style;
-  if (typeof value === "string") return nodeStyle.cssText = value;
-  typeof prev === "string" && (nodeStyle.cssText = prev = void 0);
-  prev || (prev = {});
-  value || (value = {});
-  let v, s;
-  for (s in prev) {
-    value[s] == null && nodeStyle.removeProperty(s);
-    delete prev[s];
-  }
-  for (s in value) {
-    v = value[s];
-    if (v !== prev[s]) {
-      nodeStyle.setProperty(s, v);
-      prev[s] = v;
-    }
-  }
-  return prev;
-}
-function use(fn, element, arg) {
-  return untrack$1(() => fn(element, arg));
-}
-function insert(parent, accessor, marker, initial) {
-  if (marker !== void 0 && !initial) initial = [];
-  if (typeof accessor !== "function") return insertExpression(parent, accessor, initial, marker);
-  createRenderEffect((current) => insertExpression(parent, accessor(), current, marker), initial);
-}
-function eventHandler(e) {
-  let node = e.target;
-  const key = `$$${e.type}`;
-  const oriTarget = e.target;
-  const oriCurrentTarget = e.currentTarget;
-  const retarget = (value) => Object.defineProperty(e, "target", {
-    configurable: true,
-    value
-  });
-  const handleNode = () => {
-    const handler = node[key];
-    if (handler && !node.disabled) {
-      const data = node[`${key}Data`];
-      data !== void 0 ? handler.call(node, data, e) : handler.call(node, e);
-      if (e.cancelBubble) return;
-    }
-    node.host && typeof node.host !== "string" && !node.host._$host && node.contains(e.target) && retarget(node.host);
-    return true;
-  };
-  const walkUpTree = () => {
-    while (handleNode() && (node = node._$host || node.parentNode || node.host)) ;
-  };
-  Object.defineProperty(e, "currentTarget", {
-    configurable: true,
-    get() {
-      return node || document;
-    }
-  });
-  if (e.composedPath) {
-    const path = e.composedPath();
-    retarget(path[0]);
-    for (let i = 0; i < path.length - 2; i++) {
-      node = path[i];
-      if (!handleNode()) break;
-      if (node._$host) {
-        node = node._$host;
-        walkUpTree();
-        break;
-      }
-      if (node.parentNode === oriCurrentTarget) {
-        break;
-      }
-    }
-  } else walkUpTree();
-  retarget(oriTarget);
-}
-function insertExpression(parent, value, current, marker, unwrapArray) {
-  while (typeof current === "function") current = current();
-  if (value === current) return current;
-  const t = typeof value, multi = marker !== void 0;
-  parent = multi && current[0] && current[0].parentNode || parent;
-  if (t === "string" || t === "number") {
-    if (t === "number") {
-      value = value.toString();
-      if (value === current) return current;
-    }
-    if (multi) {
-      let node = current[0];
-      if (node && node.nodeType === 3) {
-        node.data !== value && (node.data = value);
-      } else node = document.createTextNode(value);
-      current = cleanChildren(parent, current, marker, node);
-    } else {
-      if (current !== "" && typeof current === "string") {
-        current = parent.firstChild.data = value;
-      } else current = parent.textContent = value;
-    }
-  } else if (value == null || t === "boolean") {
-    current = cleanChildren(parent, current, marker);
-  } else if (t === "function") {
-    createRenderEffect(() => {
-      let v = value();
-      while (typeof v === "function") v = v();
-      current = insertExpression(parent, v, current, marker);
-    });
-    return () => current;
-  } else if (Array.isArray(value)) {
-    const array = [];
-    const currentArray = current && Array.isArray(current);
-    if (normalizeIncomingArray(array, value, current, unwrapArray)) {
-      createRenderEffect(() => current = insertExpression(parent, array, current, marker, true));
-      return () => current;
-    }
-    if (array.length === 0) {
-      current = cleanChildren(parent, current, marker);
-      if (multi) return current;
-    } else if (currentArray) {
-      if (current.length === 0) {
-        appendNodes(parent, array, marker);
-      } else reconcileArrays(parent, current, array);
-    } else {
-      current && cleanChildren(parent);
-      appendNodes(parent, array);
-    }
-    current = array;
-  } else if (value.nodeType) {
-    if (Array.isArray(current)) {
-      if (multi) return current = cleanChildren(parent, current, marker, value);
-      cleanChildren(parent, current, null, value);
-    } else if (current == null || current === "" || !parent.firstChild) {
-      parent.appendChild(value);
-    } else parent.replaceChild(value, parent.firstChild);
-    current = value;
-  } else ;
-  return current;
-}
-function normalizeIncomingArray(normalized, array, current, unwrap2) {
-  let dynamic = false;
-  for (let i = 0, len = array.length; i < len; i++) {
-    let item = array[i], prev = current && current[normalized.length], t;
-    if (item == null || item === true || item === false) ;
-    else if ((t = typeof item) === "object" && item.nodeType) {
-      normalized.push(item);
-    } else if (Array.isArray(item)) {
-      dynamic = normalizeIncomingArray(normalized, item, prev) || dynamic;
-    } else if (t === "function") {
-      if (unwrap2) {
-        while (typeof item === "function") item = item();
-        dynamic = normalizeIncomingArray(normalized, Array.isArray(item) ? item : [item], Array.isArray(prev) ? prev : [prev]) || dynamic;
-      } else {
-        normalized.push(item);
-        dynamic = true;
-      }
-    } else {
-      const value = String(item);
-      if (prev && prev.nodeType === 3 && prev.data === value) normalized.push(prev);
-      else normalized.push(document.createTextNode(value));
-    }
-  }
-  return dynamic;
-}
-function appendNodes(parent, array, marker = null) {
-  for (let i = 0, len = array.length; i < len; i++) parent.insertBefore(array[i], marker);
-}
-function cleanChildren(parent, current, marker, replacement) {
-  if (marker === void 0) return parent.textContent = "";
-  const node = replacement || document.createTextNode("");
-  if (current.length) {
-    let inserted = false;
-    for (let i = current.length - 1; i >= 0; i--) {
-      const el = current[i];
-      if (node !== el) {
-        const isParent = el.parentNode === parent;
-        if (!inserted && !i) isParent ? parent.replaceChild(node, el) : parent.insertBefore(node, marker);
-        else isParent && el.remove();
-      } else inserted = true;
-    }
-  } else parent.insertBefore(node, marker);
-  return [node];
-}
 const IS_DEV = false;
 const equalFn = (a, b) => a === b;
+const $PROXY = /* @__PURE__ */ Symbol("solid-proxy");
 const $TRACK = /* @__PURE__ */ Symbol("solid-track");
 const signalOptions = {
   equals: equalFn
@@ -611,7 +23,7 @@ let Updates = null;
 let Effects = null;
 let ExecCount = 0;
 function createRoot(fn, detachedOwner) {
-  const listener = Listener, owner = Owner, unowned = fn.length === 0, current = owner, root = unowned ? UNOWNED : {
+  const listener = Listener, owner = Owner, unowned = fn.length === 0, current = detachedOwner === void 0 ? owner : detachedOwner, root = unowned ? UNOWNED : {
     owned: null,
     cleanups: null,
     context: current ? current.context : null,
@@ -642,6 +54,10 @@ function createSignal(value, options) {
   };
   return [readSignal.bind(s), setter];
 }
+function createRenderEffect(fn, value, options) {
+  const c = createComputation(fn, value, false, STALE);
+  updateComputation(c);
+}
 function createEffect(fn, value, options) {
   runEffects = runUserEffects;
   const c = createComputation(fn, value, false, STALE);
@@ -656,6 +72,9 @@ function createMemo(fn, value, options) {
   c.comparator = options.equals || void 0;
   updateComputation(c);
   return readSignal.bind(c);
+}
+function batch(fn) {
+  return runUpdates(fn, false);
 }
 function untrack(fn) {
   if (Listener === null) return fn();
@@ -676,6 +95,9 @@ function onCleanup(fn) {
   else if (Owner.cleanups === null) Owner.cleanups = [fn];
   else Owner.cleanups.push(fn);
   return fn;
+}
+function getListener() {
+  return Listener;
 }
 function readSignal() {
   if (this.sources && this.state) {
@@ -1001,6 +423,9 @@ function mapArray(list, mapFn, options = {}) {
     }
   };
 }
+function createComponent(Comp, props) {
+  return untrack(() => Comp(props || {}));
+}
 const narrowedError = (name) => `Stale read from <${name}>.`;
 function For(props) {
   const fallback = "fallback" in props && {
@@ -1026,6 +451,283 @@ function Show(props) {
     }
     return props.fallback;
   }, void 0, void 0);
+}
+const memo = (fn) => createMemo(() => fn());
+function reconcileArrays(parentNode, a, b) {
+  let bLength = b.length, aEnd = a.length, bEnd = bLength, aStart = 0, bStart = 0, after = a[aEnd - 1].nextSibling, map = null;
+  while (aStart < aEnd || bStart < bEnd) {
+    if (a[aStart] === b[bStart]) {
+      aStart++;
+      bStart++;
+      continue;
+    }
+    while (a[aEnd - 1] === b[bEnd - 1]) {
+      aEnd--;
+      bEnd--;
+    }
+    if (aEnd === aStart) {
+      const node = bEnd < bLength ? bStart ? b[bStart - 1].nextSibling : b[bEnd - bStart] : after;
+      while (bStart < bEnd) parentNode.insertBefore(b[bStart++], node);
+    } else if (bEnd === bStart) {
+      while (aStart < aEnd) {
+        if (!map || !map.has(a[aStart])) a[aStart].remove();
+        aStart++;
+      }
+    } else if (a[aStart] === b[bEnd - 1] && b[bStart] === a[aEnd - 1]) {
+      const node = a[--aEnd].nextSibling;
+      parentNode.insertBefore(b[bStart++], a[aStart++].nextSibling);
+      parentNode.insertBefore(b[--bEnd], node);
+      a[aEnd] = b[bEnd];
+    } else {
+      if (!map) {
+        map = /* @__PURE__ */ new Map();
+        let i = bStart;
+        while (i < bEnd) map.set(b[i], i++);
+      }
+      const index = map.get(a[aStart]);
+      if (index != null) {
+        if (bStart < index && index < bEnd) {
+          let i = aStart, sequence = 1, t;
+          while (++i < aEnd && i < bEnd) {
+            if ((t = map.get(a[i])) == null || t !== index + sequence) break;
+            sequence++;
+          }
+          if (sequence > index - bStart) {
+            const node = a[aStart];
+            while (bStart < index) parentNode.insertBefore(b[bStart++], node);
+          } else parentNode.replaceChild(b[bStart++], a[aStart++]);
+        } else aStart++;
+      } else a[aStart++].remove();
+    }
+  }
+}
+const $$EVENTS = "_$DX_DELEGATE";
+function render$1(code, element, init, options = {}) {
+  let disposer;
+  createRoot((dispose2) => {
+    disposer = dispose2;
+    element === document ? code() : insert(element, code(), element.firstChild ? null : void 0, init);
+  }, options.owner);
+  return () => {
+    disposer();
+    element.textContent = "";
+  };
+}
+function template(html, isImportNode, isSVG, isMathML) {
+  let node;
+  const create = () => {
+    const t = document.createElement("template");
+    t.innerHTML = html;
+    return t.content.firstChild;
+  };
+  const fn = () => (node || (node = create())).cloneNode(true);
+  fn.cloneNode = fn;
+  return fn;
+}
+function delegateEvents(eventNames, document2 = window.document) {
+  const e = document2[$$EVENTS] || (document2[$$EVENTS] = /* @__PURE__ */ new Set());
+  for (let i = 0, l = eventNames.length; i < l; i++) {
+    const name = eventNames[i];
+    if (!e.has(name)) {
+      e.add(name);
+      document2.addEventListener(name, eventHandler);
+    }
+  }
+}
+function setAttribute(node, name, value) {
+  if (value == null) node.removeAttribute(name);
+  else node.setAttribute(name, value);
+}
+function className(node, value) {
+  if (value == null) node.removeAttribute("class");
+  else node.className = value;
+}
+function addEventListener(node, name, handler, delegate) {
+  {
+    if (Array.isArray(handler)) {
+      node[`$$${name}`] = handler[0];
+      node[`$$${name}Data`] = handler[1];
+    } else node[`$$${name}`] = handler;
+  }
+}
+function style(node, value, prev) {
+  if (!value) return prev ? setAttribute(node, "style") : value;
+  const nodeStyle = node.style;
+  if (typeof value === "string") return nodeStyle.cssText = value;
+  typeof prev === "string" && (nodeStyle.cssText = prev = void 0);
+  prev || (prev = {});
+  value || (value = {});
+  let v, s;
+  for (s in prev) {
+    value[s] == null && nodeStyle.removeProperty(s);
+    delete prev[s];
+  }
+  for (s in value) {
+    v = value[s];
+    if (v !== prev[s]) {
+      nodeStyle.setProperty(s, v);
+      prev[s] = v;
+    }
+  }
+  return prev;
+}
+function use(fn, element, arg) {
+  return untrack(() => fn(element, arg));
+}
+function insert(parent, accessor, marker, initial) {
+  if (marker !== void 0 && !initial) initial = [];
+  if (typeof accessor !== "function") return insertExpression(parent, accessor, initial, marker);
+  createRenderEffect((current) => insertExpression(parent, accessor(), current, marker), initial);
+}
+function eventHandler(e) {
+  let node = e.target;
+  const key = `$$${e.type}`;
+  const oriTarget = e.target;
+  const oriCurrentTarget = e.currentTarget;
+  const retarget = (value) => Object.defineProperty(e, "target", {
+    configurable: true,
+    value
+  });
+  const handleNode = () => {
+    const handler = node[key];
+    if (handler && !node.disabled) {
+      const data = node[`${key}Data`];
+      data !== void 0 ? handler.call(node, data, e) : handler.call(node, e);
+      if (e.cancelBubble) return;
+    }
+    node.host && typeof node.host !== "string" && !node.host._$host && node.contains(e.target) && retarget(node.host);
+    return true;
+  };
+  const walkUpTree = () => {
+    while (handleNode() && (node = node._$host || node.parentNode || node.host)) ;
+  };
+  Object.defineProperty(e, "currentTarget", {
+    configurable: true,
+    get() {
+      return node || document;
+    }
+  });
+  if (e.composedPath) {
+    const path = e.composedPath();
+    retarget(path[0]);
+    for (let i = 0; i < path.length - 2; i++) {
+      node = path[i];
+      if (!handleNode()) break;
+      if (node._$host) {
+        node = node._$host;
+        walkUpTree();
+        break;
+      }
+      if (node.parentNode === oriCurrentTarget) {
+        break;
+      }
+    }
+  } else walkUpTree();
+  retarget(oriTarget);
+}
+function insertExpression(parent, value, current, marker, unwrapArray) {
+  while (typeof current === "function") current = current();
+  if (value === current) return current;
+  const t = typeof value, multi = marker !== void 0;
+  parent = multi && current[0] && current[0].parentNode || parent;
+  if (t === "string" || t === "number") {
+    if (t === "number") {
+      value = value.toString();
+      if (value === current) return current;
+    }
+    if (multi) {
+      let node = current[0];
+      if (node && node.nodeType === 3) {
+        node.data !== value && (node.data = value);
+      } else node = document.createTextNode(value);
+      current = cleanChildren(parent, current, marker, node);
+    } else {
+      if (current !== "" && typeof current === "string") {
+        current = parent.firstChild.data = value;
+      } else current = parent.textContent = value;
+    }
+  } else if (value == null || t === "boolean") {
+    current = cleanChildren(parent, current, marker);
+  } else if (t === "function") {
+    createRenderEffect(() => {
+      let v = value();
+      while (typeof v === "function") v = v();
+      current = insertExpression(parent, v, current, marker);
+    });
+    return () => current;
+  } else if (Array.isArray(value)) {
+    const array = [];
+    const currentArray = current && Array.isArray(current);
+    if (normalizeIncomingArray(array, value, current, unwrapArray)) {
+      createRenderEffect(() => current = insertExpression(parent, array, current, marker, true));
+      return () => current;
+    }
+    if (array.length === 0) {
+      current = cleanChildren(parent, current, marker);
+      if (multi) return current;
+    } else if (currentArray) {
+      if (current.length === 0) {
+        appendNodes(parent, array, marker);
+      } else reconcileArrays(parent, current, array);
+    } else {
+      current && cleanChildren(parent);
+      appendNodes(parent, array);
+    }
+    current = array;
+  } else if (value.nodeType) {
+    if (Array.isArray(current)) {
+      if (multi) return current = cleanChildren(parent, current, marker, value);
+      cleanChildren(parent, current, null, value);
+    } else if (current == null || current === "" || !parent.firstChild) {
+      parent.appendChild(value);
+    } else parent.replaceChild(value, parent.firstChild);
+    current = value;
+  } else ;
+  return current;
+}
+function normalizeIncomingArray(normalized, array, current, unwrap2) {
+  let dynamic = false;
+  for (let i = 0, len = array.length; i < len; i++) {
+    let item = array[i], prev = current && current[normalized.length], t;
+    if (item == null || item === true || item === false) ;
+    else if ((t = typeof item) === "object" && item.nodeType) {
+      normalized.push(item);
+    } else if (Array.isArray(item)) {
+      dynamic = normalizeIncomingArray(normalized, item, prev) || dynamic;
+    } else if (t === "function") {
+      if (unwrap2) {
+        while (typeof item === "function") item = item();
+        dynamic = normalizeIncomingArray(normalized, Array.isArray(item) ? item : [item], Array.isArray(prev) ? prev : [prev]) || dynamic;
+      } else {
+        normalized.push(item);
+        dynamic = true;
+      }
+    } else {
+      const value = String(item);
+      if (prev && prev.nodeType === 3 && prev.data === value) normalized.push(prev);
+      else normalized.push(document.createTextNode(value));
+    }
+  }
+  return dynamic;
+}
+function appendNodes(parent, array, marker = null) {
+  for (let i = 0, len = array.length; i < len; i++) parent.insertBefore(array[i], marker);
+}
+function cleanChildren(parent, current, marker, replacement) {
+  if (marker === void 0) return parent.textContent = "";
+  const node = replacement || document.createTextNode("");
+  if (current.length) {
+    let inserted = false;
+    for (let i = current.length - 1; i >= 0; i--) {
+      const el = current[i];
+      if (node !== el) {
+        const isParent = el.parentNode === parent;
+        if (!inserted && !i) isParent ? parent.replaceChild(node, el) : parent.insertBefore(node, marker);
+        else isParent && el.remove();
+      } else inserted = true;
+    }
+  } else parent.insertBefore(node, marker);
+  return [node];
 }
 const TEST_API_GLOBAL_NAME = "__AW_TEST__";
 const RENDER_META_GLOBAL_NAME = "__AW_VIEWER_RENDER_META__";
@@ -3285,7 +2987,7 @@ function getNodes(target, symbol) {
 }
 function getNode(nodes, property, value) {
   if (nodes[property]) return nodes[property];
-  const [s, set] = createSignal$1(value, {
+  const [s, set] = createSignal(value, {
     equals: false,
     internal: true
   });
@@ -3330,7 +3032,7 @@ const proxyTraps = {
   get(target, property, receiver) {
     if (property === $RAW) return target;
     if (property === $PROXY) return receiver;
-    if (property === $TRACK$1) {
+    if (property === $TRACK) {
       trackSelf(target);
       return receiver;
     }
@@ -3349,7 +3051,7 @@ const proxyTraps = {
     return isWrappable(value) ? wrap(value) : value;
   },
   has(target, property) {
-    if (property === $RAW || property === $PROXY || property === $TRACK$1 || property === $NODE || property === $HAS || property === "__proto__") return true;
+    if (property === $RAW || property === $PROXY || property === $TRACK || property === $NODE || property === $HAS || property === "__proto__") return true;
     getListener() && getNode(getNodes(target, $HAS), property)();
     return property in target;
   },
@@ -9250,7 +8952,7 @@ function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
   }
   return { agentBindingForId: agentBindingForId2, agentClaimUsesCurrentBoundAgent, buildAgentClaimAction: buildAgentClaimAction2, buildAgentClaimTargets: buildAgentClaimTargets2, describeAgentSessionStatus: describeAgentSessionStatus2, hasAgentClaimSessionBoundary: hasAgentClaimSessionBoundary2, hasExecutableAgentClaim: hasExecutableAgentClaim2, normalizedId: normalizedId2 };
 }
-var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$47 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$49 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$50 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$51 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$61 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row">`), _tmpl$62 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$63 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$64 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$65 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$66 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
+var _tmpl$ = /* @__PURE__ */ template(`<span>`), _tmpl$2 = /* @__PURE__ */ template(`<div>`), _tmpl$3 = /* @__PURE__ */ template(`<div class=entity-list-pending__progress>`), _tmpl$4 = /* @__PURE__ */ template(`<div class=entity-list-pending aria-live=polite aria-busy=true><div class=entity-list-pending__row><span class=entity-list-pending__spinner aria-hidden=true></span><span></span></div><div class=entity-list-pending__skeleton aria-hidden=true><span></span><span></span><span>`), _tmpl$5 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$6 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$7 = /* @__PURE__ */ template(`<details class=diagnostic><summary></summary><div class="stack flow-top">`), _tmpl$8 = /* @__PURE__ */ template(`<div class=badge-row>`), _tmpl$9 = /* @__PURE__ */ template(`<div class=feedback-summary>`), _tmpl$0 = /* @__PURE__ */ template(`<div class=summary-grid>`), _tmpl$1 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$10 = /* @__PURE__ */ template(`<div class=action-grid>`), _tmpl$11 = /* @__PURE__ */ template(`<div class=feedback-detail><div class=metric__label>`), _tmpl$12 = /* @__PURE__ */ template(`<div class=inline-help-tip><button type=button class=inline-help-tip__button>?</button><div class=inline-help-tip__panel><div class=inline-help-tip__title></div><div class=inline-help-tip__body>`), _tmpl$13 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row></div><div class=feedback-summary>`), _tmpl$14 = /* @__PURE__ */ template(`<div class="feedback-detail flow-top--tight">`), _tmpl$15 = /* @__PURE__ */ template(`<div class="badge-row badge-row--tight">`), _tmpl$16 = /* @__PURE__ */ template(`<div><div class=metric__label></div><div class=metric__value>`), _tmpl$17 = /* @__PURE__ */ template(`<div class=event-card__meta>`), _tmpl$18 = /* @__PURE__ */ template(`<div><div class=event-card__title><span>`), _tmpl$19 = /* @__PURE__ */ template(`<div class=panel__eyebrow>`), _tmpl$20 = /* @__PURE__ */ template(`<div class=panel__meta-copy>`), _tmpl$21 = /* @__PURE__ */ template(`<div><div class=panel__header><div class="stack stack--compact"><div class=panel__title></div></div></div><div class="panel__body stack">`), _tmpl$22 = /* @__PURE__ */ template(`<div><div class=callout__header><div class=callout__title></div></div><div class=callout__body>`), _tmpl$23 = /* @__PURE__ */ template(`<div class=field><label></label><input type=text autocomplete=off>`), _tmpl$24 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=complete-login>`), _tmpl$25 = /* @__PURE__ */ template(`<div class=stack>`), _tmpl$26 = /* @__PURE__ */ template(`<div class=stack><div class=control-grid><div class=field><label></label><input type=email autocomplete=email></div></div><div class=toolbar><button data-auth-action=start-login>`), _tmpl$27 = /* @__PURE__ */ template(`<div class=auth-gate data-viewer-fixture-state=hosted_login_gate role=dialog aria-modal=true aria-labelledby=hosted-login-gate-title tabindex=-1><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=hosted-login-gate-title class=auth-gate__title></h1></div></div><div class=feedback-summary>`), _tmpl$28 = /* @__PURE__ */ template(`<div class=toolbar><button>`), _tmpl$29 = /* @__PURE__ */ template(`<details class=entry-menu><summary class=entry-menu__toggle></summary><div class="entry-menu__panel stack"><div><div class="panel__title panel__title--spaced"></div><div class=feedback-detail></div></div><div class=toolbar><button data-locale=zh>中文</button><button data-locale=en>English</button></div><div class=badge-row></div><div class=feedback-detail>`), _tmpl$30 = /* @__PURE__ */ template(`<div class="stack stack--compact"><div class=feedback-summary></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div></div><div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$31 = /* @__PURE__ */ template(`<div class="stack stack--compact">`), _tmpl$32 = /* @__PURE__ */ template(`<button>`), _tmpl$33 = /* @__PURE__ */ template(`<div class=auth-gate role=dialog aria-modal=true aria-labelledby=starter-oc-gate-title data-viewer-fixture-state=starter_oc_required_gate><div class=auth-gate__dialog><div class=auth-gate__header><div><div class=panel__eyebrow></div><h1 id=starter-oc-gate-title class=auth-gate__title></h1></div></div><div class=feedback-detail></div><div class=toolbar>`), _tmpl$34 = /* @__PURE__ */ template(`<button data-testid=viewer-playthrough-action-claim-starter-oc>`), _tmpl$35 = /* @__PURE__ */ template(`<div class=control-grid><div class=field><label for=agent-claim-target></label><select id=agent-claim-target>`), _tmpl$36 = /* @__PURE__ */ template(`<option>`), _tmpl$37 = /* @__PURE__ */ template(`<div class="stage-hero stage-hero--compact"><div class=stage-hero__topline><div class="stack stack--hero"><div class=stage-hero__eyebrow-row><div class=stage-hero__eyebrow></div></div><div class=stage-hero__title></div><div class=stage-hero__lede></div></div></div><div class="hero-focus-grid hero-focus-grid--compact"><div class=hero-focus-card><div class=hero-focus-card__label></div><div></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div></div><div class=hero-focus-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div></div><div class=hero-focus-card data-testid=viewer-identity-card><div class=hero-focus-card__label></div><div class="hero-focus-card__value hero-focus-card__value--body"></div><div class=hero-focus-card__detail></div><div class=hero-focus-card__detail></div></div></div><div class=toolbar><button type=button data-testid=viewer-playthrough-action-request-snapshot></button><button type=button data-testid=viewer-playthrough-action-step></button></div><div class=feedback-detail data-testid=viewer-primary-action-preview></div><div class=stage-hero__mobile-shortcuts><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel>`), _tmpl$38 = /* @__PURE__ */ template(`<div class="badge-row stage-hero__selection">`), _tmpl$39 = /* @__PURE__ */ template(`<nav class=mobile-rail><a class=mobile-rail__link href=#viewer-stage-panel></a><a class=mobile-rail__link href=#viewer-targets-panel></a><a class=mobile-rail__link href=#viewer-details-panel></a><a class="mobile-rail__link mobile-rail__link--diagnostics"href=#viewer-diagnostics-panel>`), _tmpl$40 = /* @__PURE__ */ template(`<div class=stack><div class=field><label for=entity-search></label><input id=entity-search type=search></div><div><div class="panel__title panel__title--spaced"></div><div class=list></div></div><div><div class="panel__title panel__title--spaced"></div><div class=list>`), _tmpl$41 = /* @__PURE__ */ template(`<span class=list-item__selected-label>`), _tmpl$42 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=agent><div class=list-item__header><div class=list-item__title></div></div><div class=badge-row></div><div class=list-item__meta></div><div class=list-item__meta>`), _tmpl$43 = /* @__PURE__ */ template(`<button class=list-item data-select-kind=location><div class=list-item__header><div class=list-item__title></div></div><div class=list-item__meta>`), _tmpl$44 = /* @__PURE__ */ template(`<div class=toolbar><button data-auth-action=logout>`), _tmpl$45 = /* @__PURE__ */ template(`<button data-auth-action=logout>`), _tmpl$46 = /* @__PURE__ */ template(`<div class=event-list>`), _tmpl$47 = /* @__PURE__ */ template(`<details class=gameplay-details-surface id=viewer-gameplay-details open><summary class=gameplay-details-surface__summary><div class=diagnostic-surface__title><span></span><span class=diagnostic-surface__meta></span></div></summary><div class="stack flow-top"><details id=viewer-diagnostics-panel class="panel diagnostic-surface"data-viewer-surface=diagnostics><summary class="panel__header diagnostic-surface__summary"><div class=diagnostic-surface__title><div class=panel__title></div><div class=diagnostic-surface__meta></div></div><div class=badge-row></div></summary><div class="panel__body stack"><div class=badge-row></div><div class=badge-row></div><div class=toolbar></div><div class=summary-grid></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$48 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$49 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced"></div><div class=action-grid>`), _tmpl$50 = /* @__PURE__ */ template(`<div class="badge-row command-surface__auth-boundary">`), _tmpl$51 = /* @__PURE__ */ template(`<div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=4>`), _tmpl$52 = /* @__PURE__ */ template(`<div class=toolbar><button data-chat-send=1>`), _tmpl$53 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-visibility-toggle=1>`), _tmpl$54 = /* @__PURE__ */ template(`<div class=field><label for=strong-auth-approval-code></label><input id=strong-auth-approval-code type=password autocomplete=off>`), _tmpl$55 = /* @__PURE__ */ template(`<div class=field><label for=prompt-system></label><textarea id=prompt-system rows=4>`), _tmpl$56 = /* @__PURE__ */ template(`<div class=field><label for=prompt-short></label><textarea id=prompt-short rows=3>`), _tmpl$57 = /* @__PURE__ */ template(`<div class=field><label for=prompt-long></label><textarea id=prompt-long rows=3>`), _tmpl$58 = /* @__PURE__ */ template(`<div class=toolbar><button data-prompt-action=preview></button><button data-prompt-action=apply>`), _tmpl$59 = /* @__PURE__ */ template(`<div class=toolbar><div class="field field--inline-flex"><label for=prompt-rollback-version></label><input id=prompt-rollback-version type=number min=0 step=1></div><button data-prompt-action=rollback>`), _tmpl$60 = /* @__PURE__ */ template(`<div class=toolbar><button disabled>`), _tmpl$61 = /* @__PURE__ */ template(`<div class="stack command-surface"><div class="badge-row command-surface__target-row"></div><div class="badge-row command-surface__capability-row command-surface__diagnostic-strip">`), _tmpl$62 = /* @__PURE__ */ template(`<div><div class="panel__title panel__title--spaced panel__title--danger"></div><pre class=json>`), _tmpl$63 = /* @__PURE__ */ template(`<div class=stack><div class=badge-row></div><div><div class="panel__title panel__title--spaced"></div><div class=badge-row></div><div class="feedback-detail flow-top">`), _tmpl$64 = /* @__PURE__ */ template(`<section class="panel panel--targets"id=viewer-targets-panel data-viewer-surface=targets><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`), _tmpl$65 = /* @__PURE__ */ template(`<section class="panel panel--stage"id=viewer-stage-panel data-viewer-surface=stage><div class="panel__body panel__body--stage"><div class=stack>`), _tmpl$66 = /* @__PURE__ */ template(`<section class="panel panel--details"id=viewer-details-panel data-viewer-surface=command><div class="panel__header panel__header--stack"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div><div class=panel__body>`);
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
 function observeViewerStateRevision() {

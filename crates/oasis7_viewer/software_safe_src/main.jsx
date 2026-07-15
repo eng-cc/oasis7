@@ -3378,7 +3378,7 @@ function InteractionPanel() {
         </div>
         <EmptyState class="command-surface__auth-boundary">{playerSessionReadyCopy()}</EmptyState>
       </Show>
-      <div class="badge-row command-surface__capability-row">
+      <div class="badge-row command-surface__capability-row command-surface__diagnostic-strip">
         <Badge>{`boundPlayer=${binding()?.playerId || "-"}`}</Badge>
         <Badge>{`boundKey=${binding()?.publicKey ? `${binding().publicKey.slice(0, 10)}…` : "-"}`}</Badge>
         <Badge class={promptControlsEnabled() ? "badge badge--good" : "badge badge--warn"}>
