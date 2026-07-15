@@ -496,9 +496,23 @@ $activeGovernedFiles = @(
   }
 )
 foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest, $activeBootstrap)) {
-  if ($activeGovernedFiles -notcontains $requiredActivePath) {
+  $requiredActiveLeaf = [System.IO.Path]::GetFileName($requiredActivePath)
+  $projectedActivePaths = @(
+    $activeGovernedFiles | Where-Object {
+      [System.IO.Path]::GetFileName($_) -eq $requiredActiveLeaf
+    }
+  )
+  if ($projectedActivePaths.Count -eq 0) {
     throw "fixture staged governed closure omitted required active target: $requiredActivePath"
   }
+  if ($projectedActivePaths.Count -ne 1) {
+    throw "fixture staged governed closure has ambiguous required active target: $requiredActiveLeaf"
+  }
+  $projectedActivePath = $projectedActivePaths[0]
+  if (!(Test-Path -LiteralPath $requiredActivePath -PathType Leaf)) {
+    throw "fixture logical active target is not reachable through its configured path: $requiredActivePath"
+  }
+  Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
 }
 return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
