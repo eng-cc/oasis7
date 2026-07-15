@@ -1,8 +1,10 @@
 use super::*;
 
+use std::sync::Condvar;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const OBSERVER_FAILURE: &str = "injected consensus progress observer failure";
+const OBSERVER_BACKPRESSURE: &str = "consensus progress observer queue saturated";
 
 #[derive(Clone)]
 struct ControllableConsensusProgressObserver {
@@ -25,6 +27,46 @@ impl NodeConsensusProgressObserver for ControllableConsensusProgressObserver {
     }
 }
 
+#[derive(Default)]
+struct BlockingObserverControl {
+    entered: AtomicBool,
+    release: AtomicBool,
+    calls: AtomicUsize,
+    observed_heights: Mutex<Vec<u64>>,
+    signal: Condvar,
+}
+
+struct BlockingConsensusProgressObserver {
+    control: Arc<BlockingObserverControl>,
+}
+
+impl NodeConsensusProgressObserver for BlockingConsensusProgressObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), String> {
+        self.control.calls.fetch_add(1, Ordering::SeqCst);
+        let mut observed_heights = self
+            .control
+            .observed_heights
+            .lock()
+            .expect("lock blocking observer heights");
+        observed_heights.push(snapshot.committed_height);
+        if !self.control.entered.swap(true, Ordering::SeqCst) {
+            self.control.signal.notify_all();
+            while !self.control.release.load(Ordering::SeqCst) {
+                observed_heights = self
+                    .control
+                    .signal
+                    .wait(observed_heights)
+                    .expect("wait for blocking observer release");
+            }
+        }
+        Ok(())
+    }
+}
+
 fn retained_commit_publication_count(network: &TestInMemoryNetwork, world_id: &str) -> usize {
     let topic = super::super::network_bridge::default_consensus_commit_topic(world_id);
     network
@@ -34,6 +76,185 @@ fn retained_commit_publication_count(network: &TestInMemoryNetwork, world_id: &s
         .get(topic.as_str())
         .map(Vec::len)
         .unwrap_or_default()
+}
+
+#[test]
+fn blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_tick() {
+    run_test_with_timeout(
+        "blocking_consensus_progress_observer_is_bounded_coalescing_and_never_stalls_tick",
+        Duration::from_secs(8),
+        || {
+            let world_id = "world-blocking-consensus-progress-observer";
+            let replication_root = temp_dir("blocking-consensus-progress-observer");
+            let network = Arc::new(TestInMemoryNetwork::default());
+            let dht = Arc::new(TestReplicaMaintenanceDht::new("source-a", "node-a"));
+            let observer = Arc::new(BlockingObserverControl::default());
+            let execution_calls = Arc::new(Mutex::new(Vec::new()));
+            let config = NodeConfig::new("node-a", world_id, NodeRole::Sequencer)
+                .expect("config")
+                .with_tick_interval(Duration::from_millis(10))
+                .expect("tick interval")
+                .with_pos_config(signed_pos_config_with_signer_seeds(
+                    vec![PosValidator {
+                        validator_id: "node-a".to_string(),
+                        stake: 100,
+                    }],
+                    &[("node-a", 101)],
+                ))
+                .expect("pos config")
+                .with_replication(signed_replication_config(replication_root.clone(), 101))
+                .with_replica_maintenance(NodeReplicaMaintenanceConfig {
+                    max_content_hash_samples_per_round: 2,
+                    target_replicas_per_blob: 2,
+                    max_repairs_per_round: 2,
+                    max_rebalances_per_round: 0,
+                    poll_interval_ms: 10,
+                    ..NodeReplicaMaintenanceConfig::default()
+                })
+                .expect("replica maintenance");
+            let mut runtime = NodeRuntime::new(config.clone())
+                .with_execution_hook(RecordingExecutionHook::new(Arc::clone(&execution_calls)))
+                .with_consensus_progress_observer(BlockingConsensusProgressObserver {
+                    control: Arc::clone(&observer),
+                })
+                .with_replication_network(NodeReplicationNetworkHandle::new(network.clone()))
+                .with_replica_maintenance_dht(dht.clone());
+
+            runtime
+                .submit_consensus_action_payload(
+                    1,
+                    serde_cbor::to_vec(&serde_json::json!({"kind": "blocking-observer"}))
+                        .expect("action payload"),
+                )
+                .expect("submit action");
+            let batches_ready = runtime.committed_action_batches_handle();
+            runtime.start().expect("start runtime");
+
+            let entered = wait_until(Instant::now() + Duration::from_secs(2), || {
+                observer.entered.load(Ordering::SeqCst)
+            });
+            assert!(
+                entered,
+                "observer never entered its deliberately blocking call"
+            );
+            let blocked_at = runtime.snapshot();
+            let publications_at = retained_commit_publication_count(network.as_ref(), world_id);
+            let maintenance_at = dht.published_records().len();
+            let blocked_progress_observed =
+                wait_until(Instant::now() + Duration::from_secs(2), || {
+                    let snapshot = runtime.snapshot();
+                    let persisted =
+                        super::super::pos_state_store::PosNodeStateStore::from_replication(
+                            config.replication.as_ref().expect("replication config"),
+                        )
+                        .load()
+                        .ok()
+                        .flatten();
+                    snapshot.tick_count >= blocked_at.tick_count.saturating_add(5)
+                        && snapshot.consensus.committed_height
+                            >= blocked_at.consensus.committed_height.saturating_add(2)
+                        && snapshot.consensus.last_execution_height
+                            >= blocked_at.consensus.last_execution_height.saturating_add(2)
+                        && retained_commit_publication_count(network.as_ref(), world_id)
+                            > publications_at
+                        && dht.published_records().len() > maintenance_at
+                        && persisted.as_ref().is_some_and(|state| {
+                            state.committed_height
+                                >= blocked_at.consensus.committed_height.saturating_add(2)
+                        })
+                        && batches_ready.wait_for_batches(Duration::ZERO)
+                        && !execution_calls
+                            .lock()
+                            .expect("lock execution calls")
+                            .is_empty()
+                });
+
+            let while_blocked = runtime.snapshot();
+            let publications_while_blocked =
+                retained_commit_publication_count(network.as_ref(), world_id);
+            let maintenance_while_blocked = dht.published_records().len();
+            let persisted_while_blocked =
+                super::super::pos_state_store::PosNodeStateStore::from_replication(
+                    config.replication.as_ref().expect("replication config"),
+                )
+                .load()
+                .ok()
+                .flatten();
+            let committed_batch_while_blocked = batches_ready.wait_for_batches(Duration::ZERO);
+            let calls_while_blocked = observer.calls.load(Ordering::SeqCst);
+            let latest_height_while_blocked = while_blocked.consensus.committed_height;
+
+            observer.release.store(true, Ordering::SeqCst);
+            observer.signal.notify_all();
+            let recovered = wait_until(Instant::now() + Duration::from_secs(2), || {
+                let snapshot = runtime.snapshot();
+                observer
+                    .observed_heights
+                    .lock()
+                    .expect("lock observed heights")
+                    .last()
+                    .is_some_and(|height| *height >= latest_height_while_blocked)
+                    && snapshot.consensus_progress_observer_error.is_none()
+            });
+            let recovered_snapshot = runtime.snapshot();
+            runtime.stop().expect("stop runtime");
+            let observed_heights = observer
+                .observed_heights
+                .lock()
+                .expect("lock observed heights")
+                .clone();
+            let total_observer_calls = observer.calls.load(Ordering::SeqCst);
+            let execution_call_count = execution_calls.lock().expect("lock execution calls").len();
+            let _ = fs::remove_dir_all(&replication_root);
+
+            assert!(
+                blocked_progress_observed,
+                "blocking observer delayed tick/execution progress: blocked_at={blocked_at:?} while_blocked={while_blocked:?}",
+            );
+            assert!(
+                committed_batch_while_blocked && execution_call_count > 0,
+                "blocking observer delayed execution or committed-batch delivery: batch_ready={committed_batch_while_blocked} execution_calls={execution_call_count}",
+            );
+            assert!(
+                publications_while_blocked > publications_at,
+                "blocking observer delayed consensus rebroadcast: before={publications_at} during={publications_while_blocked}",
+            );
+            assert!(
+                maintenance_while_blocked > maintenance_at,
+                "blocking observer delayed replica maintenance: before={maintenance_at} during={maintenance_while_blocked}",
+            );
+            assert!(
+                persisted_while_blocked.as_ref().is_some_and(|persisted| {
+                    persisted.committed_height >= while_blocked.consensus.committed_height
+                }),
+                "blocking observer delayed engine save: persisted={persisted_while_blocked:?} while_blocked_height={}",
+                while_blocked.consensus.committed_height,
+            );
+            assert!(
+                while_blocked
+                    .consensus_progress_observer_error
+                    .as_deref()
+                    .is_some_and(|error| error.contains(OBSERVER_BACKPRESSURE)),
+                "bounded queue saturation must be visible through the dedicated observer error: {:?}",
+                while_blocked.consensus_progress_observer_error,
+            );
+            assert_eq!(
+                calls_while_blocked, 1,
+                "a blocked observer must have at most one active invocation",
+            );
+            assert!(
+                recovered && total_observer_calls >= 2,
+                "observer queue was not bounded/coalescing or did not recover: recovered={recovered} calls={total_observer_calls} heights={observed_heights:?} snapshot={recovered_snapshot:?}",
+            );
+            assert!(
+                observed_heights
+                    .last()
+                    .is_some_and(|height| { *height >= while_blocked.consensus.committed_height }),
+                "coalescing observer did not receive the latest pending snapshot: heights={observed_heights:?} while_blocked={while_blocked:?}",
+            );
+            assert_eq!(recovered_snapshot.consensus_progress_observer_error, None);
+        },
+    );
 }
 
 #[test]

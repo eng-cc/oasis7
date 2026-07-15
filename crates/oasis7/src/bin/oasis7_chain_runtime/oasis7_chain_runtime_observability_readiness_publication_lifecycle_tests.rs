@@ -312,7 +312,7 @@ fn publication_lifecycle_rejects_zero_or_missing_stake_authority_before_persisti
                     result
                         .as_ref()
                         .err()
-                        .map(|error| (error.reason, error.detail)),
+                        .map(|error| (error.reason, error.detail.clone())),
                     state_before
                         .as_deref()
                         .map(String::from_utf8_lossy)
@@ -361,7 +361,7 @@ fn publication_state_replacement_never_deletes_last_good_destination_before_atom
     let error = result.expect_err("injected replacement failure must propagate");
     assert_eq!(
         (error.reason, error.detail),
-        ("state_persist_failed", "state_replace_failed")
+        ("state_persist_failed", "state_replace_failed".to_string())
     );
     assert_eq!(
         fs::read(&destination).expect("read destination after replacement failure"),

@@ -39,6 +39,7 @@ use oasis7_proto::distributed_dht as proto_dht;
 use oasis7_proto::world_error::WorldError as ProtoWorldError;
 use serde::Deserialize;
 
+mod consensus_progress_observer;
 mod consensus_support;
 mod error;
 mod execution_hook;
@@ -131,12 +132,15 @@ pub use types_consensus::{
     NodeValidatorStakeProofStepSnapshot,
 };
 
+pub use consensus_progress_observer::NodeConsensusProgressObserver;
+use consensus_progress_observer::{
+    ConsensusProgressObserverDispatcher, publish_runtime_progress_snapshot,
+};
 use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,
 };
 use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
-pub use node_runtime_core::NodeConsensusProgressObserver;
-use node_runtime_core::{RuntimeState, publish_runtime_progress_snapshot};
+use node_runtime_core::RuntimeState;
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use provider_publication_queue::{ProviderPublicationEnqueueResult, ProviderPublicationQueue};
@@ -217,8 +221,8 @@ pub struct NodeRuntime {
     feedback_store: Option<Arc<FeedbackStore>>,
     pending_feedback_announces: Arc<Mutex<Vec<FeedbackAnnounce>>>,
     execution_hook: Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeExecutionHook>>>>,
-    consensus_progress_observer:
-        Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeConsensusProgressObserver>>>>,
+    consensus_progress_observer: Option<Box<dyn NodeConsensusProgressObserver>>,
+    consensus_progress_observer_dispatcher: Option<ConsensusProgressObserverDispatcher>,
     replica_maintenance_dht:
         Option<Arc<dyn proto_dht::DistributedDht<ProtoWorldError> + Send + Sync>>,
     pending_consensus_actions: Arc<Mutex<Vec<NodeConsensusAction>>>,
@@ -496,7 +500,27 @@ impl NodeRuntime {
         let running = Arc::clone(&self.running);
         let state = Arc::clone(&self.state);
         let execution_hook = self.execution_hook.clone();
-        let consensus_progress_observer = self.consensus_progress_observer.clone();
+        if self.consensus_progress_observer_dispatcher.is_none()
+            && let Some(observer) = self.consensus_progress_observer.take()
+        {
+            self.consensus_progress_observer_dispatcher = Some(
+                ConsensusProgressObserverDispatcher::spawn(
+                    self.config.node_id.as_str(),
+                    Arc::clone(&self.state),
+                    observer,
+                )
+                .map_err(|error| {
+                    self.running.store(false, Ordering::SeqCst);
+                    NodeError::ThreadSpawnFailed {
+                        reason: error.to_string(),
+                    }
+                })?,
+            );
+        }
+        let consensus_progress_observer = self
+            .consensus_progress_observer_dispatcher
+            .as_ref()
+            .map(ConsensusProgressObserverDispatcher::submitter);
         let replica_maintenance = self.config.replica_maintenance;
         let replica_maintenance_dht = self.replica_maintenance_dht.clone();
         let pending_consensus_actions = Arc::clone(&self.pending_consensus_actions);

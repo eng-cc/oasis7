@@ -1,12 +1,14 @@
 use std::path::Path;
 
-use oasis7_node::NodeSnapshot;
-use serde::Deserialize;
-
 use super::super::publication_lifecycle::{
     LifecycleError, PublicationHeadBinding, PublicationLifecycleSnapshot,
     SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_complete_publication_quorum_at_height, load_snapshot,
 };
+use super::super::publication_proof::{
+    PublicationExecutionRecord, PublicationProofError, PublicationProofErrorKind, load_record,
+    scan_contiguous_history, validate_edge, validate_record,
+};
+use oasis7_node::NodeSnapshot;
 
 use super::{
     ChainConsensusNetworkHeadStatus, ChainNodeObservabilityAlert, ChainNodeObservabilityStatus,
@@ -14,8 +16,6 @@ use super::{
     push_local_chain_ahead_alert, push_observability_alert,
     sequencer_head_publication_pending_summary,
 };
-
-const MAX_PUBLICATION_EPISODE_RECORD_SCAN: usize = 255;
 
 pub(super) fn push_publication_or_divergence_alert(
     alerts: &mut Vec<ChainNodeObservabilityAlert>,
@@ -177,23 +177,13 @@ fn derive_from_durable_episode(
             format!("episode_height={}", episode.height),
         ));
     }
-    let mut records = vec![local, parent];
-    while records.last().expect("nonempty records").height > episode.height {
-        if records.len() == MAX_PUBLICATION_EPISODE_RECORD_SCAN {
-            return Err(PublicationProofRejection::new(
-                Reason::ScanLimitExceeded,
-                format!("records={}", records.len() + 1),
-            ));
-        }
-        let oldest = records.last().expect("nonempty records");
-        let previous_height = oldest.height.checked_sub(1).ok_or_else(|| {
-            PublicationProofRejection::new(Reason::StateBindingInvalid, "episode_before_genesis")
-        })?;
-        let previous = load_record(records_dir, previous_height)?;
-        validate_record(&previous, previous_height, snapshot.world_id.as_str())?;
-        validate_edge(oldest, &previous)?;
-        records.push(previous);
-    }
+    let records = scan_contiguous_history(
+        records_dir,
+        snapshot.world_id.as_str(),
+        local,
+        parent,
+        Some(episode.height),
+    )?;
     let retained_episode = records
         .iter()
         .find(|record| record.height == episode.height)
@@ -215,42 +205,23 @@ fn derive_from_durable_episode(
 fn derive_from_retained_history(
     snapshot: &NodeSnapshot,
     records_dir: &Path,
-    mut records: Vec<PublicationExecutionRecord>,
+    records: Vec<PublicationExecutionRecord>,
     observed_at_unix_ms: i64,
 ) -> Result<PublicationEpisodeProof, PublicationProofRejection> {
-    loop {
-        let episode_index = records.len() - 2;
-        let episode = records[episode_index].clone();
-        if observed_at_unix_ms
-            .saturating_sub(episode.timestamp_ms)
-            .max(0)
-            > SEQUENCER_HEAD_PUBLICATION_GRACE_MS
-        {
-            return Err(PublicationProofRejection::new(
-                Reason::GraceExpired,
-                format!("episode_started_at_ms={}", episode.timestamp_ms),
-            ));
-        }
-        if records.len() == MAX_PUBLICATION_EPISODE_RECORD_SCAN {
-            let oldest_height = records.last().expect("nonempty records").height;
-            if oldest_height > 0 && record_path(records_dir, oldest_height - 1).exists() {
-                return Err(PublicationProofRejection::new(
-                    Reason::ScanLimitExceeded,
-                    format!("records={}", records.len() + 1),
-                ));
-            }
-            return validate_grace(episode, observed_at_unix_ms);
-        }
-
-        let oldest = records.last().expect("nonempty records");
-        let Some(previous_height) = oldest.height.checked_sub(1) else {
-            return validate_grace(episode, observed_at_unix_ms);
-        };
-        let previous = load_record(records_dir, previous_height)?;
-        validate_record(&previous, previous_height, snapshot.world_id.as_str())?;
-        validate_edge(oldest, &previous)?;
-        records.push(previous);
-    }
+    let [local, parent] = records.as_slice() else {
+        return Err(PublicationProofRejection::new(
+            Reason::ContinuityInvalid,
+            "boundary_record_count",
+        ));
+    };
+    let history = scan_contiguous_history(
+        records_dir,
+        snapshot.world_id.as_str(),
+        local.clone(),
+        parent.clone(),
+        None,
+    )?;
+    validate_grace(history[history.len() - 2].clone(), observed_at_unix_ms)
 }
 
 fn validate_grace(
@@ -270,53 +241,6 @@ fn validate_grace(
         episode: binding_from_record(&episode),
         episode_age_ms,
     })
-}
-
-fn validate_record(
-    record: &PublicationExecutionRecord,
-    expected_height: u64,
-    expected_world_id: &str,
-) -> Result<(), PublicationProofRejection> {
-    if record.height != expected_height || record.world_id != expected_world_id {
-        return Err(PublicationProofRejection::new(
-            Reason::ContinuityInvalid,
-            format!("expected_height={expected_height}"),
-        ));
-    }
-    if nonempty_hash(record.node_block_hash.as_deref()).is_none()
-        || nonempty_hash(record.prev_node_block_hash.as_deref()).is_none()
-    {
-        return Err(PublicationProofRejection::new(
-            Reason::AncestryInvalid,
-            format!("height={expected_height}"),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_edge(
-    child: &PublicationExecutionRecord,
-    parent: &PublicationExecutionRecord,
-) -> Result<(), PublicationProofRejection> {
-    if child.height.checked_sub(1) != Some(parent.height) || child.world_id != parent.world_id {
-        return Err(PublicationProofRejection::new(
-            Reason::ContinuityInvalid,
-            format!("child_height={}", child.height),
-        ));
-    }
-    if child.prev_node_block_hash.as_deref() != parent.node_block_hash.as_deref() {
-        return Err(PublicationProofRejection::new(
-            Reason::AncestryInvalid,
-            format!("child_height={}", child.height),
-        ));
-    }
-    if child.timestamp_ms < parent.timestamp_ms {
-        return Err(PublicationProofRejection::new(
-            Reason::ChronologyInvalid,
-            format!("child_height={}", child.height),
-        ));
-    }
-    Ok(())
 }
 
 fn validate_boundary_bindings(
@@ -421,32 +345,6 @@ fn reject_publication_proof(
     observability.ready = false;
 }
 
-fn load_record(
-    records_dir: &Path,
-    height: u64,
-) -> Result<PublicationExecutionRecord, PublicationProofRejection> {
-    let path = record_path(records_dir, height);
-    let bytes = std::fs::read(&path).map_err(|error| {
-        let reason = if error.kind() == std::io::ErrorKind::NotFound {
-            Reason::RecordMissing
-        } else {
-            Reason::RecordMalformed
-        };
-        PublicationProofRejection::new(reason, format!("height={height}"))
-    })?;
-    serde_json::from_slice::<PublicationExecutionRecord>(&bytes).map_err(|_| {
-        PublicationProofRejection::new(Reason::RecordMalformed, format!("height={height}"))
-    })
-}
-
-fn nonempty_hash(value: Option<&str>) -> Option<&str> {
-    value.filter(|value| !value.trim().is_empty())
-}
-
-fn record_path(records_dir: &Path, height: u64) -> std::path::PathBuf {
-    records_dir.join(format!("{height:020}.json"))
-}
-
 struct PublicationEpisodeProof {
     episode: PublicationHeadBinding,
     episode_age_ms: i64,
@@ -477,6 +375,20 @@ impl PublicationProofRejection {
         let reason = match error.reason {
             "state_malformed" => Reason::StateMalformed,
             _ => Reason::StateBindingInvalid,
+        };
+        Self::new(reason, error.detail)
+    }
+}
+
+impl From<PublicationProofError> for PublicationProofRejection {
+    fn from(error: PublicationProofError) -> Self {
+        let reason = match error.kind {
+            PublicationProofErrorKind::RecordMissing => Reason::RecordMissing,
+            PublicationProofErrorKind::RecordMalformed => Reason::RecordMalformed,
+            PublicationProofErrorKind::ContinuityInvalid => Reason::ContinuityInvalid,
+            PublicationProofErrorKind::AncestryInvalid => Reason::AncestryInvalid,
+            PublicationProofErrorKind::ChronologyInvalid => Reason::ChronologyInvalid,
+            PublicationProofErrorKind::ScanLimitExceeded => Reason::ScanLimitExceeded,
         };
         Self::new(reason, error.detail)
     }
@@ -534,16 +446,4 @@ fn binding_matches_record(
         && binding.execution_block_hash == record.execution_block_hash
         && binding.execution_state_root == record.execution_state_root
         && binding.timestamp_ms == record.timestamp_ms
-}
-
-#[derive(Clone, Deserialize)]
-struct PublicationExecutionRecord {
-    world_id: String,
-    height: u64,
-    node_block_hash: Option<String>,
-    #[serde(default)]
-    prev_node_block_hash: Option<String>,
-    execution_block_hash: String,
-    execution_state_root: String,
-    timestamp_ms: i64,
 }

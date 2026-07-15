@@ -58,6 +58,8 @@ mod node_keypair_config;
 mod p2p_status;
 #[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
 mod publication_lifecycle;
+#[path = "oasis7_chain_runtime/publication_proof.rs"]
+mod publication_proof;
 #[path = "oasis7_chain_runtime/reward_runtime_settlement.rs"]
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
@@ -1138,6 +1140,8 @@ mod observability_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_transport_tests.rs"]
 mod observability_transport_tests;
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_status_payload_observer_tests.rs"]
+mod status_payload_observer_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_status_payload_tests.rs"]
 mod status_payload_tests;

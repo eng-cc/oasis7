@@ -15,45 +15,10 @@ use serde_json::Value as JsonValue;
 use crate::runtime_util::now_unix_ms;
 use crate::{
     NodeCommittedActionBatch, NodeCommittedActionBatchesHandle, NodeConfig, NodeConsensusAction,
-    NodeConsensusSnapshot, NodeError, NodeExecutionHook, NodeMainTokenControllerBindingConfig,
-    NodeMainTokenControllerSignerPolicy, NodeReplicationNetworkHandle, NodeRuntime,
+    NodeConsensusProgressObserver, NodeConsensusSnapshot, NodeError, NodeExecutionHook,
+    NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy,
+    NodeReplicationNetworkHandle, NodeRuntime,
 };
-
-pub trait NodeConsensusProgressObserver: Send {
-    fn observe_consensus_progress(
-        &mut self,
-        snapshot: &NodeConsensusSnapshot,
-        observed_at_ms: i64,
-    ) -> Result<(), String>;
-}
-
-pub(super) fn publish_runtime_progress_snapshot(
-    state: &Arc<Mutex<RuntimeState>>,
-    observer: Option<&Arc<Mutex<Box<dyn NodeConsensusProgressObserver>>>>,
-    snapshot: NodeConsensusSnapshot,
-    observed_at_ms: i64,
-) -> Result<(), NodeError> {
-    {
-        let mut current = state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        current.consensus = snapshot.clone();
-        current.last_tick_unix_ms = Some(observed_at_ms);
-    }
-    let observer_result = observer.map(|observer| {
-        observer
-            .lock()
-            .map_err(|_| "consensus progress observer lock poisoned".to_string())?
-            .observe_consensus_progress(&snapshot, observed_at_ms)
-    });
-    if let Some(observer_result) = observer_result {
-        let mut current = state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        current.consensus_progress_observer_error = observer_result.err();
-    }
-    Ok(())
-}
 
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeState {
@@ -263,7 +228,8 @@ impl fmt::Debug for NodeRuntime {
             .field("has_execution_hook", &self.execution_hook.is_some())
             .field(
                 "has_consensus_progress_observer",
-                &self.consensus_progress_observer.is_some(),
+                &(self.consensus_progress_observer.is_some()
+                    || self.consensus_progress_observer_dispatcher.is_some()),
             )
             .field("running", &self.running.load(Ordering::SeqCst))
             .finish()
@@ -289,6 +255,7 @@ impl NodeRuntime {
             pending_feedback_announces: Arc::new(Mutex::new(Vec::new())),
             execution_hook: None,
             consensus_progress_observer: None,
+            consensus_progress_observer_dispatcher: None,
             pending_consensus_actions: Arc::new(Mutex::new(Vec::new())),
             committed_action_batches: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -321,7 +288,7 @@ impl NodeRuntime {
     where
         T: NodeConsensusProgressObserver + 'static,
     {
-        self.consensus_progress_observer = Some(Arc::new(Mutex::new(Box::new(observer))));
+        self.consensus_progress_observer = Some(Box::new(observer));
         self
     }
 

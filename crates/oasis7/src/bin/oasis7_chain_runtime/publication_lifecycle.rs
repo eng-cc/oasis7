@@ -7,6 +7,10 @@ use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7_node::{NodeConsensusProgressObserver, NodeConsensusSnapshot, NodeRole, NodeSnapshot};
 use serde::{Deserialize, Serialize};
 
+use super::publication_proof::{
+    PublicationExecutionRecord, PublicationProofError, load_record, scan_contiguous_history,
+    validate_edge, validate_record,
+};
 use super::status_payload::{
     ChainConsensusNetworkHeadStatus, build_network_head_status, readiness_policy,
 };
@@ -14,7 +18,6 @@ use super::status_payload::{
 pub(super) const SEQUENCER_HEAD_PUBLICATION_GRACE_MS: i64 = 30_000;
 pub(super) const PUBLICATION_LAG_STATE_FILE: &str = "sequencer-publication-lag-state.json";
 const PUBLICATION_LAG_STATE_SCHEMA_VERSION: u32 = 1;
-const MAX_PUBLICATION_EPISODE_RECORD_SCAN: usize = 255;
 
 pub(super) fn has_authoritative_publication_stake(
     snapshot: &NodeSnapshot,
@@ -367,24 +370,8 @@ fn derive_retained_episode(
     local: PublicationExecutionRecord,
     parent: PublicationExecutionRecord,
 ) -> Result<PublicationHeadBinding, LifecycleError> {
-    let mut records = vec![local, parent];
-    loop {
-        if records.len() == MAX_PUBLICATION_EPISODE_RECORD_SCAN {
-            let oldest_height = records.last().expect("nonempty records").height;
-            if oldest_height > 0 && record_path(records_dir, oldest_height - 1).exists() {
-                return Err(LifecycleError::binding("scan_limit_exceeded"));
-            }
-            return PublicationHeadBinding::from_record(&records[records.len() - 2]);
-        }
-        let oldest = records.last().expect("nonempty records");
-        let Some(previous_height) = oldest.height.checked_sub(1) else {
-            return PublicationHeadBinding::from_record(&records[records.len() - 2]);
-        };
-        let previous = load_record(records_dir, previous_height)?;
-        validate_record(&previous, previous_height, world_id)?;
-        validate_edge(oldest, &previous)?;
-        records.push(previous);
-    }
+    let records = scan_contiguous_history(records_dir, world_id, local, parent, None)?;
+    PublicationHeadBinding::from_record(&records[records.len() - 2])
 }
 
 pub(super) fn has_complete_publication_quorum_at_height(
@@ -464,23 +451,22 @@ fn validate_contiguous_binding(
     local: &PublicationExecutionRecord,
     episode: &PublicationHeadBinding,
 ) -> Result<(), LifecycleError> {
-    let mut child = local.clone();
-    let mut scanned = 1_usize;
-    while child.height > episode.height {
-        if scanned == MAX_PUBLICATION_EPISODE_RECORD_SCAN {
-            return Err(LifecycleError::binding("scan_limit_exceeded"));
-        }
-        let height = child
-            .height
-            .checked_sub(1)
-            .ok_or_else(|| LifecycleError::binding("episode_before_genesis"))?;
-        let parent = load_record(records_dir, height)?;
-        validate_record(&parent, height, world_id)?;
-        validate_edge(&child, &parent)?;
-        child = parent;
-        scanned += 1;
-    }
-    if !episode.matches_record(&child) {
+    let parent_height = local
+        .height
+        .checked_sub(1)
+        .ok_or_else(|| LifecycleError::binding("episode_before_genesis"))?;
+    let parent = load_record(records_dir, parent_height)?;
+    let records = scan_contiguous_history(
+        records_dir,
+        world_id,
+        local.clone(),
+        parent,
+        Some(episode.height),
+    )?;
+    if !records
+        .last()
+        .is_some_and(|record| episode.matches_record(record))
+    {
         return Err(LifecycleError::binding("episode_binding_mismatch"));
     }
     Ok(())
@@ -615,54 +601,6 @@ fn bindings_equal(left: &PublicationHeadBinding, right: &PublicationHeadBinding)
         && left.timestamp_ms == right.timestamp_ms
 }
 
-fn validate_record(
-    record: &PublicationExecutionRecord,
-    expected_height: u64,
-    world_id: &str,
-) -> Result<(), LifecycleError> {
-    if record.height != expected_height || record.world_id != world_id {
-        return Err(LifecycleError::binding("record_continuity_invalid"));
-    }
-    if nonempty(record.node_block_hash.as_deref()).is_none()
-        || nonempty(record.prev_node_block_hash.as_deref()).is_none()
-    {
-        return Err(LifecycleError::binding("record_ancestry_invalid"));
-    }
-    Ok(())
-}
-
-fn validate_edge(
-    child: &PublicationExecutionRecord,
-    parent: &PublicationExecutionRecord,
-) -> Result<(), LifecycleError> {
-    if child.height.checked_sub(1) != Some(parent.height)
-        || child.world_id != parent.world_id
-        || child.prev_node_block_hash.as_deref() != parent.node_block_hash.as_deref()
-        || child.timestamp_ms < parent.timestamp_ms
-    {
-        return Err(LifecycleError::binding("record_edge_invalid"));
-    }
-    Ok(())
-}
-
-fn load_record(
-    records_dir: &Path,
-    height: u64,
-) -> Result<PublicationExecutionRecord, LifecycleError> {
-    let bytes = fs::read(record_path(records_dir, height)).map_err(|error| {
-        if error.kind() == ErrorKind::NotFound {
-            LifecycleError::binding("record_missing")
-        } else {
-            LifecycleError::malformed("record_read_failed")
-        }
-    })?;
-    serde_json::from_slice(&bytes).map_err(|_| LifecycleError::malformed("record_parse_failed"))
-}
-
-fn record_path(records_dir: &Path, height: u64) -> PathBuf {
-    records_dir.join(format!("{height:020}.json"))
-}
-
 fn nonempty(value: Option<&str>) -> Option<&str> {
     value.filter(|value| !value.trim().is_empty())
 }
@@ -670,40 +608,34 @@ fn nonempty(value: Option<&str>) -> Option<&str> {
 #[derive(Clone, Debug)]
 pub(super) struct LifecycleError {
     pub(super) reason: &'static str,
-    pub(super) detail: &'static str,
+    pub(super) detail: String,
 }
 
 impl LifecycleError {
-    fn malformed(detail: &'static str) -> Self {
+    fn malformed(detail: impl Into<String>) -> Self {
         Self {
             reason: "state_malformed",
-            detail,
+            detail: detail.into(),
         }
     }
 
-    fn binding(detail: &'static str) -> Self {
+    fn binding(detail: impl Into<String>) -> Self {
         Self {
             reason: "state_binding_invalid",
-            detail,
+            detail: detail.into(),
         }
     }
 
-    fn persist(detail: &'static str) -> Self {
+    fn persist(detail: impl Into<String>) -> Self {
         Self {
             reason: "state_persist_failed",
-            detail,
+            detail: detail.into(),
         }
     }
 }
 
-#[derive(Clone, Deserialize)]
-pub(super) struct PublicationExecutionRecord {
-    world_id: String,
-    height: u64,
-    node_block_hash: Option<String>,
-    #[serde(default)]
-    prev_node_block_hash: Option<String>,
-    execution_block_hash: String,
-    execution_state_root: String,
-    timestamp_ms: i64,
+impl From<PublicationProofError> for LifecycleError {
+    fn from(error: PublicationProofError) -> Self {
+        Self::binding(error.detail)
+    }
 }
