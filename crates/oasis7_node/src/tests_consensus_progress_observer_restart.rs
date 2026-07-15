@@ -760,6 +760,233 @@ fn successor_publication_overtakes_paused_predecessor_final_commit_without_stale
     );
 }
 
+#[derive(Default)]
+struct BusyRetryControl {
+    predecessor_at_native_replace: AtomicBool,
+    release_predecessor: AtomicBool,
+    successor_attempts: AtomicUsize,
+    successor_committed: AtomicBool,
+    durable_path: std::path::PathBuf,
+    signal: Condvar,
+    wait_lock: Mutex<()>,
+}
+
+struct BusyRetryObserver {
+    control: Arc<BusyRetryControl>,
+    generation: usize,
+    authority: Option<ObserverLifecycleAuthority>,
+}
+
+impl NodeConsensusProgressObserver for BusyRetryObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        _snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .expect("dispatcher must bind busy-retry authority");
+        let mutation = authority
+            .acquire_durable_mutation()
+            .expect("active generation must acquire busy-retry mutation authority");
+        let temp = self.control.durable_path.with_extension(format!(
+            "generation-{}-attempt-{}.tmp",
+            self.generation,
+            self.control.successor_attempts.load(Ordering::SeqCst)
+        ));
+        fs::write(
+            &temp,
+            if self.generation == 0 {
+                b"predecessor".as_slice()
+            } else {
+                b"successor".as_slice()
+            },
+        )
+        .expect("write busy-retry staged publication");
+
+        if self.generation == 0 {
+            let control = Arc::clone(&self.control);
+            authority.set_before_native_replace_hook_for_test(Arc::new(move || {
+                control
+                    .predecessor_at_native_replace
+                    .store(true, Ordering::SeqCst);
+                control.signal.notify_all();
+                let mut wait = control
+                    .wait_lock
+                    .lock()
+                    .expect("lock predecessor native-replace pause");
+                while !control.release_predecessor.load(Ordering::SeqCst) {
+                    wait = control
+                        .signal
+                        .wait(wait)
+                        .expect("wait to release predecessor native replace");
+                }
+            }));
+        } else {
+            self.control
+                .successor_attempts
+                .fetch_add(1, Ordering::SeqCst);
+        }
+
+        mutation
+            .publish_staged_file(&temp, &self.control.durable_path)
+            .map_err(|error| {
+                NodeConsensusProgressObserverError::coded(error.code(), error.to_string())
+            })?;
+        if self.generation > 0 {
+            self.control
+                .successor_committed
+                .store(true, Ordering::SeqCst);
+            self.control.signal.notify_all();
+        }
+        Ok(())
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(Self {
+            control: Arc::clone(&self.control),
+            generation: self.generation + 1,
+            authority: None,
+        }))
+    }
+
+    fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        self.authority = Some(authority);
+    }
+}
+
+struct BusyRetryReleaseGuard(Arc<BusyRetryControl>);
+
+impl Drop for BusyRetryReleaseGuard {
+    fn drop(&mut self) {
+        self.0.release_predecessor.store(true, Ordering::SeqCst);
+        self.0.signal.notify_all();
+    }
+}
+
+#[test]
+fn successor_retries_retained_snapshot_after_busy_predecessor_without_new_submission() {
+    run_test_with_timeout(
+        "successor_retries_retained_snapshot_after_busy_predecessor_without_new_submission",
+        Duration::from_secs(4),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let durable_root = temp_dir("busy-publication-autonomous-retry-red");
+            fs::create_dir_all(&durable_root).expect("create busy-retry publication root");
+            let durable_path = durable_root.join("sequencer-publication-lag-state.json");
+            fs::write(&durable_path, b"last-good").expect("write last-good publication");
+            let control = Arc::new(BusyRetryControl {
+                durable_path: durable_path.clone(),
+                ..BusyRetryControl::default()
+            });
+            let release_guard = BusyRetryReleaseGuard(Arc::clone(&control));
+            let mut predecessor = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "busy-publication-autonomous-retry",
+                Arc::clone(&state),
+                0,
+                Box::new(BusyRetryObserver {
+                    control: Arc::clone(&control),
+                    generation: 0,
+                    authority: None,
+                }),
+            )
+            .expect("spawn busy-retry predecessor");
+            predecessor
+                .submitter()
+                .submit(NodeConsensusSnapshot::default(), 1);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .predecessor_at_native_replace
+                        .load(Ordering::SeqCst)
+                }),
+                "predecessor never paused after final generation validation"
+            );
+
+            let stop_started = Instant::now();
+            let recreated = predecessor
+                .shutdown()
+                .expect("restartable busy-retry observer must survive shutdown");
+            assert!(
+                stop_started.elapsed() < Duration::from_millis(500),
+                "bounded shutdown waited at native replace boundary: elapsed={:?}",
+                stop_started.elapsed()
+            );
+            let successor = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "busy-publication-autonomous-retry",
+                Arc::clone(&state),
+                1,
+                recreated,
+            )
+            .expect("spawn busy-retry successor");
+
+            // This is the only successor submission. A busy result must retain it for retry.
+            successor
+                .submitter()
+                .submit(NodeConsensusSnapshot::default(), 2);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    state
+                        .lock()
+                        .expect("lock busy-retry runtime state")
+                        .consensus_progress_observer_error
+                        .as_ref()
+                        .is_some_and(|error| {
+                            error.code.as_deref() == Some("observer_lifecycle_commit_busy")
+                        })
+                }),
+                "successor did not surface the fail-closed busy error"
+            );
+            assert_eq!(
+                fs::read(&durable_path).expect("read target while predecessor is paused"),
+                b"last-good",
+                "busy successor replaced the last-good target"
+            );
+
+            release_guard
+                .0
+                .release_predecessor
+                .store(true, Ordering::SeqCst);
+            release_guard.0.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    fs::read(&durable_path).ok().as_deref() == Some(b"predecessor")
+                }),
+                "predecessor did not complete the already-linearized native replacement"
+            );
+            let retried_without_submission =
+                wait_until(Instant::now() + Duration::from_millis(500), || {
+                    control.successor_committed.load(Ordering::SeqCst)
+                        && state
+                            .lock()
+                            .expect("lock autonomously recovered observer state")
+                            .consensus_progress_observer_error
+                            .is_none()
+                });
+            let attempts = control.successor_attempts.load(Ordering::SeqCst);
+            let final_bytes = fs::read(&durable_path).expect("read final busy-retry publication");
+            drop(successor);
+            fs::remove_dir_all(durable_root).expect("remove busy-retry publication root");
+
+            assert!(
+                retried_without_submission,
+                "successor did not autonomously retry retained newest snapshot after busy predecessor completed"
+            );
+            assert!(
+                attempts >= 2,
+                "successor snapshot was not retried after busy result: attempts={attempts}"
+            );
+            assert_eq!(
+                final_bytes, b"successor",
+                "autonomous retry did not publish successor bytes"
+            );
+        },
+    );
+}
+
 #[test]
 fn in_flight_only_restart_preserves_sequence_and_clears_backpressure_after_newest_delivery() {
     run_test_with_timeout(

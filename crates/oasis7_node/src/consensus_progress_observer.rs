@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, TryLockError, Weak};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use crate::node_runtime_core::RuntimeState;
 use crate::{NodeConsensusSnapshot, NodeError};
@@ -89,6 +90,8 @@ pub struct ObserverLifecycleAuthority {
 struct ObserverLifecycleAuthorityState {
     active_generation: AtomicU64,
     commit_lock: Mutex<()>,
+    #[cfg(test)]
+    before_native_replace_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 pub struct ObserverLifecycleMutationGuard {
@@ -144,6 +147,18 @@ impl ObserverLifecycleAuthority {
             },
         )
     }
+
+    #[cfg(test)]
+    pub(crate) fn set_before_native_replace_hook_for_test(
+        &self,
+        hook: Arc<dyn Fn() + Send + Sync>,
+    ) {
+        *self
+            .state
+            .before_native_replace_hook
+            .lock()
+            .expect("lock observer native replace test hook") = Some(hook);
+    }
 }
 
 impl ObserverLifecycleMutationGuard {
@@ -194,6 +209,17 @@ impl ObserverLifecycleMutationGuard {
             return Err(ObserverLifecyclePublicationError::new(
                 "observer_lifecycle_revoked",
             ));
+        }
+        #[cfg(test)]
+        if let Some(hook) = self
+            .authority
+            .state
+            .before_native_replace_hook
+            .lock()
+            .expect("lock observer native replace test hook")
+            .take()
+        {
+            hook();
         }
         platform_replace_staged_file(staged, target).map_err(|source| {
             ObserverLifecyclePublicationError::io("state_replace_failed", source)
@@ -249,6 +275,9 @@ fn sync_parent_dir(_parent: &Path) -> io::Result<()> {
 const CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE: &str =
     "consensus progress observer queue saturated";
 const CONSENSUS_PROGRESS_OBSERVER_PENDING_LIMIT: usize = 2;
+const CONSENSUS_PROGRESS_OBSERVER_COMMIT_BUSY: &str = "observer_lifecycle_commit_busy";
+const CONSENSUS_PROGRESS_OBSERVER_RETRY_INITIAL_BACKOFF: Duration = Duration::from_millis(200);
+const CONSENSUS_PROGRESS_OBSERVER_RETRY_MAX_BACKOFF: Duration = Duration::from_millis(400);
 
 struct PendingConsensusProgress {
     sequence: u64,
@@ -293,12 +322,14 @@ impl NodeConsensusProgressObserver for RestartHandoffObserver {
 #[derive(Default)]
 struct ConsensusProgressObserverQueue {
     next_sequence: u64,
+    revision: u64,
     pending: VecDeque<PendingConsensusProgress>,
     shutdown: bool,
 }
 
 impl ConsensusProgressObserverQueue {
     fn enqueue(&mut self, pending: PendingConsensusProgress) -> bool {
+        self.revision = self.revision.saturating_add(1);
         if self.pending.len() < CONSENSUS_PROGRESS_OBSERVER_PENDING_LIMIT {
             self.pending.push_back(pending);
             return false;
@@ -368,6 +399,8 @@ impl ConsensusProgressObserverDispatcher {
                 Arc::new(ObserverLifecycleAuthorityState {
                     active_generation: AtomicU64::new(generation),
                     commit_lock: Mutex::new(()),
+                    #[cfg(test)]
+                    before_native_replace_hook: Mutex::new(None),
                 })
             },
             |handoff| Arc::clone(&handoff.authority_state),
@@ -402,7 +435,7 @@ impl ConsensusProgressObserverDispatcher {
         let worker = thread::Builder::new()
             .name(format!("aw-node-observer-{node_id}"))
             .spawn(move || {
-                loop {
+                'worker: loop {
                     let pending = {
                         let (queue_lock, signal) = &*worker_queue;
                         let mut queue = queue_lock
@@ -422,44 +455,100 @@ impl ConsensusProgressObserverDispatcher {
                             .expect("pending observer snapshot")
                     };
 
-                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        observer
-                            .observe_consensus_progress(&pending.snapshot, pending.observed_at_ms)
-                    }))
-                    .unwrap_or_else(|_| {
-                        Err(NodeConsensusProgressObserverError::new(
-                            "consensus progress observer panicked",
-                        ))
-                    });
-                    let has_newer_snapshot = {
-                        let (queue_lock, _) = &*worker_queue;
-                        let queue = queue_lock
+                    let mut retry_attempt = 0_u32;
+                    loop {
+                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            observer.observe_consensus_progress(
+                                &pending.snapshot,
+                                pending.observed_at_ms,
+                            )
+                        }))
+                        .unwrap_or_else(|_| {
+                            Err(NodeConsensusProgressObserverError::new(
+                                "consensus progress observer panicked",
+                            ))
+                        });
+                        let commit_busy = result.as_ref().is_err_and(|error| {
+                            error.code.as_deref() == Some(CONSENSUS_PROGRESS_OBSERVER_COMMIT_BUSY)
+                        });
+                        let current_is_equal_head = pending.snapshot.committed_height
+                            == pending.snapshot.network_committed_height;
+                        let (has_newer_snapshot, queued_equal_head) = {
+                            let (queue_lock, _) = &*worker_queue;
+                            let queue = queue_lock
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            if queue.shutdown {
+                                break 'worker;
+                            }
+                            let has_newer_snapshot = queue
+                                .pending
+                                .back()
+                                .is_some_and(|next| next.sequence > pending.sequence);
+                            let queued_equal_head = queue.pending.iter().any(|next| {
+                                next.snapshot.committed_height
+                                    == next.snapshot.network_committed_height
+                            });
+                            (has_newer_snapshot, queued_equal_head)
+                        };
+                        let Some(current_state) = worker_state.upgrade() else {
+                            break 'worker;
+                        };
+                        let mut current = current_state
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        if queue.shutdown {
+                        if current.generation != generation {
+                            break 'worker;
+                        }
+                        match result {
+                            Ok(()) if !has_newer_snapshot => {
+                                current.consensus_progress_observer_error = None;
+                            }
+                            Ok(()) => {}
+                            Err(error) => {
+                                current.consensus_progress_observer_error = Some(error);
+                            }
+                        }
+                        drop(current);
+                        let retry_commit_busy = should_retry_consensus_progress_observer_commit(
+                            commit_busy,
+                            current_is_equal_head,
+                            has_newer_snapshot,
+                            queued_equal_head,
+                        );
+                        if !retry_commit_busy {
                             break;
                         }
-                        queue
-                            .pending
-                            .back()
-                            .is_some_and(|next| next.sequence > pending.sequence)
-                    };
-                    let Some(worker_state) = worker_state.upgrade() else {
-                        break;
-                    };
-                    let mut current = worker_state
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    if current.generation != generation {
-                        break;
-                    }
-                    match result {
-                        Ok(()) if !has_newer_snapshot => {
-                            current.consensus_progress_observer_error = None;
+                        let backoff = consensus_progress_observer_retry_backoff(retry_attempt);
+                        retry_attempt = retry_attempt.saturating_add(1);
+                        if !wait_for_consensus_progress_observer_retry(&worker_queue, backoff) {
+                            break 'worker;
                         }
-                        Ok(()) => {}
-                        Err(error) => {
-                            current.consensus_progress_observer_error = Some(error);
+                        let retry_still_required = {
+                            let (queue_lock, _) = &*worker_queue;
+                            let queue = queue_lock
+                                .lock()
+                                .unwrap_or_else(|poisoned| poisoned.into_inner());
+                            if queue.shutdown {
+                                break 'worker;
+                            }
+                            let has_newer_snapshot = queue
+                                .pending
+                                .back()
+                                .is_some_and(|next| next.sequence > pending.sequence);
+                            let queued_equal_head = queue.pending.iter().any(|next| {
+                                next.snapshot.committed_height
+                                    == next.snapshot.network_committed_height
+                            });
+                            should_retry_consensus_progress_observer_commit(
+                                true,
+                                current_is_equal_head,
+                                has_newer_snapshot,
+                                queued_equal_head,
+                            )
+                        };
+                        if !retry_still_required {
+                            break;
                         }
                     }
                 }
@@ -488,6 +577,7 @@ impl ConsensusProgressObserverDispatcher {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         queue.shutdown = true;
+        queue.revision = queue.revision.saturating_add(1);
         let next_sequence = queue.next_sequence;
         let pending = std::mem::take(&mut queue.pending);
         drop(queue);
@@ -524,6 +614,39 @@ impl ConsensusProgressObserverDispatcher {
             }) as Box<dyn NodeConsensusProgressObserver>
         })
     }
+}
+
+fn consensus_progress_observer_retry_backoff(attempt: u32) -> Duration {
+    let multiplier = 1_u32 << attempt.min(3);
+    CONSENSUS_PROGRESS_OBSERVER_RETRY_INITIAL_BACKOFF
+        .saturating_mul(multiplier)
+        .min(CONSENSUS_PROGRESS_OBSERVER_RETRY_MAX_BACKOFF)
+}
+
+fn should_retry_consensus_progress_observer_commit(
+    commit_busy: bool,
+    current_is_equal_head: bool,
+    has_newer_snapshot: bool,
+    queued_equal_head: bool,
+) -> bool {
+    commit_busy && (!has_newer_snapshot || (current_is_equal_head && !queued_equal_head))
+}
+
+fn wait_for_consensus_progress_observer_retry(
+    queue: &Arc<(Mutex<ConsensusProgressObserverQueue>, Condvar)>,
+    backoff: Duration,
+) -> bool {
+    let (queue_lock, signal) = &**queue;
+    let current = queue_lock
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let revision = current.revision;
+    let (current, _) = signal
+        .wait_timeout_while(current, backoff, |current| {
+            !current.shutdown && current.revision == revision
+        })
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    !current.shutdown
 }
 
 fn lock_state_generation(state: &Arc<Mutex<RuntimeState>>, generation: u64) {
@@ -726,6 +849,7 @@ mod tests {
         let state = Arc::new(ObserverLifecycleAuthorityState {
             active_generation: AtomicU64::new(0),
             commit_lock: Mutex::new(()),
+            before_native_replace_hook: Mutex::new(None),
         });
         let authority = ObserverLifecycleAuthority {
             state: Arc::clone(&state),
@@ -763,6 +887,7 @@ mod tests {
         let state = Arc::new(ObserverLifecycleAuthorityState {
             active_generation: AtomicU64::new(0),
             commit_lock: Mutex::new(()),
+            before_native_replace_hook: Mutex::new(None),
         });
         let poison_state = Arc::clone(&state);
         let _ = thread::spawn(move || {
