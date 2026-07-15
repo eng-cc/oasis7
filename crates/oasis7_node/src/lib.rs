@@ -526,17 +526,8 @@ impl NodeRuntime {
         let max_committed_action_batches = self.config.max_committed_action_batches.max(1);
         let (stop_tx, stop_rx) = mpsc::channel::<()>();
 
-        #[cfg(test)]
-        if std::mem::take(&mut self.fail_next_worker_spawn) {
-            self.restore_consensus_progress_observer_after_start_failure();
-            self.running.store(false, Ordering::SeqCst);
-            return Err(NodeError::ThreadSpawnFailed {
-                reason: "injected runtime worker spawn failure".to_string(),
-            });
-        }
-
-        let worker = thread::Builder::new()
-            .name(worker_name)
+        let worker = self
+            .runtime_worker_spawner(thread::Builder::new().name(worker_name))
             .spawn(move || {
                 loop {
                     let wait_duration =

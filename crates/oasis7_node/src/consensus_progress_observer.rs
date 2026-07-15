@@ -406,6 +406,23 @@ pub(super) struct ConsensusProgressObserverSpawnError {
     observer: Box<dyn NodeConsensusProgressObserver>,
 }
 
+struct ConsensusProgressObserverWorkerSpawner {
+    builder: thread::Builder,
+    fail: bool,
+}
+
+impl ConsensusProgressObserverWorkerSpawner {
+    fn spawn<F>(self, worker: F) -> io::Result<JoinHandle<()>>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        if self.fail {
+            return Err(io::Error::other("injected observer worker spawn failure"));
+        }
+        self.builder.spawn(worker)
+    }
+}
+
 impl fmt::Debug for ConsensusProgressObserverSpawnError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -437,19 +454,29 @@ pub(super) struct ConsensusProgressObserverSubmitter {
 impl ConsensusProgressObserverDispatcher {
     #[cfg(test)]
     pub(super) fn fail_spawn_for_test(
+        node_id: &str,
+        state: Arc<Mutex<RuntimeState>>,
+        generation: u64,
         observer: Box<dyn NodeConsensusProgressObserver>,
     ) -> Result<Self, ConsensusProgressObserverSpawnError> {
-        Err(ConsensusProgressObserverSpawnError {
-            source: io::Error::other("injected observer worker spawn failure"),
-            observer,
-        })
+        Self::spawn_inner(node_id, state, generation, observer, true)
     }
 
     pub(super) fn spawn(
         node_id: &str,
         state: Arc<Mutex<RuntimeState>>,
         generation: u64,
+        observer: Box<dyn NodeConsensusProgressObserver>,
+    ) -> Result<Self, ConsensusProgressObserverSpawnError> {
+        Self::spawn_inner(node_id, state, generation, observer, false)
+    }
+
+    fn spawn_inner(
+        node_id: &str,
+        state: Arc<Mutex<RuntimeState>>,
+        generation: u64,
         mut observer: Box<dyn NodeConsensusProgressObserver>,
+        fail_worker_spawn: bool,
     ) -> Result<Self, ConsensusProgressObserverSpawnError> {
         let handoff = observer.take_restart_handoff();
         let authority_state = handoff.as_ref().map_or_else(
@@ -494,132 +521,130 @@ impl ConsensusProgressObserverDispatcher {
         let worker_state = Arc::downgrade(&state);
         let observer_cell = Arc::new(Mutex::new(Some(observer)));
         let worker_observer = Arc::clone(&observer_cell);
-        let worker = match thread::Builder::new()
-            .name(format!("aw-node-observer-{node_id}"))
-            .spawn(move || {
-                let mut observer = worker_observer
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .take()
-                    .expect("observer worker owns configured observer");
-                'worker: loop {
-                    let pending = {
-                        let (queue_lock, signal) = &*worker_queue;
-                        let mut queue = queue_lock
-                            .lock()
+        let worker = match (ConsensusProgressObserverWorkerSpawner {
+            builder: thread::Builder::new().name(format!("aw-node-observer-{node_id}")),
+            fail: fail_worker_spawn,
+        })
+        .spawn(move || {
+            let mut observer = worker_observer
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take()
+                .expect("observer worker owns configured observer");
+            'worker: loop {
+                let pending = {
+                    let (queue_lock, signal) = &*worker_queue;
+                    let mut queue = queue_lock
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    while queue.pending.is_empty() && !queue.shutdown {
+                        queue = signal
+                            .wait(queue)
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        while queue.pending.is_empty() && !queue.shutdown {
-                            queue = signal
-                                .wait(queue)
-                                .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        }
-                        if queue.shutdown {
-                            break;
-                        }
-                        queue
-                            .pending
-                            .pop_front()
-                            .expect("pending observer snapshot")
-                    };
+                    }
+                    if queue.shutdown {
+                        break;
+                    }
+                    queue
+                        .pending
+                        .pop_front()
+                        .expect("pending observer snapshot")
+                };
 
-                    let mut retry_attempt = 0_u32;
-                    loop {
-                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            observer.observe_consensus_progress(
-                                &pending.snapshot,
-                                pending.observed_at_ms,
-                            )
-                        }))
-                        .unwrap_or_else(|_| {
-                            Err(NodeConsensusProgressObserverError::new(
-                                "consensus progress observer panicked",
-                            ))
-                        });
-                        let commit_busy = result.as_ref().is_err_and(|error| {
-                            error.code.as_deref() == Some(CONSENSUS_PROGRESS_OBSERVER_COMMIT_BUSY)
-                        });
-                        let current_is_equal_head = pending.snapshot.committed_height
-                            == pending.snapshot.network_committed_height;
-                        let (has_newer_snapshot, queued_equal_head) = {
-                            let (queue_lock, _) = &*worker_queue;
-                            let queue = queue_lock
-                                .lock()
-                                .unwrap_or_else(|poisoned| poisoned.into_inner());
-                            if queue.shutdown {
-                                break 'worker;
-                            }
-                            let has_newer_snapshot = queue
-                                .pending
-                                .back()
-                                .is_some_and(|next| next.sequence > pending.sequence);
-                            let queued_equal_head = queue.pending.iter().any(|next| {
-                                next.snapshot.committed_height
-                                    == next.snapshot.network_committed_height
-                            });
-                            (has_newer_snapshot, queued_equal_head)
-                        };
-                        let Some(current_state) = worker_state.upgrade() else {
-                            break 'worker;
-                        };
-                        let mut current = current_state
+                let mut retry_attempt = 0_u32;
+                loop {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        observer
+                            .observe_consensus_progress(&pending.snapshot, pending.observed_at_ms)
+                    }))
+                    .unwrap_or_else(|_| {
+                        Err(NodeConsensusProgressObserverError::new(
+                            "consensus progress observer panicked",
+                        ))
+                    });
+                    let commit_busy = result.as_ref().is_err_and(|error| {
+                        error.code.as_deref() == Some(CONSENSUS_PROGRESS_OBSERVER_COMMIT_BUSY)
+                    });
+                    let current_is_equal_head = pending.snapshot.committed_height
+                        == pending.snapshot.network_committed_height;
+                    let (has_newer_snapshot, queued_equal_head) = {
+                        let (queue_lock, _) = &*worker_queue;
+                        let queue = queue_lock
                             .lock()
                             .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        if current.generation != generation {
+                        if queue.shutdown {
                             break 'worker;
                         }
-                        match result {
-                            Ok(()) if !has_newer_snapshot => {
-                                current.consensus_progress_observer_error = None;
-                            }
-                            Ok(()) => {}
-                            Err(error) => {
-                                current.consensus_progress_observer_error = Some(error);
-                            }
+                        let has_newer_snapshot = queue
+                            .pending
+                            .back()
+                            .is_some_and(|next| next.sequence > pending.sequence);
+                        let queued_equal_head = queue.pending.iter().any(|next| {
+                            next.snapshot.committed_height == next.snapshot.network_committed_height
+                        });
+                        (has_newer_snapshot, queued_equal_head)
+                    };
+                    let Some(current_state) = worker_state.upgrade() else {
+                        break 'worker;
+                    };
+                    let mut current = current_state
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    if current.generation != generation {
+                        break 'worker;
+                    }
+                    match result {
+                        Ok(()) if !has_newer_snapshot => {
+                            current.consensus_progress_observer_error = None;
                         }
-                        drop(current);
-                        let retry_commit_busy = should_retry_consensus_progress_observer_commit(
-                            commit_busy,
+                        Ok(()) => {}
+                        Err(error) => {
+                            current.consensus_progress_observer_error = Some(error);
+                        }
+                    }
+                    drop(current);
+                    let retry_commit_busy = should_retry_consensus_progress_observer_commit(
+                        commit_busy,
+                        current_is_equal_head,
+                        has_newer_snapshot,
+                        queued_equal_head,
+                    );
+                    if !retry_commit_busy {
+                        break;
+                    }
+                    let backoff = consensus_progress_observer_retry_backoff(retry_attempt);
+                    retry_attempt = retry_attempt.saturating_add(1);
+                    if !wait_for_consensus_progress_observer_retry(&worker_queue, backoff) {
+                        break 'worker;
+                    }
+                    let retry_still_required = {
+                        let (queue_lock, _) = &*worker_queue;
+                        let queue = queue_lock
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        if queue.shutdown {
+                            break 'worker;
+                        }
+                        let has_newer_snapshot = queue
+                            .pending
+                            .back()
+                            .is_some_and(|next| next.sequence > pending.sequence);
+                        let queued_equal_head = queue.pending.iter().any(|next| {
+                            next.snapshot.committed_height == next.snapshot.network_committed_height
+                        });
+                        should_retry_consensus_progress_observer_commit(
+                            true,
                             current_is_equal_head,
                             has_newer_snapshot,
                             queued_equal_head,
-                        );
-                        if !retry_commit_busy {
-                            break;
-                        }
-                        let backoff = consensus_progress_observer_retry_backoff(retry_attempt);
-                        retry_attempt = retry_attempt.saturating_add(1);
-                        if !wait_for_consensus_progress_observer_retry(&worker_queue, backoff) {
-                            break 'worker;
-                        }
-                        let retry_still_required = {
-                            let (queue_lock, _) = &*worker_queue;
-                            let queue = queue_lock
-                                .lock()
-                                .unwrap_or_else(|poisoned| poisoned.into_inner());
-                            if queue.shutdown {
-                                break 'worker;
-                            }
-                            let has_newer_snapshot = queue
-                                .pending
-                                .back()
-                                .is_some_and(|next| next.sequence > pending.sequence);
-                            let queued_equal_head = queue.pending.iter().any(|next| {
-                                next.snapshot.committed_height
-                                    == next.snapshot.network_committed_height
-                            });
-                            should_retry_consensus_progress_observer_commit(
-                                true,
-                                current_is_equal_head,
-                                has_newer_snapshot,
-                                queued_equal_head,
-                            )
-                        };
-                        if !retry_still_required {
-                            break;
-                        }
+                        )
+                    };
+                    if !retry_still_required {
+                        break;
                     }
                 }
-            }) {
+            }
+        }) {
             Ok(worker) => worker,
             Err(source) => {
                 if authority_state.active_generation.load(Ordering::SeqCst) == generation {

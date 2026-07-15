@@ -1,9 +1,29 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::thread::{self, JoinHandle};
 
 use crate::consensus_progress_observer::ConsensusProgressObserverDispatcher;
 use crate::runtime_util::lock_state;
 use crate::{NodeError, NodeRuntime};
+
+pub(super) struct RuntimeWorkerSpawner {
+    builder: thread::Builder,
+    fail: bool,
+}
+
+impl RuntimeWorkerSpawner {
+    pub(super) fn spawn<F>(self, worker: F) -> std::io::Result<JoinHandle<()>>
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        if self.fail {
+            return Err(std::io::Error::other(
+                "injected runtime worker spawn failure",
+            ));
+        }
+        self.builder.spawn(worker)
+    }
+}
 
 impl NodeRuntime {
     pub(super) fn start_consensus_progress_observer_dispatcher(&mut self) -> Result<(), NodeError> {
@@ -18,7 +38,12 @@ impl NodeRuntime {
         let fail_observer_spawn = std::mem::take(&mut self.fail_next_observer_worker_spawn);
         #[cfg(test)]
         let dispatcher = if fail_observer_spawn {
-            ConsensusProgressObserverDispatcher::fail_spawn_for_test(observer)
+            ConsensusProgressObserverDispatcher::fail_spawn_for_test(
+                self.config.node_id.as_str(),
+                Arc::clone(&self.state),
+                generation,
+                observer,
+            )
         } else {
             ConsensusProgressObserverDispatcher::spawn(
                 self.config.node_id.as_str(),
@@ -52,6 +77,17 @@ impl NodeRuntime {
         if let Some(mut dispatcher) = self.consensus_progress_observer_dispatcher.take() {
             self.consensus_progress_observer = dispatcher.shutdown();
         }
+    }
+
+    pub(super) fn runtime_worker_spawner(
+        &mut self,
+        builder: thread::Builder,
+    ) -> RuntimeWorkerSpawner {
+        #[cfg(test)]
+        let fail = std::mem::take(&mut self.fail_next_worker_spawn);
+        #[cfg(not(test))]
+        let fail = false;
+        RuntimeWorkerSpawner { builder, fail }
     }
 
     #[cfg(test)]
