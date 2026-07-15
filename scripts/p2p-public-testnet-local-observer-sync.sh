@@ -1187,14 +1187,15 @@ localize_manifest_runtime_refs() {
   local manifest_source=$1
   local manifest_dest=$2
   local governance_stage=${3:-}
+  local preflight_only=${4:-0}
 
-  python3 - "$manifest_source" "$manifest_dest" "$repo_root" "$governance_stage" <<'PY'
+  python3 - "$manifest_source" "$manifest_dest" "$repo_root" "$governance_stage" "$preflight_only" <<'PY'
 import json
 import os
 import shutil
 import sys
 
-manifest_source, manifest_dest, repo_root, governance_stage = sys.argv[1:5]
+manifest_source, manifest_dest, repo_root, governance_stage, preflight_only = sys.argv[1:6]
 manifest_dest = os.path.abspath(manifest_dest)
 manifest_dir = os.path.dirname(manifest_dest)
 manifest_source = os.path.abspath(manifest_source)
@@ -1217,6 +1218,43 @@ with open(manifest_source, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 runtime_refs = data.get("runtime_refs", {})
+
+def confined_manifest_target_ref(raw_ref, key):
+    if not isinstance(raw_ref, str) or not raw_ref:
+        raise SystemExit(f"manifest runtime ref escapes localization root for {key}: {raw_ref}")
+    if os.path.isabs(raw_ref):
+        target_ref = os.path.basename(os.path.normpath(raw_ref))
+    else:
+        target_ref = os.path.normpath(raw_ref.replace("\\", os.path.sep))
+    target = os.path.abspath(os.path.join(manifest_dir, target_ref))
+    try:
+        contained = os.path.commonpath((manifest_dir, target)) == manifest_dir
+    except ValueError:
+        contained = False
+    if not target_ref or target_ref in (".", "..") or not contained:
+        raise SystemExit(f"manifest runtime ref escapes localization root for {key}: {raw_ref}")
+    return target_ref, target
+
+generated_runtime_ref_preflight = {}
+for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
+    ref = runtime_refs.get(key)
+    if not ref:
+        continue
+    source = os.path.abspath(resolve_ref(ref))
+    target_ref, target = confined_manifest_target_ref(ref, key)
+    if key == "generated_world_sidecar_ref":
+        source_exists = os.path.isdir(source)
+    else:
+        source_exists = os.path.isfile(source)
+    if not source_exists:
+        raise SystemExit(f"missing manifest runtime ref source: {source}")
+    if source == target:
+        raise SystemExit(f"ref source and localized target must differ: {source}")
+    generated_runtime_ref_preflight[key] = (source, target_ref, target)
+
+if preflight_only == "1":
+    raise SystemExit(0)
+
 localized_sources = {}
 for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref"):
     ref = runtime_refs.get(key)
@@ -1275,24 +1313,16 @@ if genesis_ref and genesis_source:
             fh.write("\n")
 
 for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
-    ref = runtime_refs.get(key)
-    if not ref:
+    preflight = generated_runtime_ref_preflight.get(key)
+    if preflight is None:
         continue
-    source = resolve_ref(ref)
-    target_ref = os.path.basename(os.path.normpath(ref)) if os.path.isabs(ref) else ref
-    target = os.path.join(manifest_dir, target_ref)
-    if os.path.abspath(source) == os.path.abspath(target):
-        raise SystemExit(f"ref source and localized target must differ: {source}")
+    source, target_ref, target = preflight
     os.makedirs(os.path.dirname(target), exist_ok=True)
     if key == "generated_world_sidecar_ref":
-        if not os.path.isdir(source):
-            raise SystemExit(f"missing manifest runtime ref source: {source}")
         if os.path.exists(target):
             shutil.rmtree(target)
         shutil.copytree(source, target)
     else:
-        if not os.path.isfile(source):
-            raise SystemExit(f"missing manifest runtime ref source: {source}")
         shutil.copy2(source, target)
     runtime_refs[key] = target_ref
 
@@ -1504,6 +1534,7 @@ case "$mode" in
     if [[ -n "$manifest_source" ]]; then
       require_file "$manifest_source"
       [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
+      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest" "" 1
       governance_stage=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-observer-governance-stage.XXXXXX")
       trap 'rm -rf "${governance_stage:-}"' EXIT
       preflight_manifest_governance_refs "$manifest_source" "$governance_stage"

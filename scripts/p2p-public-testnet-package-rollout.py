@@ -9,7 +9,7 @@ import os
 import shlex
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
@@ -147,6 +147,29 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
         bootstrap.name: bootstrap,
     }
 
+    platform_root = platform_dir.resolve()
+
+    def confined_artifact_ref(raw_ref: str, label: str) -> tuple[Path, Path]:
+        normalized = raw_ref.replace("\\", "/")
+        posix_ref = PurePosixPath(normalized)
+        windows_ref = PureWindowsPath(raw_ref)
+        if (
+            posix_ref.is_absolute()
+            or windows_ref.is_absolute()
+            or bool(windows_ref.drive)
+            or ".." in posix_ref.parts
+        ):
+            die(f"Windows runtime truth ref escapes platform closure for {label}: {raw_ref}")
+        relative = Path(*posix_ref.parts)
+        if relative == Path("."):
+            die(f"Windows runtime truth ref escapes platform closure for {label}: {raw_ref}")
+        source = (platform_root / relative).resolve()
+        try:
+            source.relative_to(platform_root)
+        except ValueError:
+            die(f"Windows runtime truth ref escapes platform closure for {label}: {raw_ref}")
+        return relative, source
+
     def add_file(source: Path, remote_relative: str) -> None:
         source = source.resolve()
         if not source.is_file():
@@ -162,8 +185,7 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
         raw_ref = metadata.get("ref")
         if not isinstance(raw_ref, str) or not raw_ref:
             die(f"Windows bundle {label} missing ref")
-        relative = Path(raw_ref.replace("\\", "/"))
-        source = (platform_dir / relative).resolve()
+        relative, source = confined_artifact_ref(raw_ref, label)
         if metadata.get("kind") == "directory":
             if not source.is_dir():
                 die(f"Windows runtime truth directory missing for {label}: {source}")
@@ -1118,15 +1140,16 @@ while ((Get-Date) -lt $verificationDeadline) {{
   $processRunning = $null -ne (Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue | Select-Object -First 1)
   $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction SilentlyContinue
   $lastTaskResult = if ($null -ne $taskInfo) {{ $taskInfo.LastTaskResult }} else {{ $null }}
+  $schedulerRunningResult = 267009
+  $schedulerReportsRunning = $lastTaskResult -eq $schedulerRunningResult
   $attemptChildExitCode = $null
   if (Test-Path -LiteralPath $attemptExitMarkerPath -PathType Leaf) {{
     $markerValue = Get-Content -LiteralPath $attemptExitMarkerPath -Tail 1 -ErrorAction SilentlyContinue
     $parsedExitCode = 0
     if ([int]::TryParse([string]$markerValue, [ref]$parsedExitCode)) {{ $attemptChildExitCode = $parsedExitCode }}
   }}
-  $terminalExitCode = if ($null -ne $attemptChildExitCode) {{ $attemptChildExitCode }} else {{ $lastTaskResult }}
-  $newTaskResult = $null -ne $taskInfo -and $taskInfo.LastRunTime -ge $taskStartTime
-  if (($null -ne $attemptChildExitCode -or $newTaskResult) -and
+  $terminalExitCode = if ($null -ne $attemptChildExitCode) {{ $attemptChildExitCode }} else {{ $null }}
+  if ($null -ne $attemptChildExitCode -and
       $null -ne $terminalExitCode -and $terminalExitCode -ne 0) {{
     Preserve-AttemptDiagnostics $attemptStdoutPath $attemptStderrPath $attemptExitMarkerPath
     $diagnosticLines = @(
@@ -1136,6 +1159,7 @@ while ((Get-Date) -lt $verificationDeadline) {{
       "attempt_stderr=$attemptStderrPath",
       "attempt_exit_marker=$attemptExitMarkerPath",
       "last_task_result=$lastTaskResult",
+      "scheduler_reports_running=$schedulerReportsRunning",
       "child_exit_code=$attemptChildExitCode"
     )
     foreach ($diagnosticPath in @($attemptStdoutPath, $attemptStderrPath, $attemptExitMarkerPath)) {{

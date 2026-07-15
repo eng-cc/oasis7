@@ -920,6 +920,68 @@ PY
   fi
 done
 
+for escaped_field in generated_world_sidecar world_generation_provenance; do
+  for escaped_ref_kind in traversal absolute; do
+    escaped_package="$TMP_DIR/escaped-$escaped_field-$escaped_ref_kind-package"
+    cp -R "$package_dir" "$escaped_package"
+    escaped_windows="$escaped_package/windows"
+    escaped_bundle="$escaped_windows/$(basename "$windows_bundle")"
+    if [[ "$escaped_field" == "generated_world_sidecar" ]]; then
+      escaped_source="$TMP_DIR/escaped-$escaped_field-$escaped_ref_kind"
+      mkdir -p "$escaped_source"
+      printf 'escaped sidecar fixture\n' >"$escaped_source/snapshot.json"
+    else
+      escaped_source="$TMP_DIR/escaped-$escaped_field-$escaped_ref_kind.json"
+      printf '{"escaped":true}\n' >"$escaped_source"
+    fi
+    if [[ "$escaped_ref_kind" == "traversal" ]]; then
+      escaped_ref="../$(basename "$escaped_source")"
+      # Make the traversal resolve outside windows/ while retaining an existing source.
+      cp -R "$escaped_source" "$escaped_package/$(basename "$escaped_source")"
+    else
+      escaped_ref="$escaped_source"
+    fi
+    python3 - "$escaped_bundle" "$escaped_field" "$escaped_ref" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+bundle_path = Path(sys.argv[1])
+field = sys.argv[2]
+raw_ref = sys.argv[3]
+bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+bundle[field]["ref"] = raw_ref
+bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+PY
+    (
+      cd "$escaped_windows"
+      find . -type f ! -name windows-x64-SHA256SUMS -print \
+        | LC_ALL=C sort \
+        | sed 's#^./##' \
+        | while IFS= read -r path; do shasum -a 256 "$path"; done \
+        >windows-x64-SHA256SUMS
+    )
+    escaped_out="$TMP_DIR/escaped-$escaped_field-$escaped_ref_kind-out"
+    if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+      --manifest "$TMP_DIR/manifest.json" \
+      --package-dir "$escaped_package" \
+      --out-dir "$escaped_out" \
+      >"$escaped_out.stdout" 2>"$escaped_out.stderr"; then
+      echo "expected escaped Windows $escaped_field ref to fail before plan transfer generation" >&2
+      package_contract_failed=1
+    elif ! grep -q 'Windows runtime truth ref escapes platform closure' "$escaped_out.stderr"; then
+      echo "escaped Windows $escaped_field ref did not fail with the platform-closure diagnostic" >&2
+      cat "$escaped_out.stderr" >&2
+      package_contract_failed=1
+    fi
+    if [[ -e "$escaped_out/windows-observer-windows-upgrade.ps1" \
+      || -e "$escaped_out/rollout-plan.json" ]]; then
+      echo "escaped Windows $escaped_field ref generated a transfer/apply plan before rejection" >&2
+      package_contract_failed=1
+    fi
+  done
+done
+
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
   --manifest "$TMP_DIR/manifest.json" \
   --package-dir "$package_dir" \
@@ -1238,6 +1300,77 @@ deadline_failure_match = re.search(
 assert deadline_failure_match, "rpc-running verification must check failure after its poll deadline"
 assert "throw " in deadline_failure_match.group("body"), (
     "rpc-running verification must exit nonzero after the poll deadline"
+)
+PY
+then
+  package_contract_failed=1
+fi
+
+if ! python3 - "$windows_script" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+task_start = text.index("Start-ScheduledTask -TaskName $taskName")
+startup_poll = text[task_start:text.index("if (!$verified)", task_start)]
+
+# Fixture: Get-ScheduledTaskInfo can report a fresh LastRunTime with 0x41301
+# while the wrapper is still running and has not yet emitted this attempt's
+# terminal exit marker.  That is nonterminal and must keep polling, not roll
+# back a healthy observer.
+fresh_running_without_marker = {
+    "last_run_time_is_fresh": True,
+    "last_task_result": 267009,  # 0x41301: task is currently running
+    "exact_attempt_exit_marker": None,
+    "expects_terminal_failure": False,
+    "expects_rollback": False,
+}
+terminal_child_failure = {
+    "last_run_time_is_fresh": True,
+    "last_task_result": 1,
+    "exact_attempt_exit_marker": 255,
+    "expects_terminal_failure": True,
+    "expects_rollback": True,
+}
+assert fresh_running_without_marker["last_task_result"] == 267009
+assert fresh_running_without_marker["exact_attempt_exit_marker"] is None
+assert not fresh_running_without_marker["expects_rollback"]
+assert terminal_child_failure["exact_attempt_exit_marker"] == 255
+assert terminal_child_failure["expects_rollback"]
+
+assert re.search(
+    r"\$schedulerRunningResult\s*=\s*267009\b", startup_poll
+), (
+    "fresh LastTaskResult=267009 (0x41301 task running) needs an explicit "
+    "nonterminal scheduler classification"
+)
+assert re.search(
+    r"\$schedulerReportsRunning\s*=\s*\$lastTaskResult\s*-eq\s*\$schedulerRunningResult",
+    startup_poll,
+), "startup poll must classify 0x41301 from the fresh scheduler observation"
+assert re.search(
+    r"\$terminalExitCode\s*=\s*if\s*\(\$null\s*-ne\s*\$attemptChildExitCode\)\s*\{\s*\$attemptChildExitCode\s*\}\s*else\s*\{\s*\$null\s*\}",
+    startup_poll,
+), (
+    "without the exact current-attempt exit marker, scheduler status alone "
+    "must not manufacture a terminal child exit code"
+)
+terminal_guard = re.search(
+    r"if\s*\((?P<condition>.*?)\)\s*\{\s*Preserve-AttemptDiagnostics",
+    startup_poll,
+    re.DOTALL,
+)
+assert terminal_guard, "startup poll must retain one marker-bound terminal failure guard"
+condition = terminal_guard.group("condition")
+assert "$attemptChildExitCode" in condition, (
+    "terminal child failure and rollback must require the exact current-attempt exit marker"
+)
+assert "$newTaskResult" not in condition, (
+    "a fresh scheduler result, including 0x41301, must not independently request rollback"
+)
+assert "$schedulerReportsRunning" in startup_poll, (
+    "the running scheduler result must remain nonterminal while the attempt marker is absent"
 )
 PY
 then

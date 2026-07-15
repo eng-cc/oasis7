@@ -12,6 +12,7 @@ if [[ "$test_case" == "all" ]]; then
     governance_refs_localized \
     governance_missing_source_no_mutation \
     governance_basename_collision_no_mutation \
+    runtime_ref_escape_no_mutation \
     reset_owned_restore_retry \
     reset_owned_restore_retry_path_shim \
     corrupt_file_metadata \
@@ -29,6 +30,7 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "governance_refs_localized" \
   && "$test_case" != "governance_missing_source_no_mutation" \
   && "$test_case" != "governance_basename_collision_no_mutation" \
+  && "$test_case" != "runtime_ref_escape_no_mutation" \
   && "$test_case" != "reset_owned_restore_retry" \
   && "$test_case" != "reset_owned_restore_retry_path_shim" \
   && "$test_case" != "corrupt_file_metadata" \
@@ -169,7 +171,8 @@ fi
 if [[ "$test_case" == "canonical_layout" \
   || "$test_case" == "governance_refs_localized" \
   || "$test_case" == "governance_missing_source_no_mutation" \
-  || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+  || "$test_case" == "governance_basename_collision_no_mutation" \
+  || "$test_case" == "runtime_ref_escape_no_mutation" ]]; then
   sidecar_ref="generated-world/generated-scenario-world"
   provenance_ref="generated-world/world-generation-provenance.json"
 else
@@ -298,7 +301,9 @@ grep -q 'REMOTE_EXECUTION_BRIDGE_STATE_REQUIRED' scripts/p2p-public-testnet-loca
 grep -q 'execution_bridge_state_path_for_root "$remote_stack_root" "$remote_node_id" "$remote_runtime_root"' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'generated_world_sidecar_ref' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'world_generation_provenance_ref' scripts/p2p-public-testnet-local-observer-sync.sh
-grep -q 'target_ref = os.path.basename(os.path.normpath(ref)) if os.path.isabs(ref) else ref' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'def confined_manifest_target_ref(raw_ref, key):' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'manifest runtime ref escapes localization root for {key}: {raw_ref}' scripts/p2p-public-testnet-local-observer-sync.sh
+grep -q 'generated_runtime_ref_preflight\[key\] = (source, target_ref, target)' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'ref source and localized target must differ' scripts/p2p-public-testnet-local-observer-sync.sh
 grep -q 'bundle\["generated_world_sidecar"\]\["resolved_path"\]' scripts/p2p-public-testnet-local-observer-sync.sh
 
@@ -371,7 +376,8 @@ PY
 
 if [[ "$test_case" == "governance_refs_localized" \
   || "$test_case" == "governance_missing_source_no_mutation" \
-  || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+  || "$test_case" == "governance_basename_collision_no_mutation" \
+  || "$test_case" == "runtime_ref_escape_no_mutation" ]]; then
   build_worktree="$tmp_dir/build-worktree"
   build_config="$build_worktree/config"
   build_evidence="$build_worktree/doc/testing/evidence"
@@ -428,6 +434,24 @@ data = json.loads(path.read_text(encoding="utf-8"))
 data["governance_bootstrap_refs"]["liveops_public_manifest_ref"] = sys.argv[2]
 path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
+  elif [[ "$test_case" == "runtime_ref_escape_no_mutation" ]]; then
+    escaped_sidecar="$build_worktree/escaped-sidecar"
+    escaped_provenance="$build_worktree/escaped-provenance.json"
+    mkdir -p "$escaped_sidecar"
+    printf '{"escaped":true}\n' >"$escaped_sidecar/snapshot.json"
+    printf '{"escaped":true}\n' >"$escaped_provenance"
+    python3 - "$build_config/manifest.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text(encoding="utf-8"))
+refs = data["runtime_refs"]
+refs["generated_world_sidecar_ref"] = "../escaped-sidecar"
+refs["world_generation_provenance_ref"] = "../escaped-provenance.json"
+path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
   fi
 
   apply_localization() {
@@ -443,7 +467,8 @@ PY
   }
 
   if [[ "$test_case" == "governance_missing_source_no_mutation" \
-    || "$test_case" == "governance_basename_collision_no_mutation" ]]; then
+    || "$test_case" == "governance_basename_collision_no_mutation" \
+    || "$test_case" == "runtime_ref_escape_no_mutation" ]]; then
     registry_path="$local_stack/config/genesis-validator-registry.json"
     start_script_path="$tmp_dir/localized-observer/bin/start-node.sh"
     mkdir -p "$(dirname "$registry_path")" "$(dirname "$start_script_path")"
@@ -456,13 +481,15 @@ PY
     start_script_sha=$(shasum -a 256 "$start_script_path" | awk '{print $1}')
 
     if apply_localization >"$tmp_dir/preflight.stdout" 2>"$tmp_dir/preflight.stderr"; then
-      echo "expected governed-ref preflight failure before observer mutation" >&2
+      echo "expected observer runtime-ref confinement preflight failure before mutation" >&2
       exit 1
     fi
     if [[ "$test_case" == "governance_missing_source_no_mutation" ]]; then
       grep -q 'missing genesis governance ref source' "$tmp_dir/preflight.stderr"
-    else
+    elif [[ "$test_case" == "governance_basename_collision_no_mutation" ]]; then
       grep -q 'genesis governance refs collide at localized target' "$tmp_dir/preflight.stderr"
+    else
+      grep -q 'manifest runtime ref escapes localization root' "$tmp_dir/preflight.stderr"
     fi
     mutation_detected=0
     if [[ "$(shasum -a 256 "$tmp_dir/local.env" | awk '{print $1}')" != "$local_env_sha" ]]; then
@@ -487,6 +514,11 @@ PY
     fi
     if [[ -e "$localized_config/doc/testing/evidence" ]]; then
       echo "observer preflight failure partially copied governed evidence" >&2
+      mutation_detected=1
+    fi
+    if [[ -e "$tmp_dir/localized-observer/escaped-sidecar" \
+      || -e "$tmp_dir/localized-observer/escaped-provenance.json" ]]; then
+      echo "observer runtime-ref preflight failure wrote outside manifest_dir" >&2
       mutation_detected=1
     fi
     if [[ "$mutation_detected" -ne 0 ]]; then
