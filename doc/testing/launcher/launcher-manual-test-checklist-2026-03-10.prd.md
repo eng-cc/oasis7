@@ -2,7 +2,7 @@
 
 审计轮次: 1
 
-- 对应项目管理文档: `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md`
+- 目录入口: `doc/testing/launcher/README.md`
 
 ## 1. Executive Summary
 - Problem Statement: 启动器虽然已有较多单元/定向测试，但发布前若缺少传统互联网产品视角的人工测试清单，容易遗漏“真实用户会遇到、但代码层不易暴露”的安装、配置、交互、异常恢复与兼容性问题。若清单只停留在模块级 smoke，又会把 `Explorer`、`Transfer` 这类依赖真实数据与状态迁移的功能测得过粗。

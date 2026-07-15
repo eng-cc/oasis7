@@ -64,7 +64,7 @@ Manual convergence note: Web UI manual 当前按 driver / evidence mode 分流�
 ## 专题清单（含历史完成项，按文件名精确检索）
 本表用于互链可达性和 traceability，不代表每一行都是默认首读或当前活跃执行面；已完成的规划三件套应先读其 redirect / historical status，再进入当前 canonical 手册或 topic 文档。
 
-2026-07-06 governance note: 早期 launcher chain migration、lifecycle hardening、viewer auth/node config autowire 与 full usability closure audit 四组三件套已退役删除；当前 launcher / playtest / Web UI 闭环入口保留在 `testing-manual.md`、`doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`、`doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`、Web UI manual、GitHub task issue evidence comments 与 git history。
+2026-07-15 governance note: 早期 launcher 专题三件套与已完成的 design/project 拆解已退役删除；当前 launcher / playtest / Web UI 闭环入口收敛到 `testing-manual.md`、`doc/testing/launcher/README.md`、两份 launcher 现行 PRD、Web UI manual、GitHub task issue evidence comments 与 Git 历史。
 
 Viewer performance historical/provenance note: `doc/testing/performance/viewer-performance-methodology-closure-2026-02-25.*` 是已完成的 legacy methodology closure，依赖已移除的 `viewer-owr4-stress` / old `perf_probe` 路径；当前 Viewer performance 入口为 `doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md`、`doc/testing/performance/viewer-current-web-performance-harness-2026-06-02.prd.md` 与 `testing-manual.md` 的 Viewer performance probe 指引。Delete-candidate boundary: focused `rg` 确认只剩 self/provenance 引用前，保留该 legacy triplet 作为历史证据；不得把它作为当前 operator guidance。
 
@@ -89,8 +89,8 @@ Wasm build determinism guard historical/provenance note: `doc/testing/governance
 | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.prd.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.design.md` | `doc/testing/governance/release-gate-metric-policy-alignment-2026-02-28.project.md` |
 | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.prd.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.design.md` | `doc/testing/governance/token-genesis-allocation-audit-checklist-2026-03-22.project.md` |
 | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.design.md` | `doc/testing/governance/testing-quality-trend-tracking-2026-03-11.project.md` |
-| `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.design.md` | `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md` |
-| `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.design.md` | `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.project.md` |
+| `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md` | 当前设计决策与验收记录已并入 PRD | 已完成项目拆解见 Git 历史与 GitHub task evidence |
+| `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md` | 当前执行设计与分层清单已并入 PRD | 已完成项目拆解见 Git 历史与 GitHub task evidence |
 | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.prd.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.design.md` | `doc/testing/longrun/chain-runtime-feedback-replication-network-autowire-2026-03-02.project.md` |
 | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.design.md` | `doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.project.md` |
 | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md` | `doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.project.md` |

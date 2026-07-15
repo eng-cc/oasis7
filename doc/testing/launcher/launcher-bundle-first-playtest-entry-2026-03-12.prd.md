@@ -13,7 +13,7 @@
 
 ## 接口 / 数据
 - PRD 主入口: `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md`
-- 项目管理入口: `doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.project.md`
+- 目录入口: `doc/testing/launcher/README.md`
 - 模块主 PRD: `doc/testing/prd.md`
 - 模块主项目: `doc/testing/project.md`
 - 文件级索引: `doc/testing/prd.index.md`
