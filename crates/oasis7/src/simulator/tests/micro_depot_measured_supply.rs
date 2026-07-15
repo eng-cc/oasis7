@@ -151,7 +151,10 @@ fn micro_depot_service_rejects_insufficient_facility_inventory_without_partial_d
 }
 
 #[test]
-fn micro_depot_service_rejects_exhausted_epoch_throughput_without_inventory_loss() {
+fn micro_depot_service_defense_in_depth_rejects_synthetic_exhausted_throughput_state() {
+    // Commissioning creates 8 inventory units and 16 throughput units, so inventory is the
+    // reachable gameplay blocker. This synthetic persisted-state fixture protects the lower-level
+    // throughput invariant against corrupted, migrated, or future independently refilled state.
     let mut kernel = installed_micro_depot_with_measured_supply(5, 1, 2);
     let before = kernel
         .model()

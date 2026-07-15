@@ -32,7 +32,7 @@
 
 | Step | Owner | Output | Verification |
 | --- | --- | --- | --- |
-| 1. Measured contract | `producer_system_designer` + `runtime_engineer` + `wasm_platform_engineer` | 将库存、epoch 吞吐、精确 debit、原子 apply 与 receipt before/after 绑定为 v2 normative contract | PRD/design acceptance and runtime/accounting tests in draft PR #2289 |
+| 1. Measured contract | `producer_system_designer` + `runtime_engineer` + `wasm_platform_engineer` | 将 single-commission consumable stock、内部 throughput ceiling、精确 debit、原子 apply 与 receipt before/after 绑定为 v2 normative contract | PRD/design acceptance and runtime/accounting tests in draft PR #2289 |
 | 2. Runtime/accounting implementation | `runtime_engineer` | Data-only commissioning `10 = 2 sink + 8 transfer`、初始 throughput `16`、service 原子扣减、reclaim/reinstall 与 replay accounting | targeted micro-depot tests and `cargo check` evidence on GitHub issue #2279 |
 | 3. Compatibility implementation | `wasm_platform_engineer` + `runtime_engineer` | 保留历史 v1 wire、canonical serialization、input/proposal hash projection；v2 measured fields 不进入 v1 projection | v1 golden compatibility evidence on GitHub issue #2279 |
 | 4. Pre-merge integration | `tpm` + involved review roles | 冻结 current head，完成 fresh verification、review、required checks、comment/thread gate 与 merge receipt | draft PR #2289; canonical PR gate evidence |
@@ -42,7 +42,7 @@
 | Lane | Owner role | Required tier | Entry condition | Done signal |
 | --- | --- | --- | --- | --- |
 | `micro-depot-wasm-abi-host-adapter` | `wasm_platform_engineer` + `runtime_engineer` | `test_tier_required` | implemented in draft PR #2289 | Same `micro_depot.eval.v2` input snapshot + module hash produces byte-identical measured proposal hash; schema/hash mismatch rejects; v1 golden preserves exact historical pre-change wire/action and input/proposal hash projection. |
-| `micro-depot-runtime-state-events` | `runtime_engineer` | `test_tier_required` | implemented in draft PR #2289 | Data-only v2 install debits `10 Data` as `2` sink + `8` transfer; reclaim refunds zero/destroys remainder; reinstall creates fresh `8/16` with no carry; service debit, replay and blockers are structured. |
+| `micro-depot-runtime-state-events` | `runtime_engineer` | `test_tier_required` | implemented in draft PR #2289 | Data-only v2 install debits `10 Data` as `2` sink + `8` transfer; service consumes finite stock; at zero, service and upkeep reject without charge; reclaim refunds zero/destroys remainder; only full-cost reinstall creates fresh `8/16`; replay/blockers remain structured. |
 | `micro-depot-measured-supply-accounting` | `runtime_engineer` + `wasm_platform_engineer` + `qa_engineer` | `test_tier_required` + `test_tier_full` | implemented in draft PR #2289 | Exact stock/throughput debit and receipt before/after reconcile; failed apply is atomic; exact historical v1 wire/hash compatibility remains covered. This status is branch-local until merge receipt exists. |
 
 ## Authorized Follow-Ups
@@ -68,7 +68,7 @@
 - Do not expose arbitrary player-uploaded WASM before security/governance owner lanes exist.
 - Do not let depot effects bypass claim scope, upkeep, resource accounting or restricted starter funding provenance.
 - Do not treat upkeep as service inventory, invent refill/rollover authority, reserve stock during preview, accept class-only consumption as the v2 norm, or allow partial stock/throughput debit.
-- Current v2 MVP accepts exactly canonical `["data"]`; empty/non-data/mixed/duplicate/case variants reject. Install debits `10 Data = 2` non-refundable sink + `8` commissioned transfer and initializes throughput `16`; reclaim refunds zero and destroys remaining supply; reinstall is a fresh `10/8/16` with no carry, never refill. Only the authorized refill, canonical epoch rollover/reset, and configurable commissioning/debit-curve balance lanes above remain follow-up work.
+- Current v2 MVP is a single-commission consumable depot and accepts exactly canonical `["data"]`; empty/non-data/mixed/duplicate/case variants reject. Install debits `10 Data = 2` non-refundable sink + `8` commissioned transfer. Stock depletion ends service life; upkeep never replenishes and must reject/no charge at zero. Recovery is only destructive reclaim plus a fresh full-cost `10/8/16` install with no carry. Throughput `16` is an internal defense-in-depth ceiling/replay invariant, not a separately reachable gameplay blocker or epoch loop. Authorized refill, canonical epoch rollover/reset, and configurable commissioning/debit-curve balance remain future work.
 - Do not use this PRD/project to claim closed beta, production readiness, or live release.
 - If future edits change stage, gate verdict, preview cadence or public claim wording, route through `producer_system_designer`, `qa_engineer`, and `liveops_community`.
 

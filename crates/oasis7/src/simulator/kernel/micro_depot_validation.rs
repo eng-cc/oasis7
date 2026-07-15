@@ -1,9 +1,18 @@
 use std::collections::BTreeSet;
 
+use super::super::world_model::RegionalInfrastructure;
 use super::micro_depot::{
     MicroDepotDecision, MicroDepotEvalInput, MicroDepotProposal, MicroDepotStatus,
     compute_micro_depot_proposal_hash, micro_depot_resource_kind_label,
 };
+
+pub(super) fn measured_micro_depot_inventory_depleted(facility: &RegionalInfrastructure) -> bool {
+    facility.measured_supply_schema_version == 2
+        && !facility
+            .available_units_by_kind
+            .values()
+            .any(|units| *units > 0)
+}
 use super::types::MicroDepotProposalResourceDebit;
 
 pub(super) fn validate_micro_depot_exact_resource_debits(

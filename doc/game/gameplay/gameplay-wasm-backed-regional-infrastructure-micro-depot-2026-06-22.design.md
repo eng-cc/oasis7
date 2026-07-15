@@ -279,10 +279,12 @@ RegionalInfrastructure {
 - `available_units_by_kind[resource_kind]` 是设施内可服务库存；缺失 key 等价于 `0`。每个值和总量都必须是非负整数，且不得超过 runtime 配置的 per-kind / facility capacity。
 - v2 MVP 的 install request 必须且只能声明 canonical `supported_resource_kinds == ["data"]`。空列表、任何非 `data` 值、mixed/duplicate 列表，以及 `Data`、`DATA` 等大小写变体都必须原子拒绝；MVP 不做输入 canonicalization，也不承诺多资源 commissioning。
 - v2 当前 install debit 固定为 `10 Data`：其中 `2 Data` 是不可退还的 deployment sink，`8 Data` 从玩家余额转入设施成为 commissioned inventory；同时初始化 throughput limit/remaining `16` units、epoch `0`。`10/8/16` 是当前实现与 replay 的版本化事实，不是最终平衡承诺。
+- 当前 v2 MVP 是 **single-commission consumable depot**：这次安装只获得上述 `8 Data` commissioned inventory，库存耗尽即结束本次设施的可服务生命。它不是持续生产、周期补货或可无限续费的设施。
 - `MicroDepotInstalled` receipt 与设施 provenance 必须证明同一次 accepted install 的 `10 Data` debit、`2 Data` sink、`8 Data` commissioned transfer 和初始 `16` throughput。不得把“支付 2、系统赠送 8”或任何低于 10 Data 获得 bundle 的路径写入实现或玩家口径。
 - reclaim refund 固定为零，并销毁设施内所有剩余 inventory 与 throughput；销毁余额不得转回玩家、其他设施或后续安装。reinstall 是全新的 `10 Data` install，重新产生 fresh `8/16` state，不 carry over，也不是 refill。
-- `throughput_limit_units_per_epoch`、`throughput_epoch` 与 `throughput_remaining_units` 是 measured-service canonical state；当前 slice 初始化并在成功 service 时扣减这些值，但没有 canonical epoch clock、自动 rollover 或 reset action。
-- 当前 acceptance 不包含补货 action 或吞吐 reset。库存来源授权、补货扣转、epoch clock、rollover/reset 触发与事件必须由 `gameplay_designer + runtime_engineer` 后续联合设计后才能实现；commissioning initialization 之外，upkeep、任意 tick/epoch 变化都不得增加库存或吞吐。
+- upkeep 只维持尚有库存的设施处于可服务状态，不补充 inventory 或 throughput。库存为零时，upkeep 请求必须拒绝且不收费；玩家唯一的当前恢复路径是 destructive reclaim，再支付完整 `10 Data` 安装成本创建全新设施。
+- `throughput_limit_units_per_epoch`、`throughput_epoch` 与 `throughput_remaining_units` 是 measured-service canonical state；当前固定 `16` 仅作为内部 defense-in-depth accounting ceiling 与 replay invariant。由于同一 commissioning 只有 `8 Data` 库存，当前玩法不能在库存之前自然触达 throughput exhaustion；不得把它写成独立玩家 blocker、恢复循环、epoch playability 或周期续航承诺。
+- 当前 acceptance 不包含补货 action、canonical epoch clock 或吞吐 reset。库存来源授权、补货扣转、epoch clock、rollover/reset 触发与事件必须由 `gameplay_designer + runtime_engineer` 后续联合设计后才能实现；commissioning initialization 之外，upkeep、任意 tick/epoch 变化都不得增加库存或吞吐。
 - 每次成功 service debit 都递增 `inventory_revision`。同步 service action 内的 evaluator input 与 proposal 必须具有一致的 `evaluated_inventory_revision + evaluated_epoch`；这是 evaluator input consistency validation，不是跨 action 的 preview reservation 或并发确认合同。
 - service apply 必须原子重验 owner/claim、upkeep、range、module/schema/proposal hash、各 kind 库存和总吞吐；全部成立才同时扣减 `available_units_by_kind` 与 `throughput_remaining_units` 并应用 service effect。任一失败则两者和 service world state 都不改变。
 - evaluator preview 永不 reserve 或 debit。库存不足为 `DEPOT_INVENTORY_INSUFFICIENT`，吞吐不足为 `DEPOT_THROUGHPUT_EXHAUSTED`；当前同步 action 不承诺独立 preview-confirm concurrency 或 `DEPOT_SUPPLY_SNAPSHOT_STALE` player-facing blocker。
@@ -341,7 +343,8 @@ Viewer 和 pure API 不读取 WASM，不猜测收益，只渲染 runtime DTO。
 - `depot_contributions[]`
   - depot id, proposal hash, effect class, explanation code
 - `bottlenecks[]`
-- missing resource, insufficient inventory, throughput exhausted, unpaid upkeep, out of range, permission denied, degraded
+- missing resource, insufficient inventory/depleted, unpaid upkeep while stocked, out of range, permission denied, degraded
+- `throughput exhausted` 仅保留为 malformed/corrupt canonical state 的 fail-closed defense；当前 `8` stock / `16` ceiling 不能自然进入该玩家流程，也没有独立恢复动词
 - `module_evidence`
   - module id, version, hash, schema version, proposal hash
 
@@ -404,7 +407,7 @@ Runtime 必须：
 6. receipt / audit
    - Gate: every applied service records module hash, proposal hash, before / after quote, world change summary.
 7. gameplay smoke
-   - Gate: one repair / logistics action becomes measurably cheaper, faster, or less risky because of depot, exact stock/throughput debit is visible, and player can identify the remaining blocker.
+   - Gate: reachable lifecycle runs end to end: fresh install (`10 = 2 sink + 8 inventory`) -> measured repair/logistics service(s) -> stock reaches zero -> further service and upkeep both reject without charge or mutation -> destructive reclaim -> optional fresh full-cost reinstall. Receipts reconcile stock/throughput before/after; throughput remains an internal ceiling, not a separately claimed reachable gameplay blocker.
 
 ## 12. Post-first-capability 10 分钟验证切片
 
@@ -430,6 +433,7 @@ Runtime 必须：
 - 玩家能说明 depot 花了什么。
 - 玩家能指出哪一次行动被 depot 改变。
 - 玩家能看到 remaining blocker 或下一步建议。
+- QA 另以确定性 lifecycle smoke 覆盖 `install -> service until stock=0 -> service blocked -> upkeep rejected/no charge -> reclaim -> fresh full-cost reinstall`；该 smoke 是 consumable lifecycle/accounting evidence，不是 epoch rollover、refill 或长期 playability evidence。
 - QA / smoke evidence 明确标注该样本发生在 first capability 之后，不能用于证明首局 0-10 分钟 onboarding 通过。
 
 失败/防漂移条件：
