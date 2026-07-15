@@ -73,6 +73,7 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn record_gameplay_action_rejection(&mut self, error: &GameplayActionError) {
         let action_id = error.action_id.as_deref().unwrap_or("unknown");
+        let hint = gameplay_action_rejection_hint(error.code.as_str());
         self.set_latest_player_gameplay_feedback(Self::make_player_gameplay_feedback(
             format!("gameplay_action:{action_id}"),
             "rejected",
@@ -83,7 +84,7 @@ impl ViewerRuntimeLiveServer {
             Some(format!("submit gameplay action {action_id}")),
             error.target_agent_id.clone(),
             Some(format!("{}: {}", error.code, error.message)),
-            Some("correct the rejected request before retrying".to_string()),
+            Some(hint.to_string()),
             0,
             0,
         ));
@@ -101,5 +102,32 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn confirm_player_gameplay_progress(&mut self) {
         self.confirmed_player_gameplay_progress_time = Some(self.world.state().time);
+    }
+}
+
+fn gameplay_action_rejection_hint(code: &str) -> &'static str {
+    match code {
+        "chain_submit_unavailable" | "chain_submit_failed" => {
+            "restore the chain gameplay submission path, then retry"
+        }
+        "llm_mode_required"
+        | "llm_init_failed"
+        | "provider_config_invalid"
+        | "provider_config_missing"
+        | "provider_unreachable"
+        | "runtime_sync_unavailable"
+        | "runtime_io_failed"
+        | "runtime_sync_decode_failed"
+        | "runtime_init_failed"
+        | "runtime_step_failed" => "restore or wait for runtime and provider readiness, then retry",
+        "auth_proof_required"
+        | "auth_nonce_replay"
+        | "invalid_first_agent_claim_target"
+        | "first_agent_already_bound"
+        | "player_agent_binding_required"
+        | "actor_agent_required"
+        | "actor_agent_mismatch"
+        | "player_bind_failed" => "correct the rejected request before retrying",
+        _ => "inspect the rejection details before retrying",
     }
 }

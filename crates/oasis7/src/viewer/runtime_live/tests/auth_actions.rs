@@ -231,6 +231,57 @@ fn runtime_gameplay_action_dispatch_rejection_without_snapshot_subscription_emit
 }
 
 #[test]
+fn runtime_gameplay_action_rejection_feedback_classifies_operational_and_unknown_hints() {
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+
+    server.record_gameplay_action_rejection(&crate::viewer::GameplayActionError {
+        code: "chain_submit_unavailable".to_string(),
+        message: "chain gameplay submit transport failed".to_string(),
+        action_id: Some("mine".to_string()),
+        target_agent_id: Some("agent-1".to_string()),
+    });
+    assert_eq!(
+        server
+            .latest_player_gameplay_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.hint.as_deref()),
+        Some("restore the chain gameplay submission path, then retry")
+    );
+
+    server.record_gameplay_action_rejection(&crate::viewer::GameplayActionError {
+        code: "llm_mode_required".to_string(),
+        message: "gameplay actions require LLM mode".to_string(),
+        action_id: Some("mine".to_string()),
+        target_agent_id: Some("agent-1".to_string()),
+    });
+    assert_eq!(
+        server
+            .latest_player_gameplay_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.hint.as_deref()),
+        Some("restore or wait for runtime and provider readiness, then retry")
+    );
+
+    server.record_gameplay_action_rejection(&crate::viewer::GameplayActionError {
+        code: "future_gameplay_rejection".to_string(),
+        message: "future rejection detail".to_string(),
+        action_id: Some("mine".to_string()),
+        target_agent_id: Some("agent-1".to_string()),
+    });
+    assert_eq!(
+        server
+            .latest_player_gameplay_feedback
+            .as_ref()
+            .and_then(|feedback| feedback.hint.as_deref()),
+        Some("inspect the rejection details before retrying")
+    );
+}
+
+#[test]
 fn runtime_gameplay_action_script_mode_requires_llm_mode() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
