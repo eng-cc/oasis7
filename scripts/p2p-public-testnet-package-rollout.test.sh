@@ -2781,6 +2781,18 @@ assert "`rollback_applied=true`" in handoff and "`promotion_begin=true`" in hand
 assert "`State=Ready`" in handoff and "可人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`" in handoff, (
     "manual restart must be limited to a restored, stopped task"
 )
+common_start = text.index("### Current five-node status")
+common_end = text.index("### Peer id truth", common_start)
+common_commands = text[common_start:common_end]
+assert "Start-ScheduledTask" not in common_commands, (
+    "common fleet-status commands must never restart a Windows observer"
+)
+handoff_command_start = handoff.index("最小 Windows handoff 命令")
+handoff_commands = handoff[handoff_command_start:]
+assert "Start-ScheduledTask" not in handoff_commands, (
+    "the common Windows handoff command block must not contain an unconditional restart; "
+    "Start-ScheduledTask may appear only in the restored-post-stop eligibility branch"
+)
 PY
 then
   package_contract_failed=1

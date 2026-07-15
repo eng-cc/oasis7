@@ -571,6 +571,20 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 8. `readiness.failed_gates`
 9. `consensus.network_head.decision`
 
+在作出 `Fleet healthy` 或 recovery update 结论前，使用 collector 生成唯一的 bounded same-window artifact；它会逐节点记录 UTC capture timestamp、全局 UTC start/finish timestamp 和 capture span，并在 span、head、readiness、failed gate、last error 或 network-head decision 不满足时 fail closed：
+
+```bash
+./scripts/p2p-public-testnet-fleet-health.py \
+  --sequencer sequencer \
+  --node sequencer=http://39.104.204.172:6631/v1/chain/status \
+  --node storage=http://39.104.205.67:6632/v1/chain/status \
+  --node linux-lan-observer=http://<linux-lan-observer>:6633/v1/chain/status \
+  --node windows-observer=http://<windows-observer>:5121/v1/chain/status \
+  --node macos-observer=http://127.0.0.1:19083/v1/chain/status \
+  --max-capture-span-seconds 30 \
+  --output .tmp/public-testnet-fleet-health.json
+```
+
 ### Verdict rules
 1. **Fleet live**
    - 当前 operator inventory 中所有节点都在跑
@@ -630,7 +644,6 @@ Windows package rollout 只要输出 `rollback_required=true`，就进入仍在�
 ```powershell
 Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State,Actions
 Get-Content -LiteralPath '<attempt_stdout>','<attempt_stderr>','<attempt_exit_marker>'
-Start-ScheduledTask -TaskName Oasis7Observer
 Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State
 Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
   ConvertTo-Json -Depth 8
