@@ -215,6 +215,38 @@ test -f "$node_root_abs/world-simulator-mirror/snapshot.json"
 test -f "$node_root_abs/world/snapshot.json"
 test -f "$node_root_abs/runtime-root/reward-runtime-execution-bridge-state.json"
 
+reset_symlink_backup="$TMP_DIR/reset-state-symlink-backup"
+reset_symlink_external="$TMP_DIR/reset-state-symlink-external"
+mkdir -p "$reset_symlink_external"
+mv "$node_root_abs/config/doc" "$node_root_abs/config/doc.real"
+ln -s "$reset_symlink_external" "$node_root_abs/config/doc"
+set +e
+reset_symlink_output=$("$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
+  --source-env "$source_stack/node.env" \
+  --source-manifest "$source_stack/config/manifest.json" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --node-root "$node_root" \
+  --reset-state \
+  --state-backup-dir "$reset_symlink_backup" 2>&1)
+reset_symlink_status=$?
+set -e
+if [[ "$reset_symlink_status" -eq 0 ]]; then
+  echo "expected reset-state to reject a config/doc symlink before mutating state" >&2
+  exit 1
+fi
+grep -q 'local node install target contains symlink component' <<<"$reset_symlink_output"
+# Regression contract: an unsafe governed target must fail before either the
+# persisted state or the caller-selected backup root is changed.
+if [[ ! -f "$node_root_abs/replication-root/node_pos_state.json" \
+  || ! -f "$node_root_abs/execution-records/latest.json" \
+  || ! -f "$node_root_abs/store/blobs/old" \
+  || -e "$reset_symlink_backup" ]]; then
+  echo "reset-state symlink rejection mutated persisted state or created a backup" >&2
+  exit 1
+fi
+rm "$node_root_abs/config/doc"
+mv "$node_root_abs/config/doc.real" "$node_root_abs/config/doc"
+
 reset_backup="$TMP_DIR/reset-backup"
 "$ROOT_DIR/scripts/p2p-public-testnet-local-node-install.sh" \
   --source-env "$source_stack/node.env" \

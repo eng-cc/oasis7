@@ -545,6 +545,32 @@ function Test-NodeLocalPath {{
   return $false
 }}
 
+function Assert-NodeLocalPhysicalPath {{
+  param(
+    [Parameter(Mandatory = $true)] [string] $Path,
+    [Parameter(Mandatory = $true)] [string] $Label
+  )
+  if (!(Test-NodeLocalPath -Path $Path)) {{
+    throw "$Label is not node-local: $Path"
+  }}
+  $candidate = [System.IO.Path]::GetFullPath([Environment]::ExpandEnvironmentVariables($Path))
+  $probe = $candidate
+  while (![string]::IsNullOrWhiteSpace($probe)) {{
+    $item = Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+    if ($null -ne $item -and
+        (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)) {{
+      throw "$Label contains reparse-point component: $probe"
+    }}
+    $parent = Split-Path -LiteralPath $probe -Parent
+    if ([string]::IsNullOrWhiteSpace($parent) -or
+        $parent.Equals($probe, [System.StringComparison]::OrdinalIgnoreCase)) {{
+      break
+    }}
+    $probe = $parent
+  }}
+  return $candidate
+}}
+
 function Preserve-AttemptDiagnostics {{
   param([string] $StdoutPath, [string] $StderrPath, [string] $ExitMarkerPath)
   foreach ($diagnosticPath in @($StdoutPath, $StderrPath, $ExitMarkerPath)) {{
@@ -580,7 +606,27 @@ $statusUrl = {ps_literal(status_url)}
 $requireStrictReady = {require_strict_ready}
 $requireRpcRunning = {require_rpc_running}
 $verificationTimeoutSeconds = {verification_timeout_secs}
+$activeConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $deployRoot 'config')).TrimEnd('\\')
+$stagingConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $stagingRoot 'config')).TrimEnd('\\')
+$stagingConfigPrefix = $stagingConfigRoot + '\\'
+$physicalPreflightTargets = @(
+  [PSCustomObject]@{{ path = $stagingRoot; label = 'staging root' }},
+  [PSCustomObject]@{{ path = $stagingConfigRoot; label = 'staging config root' }},
+  [PSCustomObject]@{{ path = $deployRoot; label = 'active deploy root' }},
+  [PSCustomObject]@{{ path = $activeConfigRoot; label = 'active config root' }},
+  [PSCustomObject]@{{ path = $installRoot; label = 'install root' }},
+  [PSCustomObject]@{{ path = $runtime; label = 'runtime path' }},
+  [PSCustomObject]@{{ path = $activeBundlePath; label = 'active config bundle path' }},
+  [PSCustomObject]@{{ path = $activeGenesisPath; label = 'active config genesis path' }},
+  [PSCustomObject]@{{ path = $activeManifestPath; label = 'active config manifest path' }},
+  [PSCustomObject]@{{ path = $activeBootstrapPath; label = 'active config bootstrap path' }},
+  [PSCustomObject]@{{ path = $rollbackBackupRoot; label = 'rollback root' }}
+)
+foreach ($physicalPreflightTarget in $physicalPreflightTargets) {{
+  Assert-NodeLocalPhysicalPath -Path $physicalPreflightTarget.path -Label $physicalPreflightTarget.label | Out-Null
+}}
 $logRoot = Join-Path $deployRoot 'logs\package-rollout-attempts'
+Assert-NodeLocalPhysicalPath -Path $logRoot -Label 'active deploy log root' | Out-Null
 New-Item -ItemType Directory -Path $logRoot -Force | Out-Null
 $attemptId = [Guid]::NewGuid().ToString('N')
 $attemptStdoutPath = Join-Path $logRoot "$attemptId.stdout.log"
@@ -592,15 +638,42 @@ $expectedGovernedSha256 = @{{
 {integrity_entries}
 }}
 
+$transformedConfigTargets = @(
+  [System.IO.Path]::GetFullPath($activeBundlePath),
+  [System.IO.Path]::GetFullPath($activeGenesisPath),
+  [System.IO.Path]::GetFullPath($activeManifestPath)
+)
+$transformedConfigTargetSet = [System.Collections.Generic.HashSet[string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase
+)
+$rollbackConfigTargetSet = [System.Collections.Generic.HashSet[string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase
+)
+$stagedToActiveConfigTargets = [System.Collections.Generic.Dictionary[string, string]]::new(
+  [System.StringComparer]::OrdinalIgnoreCase
+)
+
 foreach ($entry in $expectedGovernedSha256.GetEnumerator()) {{
   try {{
-    if (!(Test-Path -LiteralPath $entry.Key -PathType Leaf)) {{
-      throw "staged governed bootstrap source missing: $($entry.Key)"
+    $stagedConfigSource = [System.IO.Path]::GetFullPath([string]$entry.Key)
+    if (!$stagedConfigSource.StartsWith($stagingConfigPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
+      throw "staged governed source escapes staging config root: $stagedConfigSource"
     }}
-    $actual = (Get-FileHash -LiteralPath $entry.Key -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stagedConfigRelativePath = $stagedConfigSource.Substring($stagingConfigPrefix.Length)
+    if ([string]::IsNullOrWhiteSpace($stagedConfigRelativePath)) {{
+      throw "staged governed source has empty staging-relative path: $stagedConfigSource"
+    }}
+    $activeConfigTarget = [System.IO.Path]::GetFullPath((Join-Path $activeConfigRoot $stagedConfigRelativePath))
+    Assert-NodeLocalPhysicalPath -Path $stagedConfigSource -Label 'staging governed source' | Out-Null
+    if (!(Test-Path -LiteralPath $stagedConfigSource -PathType Leaf)) {{
+      throw "staged governed bootstrap source missing: $stagedConfigSource"
+    }}
+    $actual = (Get-FileHash -LiteralPath $stagedConfigSource -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actual -ne $entry.Value) {{
-      throw "staged governed bootstrap integrity mismatch: $($entry.Key)"
+      throw "staged governed bootstrap integrity mismatch: $stagedConfigSource"
     }}
+    $stagedToActiveConfigTargets[$stagedConfigSource] = $activeConfigTarget
+    $rollbackConfigTargetSet.Add($activeConfigTarget) | Out-Null
   }} catch {{
     $stagingPreflightDiagnostic = @(
       'failure_phase=staging_preflight',
@@ -615,6 +688,11 @@ foreach ($entry in $expectedGovernedSha256.GetEnumerator()) {{
     throw
   }}
 }}
+foreach ($transformedConfigTarget in $transformedConfigTargets) {{
+  $transformedConfigTargetSet.Add($transformedConfigTarget) | Out-Null
+  $rollbackConfigTargetSet.Add($transformedConfigTarget) | Out-Null
+}}
+$rollbackConfigTargets = @($rollbackConfigTargetSet | Sort-Object)
 
 $bundle = Get-Item $bundlePath -ErrorAction Stop
 $json = Get-Content $bundle.FullName -Raw | ConvertFrom-Json
@@ -633,7 +711,6 @@ if ($null -eq $genesisJson.governance_bootstrap_refs) {{
   throw "governed genesis missing governance_bootstrap_refs: $($genesis.FullName)"
 }}
 $evidenceDir = Join-Path $genesis.Directory.FullName 'doc\\testing\\evidence'
-$activeConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $deployRoot 'config')).TrimEnd('\\')
 $activeEvidenceDir = Join-Path $activeConfigRoot 'doc\\testing\\evidence'
 $localizedTargets = @{{}}
 $localizedGovernedRefCount = 0
@@ -741,6 +818,7 @@ foreach ($entry in $structuredPaths) {{
 
 function Resolve-RollbackRuntimeSource {{
   param([Parameter(Mandatory = $true)] [string] $BackupRoot)
+  Assert-NodeLocalPhysicalPath -Path $BackupRoot -Label 'rollback root' | Out-Null
   $backupRootFull = [System.IO.Path]::GetFullPath($BackupRoot).TrimEnd('\\')
   $backupRootPrefix = $backupRootFull + '\\'
   $backupManifestPath = Join-Path $backupRootFull 'backup-manifest.json'
@@ -755,6 +833,7 @@ function Resolve-RollbackRuntimeSource {{
     throw "rollback runtime ambiguous: multiple backup manifest/provenance files under $backupRootFull"
   }}
   if ($metadataPaths.Count -eq 1) {{
+    Assert-NodeLocalPhysicalPath -Path $metadataPaths[0] -Label 'rollback metadata source' | Out-Null
     $backupMetadata = Get-Content -LiteralPath $metadataPaths[0] -Raw | ConvertFrom-Json
     $runtimeRelativePath = ''
     $expectedRuntimeSha256 = ''
@@ -812,6 +891,7 @@ function Resolve-RollbackRuntimeSource {{
       if (!$legacyConfinedCandidate.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
         throw "rollback runtime path escapes backup root: path=$legacyConfinedCandidate root=$backupRootFull"
       }}
+      Assert-NodeLocalPhysicalPath -Path $legacyConfinedCandidate -Label 'rollback runtime source' | Out-Null
       if ($expectedRuntimeSha256 -notmatch '^[0-9a-fA-F]{{64}}$') {{
         throw "confined backup runtime sha256 mismatch for legacy rooted runtime_path: declared runtime_sha256 is missing or invalid"
       }}
@@ -827,6 +907,7 @@ function Resolve-RollbackRuntimeSource {{
     if (!(Test-Path -LiteralPath $manifestCandidate -PathType Leaf)) {{
       throw "known-good rollback runtime missing: $manifestCandidate"
     }}
+    Assert-NodeLocalPhysicalPath -Path $manifestCandidate -Label 'rollback runtime source' | Out-Null
     if (![string]::IsNullOrWhiteSpace($expectedRuntimeSha256)) {{
       if ($expectedRuntimeSha256 -notmatch '^[0-9a-fA-F]{{64}}$') {{
         throw "invalid rollback runtime sha256 in backup manifest/provenance: $expectedRuntimeSha256"
@@ -853,24 +934,18 @@ function Resolve-RollbackRuntimeSource {{
   if (!$resolvedFallback.StartsWith($backupRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
     throw "rollback runtime path escapes backup root: path=$resolvedFallback root=$backupRootFull"
   }}
+  Assert-NodeLocalPhysicalPath -Path $resolvedFallback -Label 'rollback runtime source' | Out-Null
   return $resolvedFallback
 }}
 
 $configRoot = $activeConfigRoot
 $configRootPrefix = $configRoot + '\\'
-$rollbackConfigTargets = @(
-  [System.IO.Path]::GetFullPath($activeBundlePath),
-  [System.IO.Path]::GetFullPath($activeGenesisPath),
-  [System.IO.Path]::GetFullPath($activeManifestPath)
-)
 $rollbackProvenanceTargets = @(
   (Join-Path $deployRoot 'CURRENT_VERSION'),
   (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
 )
 try {{
-  if (!(Test-NodeLocalPath -Path $rollbackBackupRoot)) {{
-    throw "configured rollback backup root is not node-local: $rollbackBackupRoot"
-  }}
+  Assert-NodeLocalPhysicalPath -Path $rollbackBackupRoot -Label 'rollback root' | Out-Null
   $rollbackRuntimeSource = Resolve-RollbackRuntimeSource -BackupRoot $rollbackBackupRoot
   foreach ($rollbackConfigTarget in $rollbackConfigTargets) {{
     if (!$rollbackConfigTarget.StartsWith($configRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
@@ -878,12 +953,16 @@ try {{
     }}
     $rollbackRelativePath = $rollbackConfigTarget.Substring($configRootPrefix.Length)
     $rollbackConfigSource = Join-Path (Join-Path $rollbackBackupRoot 'config') $rollbackRelativePath
+    Assert-NodeLocalPhysicalPath -Path $rollbackConfigTarget -Label 'active config rollback target' | Out-Null
+    Assert-NodeLocalPhysicalPath -Path $rollbackConfigSource -Label 'rollback config source' | Out-Null
     if (!(Test-Path -LiteralPath $rollbackConfigSource -PathType Leaf)) {{
       throw "known-good rollback config missing: $rollbackConfigSource"
     }}
   }}
   foreach ($rollbackProvenanceTarget in $rollbackProvenanceTargets) {{
     $rollbackProvenanceSource = Join-Path $rollbackBackupRoot ([System.IO.Path]::GetFileName($rollbackProvenanceTarget))
+    Assert-NodeLocalPhysicalPath -Path $rollbackProvenanceTarget -Label 'active deploy rollback target' | Out-Null
+    Assert-NodeLocalPhysicalPath -Path $rollbackProvenanceSource -Label 'rollback provenance source' | Out-Null
     if (!(Test-Path -LiteralPath $rollbackProvenanceSource -PathType Leaf)) {{
       throw "known-good rollback provenance missing: $rollbackProvenanceSource"
     }}
@@ -901,11 +980,21 @@ Write-Output 'promotion_begin=true'
 
 function Copy-StagedFileAtomically {{
   param([Parameter(Mandatory = $true)] [string] $Source, [Parameter(Mandatory = $true)] [string] $Destination)
+  Assert-NodeLocalPhysicalPath -Path $Source -Label 'staging promotion source' | Out-Null
+  Assert-NodeLocalPhysicalPath -Path $Destination -Label 'active promotion destination' | Out-Null
   $destinationParent = [System.IO.Path]::GetDirectoryName($Destination)
+  Assert-NodeLocalPhysicalPath -Path $destinationParent -Label 'active promotion destination parent' | Out-Null
   New-Item -ItemType Directory -Path $destinationParent -Force | Out-Null
   $destinationTemp = "$Destination.rollout-$attemptId.tmp"
   Copy-Item -LiteralPath $Source -Destination $destinationTemp -Force
   Move-Item -LiteralPath $destinationTemp -Destination $Destination -Force
+}}
+
+function Move-NodeLocalFileAtomically {{
+  param([Parameter(Mandatory = $true)] [string] $Source, [Parameter(Mandatory = $true)] [string] $Destination)
+  Assert-NodeLocalPhysicalPath -Path $Source -Label 'active promotion temporary source' | Out-Null
+  Assert-NodeLocalPhysicalPath -Path $Destination -Label 'active promotion destination' | Out-Null
+  Move-Item -LiteralPath $Source -Destination $Destination -Force
 }}
 
 function Invoke-KnownGoodRollback {{
@@ -925,6 +1014,8 @@ function Invoke-KnownGoodRollback {{
   if (!$rollbackRuntimeSourceAtRestore.Equals($rollbackRuntimeSource, [System.StringComparison]::OrdinalIgnoreCase)) {{
     throw "rollback runtime source changed after preflight: preflight=$rollbackRuntimeSource restore=$rollbackRuntimeSourceAtRestore"
   }}
+  Assert-NodeLocalPhysicalPath -Path $rollbackRuntimeSourceAtRestore -Label 'rollback runtime source' | Out-Null
+  Assert-NodeLocalPhysicalPath -Path $runtime -Label 'runtime rollback target' | Out-Null
   $rollbackRuntimeSourceSha256 = (Get-FileHash -LiteralPath $rollbackRuntimeSourceAtRestore -Algorithm SHA256).Hash.ToLowerInvariant()
   $installedRuntimeSha256 = if (Test-Path -LiteralPath $runtime -PathType Leaf) {{
     (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -968,6 +1059,7 @@ function Invoke-KnownGoodRollback {{
         Start-Sleep -Milliseconds 250
       }}
     }}
+    Assert-NodeLocalPhysicalPath -Path $runtime -Label 'runtime rollback target' | Out-Null
     if (!$runtimeUnlocked) {{
       $lockDiagnostic = "failure_phase=rollback_unlock rollback_path=$runtime rollback_error=exclusive_file_unlock_timeout rollback_exit_code=1 rollback_required=true lock_remains=true"
       [System.IO.File]::AppendAllText($attemptStderrPath, $lockDiagnostic + [Environment]::NewLine)
@@ -982,6 +1074,8 @@ function Invoke-KnownGoodRollback {{
   foreach ($rollbackConfigTarget in $rollbackConfigTargets) {{
     $rollbackRelativePath = $rollbackConfigTarget.Substring($configRootPrefix.Length)
     $rollbackConfigSource = Join-Path (Join-Path $rollbackBackupRoot 'config') $rollbackRelativePath
+    Assert-NodeLocalPhysicalPath -Path $rollbackConfigSource -Label 'rollback config source' | Out-Null
+    Assert-NodeLocalPhysicalPath -Path $rollbackConfigTarget -Label 'active config rollback target' | Out-Null
     $rollbackConfigSourceHash = (Get-FileHash -LiteralPath $rollbackConfigSource -Algorithm SHA256).Hash.ToLowerInvariant()
     $rollbackConfigTargetHash = if (Test-Path -LiteralPath $rollbackConfigTarget -PathType Leaf) {{
       (Get-FileHash -LiteralPath $rollbackConfigTarget -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -997,6 +1091,8 @@ function Invoke-KnownGoodRollback {{
   }}
   foreach ($rollbackProvenanceTarget in $rollbackProvenanceTargets) {{
     $rollbackProvenanceSource = Join-Path $rollbackBackupRoot ([System.IO.Path]::GetFileName($rollbackProvenanceTarget))
+    Assert-NodeLocalPhysicalPath -Path $rollbackProvenanceSource -Label 'rollback provenance source' | Out-Null
+    Assert-NodeLocalPhysicalPath -Path $rollbackProvenanceTarget -Label 'active deploy rollback target' | Out-Null
     $rollbackProvenanceSourceHash = (Get-FileHash -LiteralPath $rollbackProvenanceSource -Algorithm SHA256).Hash.ToLowerInvariant()
     $rollbackProvenanceTargetHash = if (Test-Path -LiteralPath $rollbackProvenanceTarget -PathType Leaf) {{
       (Get-FileHash -LiteralPath $rollbackProvenanceTarget -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -1108,26 +1204,18 @@ if (!(Test-Path $runtime)) {{
   Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'installer' -FailureError "runtime missing after install: $runtime" -FailureExitCode 1
   throw "runtime missing after install: $runtime"
 }}
+Assert-NodeLocalPhysicalPath -Path $runtime -Label 'runtime promotion target' | Out-Null
 
 $hash = (Get-FileHash $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
 $size = (Get-Item $runtime).Length
 Write-Output "new_runtime_sha256=$hash"
 Write-Output "new_runtime_size=$size"
 
-$stagingConfigRoot = [System.IO.Path]::GetFullPath((Join-Path $stagingRoot 'config')).TrimEnd('\\')
-$stagingConfigPrefix = $stagingConfigRoot + '\\'
-$transformedConfigTargets = @($activeBundlePath, $activeGenesisPath, $activeManifestPath)
-foreach ($stagedConfigSource in @($expectedGovernedSha256.Keys)) {{
-  $stagedConfigSourceFull = [System.IO.Path]::GetFullPath([string]$stagedConfigSource)
-  if (!$stagedConfigSourceFull.StartsWith($stagingConfigPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {{
-    Invoke-KnownGoodRollback -OriginalTaskAction $originalTaskAction -FailurePhase 'promotion' -FailureError "staged config source escapes staging root: $stagedConfigSourceFull" -FailureExitCode 1
-    throw "staged config source escapes staging root: $stagedConfigSourceFull"
-  }}
-  $stagedConfigRelativePath = $stagedConfigSourceFull.Substring($stagingConfigPrefix.Length)
-  $activeConfigTarget = [System.IO.Path]::GetFullPath((Join-Path $activeConfigRoot $stagedConfigRelativePath))
-  if ($transformedConfigTargets -contains $activeConfigTarget) {{ continue }}
+foreach ($stagedConfigSource in @($stagedToActiveConfigTargets.Keys)) {{
+  $activeConfigTarget = $stagedToActiveConfigTargets[$stagedConfigSource]
+  if ($transformedConfigTargetSet.Contains($activeConfigTarget)) {{ continue }}
   Invoke-RolloutFailureInjection -Phase 'governed_copy'
-  Copy-StagedFileAtomically -Source $stagedConfigSourceFull -Destination $activeConfigTarget
+  Copy-StagedFileAtomically -Source $stagedConfigSource -Destination $activeConfigTarget
 }}
 
 Set-JsonProperty $json.runtime_build 'git_commit' $commit
@@ -1148,7 +1236,7 @@ $bundleTemp = "$activeBundlePath.rollout-$attemptId.tmp"
   [System.Text.UTF8Encoding]::new($false)
 )
 Invoke-RolloutFailureInjection -Phase 'bundle_move'
-Move-Item -LiteralPath $bundleTemp -Destination $activeBundlePath -Force
+Move-NodeLocalFileAtomically -Source $bundleTemp -Destination $activeBundlePath
 $updated = 1
 
 $genesisTemp = "$activeGenesisPath.rollout-$attemptId.tmp"
@@ -1158,7 +1246,7 @@ $genesisTemp = "$activeGenesisPath.rollout-$attemptId.tmp"
   [System.Text.UTF8Encoding]::new($false)
 )
 Invoke-RolloutFailureInjection -Phase 'genesis_move'
-Move-Item -LiteralPath $genesisTemp -Destination $activeGenesisPath -Force
+Move-NodeLocalFileAtomically -Source $genesisTemp -Destination $activeGenesisPath
 $manifestTemp = "$activeManifestPath.rollout-$attemptId.tmp"
 [System.IO.File]::WriteAllText(
   $manifestTemp,
@@ -1166,7 +1254,7 @@ $manifestTemp = "$activeManifestPath.rollout-$attemptId.tmp"
   [System.Text.UTF8Encoding]::new($false)
 )
 Invoke-RolloutFailureInjection -Phase 'manifest_move'
-Move-Item -LiteralPath $manifestTemp -Destination $activeManifestPath -Force
+Move-NodeLocalFileAtomically -Source $manifestTemp -Destination $activeManifestPath
 foreach ($key in $currentGovernedRefKeys) {{
   $property = $genesisJson.governance_bootstrap_refs.PSObject.Properties[$key]
   if ($null -ne $property -and $property.Value -is [string] -and ![string]::IsNullOrEmpty($property.Value)) {{
@@ -1178,7 +1266,9 @@ foreach ($key in $currentGovernedRefKeys) {{
 Write-Output "localized_governed_ref_count=$localizedGovernedRefCount"
 
 Invoke-RolloutFailureInjection -Phase 'current_version_write'
-Set-Content -Encoding UTF8 (Join-Path $deployRoot 'CURRENT_VERSION') $version
+$currentVersionPath = Join-Path $deployRoot 'CURRENT_VERSION'
+Assert-NodeLocalPhysicalPath -Path $currentVersionPath -Label 'active deploy current version target' | Out-Null
+Set-Content -Encoding UTF8 $currentVersionPath $version
 $deployedBuildInfo = @(
   'workflow=Testnet Packages',
   "run_id=$runId",
@@ -1190,7 +1280,9 @@ $deployedBuildInfo = @(
   "runtime_size=$size"
 )
 Invoke-RolloutFailureInjection -Phase 'deployed_buildinfo_write'
-$deployedBuildInfo | Set-Content -Encoding UTF8 (Join-Path $deployRoot 'DEPLOYED_BUILDINFO')
+$deployedBuildInfoPath = Join-Path $deployRoot 'DEPLOYED_BUILDINFO'
+Assert-NodeLocalPhysicalPath -Path $deployedBuildInfoPath -Label 'active deploy buildinfo target' | Out-Null
+$deployedBuildInfo | Set-Content -Encoding UTF8 $deployedBuildInfoPath
 Write-Output "updated_bundle_count=$updated"
 Write-Output 'promotion_complete=true'
 

@@ -1877,6 +1877,236 @@ if [[ "$package_contract_failed" -ne 0 ]]; then
   exit 1
 fi
 
+# This is intentionally a Windows-only behavior harness. macOS/Linux retain
+# generation and contract coverage above; the narrow PR-only Windows CI job
+# below supplies Windows PowerShell, ScheduledTasks, and junction semantics.
+if [[ "${OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST:-0}" == "1" ]]; then
+  windows_powershell="$(command -v powershell.exe || command -v powershell || command -v pwsh || true)"
+  if [[ -z "$windows_powershell" ]]; then
+    echo "OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST=1 requires Windows PowerShell" >&2
+    exit 1
+  fi
+  if ! command -v cygpath >/dev/null 2>&1; then
+    echo "OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST=1 requires Git Bash cygpath" >&2
+    exit 1
+  fi
+  OASIS7_FIXTURE_ROOT_DIR="$(cygpath -w "$TMP_DIR")" \
+    OASIS7_FIXTURE_PACKAGE_DIR="$(cygpath -w "$package_dir")" \
+    OASIS7_FIXTURE_ROLLOUT_PY="$(cygpath -w "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py")" \
+    "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -Command - <<'PS'
+$ErrorActionPreference = 'Stop'
+
+$fixtureRoot = Join-Path $env:OASIS7_FIXTURE_ROOT_DIR ("windows-rollout-behavior-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
+$fixtureTasks = [System.Collections.Generic.List[string]]::new()
+
+function Get-Sha256([string] $Path) {
+  (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
+}
+
+function Assert-Equal([object] $Actual, [object] $Expected, [string] $Label) {
+  if ($Actual -ne $Expected) { throw "$Label: expected=[$Expected] actual=[$Actual]" }
+}
+
+function Write-FixtureExecutables {
+  param([string] $Directory)
+  $runtimeSource = @'
+using System;
+using System.Net;
+using System.Text;
+public static class FixtureRuntime {
+  public static void Main(string[] args) {
+    int port = Int32.Parse(args[1]);
+    var listener = new HttpListener();
+    listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+    listener.Start();
+    while (true) {
+      var context = listener.GetContext();
+      byte[] payload = Encoding.UTF8.GetBytes("{\"running\":true}");
+      context.Response.ContentType = "application/json";
+      context.Response.OutputStream.Write(payload, 0, payload.Length);
+      context.Response.Close();
+    }
+  }
+}
+'@
+  $installerSource = @'
+using System;
+using System.IO;
+public static class FixtureInstaller {
+  public static void Main() {
+    string installRoot = Environment.GetEnvironmentVariable("OASIS7_FIXTURE_INSTALL_ROOT");
+    string runtime = Environment.GetEnvironmentVariable("OASIS7_FIXTURE_RUNTIME_TEMPLATE");
+    string target = Path.Combine(installRoot, "bin", "oasis7_chain_runtime.exe");
+    Directory.CreateDirectory(Path.GetDirectoryName(target));
+    File.Copy(runtime, target, true);
+  }
+}
+'@
+  $runtime = Join-Path $Directory 'oasis7_chain_runtime.exe'
+  $installer = Join-Path $Directory 'fixture-installer.exe'
+  Add-Type -TypeDefinition $runtimeSource -OutputAssembly $runtime -OutputType ConsoleApplication
+  Add-Type -TypeDefinition $installerSource -OutputAssembly $installer -OutputType ConsoleApplication
+  return @{ Runtime = $runtime; Installer = $installer }
+}
+
+$executables = Write-FixtureExecutables -Directory $fixtureRoot
+
+function New-RolloutFixture {
+  param([string] $Name, [switch] $ActiveConfigJunction, [switch] $RollbackRootJunction)
+  $root = Join-Path $fixtureRoot $Name
+  $deployReal = Join-Path $root 'deploy-real'
+  $deploy = if ($ActiveConfigJunction) { Join-Path $root 'deploy-link' } else { $deployReal }
+  $installRoot = Join-Path $root 'install'
+  $rollbackReal = Join-Path $deployReal 'backups/rollback-real'
+  $rollbackRoot = if ($RollbackRootJunction) { Join-Path $deploy 'backups/rollback-link' } else { $rollbackReal }
+  New-Item -ItemType Directory -Path $deployReal, $installRoot, $rollbackReal -Force | Out-Null
+  if ($ActiveConfigJunction) { New-Item -ItemType Junction -Path $deploy -Target $deployReal | Out-Null }
+  if ($RollbackRootJunction) { New-Item -ItemType Junction -Path $rollbackRoot -Target $rollbackReal | Out-Null }
+  $taskName = "Oasis7Fixture2269_" + [Guid]::NewGuid().ToString('N')
+  $port = Get-Random -Minimum 20000 -Maximum 45000
+  $config = Join-Path $deploy 'config'
+  $activeBundle = Join-Path $config 'public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json'
+  $activeGenesis = Join-Path $config 'public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json'
+  $activeManifest = Join-Path $config 'public-testnet-governed-bootstrap-manifest-2026-06-06.windows.json'
+  $activeBootstrap = Join-Path $config 'public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt'
+  New-Item -ItemType Directory -Path $config, (Join-Path $installRoot 'bin'), (Join-Path $rollbackRoot 'runtime'), (Join-Path $rollbackRoot 'config') -Force | Out-Null
+  Copy-Item -LiteralPath $executables.Runtime -Destination (Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') -Force
+  Copy-Item -LiteralPath $executables.Runtime -Destination (Join-Path $rollbackRoot 'runtime/oasis7_chain_runtime.exe') -Force
+  Set-Content -LiteralPath (Join-Path $deploy 'CURRENT_VERSION') -Value 'known-good-version' -NoNewline
+  Set-Content -LiteralPath (Join-Path $deploy 'DEPLOYED_BUILDINFO') -Value 'known-good-buildinfo' -NoNewline
+  Copy-Item -LiteralPath (Join-Path $deploy 'CURRENT_VERSION') -Destination (Join-Path $rollbackRoot 'CURRENT_VERSION') -Force
+  Copy-Item -LiteralPath (Join-Path $deploy 'DEPLOYED_BUILDINFO') -Destination (Join-Path $rollbackRoot 'DEPLOYED_BUILDINFO') -Force
+  $runtimeBackupHash = Get-Sha256 (Join-Path $rollbackRoot 'runtime/oasis7_chain_runtime.exe')
+  @{
+    schema_version = 'oasis7.windows_observer_backup.v1'
+    runtime_path = 'runtime\oasis7_chain_runtime.exe'
+    runtime_sha256 = $runtimeBackupHash
+  } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $rollbackRoot 'backup-manifest.json') -Encoding UTF8
+  $action = New-ScheduledTaskAction -Execute (Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') -Argument "--port $port"
+  Register-ScheduledTask -TaskName $taskName -Action $action -Force | Out-Null
+  $fixtureTasks.Add($taskName)
+  $manifest = @{
+    nodes = @(@{
+      name = 'windows-fixture'; platform = 'windows-x64'; deploy_root = $deploy; install_root = $installRoot
+      remote_installer = (Join-Path $deploy 'placeholder/oasis7-windows-x64.exe'); scheduled_task = $taskName
+      status_url = "http://127.0.0.1:$port/v1/chain/status"; rollback_backup_root = $rollbackRoot; rollback_unlock_timeout_secs = 5
+      governed_bundle_path = $activeBundle; governed_genesis_path = $activeGenesis; governed_manifest_path = $activeManifest; governed_bootstrap_path = $activeBootstrap
+    })
+  }
+  $manifestPath = Join-Path $root 'manifest.json'
+  $outDir = Join-Path $root 'out'
+  $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  & python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath --package-dir $env:OASIS7_FIXTURE_PACKAGE_DIR --out-dir $outDir --json | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
+  $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
+  $scriptText = [IO.File]::ReadAllText($rollout)
+  $staging = [regex]::Match($scriptText, "\\$stagingRoot = \[Environment\]::ExpandEnvironmentVariables\('([^']+)'\)").Groups[1].Value
+  if ([string]::IsNullOrEmpty($staging)) { throw "fixture could not locate generated staging root: $Name" }
+  New-Item -ItemType Directory -Path (Join-Path $staging 'config') -Force | Out-Null
+  Copy-Item -LiteralPath $executables.Installer -Destination (Join-Path $staging 'oasis7-windows-x64.exe') -Force
+  $packageWindows = Join-Path $env:OASIS7_FIXTURE_PACKAGE_DIR 'windows'
+  Get-ChildItem -LiteralPath $packageWindows -Recurse -File | Where-Object { $_.Name -notin @('oasis7-windows-x64.exe', 'windows-x64-BUILDINFO', 'windows-x64-SHA256SUMS') } | ForEach-Object {
+    $relative = $_.FullName.Substring($packageWindows.Length).TrimStart('\\')
+    $destination = Join-Path (Join-Path $staging 'config') $relative
+    New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+  }
+  # Mirror every staged governed file into the active config and known-good
+  # backup. The generated rollout promotes this complete recursive closure,
+  # not only the three transformed JSON documents.
+  $stagingConfig = Join-Path $staging 'config'
+  $activeGovernedFiles = @(
+    Get-ChildItem -LiteralPath $stagingConfig -Recurse -File | ForEach-Object {
+      $relative = $_.FullName.Substring($stagingConfig.Length).TrimStart('\\')
+      $activePath = Join-Path $config $relative
+      $backupPath = Join-Path (Join-Path $rollbackRoot 'config') $relative
+      New-Item -ItemType Directory -Path (Split-Path $activePath -Parent), (Split-Path $backupPath -Parent) -Force | Out-Null
+      Set-Content -LiteralPath $activePath -Value ("known-good-$relative") -NoNewline
+      Copy-Item -LiteralPath $activePath -Destination $backupPath -Force
+      $activePath
+    }
+  )
+  foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest, $activeBootstrap)) {
+    if ($activeGovernedFiles -notcontains $requiredActivePath) {
+      throw "fixture staged governed closure omitted required active target: $requiredActivePath"
+    }
+  }
+  return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
+}
+
+function Get-FixtureSnapshot($Fixture) {
+  $files = @($Fixture.Runtime) + $Fixture.Active
+  @($files | ForEach-Object { "$($_)=$(Get-Sha256 $_)" }) -join "`n"
+}
+
+function Assert-OriginalTaskAction($Fixture) {
+  $action = @((Get-ScheduledTask -TaskName $Fixture.Task).Actions)[0]
+  Assert-Equal $action.Execute $Fixture.Runtime "scheduled task execute changed for $($Fixture.Task)"
+  Assert-Equal $action.Arguments "--port $($Fixture.Port)" "scheduled task arguments changed for $($Fixture.Task)"
+}
+
+function Remove-RolloutFixture($Fixture) {
+  if ($null -eq $Fixture) { return }
+  Unregister-ScheduledTask -TaskName $Fixture.Task -Confirm:$false -ErrorAction SilentlyContinue
+  Get-Process oasis7_chain_runtime -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$($Fixture.Install)*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+
+try {
+  # Both cases use a live, uniquely named task. A reparse ancestor must reject
+  # before Stop-ScheduledTask: the task remains running and all persisted state
+  # is byte-identical.
+  foreach ($case in @(@{Name='active-config-junction'; Active=$true; Rollback=$false}, @{Name='rollback-root-junction'; Active=$false; Rollback=$true})) {
+    $fixture = New-RolloutFixture -Name $case.Name -ActiveConfigJunction:$case.Active -RollbackRootJunction:$case.Rollback
+    try {
+      Start-ScheduledTask -TaskName $fixture.Task
+      Start-Sleep -Seconds 1
+      $before = Get-FixtureSnapshot $fixture
+      $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture.Rollout 2>&1
+      if ($LASTEXITCODE -eq 0) { throw "junction fixture unexpectedly succeeded: $($case.Name)" }
+      if (($result -join "`n") -notmatch 'reparse') { throw "junction fixture missing reparse rejection: $($case.Name) output=$result" }
+      Assert-Equal (Get-FixtureSnapshot $fixture) $before "junction fixture mutated persisted state: $($case.Name)"
+      Assert-OriginalTaskAction $fixture
+      if ((Get-ScheduledTask -TaskName $fixture.Task).State -ne 'Running') { throw "junction fixture reached Stop-ScheduledTask: $($case.Name)" }
+    } finally { Remove-RolloutFixture $fixture }
+  }
+
+  $phases = @('installer','governed_copy','bundle_move','genesis_move','manifest_move','current_version_write','deployed_buildinfo_write','task_action_restore')
+  foreach ($phase in $phases) {
+    $fixture = New-RolloutFixture -Name "phase-$phase"
+    try {
+      $before = Get-FixtureSnapshot $fixture
+      for ($attempt = 1; $attempt -le 2; $attempt++) {
+        $env:OASIS7_FIXTURE_INSTALL_ROOT = $fixture.Install
+        $env:OASIS7_FIXTURE_RUNTIME_TEMPLATE = $executables.Runtime
+        $env:OASIS7_ROLLOUT_FAIL_PHASE = $phase
+        # The generated production interface currently consumes the explicit
+        # INJECT spelling; retain FAIL_PHASE as the fixture contract alias.
+        $env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE = $phase
+        $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture.Rollout 2>&1
+        if ($LASTEXITCODE -eq 0) { throw "injected phase unexpectedly succeeded: phase=$phase attempt=$attempt" }
+        Assert-Equal (Get-FixtureSnapshot $fixture) $before "rollback failed to restore known-good state: phase=$phase attempt=$attempt"
+        Assert-OriginalTaskAction $fixture
+        $diagnostics = (Get-ChildItem -LiteralPath $fixture.Deploy -Recurse -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue }) -join "`n"
+        foreach ($field in @('failure_phase=', 'rollback_path=', 'rollback_error=', 'rollback_exit_code=', 'rollback_required=true')) {
+          if ($diagnostics -notmatch [regex]::Escape($field)) { throw "missing stable rollback diagnostic: phase=$phase field=$field" }
+        }
+      }
+    } finally {
+      Remove-Item Env:OASIS7_ROLLOUT_FAIL_PHASE -ErrorAction SilentlyContinue
+      Remove-Item Env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE -ErrorAction SilentlyContinue
+      Remove-Item Env:OASIS7_FIXTURE_INSTALL_ROOT -ErrorAction SilentlyContinue
+      Remove-Item Env:OASIS7_FIXTURE_RUNTIME_TEMPLATE -ErrorAction SilentlyContinue
+      Remove-RolloutFixture $fixture
+    }
+  }
+} finally {
+  foreach ($taskName in $fixtureTasks) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
+  Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+PS
+fi
+
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --help >/tmp/oasis7-package-rollout-help.out
 grep -q "mode is plan-only" /tmp/oasis7-package-rollout-help.out
 grep -q "Mutation requires" /tmp/oasis7-package-rollout-help.out

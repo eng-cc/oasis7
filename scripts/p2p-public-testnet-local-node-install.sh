@@ -47,6 +47,10 @@ abs_path() {
   python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$1"
 }
 
+abs_lexical_path() {
+  python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().absolute())' "$1"
+}
+
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
@@ -129,7 +133,10 @@ require_file "$start_script_source"
 source_env=$(abs_path "$source_env")
 source_manifest=$(abs_path "$source_manifest")
 runtime_build_ref=$(abs_path "$runtime_build_ref")
-node_root=$(abs_path "$node_root")
+# Preserve the caller's lexical node-root path until containment has rejected
+# any symlink component.  Resolving it here would erase a root-level symlink
+# from the safety check below.
+node_root=$(abs_lexical_path "$node_root")
 start_script_source=$(abs_path "$start_script_source")
 if [[ -n "$state_backup_dir" ]]; then
   state_backup_dir=$(abs_path "$state_backup_dir")
@@ -203,6 +210,45 @@ path_has_state() {
   return 0
 }
 
+# This must run before reset-state creates a backup directory or moves any
+# persisted state.  It also guards normal installation writes: containment is
+# physical, not merely a string-prefix check, so an existing symlink anywhere
+# in the governed node-root tree is fail-closed.
+python3 - "$node_root" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).expanduser().absolute()
+targets = (
+    root,
+    root / "bin",
+    root / "config",
+    root / "config" / "doc",
+    root / "config" / "doc" / "testing",
+    root / "config" / "doc" / "testing" / "evidence",
+    root / "logs",
+    root / "world",
+    root / "world-simulator-mirror",
+    root / "execution-records",
+    root / "store",
+    root / "replication-root",
+    root / "runtime-root",
+    root / "output" / "chain-runtime",
+)
+for target in targets:
+    current = root
+    if current.is_symlink():
+        raise SystemExit(f"local node install target contains symlink component: {current}")
+    for component in target.relative_to(root).parts:
+        current /= component
+        if current.is_symlink():
+            raise SystemExit(f"local node install target contains symlink component: {current}")
+    try:
+        target.resolve(strict=False).relative_to(root.resolve(strict=False))
+    except ValueError:
+        raise SystemExit(f"local node install target escapes node root: {target}")
+PY
+
 state_paths=(
   "$node_root/world"
   "$node_root/world-simulator-mirror"
@@ -239,35 +285,6 @@ if [[ "$state_mode" == "reset" && ${#existing_state_paths[@]} -gt 0 ]]; then
     printf 'backed up stale local observer state: %s -> %s\n' "$state_path" "$state_backup_dir/$(basename "$state_path")"
   done
 fi
-
-python3 - "$node_root" <<'PY'
-from pathlib import Path
-import sys
-
-root = Path(sys.argv[1]).expanduser().absolute()
-root_resolved = root.resolve(strict=False)
-targets = (
-    root,
-    root / "bin",
-    root / "config",
-    root / "config" / "doc",
-    root / "config" / "doc" / "testing",
-    root / "config" / "doc" / "testing" / "evidence",
-    root / "logs",
-)
-for target in targets:
-    current = root
-    if root.is_symlink():
-        raise SystemExit(f"local node install target contains symlink component: {root}")
-    for component in target.relative_to(root).parts:
-        current /= component
-        if current.is_symlink():
-            raise SystemExit(f"local node install target contains symlink component: {current}")
-    try:
-        target.resolve(strict=False).relative_to(root_resolved)
-    except ValueError:
-        raise SystemExit(f"local node install target escapes node root: {target}")
-PY
 
 mkdir -p "$node_root/bin" "$node_root/config" "$node_root/logs"
 install -m 0755 "$runtime_build_ref" "$node_root/bin/oasis7_chain_runtime"
