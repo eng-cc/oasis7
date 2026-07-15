@@ -349,6 +349,13 @@ function Assert-Equal([object] $Actual, [object] $Expected, [string] $Label) {
 if ($Actual -ne $Expected) { throw "${Label}: expected=[$Expected] actual=[$Actual]" }
 }
 
+function Assert-Utf8NoBom([string] $Path) {
+$bytes = [System.IO.File]::ReadAllBytes($Path)
+if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+  throw "fixture JSON must be UTF-8 without BOM: $Path"
+}
+}
+
 function Write-FixtureExecutables {
 param([string] $Directory)
 $runtimeSource = @'
@@ -419,11 +426,16 @@ Set-Content -LiteralPath (Join-Path $deploy 'DEPLOYED_BUILDINFO') -Value 'known-
 Copy-Item -LiteralPath (Join-Path $deploy 'CURRENT_VERSION') -Destination (Join-Path $rollbackRoot 'CURRENT_VERSION') -Force
 Copy-Item -LiteralPath (Join-Path $deploy 'DEPLOYED_BUILDINFO') -Destination (Join-Path $rollbackRoot 'DEPLOYED_BUILDINFO') -Force
 $runtimeBackupHash = Get-Sha256 (Join-Path $rollbackRoot 'runtime/oasis7_chain_runtime.exe')
-@{
+$backupManifestPath = Join-Path $rollbackRoot 'backup-manifest.json'
+[System.IO.File]::WriteAllText(
+  $backupManifestPath,
+  (@{
   schema_version = 'oasis7.windows_observer_backup.v1'
   runtime_path = 'runtime\oasis7_chain_runtime.exe'
   runtime_sha256 = $runtimeBackupHash
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $rollbackRoot 'backup-manifest.json') -Encoding UTF8
+  } | ConvertTo-Json),
+  [System.Text.UTF8Encoding]::new($false)
+)
 $action = New-ScheduledTaskAction -Execute (Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') -Argument "--port $port"
 Register-ScheduledTask -TaskName $taskName -Action $action -Force | Out-Null
 $fixtureTasks.Add($taskName)
@@ -437,7 +449,13 @@ $manifest = @{
 }
 $manifestPath = Join-Path $root 'manifest.json'
 $outDir = Join-Path $root 'out'
-$manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+[System.IO.File]::WriteAllText(
+  $manifestPath,
+  ($manifest | ConvertTo-Json -Depth 8),
+  [System.Text.UTF8Encoding]::new($false)
+)
+Assert-Utf8NoBom $backupManifestPath
+Assert-Utf8NoBom $manifestPath
 & python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath --package-dir $env:OASIS7_FIXTURE_PACKAGE_DIR --out-dir $outDir --json | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
