@@ -349,6 +349,19 @@ function Assert-Equal([object] $Actual, [object] $Expected, [string] $Label) {
 if ($Actual -ne $Expected) { throw "${Label}: expected=[$Expected] actual=[$Actual]" }
 }
 
+function Get-FixtureCanonicalExistingPath([string] $Path) {
+$item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+return [System.IO.Path]::GetFullPath($item.FullName).TrimEnd('\')
+}
+
+function Assert-FixtureSameExistingPath([string] $Actual, [string] $Expected, [string] $Label) {
+$actualCanonical = Get-FixtureCanonicalExistingPath $Actual
+$expectedCanonical = Get-FixtureCanonicalExistingPath $Expected
+if (!$actualCanonical.Equals($expectedCanonical, [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "${Label}: expected=[$Expected] expected_canonical=[$expectedCanonical] actual=[$Actual] actual_canonical=[$actualCanonical]"
+}
+}
+
 function Assert-Utf8NoBom([string] $Path) {
 $bytes = [System.IO.File]::ReadAllBytes($Path)
 if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
@@ -487,10 +500,16 @@ if ($ActiveConfigJunction -or $RollbackRootJunction) {
   try {
     Assert-NodeLocalPhysicalPath -Path $nestedReparseProbe -Label 'fixture parent traversal probe' | Out-Null
   } catch {
-    if ($_.Exception.Message -notmatch 'reparse-point component' -or
-        $_.Exception.Message -notmatch [regex]::Escape($expectedReparseAncestor)) {
+    $reportedReparseMatch = [regex]::Match($_.Exception.Message, 'reparse-point component:\s*(?<path>.+?)\s*$')
+    if (!$reportedReparseMatch.Success) {
       throw "fixture parent traversal did not identify its reparse ancestor: expected=$expectedReparseAncestor error=$($_.Exception.Message)"
     }
+    $reportedReparseAncestor = $reportedReparseMatch.Groups['path'].Value
+    $reportedReparseItem = Get-Item -LiteralPath $reportedReparseAncestor -Force -ErrorAction Stop
+    if (($reportedReparseItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+      throw "fixture parent traversal reported a non-reparse path: $reportedReparseAncestor"
+    }
+    Assert-FixtureSameExistingPath $reportedReparseAncestor $expectedReparseAncestor 'fixture parent traversal rejected the wrong reparse ancestor'
     $ancestorRejected = $true
   }
   if (!$ancestorRejected) {
@@ -668,6 +687,30 @@ require_windows_powershell_behavior_success \
   "$powershell_status" "$powershell_output" "$powershell_completion_marker"
 }
 verify_windows_powershell_behavior_boundary_fails_closed
+python3 - "${BASH_SOURCE[0]}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+fixture_match = re.search(
+    r"cat >\"\$powershell_fixture_script\" <<'PS'\n(?P<body>.*?)\nPS$",
+    source,
+    re.MULTILINE | re.DOTALL,
+)
+assert fixture_match, "could not isolate native Windows PowerShell behavior fixture"
+fixture = fixture_match.group("body")
+assert "function Get-FixtureCanonicalExistingPath" in fixture
+assert "Get-Item -LiteralPath $Path -Force -ErrorAction Stop" in fixture
+assert "$item.FullName" in fixture
+assert "[System.StringComparison]::OrdinalIgnoreCase" in fixture
+assert "reportedReparseItem.Attributes" in fixture
+assert "[System.IO.FileAttributes]::ReparsePoint" in fixture
+assert "Assert-FixtureSameExistingPath $reportedReparseAncestor $expectedReparseAncestor" in fixture
+assert "-notmatch [regex]::Escape($expectedReparseAncestor)" not in fixture, (
+    "fixture must not compare raw short/long Windows path spellings"
+)
+PY
 if [[ "${OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST:-0}" == "1" ]]; then
   run_windows_powershell_behavior_harness
   exit 0
