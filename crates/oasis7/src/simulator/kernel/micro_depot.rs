@@ -4,6 +4,7 @@ use oasis7_wasm_abi::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use crate::geometry::space_distance_cm;
@@ -12,7 +13,14 @@ use super::super::types::{
     Action, ActionId, AgentId, FacilityId, LocationId, ResourceKind, ResourceOwner,
 };
 use super::super::world_model::RegionalInfrastructure;
-use super::types::{MicroDepotResourceDebit, RejectReason, WorldEventKind};
+use super::micro_depot_commissioning::MicroDepotCommissioning;
+use super::micro_depot_validation::{
+    measured_micro_depot_inventory_depleted, validate_micro_depot_input,
+    validate_micro_depot_proposal,
+};
+use super::types::{
+    MicroDepotProposalResourceDebit, MicroDepotResourceDebit, RejectReason, WorldEventKind,
+};
 use super::{WorldKernel, to_canonical_cbor};
 
 pub const MICRO_DEPOT_PROPOSAL_EMIT_KIND: &str = "micro_depot.proposal";
@@ -21,8 +29,11 @@ pub const MICRO_DEPOT_DEBIT_AMOUNT_LOW: i64 = 1;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_MEDIUM: i64 = 3;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_HIGH: i64 = 5;
 pub const MICRO_DEPOT_DEBIT_AMOUNT_CRITICAL: i64 = 8;
-pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 2;
+pub const MICRO_DEPOT_INSTALL_DATA_COST: i64 = 10;
+pub const MICRO_DEPOT_INSTALL_SINK_DATA_COST: i64 = 2;
 pub const MICRO_DEPOT_UPKEEP_DATA_COST: i64 = 1;
+pub const MICRO_DEPOT_INITIAL_INVENTORY_UNITS_PER_KIND: i64 = 8;
+pub const MICRO_DEPOT_THROUGHPUT_LIMIT_UNITS_PER_EPOCH: i64 = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MicroDepotEvalInput {
@@ -76,6 +87,16 @@ pub struct MicroDepotFacilityContext {
     pub owner_claim_id: String,
     pub capacity_class: MicroDepotPressureClass,
     #[serde(default)]
+    pub inventory_revision: u64,
+    #[serde(default)]
+    pub current_epoch: u64,
+    #[serde(default)]
+    pub available_units_by_kind: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub throughput_remaining_units: i64,
+    #[serde(default)]
+    pub throughput_limit_units_per_epoch: i64,
+    #[serde(default)]
     pub supported_resource_kinds: Vec<String>,
     pub service_radius_cm: i64,
     pub upkeep_paid: bool,
@@ -110,6 +131,12 @@ pub struct MicroDepotProposal {
     pub blocker_change: Option<String>,
     #[serde(default)]
     pub consumed_resource_classes: Vec<MicroDepotConsumedResourceClass>,
+    #[serde(default)]
+    pub resource_debits: Vec<MicroDepotProposalResourceDebit>,
+    #[serde(default)]
+    pub evaluated_inventory_revision: u64,
+    #[serde(default)]
+    pub evaluated_epoch: u64,
     pub explanation_code: String,
     pub proposal_hash: String,
 }
@@ -161,9 +188,21 @@ pub struct MicroDepotEffectPreview {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MicroDepotPlayerFacilitySnapshot {
     pub facility_id: FacilityId,
+    #[serde(default)]
+    pub owner_claim_id: String,
     pub status: String,
     pub location_id: LocationId,
     pub service_radius_cm: i64,
+    #[serde(default)]
+    pub inventory_revision: u64,
+    #[serde(default)]
+    pub available_units_by_kind: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub throughput_epoch: u64,
+    #[serde(default)]
+    pub throughput_remaining_units: i64,
+    #[serde(default)]
+    pub throughput_limit_units_per_epoch: i64,
     #[serde(default)]
     pub supported_resource_kinds: Vec<String>,
     pub module_id: String,
@@ -188,8 +227,14 @@ pub fn compute_micro_depot_proposal_hash(
     input: &MicroDepotEvalInput,
     proposal: &MicroDepotProposal,
 ) -> Result<String, String> {
+    if input.schema_version == "micro_depot.eval.v1" {
+        return super::micro_depot_v1::proposal_hash(input, proposal);
+    }
     let mut canonical_proposal = proposal.clone();
     canonical_proposal.proposal_hash.clear();
+    if input.schema_version == "micro_depot.eval.v2" {
+        canonical_proposal.consumed_resource_classes.clear();
+    }
     let payload = MicroDepotProposalHashPayload {
         input,
         proposal: canonical_proposal,
@@ -256,7 +301,11 @@ where
         risk_delta_class: proposal.risk_delta_class,
         wait_delta_class: proposal.wait_delta_class,
         blocker_change: proposal.blocker_change.clone(),
-        consumed_resource_classes: proposal.consumed_resource_classes.clone(),
+        consumed_resource_classes: if input.schema_version == "micro_depot.eval.v1" {
+            proposal.consumed_resource_classes.clone()
+        } else {
+            Vec::new()
+        },
         explanation_code: proposal.explanation_code.clone(),
     };
 
@@ -431,42 +480,6 @@ impl WorldKernel {
         Ok(())
     }
 
-    pub fn micro_depot_player_facility_snapshots(&self) -> Vec<MicroDepotPlayerFacilitySnapshot> {
-        let mut snapshots: Vec<_> = self
-            .model
-            .regional_infrastructure
-            .values()
-            .filter(|facility| facility.kind == "micro_depot")
-            .map(|facility| {
-                let mut available_actions = Vec::new();
-                if facility.status == "active" && facility.upkeep_paid {
-                    available_actions.push("service_micro_depot_repair".to_string());
-                    available_actions.push("service_micro_depot_logistics".to_string());
-                    available_actions.push("suspend_micro_depot".to_string());
-                } else if facility.status == "suspended" || !facility.upkeep_paid {
-                    available_actions.push("pay_micro_depot_upkeep".to_string());
-                    available_actions.push("reclaim_micro_depot".to_string());
-                }
-                MicroDepotPlayerFacilitySnapshot {
-                    facility_id: facility.facility_id.clone(),
-                    status: facility.status.clone(),
-                    location_id: facility.location_id.clone(),
-                    service_radius_cm: facility.service_radius_cm,
-                    supported_resource_kinds: facility.supported_resource_kinds.clone(),
-                    module_id: facility.module_id.clone(),
-                    module_version: facility.module_version.clone(),
-                    wasm_hash: facility.wasm_hash.clone(),
-                    upkeep_paid: facility.upkeep_paid,
-                    last_receipt_id: facility.last_receipt_id.clone(),
-                    last_proposal_hash: facility.last_proposal_hash.clone(),
-                    available_actions,
-                }
-            })
-            .collect();
-        snapshots.sort_by(|left, right| left.facility_id.cmp(&right.facility_id));
-        snapshots
-    }
-
     pub(super) fn apply_install_micro_depot(
         &mut self,
         installer_agent_id: AgentId,
@@ -509,12 +522,12 @@ impl WorldKernel {
             || wasm_hash.trim().is_empty()
             || entrypoint.trim().is_empty()
             || service_radius_cm <= 0
-            || supported_resource_kinds.is_empty()
+            || supported_resource_kinds.as_slice() != ["data"]
         {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied {
                     notes: vec![
-                        "install_micro_depot requires owner claim, regional blocker receipt, module identity, entrypoint, positive radius, and supported resources"
+                        "install_micro_depot requires owner claim, regional blocker receipt, module identity, entrypoint, positive radius, and canonical supported resources [data]"
                             .to_string(),
                     ],
                 },
@@ -536,11 +549,8 @@ impl WorldKernel {
         let owner = ResourceOwner::Agent {
             agent_id: installer_agent_id.clone(),
         };
-        let install_cost_resources = vec![MicroDepotResourceDebit {
-            kind: ResourceKind::Data,
-            amount: MICRO_DEPOT_INSTALL_DATA_COST,
-        }];
-        for debit in &install_cost_resources {
+        let commissioning = MicroDepotCommissioning::v2();
+        for debit in &commissioning.install_cost_resources {
             if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
                 return WorldEventKind::ActionRejected { reason };
             }
@@ -559,6 +569,12 @@ impl WorldKernel {
             entrypoint: entrypoint.clone(),
             service_radius_cm,
             supported_resource_kinds: supported_resource_kinds.clone(),
+            measured_supply_schema_version: 2,
+            inventory_revision: 0,
+            available_units_by_kind: commissioning.inventory_by_kind.clone(),
+            throughput_limit_units_per_epoch: commissioning.throughput_limit_units_per_epoch,
+            throughput_epoch: 0,
+            throughput_remaining_units: commissioning.throughput_remaining_units,
             upkeep_paid: true,
             last_proposal_hash: None,
             last_receipt_id: None,
@@ -580,7 +596,13 @@ impl WorldKernel {
             entrypoint,
             service_radius_cm,
             supported_resource_kinds,
-            install_cost_resources,
+            install_cost_resources: commissioning.install_cost_resources,
+            measured_supply_schema_version: 2,
+            commissioning_sink_resources: commissioning.sink_resources,
+            commissioned_inventory_by_kind: commissioning.inventory_by_kind,
+            initial_throughput_limit_units_per_epoch: commissioning
+                .throughput_limit_units_per_epoch,
+            initial_throughput_remaining_units: commissioning.throughput_remaining_units,
         }
     }
 
@@ -689,7 +711,7 @@ impl WorldKernel {
             };
         };
         let input = MicroDepotEvalInput {
-            schema_version: "micro_depot.eval.v1".to_string(),
+            schema_version: "micro_depot.eval.v2".to_string(),
             module_id: facility.module_id.clone(),
             module_version: facility.module_version.clone(),
             action: MicroDepotActionContext {
@@ -712,6 +734,11 @@ impl WorldKernel {
                 status: MicroDepotStatus::Active,
                 owner_claim_id: facility.owner_claim_id.clone(),
                 capacity_class: MicroDepotPressureClass::Medium,
+                inventory_revision: facility.inventory_revision,
+                current_epoch: facility.throughput_epoch,
+                available_units_by_kind: facility.available_units_by_kind.clone(),
+                throughput_remaining_units: facility.throughput_remaining_units,
+                throughput_limit_units_per_epoch: facility.throughput_limit_units_per_epoch,
                 supported_resource_kinds: facility.supported_resource_kinds.clone(),
                 service_radius_cm: facility.service_radius_cm,
                 upkeep_paid: facility.upkeep_paid,
@@ -756,7 +783,7 @@ impl WorldKernel {
                 },
             };
         }
-        let consumed_resources = match micro_depot_resource_debits(&preview.proposal) {
+        let resource_debits = match micro_depot_resource_debits(&preview.proposal) {
             Ok(debits) => debits,
             Err(note) => {
                 return WorldEventKind::ActionRejected {
@@ -766,24 +793,75 @@ impl WorldKernel {
         };
         if let Err(note) = ensure_micro_depot_supported_resources(
             &facility.supported_resource_kinds,
-            &consumed_resources,
+            &resource_debits,
         ) {
             return WorldEventKind::ActionRejected {
                 reason: RejectReason::RuleDenied { notes: vec![note] },
             };
         }
-        let owner = facility.owner.clone();
-        if let Err(reason) = self.ensure_micro_depot_debits_available(&owner, &consumed_resources) {
-            return WorldEventKind::ActionRejected { reason };
+        let total_units = match resource_debits
+            .iter()
+            .try_fold(0_i64, |total, debit| total.checked_add(debit.units))
+        {
+            Some(total) => total,
+            None => {
+                return WorldEventKind::ActionRejected {
+                    reason: RejectReason::RuleDenied {
+                        notes: vec!["micro_depot resource debit total overflow".to_string()],
+                    },
+                };
+            }
+        };
+        if total_units > facility.throughput_remaining_units {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "DEPOT_THROUGHPUT_EXHAUSTED required_units={total_units} remaining_units={}",
+                        facility.throughput_remaining_units
+                    )],
+                },
+            };
         }
-        for debit in &consumed_resources {
-            if let Err(reason) = self.remove_from_owner(&owner, debit.kind, debit.amount) {
-                return WorldEventKind::ActionRejected { reason };
+        for debit in &resource_debits {
+            let available = facility
+                .available_units_by_kind
+                .get(micro_depot_resource_kind_label(debit.resource_kind))
+                .copied()
+                .unwrap_or(0);
+            if debit.units > available {
+                return WorldEventKind::ActionRejected {
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "DEPOT_INVENTORY_INSUFFICIENT resource_kind={} required_units={} available_units={available}",
+                            micro_depot_resource_kind_label(debit.resource_kind),
+                            debit.units
+                        )],
+                    },
+                };
             }
         }
 
         let receipt_id = format!("micro-depot:{facility_id}:{action_id}");
+        let inventory_units_before_by_kind = facility.available_units_by_kind.clone();
+        let inventory_revision_before = facility.inventory_revision;
+        let Some(inventory_revision_after) = inventory_revision_before.checked_add(1) else {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec!["micro_depot inventory revision overflow".to_string()],
+                },
+            };
+        };
+        let throughput_units_before = facility.throughput_remaining_units;
+        let throughput_units_after = throughput_units_before - total_units;
+        let mut inventory_units_after_by_kind = inventory_units_before_by_kind.clone();
+        for debit in &resource_debits {
+            let kind = micro_depot_resource_kind_label(debit.resource_kind).to_string();
+            *inventory_units_after_by_kind.entry(kind).or_default() -= debit.units;
+        }
         if let Some(stored) = self.model.regional_infrastructure.get_mut(&facility_id) {
+            stored.available_units_by_kind = inventory_units_after_by_kind.clone();
+            stored.throughput_remaining_units = throughput_units_after;
+            stored.inventory_revision = inventory_revision_after;
             stored.last_proposal_hash = Some(preview.proposal.proposal_hash.clone());
             stored.last_receipt_id = Some(receipt_id.clone());
             stored.last_serviced_target_id = Some(target_id.clone());
@@ -808,7 +886,21 @@ impl WorldKernel {
             wait_delta_class: micro_depot_delta_class_label(preview.effect.wait_delta_class)
                 .to_string(),
             blocker_change: preview.effect.blocker_change,
-            consumed_resources,
+            consumed_resources: resource_debits
+                .iter()
+                .map(|debit| MicroDepotResourceDebit {
+                    kind: debit.resource_kind,
+                    amount: debit.units,
+                })
+                .collect(),
+            evaluated_epoch: facility.throughput_epoch,
+            inventory_revision_before,
+            inventory_revision_after,
+            resource_debits,
+            inventory_units_before_by_kind,
+            inventory_units_after_by_kind,
+            throughput_units_before,
+            throughput_units_after,
             explanation_code: preview.effect.explanation_code,
         }
     }
@@ -821,6 +913,21 @@ impl WorldKernel {
         match self.ensure_micro_depot_owner(&facility_id, &agent_id) {
             Ok(()) => {}
             Err(reason) => return WorldEventKind::ActionRejected { reason },
+        }
+        if self
+            .model
+            .regional_infrastructure
+            .get(&facility_id)
+            .is_some_and(measured_micro_depot_inventory_depleted)
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![
+                        "DEPOT_INVENTORY_INSUFFICIENT required_units=1 available_units=0"
+                            .to_string(),
+                    ],
+                },
+            };
         }
         let owner = ResourceOwner::Agent {
             agent_id: agent_id.clone(),
@@ -913,39 +1020,6 @@ impl WorldKernel {
         }
     }
 
-    fn ensure_micro_depot_debits_available(
-        &self,
-        owner: &ResourceOwner,
-        debits: &[MicroDepotResourceDebit],
-    ) -> Result<(), RejectReason> {
-        let mut required = std::collections::BTreeMap::<ResourceKind, i64>::new();
-        for debit in debits {
-            *required.entry(debit.kind).or_default() += debit.amount;
-        }
-        let Some(stock) = self.owner_stock(owner) else {
-            return match owner {
-                ResourceOwner::Agent { agent_id } => Err(RejectReason::AgentNotFound {
-                    agent_id: agent_id.clone(),
-                }),
-                ResourceOwner::Location { location_id } => Err(RejectReason::LocationNotFound {
-                    location_id: location_id.clone(),
-                }),
-            };
-        };
-        for (kind, requested) in required {
-            let available = stock.get(kind);
-            if available < requested {
-                return Err(RejectReason::InsufficientResource {
-                    owner: owner.clone(),
-                    kind,
-                    requested,
-                    available,
-                });
-            }
-        }
-        Ok(())
-    }
-
     fn micro_depot_distance_to_target(
         &self,
         facility: &RegionalInfrastructure,
@@ -965,16 +1039,26 @@ impl WorldKernel {
 
 fn micro_depot_resource_debits(
     proposal: &MicroDepotProposal,
-) -> Result<Vec<MicroDepotResourceDebit>, String> {
-    let mut debits = Vec::new();
-    for consumed in &proposal.consumed_resource_classes {
-        let kind = micro_depot_resource_kind(&consumed.resource_kind)?;
-        let amount = micro_depot_amount_for_pressure(consumed.amount_class);
-        if amount > 0 {
-            debits.push(MicroDepotResourceDebit { kind, amount });
-        }
+) -> Result<Vec<MicroDepotProposalResourceDebit>, String> {
+    if !proposal.resource_debits.is_empty() {
+        return Ok(proposal.resource_debits.clone());
     }
-    Ok(debits)
+    proposal
+        .consumed_resource_classes
+        .iter()
+        .map(|consumed| {
+            let kind = micro_depot_resource_kind(&consumed.resource_kind)?;
+            let amount = micro_depot_amount_for_pressure(consumed.amount_class);
+            Ok(MicroDepotProposalResourceDebit {
+                resource_kind: kind,
+                units: amount,
+            })
+        })
+        .filter(|result| match result {
+            Ok(debit) => debit.units > 0,
+            Err(_) => true,
+        })
+        .collect()
 }
 
 fn micro_depot_resource_kind(value: &str) -> Result<ResourceKind, String> {
@@ -987,10 +1071,10 @@ fn micro_depot_resource_kind(value: &str) -> Result<ResourceKind, String> {
 
 fn ensure_micro_depot_supported_resources(
     supported_resource_kinds: &[String],
-    debits: &[MicroDepotResourceDebit],
+    debits: &[MicroDepotProposalResourceDebit],
 ) -> Result<(), String> {
     for debit in debits {
-        let required = micro_depot_resource_kind_label(debit.kind);
+        let required = micro_depot_resource_kind_label(debit.resource_kind);
         if !supported_resource_kinds.iter().any(|kind| kind == required) {
             return Err(format!(
                 "micro_depot resource kind {required} is not supported by facility"
@@ -1000,7 +1084,7 @@ fn ensure_micro_depot_supported_resources(
     Ok(())
 }
 
-fn micro_depot_resource_kind_label(kind: ResourceKind) -> &'static str {
+pub(super) fn micro_depot_resource_kind_label(kind: ResourceKind) -> &'static str {
     match kind {
         ResourceKind::Data => "data",
         ResourceKind::Electricity => "electricity",
@@ -1041,7 +1125,11 @@ fn build_micro_depot_wasm_call_request(
     wasm_bytes: Vec<u8>,
     limits: ModuleLimits,
 ) -> Result<ModuleCallRequest, String> {
-    let action_bytes = to_canonical_cbor(input)?;
+    let action_bytes = if input.schema_version == "micro_depot.eval.v1" {
+        super::micro_depot_v1::input_bytes(input)?
+    } else {
+        to_canonical_cbor(input)?
+    };
     let trace_id = format!(
         "micro-depot-quote-{}-{}",
         input.depot.facility_id, input.action.action_id
@@ -1103,79 +1191,4 @@ fn parse_micro_depot_proposal(
         .ok_or_else(|| "missing micro_depot.proposal emit in wasm module output".to_string())?;
     validate_micro_depot_proposal(input, &proposal)?;
     Ok(proposal)
-}
-
-fn validate_micro_depot_input(input: &MicroDepotEvalInput) -> Result<(), String> {
-    if input.schema_version != "micro_depot.eval.v1" {
-        return Err(format!(
-            "unsupported micro_depot schema_version {}",
-            input.schema_version
-        ));
-    }
-    if input.module_id.trim().is_empty() {
-        return Err("micro_depot input module_id is empty".to_string());
-    }
-    if input.module_version.trim().is_empty() {
-        return Err("micro_depot input module_version is empty".to_string());
-    }
-    if input.action.target_id.trim().is_empty() {
-        return Err("micro_depot action target_id is empty".to_string());
-    }
-    if input.player.account_id.trim().is_empty() || input.player.claim_id.trim().is_empty() {
-        return Err("micro_depot player identity is incomplete".to_string());
-    }
-    if input.depot.facility_id.trim().is_empty() {
-        return Err("micro_depot facility_id is empty".to_string());
-    }
-    if input.depot.owner_claim_id != input.player.claim_id {
-        return Err("micro_depot owner_claim_id must match player claim_id".to_string());
-    }
-    if input.depot.status != MicroDepotStatus::Active {
-        return Err("micro_depot facility must be active for quote evaluation".to_string());
-    }
-    if !input.depot.upkeep_paid {
-        return Err("micro_depot upkeep must be paid for quote evaluation".to_string());
-    }
-    if input.depot.service_radius_cm <= 0 {
-        return Err("micro_depot service_radius_cm must be positive".to_string());
-    }
-    if input.context.distance_to_target_cm < 0 {
-        return Err("micro_depot distance_to_target_cm must be non-negative".to_string());
-    }
-    if input.context.distance_to_target_cm > input.depot.service_radius_cm {
-        return Err("micro_depot target is outside service radius".to_string());
-    }
-    Ok(())
-}
-
-fn validate_micro_depot_proposal(
-    input: &MicroDepotEvalInput,
-    proposal: &MicroDepotProposal,
-) -> Result<(), String> {
-    if proposal.action_id != input.action.action_id {
-        return Err(format!(
-            "micro_depot proposal action_id mismatch expected {} got {}",
-            input.action.action_id, proposal.action_id
-        ));
-    }
-    if proposal.facility_id != input.depot.facility_id {
-        return Err(format!(
-            "micro_depot proposal facility_id mismatch expected {} got {}",
-            input.depot.facility_id, proposal.facility_id
-        ));
-    }
-    if proposal.explanation_code.trim().is_empty() {
-        return Err("micro_depot proposal explanation_code is empty".to_string());
-    }
-    if proposal.proposal_hash.trim().is_empty() {
-        return Err("micro_depot proposal_hash is empty".to_string());
-    }
-    let expected_hash = compute_micro_depot_proposal_hash(input, proposal)?;
-    if proposal.proposal_hash != expected_hash {
-        return Err(format!(
-            "micro_depot proposal_hash mismatch expected {expected_hash} got {}",
-            proposal.proposal_hash
-        ));
-    }
-    Ok(())
 }

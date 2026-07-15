@@ -279,8 +279,20 @@ def main() -> None:
             fail(f"agents.{role}.config_file must be exactly {expected_relative_path}")
         adapter_path = root / ".codex" / expected_relative_path
         adapter = load_toml(adapter_path)
-        if set(adapter) != {"developer_instructions"}:
-            fail(f"{adapter_path} must contain exactly developer_instructions")
+        required_adapter_keys = {
+            "developer_instructions",
+            "model",
+            "model_reasoning_effort",
+        }
+        if set(adapter) != required_adapter_keys:
+            fail(
+                f"{adapter_path} must contain exactly developer_instructions, model, "
+                "and model_reasoning_effort"
+            )
+        if adapter.get("model") != "gpt-5.6-terra":
+            fail(f'{adapter_path} model must be exactly "gpt-5.6-terra"')
+        if adapter.get("model_reasoning_effort") != "medium":
+            fail(f'{adapter_path} model_reasoning_effort must be exactly "medium"')
         instructions = adapter.get("developer_instructions")
         if not isinstance(instructions, str) or not instructions.strip():
             fail(f"{adapter_path} must define non-blank developer_instructions")
@@ -353,7 +365,13 @@ def main() -> None:
             {
                 "status": "ok",
                 "parser": f"stdlib tomllib via {sys.executable}",
-                "runtime_policy": "inherit current parent selection; actual model inherited/unverified when the surface cannot report it",
+                "runtime_policy": (
+                    "root/default unpinned; specialist adapter model/reasoning is intended "
+                    "configuration for adapter-backed named-role activation only; message-assigned "
+                    "adapter-inactive fallback uses user-selected or parent-inherited runtime; "
+                    "static validation does not prove activation, model availability, or observed "
+                    "actual runtime"
+                ),
                 "adapters": adapter_results,
                 "native_probe": native_probe,
             },

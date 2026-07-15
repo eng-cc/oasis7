@@ -170,8 +170,9 @@ pub use kernel::{
     MicroDepotActionKind, MicroDepotConsumedResourceClass, MicroDepotDecision,
     MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
     MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
-    MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext, MicroDepotResourceDebit,
-    MicroDepotStatus, PowerOrderFill, PromptUpdateOperation, RejectReason, WorldEvent,
-    WorldEventKind, compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
+    MicroDepotProposal, MicroDepotProposalResourceDebit, MicroDepotQuotePreview,
+    MicroDepotRegionContext, MicroDepotResourceDebit, MicroDepotStatus, PowerOrderFill,
+    PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind,
+    compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
     merge_kernel_rule_decisions,
 };
