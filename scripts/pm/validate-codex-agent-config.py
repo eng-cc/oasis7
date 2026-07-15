@@ -365,7 +365,13 @@ def main() -> None:
             {
                 "status": "ok",
                 "parser": f"stdlib tomllib via {sys.executable}",
-                "runtime_policy": "inherit current parent selection; actual model inherited/unverified when the surface cannot report it",
+                "runtime_policy": (
+                    "root/default unpinned; specialist adapter model/reasoning is intended "
+                    "configuration for adapter-backed named-role activation only; message-assigned "
+                    "adapter-inactive fallback uses user-selected or parent-inherited runtime; "
+                    "static validation does not prove activation, model availability, or observed "
+                    "actual runtime"
+                ),
                 "adapters": adapter_results,
                 "native_probe": native_probe,
             },
