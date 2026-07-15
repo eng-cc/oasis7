@@ -354,6 +354,15 @@ while (![string]::IsNullOrWhiteSpace($probe)) {
 }
 }
 
+function Assert-FixturePathUnderSafeBase([string] $Path, [string] $Label) {
+$safeRoot = [System.IO.Path]::GetFullPath($fixtureSafeRootBase).TrimEnd('\')
+$candidate = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+if (!$candidate.StartsWith($safeRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+  throw "fixture generated mutable path escapes verified safe base: label=$Label path=$Path canonical=$candidate safe_base=$safeRoot"
+}
+return $candidate
+}
+
 $fixtureSafeRootBase = [System.IO.Path]::GetFullPath($env:OASIS7_FIXTURE_SAFE_ROOT_BASE)
 if (!(Test-Path -LiteralPath $fixtureSafeRootBase -PathType Container)) {
   throw "fixture safe-root base does not exist: $fixtureSafeRootBase"
@@ -390,6 +399,18 @@ $bytes = [System.IO.File]::ReadAllBytes($Path)
 if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
   throw "fixture JSON must be UTF-8 without BOM: $Path"
 }
+}
+
+function Invoke-FixtureRolloutExpectingFailure([string] $Rollout) {
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+  $ErrorActionPreference = 'Continue'
+  $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Rollout 2>&1)
+  $exitCode = $LASTEXITCODE
+} finally {
+  $ErrorActionPreference = $previousErrorActionPreference
+}
+return [PSCustomObject]@{ ExitCode = $exitCode; Output = @($output) }
 }
 
 function Write-FixtureExecutables {
@@ -539,18 +560,22 @@ if ($ActiveConfigJunction -or $RollbackRootJunction) {
     throw "fixture parent traversal accepted nested path below reparse ancestor: $nestedReparseProbe"
   }
 }
-$requiredActiveAssignments = @{
+$requiredGeneratedAssignments = @{
+  deployRoot = $deploy
+  installRoot = $installRoot
+  rollbackBackupRoot = $rollbackRoot
   activeBundlePath = $activeBundle
   activeGenesisPath = $activeGenesis
   activeManifestPath = $activeManifest
   activeBootstrapPath = $activeBootstrap
 }
-foreach ($requiredActiveAssignment in $requiredActiveAssignments.GetEnumerator()) {
-  $assignmentPattern = '\$' + [regex]::Escape($requiredActiveAssignment.Key) + ' = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
+foreach ($requiredGeneratedAssignment in $requiredGeneratedAssignments.GetEnumerator()) {
+  $assignmentPattern = '\$' + [regex]::Escape($requiredGeneratedAssignment.Key) + ' = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
   $assignmentMatch = [regex]::Match($scriptText, $assignmentPattern)
-  if (!$assignmentMatch.Success -or $assignmentMatch.Groups[1].Value -ne $requiredActiveAssignment.Value) {
-    throw "fixture generated active destination diverged: variable=$($requiredActiveAssignment.Key) expected=$($requiredActiveAssignment.Value) actual=$($assignmentMatch.Groups[1].Value)"
+  if (!$assignmentMatch.Success -or $assignmentMatch.Groups[1].Value -ne $requiredGeneratedAssignment.Value) {
+    throw "fixture generated mutable destination diverged: variable=$($requiredGeneratedAssignment.Key) expected=$($requiredGeneratedAssignment.Value) actual=$($assignmentMatch.Groups[1].Value)"
   }
+  Assert-FixturePathUnderSafeBase $assignmentMatch.Groups[1].Value $requiredGeneratedAssignment.Key | Out-Null
 }
 $stagingRootAssignmentPattern = '\$stagingRoot = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
 $representativeStagingAssignment = '$stagingRoot = [Environment]::ExpandEnvironmentVariables(''C:\oasis7-deploy\staging\package-rollout\manual'')'
@@ -563,6 +588,18 @@ if (!$stagingMatch.Success -or [string]::IsNullOrWhiteSpace($stagingMatch.Groups
   throw "fixture could not locate generated staging root: $Name"
 }
 $staging = $stagingMatch.Groups[1].Value
+Assert-FixturePathUnderSafeBase $staging 'stagingRoot' | Out-Null
+foreach ($stagedAssignmentName in @('installer', 'bundlePath', 'genesisPath', 'manifestPath', 'bootstrapPath')) {
+  $stagedAssignmentPattern = '\$' + [regex]::Escape($stagedAssignmentName) + ' = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
+  $stagedAssignmentMatches = [regex]::Matches($scriptText, $stagedAssignmentPattern)
+  if ($stagedAssignmentMatches.Count -eq 0) {
+    throw "fixture generated script omitted guarded staged assignment: $stagedAssignmentName"
+  }
+  foreach ($stagedAssignmentMatch in $stagedAssignmentMatches) {
+    Assert-FixturePathUnderSafeBase $stagedAssignmentMatch.Groups[1].Value $stagedAssignmentName | Out-Null
+  }
+}
+[Console]::Error.WriteLine("fixture_generated_staging_root name=$Name path=$staging safe_base=$fixtureSafeRootBase package_input=$env:OASIS7_FIXTURE_PACKAGE_DIR")
 New-Item -ItemType Directory -Path (Join-Path $staging 'config') -Force | Out-Null
 Copy-Item -LiteralPath $executables.Installer -Destination (Join-Path $staging 'oasis7-windows-x64.exe') -Force
 $packageWindows = Join-Path $env:OASIS7_FIXTURE_PACKAGE_DIR 'windows'
@@ -608,7 +645,7 @@ foreach ($requiredActivePath in @($activeBundle, $activeGenesis, $activeManifest
     Assert-Equal (Get-Sha256 $projectedActivePath) (Get-Sha256 $requiredActivePath) "fixture active target projection diverged for $requiredActiveLeaf"
   }
 }
-return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
+return @{ Root=$root; Deploy=$deploy; Install=$installRoot; Rollback=$rollbackRoot; Staging=$staging; Task=$taskName; Port=$port; Rollout=$rollout; Active=@($activeGovernedFiles + (Join-Path $deploy 'CURRENT_VERSION') + (Join-Path $deploy 'DEPLOYED_BUILDINFO')); Runtime=(Join-Path $installRoot 'bin/oasis7_chain_runtime.exe') }
 }
 
 function Get-FixtureSnapshot($Fixture) {
@@ -638,9 +675,11 @@ foreach ($case in @(@{Name='active-config-junction'; Active=$true; Rollback=$fal
     Start-ScheduledTask -TaskName $fixture.Task
     Start-Sleep -Seconds 1
     $before = Get-FixtureSnapshot $fixture
-    $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture.Rollout 2>&1
-    if ($LASTEXITCODE -eq 0) { throw "junction fixture unexpectedly succeeded: $($case.Name)" }
-    if (($result -join "`n") -notmatch 'reparse') { throw "junction fixture missing reparse rejection: $($case.Name) output=$result" }
+    $invocation = Invoke-FixtureRolloutExpectingFailure $fixture.Rollout
+    if ($invocation.ExitCode -eq 0) { throw "junction fixture unexpectedly succeeded: $($case.Name)" }
+    $junctionOutput = $invocation.Output -join "`n"
+    [Console]::Error.WriteLine("fixture_expected_reparse case=$($case.Name) staging_root=$($fixture.Staging) output=$junctionOutput")
+    if ($junctionOutput -notmatch 'reparse') { throw "junction fixture missing reparse rejection: $($case.Name) output=$junctionOutput" }
     Assert-Equal (Get-FixtureSnapshot $fixture) $before "junction fixture mutated persisted state: $($case.Name)"
     Assert-OriginalTaskAction $fixture
     if ((Get-ScheduledTask -TaskName $fixture.Task).State -ne 'Running') { throw "junction fixture reached Stop-ScheduledTask: $($case.Name)" }
@@ -659,8 +698,8 @@ foreach ($phase in $phases) {
       # The generated production interface currently consumes the explicit
       # INJECT spelling; retain FAIL_PHASE as the fixture contract alias.
       $env:OASIS7_ROLLOUT_INJECT_FAILURE_PHASE = $phase
-      $result = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $fixture.Rollout 2>&1
-      if ($LASTEXITCODE -eq 0) { throw "injected phase unexpectedly succeeded: phase=$phase attempt=$attempt" }
+      $invocation = Invoke-FixtureRolloutExpectingFailure $fixture.Rollout
+      if ($invocation.ExitCode -eq 0) { throw "injected phase unexpectedly succeeded: phase=$phase attempt=$attempt" }
       Assert-Equal (Get-FixtureSnapshot $fixture) $before "rollback failed to restore known-good state: phase=$phase attempt=$attempt"
       Assert-OriginalTaskAction $fixture
       $diagnostics = (Get-ChildItem -LiteralPath $fixture.Deploy -Recurse -File | ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue }) -join "`n"
@@ -735,7 +774,16 @@ assert "-notmatch [regex]::Escape($expectedReparseAncestor)" not in fixture, (
     "fixture must not compare raw short/long Windows path spellings"
 )
 assert "function Assert-FixtureNoReparseAncestor" in fixture
+assert "function Assert-FixturePathUnderSafeBase" in fixture
 assert "fixture safe-root precondition failed: reparse-point component=" in fixture
+assert "fixture generated mutable path escapes verified safe base:" in fixture
+assert "Assert-FixturePathUnderSafeBase $staging 'stagingRoot'" in fixture
+assert "fixture_generated_staging_root name=$Name path=$staging" in fixture
+assert "fixture_expected_reparse case=$($case.Name) staging_root=$($fixture.Staging)" in fixture
+assert "function Invoke-FixtureRolloutExpectingFailure" in fixture
+assert "$ErrorActionPreference = 'Continue'" in fixture
+assert "$ErrorActionPreference = $previousErrorActionPreference" in fixture
+assert fixture.count("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout") == 2
 safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureSafeRootBase\n")
 fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
 intentional_junction = fixture.index("New-Item -ItemType Junction")
@@ -747,6 +795,11 @@ assert re.search(
     r'^OASIS7_FIXTURE_SAFE_ROOT_BASE="\$\(cygpath -w "\$ROOT_DIR/\.tmp"\)" \\$',
     source,
     re.MULTILINE,
+)
+staging_descendant_check = fixture.index("Assert-FixturePathUnderSafeBase $staging 'stagingRoot'")
+generated_script_execution = fixture.index("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout")
+assert staging_descendant_check < generated_script_execution, (
+    "generated staging root must be proven beneath the safe base before native execution"
 )
 PY
 if [[ "${OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST:-0}" == "1" ]]; then
