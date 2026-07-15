@@ -1140,6 +1140,7 @@ mod observability_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_transport_tests.rs"]
 mod observability_transport_tests;
+#[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_status_payload_observer_tests.rs"]
 mod status_payload_observer_tests;
 #[cfg(test)]
