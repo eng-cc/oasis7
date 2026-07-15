@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use super::super::publication_lifecycle::{
     LifecycleError, PublicationHeadBinding, PublicationLifecycleSnapshot,
-    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, load_snapshot,
+    SEQUENCER_HEAD_PUBLICATION_GRACE_MS, has_authoritative_publication_stake, load_snapshot,
 };
 
 use super::{
@@ -408,9 +408,7 @@ fn is_exact_quorum_at_height(
         && network_head.decision == "ready"
         && network_head.height == Some(expected_height)
         && network_head.conflicting_peer_count == 0
-        && network_head.stake_quorum_met
-        && snapshot.consensus.required_stake > 0
-        && network_head.observed_stake >= snapshot.consensus.required_stake
+        && has_authoritative_publication_stake(snapshot, network_head)
         && network_head.required_peer_count > 0
         && network_head.fresh_peer_count >= network_head.required_peer_count
         && every_fresh_peer_binds_head

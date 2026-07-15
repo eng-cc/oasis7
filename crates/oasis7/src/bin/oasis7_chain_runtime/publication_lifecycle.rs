@@ -16,6 +16,15 @@ pub(super) const PUBLICATION_LAG_STATE_FILE: &str = "sequencer-publication-lag-s
 const PUBLICATION_LAG_STATE_SCHEMA_VERSION: u32 = 1;
 const MAX_PUBLICATION_EPISODE_RECORD_SCAN: usize = 255;
 
+pub(super) fn has_authoritative_publication_stake(
+    snapshot: &NodeSnapshot,
+    network_head: &ChainConsensusNetworkHeadStatus,
+) -> bool {
+    snapshot.consensus.required_stake > 0
+        && network_head.stake_quorum_met
+        && network_head.observed_stake >= snapshot.consensus.required_stake
+}
+
 pub(super) struct PublicationLifecycleObserver {
     node_id: String,
     player_id: String,
@@ -419,9 +428,7 @@ fn exact_quorum_at_height(
         && network_head.decision == "ready"
         && network_head.height == Some(expected_height)
         && network_head.conflicting_peer_count == 0
-        && network_head.stake_quorum_met
-        && (snapshot.consensus.required_stake == 0
-            || network_head.observed_stake >= snapshot.consensus.required_stake)
+        && has_authoritative_publication_stake(snapshot, network_head)
         && network_head.required_peer_count > 0
         && network_head.fresh_peer_count >= network_head.required_peer_count
         && every_fresh_peer_binds
@@ -534,10 +541,48 @@ fn replace_file(temp: &Path, target: &Path) -> Result<(), LifecycleError> {
 
 #[cfg(not(unix))]
 fn replace_file(temp: &Path, target: &Path) -> Result<(), LifecycleError> {
-    if target.exists() {
-        fs::remove_file(target).map_err(|_| LifecycleError::persist("state_remove_failed"))?;
+    replace_file_with(temp, target, platform_atomic_replace)
+}
+
+#[cfg(not(unix))]
+fn replace_file_with(
+    temp: &Path,
+    target: &Path,
+    replace: impl FnOnce(&Path, &Path) -> std::io::Result<()>,
+) -> Result<(), LifecycleError> {
+    replace(temp, target).map_err(|_| LifecycleError::persist("state_replace_failed"))
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn platform_atomic_replace(temp: &Path, target: &Path) -> std::io::Result<()> {
+    fs::rename(temp, target)
+}
+
+#[cfg(windows)]
+fn platform_atomic_replace(temp: &Path, target: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = temp
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = target
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    // SAFETY: both paths are owned, NUL-terminated UTF-16 buffers that remain
+    // alive for the duration of the call.
+    let replaced = unsafe { MoveFileExW(source.as_ptr(), destination.as_ptr(), flags) };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
     }
-    fs::rename(temp, target).map_err(|_| LifecycleError::persist("state_replace_failed"))
+    Ok(())
 }
 
 #[cfg(unix)]

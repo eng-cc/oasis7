@@ -227,6 +227,163 @@ fn is_critical_not_ready(
             .any(|alert| alert.severity == "critical")
 }
 
+fn remove_stake_authority(snapshot: &mut NodeSnapshot) {
+    snapshot.consensus.required_stake = 0;
+    snapshot.consensus.total_stake = 0;
+    snapshot.consensus.validator_stakes.clear();
+    snapshot.consensus.validator_set_hash.clear();
+    snapshot.consensus.validator_stake_root.clear();
+    snapshot.consensus.validator_stake_proofs.clear();
+}
+
+fn non_unix_replace_body() -> &'static str {
+    let source = include_str!("publication_lifecycle.rs");
+    source
+        .split_once("#[cfg(not(unix))]\nfn replace_file")
+        .expect("non-Unix publication replacement implementation exists")
+        .1
+        .split_once("#[cfg(unix)]\nfn sync_parent_dir")
+        .expect("non-Unix publication replacement implementation is bounded")
+        .0
+}
+
+fn destination_after_injected_replace_failure(replace_body: &str) -> Option<&'static [u8]> {
+    const LAST_GOOD: &[u8] = b"last-good-durable-publication-state";
+    let remove_at = replace_body.find("remove_file(target)");
+    let replace_at = replace_body
+        .find("rename(temp, target)")
+        .expect("replacement operation remains explicit");
+    if remove_at.is_some_and(|position| position < replace_at) {
+        None
+    } else {
+        Some(LAST_GOOD)
+    }
+}
+
+#[test]
+fn publication_lifecycle_rejects_zero_or_missing_stake_authority_before_persisting_state() {
+    let manifest = publication_test_manifest("public_testnet", 2);
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_millis() as i64;
+    let mut failures = Vec::new();
+
+    for authority in ["zero-required-stake", "missing-stake-authority"] {
+        for (phase, local_height, peer_height) in [
+            ("equal-head-catch-up", 1_200, 1_200),
+            ("one-block-lag-episode", 1_201, 1_200),
+        ] {
+            let label = format!("{authority}-{phase}");
+            let (root, records_dir, _) = prepare_world(
+                label.as_str(),
+                &[
+                    (1_199, now_ms - 3_000),
+                    (1_200, now_ms - 2_000),
+                    (1_201, now_ms - 1_000),
+                ],
+            );
+            let mut snapshot = lifecycle_snapshot(
+                local_height,
+                if local_height == 1_200 {
+                    now_ms - 2_000
+                } else {
+                    now_ms - 1_000
+                },
+                peer_height,
+                now_ms - 2_000,
+                now_ms - 100,
+            );
+            snapshot.consensus.required_stake = 0;
+            if authority == "missing-stake-authority" {
+                remove_stake_authority(&mut snapshot);
+            }
+
+            let network_head = super::super::super::status_payload::build_network_head_status(
+                &snapshot,
+                now_ms,
+                Some(&manifest),
+            );
+            assert_eq!(network_head.quorum_mode, "count", "{label}");
+            assert_eq!(network_head.source, "peer_quorum", "{label}");
+            assert_eq!(network_head.decision, "ready", "{label}");
+            assert!(
+                network_head.fresh_peer_count >= network_head.required_peer_count,
+                "{label}: count quorum fixture is not ready"
+            );
+            assert!(
+                network_head.stake_quorum_met,
+                "{label}: count-mode fixture must expose the vacuous stake-quorum signal"
+            );
+
+            let execution_world_dir = root.join("execution-world");
+            if phase == "one-block-lag-episode" {
+                install_lifecycle_state(&root, "catch_up", 1_200, now_ms - 2_000);
+            }
+            let state_path = execution_world_dir.join(STATE_FILE);
+            let state_before = fs::read(&state_path).ok();
+            let result = super::super::super::publication_lifecycle::reconcile(
+                &snapshot,
+                Some(&manifest),
+                execution_world_dir.as_path(),
+                records_dir.as_path(),
+                now_ms,
+            );
+            let state_after = fs::read(&state_path).ok();
+            if state_after != state_before {
+                failures.push(format!(
+                    "{label}: lifecycle mutated unauthoritative state after result={:?}: before={} after={}",
+                    result
+                        .as_ref()
+                        .err()
+                        .map(|error| (error.reason, error.detail)),
+                    state_before
+                        .as_deref()
+                        .map(String::from_utf8_lossy)
+                        .unwrap_or_else(|| "<missing>".into()),
+                    state_after
+                        .as_deref()
+                        .map(String::from_utf8_lossy)
+                        .unwrap_or_else(|| "<missing>".into()),
+                ));
+            }
+            fs::remove_dir_all(root).expect("remove stake-authority lifecycle fixture");
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "publication lifecycle accepted count quorum without authoritative stake:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
+fn publication_state_replacement_never_deletes_last_good_destination_before_atomic_success() {
+    const LAST_GOOD: &[u8] = b"last-good-durable-publication-state";
+    let root = publication_test_temp_dir("atomic-replace-contract");
+    fs::create_dir_all(&root).expect("create replacement contract fixture");
+    let destination = root.join("destination.json");
+    let replacement = root.join("replacement.tmp");
+    fs::write(&destination, LAST_GOOD).expect("write last good destination");
+    fs::write(&replacement, b"next-durable-publication-state").expect("write replacement");
+
+    fs::rename(&replacement, &destination).expect("platform atomic replacement success control");
+    assert_eq!(
+        fs::read(&destination).expect("read successful replacement"),
+        b"next-durable-publication-state"
+    );
+
+    let destination_after_failure =
+        destination_after_injected_replace_failure(non_unix_replace_body());
+    assert_eq!(
+        destination_after_failure,
+        Some(LAST_GOOD),
+        "non-Unix replacement deletes the last good destination before the injected atomic replace failure"
+    );
+    fs::remove_dir_all(root).expect("remove replacement contract fixture");
+}
+
 #[test]
 fn publication_status_get_and_head_construction_never_mutate_durable_state() {
     let now_ms = SystemTime::now()
