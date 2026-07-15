@@ -460,8 +460,17 @@ Assert-Utf8NoBom $manifestPath
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
 $scriptText = [IO.File]::ReadAllText($rollout)
-$staging = [regex]::Match($scriptText, "\\$stagingRoot = \[Environment\]::ExpandEnvironmentVariables\('([^']+)'\)").Groups[1].Value
-if ([string]::IsNullOrEmpty($staging)) { throw "fixture could not locate generated staging root: $Name" }
+$stagingRootAssignmentPattern = '\$stagingRoot = \[Environment\]::ExpandEnvironmentVariables\(''([^'']+)''\)'
+$representativeStagingAssignment = '$stagingRoot = [Environment]::ExpandEnvironmentVariables(''C:\oasis7-deploy\staging\package-rollout\manual'')'
+$representativeStagingMatch = [regex]::Match($representativeStagingAssignment, $stagingRootAssignmentPattern)
+if (!$representativeStagingMatch.Success -or $representativeStagingMatch.Groups[1].Value -ne 'C:\oasis7-deploy\staging\package-rollout\manual') {
+  throw 'fixture staging-root extraction regex does not match the generated PowerShell assignment contract'
+}
+$stagingMatch = [regex]::Match($scriptText, $stagingRootAssignmentPattern)
+if (!$stagingMatch.Success -or [string]::IsNullOrWhiteSpace($stagingMatch.Groups[1].Value)) {
+  throw "fixture could not locate generated staging root: $Name"
+}
+$staging = $stagingMatch.Groups[1].Value
 New-Item -ItemType Directory -Path (Join-Path $staging 'config') -Force | Out-Null
 Copy-Item -LiteralPath $executables.Installer -Destination (Join-Path $staging 'oasis7-windows-x64.exe') -Force
 $packageWindows = Join-Path $env:OASIS7_FIXTURE_PACKAGE_DIR 'windows'
