@@ -325,7 +325,9 @@ impl PosNodeEngine {
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
-        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+        mut progress_callback: Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
             return Ok(());
@@ -438,7 +440,7 @@ impl PosNodeEngine {
                     self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
                     if let Some(callback) = progress_callback.as_deref_mut() {
                         let decision = self.idle_pending_decision()?;
-                        callback(self.snapshot_from_decision(&decision));
+                        callback(self.snapshot_from_decision(&decision))?;
                     }
                 }
             }
@@ -516,7 +518,9 @@ impl PosNodeEngine {
         blocked_height: u64,
         expected_checkpoint_head: Option<&WorldHeadAnnounce>,
         execution_hook: &mut Option<&mut dyn NodeExecutionHook>,
-        progress_callback: &mut Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+        progress_callback: &mut Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
     ) -> Result<bool, NodeError> {
         if self.require_execution_on_commit
             || checkpoint_height <= blocked_height
@@ -635,7 +639,7 @@ impl PosNodeEngine {
         self.last_replication_gap_sync_repair_attempt_route_snapshot = None;
         if let Some(callback) = progress_callback.as_deref_mut() {
             let decision = self.idle_pending_decision()?;
-            callback(self.snapshot_from_decision(&decision));
+            callback(self.snapshot_from_decision(&decision))?;
         }
         Ok(true)
     }
@@ -765,7 +769,9 @@ impl PosNodeEngine {
         world_id: &str,
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
-        mut progress_callback: Option<&mut dyn FnMut(NodeConsensusSnapshot)>,
+        mut progress_callback: Option<
+            &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
+        >,
         record_peer_heads_from_gap_sync: bool,
     ) -> Result<(), NodeError> {
         let Some(replication_runtime) = replication.as_deref_mut() else {
@@ -1019,7 +1025,7 @@ impl PosNodeEngine {
                 }
                 if let Some(callback) = progress_callback.as_deref_mut() {
                     let decision = self.idle_pending_decision()?;
-                    callback(self.snapshot_from_decision(&decision));
+                    callback(self.snapshot_from_decision(&decision))?;
                 }
                 next_height = checked_replication_successor(
                     next_height,

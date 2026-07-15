@@ -19,6 +19,36 @@ use crate::{
     NodeMainTokenControllerSignerPolicy, NodeReplicationNetworkHandle, NodeRuntime,
 };
 
+pub trait NodeConsensusProgressObserver: Send {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        observed_at_ms: i64,
+    ) -> Result<(), String>;
+}
+
+pub(super) fn publish_runtime_progress_snapshot(
+    state: &Arc<Mutex<RuntimeState>>,
+    observer: Option<&Arc<Mutex<Box<dyn NodeConsensusProgressObserver>>>>,
+    snapshot: NodeConsensusSnapshot,
+    observed_at_ms: i64,
+) -> Result<(), NodeError> {
+    if let Some(observer) = observer {
+        let mut observer = observer.lock().map_err(|_| NodeError::Execution {
+            reason: "consensus progress observer lock poisoned".to_string(),
+        })?;
+        observer
+            .observe_consensus_progress(&snapshot, observed_at_ms)
+            .map_err(|reason| NodeError::Execution { reason })?;
+    }
+    let mut current = state
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    current.consensus = snapshot;
+    current.last_tick_unix_ms = Some(observed_at_ms);
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct RuntimeState {
     pub(super) tick_count: u64,
@@ -223,6 +253,10 @@ impl fmt::Debug for NodeRuntime {
             )
             .field("has_feedback_store", &self.feedback_store.is_some())
             .field("has_execution_hook", &self.execution_hook.is_some())
+            .field(
+                "has_consensus_progress_observer",
+                &self.consensus_progress_observer.is_some(),
+            )
             .field("running", &self.running.load(Ordering::SeqCst))
             .finish()
     }
@@ -246,6 +280,7 @@ impl NodeRuntime {
             feedback_store,
             pending_feedback_announces: Arc::new(Mutex::new(Vec::new())),
             execution_hook: None,
+            consensus_progress_observer: None,
             pending_consensus_actions: Arc::new(Mutex::new(Vec::new())),
             committed_action_batches: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -271,6 +306,14 @@ impl NodeRuntime {
         T: NodeExecutionHook + 'static,
     {
         self.execution_hook = Some(Arc::new(Mutex::new(Box::new(hook))));
+        self
+    }
+
+    pub fn with_consensus_progress_observer<T>(mut self, observer: T) -> Self
+    where
+        T: NodeConsensusProgressObserver + 'static,
+    {
+        self.consensus_progress_observer = Some(Arc::new(Mutex::new(Box::new(observer))));
         self
     }
 

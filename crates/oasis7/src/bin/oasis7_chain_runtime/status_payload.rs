@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::ReleaseSecurityPolicy;
 use oasis7::simulator::RuntimePerfSnapshot;
@@ -8,6 +6,7 @@ use oasis7_node::{
     NodeUserModeRecommendation,
 };
 use serde::Serialize;
+use std::path::Path;
 
 use super::execution_bridge::{
     ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
@@ -25,6 +24,8 @@ mod status_payload_module_tick_routing;
 mod status_payload_network_head;
 #[path = "status_payload_network_tier.rs"]
 mod status_payload_network_tier;
+#[path = "status_payload_publication.rs"]
+mod status_payload_publication;
 use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
 use status_payload_module_tick_routing::{
     ChainModuleTickRoutingStatus, build_module_tick_routing_status,
@@ -34,11 +35,15 @@ pub(super) use status_payload_network_head::{
     build_network_head_status, pending_slashing_intent_count, readiness_policy,
 };
 use status_payload_network_tier::ChainNetworkTierStatus;
+use status_payload_publication::{
+    enforce_retained_publication_proof, push_publication_or_divergence_alert,
+};
 #[path = "status_payload_observability.rs"]
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
 mod status_payload_state_sync;
 use status_payload_observability::{
+    ChainFinalityLatencyStatus, ChainInboundTimingRejectionsStatus,
     ChainP2pPathObservabilityStatus, build_path_observability_status,
 };
 pub(crate) use status_payload_observability::{
@@ -47,6 +52,7 @@ pub(crate) use status_payload_observability::{
     build_runtime_perf_snapshot_from_execution_bridge_timing, classify_transport_stability,
     observability_status_for_alerts, observability_summary_for_alerts,
     push_local_chain_ahead_alert, push_observability_alert, reachability_policy_ok,
+    sequencer_head_publication_pending_summary,
 };
 use status_payload_state_sync::{
     consensus_participation_hold_reason, state_sync_fallback_reason,
@@ -257,25 +263,6 @@ pub(super) struct ChainPendingConsensusActionsStatus {
     pub(super) submit_buffer_action_count: usize,
     pub(super) submit_buffer_payload_bytes: usize,
     pub(super) submit_buffer_max_capacity: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainInboundTimingRejectionsStatus {
-    pub(super) proposal_future_slot: u64,
-    pub(super) proposal_stale_slot: u64,
-    pub(super) attestation_future_slot: u64,
-    pub(super) attestation_stale_slot: u64,
-    pub(super) attestation_epoch_mismatch: u64,
-    pub(super) last_reason: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainFinalityLatencyStatus {
-    pub(super) sample_count: usize,
-    pub(super) avg_latency_ms: Option<i64>,
-    pub(super) max_latency_ms: Option<i64>,
-    pub(super) p50_latency_ms: Option<i64>,
-    pub(super) p95_latency_ms: Option<i64>,
 }
 
 pub(super) fn build_chain_node_observability_status(
@@ -521,7 +508,13 @@ fn build_chain_node_observability_status_with_transactions(
             ),
         );
     }
-    push_local_chain_ahead_alert(&mut alerts, snapshot, network_head.height);
+    push_publication_or_divergence_alert(
+        &mut alerts,
+        snapshot,
+        network_head,
+        policy,
+        observed_at_unix_ms,
+    );
     if network_height_lag > 0
         && snapshot
             .consensus
@@ -918,6 +911,15 @@ pub(super) fn build_chain_status_payload(
         Some(&module_tick_routing),
         Some(&wasm),
         observed_at_unix_ms,
+    );
+    enforce_retained_publication_proof(
+        &snapshot,
+        &network_head,
+        &readiness_policy,
+        execution_world_dir,
+        execution_records_dir,
+        observed_at_unix_ms,
+        &mut observability,
     );
     if let Some(gossip) = traffic.udp_gossip.as_ref() {
         let outbound = &gossip.totals.outbound;

@@ -56,6 +56,8 @@ mod module_release_attestation_submit_api;
 mod node_keypair_config;
 #[path = "oasis7_chain_runtime/p2p_status.rs"]
 mod p2p_status;
+#[path = "oasis7_chain_runtime/publication_lifecycle.rs"]
+mod publication_lifecycle;
 #[path = "oasis7_chain_runtime/reward_runtime_settlement.rs"]
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
@@ -457,7 +459,18 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
     drop(startup_reconcile_bind_guard);
 
-    let mut runtime = NodeRuntime::new(config);
+    let publication_lifecycle_observer = publication_lifecycle::PublicationLifecycleObserver::new(
+        config.node_id.clone(),
+        config.player_id.clone(),
+        config.world_id.clone(),
+        config.role,
+        config.replication.is_some(),
+        options.loaded_network_tier_manifest.clone(),
+        paths.execution_world_dir.clone(),
+        paths.execution_records_dir.clone(),
+    );
+    let mut runtime =
+        NodeRuntime::new(config).with_consensus_progress_observer(publication_lifecycle_observer);
     if materialize_execution {
         let execution_driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
             paths.execution_bridge_state_path.clone(),

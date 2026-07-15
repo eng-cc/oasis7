@@ -135,7 +135,8 @@ use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,
 };
 use network_bridge::{ConsensusNetworkEndpoint, ReplicationNetworkEndpoint};
-use node_runtime_core::RuntimeState;
+pub use node_runtime_core::NodeConsensusProgressObserver;
+use node_runtime_core::{RuntimeState, publish_runtime_progress_snapshot};
 use pos_state_store::PosNodeStateStore;
 use pos_validation::{normalize_consensus_public_key_hex, validated_pos_state};
 use provider_publication_queue::{ProviderPublicationEnqueueResult, ProviderPublicationQueue};
@@ -208,16 +209,6 @@ fn with_execution_hook<T>(
     }
 }
 
-fn publish_runtime_progress_snapshot(
-    state: &Arc<Mutex<RuntimeState>>,
-    snapshot: NodeConsensusSnapshot,
-    observed_at_ms: i64,
-) {
-    let mut current = lock_state(state);
-    current.consensus = snapshot;
-    current.last_tick_unix_ms = Some(observed_at_ms);
-}
-
 pub struct NodeRuntime {
     config: NodeConfig,
     replication_network: Option<NodeReplicationNetworkHandle>,
@@ -226,6 +217,8 @@ pub struct NodeRuntime {
     feedback_store: Option<Arc<FeedbackStore>>,
     pending_feedback_announces: Arc<Mutex<Vec<FeedbackAnnounce>>>,
     execution_hook: Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeExecutionHook>>>>,
+    consensus_progress_observer:
+        Option<std::sync::Arc<std::sync::Mutex<Box<dyn NodeConsensusProgressObserver>>>>,
     replica_maintenance_dht:
         Option<Arc<dyn proto_dht::DistributedDht<ProtoWorldError> + Send + Sync>>,
     pending_consensus_actions: Arc<Mutex<Vec<NodeConsensusAction>>>,
@@ -503,6 +496,7 @@ impl NodeRuntime {
         let running = Arc::clone(&self.running);
         let state = Arc::clone(&self.state);
         let execution_hook = self.execution_hook.clone();
+        let consensus_progress_observer = self.consensus_progress_observer.clone();
         let replica_maintenance = self.config.replica_maintenance;
         let replica_maintenance_dht = self.replica_maintenance_dht.clone();
         let pending_consensus_actions = Arc::clone(&self.pending_consensus_actions);
@@ -561,9 +555,10 @@ impl NodeRuntime {
                                             |snapshot: NodeConsensusSnapshot| {
                                                 publish_runtime_progress_snapshot(
                                                     &progress_state,
+                                                    consensus_progress_observer.as_ref(),
                                                     snapshot,
                                                     now_ms,
-                                                );
+                                                )
                                             };
                                         engine.tick_with_progress(
                                             &node_id,
@@ -587,9 +582,10 @@ impl NodeRuntime {
                                 let mut publish_progress = |snapshot: NodeConsensusSnapshot| {
                                     publish_runtime_progress_snapshot(
                                         &progress_state,
+                                        consensus_progress_observer.as_ref(),
                                         snapshot,
                                         now_ms,
-                                    );
+                                    )
                                 };
                                 engine.tick_with_progress(
                                     &node_id,

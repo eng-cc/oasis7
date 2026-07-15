@@ -6,10 +6,13 @@ use oasis7::simulator::{
 use oasis7_node::NodeSnapshot;
 use serde::Serialize;
 
+use super::super::publication_lifecycle::SEQUENCER_HEAD_PUBLICATION_GRACE_MS;
+
 use super::ExecutionBridgeCommitTimingSnapshot;
 use super::{
-    ChainLivenessStatus, ChainNodeObservabilityAlert, ChainP2pStatus, ChainReadinessPolicyStatus,
-    ChainReplicationTransportStability, TRANSPORT_STABILITY_MIN_SCORE,
+    ChainConsensusNetworkHeadStatus, ChainLivenessStatus, ChainNodeObservabilityAlert,
+    ChainP2pStatus, ChainReadinessPolicyStatus, ChainReplicationTransportStability,
+    TRANSPORT_STABILITY_MIN_SCORE,
 };
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
@@ -59,6 +62,25 @@ pub(crate) struct ChainP2pTransportTransition {
     pub(crate) from_kind: Option<String>,
     pub(crate) to_kind: Option<String>,
     pub(crate) at_unix_ms: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ChainInboundTimingRejectionsStatus {
+    pub(crate) proposal_future_slot: u64,
+    pub(crate) proposal_stale_slot: u64,
+    pub(crate) attestation_future_slot: u64,
+    pub(crate) attestation_stale_slot: u64,
+    pub(crate) attestation_epoch_mismatch: u64,
+    pub(crate) last_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ChainFinalityLatencyStatus {
+    pub(crate) sample_count: usize,
+    pub(crate) avg_latency_ms: Option<i64>,
+    pub(crate) max_latency_ms: Option<i64>,
+    pub(crate) p50_latency_ms: Option<i64>,
+    pub(crate) p95_latency_ms: Option<i64>,
 }
 
 pub(crate) fn build_path_observability_status(
@@ -259,6 +281,70 @@ pub(crate) fn push_local_chain_ahead_alert(
             local_height.saturating_sub(network_height)
         ),
     );
+}
+
+pub(crate) fn sequencer_head_publication_pending_summary(
+    snapshot: &NodeSnapshot,
+    network_head: &ChainConsensusNetworkHeadStatus,
+    policy: &ChainReadinessPolicyStatus,
+    observed_at_unix_ms: i64,
+) -> Option<String> {
+    let local_height = snapshot.consensus.committed_height;
+    let parent_height = local_height.checked_sub(1)?;
+    let local_block_hash = nonempty(snapshot.consensus.last_block_hash.as_deref())?;
+    let local_execution_block_hash =
+        nonempty(snapshot.consensus.last_execution_block_hash.as_deref())?;
+    let local_execution_state_root =
+        nonempty(snapshot.consensus.last_execution_state_root.as_deref())?;
+    let parent_block_hash = nonempty(network_head.block_hash.as_deref())?;
+    let parent_execution_block_hash = nonempty(network_head.execution_block_hash.as_deref())?;
+    let parent_execution_state_root = nonempty(network_head.execution_state_root.as_deref())?;
+    let commit_age_ms = observed_at_unix_ms
+        .saturating_sub(snapshot.consensus.last_committed_at_ms?)
+        .max(0);
+
+    let complete_local_boundary = snapshot.consensus.latest_height == local_height
+        && snapshot.consensus.network_committed_height == local_height
+        && snapshot.consensus.replication_persisted_height == local_height
+        && snapshot.consensus.last_execution_height == local_height;
+    let exact_parent_quorum = network_head.source == "peer_quorum"
+        && network_head.decision == "ready"
+        && network_head.height == Some(parent_height)
+        && network_head.conflicting_peer_count == 0
+        && network_head.stake_quorum_met
+        && (snapshot.consensus.required_stake == 0
+            || network_head.observed_stake >= snapshot.consensus.required_stake)
+        && network_head.fresh_peer_count >= network_head.required_peer_count
+        && network_head.required_peer_count > 0;
+    let every_fresh_peer_binds_parent = network_head
+        .peer_heads
+        .iter()
+        .filter(|peer| peer.fresh)
+        .all(|peer| {
+            peer.height == parent_height
+                && peer.block_hash == parent_block_hash
+                && peer.execution_block_hash.as_deref() == Some(parent_execution_block_hash)
+                && peer.execution_state_root.as_deref() == Some(parent_execution_state_root)
+        });
+
+    if policy.tier != "public_testnet"
+        || policy.role != "sequencer"
+        || !complete_local_boundary
+        || !exact_parent_quorum
+        || network_head.fresh_peer_count == 0
+        || !every_fresh_peer_binds_parent
+        || commit_age_ms > SEQUENCER_HEAD_PUBLICATION_GRACE_MS
+    {
+        return None;
+    }
+
+    Some(format!(
+        "sequencer head publication pending within {SEQUENCER_HEAD_PUBLICATION_GRACE_MS}ms grace: local_height={local_height} local_block_hash={local_block_hash} local_execution_block_hash={local_execution_block_hash} local_execution_state_root={local_execution_state_root} parent_height={parent_height} parent_block_hash={parent_block_hash} parent_execution_block_hash={parent_execution_block_hash} parent_execution_state_root={parent_execution_state_root} commit_age_ms={commit_age_ms}"
+    ))
+}
+
+fn nonempty(value: Option<&str>) -> Option<&str> {
+    value.filter(|value| !value.trim().is_empty())
 }
 
 pub(crate) fn observability_status_for_alerts(alerts: &[ChainNodeObservabilityAlert]) -> String {
