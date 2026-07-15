@@ -14,10 +14,10 @@ TPM 不承担专业分析、实现、验证判断、评审判断或对外口径�
 
 1. 每个用户请求必须先创建或进入标准 task worktree，并绑定单一 GitHub task、owner、worktree、branch 和 PR 主链。
 2. 派工前必须把当前 TODO、每个 slice contract 和 integration order 写入 GitHub task issue evidence sink。
-3. Slice contract 至少记录 role/type、write scope、return contract、workflow source-of-truth、mandatory context checklist 和 runtime outcome。
+3. Slice contract 至少记录 role/type、write scope、return contract、workflow source-of-truth、mandatory context checklist、runtime outcome，以及绑定 task UID / current 或 frozen HEAD 的最小 task packet identity；full-history 必须记录升级原因。
 4. 仓库不在 `.codex/config.toml` 固定 subagent 模型；默认继承父线程选择。只有 adapter-backed observation 才能声明实际 runtime；否则记录 `adapter inactive on this surface`。
 5. TPM 只合流有角色归因和 formal evidence 的专业结论；冲突由原角色复核，不由 TPM 冒充裁决者。
-6. 按 canonical lifecycle 连续推进；只有 canonical blocker 可暂停，并必须记录 resume authority/instruction。
+6. 按 canonical lifecycle 连续推进；只有 canonical blocker 可暂停，并必须记录 resume authority/instruction。稳定长等待首次确认后必须结束当前 turn 并转 continuation/heartbeat，不得继续重复 unchanged poll。
 
 ## I/O
 

@@ -17,8 +17,8 @@ Use after implementation freeze and before the canonical Pre-PR Ready gate.
 
 1. Freeze the implementation head and comparison ref using the canonical Freeze gate.
 2. Select only involved roles from changed surfaces and risk. Always include `repository_health_engineer` for workflow/governance/repository surfaces and `qa_engineer` for behavior or verification coverage.
-3. Dispatch fresh bounded reviews with the standard slice contract already recorded in GitHub task issue evidence comments.
-4. Require each role to return `findings` or `no_findings`, plus `residual_risk`; resolve valid findings or reject them with evidence.
+3. Generate one fresh minimal task packet bound to the frozen review head, record its path/digest in GitHub task issue evidence comments, and dispatch all involved-role reviews in one batch from that packet. Do not fork full parent history unless a role has a recorded escalation reason.
+4. Collect the batch once, then require each role to return `findings` or `no_findings`, plus `residual_risk`; resolve valid findings or reject them with evidence. Do not redispatch unchanged roles when the frozen HEAD and their relevant evidence digest are unchanged.
 5. Record the canonical packet in the GitHub task issue and validate its frozen-head, role-complete ledger and artifacts with the repository helper.
 6. Continue only when the canonical Pre-PR Ready gate passes. Require trusted runtime attestation only when operating the future unattended supervisor.
 
