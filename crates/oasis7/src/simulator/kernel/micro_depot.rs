@@ -190,6 +190,16 @@ pub struct MicroDepotPlayerFacilitySnapshot {
     pub location_id: LocationId,
     pub service_radius_cm: i64,
     #[serde(default)]
+    pub inventory_revision: u64,
+    #[serde(default)]
+    pub available_units_by_kind: BTreeMap<String, i64>,
+    #[serde(default)]
+    pub throughput_epoch: u64,
+    #[serde(default)]
+    pub throughput_remaining_units: i64,
+    #[serde(default)]
+    pub throughput_limit_units_per_epoch: i64,
+    #[serde(default)]
     pub supported_resource_kinds: Vec<String>,
     pub module_id: String,
     pub module_version: String,

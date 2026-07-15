@@ -222,13 +222,31 @@ fn micro_depot_reachable_exhaustion_rejects_upkeep_then_reclaims_and_reinstalls_
         10,
         "owner retains enough funds for upkeep"
     );
+    let initial_snapshot = kernel
+        .micro_depot_player_facility_snapshots()
+        .pop()
+        .expect("commissioned depot snapshot");
+    assert_eq!(
+        initial_snapshot.available_units_by_kind.get("data"),
+        Some(&8)
+    );
+    assert_eq!(initial_snapshot.throughput_remaining_units, 16);
     configure_two_unit_service(&mut kernel);
 
-    for _ in 0..4 {
+    for expected in [(6, 14), (4, 12), (2, 10), (0, 8)] {
         assert!(matches!(
             service_repair(&mut kernel, "depot-lifecycle"),
             WorldEventKind::MicroDepotServiceApplied { .. }
         ));
+        let post_service_snapshot = kernel
+            .micro_depot_player_facility_snapshots()
+            .pop()
+            .expect("post-service depot snapshot");
+        assert_eq!(
+            post_service_snapshot.available_units_by_kind.get("data"),
+            Some(&expected.0)
+        );
+        assert_eq!(post_service_snapshot.throughput_remaining_units, expected.1);
     }
     let exhausted = kernel
         .model()
@@ -237,6 +255,70 @@ fn micro_depot_reachable_exhaustion_rejects_upkeep_then_reclaims_and_reinstalls_
         .expect("exhausted depot remains")
         .clone();
     assert_eq!(exhausted.available_units_by_kind.get("data"), Some(&0));
+    assert_eq!(exhausted.throughput_remaining_units, 8);
+
+    let depleted_snapshot = kernel
+        .micro_depot_player_facility_snapshots()
+        .pop()
+        .expect("depleted depot snapshot");
+    assert_eq!(
+        depleted_snapshot.available_units_by_kind.get("data"),
+        Some(&0)
+    );
+    assert_eq!(depleted_snapshot.throughput_remaining_units, 8);
+
+    let owner_before_service_rejection = kernel
+        .model()
+        .agents
+        .get("agent-owner")
+        .expect("owner before rejected fifth service")
+        .clone();
+    let journal_before_service_rejection = kernel.journal_snapshot();
+    let rejected_service = service_repair(&mut kernel, "depot-lifecycle");
+    let rejection_json =
+        serde_json::to_string(&rejected_service).expect("serialize fifth service rejection");
+    assert!(matches!(
+        rejected_service,
+        WorldEventKind::ActionRejected { .. }
+    ));
+    assert!(rejection_json.contains("DEPOT_INVENTORY_INSUFFICIENT"));
+    assert!(rejection_json.contains("available_units=0"));
+    assert!(!rejection_json.contains("DEPOT_THROUGHPUT_EXHAUSTED"));
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-owner")
+            .expect("owner after rejected fifth service"),
+        &owner_before_service_rejection,
+        "rejected fifth service must preserve owner business state"
+    );
+    assert_eq!(
+        kernel
+            .model()
+            .regional_infrastructure
+            .get("depot-lifecycle")
+            .expect("depot after rejected fifth service"),
+        &exhausted,
+        "rejected fifth service must preserve facility business state"
+    );
+    let journal_after_service_rejection = kernel.journal_snapshot();
+    assert_eq!(
+        &journal_after_service_rejection.events[..journal_before_service_rejection.events.len()],
+        journal_before_service_rejection.events.as_slice(),
+        "rejected fifth service must not rewrite canonical history"
+    );
+    assert_eq!(
+        journal_after_service_rejection.events.len(),
+        journal_before_service_rejection.events.len() + 1
+    );
+    assert!(matches!(
+        journal_after_service_rejection
+            .events
+            .last()
+            .map(|event| &event.kind),
+        Some(WorldEventKind::ActionRejected { .. })
+    ));
 
     let owner_before_upkeep = owner_data(&kernel);
     let journal_before_upkeep = kernel.journal_snapshot();
