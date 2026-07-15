@@ -1180,7 +1180,9 @@ pub(super) fn build_chain_status_payload(
             network_head,
         },
         chain_proof,
-        consensus_progress_observer_error: snapshot.consensus_progress_observer_error,
+        consensus_progress_observer_error: snapshot
+            .consensus_progress_observer_error
+            .map(|error| error.message),
         last_error: snapshot.last_error,
         execution_world_dir: execution_world_dir.display().to_string(),
         p2p,

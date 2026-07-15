@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
-use oasis7_node::{NodeConsensusProgressObserver, NodeConsensusSnapshot, NodeRole, NodeSnapshot};
+use oasis7_node::{
+    NodeConsensusProgressObserver, NodeConsensusProgressObserverError, NodeConsensusSnapshot,
+    NodeRole, NodeSnapshot,
+};
 use serde::{Deserialize, Serialize};
 
 use super::publication_proof::{
@@ -69,7 +72,7 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
         &mut self,
         consensus: &NodeConsensusSnapshot,
         observed_at_ms: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeConsensusProgressObserverError> {
         let snapshot = NodeSnapshot {
             node_id: self.node_id.clone(),
             player_id: self.player_id.clone(),
@@ -91,9 +94,12 @@ impl NodeConsensusProgressObserver for PublicationLifecycleObserver {
             observed_at_ms,
         )
         .map_err(|error| {
-            format!(
-                "publication lifecycle reconciliation failed: reason={} detail={}",
-                error.reason, error.detail
+            NodeConsensusProgressObserverError::coded(
+                error.reason,
+                format!(
+                    "publication lifecycle reconciliation failed: reason={} detail={}",
+                    error.reason, error.detail
+                ),
             )
         })
     }

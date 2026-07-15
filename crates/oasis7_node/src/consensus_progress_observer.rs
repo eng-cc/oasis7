@@ -1,15 +1,65 @@
+use std::fmt;
+use std::ops::Deref;
 use std::sync::{Arc, Condvar, Mutex, TryLockError, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
 use crate::{NodeConsensusSnapshot, NodeError};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NodeConsensusProgressObserverError {
+    pub code: Option<String>,
+    pub message: String,
+}
+
+impl NodeConsensusProgressObserverError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            code: None,
+            message: message.into(),
+        }
+    }
+
+    pub fn coded(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: Some(code.into()),
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for NodeConsensusProgressObserverError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.message.as_str())
+    }
+}
+
+impl Deref for NodeConsensusProgressObserverError {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.message.as_str()
+    }
+}
+
+impl From<String> for NodeConsensusProgressObserverError {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<&str> for NodeConsensusProgressObserverError {
+    fn from(message: &str) -> Self {
+        Self::new(message)
+    }
+}
+
 pub trait NodeConsensusProgressObserver: Send {
     fn observe_consensus_progress(
         &mut self,
         snapshot: &NodeConsensusSnapshot,
         observed_at_ms: i64,
-    ) -> Result<(), String>;
+    ) -> Result<(), NodeConsensusProgressObserverError>;
 
     fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
         None
@@ -85,7 +135,11 @@ impl ConsensusProgressObserverDispatcher {
                         observer
                             .observe_consensus_progress(&pending.snapshot, pending.observed_at_ms)
                     }))
-                    .unwrap_or_else(|_| Err("consensus progress observer panicked".to_string()));
+                    .unwrap_or_else(|_| {
+                        Err(NodeConsensusProgressObserverError::new(
+                            "consensus progress observer panicked",
+                        ))
+                    });
                     let has_newer_snapshot = {
                         let (queue_lock, _) = &*worker_queue;
                         let queue = queue_lock
@@ -200,7 +254,10 @@ impl ConsensusProgressObserverSubmitter {
             return;
         }
         current.consensus_progress_observer_error =
-            Some(CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE.to_string());
+            Some(NodeConsensusProgressObserverError::coded(
+                "consensus_progress_observer_backpressure",
+                CONSENSUS_PROGRESS_OBSERVER_BACKPRESSURE,
+            ));
     }
 }
 
@@ -246,7 +303,7 @@ mod tests {
             &mut self,
             _snapshot: &NodeConsensusSnapshot,
             _observed_at_ms: i64,
-        ) -> Result<(), String> {
+        ) -> Result<(), NodeConsensusProgressObserverError> {
             let _ = self.entered.send(());
             let _ = self.release.recv();
             Ok(())

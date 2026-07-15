@@ -133,9 +133,11 @@ pub use types_consensus::{
     NodeValidatorStakeProofStepSnapshot,
 };
 
-pub use consensus_progress_observer::NodeConsensusProgressObserver;
 use consensus_progress_observer::{
     ConsensusProgressObserverDispatcher, publish_runtime_progress_snapshot,
+};
+pub use consensus_progress_observer::{
+    NodeConsensusProgressObserver, NodeConsensusProgressObserverError,
 };
 use feedback_runtime::{
     maybe_ingest_runtime_feedback_announces, maybe_publish_runtime_feedback_announces,

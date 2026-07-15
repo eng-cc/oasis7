@@ -15,9 +15,9 @@ use serde_json::Value as JsonValue;
 use crate::runtime_util::now_unix_ms;
 use crate::{
     NodeCommittedActionBatch, NodeCommittedActionBatchesHandle, NodeConfig, NodeConsensusAction,
-    NodeConsensusProgressObserver, NodeConsensusSnapshot, NodeError, NodeExecutionHook,
-    NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy,
-    NodeReplicationNetworkHandle, NodeRuntime,
+    NodeConsensusProgressObserver, NodeConsensusProgressObserverError, NodeConsensusSnapshot,
+    NodeError, NodeExecutionHook, NodeMainTokenControllerBindingConfig,
+    NodeMainTokenControllerSignerPolicy, NodeReplicationNetworkHandle, NodeRuntime,
 };
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub(super) struct RuntimeState {
     pub(super) last_tick_unix_ms: Option<i64>,
     pub(super) replica_maintenance_last_polled_at_ms: Option<i64>,
     pub(super) consensus: NodeConsensusSnapshot,
-    pub(super) consensus_progress_observer_error: Option<String>,
+    pub(super) consensus_progress_observer_error: Option<NodeConsensusProgressObserverError>,
     pub(super) last_error: Option<String>,
 }
 

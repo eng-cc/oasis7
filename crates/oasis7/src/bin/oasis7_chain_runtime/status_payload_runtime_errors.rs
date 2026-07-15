@@ -7,6 +7,14 @@ pub(super) fn push_runtime_error_alerts(
     snapshot: &NodeSnapshot,
 ) {
     if let Some(error) = snapshot.consensus_progress_observer_error.as_ref() {
+        if error.code.as_deref() == Some("state_persist_failed") {
+            push_observability_alert(
+                alerts,
+                "critical",
+                "state_persist_failed",
+                format!("publication lifecycle state persistence failed: {error}"),
+            );
+        }
         push_observability_alert(
             alerts,
             "critical",

@@ -16,6 +16,24 @@ pub(super) fn build_minimal_status_payload_with_world_dir_runtime_perf_wasm_traf
     traffic: super::ChainTrafficStatus,
     consensus_progress_observer_error: Option<String>,
 ) -> super::status_payload::ChainStatusResponse {
+    build_minimal_status_payload_with_observer_error(
+        execution_world_dir,
+        execution_records_dir,
+        runtime_perf,
+        wasm,
+        traffic,
+        consensus_progress_observer_error.map(Into::into),
+    )
+}
+
+fn build_minimal_status_payload_with_observer_error(
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+    runtime_perf: Option<RuntimePerfSnapshot>,
+    wasm: super::wasm_status::ChainWasmStatus,
+    traffic: super::ChainTrafficStatus,
+    consensus_progress_observer_error: Option<oasis7_node::NodeConsensusProgressObserverError>,
+) -> super::status_payload::ChainStatusResponse {
     let snapshot = NodeSnapshot {
         node_id: "node-a".to_string(),
         player_id: "player-a".to_string(),
@@ -59,6 +77,61 @@ pub(super) fn build_minimal_status_payload_with_world_dir_runtime_perf_wasm_traf
         super::status_payload_tests::minimal_transfer_status(),
         super::ChainReplicationDebugStatus::default(),
     )
+}
+
+#[test]
+fn publication_state_persist_failure_is_the_first_critical_gate_until_observer_recovery() {
+    const OBSERVER_ERROR: &str = "publication lifecycle reconciliation failed: reason=state_persist_failed detail=state_replace_failed";
+    let payload = build_minimal_status_payload_with_observer_error(
+        Path::new("/tmp/execution-world"),
+        None,
+        None,
+        super::status_payload_tests::minimal_wasm_status(),
+        super::ChainTrafficStatus {
+            udp_gossip: None,
+            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
+        Some(oasis7_node::NodeConsensusProgressObserverError::coded(
+            "state_persist_failed",
+            OBSERVER_ERROR,
+        )),
+    );
+
+    assert_eq!(
+        payload.consensus_progress_observer_error.as_deref(),
+        Some(OBSERVER_ERROR),
+    );
+    assert_eq!(
+        payload.readiness.failed_gates.first().map(String::as_str),
+        Some("state_persist_failed"),
+    );
+    assert_eq!(
+        payload.readiness.failed_gates.get(1).map(String::as_str),
+        Some("consensus_progress_observer_error"),
+    );
+    assert!(!payload.observability.ready);
+    assert!(!payload.readiness.ready);
+
+    let recovered = build_minimal_status_payload_with_observer_error(
+        Path::new("/tmp/execution-world"),
+        None,
+        None,
+        super::status_payload_tests::minimal_wasm_status(),
+        super::ChainTrafficStatus {
+            udp_gossip: None,
+            libp2p_replication: oasis7_node::Libp2pTrafficMetricsSnapshot::default(),
+        },
+        None,
+    );
+    assert!(
+        !recovered
+            .readiness
+            .failed_gates
+            .iter()
+            .any(|gate| gate == "state_persist_failed"
+                || gate == "consensus_progress_observer_error"),
+        "a successful lifecycle reconciliation must clear both observer failure gates",
+    );
 }
 
 #[test]

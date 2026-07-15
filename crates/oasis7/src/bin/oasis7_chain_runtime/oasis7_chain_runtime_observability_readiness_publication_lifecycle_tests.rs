@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Barrier};
 use std::thread;
 
+use oasis7_node::NodeConsensusProgressObserver;
+
 const STATE_FILE: &str = "sequencer-publication-lag-state.json";
 const STATE_TEMP_FILE: &str = "sequencer-publication-lag-state.json.tmp";
 
@@ -454,6 +456,51 @@ fn publication_state_persist_failure_has_distinct_status_rejection_reason() {
 
     assert_eq!(rejection_reason, "state_persist_failed");
     assert_ne!(rejection_reason, "state_binding_invalid");
+}
+
+#[cfg(unix)]
+#[test]
+fn publication_lifecycle_observer_preserves_real_persist_failure_code_and_recovers() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_millis() as i64;
+    let (root, records_dir, manifest) = prepare_world(
+        "typed-persist-failure-recovery",
+        &[(800, now_ms - 2_000), (801, now_ms - 1_000)],
+    );
+    let execution_world_dir = root.join("execution-world");
+    install_lifecycle_state(&root, "catch_up", 800, now_ms - 2_000);
+    fs::set_permissions(&execution_world_dir, fs::Permissions::from_mode(0o555))
+        .expect("make lifecycle state directory read-only");
+
+    let snapshot = lifecycle_snapshot(801, now_ms - 1_000, 800, now_ms - 2_000, now_ms - 100);
+    let mut observer =
+        super::super::super::publication_lifecycle::PublicationLifecycleObserver::new(
+            snapshot.node_id.clone(),
+            snapshot.player_id.clone(),
+            snapshot.world_id.clone(),
+            snapshot.role,
+            snapshot.replication_enabled,
+            Some(manifest),
+            execution_world_dir.clone(),
+            records_dir,
+        );
+    let error = observer
+        .observe_consensus_progress(&snapshot.consensus, now_ms)
+        .expect_err("blocked state directory must fail lifecycle persistence");
+    assert_eq!(error.code.as_deref(), Some("state_persist_failed"));
+    assert!(error.message.contains("detail=state_temp_create_failed"));
+
+    fs::set_permissions(&execution_world_dir, fs::Permissions::from_mode(0o755))
+        .expect("restore lifecycle state directory permissions");
+    observer
+        .observe_consensus_progress(&snapshot.consensus, now_ms + 1)
+        .expect("successful lifecycle reconciliation must recover after storage repair");
+    assert!(execution_world_dir.join(STATE_FILE).is_file());
+    fs::remove_dir_all(root).expect("remove persistence recovery fixture");
 }
 
 #[test]

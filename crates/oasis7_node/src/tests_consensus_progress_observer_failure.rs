@@ -18,10 +18,13 @@ impl NodeConsensusProgressObserver for ControllableConsensusProgressObserver {
         &mut self,
         _snapshot: &NodeConsensusSnapshot,
         _observed_at_ms: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeConsensusProgressObserverError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if self.should_fail.load(Ordering::SeqCst) {
-            Err(OBSERVER_FAILURE.to_string())
+            Err(NodeConsensusProgressObserverError::coded(
+                "state_persist_failed",
+                OBSERVER_FAILURE,
+            ))
         } else {
             Ok(())
         }
@@ -46,7 +49,7 @@ impl NodeConsensusProgressObserver for BlockingConsensusProgressObserver {
         &mut self,
         snapshot: &NodeConsensusSnapshot,
         _observed_at_ms: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeConsensusProgressObserverError> {
         self.control.calls.fetch_add(1, Ordering::SeqCst);
         let mut observed_heights = self
             .control
@@ -87,7 +90,7 @@ impl NodeConsensusProgressObserver for RestartGenerationConsensusProgressObserve
         &mut self,
         _snapshot: &NodeConsensusSnapshot,
         _observed_at_ms: i64,
-    ) -> Result<(), String> {
+    ) -> Result<(), NodeConsensusProgressObserverError> {
         let call = self.control.calls.fetch_add(1, Ordering::SeqCst);
         if call == 0 {
             let mut guard = self
@@ -104,7 +107,7 @@ impl NodeConsensusProgressObserver for RestartGenerationConsensusProgressObserve
                     .wait(guard)
                     .expect("wait for restart observer release");
             }
-            return Err(STALE_GENERATION_FAILURE.to_string());
+            return Err(STALE_GENERATION_FAILURE.into());
         }
         Ok(())
     }
@@ -480,6 +483,14 @@ fn consensus_progress_observer_failure_is_non_fatal_observable_and_recoverable()
                     .as_deref(),
                 Some(OBSERVER_FAILURE),
                 "observer failure must remain in the dedicated field",
+            );
+            assert_eq!(
+                failing_snapshot
+                    .consensus_progress_observer_error
+                    .as_ref()
+                    .and_then(|error| error.code.as_deref()),
+                Some("state_persist_failed"),
+                "observer failure code must survive the asynchronous runtime boundary",
             );
             assert!(
                 failing_snapshot.last_error.is_none(),
