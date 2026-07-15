@@ -446,8 +446,20 @@ fn save_snapshot(
             .sync_all()
             .map_err(|_| LifecycleError::persist("state_fsync_failed"))?;
         drop(temp_file);
-        replace_file(temp_path.as_path(), target.as_path())?;
-        sync_parent_dir(execution_world_dir)?;
+        mutation_guard.as_ref().map_or_else(
+            || {
+                replace_file(temp_path.as_path(), target.as_path())?;
+                sync_parent_dir(execution_world_dir)
+            },
+            |guard| {
+                guard
+                    .commit(|| {
+                        replace_file(temp_path.as_path(), target.as_path())?;
+                        sync_parent_dir(execution_world_dir)
+                    })
+                    .ok_or_else(|| LifecycleError::persist("observer_lifecycle_revoked"))?
+            },
+        )?;
         Ok(())
     })();
     if result.is_err() {

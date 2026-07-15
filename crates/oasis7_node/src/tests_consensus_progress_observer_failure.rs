@@ -283,6 +283,139 @@ impl NodeConsensusProgressObserver for RestartAuthorityObserver {
     }
 }
 
+#[derive(Default)]
+struct RestartSequenceControl {
+    release_calls: AtomicUsize,
+    observed: Mutex<Vec<(usize, i64, u64, u64)>>,
+    signal: Condvar,
+}
+
+struct RestartSequenceObserver {
+    control: Arc<RestartSequenceControl>,
+    generation: usize,
+}
+
+impl NodeConsensusProgressObserver for RestartSequenceObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        snapshot: &NodeConsensusSnapshot,
+        observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        let mut observed = self.control.observed.lock().expect("lock restart sequence");
+        let call = observed.len();
+        observed.push((
+            self.generation,
+            observed_at_ms,
+            snapshot.committed_height,
+            snapshot.network_committed_height,
+        ));
+        self.control.signal.notify_all();
+        while self.control.release_calls.load(Ordering::SeqCst) <= call {
+            observed = self
+                .control
+                .signal
+                .wait(observed)
+                .expect("wait for restart sequence release");
+        }
+        Ok(())
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(Self {
+            control: Arc::clone(&self.control),
+            generation: self.generation + 1,
+        }))
+    }
+}
+
+#[derive(Default)]
+struct CooperativeAuthorityControl {
+    old_authority_acquired: AtomicBool,
+    successor_entered: AtomicBool,
+    release: AtomicBool,
+    commits: Mutex<Vec<usize>>,
+    signal: Condvar,
+    wait_lock: Mutex<()>,
+}
+
+struct CooperativeAuthorityObserver {
+    control: Arc<CooperativeAuthorityControl>,
+    generation: usize,
+    authority: Option<ObserverLifecycleAuthority>,
+}
+
+impl NodeConsensusProgressObserver for CooperativeAuthorityObserver {
+    fn observe_consensus_progress(
+        &mut self,
+        _snapshot: &NodeConsensusSnapshot,
+        _observed_at_ms: i64,
+    ) -> Result<(), NodeConsensusProgressObserverError> {
+        let authority = self
+            .authority
+            .as_ref()
+            .expect("dispatcher must bind lifecycle authority");
+        if self.generation == 0 {
+            let guard = authority
+                .acquire_durable_mutation()
+                .expect("first generation must acquire durable authority");
+            self.control
+                .old_authority_acquired
+                .store(true, Ordering::SeqCst);
+            self.control.signal.notify_all();
+            let mut wait = self
+                .control
+                .wait_lock
+                .lock()
+                .expect("lock old authority wait");
+            while !self.control.release.load(Ordering::SeqCst) {
+                wait = self
+                    .control
+                    .signal
+                    .wait(wait)
+                    .expect("wait for old authority release");
+            }
+            drop(wait);
+            drop(guard);
+        } else {
+            self.control.successor_entered.store(true, Ordering::SeqCst);
+            self.control.signal.notify_all();
+            let mut wait = self
+                .control
+                .wait_lock
+                .lock()
+                .expect("lock successor authority wait");
+            while !self.control.release.load(Ordering::SeqCst) {
+                wait = self
+                    .control
+                    .signal
+                    .wait(wait)
+                    .expect("wait for successor authority release");
+            }
+        }
+
+        if authority.acquire_durable_mutation().is_some() {
+            self.control
+                .commits
+                .lock()
+                .expect("lock durable commits")
+                .push(self.generation);
+        }
+        Ok(())
+    }
+
+    fn recreate_for_restart(&self) -> Option<Box<dyn NodeConsensusProgressObserver>> {
+        Some(Box::new(Self {
+            control: Arc::clone(&self.control),
+            generation: self.generation + 1,
+            authority: None,
+        }))
+    }
+
+    fn bind_lifecycle_authority(&mut self, authority: ObserverLifecycleAuthority) {
+        self.authority = Some(authority);
+    }
+}
+
 fn retained_commit_publication_count(network: &TestInMemoryNetwork, world_id: &str) -> usize {
     let topic = super::super::network_bridge::default_consensus_commit_topic(world_id);
     network
@@ -721,6 +854,233 @@ fn bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_o
                     .expect("lock restart handoff progress"),
                 vec![(0, 10, 9), (1, 10, 10), (1, 11, 10)],
                 "recreated observer must receive pending equal-head -> fresh lag in order after the original lag"
+            );
+            drop(restarted);
+        },
+    );
+}
+
+#[test]
+fn restart_handoff_keeps_sequences_monotonic_and_backpressure_until_newest_delivery() {
+    run_test_with_timeout(
+        "restart_handoff_keeps_sequences_monotonic_and_backpressure_until_newest_delivery",
+        Duration::from_secs(4),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let control = Arc::new(RestartSequenceControl::default());
+            let mut dispatcher = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "restart-sequence-continuity",
+                Arc::clone(&state),
+                0,
+                Box::new(RestartSequenceObserver {
+                    control: Arc::clone(&control),
+                    generation: 0,
+                }),
+            )
+            .expect("spawn first restart sequence dispatcher");
+            let first_submitter = dispatcher.submitter();
+
+            let mut lag = NodeConsensusSnapshot::default();
+            lag.committed_height = 10;
+            lag.network_committed_height = 9;
+            let mut equal_head = lag.clone();
+            equal_head.network_committed_height = 10;
+            let mut inherited_lag = equal_head.clone();
+            inherited_lag.committed_height = 11;
+
+            first_submitter.submit(lag, 1);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed
+                        .lock()
+                        .expect("lock first restart sequence observation")
+                        .len()
+                        == 1
+                }),
+                "first generation never blocked after its first sequence"
+            );
+            first_submitter.submit(equal_head, 2);
+            first_submitter.submit(inherited_lag.clone(), 3);
+
+            let recreated = dispatcher
+                .shutdown()
+                .expect("restartable observer must preserve inherited pending work");
+            let restarted = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "restart-sequence-continuity",
+                Arc::clone(&state),
+                1,
+                recreated,
+            )
+            .expect("spawn restarted sequence dispatcher");
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed
+                        .lock()
+                        .expect("lock inherited restart sequence observation")
+                        .len()
+                        == 2
+                }),
+                "restarted dispatcher did not begin inherited pending delivery"
+            );
+
+            let restart_submitter = restarted.submitter();
+            let mut post_restart_equal = inherited_lag.clone();
+            post_restart_equal.network_committed_height = 11;
+            let mut newest_lag = post_restart_equal.clone();
+            newest_lag.committed_height = 12;
+            restart_submitter.submit(post_restart_equal, 4);
+            restart_submitter.submit(newest_lag, 5);
+            assert!(
+                state
+                    .lock()
+                    .expect("lock restart sequence runtime state")
+                    .consensus_progress_observer_error
+                    .as_deref()
+                    .is_some_and(|error| error.contains(OBSERVER_BACKPRESSURE)),
+                "post-restart coalescing must report backpressure before inherited delivery resumes"
+            );
+
+            control.release_calls.store(2, Ordering::SeqCst);
+            control.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed
+                        .lock()
+                        .expect("lock post-restart sequence observation")
+                        .len()
+                        == 3
+                }),
+                "restarted dispatcher did not continue into coalesced post-restart delivery"
+            );
+            assert!(
+                state
+                    .lock()
+                    .expect("lock restart sequence runtime state")
+                    .consensus_progress_observer_error
+                    .as_deref()
+                    .is_some_and(|error| error.contains(OBSERVER_BACKPRESSURE)),
+                "backpressure cleared before the newest post-restart sequence completed"
+            );
+
+            control.release_calls.store(4, Ordering::SeqCst);
+            control.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control
+                        .observed
+                        .lock()
+                        .expect("lock final restart sequence observation")
+                        .len()
+                        == 4
+                        && state
+                            .lock()
+                            .expect("lock final restart sequence state")
+                            .consensus_progress_observer_error
+                            .is_none()
+                }),
+                "newest post-restart sequence did not complete and clear backpressure"
+            );
+            let observed = control
+                .observed
+                .lock()
+                .expect("lock completed restart sequence observation")
+                .clone();
+            drop(restarted);
+
+            assert_eq!(
+                observed,
+                vec![
+                    (0, 1, 10, 9),
+                    (1, 2, 10, 10),
+                    (1, 4, 11, 11),
+                    (1, 5, 12, 11)
+                ],
+                "restart handoff and immediate coalescing must deliver strictly increasing observation sequences without replaying stale pending work"
+            );
+        },
+    );
+}
+
+#[test]
+fn cooperative_durable_authority_holder_does_not_block_restart_or_commit_after_revocation() {
+    run_test_with_timeout(
+        "cooperative_durable_authority_holder_does_not_block_restart_or_commit_after_revocation",
+        Duration::from_secs(4),
+        || {
+            let state = Arc::new(Mutex::new(
+                super::super::node_runtime_core::RuntimeState::default(),
+            ));
+            let control = Arc::new(CooperativeAuthorityControl::default());
+            let mut dispatcher = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "cooperative-authority-restart",
+                Arc::clone(&state),
+                0,
+                Box::new(CooperativeAuthorityObserver {
+                    control: Arc::clone(&control),
+                    generation: 0,
+                    authority: None,
+                }),
+            )
+            .expect("spawn durable authority holder");
+            dispatcher
+                .submitter()
+                .submit(NodeConsensusSnapshot::default(), 1);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control.old_authority_acquired.load(Ordering::SeqCst)
+                }),
+                "old observer never acquired durable authority before its cooperative block"
+            );
+
+            let (handoff_tx, handoff_rx) = std::sync::mpsc::sync_channel(1);
+            std::thread::spawn(move || {
+                let _ = handoff_tx.send(dispatcher.shutdown());
+            });
+            let recreated = match handoff_rx.recv_timeout(Duration::from_millis(500)) {
+                Ok(Some(observer)) => observer,
+                Ok(None) => panic!("restartable observer was not returned from shutdown"),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    control.release.store(true, Ordering::SeqCst);
+                    control.signal.notify_all();
+                    let _ = handoff_rx.recv_timeout(Duration::from_secs(1));
+                    panic!(
+                        "bounded dispatcher shutdown waited for a cooperative observer holding durable authority"
+                    );
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                    panic!("shutdown worker disconnected before handing off observer")
+                }
+            };
+            let restarted = super::super::consensus_progress_observer::ConsensusProgressObserverDispatcher::spawn(
+                "cooperative-authority-restart",
+                Arc::clone(&state),
+                1,
+                recreated,
+            )
+            .expect("successor activation must not wait for old durable authority release");
+            restarted
+                .submitter()
+                .submit(NodeConsensusSnapshot::default(), 2);
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    control.successor_entered.load(Ordering::SeqCst)
+                }),
+                "successor activation blocked behind the old authority holder"
+            );
+
+            control.release.store(true, Ordering::SeqCst);
+            control.signal.notify_all();
+            assert!(
+                wait_until(Instant::now() + Duration::from_secs(1), || {
+                    *control.commits.lock().expect("lock durable commits") == vec![1]
+                }),
+                "revoked old generation committed or successor did not commit after release: commits={:?}",
+                control.commits.lock().expect("lock durable commits")
             );
             drop(restarted);
         },

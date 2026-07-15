@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread::{self, JoinHandle};
 
 use crate::node_runtime_core::RuntimeState;
@@ -84,22 +84,43 @@ pub struct ObserverLifecycleAuthority {
 
 struct ObserverLifecycleAuthorityState {
     active_generation: AtomicU64,
-    mutation_lock: Mutex<()>,
+    commit_lock: Mutex<()>,
 }
 
 pub struct ObserverLifecycleMutationGuard<'a> {
-    _lock: MutexGuard<'a, ()>,
+    authority: &'a ObserverLifecycleAuthority,
 }
 
 impl ObserverLifecycleAuthority {
+    /// Starts durable work only while this generation is still active.
+    ///
+    /// This deliberately does not hold the commit lock while callers write or fsync a temporary
+    /// file. Restart must be able to revoke a stalled predecessor without waiting for that I/O.
     pub fn acquire_durable_mutation(&self) -> Option<ObserverLifecycleMutationGuard<'_>> {
-        let lock = self
+        (self.state.active_generation.load(Ordering::SeqCst) == self.generation)
+            .then_some(ObserverLifecycleMutationGuard { authority: self })
+    }
+}
+
+impl ObserverLifecycleMutationGuard<'_> {
+    /// Revalidates authority while serializing only the final durable publication.
+    ///
+    /// A predecessor revoked before this point cannot enter `commit`. A commit already inside
+    /// this closure linearizes before the handoff; activation and shutdown never wait for it.
+    pub fn commit<T>(&self, commit: impl FnOnce() -> T) -> Option<T> {
+        let _commit_lock = self
+            .authority
             .state
-            .mutation_lock
+            .commit_lock
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        (self.state.active_generation.load(Ordering::SeqCst) == self.generation)
-            .then_some(ObserverLifecycleMutationGuard { _lock: lock })
+        (self
+            .authority
+            .state
+            .active_generation
+            .load(Ordering::SeqCst)
+            == self.authority.generation)
+            .then(commit)
     }
 }
 
@@ -223,20 +244,14 @@ impl ConsensusProgressObserverDispatcher {
             || {
                 Arc::new(ObserverLifecycleAuthorityState {
                     active_generation: AtomicU64::new(generation),
-                    mutation_lock: Mutex::new(()),
+                    commit_lock: Mutex::new(()),
                 })
             },
             |handoff| Arc::clone(&handoff.authority_state),
         );
-        {
-            let _mutation_lock = authority_state
-                .mutation_lock
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            authority_state
-                .active_generation
-                .store(generation, Ordering::SeqCst);
-        }
+        authority_state
+            .active_generation
+            .store(generation, Ordering::SeqCst);
         let authority = ObserverLifecycleAuthority {
             state: authority_state,
             generation,
@@ -248,9 +263,18 @@ impl ConsensusProgressObserverDispatcher {
         // synchronize observer lifecycle state themselves.
         lock_state_generation(&state, generation);
         let queue = Arc::new((
-            Mutex::new(ConsensusProgressObserverQueue {
-                pending: handoff.map_or_else(VecDeque::new, |handoff| handoff.pending),
-                ..ConsensusProgressObserverQueue::default()
+            Mutex::new({
+                let pending = handoff.map_or_else(VecDeque::new, |handoff| handoff.pending);
+                let next_sequence = pending
+                    .iter()
+                    .map(|pending| pending.sequence)
+                    .max()
+                    .unwrap_or_default();
+                ConsensusProgressObserverQueue {
+                    next_sequence,
+                    pending,
+                    ..ConsensusProgressObserverQueue::default()
+                }
             }),
             Condvar::new(),
         ));
@@ -347,25 +371,17 @@ impl ConsensusProgressObserverDispatcher {
         queue.shutdown = true;
         let pending = std::mem::take(&mut queue.pending);
         drop(queue);
+        if self
+            .authority
+            .state
+            .active_generation
+            .load(Ordering::SeqCst)
+            == self.generation
         {
-            let _mutation_lock = self
-                .authority
-                .state
-                .mutation_lock
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if self
-                .authority
+            self.authority
                 .state
                 .active_generation
-                .load(Ordering::SeqCst)
-                == self.generation
-            {
-                self.authority
-                    .state
-                    .active_generation
-                    .store(u64::MAX, Ordering::SeqCst);
-            }
+                .store(u64::MAX, Ordering::SeqCst);
         }
         signal.notify_all();
 
@@ -563,6 +579,27 @@ mod tests {
             .expect("observer received the snapshot after queue lock release");
         submit_thread.join().expect("join submit thread");
         drop(dispatcher);
+    }
+
+    #[test]
+    fn revoked_durable_mutation_cannot_enter_final_commit() {
+        let state = Arc::new(ObserverLifecycleAuthorityState {
+            active_generation: AtomicU64::new(0),
+            commit_lock: Mutex::new(()),
+        });
+        let authority = ObserverLifecycleAuthority {
+            state: Arc::clone(&state),
+            generation: 0,
+        };
+        let mutation = authority
+            .acquire_durable_mutation()
+            .expect("active generation starts durable work");
+
+        state.active_generation.store(1, Ordering::SeqCst);
+        assert!(
+            mutation.commit(|| ()).is_none(),
+            "a generation revoked during temporary-file work must not reach final commit"
+        );
     }
 
     #[test]
