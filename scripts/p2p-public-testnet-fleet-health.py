@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from datetime import datetime, timezone
@@ -71,8 +72,8 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
-    if args.max_capture_span_seconds < 0:
-        parser.error("--max-capture-span-seconds must be non-negative")
+    if not math.isfinite(args.max_capture_span_seconds) or args.max_capture_span_seconds < 0:
+        parser.error("--max-capture-span-seconds must be finite and non-negative")
     nodes = dict(args.node)
     if len(nodes) != len(args.node):
         parser.error("--node names must be unique")

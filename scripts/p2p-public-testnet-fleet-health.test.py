@@ -79,7 +79,7 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
         fixture: FleetHealthFixture,
         output: Path,
         *,
-        max_span_seconds: float = 1.0,
+        max_span_seconds: float | str = 1.0,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
@@ -137,6 +137,27 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
             evidence = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(evidence["verdict"], "blocked")
             self.assertIn("capture_span_exceeded", evidence["failed_gates"])
+
+    def test_non_finite_capture_span_is_rejected_without_ready_evidence(self) -> None:
+        responses = {f"/{name}": (status(), 0.0) for name in ("sequencer", "storage", "observer")}
+        for non_finite_span in ("nan", "inf"):
+            with (
+                self.subTest(max_capture_span_seconds=non_finite_span),
+                tempfile.TemporaryDirectory() as temp_dir,
+                FleetHealthFixture(responses) as fixture,
+            ):
+                output = Path(temp_dir) / "fleet-health.json"
+                result = self.run_collector(
+                    fixture,
+                    output,
+                    max_span_seconds=non_finite_span,
+                )
+
+                self.assertNotEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(
+                    output.exists(),
+                    "non-finite capture span must not produce ready evidence",
+                )
 
     def test_any_head_projection_divergence_fails_closed(self) -> None:
         for field in (
