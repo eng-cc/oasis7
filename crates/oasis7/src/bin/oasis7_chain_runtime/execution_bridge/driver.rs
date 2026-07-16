@@ -53,8 +53,8 @@ use super::external_effect::{
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
 use super::simulator_mirror::{load_simulator_execution_world, persist_simulator_execution_world};
 use super::{
-    ExecutionBridgeRecord, ExecutionBridgeState, ExecutionSimulatorMirrorRecord,
-    persist_world_head_proof_for_record,
+    EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord, ExecutionBridgeState,
+    ExecutionSimulatorMirrorRecord, persist_world_head_proof_for_record,
 };
 use crate::{
     EXECUTION_BRIDGE_RETENTION_DEGRADED_MARKER, EXECUTION_BRIDGE_RETENTION_IN_PROGRESS_MARKER,
@@ -150,15 +150,19 @@ impl NodeRuntimeExecutionDriver {
             execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
-        if execution_world_bootstrap_required {
-            persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
-        }
-        if simulator_world_bootstrap_required {
-            persist_simulator_execution_world(
-                driver.simulator_world_dir.as_path(),
-                &driver.simulator_mirror,
-                None,
-            )?;
+        if driver.state.last_applied_committed_height > 0 {
+            driver.restore_startup_execution_head()?;
+        } else {
+            if execution_world_bootstrap_required {
+                persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
+            }
+            if simulator_world_bootstrap_required {
+                persist_simulator_execution_world(
+                    driver.simulator_world_dir.as_path(),
+                    &driver.simulator_mirror,
+                    None,
+                )?;
+            }
         }
         Ok(driver)
     }
@@ -330,6 +334,148 @@ impl NodeRuntimeExecutionDriver {
         Ok(recovered)
     }
 
+    fn restore_startup_execution_head(&mut self) -> Result<(), String> {
+        let target_height = self.state.last_applied_committed_height;
+        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
+        if !record_path.exists() {
+            // A state file can be ahead of retained records after an interrupted stale-height
+            // reconciliation. Keep that existing recovery path available, but only when an
+            // older durable head and its cache are present; an absent authority set still fails.
+            let latest_path = self.records_dir.join("latest.json");
+            let can_reconcile_stale_state = latest_path.exists()
+                && !execution_world_persistence_files_missing(self.world_dir.as_path())
+                && load_execution_bridge_record(latest_path.as_path())
+                    .is_ok_and(|latest| latest.height < target_height);
+            if can_reconcile_stale_state {
+                return Ok(());
+            }
+            return Err(format!(
+                "execution driver authoritative startup record missing at height {}",
+                target_height
+            ));
+        }
+        let record = load_execution_bridge_record(record_path.as_path()).map_err(|err| {
+            format!(
+                "execution driver authoritative startup record unavailable at height {}: {}",
+                target_height, err
+            )
+        })?;
+        if record.height != target_height || record.world_id.trim().is_empty() {
+            return Err(format!(
+                "execution driver authoritative startup record mismatch at height {}: record_height={} world_id={}",
+                target_height, record.height, record.world_id
+            ));
+        }
+        if self.state.last_execution_block_hash.as_deref()
+            != Some(record.execution_block_hash.as_str())
+            || self.state.last_execution_state_root.as_deref()
+                != Some(record.execution_state_root.as_str())
+            || self.state.last_node_block_hash.as_deref() != record.node_block_hash.as_deref()
+        {
+            return Err(format!(
+                "execution driver authoritative startup state head mismatch at height {}",
+                target_height
+            ));
+        }
+        if !self.restore_execution_head_from_record(record.world_id.as_str(), target_height)? {
+            return Err(format!(
+                "execution driver authoritative startup record missing at height {}",
+                target_height
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_recovered_execution_record(
+        &self,
+        record: &ExecutionBridgeRecord,
+        snapshot_ref: &str,
+        snapshot_bytes: &[u8],
+        snapshot: &RuntimeSnapshot,
+        journal: &RuntimeJournal,
+        allow_legacy_cache_recovery: bool,
+    ) -> Result<(), String> {
+        if record.height == 0 || record.world_id.trim().is_empty() {
+            return Err(format!(
+                "execution driver authoritative record has invalid identity height={} world_id={}",
+                record.height, record.world_id
+            ));
+        }
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+        {
+            let checkpoint_install_record = record.checkpoint_ref.is_some()
+                && record.proposer_id.is_none()
+                && record.action_root.is_none();
+            if record.latest_state_ref.as_deref() != Some(snapshot_ref)
+                || record.snapshot_ref.as_deref() != Some(snapshot_ref)
+                || record.journal_ref.as_deref().is_none_or(str::is_empty)
+                || record.node_block_hash.as_deref().is_none_or(str::is_empty)
+                || (!checkpoint_install_record
+                    && (record.proposer_id.as_deref().is_none_or(str::is_empty)
+                        || record.action_root.as_deref().is_none_or(str::is_empty)))
+            {
+                return Err(format!(
+                    "execution driver authoritative v3 record missing or mismatching refs at height {}",
+                    record.height
+                ));
+            }
+        }
+        let actual_state_root = blake3_hex(snapshot_bytes);
+        if actual_state_root != record.execution_state_root {
+            return Err(format!(
+                "execution driver authoritative snapshot root mismatch at height {}: expected={} actual={}",
+                record.height, record.execution_state_root, actual_state_root
+            ));
+        }
+        if snapshot.journal_len != record.journal_len || journal.len() != record.journal_len {
+            return Err(format!(
+                "execution driver authoritative journal length mismatch at height {}: snapshot={} record={} actual={}",
+                record.height,
+                snapshot.journal_len,
+                record.journal_len,
+                journal.len()
+            ));
+        }
+        let previous_execution_block_hash = if record.height == 1 {
+            "genesis".to_string()
+        } else {
+            let predecessor_path =
+                execution_bridge_record_path(self.records_dir.as_path(), record.height - 1);
+            let predecessor = load_execution_bridge_record(predecessor_path.as_path()).map_err(|err| {
+                format!(
+                    "execution driver authoritative predecessor record unavailable at height {}: {}",
+                    record.height - 1,
+                    err
+                )
+            })?;
+            if predecessor.height != record.height - 1 || predecessor.world_id != record.world_id {
+                return Err(format!(
+                    "execution driver authoritative predecessor record mismatch at height {}",
+                    record.height - 1
+                ));
+            }
+            predecessor.execution_block_hash
+        };
+        let expected_execution_block_hash = blake3_hex(
+            super::to_cbor(ExecutionHashPayload {
+                world_id: record.world_id.as_str(),
+                height: record.height,
+                prev_execution_block_hash: previous_execution_block_hash.as_str(),
+                execution_state_root: record.execution_state_root.as_str(),
+                journal_len: record.journal_len,
+            })?
+            .as_slice(),
+        );
+        if expected_execution_block_hash != record.execution_block_hash {
+            return Err(format!(
+                "execution driver authoritative execution block mismatch at height {}: expected={} actual={}",
+                record.height, expected_execution_block_hash, record.execution_block_hash
+            ));
+        }
+        Ok(())
+    }
+
     fn restore_execution_head_from_record(
         &mut self,
         expected_world_id: &str,
@@ -342,6 +488,12 @@ impl NodeRuntimeExecutionDriver {
         }
 
         let mut record = load_execution_bridge_record(record_path.as_path())?;
+        if record.height != target_height {
+            return Err(format!(
+                "execution driver record height mismatch at path height {}: record_height={}",
+                target_height, record.height
+            ));
+        }
         if record.world_id != expected_world_id {
             return Err(format!(
                 "execution driver stale-height restore world_id mismatch at height {}: expected={} actual={}",
@@ -358,6 +510,21 @@ impl NodeRuntimeExecutionDriver {
                 )
             })?
             .to_string();
+        let allow_legacy_cache_recovery = record.schema_version
+            >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && target_height < self.state.last_applied_committed_height
+            && !execution_world_persistence_files_missing(self.world_dir.as_path());
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+            && (record.latest_state_ref.as_deref() != Some(snapshot_ref.as_str())
+                || record.snapshot_ref.as_deref() != Some(snapshot_ref.as_str())
+                || record.journal_ref.as_deref().is_none_or(str::is_empty))
+        {
+            return Err(format!(
+                "execution driver authoritative v3 record missing exact CAS refs at height {}",
+                target_height
+            ));
+        }
         let pinned_ref_count = execution_record_recovery_ref_count(&record);
         let simulator_mirror_present = record.simulator_mirror.is_some();
         emit_stale_height_restore_start(
@@ -373,7 +540,7 @@ impl NodeRuntimeExecutionDriver {
             .get_verified(snapshot_ref.as_str())
             .map_err(|err| {
                 format!(
-                    "execution driver restore snapshot ref {} failed at height {}: {:?}",
+                    "execution driver authoritative CAS snapshot ref {} failed at height {}: {:?}",
                     snapshot_ref, target_height, err
                 )
             })?;
@@ -399,7 +566,7 @@ impl NodeRuntimeExecutionDriver {
                         .get_verified(journal_ref)
                         .map_err(|err| {
                             format!(
-                                "execution driver restore journal ref {} failed at height {}: {:?}",
+                                "execution driver authoritative CAS journal ref {} failed at height {}: {:?}",
                                 journal_ref, target_height, err
                             )
                         })?;
@@ -434,6 +601,14 @@ impl NodeRuntimeExecutionDriver {
                 (journal, Some(recovered_ref))
             }
         };
+        self.validate_recovered_execution_record(
+            &record,
+            snapshot_ref.as_str(),
+            snapshot_bytes.as_slice(),
+            &snapshot,
+            &journal,
+            allow_legacy_cache_recovery,
+        )?;
         let decode_ms = runtime_decode_started_at.elapsed();
 
         let restored_resource_manifest = snapshot.chain_resource_manifest.clone();
@@ -906,16 +1081,7 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         let state_persist_started_at = Instant::now();
         persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
         let state_persist_ms = state_persist_started_at.elapsed();
-        let world_persist_started_at = Instant::now();
-        persist_execution_world_with_chain_resource_context(
-            self.world_dir.as_path(),
-            &self.execution_world,
-            runtime_resource_context,
-            runtime_resource_context_hash.as_str(),
-            runtime_resource_context_hash.as_str(),
-        )?;
-        let world_persist_ms = world_persist_started_at.elapsed();
-        let persist_world_ms = state_persist_ms + world_persist_ms;
+        let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();
         let reconcile_due = self.retention_reconcile_pending
             && self

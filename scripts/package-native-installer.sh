@@ -17,7 +17,7 @@ Usage: ./scripts/package-native-installer.sh [options]
 Package a prepared launcher bundle into a platform-native release artifact.
 
 Options:
-  --platform <id>      required: linux-x64 | macos-x64 | windows-x64
+  --platform <id>      required: linux-x64 | macos-x64 | macos-arm64 | windows-x64
   --bundle-dir <path>  required: prepared bundle directory to package
   --out-dir <path>     required: output directory for packaged installer
   --asset-name <name>  required: final asset filename (.AppImage | .deb | .dmg | .exe)
@@ -132,9 +132,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$PLATFORM" in
-  linux-x64|macos-x64|windows-x64) ;;
+  linux-x64|macos-x64|macos-arm64|windows-x64) ;;
   *)
-    echo "error: --platform must be one of linux-x64|macos-x64|windows-x64" >&2
+    echo "error: --platform must be one of linux-x64|macos-x64|macos-arm64|windows-x64" >&2
     exit 1
     ;;
 esac
@@ -273,11 +273,11 @@ EOF
       exit 1
     fi
     ;;
-  macos-x64)
-    [[ "$ASSET_NAME" == *.dmg ]] || { echo "error: macos-x64 asset must end with .dmg" >&2; exit 1; }
+  macos-x64|macos-arm64)
+    [[ "$ASSET_NAME" == *.dmg ]] || { echo "error: $PLATFORM asset must end with .dmg" >&2; exit 1; }
     ensure_command hdiutil
     if [[ "$DRY_RUN" == "1" ]]; then
-      TMP_DIR="$OUT_DIR/.dry-run-macos-x64"
+      TMP_DIR="$OUT_DIR/.dry-run-$PLATFORM"
     else
       TMP_DIR="$(mktemp -d)"
       trap 'rm -rf "$TMP_DIR"' EXIT

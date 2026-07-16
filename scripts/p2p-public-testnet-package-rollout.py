@@ -103,6 +103,7 @@ def platform_asset(platform_dir: Path, platform: str) -> Path:
         "linux-x64": "oasis7-linux-x64-bundle.tar.gz",
         "windows-x64": "oasis7-windows-x64.exe",
         "macos-x64": "oasis7-macos-x64.dmg",
+        "macos-arm64": "oasis7-macos-arm64.dmg",
     }
     name = names.get(platform)
     if not name:
@@ -122,6 +123,16 @@ def require_verified_files(platform: str, platform_dir: Path, buildinfo: Path, a
     for rel_name in required:
         if rel_name not in verified_set:
             die(f"{platform} checksum file does not cover required artifact: {rel_name}")
+
+
+def require_macos_arm64_metadata(info: dict[str, str]) -> None:
+    if info.get("platform") != "macos-arm64":
+        die(f"macos-arm64 BUILDINFO platform mismatch: {info.get('platform', '')!r}")
+    if info.get("target_triple") != "aarch64-apple-darwin":
+        die(
+            "macos-arm64 BUILDINFO target_triple must be "
+            "aarch64-apple-darwin"
+        )
 
 
 def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tuple[Path, str]]:
@@ -1610,6 +1621,8 @@ def main() -> int:
         platform_infos[platform] = read_buildinfo(buildinfo)
         platform_assets[platform] = platform_asset(platform_dir, platform)
         require_verified_files(platform, platform_dir, buildinfo, platform_assets[platform], verified_files[platform])
+        if platform == "macos-arm64":
+            require_macos_arm64_metadata(platform_infos[platform])
 
     build = require_same_build(platform_infos)
     version = build["package_version"]
@@ -1681,9 +1694,9 @@ def main() -> int:
                 node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS
             )
             node_plan["commands"].extend(commands)
-        elif platform == "macos-x64":
+        elif platform in {"macos-x64", "macos-arm64"}:
             node_plan["note"] = (
-                "macos-x64 packages are installer artifacts only; this rollout helper verifies "
+                f"{platform} packages are installer artifacts only; this rollout helper verifies "
                 "the artifact but does not replace a running observer unless a platform-specific "
                 "operator script is supplied."
             )

@@ -233,7 +233,33 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
         })
         .expect("commit");
 
-    let world = load_execution_world(world_dir.as_path()).expect("load committed world");
+    let bridge_record = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
+    )
+    .expect("load authoritative v3 bridge record");
+    assert_eq!(
+        bridge_record.schema_version,
+        EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+    );
+    let snapshot_ref = bridge_record
+        .snapshot_ref
+        .as_deref()
+        .expect("authoritative v3 snapshot ref");
+    let journal_ref = bridge_record
+        .journal_ref
+        .as_deref()
+        .expect("authoritative v3 journal ref");
+    let store = LocalCasStore::new(dir.join("store"));
+    let snapshot_bytes = store
+        .get_verified(snapshot_ref)
+        .expect("load authoritative snapshot CAS blob");
+    let journal_bytes = store
+        .get_verified(journal_ref)
+        .expect("load authoritative journal CAS blob");
+    let snapshot = serde_cbor::from_slice(snapshot_bytes.as_slice()).expect("decode snapshot");
+    let journal = serde_cbor::from_slice(journal_bytes.as_slice()).expect("decode journal");
+    let world =
+        RuntimeWorld::from_snapshot(snapshot, journal).expect("reconstruct committed world");
     let record = world
         .latest_tick_consensus_record()
         .expect("latest tick consensus record");
@@ -255,10 +281,6 @@ fn node_runtime_execution_driver_persists_v2_committed_tick_context() {
         record.block.execution_digest.action_batch_hash,
         empty_action_root
     );
-    let bridge_record = load_execution_bridge_record(
-        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
-    )
-    .expect("load bridge record");
     assert_eq!(bridge_record.node_block_hash.as_deref(), Some("node-h1"));
 
     let _ = fs::remove_dir_all(dir);
@@ -834,6 +856,98 @@ fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() 
     let state = load_execution_bridge_state(state_path.as_path()).expect("load state");
     assert_eq!(state.last_applied_committed_height, 34);
     assert_eq!(state.last_node_block_hash.as_deref(), Some("node-h34"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_restart_recovers_authoritative_cas_when_world_cache_is_removed() {
+    let dir = temp_dir("execution-driver-restart-cas-recovery-without-cache");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit");
+    let committed_time = driver.execution_world.state().time;
+    let committed_journal_len = driver.execution_world.journal().len();
+    drop(driver);
+    fs::remove_dir_all(world_dir.as_path()).expect("remove non-authoritative world cache");
+
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("restart recovers authoritative CAS state");
+    assert_eq!(restarted.execution_world.state().time, committed_time);
+    assert_eq!(
+        restarted.execution_world.journal().len(),
+        committed_journal_len
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_restart_fails_closed_when_authoritative_cas_is_missing() {
+    let dir = temp_dir("execution-driver-restart-missing-authoritative-cas");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit");
+    drop(driver);
+    fs::remove_dir_all(world_dir.as_path()).expect("remove non-authoritative world cache");
+    fs::remove_dir_all(storage_root.as_path()).expect("remove authoritative CAS blobs");
+
+    let err =
+        match NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root) {
+            Ok(_) => panic!("restart must fail closed without authoritative CAS data"),
+            Err(err) => err,
+        };
+    assert!(
+        err.contains("authoritative") || err.contains("CAS") || err.contains("record"),
+        "restart failure must identify authoritative recovery data: {err}"
+    );
 
     let _ = fs::remove_dir_all(dir);
 }

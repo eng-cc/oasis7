@@ -24,11 +24,12 @@ package_version="0.0.0+testnet.89.419e119bc897"
 commit="419e119bc897efaa34750bee04c63470d1156699"
 run_id="27605906795"
 
-mkdir -p "$package_dir/windows" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
+mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
 chmod +x "$bundle_src/bin/oasis7_chain_runtime"
 tar -czf "$package_dir/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
 printf 'fake windows installer\n' >"$package_dir/windows/oasis7-windows-x64.exe"
+printf 'fake macos arm64 dmg\n' >"$package_dir/macos/oasis7-macos-arm64.dmg"
 
 windows_bundle="$package_dir/windows/public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"
 windows_genesis="$package_dir/windows/public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json"
@@ -236,6 +237,21 @@ package_version=$package_version
 published=false
 EOF
 
+cat >"$package_dir/macos/macos-arm64-BUILDINFO" <<EOF
+workflow=Testnet Packages
+run_id=$run_id
+run_number=89
+repository=eng-cc/oasis7
+requested_ref=$commit
+commit=$commit
+build_profile=release
+package_scope=all_existing
+platform=macos-arm64
+target_triple=aarch64-apple-darwin
+package_version=$package_version
+published=false
+EOF
+
 (
   cd "$package_dir"
   shasum -a 256 oasis7-linux-x64-bundle.tar.gz linux-x64-BUILDINFO >linux-x64-SHA256SUMS
@@ -259,6 +275,8 @@ EOF
     doc/testing/evidence/genesis-validator-registry.json \
     doc/testing/evidence/governed-bootstrap-topology.md \
     >windows-x64-SHA256SUMS
+  cd "$package_dir/macos"
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
 )
 
 # Windows-only: package fixture setup above is shared with the POSIX harness, but
@@ -1186,6 +1204,13 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "status_url": "http://127.0.0.1:5121/v1/chain/status",
       "rollback_backup_root": "C:\\\\oasis7-deploy\\\\backups\\\\task-2269-fixture",
       "rollback_unlock_timeout_secs": 30
+    },
+    {
+      "name": "macos-observer",
+      "platform": "macos-arm64",
+      "host": "192.0.2.34",
+      "node_root": "/Applications/oasis7",
+      "restart": false
     }
   ]
 }

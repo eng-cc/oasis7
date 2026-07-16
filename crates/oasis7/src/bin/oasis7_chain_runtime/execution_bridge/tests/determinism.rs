@@ -1,7 +1,8 @@
+use super::super::EXECUTION_BRIDGE_RECORD_SCHEMA_V3;
 use super::super::checkpoint::{execution_bridge_record_path, load_execution_bridge_record};
 use super::super::driver::NodeRuntimeExecutionDriver;
 use super::temp_dir;
-use oasis7::runtime::Snapshot as RuntimeSnapshot;
+use oasis7::runtime::{LocalCasStore, Snapshot as RuntimeSnapshot};
 use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
 use std::fs;
 
@@ -24,16 +25,27 @@ fn commit_context(
     }
 }
 
-fn persisted_delta_commit_hash(world_dir: std::path::PathBuf) -> String {
-    serde_json::from_slice::<RuntimeSnapshot>(
-        fs::read(world_dir.join("snapshot.json"))
-            .expect("read snapshot")
-            .as_slice(),
+fn authoritative_delta_commit_hash(
+    records_dir: std::path::PathBuf,
+    storage_root: std::path::PathBuf,
+) -> String {
+    let record = load_execution_bridge_record(
+        execution_bridge_record_path(records_dir.as_path(), 1).as_path(),
     )
-    .expect("snapshot")
-    .latest_chain_resource_delta
-    .and_then(|delta| delta.commit_block_hash)
-    .expect("resource delta commit hash")
+    .expect("load authoritative v3 bridge record");
+    assert_eq!(record.schema_version, EXECUTION_BRIDGE_RECORD_SCHEMA_V3);
+    let snapshot_ref = record
+        .snapshot_ref
+        .as_deref()
+        .expect("authoritative v3 snapshot ref");
+    let snapshot_bytes = LocalCasStore::new(storage_root)
+        .get_verified(snapshot_ref)
+        .expect("load authoritative snapshot CAS blob");
+    serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice())
+        .expect("decode authoritative snapshot")
+        .latest_chain_resource_delta
+        .and_then(|delta| delta.commit_block_hash)
+        .expect("resource delta commit hash")
 }
 
 #[test]
@@ -90,11 +102,12 @@ fn node_runtime_execution_driver_keeps_execution_hash_deterministic_across_node_
         .as_deref(),
         Some("node-h1-storage")
     );
-    let delta_commit_hash_a = persisted_delta_commit_hash(dir.join("a-world"));
+    let delta_commit_hash_a =
+        authoritative_delta_commit_hash(dir.join("a-records"), dir.join("a-store"));
     assert!(!delta_commit_hash_a.is_empty());
     assert_eq!(
         delta_commit_hash_a,
-        persisted_delta_commit_hash(dir.join("b-world"))
+        authoritative_delta_commit_hash(dir.join("b-records"), dir.join("b-store"))
     );
 
     let _ = fs::remove_dir_all(dir);

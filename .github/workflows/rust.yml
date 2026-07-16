@@ -197,6 +197,15 @@ jobs:
           set -euo pipefail
           bash ./scripts/p2p-public-testnet-package-rollout.test.sh
 
+  testnet-packages-macos-arm64-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify additive macOS arm64 package contract
+        shell: bash
+        run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
+
   public-testnet-fleet-health-contract:
     if: github.event_name == 'pull_request'
     strategy:
