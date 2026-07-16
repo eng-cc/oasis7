@@ -1,6 +1,6 @@
 //! Snapshot and journal types for world state persistence.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -249,9 +249,37 @@ pub struct RollbackAuthorityRecord {
     pub active: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct RollbackAuthorityRegistry {
     records: BTreeMap<String, RollbackAuthorityRecord>,
+}
+
+impl<'de> Deserialize<'de> for RollbackAuthorityRegistry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct SerializedRegistry {
+            records: BTreeMap<String, RollbackAuthorityRecord>,
+        }
+
+        let serialized = SerializedRegistry::deserialize(deserializer)?;
+        if serialized.records.is_empty() {
+            return Ok(Self::default());
+        }
+        for (key, record) in &serialized.records {
+            if key != record.authority_id.trim() {
+                return Err(D::Error::custom(format!(
+                    "rollback authority registry key {key:?} does not match authority_id {:?}",
+                    record.authority_id
+                )));
+            }
+        }
+        Self::new(serialized.records.into_values()).map_err(|error| {
+            D::Error::custom(format!("invalid rollback authority registry: {error:?}"))
+        })
+    }
 }
 
 impl RollbackAuthorityRegistry {
@@ -259,7 +287,7 @@ impl RollbackAuthorityRegistry {
         records: impl IntoIterator<Item = RollbackAuthorityRecord>,
     ) -> Result<Self, WorldError> {
         let mut registry = Self::default();
-        for record in records {
+        for mut record in records {
             let authority_id = record.authority_id.trim().to_string();
             if authority_id.is_empty() || record.public_key_hex.trim().is_empty() {
                 return Err(WorldError::DistributedValidationFailed {
@@ -273,6 +301,8 @@ impl RollbackAuthorityRegistry {
                     ),
                 });
             }
+            record.authority_id = authority_id.clone();
+            record.public_key_hex = record.public_key_hex.trim().to_ascii_lowercase();
             if registry
                 .records
                 .insert(authority_id.clone(), record)
@@ -319,6 +349,29 @@ impl RollbackAuthorityRegistry {
         Ok(registry)
     }
 
+    pub fn validate(&self) -> Result<(), WorldError> {
+        if self.records.is_empty() {
+            return Ok(());
+        }
+        for (key, record) in &self.records {
+            if key != record.authority_id.trim() {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority registry key {key:?} does not match authority_id {:?}",
+                        record.authority_id
+                    ),
+                });
+            }
+        }
+        let validated = Self::new(self.records.values().cloned())?;
+        if validated != *self {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority registry is not normalized".to_string(),
+            });
+        }
+        Ok(())
+    }
+
     pub fn get(&self, authority_id: &str) -> Option<&RollbackAuthorityRecord> {
         self.records.get(authority_id)
     }
@@ -342,6 +395,8 @@ pub struct RollbackIntent {
     pub rollback_ticket: String,
     pub snapshot_hash: String,
     pub snapshot_journal_len: usize,
+    pub target_journal_len: usize,
+    pub expected_target_state_root: String,
     pub target_batch_id: Option<String>,
     pub reason: String,
     pub issued_at_ms: u64,

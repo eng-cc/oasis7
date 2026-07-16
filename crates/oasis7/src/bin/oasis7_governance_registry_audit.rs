@@ -34,6 +34,21 @@ struct PublicManifestEntry {
     threshold: Option<u16>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+enum PublicManifest {
+    Entries(Vec<PublicManifestEntry>),
+    Document { entries: Vec<PublicManifestEntry> },
+}
+
+impl PublicManifest {
+    fn into_entries(self) -> Vec<PublicManifestEntry> {
+        match self {
+            Self::Entries(entries) | Self::Document { entries } => entries,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ManifestSlotExpectation {
     threshold: u16,
@@ -318,8 +333,9 @@ fn load_manifest_slot_expectations(
 ) -> Result<BTreeMap<String, ManifestSlotExpectation>, String> {
     let bytes = std::fs::read(path)
         .map_err(|err| format!("read public manifest {} failed: {err}", path.display()))?;
-    let entries: Vec<PublicManifestEntry> = serde_json::from_slice(bytes.as_slice())
-        .map_err(|err| format!("decode public manifest {} failed: {err}", path.display()))?;
+    let entries = serde_json::from_slice::<PublicManifest>(bytes.as_slice())
+        .map_err(|err| format!("decode public manifest {} failed: {err}", path.display()))?
+        .into_entries();
     let mut slots = BTreeMap::new();
     for entry in entries {
         validate_manifest_entry(&entry)?;
@@ -1026,5 +1042,35 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("does not exactly match"))
         );
+    }
+
+    #[test]
+    fn strict_manifest_audit_accepts_the_same_entries_document_shape_as_import() {
+        let (world_dir, manifest_path) = write_world_and_manifest();
+        let entries: Vec<serde_json::Value> = serde_json::from_slice(
+            std::fs::read(manifest_path.as_path())
+                .expect("read array manifest")
+                .as_slice(),
+        )
+        .expect("decode array manifest");
+        std::fs::write(
+            manifest_path.as_path(),
+            serde_json::to_vec_pretty(&serde_json::json!({ "entries": entries }))
+                .expect("encode document manifest"),
+        )
+        .expect("write document manifest");
+
+        let options = CliOptions {
+            world_dir,
+            public_manifest: Some(manifest_path),
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_expected_threshold: 2,
+            strict_manifest_match: true,
+            require_single_failure_tolerance: false,
+        };
+        let report = build_audit_report(&options)
+            .expect("strict audit must accept the importer-supported entries document shape");
+        assert_eq!(report.manifest_match_pass, Some(true));
+        assert!(validate_audit_report(&options, &report).is_empty());
     }
 }

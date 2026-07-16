@@ -42,12 +42,19 @@ fn signed_rollback_envelope(
     on_call: &SigningKey,
     governance: &SigningKey,
 ) -> RollbackAuthorizationEnvelope {
-    let snapshot = &server
+    let checkpoint = server
         .stable_checkpoints
         .iter()
         .find(|checkpoint| checkpoint.batch_id == batch_id)
-        .expect("stable checkpoint")
-        .snapshot;
+        .expect("stable checkpoint");
+    let snapshot = &checkpoint.snapshot;
+    let target_state_root = crate::runtime::World::from_snapshot(
+        checkpoint.snapshot.clone(),
+        checkpoint.journal.clone(),
+    )
+    .expect("reconstruct authoritative target")
+    .current_state_root_hash()
+    .expect("target state root");
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("system clock")
@@ -59,6 +66,8 @@ fn signed_rollback_envelope(
             serde_json::to_vec(snapshot).expect("snapshot json"),
         )),
         snapshot_journal_len: snapshot.journal_len,
+        target_journal_len: checkpoint.journal.len(),
+        expected_target_state_root: target_state_root,
         target_batch_id: Some(batch_id.to_string()),
         reason: reason.to_string(),
         issued_at_ms: now_ms.saturating_sub(1_000),
@@ -70,6 +79,8 @@ fn signed_rollback_envelope(
         rollback_ticket: intent.rollback_ticket.clone(),
         snapshot_hash: intent.snapshot_hash.clone(),
         snapshot_journal_len: intent.snapshot_journal_len,
+        target_journal_len: intent.target_journal_len,
+        expected_target_state_root: intent.expected_target_state_root.clone(),
         target_batch_id: intent.target_batch_id.clone(),
         reason: intent.reason.clone(),
         issued_at_ms: intent.issued_at_ms,
@@ -516,6 +527,229 @@ fn runtime_authoritative_recovery_rollback_rejects_tampered_envelope_before_muta
     assert_eq!(server.world.journal(), &journal_before);
     assert_eq!(server.authoritative_batches.len(), batch_count_before);
     assert_eq!(server.reorg_epoch, reorg_epoch_before);
+}
+
+#[test]
+fn runtime_authoritative_recovery_rejects_tampered_signed_replay_target_fields() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let signed = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "tampered-replay-target",
+        "viewer-tampered-target-1",
+        &on_call,
+        &governance,
+    );
+    let world_before = server.world.snapshot();
+    let batches_before = server.authoritative_batches.len();
+    let epoch_before = server.reorg_epoch;
+
+    for (index, mut approval) in [signed.clone(), signed].into_iter().enumerate() {
+        if index == 0 {
+            approval.intent.target_journal_len =
+                approval.intent.target_journal_len.saturating_add(1);
+        } else {
+            approval.intent.expected_target_state_root = "f".repeat(64);
+        }
+        let err = server
+            .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+                request: AuthoritativeRollbackRequest {
+                    target_batch_id: Some(first.batch_id.clone()),
+                    reason: "tampered-replay-target".to_string(),
+                    requested_by: Some("ops".to_string()),
+                    approval: Some(approval),
+                },
+            })
+            .expect_err("signed replay target tampering must fail closed");
+        assert_eq!(err.code, "rollback_authorization_invalid");
+    }
+
+    assert_eq!(server.world.snapshot(), world_before);
+    assert_eq!(server.authoritative_batches.len(), batches_before);
+    assert_eq!(server.reorg_epoch, epoch_before);
+}
+
+#[test]
+fn runtime_authoritative_recovery_classifies_journal_mismatch_separately_from_authorization() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "journal-mismatch",
+        "viewer-journal-mismatch-1",
+        &on_call,
+        &governance,
+    );
+    let checkpoint = server
+        .stable_checkpoints
+        .iter_mut()
+        .find(|checkpoint| checkpoint.batch_id == first.batch_id)
+        .expect("stable checkpoint");
+    checkpoint.snapshot.journal_len = checkpoint.journal.len().saturating_add(1);
+    let state_before = server.world.state().clone();
+    let journal_before = server.world.journal().clone();
+    let batches_before = server.authoritative_batches.clone();
+    let reorg_epoch_before = server.reorg_epoch;
+
+    let err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "journal-mismatch".to_string(),
+                requested_by: Some("ops".to_string()),
+                approval: Some(approval),
+            },
+        })
+        .expect_err("journal mismatch must fail before mutation");
+
+    assert_eq!(err.code, "rollback_journal_mismatch");
+    assert_eq!(server.world.state(), &state_before);
+    assert_eq!(server.world.journal(), &journal_before);
+    assert_eq!(server.authoritative_batches.len(), batches_before.len());
+    assert_eq!(server.reorg_epoch, reorg_epoch_before);
+}
+
+#[test]
+fn runtime_authoritative_recovery_requires_v2_negotiated_signed_rollback_capability() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "protocol-v2-required",
+        "viewer-protocol-v2-1",
+        &on_call,
+        &governance,
+    );
+    let command = AuthoritativeRecoveryCommand::Rollback {
+        request: AuthoritativeRollbackRequest {
+            target_batch_id: Some(first.batch_id),
+            reason: "protocol-v2-required".to_string(),
+            requested_by: Some("ops".to_string()),
+            approval: Some(approval),
+        },
+    };
+    let world_before = server.world.snapshot();
+    let batch_count_before = server.authoritative_batches.len();
+    let epoch_before = server.reorg_epoch;
+
+    let err = server
+        .handle_authoritative_recovery_for_protocol(
+            command,
+            &crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities(),
+        )
+        .expect_err("v1 session must not reach signed rollback execution");
+
+    assert_eq!(err.code, "protocol_upgrade_required");
+    assert_eq!(server.world.snapshot(), world_before);
+    assert_eq!(server.authoritative_batches.len(), batch_count_before);
+    assert_eq!(server.reorg_epoch, epoch_before);
+}
+
+#[test]
+fn runtime_authoritative_recovery_prepare_faults_are_atomic_and_classified() {
+    use crate::viewer::runtime_live::recovery::RuntimeRecoveryFaultInjection;
+
+    for (fault, expected_code) in [
+        (
+            RuntimeRecoveryFaultInjection::ReconciliationDrift,
+            "rollback_reconciliation_drift",
+        ),
+        (
+            RuntimeRecoveryFaultInjection::CursorCompute,
+            "cursor_compute_failed",
+        ),
+        (
+            RuntimeRecoveryFaultInjection::AckEncode,
+            "rollback_ack_encode_failed",
+        ),
+    ] {
+        let mut server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
+            WorldScenario::Minimal,
+        ))
+        .expect("runtime server");
+        let first = commit_single_authoritative_batch(&mut server);
+        server
+            .advance_authoritative_batch_finality(first.final_height)
+            .expect("finalize first batch");
+        let _second = commit_single_authoritative_batch(&mut server);
+        let (on_call, governance) = configure_rollback_authorities(&mut server);
+        let approval = signed_rollback_envelope(
+            &server,
+            &first.batch_id,
+            "atomic-prepare-fault",
+            &format!("viewer-atomic-{expected_code}"),
+            &on_call,
+            &governance,
+        );
+        let world_before = server.world.snapshot();
+        let batch_ids_before = server
+            .authoritative_batches
+            .iter()
+            .map(|batch| batch.batch_id.clone())
+            .collect::<Vec<_>>();
+        let checkpoint_ids_before = server
+            .stable_checkpoints
+            .iter()
+            .map(|checkpoint| checkpoint.batch_id.clone())
+            .collect::<Vec<_>>();
+        let epoch_before = server.reorg_epoch;
+        server.set_recovery_fault_injection(Some(fault));
+
+        let err = server
+            .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+                request: AuthoritativeRollbackRequest {
+                    target_batch_id: Some(first.batch_id),
+                    reason: "atomic-prepare-fault".to_string(),
+                    requested_by: Some("ops".to_string()),
+                    approval: Some(approval),
+                },
+            })
+            .expect_err("injected prepare fault must fail");
+
+        assert_eq!(err.code, expected_code);
+        assert_eq!(server.world.snapshot(), world_before);
+        assert_eq!(
+            server
+                .authoritative_batches
+                .iter()
+                .map(|batch| batch.batch_id.clone())
+                .collect::<Vec<_>>(),
+            batch_ids_before
+        );
+        assert_eq!(
+            server
+                .stable_checkpoints
+                .iter()
+                .map(|checkpoint| checkpoint.batch_id.clone())
+                .collect::<Vec<_>>(),
+            checkpoint_ids_before
+        );
+        assert_eq!(server.reorg_epoch, epoch_before);
+    }
 }
 
 #[test]

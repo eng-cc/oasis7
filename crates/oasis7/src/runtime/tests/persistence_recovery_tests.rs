@@ -31,8 +31,33 @@ fn rollback_authority_registry(
     .expect("valid rollback authority registry")
 }
 
+#[test]
+fn snapshot_deserialization_rejects_rollback_registry_map_key_mismatch() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+
+    let mut snapshot = serde_json::to_value(world.snapshot()).expect("encode snapshot");
+    let records = snapshot["rollback_authority_registry"]["records"]
+        .as_object_mut()
+        .expect("serialized registry records");
+    let record = records
+        .remove("on-call-alice")
+        .expect("on-call registry record");
+    records.insert("attacker-controlled-map-key".to_string(), record);
+
+    let encoded = serde_json::to_string(&snapshot).expect("encode malformed snapshot");
+    Snapshot::from_json(&encoded)
+        .expect_err("registry map keys must exactly match normalized authority ids");
+}
+
 fn signed_rollback_authorization(
     snapshot: &Snapshot,
+    target_journal_len: usize,
+    expected_target_state_root: &str,
     target_batch_id: Option<&str>,
     ticket: &str,
     reason: &str,
@@ -45,6 +70,8 @@ fn signed_rollback_authorization(
         rollback_ticket: ticket.to_string(),
         snapshot_hash: util::hash_json(snapshot).expect("snapshot hash"),
         snapshot_journal_len: snapshot.journal_len,
+        target_journal_len,
+        expected_target_state_root: expected_target_state_root.to_string(),
         target_batch_id: target_batch_id.map(str::to_string),
         reason: reason.to_string(),
         issued_at_ms: ROLLBACK_NOW_MS - 1_000,
@@ -208,6 +235,9 @@ fn rollback_to_snapshot_resets_state() {
     });
     world.step().unwrap();
     let snapshot = world.snapshot();
+    let snapshot_state_root = world
+        .current_state_root_hash()
+        .expect("snapshot state root");
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
@@ -222,6 +252,8 @@ fn rollback_to_snapshot_resets_state() {
     let journal = world.journal().clone();
     let approval = signed_rollback_authorization(
         &snapshot,
+        snapshot.journal_len,
+        snapshot_state_root.as_str(),
         None,
         "ROLLBACK-LOW-LEVEL-TEST",
         "test-rollback",
@@ -264,6 +296,7 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
 
     let stable_snapshot = world.snapshot();
     let stable_journal = world.journal().clone();
+    let stable_state_root = world.current_state_root_hash().expect("stable state root");
 
     world
         .record_tick_consensus_propagation_for_tick(0, "relay.node.1")
@@ -283,6 +316,8 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
 
     let approval = signed_rollback_authorization(
         &stable_snapshot,
+        stable_journal.len(),
+        stable_state_root.as_str(),
         None,
         "ROLLBACK-2313",
         "reconcile-after-drift",
@@ -326,6 +361,194 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
 }
 
 #[test]
+fn rollback_replays_authoritative_journal_suffix_to_the_target_state() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("create stable snapshot state");
+    let stable_snapshot = world.snapshot();
+
+    world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(9, 9),
+    });
+    world.step().expect("create authoritative catch-up suffix");
+    let target_state = world.state().clone();
+    let target_journal = world.journal().clone();
+    let target_state_root = world.current_state_root_hash().expect("target state root");
+    assert!(target_journal.len() > stable_snapshot.journal_len);
+    let approval = signed_rollback_authorization(
+        &stable_snapshot,
+        target_journal.len(),
+        target_state_root.as_str(),
+        None,
+        "ROLLBACK-2313-REPLAY-TARGET",
+        "replay-to-authoritative-target",
+        "nonce-replay-target-1",
+        &on_call_key,
+        &governance_key,
+    );
+
+    world
+        .rollback_to_snapshot_with_reconciliation(
+            stable_snapshot,
+            target_journal,
+            "replay-to-authoritative-target",
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
+        )
+        .expect("rollback and deterministic catch-up must succeed");
+
+    assert_eq!(
+        world.state(),
+        &target_state,
+        "rollback must replay the authoritative post-snapshot suffix to its target state"
+    );
+}
+
+#[test]
+fn rollback_replay_rejects_tampered_suffix_atomically_without_consuming_nonce() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("create stable snapshot state");
+    let stable_snapshot = world.snapshot();
+    world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(9, 9),
+    });
+    world.step().expect("create authoritative suffix");
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let target_state_root = world.current_state_root_hash().expect("target state root");
+    let mut tampered_journal = journal_before.clone();
+    tampered_journal.events[stable_snapshot.journal_len].id = stable_snapshot.last_event_id;
+    let approval = signed_rollback_authorization(
+        &stable_snapshot,
+        tampered_journal.len(),
+        target_state_root.as_str(),
+        None,
+        "ROLLBACK-2313-TAMPERED-REPLAY",
+        "reject-tampered-replay",
+        "nonce-tampered-replay-1",
+        &on_call_key,
+        &governance_key,
+    );
+
+    world
+        .rollback_to_snapshot_with_reconciliation(
+            stable_snapshot,
+            tampered_journal,
+            "reject-tampered-replay",
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
+        )
+        .expect_err("tampered replay suffix must be rejected before commit");
+
+    assert_eq!(world.snapshot(), snapshot_before);
+    assert_eq!(world.journal(), &journal_before);
+    assert!(
+        !world
+            .snapshot()
+            .consumed_rollback_nonces
+            .contains("nonce-tampered-replay-1")
+    );
+}
+
+#[test]
+fn rollback_replay_target_range_and_state_root_failures_are_atomic() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    for invalid_case in ["target_range", "target_state_root"] {
+        let mut world = World::new();
+        world
+            .set_rollback_authority_registry(rollback_authority_registry(
+                &on_call_key,
+                &governance_key,
+            ))
+            .expect("configure rollback authorities");
+        world.submit_action(Action::RegisterAgent {
+            agent_id: "agent-1".to_string(),
+            pos: pos(0, 0),
+        });
+        world.step().expect("create stable snapshot state");
+        let stable_snapshot = world.snapshot();
+        world.submit_action(Action::MoveAgent {
+            agent_id: "agent-1".to_string(),
+            to: pos(9, 9),
+        });
+        world.step().expect("create replay target");
+        let target_journal = world.journal().clone();
+        let target_state_root = world.current_state_root_hash().expect("target state root");
+        let snapshot_before = world.snapshot();
+        let journal_before = world.journal().clone();
+        let nonce = format!("nonce-{invalid_case}");
+        let approval = signed_rollback_authorization(
+            &stable_snapshot,
+            if invalid_case == "target_range" {
+                target_journal.len() + 1
+            } else {
+                target_journal.len()
+            },
+            if invalid_case == "target_state_root" {
+                "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            } else {
+                target_state_root.as_str()
+            },
+            None,
+            "ROLLBACK-2313-TARGET-VALIDATION",
+            "validate-signed-replay-target",
+            nonce.as_str(),
+            &on_call_key,
+            &governance_key,
+        );
+
+        let error = world
+            .rollback_to_snapshot_with_reconciliation(
+                stable_snapshot,
+                target_journal,
+                "validate-signed-replay-target",
+                None,
+                approval,
+                ROLLBACK_NOW_MS,
+            )
+            .expect_err("invalid signed replay target must fail atomically");
+        assert!(
+            matches!(
+                (invalid_case, error),
+                (
+                    "target_range",
+                    WorldError::RollbackReplayTargetInvalid { .. }
+                ) | (
+                    "target_state_root",
+                    WorldError::RollbackTargetStateRootMismatch { .. }
+                )
+            ),
+            "unexpected error for {invalid_case}"
+        );
+        assert_eq!(world.snapshot(), snapshot_before);
+        assert_eq!(world.journal(), &journal_before);
+        assert!(!world.snapshot().consumed_rollback_nonces.contains(&nonce));
+    }
+}
+
+#[test]
 fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
     let on_call_key = rollback_test_key(7);
     let governance_key = rollback_test_key(9);
@@ -347,6 +570,7 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
     assert!(world.first_tick_consensus_drift().is_some());
     let drifted_snapshot = world.snapshot();
     let drifted_journal = world.journal().clone();
+    let drifted_state_root = world.current_state_root_hash().expect("drifted state root");
 
     world.submit_action(Action::MoveAgent {
         agent_id: "agent-1".to_string(),
@@ -363,6 +587,8 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
     );
     let approval = signed_rollback_authorization(
         &drifted_snapshot,
+        drifted_journal.len(),
+        drifted_state_root.as_str(),
         None,
         "ROLLBACK-2313-DRIFT",
         "reject-drifted-candidate",
@@ -384,7 +610,7 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
     assert!(
         matches!(
             error,
-            WorldError::DistributedValidationFailed { ref reason }
+            WorldError::RollbackReconciliationFailed { ref reason, .. }
                 if reason.contains("tick consensus parent hash mismatch")
         ),
         "expected drift validation rejection, got {error:?}"
@@ -406,6 +632,8 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
     let governance_key = rollback_test_key(9);
     for invalid_case in [
         "tampered_ticket",
+        "tampered_target_journal_len",
+        "tampered_target_state_root",
         "expired",
         "same_key_wrong_role",
         "target_mismatch",
@@ -424,6 +652,7 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
         world.step().expect("step");
         let stable_snapshot = world.snapshot();
         let stable_journal = world.journal().clone();
+        let stable_state_root = world.current_state_root_hash().expect("stable state root");
 
         world.submit_action(Action::MoveAgent {
             agent_id: "agent-1".to_string(),
@@ -435,6 +664,8 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
 
         let mut approval = signed_rollback_authorization(
             &stable_snapshot,
+            stable_journal.len(),
+            stable_state_root.as_str(),
             Some("batch-stable-1"),
             "ROLLBACK-2313",
             "invalid-authorization-must-not-mutate",
@@ -444,6 +675,10 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
         );
         match invalid_case {
             "tampered_ticket" => approval.intent.rollback_ticket.push_str("-tampered"),
+            "tampered_target_journal_len" => approval.intent.target_journal_len += 1,
+            "tampered_target_state_root" => {
+                approval.intent.expected_target_state_root = "f".repeat(64)
+            }
             "expired" => approval.intent.expires_at_ms = ROLLBACK_NOW_MS - 1,
             "same_key_wrong_role" => {
                 let payload = approval
@@ -504,8 +739,11 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
     world.step().expect("step");
     let old_snapshot = world.snapshot();
     let old_journal = world.journal().clone();
+    let old_state_root = world.current_state_root_hash().expect("old state root");
     let approval = signed_rollback_authorization(
         &old_snapshot,
+        old_journal.len(),
+        old_state_root.as_str(),
         None,
         "ROLLBACK-2313-REPLAY",
         "durable-replay-test",

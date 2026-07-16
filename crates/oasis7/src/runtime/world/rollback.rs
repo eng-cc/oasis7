@@ -19,6 +19,29 @@ impl World {
         approval: RollbackAuthorizationEnvelope,
         now_ms: u64,
     ) -> Result<(), WorldError> {
+        let prior_journal_len = journal.len();
+        journal.events.truncate(snapshot.journal_len);
+        self.rollback_to_snapshot_candidate(
+            snapshot,
+            journal,
+            prior_journal_len,
+            reason,
+            target_batch_id,
+            approval,
+            now_ms,
+        )
+    }
+
+    fn rollback_to_snapshot_candidate(
+        &mut self,
+        snapshot: Snapshot,
+        journal: Journal,
+        prior_journal_len: usize,
+        reason: impl Into<String>,
+        target_batch_id: Option<&str>,
+        approval: RollbackAuthorizationEnvelope,
+        now_ms: u64,
+    ) -> Result<(), WorldError> {
         let reason = reason.into();
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
@@ -31,8 +54,17 @@ impl World {
             now_ms,
         )?;
 
-        let prior_len = journal.len();
-        journal.events.truncate(snapshot.journal_len);
+        if approval.intent.target_journal_len < snapshot.journal_len
+            || approval.intent.target_journal_len != journal.len()
+        {
+            return Err(WorldError::RollbackReplayTargetInvalid {
+                snapshot_journal_len: snapshot.journal_len,
+                target_journal_len: approval.intent.target_journal_len,
+                supplied_journal_len: journal.len(),
+            });
+        }
+
+        self.validate_rollback_replay_journal(&snapshot, &journal)?;
 
         let signer = self.receipt_signer.clone();
         let authority_registry = self.rollback_authority_registry.clone();
@@ -43,11 +75,19 @@ impl World {
         world.rollback_authority_registry = authority_registry;
         world.consumed_rollback_nonces = consumed_nonces;
 
+        let actual_target_state_root = world.current_state_root_hash()?;
+        if actual_target_state_root != approval.intent.expected_target_state_root {
+            return Err(WorldError::RollbackTargetStateRootMismatch {
+                expected: approval.intent.expected_target_state_root.clone(),
+                actual: actual_target_state_root,
+            });
+        }
+
         let snapshot_hash = hash_json(&snapshot)?;
         let event = RollbackEvent {
             snapshot_hash,
             snapshot_journal_len: snapshot.journal_len,
-            prior_journal_len: prior_len,
+            prior_journal_len,
             reason,
             rollback_ticket: approval.intent.rollback_ticket,
             on_call_approver: verified.0.clone(),
@@ -71,21 +111,34 @@ impl World {
         now_ms: u64,
     ) -> Result<(), WorldError> {
         let mut candidate = self.clone();
-        candidate.rollback_to_snapshot(
-            snapshot,
-            journal,
-            reason,
-            target_batch_id,
-            approval,
-            now_ms,
-        )?;
+        let prior_journal_len = journal.len();
+        let reconciliation_tick = snapshot.state.time;
+        candidate
+            .rollback_to_snapshot_candidate(
+                snapshot,
+                journal,
+                prior_journal_len,
+                reason,
+                target_batch_id,
+                approval,
+                now_ms,
+            )
+            .map_err(|error| match error {
+                WorldError::DistributedValidationFailed { reason }
+                    if reason.contains("tick consensus") =>
+                {
+                    WorldError::RollbackReconciliationFailed {
+                        tick: reconciliation_tick,
+                        reason,
+                    }
+                }
+                other => other,
+            })?;
 
         if let Some(drift) = candidate.first_tick_consensus_drift() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "rollback reconciliation drift detected at tick {}: {}",
-                    drift.tick, drift.reason
-                ),
+            return Err(WorldError::RollbackReconciliationFailed {
+                tick: drift.tick,
+                reason: drift.reason,
             });
         }
         *self = candidate;
@@ -125,6 +178,7 @@ impl World {
             || intent.reason != reason
             || intent.snapshot_hash != expected_hash
             || intent.snapshot_journal_len != snapshot.journal_len
+            || intent.expected_target_state_root.trim().is_empty()
             || intent.target_batch_id.as_deref() != target_batch_id
             || intent.nonce.trim().is_empty()
         {
@@ -209,5 +263,37 @@ impl World {
                 reject("rollback authorization is missing governance approval".to_string())
             })?;
         Ok((on_call, governance))
+    }
+
+    fn validate_rollback_replay_journal(
+        &self,
+        snapshot: &Snapshot,
+        journal: &Journal,
+    ) -> Result<(), WorldError> {
+        if snapshot.journal_len > journal.len() {
+            return Err(WorldError::JournalMismatch);
+        }
+        if snapshot.journal_len > 0 {
+            let boundary = &journal.events[snapshot.journal_len - 1];
+            if boundary.id != snapshot.last_event_id {
+                return Err(WorldError::RollbackReplayJournalInvalid {
+                    index: snapshot.journal_len - 1,
+                    expected_event_id: snapshot.last_event_id,
+                    found_event_id: boundary.id,
+                });
+            }
+        }
+        let mut expected_event_id = snapshot.last_event_id.saturating_add(1);
+        for (index, event) in journal.events.iter().enumerate().skip(snapshot.journal_len) {
+            if event.id != expected_event_id {
+                return Err(WorldError::RollbackReplayJournalInvalid {
+                    index,
+                    expected_event_id,
+                    found_event_id: event.id,
+                });
+            }
+            expected_event_id = expected_event_id.saturating_add(1);
+        }
+        Ok(())
     }
 }

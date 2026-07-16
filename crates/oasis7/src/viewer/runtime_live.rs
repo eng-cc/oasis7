@@ -128,6 +128,8 @@ pub struct ViewerRuntimeLiveServer {
     settlement_ranking_gate: RuntimeSettlementRankingGate,
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
+    #[cfg(test)]
+    recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
 }
 
 const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 12;
@@ -207,6 +209,8 @@ impl ViewerRuntimeLiveServer {
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
             latest_player_gameplay_feedback: None,
             latest_player_gameplay_causality: None,
+            #[cfg(test)]
+            recovery_fault_injection: None,
         })
     }
 
@@ -450,12 +454,23 @@ impl ViewerRuntimeLiveServer {
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         match request {
-            ViewerRequest::Hello { .. } => {
+            ViewerRequest::Hello { version, .. } => {
+                session.negotiated_protocol = if version >= 2 {
+                    crate::viewer::protocol::NegotiatedViewerProtocol::v2_signed_rollback()
+                } else {
+                    crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities()
+                };
                 send_response(
                     writer,
                     &ViewerResponse::HelloAck {
                         server: "oasis7".to_string(),
                         version: VIEWER_PROTOCOL_VERSION,
+                        min_version: 1,
+                        max_version: VIEWER_PROTOCOL_VERSION,
+                        capabilities: vec![
+                            crate::viewer::protocol::SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY
+                                .to_string(),
+                        ],
                         world_id: self.config.world_id.clone(),
                         control_profile: ViewerControlProfile::Live,
                     },
@@ -512,6 +527,7 @@ impl ViewerRuntimeLiveServer {
                                 message: Some("snapshot_sync_metadata".to_string()),
                                 revoke_reason: None,
                                 revoked_by: None,
+                                rollback_receipt: None,
                                 acknowledged_at_tick: self.world.state().time,
                             },
                         },
@@ -605,7 +621,10 @@ impl ViewerRuntimeLiveServer {
                 }
             }
             ViewerRequest::AuthoritativeRecovery { command } => {
-                match self.handle_authoritative_recovery(command) {
+                match self.handle_authoritative_recovery_for_protocol(
+                    command,
+                    &session.negotiated_protocol,
+                ) {
                     Ok((ack, emit_snapshot_after_ack)) => {
                         let ack_player_id = ack.player_id.clone();
                         let ack_status = ack.status;

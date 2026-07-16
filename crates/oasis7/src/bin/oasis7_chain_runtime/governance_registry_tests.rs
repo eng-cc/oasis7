@@ -940,6 +940,42 @@ fn genesis_validator_registry_allows_existing_world_with_registry() {
 }
 
 #[test]
+fn public_tier_existing_world_with_finality_but_without_rollback_registry_fails_startup() {
+    let temp_dir = temp_dir("public-existing-world-missing-rollback-registry");
+    let mut world = World::new();
+    world
+        .set_governance_finality_signer_registry(GovernanceFinalitySignerRegistry {
+            slot_id: "governance.finality.v1".to_string(),
+            threshold: 1,
+            threshold_bps: 0,
+            signer_bindings: BTreeMap::from([(
+                "governance.finality.v1.validator-a".to_string(),
+                "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+            )]),
+            validator_stakes: BTreeMap::from([(
+                "governance.finality.v1.validator-a".to_string(),
+                100,
+            )]),
+        })
+        .expect("configure finality registry");
+    world.step().expect("make world non-bootstrap");
+    world.save_to_dir(&temp_dir).expect("save existing world");
+
+    let err = ensure_world_governance_validator_registry(
+        temp_dir.as_path(),
+        None,
+        Some(&public_testnet_loaded_manifest()),
+    )
+    .expect_err("public-tier startup must require a governed rollback registry");
+
+    assert!(err.contains("rollback"), "unexpected startup error: {err}");
+    assert!(
+        err.contains("governance registry import") || err.contains("migration"),
+        "startup error must identify the remediation path: {err}"
+    );
+}
+
+#[test]
 fn public_tier_without_world_registry_or_genesis_manifest_fails() {
     let temp_dir = temp_dir("public-missing-registry");
     std::fs::create_dir_all(&temp_dir).expect("create temp dir");

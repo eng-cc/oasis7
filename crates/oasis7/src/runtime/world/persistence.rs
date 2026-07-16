@@ -919,6 +919,7 @@ impl World {
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
+        snapshot.rollback_authority_registry.validate()?;
 
         let mut world = Self::new_with_state(snapshot.state);
         world.rollback_authority_registry = snapshot.rollback_authority_registry;

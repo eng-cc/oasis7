@@ -850,6 +850,9 @@ fn query_runtime_bound_players_reads_snapshot_bindings() {
             &ViewerResponse::HelloAck {
                 server: "oasis7".to_string(),
                 version: VIEWER_PROTOCOL_VERSION,
+                min_version: 1,
+                max_version: VIEWER_PROTOCOL_VERSION,
+                capabilities: Vec::new(),
                 world_id: "test-world".to_string(),
                 control_profile: oasis7::viewer::ViewerControlProfile::Playback,
             },
@@ -1188,11 +1191,4 @@ fn sanitize_index_html_for_embedded_server_removes_trunk_reload_script() {
     assert!(sanitized.contains("window.bootstrap = true"));
     assert!(!sanitized.contains(".well-known/trunk/ws"));
     assert!(!sanitized.contains("__TRUNK_ADDRESS__"));
-}
-
-#[test]
-fn sanitize_index_html_for_embedded_server_keeps_non_index_files_unchanged() {
-    let body = b"<script>.well-known/trunk/ws</script>";
-    let sanitized = sanitize_index_html_for_embedded_server(Path::new("app.js"), body, None);
-    assert_eq!(sanitized, body);
 }

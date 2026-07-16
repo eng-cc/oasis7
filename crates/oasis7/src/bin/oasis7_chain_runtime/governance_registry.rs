@@ -107,6 +107,17 @@ pub(super) fn ensure_world_governance_validator_registry(
         return Ok(());
     }
     if world_has_effective_finality_registry(execution_world_dir)? {
+        if network_tier_requires_governance_validator_registry(loaded_network_tier_manifest) {
+            let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+            if !world_is_bootstrap_only(&world)
+                && world.snapshot().rollback_authority_registry.is_empty()
+            {
+                return Err(format!(
+                    "public-tier existing world is missing the governed rollback authority registry; run the dedicated governance registry import migration before restart: execution_world_dir={}",
+                    execution_world_dir.display()
+                ));
+            }
+        }
         return Ok(());
     }
     if let Some(manifest_path) = genesis_validator_registry_path {

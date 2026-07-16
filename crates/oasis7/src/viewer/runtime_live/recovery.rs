@@ -2,7 +2,42 @@ use super::authoritative::compute_runtime_snapshot_hash;
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
 
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RuntimeRecoveryFaultInjection {
+    ReconciliationDrift,
+    CursorCompute,
+    AckEncode,
+}
+
 impl ViewerRuntimeLiveServer {
+    #[cfg(test)]
+    pub(super) fn set_recovery_fault_injection(
+        &mut self,
+        fault: Option<RuntimeRecoveryFaultInjection>,
+    ) {
+        self.recovery_fault_injection = fault;
+    }
+
+    pub(super) fn handle_authoritative_recovery_for_protocol(
+        &mut self,
+        command: AuthoritativeRecoveryCommand,
+        negotiated: &crate::viewer::protocol::NegotiatedViewerProtocol,
+    ) -> Result<(AuthoritativeRecoveryAck<u64>, bool), AuthoritativeRecoveryError> {
+        if matches!(command, AuthoritativeRecoveryCommand::Rollback { .. })
+            && !negotiated.supports_signed_rollback()
+        {
+            return Err(recovery_error(
+                "protocol_upgrade_required",
+                "signed authoritative rollback requires Viewer protocol v2 capability negotiation",
+                None,
+                None,
+                None,
+            ));
+        }
+        self.handle_authoritative_recovery(command)
+    }
+
     pub(super) fn handle_authoritative_recovery(
         &mut self,
         command: AuthoritativeRecoveryCommand,
@@ -92,6 +127,31 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         };
+        let invalidated_batch_ids = self
+            .authoritative_batches
+            .iter()
+            .skip(batch_index.saturating_add(1))
+            .map(|batch| batch.batch_id.clone())
+            .collect::<Vec<_>>();
+        let target_state_root = crate::runtime::World::from_snapshot(
+            checkpoint.snapshot.clone(),
+            checkpoint.journal.clone(),
+        )
+        .and_then(|world| world.current_state_root_hash())
+        .map_err(|err| rollback_runtime_error(err, checkpoint.batch_id.clone()))?;
+        if approval.intent.target_journal_len != checkpoint.journal.len()
+            || approval.intent.expected_target_state_root != target_state_root
+        {
+            return Err(recovery_error(
+                "rollback_authorization_invalid",
+                "rollback authorization replay target does not match the selected checkpoint",
+                Some(checkpoint.batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+        let rollback_ticket = approval.intent.rollback_ticket.clone();
+        let authorization_nonce = approval.intent.nonce.clone();
 
         let reason = request.reason.trim();
         let rollback_reason = if reason.is_empty() {
@@ -99,7 +159,13 @@ impl ViewerRuntimeLiveServer {
         } else {
             reason.to_string()
         };
-        self.world
+        let mut candidate_world = self.world.clone();
+        let mut candidate_batches = self.authoritative_batches.clone();
+        let mut candidate_challenges = self.authoritative_challenges.clone();
+        let mut candidate_checkpoints = self.stable_checkpoints.clone();
+        let candidate_reorg_epoch = self.reorg_epoch.saturating_add(1);
+
+        candidate_world
             .rollback_to_snapshot_with_reconciliation(
                 checkpoint.snapshot.clone(),
                 checkpoint.journal.clone(),
@@ -111,6 +177,8 @@ impl ViewerRuntimeLiveServer {
                         rollback_ticket: approval.intent.rollback_ticket,
                         snapshot_hash: approval.intent.snapshot_hash,
                         snapshot_journal_len: approval.intent.snapshot_journal_len,
+                        target_journal_len: approval.intent.target_journal_len,
+                        expected_target_state_root: approval.intent.expected_target_state_root,
                         target_batch_id: approval.intent.target_batch_id,
                         reason: approval.intent.reason,
                         issued_at_ms: approval.intent.issued_at_ms,
@@ -137,43 +205,60 @@ impl ViewerRuntimeLiveServer {
                 },
                 current_unix_time_ms(),
             )
-            .map_err(|err| {
+            .map_err(|err| rollback_runtime_error(err, checkpoint.batch_id.clone()))?;
+
+        #[cfg(test)]
+        if self.recovery_fault_injection == Some(RuntimeRecoveryFaultInjection::ReconciliationDrift)
+        {
+            return Err(recovery_error(
+                "rollback_reconciliation_drift",
+                "injected rollback reconciliation drift",
+                Some(checkpoint.batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+
+        candidate_batches.truncate(batch_index.saturating_add(1));
+        candidate_challenges.retain(|challenge| {
+            candidate_batches
+                .iter()
+                .any(|batch| batch.batch_id == challenge.batch_id)
+        });
+        if let Some(index) = candidate_checkpoints
+            .iter()
+            .position(|entry| entry.batch_id == checkpoint.batch_id)
+        {
+            candidate_checkpoints.truncate(index.saturating_add(1));
+        }
+
+        #[cfg(test)]
+        if self.recovery_fault_injection == Some(RuntimeRecoveryFaultInjection::CursorCompute) {
+            return Err(recovery_error(
+                "cursor_compute_failed",
+                "injected recovery cursor failure",
+                Some(checkpoint.batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+        let snapshot_hash =
+            compute_runtime_snapshot_hash(&candidate_world.snapshot()).map_err(|err| {
                 recovery_error(
-                    "rollback_authorization_invalid",
+                    "cursor_compute_failed",
                     format!("{err:?}"),
                     Some(checkpoint.batch_id.clone()),
                     None,
                     None,
                 )
             })?;
-
-        self.authoritative_batches
-            .truncate(batch_index.saturating_add(1));
-        self.authoritative_challenges.retain(|challenge| {
-            self.authoritative_batches
-                .iter()
-                .any(|batch| batch.batch_id == challenge.batch_id)
-        });
-        self.prune_stable_checkpoints_after_batch(checkpoint.batch_id.as_str());
-        self.rebuild_settlement_ranking_gate();
-        self.reorg_epoch = self.reorg_epoch.saturating_add(1);
-
-        let cursor = self.current_recovery_cursor().map_err(|err| {
-            recovery_error(
-                "cursor_compute_failed",
-                format!("{err:?}"),
-                Some(checkpoint.batch_id.clone()),
-                None,
-                None,
-            )
-        })?;
-        Ok(AuthoritativeRecoveryAck {
+        let ack = AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
-            reorg_epoch: self.reorg_epoch,
-            snapshot_height: cursor.snapshot_height,
-            snapshot_hash: cursor.snapshot_hash,
-            log_cursor: cursor.log_cursor,
-            stable_batch_id: Some(checkpoint.batch_id),
+            reorg_epoch: candidate_reorg_epoch,
+            snapshot_height: candidate_world.state().time,
+            snapshot_hash: snapshot_hash.clone(),
+            log_cursor: latest_runtime_event_seq(&candidate_world),
+            stable_batch_id: Some(checkpoint.batch_id.clone()),
             player_id: None,
             agent_id: None,
             session_pubkey: None,
@@ -182,8 +267,48 @@ impl ViewerRuntimeLiveServer {
             message: Some("rollback applied to stable checkpoint".to_string()),
             revoke_reason: None,
             revoked_by: None,
-            acknowledged_at_tick: self.world.state().time,
-        })
+            rollback_receipt: Some(crate::viewer::protocol::AuthoritativeRollbackReceipt {
+                receipt_id: format!("rollback:{rollback_ticket}:{authorization_nonce}"),
+                authorization_nonce,
+                rollback_ticket,
+                target_batch_id: checkpoint.batch_id.clone(),
+                invalidated_batch_ids,
+                prior_reorg_epoch: self.reorg_epoch,
+                committed_reorg_epoch: candidate_reorg_epoch,
+                replay_from_snapshot_height: candidate_world.state().time,
+                replay_from_log_cursor: latest_runtime_event_seq(&candidate_world),
+                snapshot_hash,
+                snapshot_reload_required: true,
+            }),
+            acknowledged_at_tick: candidate_world.state().time,
+        };
+        #[cfg(test)]
+        if self.recovery_fault_injection == Some(RuntimeRecoveryFaultInjection::AckEncode) {
+            return Err(recovery_error(
+                "rollback_ack_encode_failed",
+                "injected rollback acknowledgment encoding failure",
+                Some(checkpoint.batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+        serde_json::to_vec(&ack).map_err(|err| {
+            recovery_error(
+                "rollback_ack_encode_failed",
+                format!("{err:?}"),
+                Some(checkpoint.batch_id.clone()),
+                None,
+                None,
+            )
+        })?;
+
+        self.world = candidate_world;
+        self.authoritative_batches = candidate_batches;
+        self.authoritative_challenges = candidate_challenges;
+        self.stable_checkpoints = candidate_checkpoints;
+        self.reorg_epoch = candidate_reorg_epoch;
+        self.rebuild_settlement_ranking_gate();
+        Ok(ack)
     }
 
     fn register_session_key(
@@ -287,6 +412,7 @@ impl ViewerRuntimeLiveServer {
             message: Some("session_registered".to_string()),
             revoke_reason: None,
             revoked_by: None,
+            rollback_receipt: None,
             acknowledged_at_tick: self.world.state().time,
         })
     }
@@ -394,6 +520,7 @@ impl ViewerRuntimeLiveServer {
             message,
             revoke_reason: None,
             revoked_by: None,
+            rollback_receipt: None,
             acknowledged_at_tick: self.world.state().time,
         })
     }
@@ -461,6 +588,7 @@ impl ViewerRuntimeLiveServer {
             message: Some(request.revoke_reason.trim().to_string()),
             revoke_reason: revoke_metadata.revoke_reason,
             revoked_by: revoke_metadata.revoked_by,
+            rollback_receipt: None,
             acknowledged_at_tick: self.world.state().time,
         })
     }
@@ -530,6 +658,7 @@ impl ViewerRuntimeLiveServer {
             message: Some(request.rotate_reason.trim().to_string()),
             revoke_reason: None,
             revoked_by: None,
+            rollback_receipt: None,
             acknowledged_at_tick: self.world.state().time,
         })
     }
@@ -675,6 +804,38 @@ fn current_unix_time_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or(0)
+}
+
+fn rollback_runtime_error(
+    err: crate::runtime::WorldError,
+    batch_id: String,
+) -> AuthoritativeRecoveryError {
+    let debug = format!("{err:?}");
+    let code = match &err {
+        crate::runtime::WorldError::JournalMismatch => "rollback_journal_mismatch",
+        crate::runtime::WorldError::RollbackReplayJournalInvalid { .. } => {
+            "rollback_replay_journal_invalid"
+        }
+        crate::runtime::WorldError::RollbackReplayTargetInvalid { .. } => {
+            "rollback_replay_target_invalid"
+        }
+        crate::runtime::WorldError::RollbackTargetStateRootMismatch { .. } => {
+            "rollback_target_state_root_mismatch"
+        }
+        crate::runtime::WorldError::RollbackReconciliationFailed { .. } => {
+            "rollback_reconciliation_drift"
+        }
+        crate::runtime::WorldError::DistributedValidationFailed { reason }
+            if reason.contains("reconciliation drift") =>
+        {
+            "rollback_reconciliation_drift"
+        }
+        crate::runtime::WorldError::DistributedValidationFailed { .. } => {
+            "rollback_authorization_invalid"
+        }
+        _ => "internal_prepare_failed",
+    };
+    recovery_error(code, debug, Some(batch_id), None, None)
 }
 
 pub(super) fn recovery_error(
