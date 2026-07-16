@@ -475,6 +475,8 @@ PM_TASK_JSON=""
 PM_TASK_UID=""
 PM_TASK_PATH=""
 PM_EXECUTION_LOG_PATH=""
+PM_BOOTSTRAP_SNAPSHOT_PATH=""
+PM_BOOTSTRAP_SNAPSHOT_DIGEST=""
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   NEW_TASK_CMD=(./scripts/pm/new-task.sh
     --owner-role "$PM_OWNER_ROLE"
@@ -524,18 +526,31 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   (
     cd "$TARGET_PATH" &&
     ./scripts/pm/move-task.sh --task-uid "$PM_TASK_UID" --to-status committed >/dev/null &&
-    ./scripts/pm/workflow-report.sh --phase start --role "$PM_OWNER_ROLE" --task-uid "$PM_TASK_UID" >/dev/null
+    ./scripts/pm/workflow-report.sh --phase start --role "$PM_OWNER_ROLE" --task-uid "$PM_TASK_UID" >/dev/null &&
+    ./scripts/pm/bootstrap-task-snapshot.py create \
+      --repo-root "$TARGET_PATH" \
+      --task-uid "$PM_TASK_UID" \
+      --request-identity "$PM_TITLE" \
+      --producer scripts/new-task-worktree.sh >/dev/null
   )
   BOOTSTRAP_STATUS=$?
   set -e
   if [[ "$BOOTSTRAP_STATUS" -ne 0 ]]; then
     echo "error: failed to move/start bootstrapped GitHub-backed PM task; preserved worktree/branch for recovery: $TARGET_PATH" >&2
-    echo "resume-bootstrap: cd '$TARGET_PATH' && ./scripts/pm/refresh-task-cache.sh --task-uid '$PM_TASK_UID' --json, then retry move-task/workflow-report" >&2
+    echo "resume-bootstrap: cd '$TARGET_PATH' && ./scripts/pm/refresh-task-cache.sh --task-uid '$PM_TASK_UID' --json, then retry move-task/workflow-report/bootstrap-task-snapshot" >&2
     exit "$BOOTSTRAP_STATUS"
   fi
+  PM_BOOTSTRAP_SNAPSHOT_PATH="$TARGET_PATH/.pm/scratch/$PM_TASK_UID/bootstrap-task-snapshot.json"
+  PM_BOOTSTRAP_SNAPSHOT_DIGEST="$(python3 - "$PM_BOOTSTRAP_SNAPSHOT_PATH" <<'PY'
+import json
+import sys
+
+print(json.load(open(sys.argv[1], encoding="utf-8"))["digest"])
+PY
+)"
 fi
 
-SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" <<'PY'
+SUMMARY_JSON="$(python3 - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" "$PM_BOOTSTRAP_SNAPSHOT_PATH" "$PM_BOOTSTRAP_SNAPSHOT_DIGEST" <<'PY'
 from __future__ import annotations
 
 import json
@@ -585,6 +600,8 @@ if sys.argv[29] == "1":
         "task_uid": sys.argv[33],
         "task_path": sys.argv[34],
         "execution_log_path": sys.argv[35],
+        "bootstrap_snapshot_path": sys.argv[36],
+        "bootstrap_snapshot_digest": sys.argv[37],
         "status": "committed",
         "workflow_started": True,
     }
@@ -655,6 +672,8 @@ PM bootstrap:
 - task uid: $PM_TASK_UID
 - task issue: $PM_TASK_PATH
 - evidence sink: $PM_EXECUTION_LOG_PATH
+- bootstrap snapshot: $PM_BOOTSTRAP_SNAPSHOT_PATH
+- snapshot digest: $PM_BOOTSTRAP_SNAPSHOT_DIGEST
 - task status: committed
 - workflow start: recorded
 INFO

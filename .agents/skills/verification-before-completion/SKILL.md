@@ -50,6 +50,7 @@ Earlier successful output is background only.
 ```
 
 4. Read both the command output and the exit status.
+   When verification output is broad, use `./scripts/pm/bounded-command-output.py` and cite both its bounded summary and full artifact digest; truncation must remain explicit.
 5. Only make the claim if the verification succeeded in the current run.
 
 ## When the Helper Is Not Enough

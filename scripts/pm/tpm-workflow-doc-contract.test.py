@@ -105,6 +105,17 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("最小 task packet", agents)
         self.assertIn("full-history fork 仅用于已记录具体原因的升级", agents)
 
+    def test_efficiency_helpers_have_bounded_enforcement_contracts(self) -> None:
+        friction = self.section("1.2.1 Friction Controls After Task Truth")
+        dispatch = self.section("5.2 TPM planning and subagent dispatch")
+        budget = self.section("GitHub query budget and terminal defaults")
+        self.assertIn("immutable machine-readable snapshot", friction)
+        self.assertIn("never a second mutable task store", friction)
+        self.assertIn("one expected role/slice batch", dispatch)
+        self.assertIn("does not claim to control Codex host concurrency", dispatch)
+        self.assertIn("bounded-command-output.py", budget)
+        self.assertIn("does not claim control over Codex host logs", budget)
+
     def test_terminal_helpers_are_current_while_supervisor_automation_is_blocked(self) -> None:
         table = self.section("Capability status")
         self.assertRegex(table, r"(?im)^\|[^\n]*(?:main[- ]sync|safe[- ]cleanup)[^\n]*\|\s*implemented\s*\|")
