@@ -54,6 +54,30 @@ def reject_symlink_components(root: Path, path: Path, label: str) -> None:
             die(f"{label} contains symlink component: {current}")
 
 
+def resolve_confined_source(stage_root: Path, candidate: Path, label: str) -> Path:
+    """Reject lexical escapes and symlinks before resolving an in-stage path."""
+    lexical_root = stage_root.absolute()
+    lexical_candidate = candidate.absolute()
+    try:
+        relative = lexical_candidate.relative_to(lexical_root)
+    except ValueError:
+        die(f"{label} escapes staged deployment closure: {candidate}")
+    if ".." in relative.parts:
+        die(f"{label} ref escapes staged deployment closure: {candidate}")
+    reject_symlink_components(lexical_root, lexical_candidate, label)
+
+    try:
+        resolved = lexical_candidate.resolve(strict=True)
+        stage_resolved = lexical_root.resolve(strict=True)
+    except OSError as exc:
+        die(f"{label} ref is missing: {candidate}: {exc}")
+    try:
+        resolved.relative_to(stage_resolved)
+    except ValueError:
+        die(f"{label} ref escapes staged deployment closure: {candidate}")
+    return resolved
+
+
 def confined_source(stage_root: Path, raw_ref: str, metadata_path: Path, label: str) -> Path:
     normalized = raw_ref.replace("\\", "/")
     posix_ref = PurePosixPath(normalized)
@@ -65,17 +89,7 @@ def confined_source(stage_root: Path, raw_ref: str, metadata_path: Path, label: 
         if ".." in posix_ref.parts or posix_ref.is_absolute():
             die(f"{label} ref escapes staged deployment closure: {raw_ref}")
         candidate = metadata_path.parent / Path(*posix_ref.parts)
-    try:
-        resolved = candidate.resolve(strict=True)
-    except OSError as exc:
-        die(f"{label} ref is missing: {raw_ref}: {exc}")
-    stage_resolved = stage_root.resolve(strict=True)
-    try:
-        resolved.relative_to(stage_resolved)
-    except ValueError:
-        die(f"{label} ref escapes staged deployment closure: {raw_ref}")
-    reject_symlink_components(stage_resolved, resolved, label)
-    return resolved
+    return resolve_confined_source(stage_root, candidate, label)
 
 
 def genesis_source(stage_root: Path, config_dir: Path, raw_ref: str, metadata_path: Path, label: str) -> Path:
@@ -92,16 +106,17 @@ def genesis_source(stage_root: Path, config_dir: Path, raw_ref: str, metadata_pa
         if not name or name in {".", ".."}:
             die(f"{label} has unsafe staged evidence name: {raw_ref}")
         copied = config_dir / "doc/testing/evidence" / name
+        copied = resolve_confined_source(stage_root, copied, label)
         if not copied.is_file():
             die(f"{label} has no copied staged evidence file: {raw_ref}")
-        reject_symlink_components(stage_root.resolve(strict=True), copied.resolve(), label)
-        return copied.resolve()
+        return copied
     return confined_source(stage_root, raw_ref, metadata_path, label)
 
 
 class Localizer:
     def __init__(self, stage_root: Path, out_dir: Path) -> None:
-        self.stage_root = stage_root.resolve(strict=True)
+        self.lexical_stage_root = stage_root.absolute()
+        self.stage_root = self.lexical_stage_root.resolve(strict=True)
         self.out_dir = out_dir
         self.destinations: dict[Path, Path] = {}
 
@@ -155,7 +170,7 @@ class Localizer:
         raw_ref = metadata.get("ref")
         if not isinstance(raw_ref, str) or not raw_ref:
             die(f"{label} metadata has no ref")
-        source = confined_source(self.stage_root, raw_ref, metadata_path, label)
+        source = confined_source(self.lexical_stage_root, raw_ref, metadata_path, label)
         directory = metadata.get("kind") == "directory"
         destination = self.destination_for(source, directory=directory)
         metadata["ref"] = self.copy(source, destination, directory=directory)

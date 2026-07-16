@@ -102,6 +102,65 @@ class WindowsGovernedClosureTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 MODULE.localize(self.make_stage(root, collision=True), root / "windows-governed-closure")
 
+    def test_rejects_symlinked_bundle_file_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage = self.make_stage(root)
+            evidence = stage / "config/doc/testing/evidence"
+            symlink = evidence / "governance-link.json"
+            symlink.symlink_to(evidence / "governance.json")
+            bundle_path = stage / "config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["governance_manifest"]["ref"] = str(symlink)
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                MODULE.localize(stage, root / "windows-governed-closure")
+
+    def test_rejects_symlinked_genesis_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage = self.make_stage(root)
+            evidence = stage / "config/doc/testing/evidence"
+            copied = evidence / "binding.md"
+            copied.unlink()
+            copied.symlink_to(evidence / "governance.json")
+
+            with self.assertRaises(SystemExit):
+                MODULE.localize(stage, root / "windows-governed-closure")
+
+    def test_closure_is_checksum_root_and_rollout_platform_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            closure = root / "windows-governed-closure"
+            MODULE.localize(self.make_stage(root), closure)
+            installer = closure / "oasis7-windows-x64.exe"
+            installer.write_text("installer\n", encoding="utf-8")
+            buildinfo = closure / "windows-x64-BUILDINFO"
+            buildinfo.write_text("package_version=test\n", encoding="utf-8")
+            files = sorted(
+                path.relative_to(closure).as_posix()
+                for path in closure.rglob("*")
+                if path.is_file()
+            )
+            sums = closure / "windows-x64-SHA256SUMS"
+            sums.write_text(
+                "".join(
+                    f"{ROLLOUT_MODULE.sha256_file(closure / name)}  {name}\n"
+                    for name in files
+                ),
+                encoding="utf-8",
+            )
+
+            platform_dir = ROLLOUT_MODULE.find_platform_dir(root, "windows-x64").resolve()
+            self.assertEqual(platform_dir, closure.resolve())
+            self.assertFalse((root / "windows-x64-SHA256SUMS").exists())
+            verified = ROLLOUT_MODULE.verify_sha256sums(platform_dir, sums.resolve())
+            ROLLOUT_MODULE.require_verified_files(
+                "windows-x64", platform_dir, buildinfo.resolve(), installer.resolve(), verified
+            )
+            self.assertGreater(len(ROLLOUT_MODULE.windows_governed_files(platform_dir, verified)), 8)
+
 
 if __name__ == "__main__":
     unittest.main()
