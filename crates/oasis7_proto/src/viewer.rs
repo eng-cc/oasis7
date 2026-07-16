@@ -235,6 +235,15 @@ pub struct AuthoritativeRollbackRequest {
     pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval: Option<RollbackApprovalEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalEvidence {
+    pub rollback_ticket: String,
+    pub on_call_approver: String,
+    pub governance_approver: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

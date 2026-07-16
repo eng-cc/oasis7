@@ -243,8 +243,8 @@ pub use signer::ReceiptSigner;
 
 // Snapshot
 pub use snapshot::{
-    Journal, RollbackEvent, Snapshot, SnapshotCatalog, SnapshotMeta, SnapshotRecord,
-    SnapshotRetentionPolicy,
+    Journal, RollbackApprovalEvidence, RollbackEvent, Snapshot, SnapshotCatalog, SnapshotMeta,
+    SnapshotRecord, SnapshotRetentionPolicy,
 };
 
 // State

@@ -146,7 +146,16 @@ fn rollback_to_snapshot_resets_state() {
 
     let journal = world.journal().clone();
     world
-        .rollback_to_snapshot(snapshot.clone(), journal, "test-rollback")
+        .rollback_to_snapshot(
+            snapshot.clone(),
+            journal,
+            "test-rollback",
+            RollbackApprovalEvidence {
+                rollback_ticket: "ROLLBACK-LOW-LEVEL-TEST".to_string(),
+                on_call_approver: "on-call-alice".to_string(),
+                governance_approver: "governance-bob".to_string(),
+            },
+        )
         .unwrap();
 
     assert_eq!(world.state(), &snapshot.state);
@@ -190,6 +199,11 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
             stable_snapshot,
             stable_journal,
             "reconcile-after-drift",
+            RollbackApprovalEvidence {
+                rollback_ticket: "ROLLBACK-2313".to_string(),
+                on_call_approver: "on-call-alice".to_string(),
+                governance_approver: "governance-bob".to_string(),
+            },
         )
         .expect("rollback with reconciliation");
 
@@ -200,6 +214,78 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
     world
         .verify_tick_consensus_chain()
         .expect("reconciled chain should verify");
+
+    let rollback = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .find_map(|event| match &event.body {
+            WorldEventBody::RollbackApplied(rollback) => Some(rollback),
+            _ => None,
+        })
+        .expect("rollback audit event");
+    assert_eq!(rollback.rollback_ticket, "ROLLBACK-2313");
+    assert_eq!(rollback.on_call_approver, "on-call-alice");
+    assert_eq!(rollback.governance_approver, "governance-bob");
+}
+
+#[test]
+fn rollback_with_reconciliation_rejects_invalid_approval_before_mutation() {
+    for approval in [
+        RollbackApprovalEvidence {
+            rollback_ticket: " ".to_string(),
+            on_call_approver: "on-call-alice".to_string(),
+            governance_approver: "governance-bob".to_string(),
+        },
+        RollbackApprovalEvidence {
+            rollback_ticket: "ROLLBACK-2313".to_string(),
+            on_call_approver: " ".to_string(),
+            governance_approver: "governance-bob".to_string(),
+        },
+        RollbackApprovalEvidence {
+            rollback_ticket: "ROLLBACK-2313".to_string(),
+            on_call_approver: "same-person".to_string(),
+            governance_approver: "same-person".to_string(),
+        },
+    ] {
+        let mut world = World::new();
+        world.submit_action(Action::RegisterAgent {
+            agent_id: "agent-1".to_string(),
+            pos: pos(0, 0),
+        });
+        world.step().expect("step");
+        let stable_snapshot = world.snapshot();
+        let stable_journal = world.journal().clone();
+
+        world.submit_action(Action::MoveAgent {
+            agent_id: "agent-1".to_string(),
+            to: pos(9, 9),
+        });
+        world.step().expect("mutate after snapshot");
+        let state_before = world.state().clone();
+        let journal_before = world.journal().clone();
+
+        world
+            .rollback_to_snapshot_with_reconciliation(
+                stable_snapshot,
+                stable_journal,
+                "invalid-approval-must-not-mutate",
+                approval,
+            )
+            .expect_err("invalid rollback approval must be rejected");
+
+        assert_eq!(
+            world.state(),
+            &state_before,
+            "state mutated before rejection"
+        );
+        assert_eq!(
+            world.journal(),
+            &journal_before,
+            "journal mutated before rejection"
+        );
+    }
 }
 
 #[test]

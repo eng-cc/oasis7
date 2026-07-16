@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use super::super::util::{hash_json, read_json_from_path, write_json_to_path};
 use super::super::{
-    Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, RollbackEvent,
-    SegmentConfig, Snapshot, TickConsensusRecord, WorldError, WorldEvent, WorldTime,
+    Journal, JournalSegmentRef, LocalCasStore, ModuleCache, ModuleStore, RollbackApprovalEvidence,
+    RollbackEvent, SegmentConfig, Snapshot, TickConsensusRecord, WorldError, WorldEvent, WorldTime,
     segment_journal, segment_snapshot,
 };
 use super::World;
@@ -919,7 +919,10 @@ impl World {
         snapshot: Snapshot,
         mut journal: Journal,
         reason: impl Into<String>,
+        approval: RollbackApprovalEvidence,
     ) -> Result<(), WorldError> {
+        approval.validate()?;
+
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
@@ -937,6 +940,9 @@ impl World {
             snapshot_journal_len: snapshot.journal_len,
             prior_journal_len: prior_len,
             reason: reason.into(),
+            rollback_ticket: approval.rollback_ticket,
+            on_call_approver: approval.on_call_approver,
+            governance_approver: approval.governance_approver,
         };
         world.append_event(super::super::WorldEventBody::RollbackApplied(event), None)?;
         *self = world;
@@ -948,8 +954,10 @@ impl World {
         snapshot: Snapshot,
         journal: Journal,
         reason: impl Into<String>,
+        approval: RollbackApprovalEvidence,
     ) -> Result<(), WorldError> {
-        self.rollback_to_snapshot(snapshot, journal, reason)?;
+        self.rollback_to_snapshot(snapshot, journal, reason, approval)?;
+
         if let Some(drift) = self.first_tick_consensus_drift() {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!(

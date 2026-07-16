@@ -1,4 +1,5 @@
 use super::*;
+use crate::viewer::protocol::RollbackApprovalEvidence;
 use crate::viewer::runtime_live::authoritative::{RuntimeBatchChallengeState, is_valid_root_hash};
 
 fn commit_single_authoritative_batch(
@@ -305,6 +306,11 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
                 target_batch_id: Some(first.batch_id.clone()),
                 reason: "test_reorg".to_string(),
                 requested_by: Some("ops".to_string()),
+                approval: Some(RollbackApprovalEvidence {
+                    rollback_ticket: "ROLLBACK-2313".to_string(),
+                    on_call_approver: "on-call-alice".to_string(),
+                    governance_approver: "governance-bob".to_string(),
+                }),
             },
         })
         .expect("rollback to first stable batch");
@@ -317,6 +323,55 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
     assert_eq!(server.reorg_epoch, 1);
     assert_eq!(server.authoritative_batches.len(), 1);
     assert_eq!(server.authoritative_batches[0].batch_id, first.batch_id);
+}
+
+#[test]
+fn runtime_authoritative_recovery_rollback_rejects_missing_approval_before_mutation() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let second = commit_single_authoritative_batch(&mut server);
+    let state_before = server.world.state().clone();
+    let journal_before = server.world.journal().clone();
+    let batch_ids_before = server
+        .authoritative_batches
+        .iter()
+        .map(|batch| batch.batch_id.clone())
+        .collect::<Vec<_>>();
+    let reorg_epoch_before = server.reorg_epoch;
+
+    let err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "missing-approval".to_string(),
+                requested_by: Some("ops".to_string()),
+                approval: None,
+            },
+        })
+        .expect_err("viewer recovery must require rollback approval evidence");
+
+    assert_eq!(err.code, "rollback_approval_required");
+    assert_eq!(server.world.state(), &state_before);
+    assert_eq!(server.world.journal(), &journal_before);
+    assert_eq!(server.authoritative_batches.len(), batch_ids_before.len());
+    assert_eq!(
+        server
+            .authoritative_batches
+            .iter()
+            .map(|batch| batch.batch_id.as_str())
+            .collect::<Vec<_>>(),
+        batch_ids_before
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(server.reorg_epoch, reorg_epoch_before);
+    assert_eq!(server.authoritative_batches[1].batch_id, second.batch_id);
 }
 
 #[test]
@@ -354,6 +409,11 @@ fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
                 target_batch_id: Some(first.batch_id),
                 reason: "force_reorg".to_string(),
                 requested_by: None,
+                approval: Some(RollbackApprovalEvidence {
+                    rollback_ticket: "ROLLBACK-2313-RECONNECT".to_string(),
+                    on_call_approver: "on-call-alice".to_string(),
+                    governance_approver: "governance-bob".to_string(),
+                }),
             },
         })
         .expect("rollback");

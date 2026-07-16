@@ -30,6 +30,15 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: AuthoritativeRollbackRequest,
     ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        let approval = request.approval.ok_or_else(|| {
+            recovery_error(
+                "rollback_approval_required",
+                "authoritative rollback requires approval evidence",
+                request.target_batch_id.clone(),
+                None,
+                None,
+            )
+        })?;
         let target_batch_id = request
             .target_batch_id
             .clone()
@@ -86,6 +95,11 @@ impl ViewerRuntimeLiveServer {
                 checkpoint.snapshot.clone(),
                 checkpoint.journal.clone(),
                 rollback_reason,
+                crate::runtime::RollbackApprovalEvidence {
+                    rollback_ticket: approval.rollback_ticket,
+                    on_call_approver: approval.on_call_approver,
+                    governance_approver: approval.governance_approver,
+                },
             )
             .map_err(|err| {
                 recovery_error(

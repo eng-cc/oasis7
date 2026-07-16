@@ -216,4 +216,45 @@ pub struct RollbackEvent {
     pub snapshot_journal_len: usize,
     pub prior_journal_len: usize,
     pub reason: String,
+    #[serde(default)]
+    pub rollback_ticket: String,
+    #[serde(default)]
+    pub on_call_approver: String,
+    #[serde(default)]
+    pub governance_approver: String,
+}
+
+/// Approval evidence required by the reconciled production rollback path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalEvidence {
+    pub rollback_ticket: String,
+    pub on_call_approver: String,
+    pub governance_approver: String,
+}
+
+impl RollbackApprovalEvidence {
+    pub(crate) fn validate(&self) -> Result<(), WorldError> {
+        if self.rollback_ticket.trim().is_empty() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback approval requires a nonblank rollback_ticket".to_string(),
+            });
+        }
+        if self.on_call_approver.trim().is_empty() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback approval requires a nonblank on_call_approver".to_string(),
+            });
+        }
+        if self.governance_approver.trim().is_empty() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback approval requires a nonblank governance_approver".to_string(),
+            });
+        }
+        if self.on_call_approver.trim() == self.governance_approver.trim() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback approval requires distinct on-call and governance approvers"
+                    .to_string(),
+            });
+        }
+        Ok(())
+    }
 }
