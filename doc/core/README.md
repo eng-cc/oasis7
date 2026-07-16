@@ -34,14 +34,14 @@
 - 维护跨模块治理基线、候选级 readiness / go-no-go 审计留痕与文档总入口同步。
 - 维护项目级设计阅读顺序、下一轮优先级与 ROUND 台账入口。
 
-## 热点子域导航（2026-06-23 快照）
-- `reviews/`（含本地 README 共 46）：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；先由 `reviews/README.md` 分流，再按需进入。
+## 热点子域导航
+- `reviews/`：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；先由 `reviews/README.md` 分流，再按需进入。
 - 根目录保留专题：下一轮优先级、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已退役删除，候选证据追溯改从 `reviews/` 审计记录进入，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
-- `templates/`（2）：阶段收口和 PRD-ID 追踪模板。
-- `checklists/`（1）：跨模块影响检查清单。
+- `templates/`：阶段收口和 PRD-ID 追踪模板。
+- `checklists/`：跨模块影响检查清单。
 
 ## 高密度提示
-- `doc/core/` 当前共有 69 份文件，其中 `reviews/` 占 46 份；默认入口不再尝试把 review / audit 材料直接摊平展示。
+- 本页不维护容易漂移的文件数量快照；当前模块库存与热点子目录统一以 `./scripts/doc-inventory-report.sh` 为准。默认入口不再尝试把 review / audit 材料直接摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/core/prd.index.md`；需要 round 审查、采证或模板时，再按子域进入。
 
 ## 共享约定
