@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::Path;
 
+use oasis7::runtime::LocalCasStore;
+use oasis7_proto::distributed::WorldHeadProofV1;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -38,7 +40,10 @@ pub(crate) struct LatestWorldHeadProofStatus {
     pub(crate) checkpoint_ref: Option<String>,
 }
 
-pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> ChainProofStatus {
+pub(crate) fn build_chain_proof_status(
+    execution_records_dir: Option<&Path>,
+    execution_storage_root: Option<&Path>,
+) -> ChainProofStatus {
     let schema_version = "oasis7.chain_proof_status.v1".to_string();
     let proof_contract = "WorldHeadProofV1".to_string();
     let claim_boundary =
@@ -238,6 +243,31 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
         }
     };
 
+    if let Err(err) = validate_latest_world_head_proof(
+        execution_storage_root,
+        latest_world_head_proof.world_head_proof_ref.as_str(),
+        latest_world_head_proof.proof_hash.as_str(),
+        latest_world_head_proof.world_id.as_str(),
+        latest_world_head_proof.height,
+        latest_world_head_proof.execution_block_hash.as_str(),
+        latest_world_head_proof.execution_state_root.as_str(),
+        latest_world_head_proof.node_block_hash.as_str(),
+        latest_world_head_proof.action_root.as_str(),
+        latest_world_head_proof.checkpoint_ref.as_deref(),
+    ) {
+        return ChainProofStatus {
+            schema_version,
+            proof_contract,
+            claim_boundary,
+            status: "stale_or_invalid".to_string(),
+            latest_world_head_proof: None,
+            latest_execution_checkpoint,
+            source_record_path: Some(latest_path.display().to_string()),
+            load_error: Some(err),
+            does_not_claim,
+        };
+    }
+
     ChainProofStatus {
         schema_version,
         proof_contract,
@@ -249,6 +279,85 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
         load_error: None,
         does_not_claim,
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_latest_world_head_proof(
+    execution_storage_root: Option<&Path>,
+    proof_ref: &str,
+    expected_proof_hash: &str,
+    world_id: &str,
+    height: u64,
+    execution_block_hash: &str,
+    execution_state_root: &str,
+    node_block_hash: &str,
+    action_root: &str,
+    checkpoint_ref: Option<&str>,
+) -> Result<(), String> {
+    let storage_root = execution_storage_root
+        .ok_or_else(|| "execution storage root is unconfigured".to_string())?;
+    let proof_bytes = LocalCasStore::new(storage_root)
+        .get_verified(proof_ref)
+        .map_err(|err| format!("load world head proof CAS blob failed: {err:?}"))?;
+    let proof: WorldHeadProofV1 = serde_cbor::from_slice(proof_bytes.as_slice())
+        .map_err(|err| format!("decode WorldHeadProofV1 failed: {err}"))?;
+    proof
+        .validate_contract()
+        .map_err(|err| format!("validate WorldHeadProofV1 failed: {err}"))?;
+    let proof_hash = proof
+        .proof_hash()
+        .map_err(|err| format!("hash WorldHeadProofV1 failed: {err}"))?;
+    if proof_hash != expected_proof_hash {
+        return Err(format!(
+            "world head proof hash mismatch: record={expected_proof_hash} proof={proof_hash}"
+        ));
+    }
+    if proof.world_id != world_id {
+        return Err(format!(
+            "world head proof world_id mismatch: record={world_id} proof={}",
+            proof.world_id
+        ));
+    }
+    if proof.height != height {
+        return Err(format!(
+            "world head proof height mismatch: record={height} proof={}",
+            proof.height
+        ));
+    }
+    if proof.execution.execution_block_hash != execution_block_hash {
+        return Err(format!(
+            "world head proof execution block hash mismatch: record={execution_block_hash} proof={}",
+            proof.execution.execution_block_hash
+        ));
+    }
+    if proof.execution.execution_state_root != execution_state_root {
+        return Err(format!(
+            "world head proof execution state root mismatch: record={execution_state_root} proof={}",
+            proof.execution.execution_state_root
+        ));
+    }
+    if proof.execution.node_block_hash != node_block_hash {
+        return Err(format!(
+            "world head proof node block hash mismatch: record={node_block_hash} proof={}",
+            proof.execution.node_block_hash
+        ));
+    }
+    if proof.execution.action_root != action_root {
+        return Err(format!(
+            "world head proof action root mismatch: record={action_root} proof={}",
+            proof.execution.action_root
+        ));
+    }
+    let proof_checkpoint_ref = proof
+        .checkpoint
+        .as_ref()
+        .map(|checkpoint| checkpoint.manifest_ref.as_str());
+    if proof_checkpoint_ref != checkpoint_ref {
+        return Err(format!(
+            "world head proof checkpoint ref mismatch: record={checkpoint_ref:?} proof={proof_checkpoint_ref:?}"
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -387,7 +496,7 @@ mod checkpoint_status_tests {
         let dir = temp_dir("status-checkpoint-none");
         fs::create_dir_all(dir.as_path()).expect("create records dir");
 
-        let status = build_chain_proof_status(Some(dir.as_path()));
+        let status = build_chain_proof_status(Some(dir.as_path()), None);
 
         assert!(status.latest_execution_checkpoint.is_none());
         let _ = fs::remove_dir_all(dir);
@@ -398,7 +507,7 @@ mod checkpoint_status_tests {
         let dir = temp_dir("status-checkpoint-v1");
         let manifest_hash = write_checkpoint_fixture(dir.as_path(), 1, 20);
 
-        let status = build_chain_proof_status(Some(dir.as_path()));
+        let status = build_chain_proof_status(Some(dir.as_path()), None);
         let checkpoint = status
             .latest_execution_checkpoint
             .expect("retained v1 checkpoint evidence");
@@ -418,7 +527,7 @@ mod checkpoint_status_tests {
         let dir = temp_dir("status-checkpoint-v2");
         let manifest_hash = write_checkpoint_fixture(dir.as_path(), 2, 42);
 
-        let status = build_chain_proof_status(Some(dir.as_path()));
+        let status = build_chain_proof_status(Some(dir.as_path()), None);
         let checkpoint = status
             .latest_execution_checkpoint
             .as_ref()

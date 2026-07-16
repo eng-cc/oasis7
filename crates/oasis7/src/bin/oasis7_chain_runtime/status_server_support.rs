@@ -74,6 +74,7 @@ pub(super) fn start_chain_status_server(
     world_id: String,
     execution_world_dir: PathBuf,
     execution_records_dir: PathBuf,
+    execution_storage_root: PathBuf,
     loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     release_security_policy: ReleaseSecurityPolicy,
     effective_p2p_policy: NodeNetworkPolicy,
@@ -101,6 +102,7 @@ pub(super) fn start_chain_status_server(
             world_id,
             execution_world_dir,
             execution_records_dir,
+            execution_storage_root,
             loaded_network_tier_manifest,
             release_security_policy,
             effective_p2p_policy,
@@ -135,6 +137,7 @@ fn run_chain_status_server_loop(
     world_id: String,
     execution_world_dir: PathBuf,
     execution_records_dir: PathBuf,
+    execution_storage_root: PathBuf,
     loaded_network_tier_manifest: Option<LoadedNetworkTierManifest>,
     release_security_policy: ReleaseSecurityPolicy,
     effective_p2p_policy: NodeNetworkPolicy,
@@ -157,6 +160,7 @@ fn run_chain_status_server_loop(
                 let world_id = world_id.clone();
                 let execution_world_dir = execution_world_dir.clone();
                 let execution_records_dir = execution_records_dir.clone();
+                let execution_storage_root = execution_storage_root.clone();
                 let loaded_network_tier_manifest = loaded_network_tier_manifest.clone();
                 let release_security_policy = release_security_policy.clone();
                 let effective_p2p_policy = effective_p2p_policy.clone();
@@ -173,6 +177,7 @@ fn run_chain_status_server_loop(
                         world_id.as_str(),
                         execution_world_dir.as_path(),
                         execution_records_dir.as_path(),
+                        execution_storage_root.as_path(),
                         loaded_network_tier_manifest.as_ref(),
                         &release_security_policy,
                         effective_p2p_policy,
@@ -209,6 +214,7 @@ fn handle_chain_status_connection(
     world_id: &str,
     execution_world_dir: &Path,
     execution_records_dir: &Path,
+    execution_storage_root: &Path,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
     release_security_policy: &ReleaseSecurityPolicy,
     effective_p2p_policy: NodeNetworkPolicy,
@@ -383,10 +389,11 @@ fn handle_chain_status_connection(
             let replication_debug_status =
                 build_chain_replication_debug_status(replication_network.as_ref());
             let transactions = transfer_submit_api::build_chain_transfer_metrics_status(&runtime)?;
-            let payload = build_chain_status_payload(
+            let payload = super::status_payload::build_chain_status_payload_with_storage_root(
                 snapshot,
                 execution_world_dir,
                 Some(execution_records_dir),
+                Some(execution_storage_root),
                 loaded_network_tier_manifest,
                 &p2p_recommendation,
                 applied_effective_user_mode,

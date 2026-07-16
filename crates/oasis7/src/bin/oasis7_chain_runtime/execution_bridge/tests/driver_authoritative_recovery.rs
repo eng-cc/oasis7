@@ -54,6 +54,60 @@ fn replay_context(
 }
 
 #[test]
+fn node_runtime_execution_driver_rolls_back_in_memory_worlds_after_state_persist_failure() {
+    let dir = temp_dir("execution-driver-state-persist-retry");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir,
+        records_dir.clone(),
+        storage_root,
+    )
+    .expect("driver");
+    let original_execution_state = driver.execution_world.state().clone();
+    let original_execution_journal = driver.execution_world.journal().clone();
+    let original_simulator_mirror = driver.simulator_mirror.clone();
+    let original_driver_state = driver.state.clone();
+    let context = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+
+    let state_path_directory = dir.join("state-path-directory");
+    fs::create_dir_all(state_path_directory.as_path()).expect("create failing state path");
+    driver.state_path = state_path_directory;
+    let err = driver
+        .on_commit(context.clone())
+        .expect_err("state persistence failure must reject commit");
+    assert!(
+        err.contains("state"),
+        "state persistence failure should remain visible: {err}"
+    );
+    assert!(
+        execution_bridge_record_path(records_dir.as_path(), 1).exists(),
+        "the failure is after durable record persistence"
+    );
+    assert_eq!(driver.execution_world.state(), &original_execution_state);
+    assert_eq!(
+        driver.execution_world.journal(),
+        &original_execution_journal
+    );
+    assert_eq!(driver.simulator_mirror, original_simulator_mirror);
+    assert_eq!(driver.state, original_driver_state);
+
+    driver.state_path = state_path.clone();
+    let retried = driver
+        .on_commit(context)
+        .expect("same-process retry after repaired state path");
+    assert_eq!(retried.execution_height, 1);
+    let persisted = load_execution_bridge_state(state_path.as_path()).expect("persisted state");
+    assert_eq!(persisted.last_applied_committed_height, 1);
+    assert_eq!(persisted.last_node_block_hash.as_deref(), Some("node-h1"));
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_rejects_conflicting_equal_height_v3_record_identity() {
     let dir = temp_dir("execution-driver-equal-height-v3-record-identity");
     let state_path = dir.join("state.json");

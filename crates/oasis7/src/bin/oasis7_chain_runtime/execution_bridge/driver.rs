@@ -584,12 +584,22 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         })?;
 
-        let rollback_state = match (expected_execution_block_hash, expected_execution_state_root) {
-            (Some(_), Some(_)) => {
-                Some((self.execution_world.clone(), self.simulator_mirror.clone()))
-            }
-            _ => None,
-        };
+        let previous_execution_world = self.execution_world.clone();
+        let previous_simulator_mirror = self.simulator_mirror.clone();
+        let previous_state = self.state.clone();
+        macro_rules! rollback_on_error {
+            ($result:expr) => {
+                match $result {
+                    Ok(value) => value,
+                    Err(err) => {
+                        self.execution_world = previous_execution_world;
+                        self.simulator_mirror = previous_simulator_mirror;
+                        self.state = previous_state;
+                        return Err(err);
+                    }
+                }
+            };
+        }
         let runtime_step_started_at = Instant::now();
         for action in decoded_runtime_actions {
             self.execution_world.submit_action(action);
@@ -603,21 +613,24 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             authority_node_id: context.node_id.clone(),
             committed_at_unix_ms: context.committed_at_unix_ms,
         };
-        self.execution_world
-            .step_with_modules_for_committed_context(
-                &mut *self.execution_sandbox,
-                &committed_tick_context,
-            )
-            .map_err(|err| {
-                format!(
-                    "execution driver world.step failed at height {}: {:?}",
-                    context.height, err
+        rollback_on_error!(
+            self.execution_world
+                .step_with_modules_for_committed_context(
+                    &mut *self.execution_sandbox,
+                    &committed_tick_context,
                 )
-            })?;
+                .map_err(|err| {
+                    format!(
+                        "execution driver world.step failed at height {}: {:?}",
+                        context.height, err
+                    )
+                })
+        );
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
-        let (simulator_mirror, simulator_observation) =
-            self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())?;
+        let (simulator_mirror, simulator_observation) = rollback_on_error!(
+            self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())
+        );
         let simulator_step_ms = simulator_step_started_at.elapsed();
 
         let runtime_resource_commit_hash =
@@ -639,21 +652,23 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         );
         let journal_value = self.execution_world.journal().clone();
         let serialize_started_at = Instant::now();
-        let snapshot_bytes = super::to_cbor(snapshot_value)?;
-        let journal_bytes = super::to_cbor(journal_value)?;
+        let snapshot_bytes = rollback_on_error!(super::to_cbor(snapshot_value));
+        let journal_bytes = rollback_on_error!(super::to_cbor(journal_value));
         let serialize_ms = serialize_started_at.elapsed();
         let snapshot_bytes_len = snapshot_bytes.len();
         let journal_bytes_len = journal_bytes.len();
 
         let cas_put_started_at = Instant::now();
-        let snapshot_ref = self
-            .execution_store
-            .put_bytes(snapshot_bytes.as_slice())
-            .map_err(|err| format!("execution driver CAS snapshot put failed: {:?}", err))?;
-        let journal_ref = self
-            .execution_store
-            .put_bytes(journal_bytes.as_slice())
-            .map_err(|err| format!("execution driver CAS journal put failed: {:?}", err))?;
+        let snapshot_ref = rollback_on_error!(
+            self.execution_store
+                .put_bytes(snapshot_bytes.as_slice())
+                .map_err(|err| format!("execution driver CAS snapshot put failed: {:?}", err))
+        );
+        let journal_ref = rollback_on_error!(
+            self.execution_store
+                .put_bytes(journal_bytes.as_slice())
+                .map_err(|err| format!("execution driver CAS journal put failed: {:?}", err))
+        );
         let mut cas_put_ms = cas_put_started_at.elapsed();
 
         let execution_state_root = blake3_hex(snapshot_bytes.as_slice());
@@ -669,18 +684,17 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             execution_state_root: execution_state_root.as_str(),
             journal_len: self.execution_world.journal().len(),
         };
-        let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
+        let execution_block_hash =
+            blake3_hex(rollback_on_error!(super::to_cbor(hash_payload)).as_slice());
         if let (Some(expected_block_hash), Some(expected_state_root)) =
             (expected_execution_block_hash, expected_execution_state_root)
         {
             if execution_block_hash != expected_block_hash
                 || execution_state_root != expected_state_root
             {
-                if let Some((previous_execution_world, previous_simulator_mirror)) = rollback_state
-                {
-                    self.execution_world = previous_execution_world;
-                    self.simulator_mirror = previous_simulator_mirror;
-                }
+                self.execution_world = previous_execution_world;
+                self.simulator_mirror = previous_simulator_mirror;
+                self.state = previous_state;
                 return Err(format!(
                     "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
                     context.height,
@@ -703,18 +717,19 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 tick: self.simulator_mirror.time(),
             };
             let simulator_persist_started_at = Instant::now();
-            persist_simulator_execution_world(
+            rollback_on_error!(persist_simulator_execution_world(
                 self.simulator_world_dir.as_path(),
                 &self.simulator_mirror,
                 Some(resource_context),
-            )?;
+            ));
             simulator_persist_ms = simulator_persist_started_at.elapsed();
         }
         let external_effect_started_at = Instant::now();
-        let external_effect_ref = persist_execution_external_effect_materialization(
-            &self.execution_store,
-            &external_effect,
-        )?;
+        let external_effect_ref =
+            rollback_on_error!(persist_execution_external_effect_materialization(
+                &self.execution_store,
+                &external_effect,
+            ));
         cas_put_ms += external_effect_started_at.elapsed();
         let prev_node_block_hash = self.state.last_node_block_hash.clone();
         let node_block_hash = Some(context.node_block_hash.clone());
@@ -736,34 +751,41 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             context.committed_at_unix_ms,
         );
         let checkpoint_started_at = Instant::now();
-        record.checkpoint_ref = maybe_persist_execution_checkpoint_for_record(
+        record.checkpoint_ref = rollback_on_error!(maybe_persist_execution_checkpoint_for_record(
             self.records_dir.as_path(),
             &record,
             self.checkpoint_interval_heights,
             self.checkpoint_keep_latest,
-        )?;
+        ));
         let checkpoint_ms = checkpoint_started_at.elapsed();
-        let checkpoint_manifest = record
-            .checkpoint_ref
-            .as_deref()
-            .map(|checkpoint_ref| {
-                load_execution_checkpoint_manifest(
-                    execution_checkpoint_root_dir(self.records_dir.as_path())
-                        .join(checkpoint_ref)
-                        .as_path(),
-                )
-            })
-            .transpose()?;
+        let checkpoint_manifest = rollback_on_error!(
+            record
+                .checkpoint_ref
+                .as_deref()
+                .map(|checkpoint_ref| {
+                    load_execution_checkpoint_manifest(
+                        execution_checkpoint_root_dir(self.records_dir.as_path())
+                            .join(checkpoint_ref)
+                            .as_path(),
+                    )
+                })
+                .transpose()
+        );
         let world_head_proof_started_at = Instant::now();
-        persist_world_head_proof_for_record(
+        rollback_on_error!(persist_world_head_proof_for_record(
             &self.execution_store,
             &mut record,
             checkpoint_manifest.as_ref(),
-        )?;
+        ));
         let world_head_proof_ms = world_head_proof_started_at.elapsed();
         let record_persist_started_at = Instant::now();
-        begin_execution_bridge_retention_transaction(self.records_dir.as_path())?;
-        persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
+        rollback_on_error!(begin_execution_bridge_retention_transaction(
+            self.records_dir.as_path()
+        ));
+        rollback_on_error!(persist_execution_bridge_record(
+            self.records_dir.as_path(),
+            &record
+        ));
         let record_persist_ms = record_persist_started_at.elapsed();
 
         self.state.last_applied_committed_height = context.height;
@@ -772,7 +794,10 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         self.state.last_node_block_hash = node_block_hash;
 
         let state_persist_started_at = Instant::now();
-        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
+        rollback_on_error!(persist_execution_bridge_state(
+            self.state_path.as_path(),
+            &self.state
+        ));
         let state_persist_ms = state_persist_started_at.elapsed();
         let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();

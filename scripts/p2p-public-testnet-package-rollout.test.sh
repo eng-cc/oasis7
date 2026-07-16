@@ -1594,6 +1594,8 @@ for token in (
     "state_sync_escalation_required=true",
     "provider_checkpoint_gate=passed",
     "latest_execution_checkpoint",
+    "provider_checkpoint_gate_macos",
+    "plutil -extract",
     "authority_failure",
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
     'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
@@ -1608,6 +1610,7 @@ checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
 mount_index = text.index("hdiutil attach")
 preflight_backup_index = text.index("preflight_backup_closure_complete=true")
 active_stop = text.index('launchctl bootout "$LAUNCHD_TARGET"', preflight_backup_index)
+checkpoint_gate_index = text.index("provider_checkpoint_gate_macos")
 state_backup_call_index = text.index("if ! backup_persistent_state", active_stop)
 state_backup_index = text.index("rollback_closure_complete=true", state_backup_call_index)
 promotion_index = text.index("promotion_begin=true", state_backup_index)
@@ -1615,6 +1618,16 @@ assert checksum_index < mount_index < preflight_backup_index < active_stop < sta
     "required order is checksum/mount, preflight backup, bootout, stopped-state backup, promotion"
 )
 assert state_backup_call_index > active_stop
+assert checkpoint_gate_index < active_stop, (
+    "macOS provider checkpoint gate must fail closed before launchd mutation"
+)
+assert "python3" not in text, (
+    "macOS operator script must not depend on an undeclared Python runtime"
+)
+assert 'IFS=$\'\\t\' read -r name url <<<"$provider"' in text
+assert '"sequencer\t' in text and '"storage\t' in text, (
+    "macOS provider checkpoint gate must delimit native provider records with tabs"
+)
 main_before_stop = text[preflight_backup_index:active_stop]
 assert "backup_persistent_state" not in main_before_stop
 assert "restart_original_service" in text[active_stop:promotion_index]

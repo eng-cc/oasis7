@@ -393,6 +393,75 @@ print(f"provider_checkpoint_gate=passed checkpoint_id={{sequencer[0]}} height_de
 PY'''
 
 
+def observer_checkpoint_gate_macos(
+    sequencer_status_url: str, storage_status_url: str
+) -> str:
+    return """provider_checkpoint_gate_macos() {
+  local provider name url payload schema checkpoint_id height manifest_hash
+  local sequencer_id sequencer_height sequencer_hash
+  local storage_id storage_height storage_hash
+  command -v plutil >/dev/null 2>&1 || {
+    echo "provider_checkpoint_gate=macos_native_parser_unavailable" >&2
+    return 1
+  }
+  for provider in \\
+    "sequencer	%s" \\
+    "storage	%s"; do
+    IFS=$'\\t' read -r name url <<<"$provider"
+    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.XXXXXX.json")" || return 1
+    if ! curl -fsS --connect-timeout 10 --max-time 10 "$url" -o "$payload"; then
+      rm -f "$payload"
+      echo "provider_checkpoint_gate=$name collection_failed" >&2
+      return 1
+    fi
+    schema="$(plutil -extract chain_proof.latest_execution_checkpoint.schema_version raw -o - "$payload" 2>/dev/null || true)"
+    checkpoint_id="$(plutil -extract chain_proof.latest_execution_checkpoint.checkpoint_id raw -o - "$payload" 2>/dev/null || true)"
+    height="$(plutil -extract chain_proof.latest_execution_checkpoint.height raw -o - "$payload" 2>/dev/null || true)"
+    manifest_hash="$(plutil -extract chain_proof.latest_execution_checkpoint.manifest_hash raw -o - "$payload" 2>/dev/null || true)"
+    rm -f "$payload"
+    if ! [[ "$schema" =~ ^[0-9]+$ ]] || (( schema < 2 )); then
+      echo "provider_checkpoint_gate=$name invalid_schema_version" >&2
+      return 1
+    fi
+    if [[ -z "$checkpoint_id" || ! "$manifest_hash" =~ ^[[:xdigit:]]{64}$ ]]; then
+      echo "provider_checkpoint_gate=$name invalid_checkpoint_identity" >&2
+      return 1
+    fi
+    if ! [[ "$height" =~ ^[0-9]+$ ]] || (( height <= 0 )); then
+      echo "provider_checkpoint_gate=$name invalid_checkpoint_height" >&2
+      return 1
+    fi
+    manifest_hash="$(tr '[:upper:]' '[:lower:]' <<<"$manifest_hash")"
+    if [[ "$name" == sequencer ]]; then
+      sequencer_id="$checkpoint_id"
+      sequencer_height="$height"
+      sequencer_hash="$manifest_hash"
+    else
+      storage_id="$checkpoint_id"
+      storage_height="$height"
+      storage_hash="$manifest_hash"
+    fi
+  done
+  if [[ "$sequencer_id" != "$storage_id" || "$sequencer_hash" != "$storage_hash" ]]; then
+    echo "provider_checkpoint_gate identity_mismatch" >&2
+    return 1
+  fi
+  if (( sequencer_height - storage_height > %d || storage_height - sequencer_height > %d )); then
+    echo "provider_checkpoint_gate height_incompatible" >&2
+    return 1
+  fi
+  echo "provider_checkpoint_gate=passed checkpoint_id=$sequencer_id height_delta=$(( sequencer_height - storage_height < 0 ? storage_height - sequencer_height : sequencer_height - storage_height ))"
+}
+
+provider_checkpoint_gate_macos
+""" % (
+        sequencer_status_url,
+        storage_status_url,
+        MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
+        MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
+    )
+
+
 def observer_checkpoint_gate_powershell(sequencer_status_url: str, storage_status_url: str) -> str:
     def ps_literal(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -1842,7 +1911,9 @@ def macos_script(
     q = shlex.quote
     config_entries = " ".join(q(path) for path in config_paths)
     state_entries = " ".join(q(path) for path in state_paths)
-    checkpoint_gate = observer_checkpoint_gate_bash(sequencer_status_url, storage_status_url)
+    checkpoint_gate = observer_checkpoint_gate_macos(
+        sequencer_status_url, storage_status_url
+    )
     return f'''#!/usr/bin/env bash
 set -euo pipefail
 
