@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("p2p-public-testnet-stage-windows-governed-closure.py")
@@ -160,6 +162,42 @@ class WindowsGovernedClosureTests(unittest.TestCase):
                 "windows-x64", platform_dir, buildinfo.resolve(), installer.resolve(), verified
             )
             self.assertGreater(len(ROLLOUT_MODULE.windows_governed_files(platform_dir, verified)), 8)
+
+    def test_main_invokes_the_explicit_git_bash_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime = root / "oasis7_chain_runtime.exe"
+            runtime.write_text("runtime\n", encoding="utf-8")
+            out_dir = root / "windows-governed-closure"
+            git_bash = r"C:\Program Files\Git\bin\bash.exe"
+            invoked: list[str] = []
+
+            def stage(command: list[str], **_: object) -> None:
+                invoked.extend(command)
+                stage_dir = Path(command[command.index("--out-dir") + 1])
+                self.make_stage(stage_dir.parent)
+
+            with (
+                mock.patch.object(MODULE.shutil, "which", return_value="jq"),
+                mock.patch.object(MODULE, "validator_keys", return_value=("sequencer", "storage")),
+                mock.patch.object(MODULE.subprocess, "run", side_effect=stage),
+                mock.patch.object(
+                    sys,
+                    "argv",
+                    [
+                        str(SCRIPT),
+                        "--runtime-build-ref",
+                        str(runtime),
+                        "--out-dir",
+                        str(out_dir),
+                        "--bash-executable",
+                        git_bash,
+                    ],
+                ),
+            ):
+                self.assertEqual(MODULE.main(), 0)
+
+            self.assertEqual(invoked[:2], [git_bash, str(MODULE.STAGE_SCRIPT)])
 
 
 if __name__ == "__main__":

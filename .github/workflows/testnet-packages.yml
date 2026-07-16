@@ -291,7 +291,8 @@ jobs:
           closure="${assets}/windows-governed-closure"
           python3 ./scripts/p2p-public-testnet-stage-windows-governed-closure.py \
             --runtime-build-ref "${assets}/oasis7-windows-x64/bin/oasis7_chain_runtime.exe" \
-            --out-dir "${closure}"
+            --out-dir "${closure}" \
+            --bash-executable "${BASH}"
 
           required=(
             public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json

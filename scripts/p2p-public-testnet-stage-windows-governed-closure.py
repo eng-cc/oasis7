@@ -270,6 +270,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-build-ref", required=True, type=Path)
     parser.add_argument("--out-dir", required=True, type=Path)
+    parser.add_argument("--bash-executable", required=True, help="exact Git Bash executable for staging")
     parser.add_argument("--stage-dir", type=Path, help="localize an existing stage; test-only escape hatch")
     args = parser.parse_args()
     runtime = args.runtime_build_ref.resolve()
@@ -286,7 +287,7 @@ def main() -> int:
         stage_dir = Path(temp) / "stage"
         subprocess.run(
             [
-                "bash", str(STAGE_SCRIPT),
+                args.bash_executable, str(STAGE_SCRIPT),
                 "--runtime-build-ref", str(runtime),
                 "--bootstrap-peers-file", str(BOOTSTRAP),
                 "--sequencer-finality-public-key", sequencer_key,

@@ -30,6 +30,9 @@ assert "matrix.platform == 'windows-x64'" in stage, (
 assert "windows-governed-closure" in stage, (
     "Windows governed deployment closure must have an explicit staged root"
 )
+assert '--bash-executable "${BASH}"' in stage, (
+    "Windows governed deployment closure must pass the active Git Bash executable to its helper"
+)
 for required_source in (
     "public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json",
     "public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json",
