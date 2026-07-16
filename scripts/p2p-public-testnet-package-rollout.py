@@ -1566,6 +1566,382 @@ def write_windows_plan(
     return script_path, commands
 
 
+def macos_absolute_path(node: dict[str, Any], field: str) -> str:
+    value = node.get(field)
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or ".." in PurePosixPath(value).parts
+    ):
+        die(f"macOS node {node.get('name', '<unnamed>')} must declare absolute {field}")
+    return str(PurePosixPath(value))
+
+
+def macos_string_paths(node: dict[str, Any], field: str) -> list[str]:
+    values = node.get(field)
+    if not isinstance(values, list) or not values or not all(
+        isinstance(value, str)
+        and value.startswith("/")
+        and ".." not in PurePosixPath(value).parts
+        for value in values
+    ):
+        die(f"macOS node {node.get('name', '<unnamed>')} must declare non-empty absolute {field}")
+    return [str(PurePosixPath(value)) for value in values]
+
+
+def macos_paths_overlap(first: str, second: str) -> bool:
+    first_path = PurePosixPath(first)
+    second_path = PurePosixPath(second)
+    return (
+        first_path == second_path
+        or first_path in second_path.parents
+        or second_path in first_path.parents
+    )
+
+
+def macos_launchd_contract(node: dict[str, Any]) -> tuple[str, str]:
+    name = str(node.get("name") or "macos-observer")
+    target = str(node.get("launchd_target") or "")
+    match = re.fullmatch(
+        r"(?:(system)/([A-Za-z0-9][A-Za-z0-9._-]*)|gui/([0-9]+)/([A-Za-z0-9][A-Za-z0-9._-]*))",
+        target,
+    )
+    if not match:
+        die(
+            f"macOS node {name} launchd_target must be "
+            "system/<label> or gui/<numeric-uid>/<label>"
+        )
+    domain = "system" if match.group(1) else f"gui/{match.group(3)}"
+    return target, domain
+
+
+def macos_script(
+    node: dict[str, Any],
+    version: str,
+    commit: str,
+    run_id: str,
+    expected_dmg_sha256: str,
+) -> str:
+    name = str(node.get("name") or "macos-observer")
+    node_root = macos_absolute_path(node, "node_root").rstrip("/")
+    launchd_target, launchd_bootstrap_domain = macos_launchd_contract(node)
+    launchd_plist = macos_absolute_path(node, "launchd_plist")
+    runtime_path = macos_absolute_path(node, "runtime_path")
+    healthz_url = str(node.get("healthz_url") or "")
+    status_url = str(node.get("status_url") or "")
+    if not healthz_url or not status_url:
+        die(f"macOS node {name} must declare healthz_url and status_url")
+    if not healthz_url.endswith("/healthz") or not status_url.endswith("/v1/chain/status"):
+        die(f"macOS node {name} must use /healthz and /v1/chain/status endpoints")
+    config_paths = macos_string_paths(node, "config_paths")
+    state_paths = macos_string_paths(node, "persistent_state_paths")
+    config_root = f"{node_root}/config/"
+    for path in config_paths:
+        if not path.startswith(config_root):
+            die(f"macOS node {name} config path escapes node_root/config: {path}")
+    for path in state_paths:
+        if not path.startswith(f"{node_root}/"):
+            die(f"macOS node {name} persistent state path escapes node_root: {path}")
+        if path == node_root:
+            die(f"macOS node {name} persistent state path equals node_root: {path}")
+    for index, path in enumerate(state_paths):
+        for other in state_paths[index + 1 :]:
+            if macos_paths_overlap(path, other):
+                die(
+                    f"macOS node {name} persistent state paths duplicate or nest: "
+                    f"{path} and {other}"
+                )
+    protected_paths = [
+        runtime_path,
+        *config_paths,
+        f"{node_root}/CURRENT_VERSION",
+        f"{node_root}/DEPLOYED_BUILDINFO",
+        launchd_plist,
+    ]
+    for path in state_paths:
+        for protected in protected_paths:
+            if macos_paths_overlap(path, protected):
+                die(
+                    f"macOS node {name} persistent state path overlaps protected path: "
+                    f"state={path} protected={protected}"
+                )
+    q = shlex.quote
+    config_entries = " ".join(q(path) for path in config_paths)
+    state_entries = " ".join(q(path) for path in state_paths)
+    return f'''#!/usr/bin/env bash
+set -euo pipefail
+
+DMG_PATH="${{1:?usage: $0 /path/to/oasis7-macos-arm64.dmg}}"
+NODE_ROOT={q(node_root)}
+RUNTIME_PATH={q(runtime_path)}
+LAUNCHD_PLIST={q(launchd_plist)}
+LAUNCHD_TARGET={q(launchd_target)}
+LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
+HEALTHZ_URL={q(healthz_url)}
+STATUS_URL={q(status_url)}
+PACKAGE_VERSION={q(version)}
+PACKAGE_COMMIT={q(commit)}
+PACKAGE_RUN_ID={q(run_id)}
+EXPECTED_DMG_SHA256={expected_dmg_sha256}
+STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot
+CONFIG_TARGETS=({config_entries})
+STATE_PATHS=({state_entries})
+MOUNT_POINT=""
+MOUNT_ATTACHED=0
+ATTEMPT_ROOT=""
+MUTATED=0
+
+die() {{ echo "error: $*" >&2; exit 1; }}
+cleanup() {{
+  if [[ "$MOUNT_ATTACHED" -eq 1 ]]; then
+    hdiutil detach "$MOUNT_POINT" -quiet || true
+    MOUNT_ATTACHED=0
+  fi
+  [[ -z "$MOUNT_POINT" ]] || rm -rf "$MOUNT_POINT"
+}}
+trap cleanup EXIT
+
+backup_path() {{
+  local source="$1" destination="$2"
+  [[ -e "$source" ]] || return 1
+  mkdir -p "$(dirname "$destination")" || return 1
+  if [[ -d "$source" ]]; then
+    ditto "$source" "$destination" || return 1
+    diff -qr "$source" "$destination" >/dev/null || return 1
+  else
+    cp -p "$source" "$destination" || return 1
+    cmp -s "$source" "$destination" || return 1
+  fi
+}}
+
+restore_file() {{
+  local source="$1" destination="$2" temporary
+  [[ -f "$source" ]] || return 1
+  mkdir -p "$(dirname "$destination")" || return 1
+  temporary="$destination.rollout-restore-$$.tmp"
+  cp -p "$source" "$temporary" || return 1
+  mv -f "$temporary" "$destination" || return 1
+}}
+
+wait_for_service_health() {{
+  local deadline=$((SECONDS + 120)) health status
+  while (( SECONDS < deadline )); do
+    health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
+    status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
+    if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+      echo "authority_failure_detected=true" >&2
+      return 2
+    fi
+    if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
+       grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}}
+
+restart_original_service() {{
+  if ! launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1; then
+    launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+  fi
+  wait_for_service_health || return 1
+  echo "original_service_recovery_verified=true"
+}}
+
+assert_state_roots_safe() {{
+  local require_present="$1" state_path
+  for state_path in "${{STATE_PATHS[@]}}"; do
+    if [[ "$require_present" == true && ! -e "$state_path" ]]; then
+      echo "persistent state root missing: $state_path" >&2
+      return 1
+    fi
+    [[ ! -L "$state_path" ]] || {{ echo "persistent state root is a symlink: $state_path" >&2; return 1; }}
+    if [[ "$require_present" == true && ! -d "$state_path" ]]; then
+      echo "persistent state root is not a directory: $state_path" >&2
+      return 1
+    fi
+  done
+}}
+
+backup_persistent_state() {{
+  local index
+  assert_state_roots_safe true || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    backup_path "${{STATE_PATHS[$index]}}" "$ATTEMPT_ROOT/state/$index" || return 1
+  done
+  echo "state_backup_closure_complete=true root=$ATTEMPT_ROOT/state"
+}}
+
+preserve_failed_state() {{
+  local index
+  assert_state_roots_safe true || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    backup_path "${{STATE_PATHS[$index]}}" "$ATTEMPT_ROOT/failed-state/$index" || return 1
+  done
+  echo "failed_state_evidence_complete=true root=$ATTEMPT_ROOT/failed-state"
+}}
+
+restore_pre_upgrade_state() {{
+  local index target
+  assert_state_roots_safe false || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    target="${{STATE_PATHS[$index]}}"
+    [[ -e "$ATTEMPT_ROOT/state/$index" ]] || return 1
+    rm -rf "$target" || return 1
+    ditto "$ATTEMPT_ROOT/state/$index" "$target" || return 1
+    diff -qr "$ATTEMPT_ROOT/state/$index" "$target" >/dev/null || return 1
+    echo "rollback_state_restored=true policy=$STATE_ROLLBACK_POLICY path=$target"
+  done
+}}
+
+rollback() {{
+  local reason="$1" index
+  [[ "$MUTATED" -eq 1 ]] || return 0
+  MUTATED=0
+  trap - ERR
+  echo "rollback_begin=true reason=$reason"
+  if launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1; then
+    launchctl bootout "$LAUNCHD_TARGET" || return 1
+  fi
+  preserve_failed_state || return 1
+  restore_pre_upgrade_state || return 1
+  restore_file "$ATTEMPT_ROOT/runtime/oasis7_chain_runtime" "$RUNTIME_PATH" || return 1
+  for index in "${{!CONFIG_TARGETS[@]}}"; do
+    restore_file "$ATTEMPT_ROOT/config/$index" "${{CONFIG_TARGETS[$index]}}" || return 1
+  done
+  restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION" || return 1
+  restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO" || return 1
+  launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+  wait_for_service_health || return 1
+  echo "rollback_service_health_verified=true"
+  echo "rollback_complete=true"
+}}
+
+on_error() {{
+  local status=$?
+  trap - ERR
+  if ! rollback "unexpected_failure"; then
+    echo "rollback_failed=true original_exit=$status" >&2
+    exit 1
+  fi
+  exit "$status"
+}}
+trap on_error ERR
+
+[[ "$(uname -s)" == Darwin ]] || die "macOS operator script must run on Darwin"
+[[ "$(uname -m)" == arm64 ]] || die "macOS observer requires native arm64 host"
+[[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" == 1 ]] || die "native arm64 capability unavailable"
+[[ -f "$DMG_PATH" ]] || die "DMG missing: $DMG_PATH"
+[[ -f "$LAUNCHD_PLIST" ]] || die "launchd plist missing: $LAUNCHD_PLIST"
+launchctl print "$LAUNCHD_TARGET" >/dev/null || die "launchd target is not loaded: $LAUNCHD_TARGET"
+[[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
+[[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
+for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
+for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done
+
+actual_dmg_sha256="$(shasum -a 256 "$DMG_PATH" | awk '{{print $1}}')"
+[[ "$actual_dmg_sha256" == "$EXPECTED_DMG_SHA256" ]] || die "DMG checksum mismatch: expected=$EXPECTED_DMG_SHA256 actual=$actual_dmg_sha256"
+echo "dmg_sha256_verified=true sha256=$actual_dmg_sha256"
+MOUNT_POINT="$(mktemp -d "${{TMPDIR:-/tmp}}/oasis7-macos-dmg.XXXXXX")"
+hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_POINT" "$DMG_PATH" >/dev/null
+MOUNT_ATTACHED=1
+PACKAGE_RUNTIME="$(find "$MOUNT_POINT" -type f -name oasis7_chain_runtime -perm -u+x -print -quit)"
+[[ -n "$PACKAGE_RUNTIME" ]] || die "DMG lacks executable oasis7_chain_runtime"
+if command -v lipo >/dev/null 2>&1; then
+  lipo -archs "$PACKAGE_RUNTIME" | tr ' ' '\\n' | grep -qx arm64 || die "DMG runtime is not arm64"
+else
+  file "$PACKAGE_RUNTIME" | grep -q arm64 || die "cannot verify arm64 runtime identity"
+fi
+echo "native_identity_verified=aarch64-apple-darwin"
+
+ATTEMPT_ROOT="$(mktemp -d "$NODE_ROOT/.package-rollout-attempt.XXXXXX")"
+backup_path "$RUNTIME_PATH" "$ATTEMPT_ROOT/runtime/oasis7_chain_runtime" || die "runtime preflight backup failed"
+backup_path "$NODE_ROOT/CURRENT_VERSION" "$ATTEMPT_ROOT/CURRENT_VERSION" || die "CURRENT_VERSION preflight backup failed"
+backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO" "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" || die "DEPLOYED_BUILDINFO preflight backup failed"
+for index in "${{!CONFIG_TARGETS[@]}}"; do
+  backup_path "${{CONFIG_TARGETS[$index]}}" "$ATTEMPT_ROOT/config/$index" || die "config preflight backup failed: ${{CONFIG_TARGETS[$index]}}"
+done
+echo "preflight_backup_closure_complete=true root=$ATTEMPT_ROOT"
+
+if ! launchctl bootout "$LAUNCHD_TARGET"; then
+  echo "original_service_stop_failed=true" >&2
+  restart_original_service || die "original service recovery failed after bootout error"
+  exit 1
+fi
+echo "original_service_stopped=true"
+if ! backup_persistent_state; then
+  echo "state_backup_failed_before_promotion=true" >&2
+  restart_original_service || die "original service recovery failed after state backup error"
+  exit 1
+fi
+echo "rollback_closure_complete=true root=$ATTEMPT_ROOT"
+
+MUTATED=1
+echo "promotion_begin=true"
+install -m 755 "$PACKAGE_RUNTIME" "$RUNTIME_PATH"
+printf '%s\\n' "$PACKAGE_VERSION" >"$NODE_ROOT/CURRENT_VERSION"
+printf 'workflow=Testnet Packages\\nrun_id=%s\\ncommit=%s\\nplatform=macos-arm64\\n' "$PACKAGE_RUN_ID" "$PACKAGE_COMMIT" >"$NODE_ROOT/DEPLOYED_BUILDINFO"
+launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"
+
+authority_failure=0
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+  health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
+  status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
+  if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+    authority_failure=1
+    break
+  fi
+  if grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
+     grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+    echo "startup_verified=true healthz=$HEALTHZ_URL status=$STATUS_URL"
+    MUTATED=0
+    trap - ERR
+    exit 0
+  fi
+  sleep 2
+done
+if [[ "$authority_failure" -eq 1 ]]; then
+  rollback_status=0
+  rollback "authority_failure" || rollback_status=$?
+  echo "state_sync_escalation_required=true reason=authority_failure rollback_status=$rollback_status action=use_verified_state_sync"
+  exit 1
+fi
+if ! rollback "readiness_timeout"; then
+  echo "rollback_failed=true reason=readiness_timeout" >&2
+  exit 1
+fi
+die "macOS observer readiness timed out"
+'''
+
+
+def write_macos_plan(
+    out_dir: Path, node: dict[str, Any], macos_asset: Path, version: str, commit: str, run_id: str
+) -> tuple[Path, list[str]]:
+    name = str(node.get("name") or "macos-observer")
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
+    script_path = out_dir / f"{safe_name}-macos-arm64-upgrade.sh"
+    expected_dmg_sha256 = sha256_file(macos_asset)
+    script_path.write_text(
+        macos_script(node, version, commit, run_id, expected_dmg_sha256),
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+    host = str(node.get("host") or "")
+    if not host:
+        return script_path, [shell_join(["bash", str(script_path), str(macos_asset)])]
+    user = str(node.get("user") or "root")
+    remote_dmg = str(node.get("remote_dmg") or macos_asset.name)
+    remote_script = str(node.get("remote_script") or script_path.name)
+    remote_target = f"{user}@{host}"
+    return script_path, [
+        shell_join(["scp", str(macos_asset), f"{remote_target}:{remote_dmg}"]),
+        shell_join(["scp", str(script_path), f"{remote_target}:{remote_script}"]),
+        shell_join(["ssh", remote_target, "bash", remote_script, remote_dmg]),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1695,11 +2071,25 @@ def main() -> int:
             )
             node_plan["commands"].extend(commands)
         elif platform in {"macos-x64", "macos-arm64"}:
-            node_plan["note"] = (
-                f"{platform} packages are installer artifacts only; this rollout helper verifies "
-                "the artifact but does not replace a running observer unless a platform-specific "
-                "operator script is supplied."
-            )
+            if platform == "macos-arm64":
+                script_path, commands = write_macos_plan(
+                    out_dir,
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                )
+                node_plan["macos_script"] = str(script_path)
+                node_plan["native_identity"] = "aarch64-apple-darwin"
+                node_plan["expected_dmg_sha256"] = sha256_file(platform_assets[platform])
+                node_plan["state_sync_escalation"] = "explicit_on_authority_failure"
+                node_plan["commands"].extend(commands)
+            else:
+                node_plan["note"] = (
+                    "macos-x64 packages remain verification-only installer artifacts; the "
+                    "native observer rollout contract currently applies only to macos-arm64."
+                )
         else:
             die(f"unsupported platform in node {name}: {platform}")
         plan["nodes"].append(node_plan)

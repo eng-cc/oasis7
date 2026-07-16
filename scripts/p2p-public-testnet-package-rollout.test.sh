@@ -1210,7 +1210,13 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "platform": "macos-arm64",
       "host": "192.0.2.34",
       "node_root": "/Applications/oasis7",
-      "restart": false
+      "launchd_target": "system/oasis7.testnet.fourth",
+      "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
+      "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+      "config_paths": ["/Applications/oasis7/config/node.env"],
+      "persistent_state_paths": ["/Applications/oasis7/data", "/Applications/oasis7/store"],
+      "healthz_url": "http://127.0.0.1:19083/healthz",
+      "status_url": "http://127.0.0.1:19083/v1/chain/status"
     }
   ]
 }
@@ -1332,6 +1338,209 @@ grep -q "windows-observer" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 grep -q "rollback_backup_root" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 
 package_contract_failed=0
+if ! python3 - \
+  "$TMP_DIR/plan-only.json" \
+  "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \
+  "$package_dir/macos/oasis7-macos-arm64.dmg" \
+  "$ROOT_DIR/doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md" \
+  "$ROOT_DIR/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" <<'PY'
+from pathlib import Path
+import contextlib
+import hashlib
+import importlib.util
+import io
+import json
+import re
+import subprocess
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+script_path = Path(sys.argv[2])
+dmg_path = Path(sys.argv[3])
+inventory_text = Path(sys.argv[4]).read_text(encoding="utf-8")
+runbook_text = Path(sys.argv[5]).read_text(encoding="utf-8")
+module_path = Path(sys.argv[6])
+macos = next(node for node in plan["nodes"] if node["name"] == "macos-observer")
+assert Path(macos["macos_script"]).resolve() == script_path.resolve(), (
+    "macOS arm64 observer must have a generated operator script, not a verification-only note"
+)
+assert macos["native_identity"] == "aarch64-apple-darwin"
+assert macos["state_sync_escalation"] == "explicit_on_authority_failure"
+expected_dmg_sha256 = hashlib.sha256(dmg_path.read_bytes()).hexdigest()
+assert macos["expected_dmg_sha256"] == expected_dmg_sha256
+text = script_path.read_text(encoding="utf-8")
+subprocess.run(["bash", "-n", str(script_path)], check=True)
+for token in (
+    f"EXPECTED_DMG_SHA256={expected_dmg_sha256}",
+    'shasum -a 256 "$DMG_PATH"',
+    "dmg_sha256_verified=true",
+    'ATTEMPT_ROOT="$(mktemp -d',
+    "preflight_backup_closure_complete=true",
+    "state_backup_closure_complete=true",
+    "STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot",
+    'backup_path "$RUNTIME_PATH"',
+    'backup_path "$NODE_ROOT/CURRENT_VERSION"',
+    'backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO"',
+    'backup_path "${CONFIG_TARGETS[$index]}"',
+    'backup_path "${STATE_PATHS[$index]}"',
+    "LAUNCHD_TARGET=system/oasis7.testnet.fourth",
+    "LAUNCHD_BOOTSTRAP_DOMAIN=system",
+    'launchctl bootout "$LAUNCHD_TARGET"',
+    'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"',
+    'MOUNT_POINT="$(mktemp -d',
+    '-mountpoint "$MOUNT_POINT"',
+    "trap cleanup EXIT",
+    "lipo -archs",
+    "arm64",
+    "rollback_closure_complete=true",
+    "/healthz",
+    "/v1/chain/status",
+    "rollback_begin=true",
+    "preserve_failed_state",
+    "failed_state_evidence_complete=true",
+    "restore_pre_upgrade_state",
+    "original_service_recovery_verified=true",
+    "state_backup_failed_before_promotion=true",
+    'MUTATED=0',
+    'trap - ERR',
+    'restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION"',
+    'restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO"',
+    "rollback_service_health_verified=true",
+    "state_sync_escalation_required=true",
+    "authority_failure",
+    'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
+    'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
+    "assert_state_roots_safe",
+    '[[ ! -L "$state_path" ]]',
+    '[[ "$require_present" == true && ! -d "$state_path" ]]',
+):
+    assert token in text, f"macOS generated rollout contract missing: {token}"
+checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
+mount_index = text.index("hdiutil attach")
+preflight_backup_index = text.index("preflight_backup_closure_complete=true")
+active_stop = text.index('launchctl bootout "$LAUNCHD_TARGET"', preflight_backup_index)
+state_backup_call_index = text.index("if ! backup_persistent_state", active_stop)
+state_backup_index = text.index("rollback_closure_complete=true", state_backup_call_index)
+promotion_index = text.index("promotion_begin=true", state_backup_index)
+assert checksum_index < mount_index < preflight_backup_index < active_stop < state_backup_index < promotion_index, (
+    "required order is checksum/mount, preflight backup, bootout, stopped-state backup, promotion"
+)
+assert state_backup_call_index > active_stop
+main_before_stop = text[preflight_backup_index:active_stop]
+assert "backup_persistent_state" not in main_before_stop
+assert "restart_original_service" in text[active_stop:promotion_index]
+rollback = text[text.index("rollback() {"):text.index("on_error() {")]
+assert rollback.index("MUTATED=0") < rollback.index("launchctl bootout"), (
+    "rollback must clear its mutation guard before any fallible rollback action"
+)
+assert "ROLLBACK_ROOT" not in text, "macOS rollback must use the attempt-local active-state backup"
+assert re.search(r"cleanup\(\).*hdiutil detach.*rm -rf", text, re.DOTALL)
+authority_path = text[text.index('if [[ "$authority_failure" -eq 1 ]]'):]
+assert authority_path.index("rollback") < authority_path.index("state_sync_escalation_required=true")
+assert "state_sync_escalation_required=true" in authority_path
+assert re.search(r"rollback.*\|\|.*rollback_status", authority_path, re.DOTALL), (
+    "authority path must emit state-sync escalation even if rollback returns nonzero"
+)
+health_function = text[text.index("wait_for_service_health() {"):text.index("restart_original_service() {")]
+assert '"ok"[[:space:]]*:[[:space:]]*true' in health_function
+assert '"running"[[:space:]]*:[[:space:]]*true' in health_function
+assert re.search(r"ok.*<<<\"\$health\"", health_function, re.DOTALL)
+assert re.search(r"running.*<<<\"\$status\"", health_function, re.DOTALL)
+assert not re.search(r"running.*<<<\"\$health\"", health_function, re.DOTALL)
+assert "authority_failure|state_sync_fallback_required" in health_function
+backup_state_function = text[text.index("backup_persistent_state() {"):text.index("preserve_failed_state() {")]
+restore_state_function = text[text.index("restore_pre_upgrade_state() {"):text.index("rollback() {")]
+assert backup_state_function.index("assert_state_roots_safe") < backup_state_function.index("backup_path")
+assert restore_state_function.index("assert_state_roots_safe") < restore_state_function.index("rm -rf")
+
+spec = importlib.util.spec_from_file_location("package_rollout_launchd_contract", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+base_node = {
+    "name": "launchd-contract",
+    "node_root": "/Applications/oasis7",
+    "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
+    "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+    "healthz_url": "http://127.0.0.1:19083/healthz",
+    "status_url": "http://127.0.0.1:19083/v1/chain/status",
+    "config_paths": ["/Applications/oasis7/config/node.env"],
+    "persistent_state_paths": ["/Applications/oasis7/data"],
+}
+for target, domain in (
+    ("system/oasis7.testnet.fourth", "system"),
+    ("gui/501/oasis7.testnet.fourth", "gui/501"),
+):
+    generated = module.macos_script(
+        {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64
+    )
+    assert f"LAUNCHD_TARGET={target}" in generated
+    assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
+    assert 'launchctl bootout "$LAUNCHD_TARGET"' in generated
+    assert 'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"' in generated
+for invalid_target in (
+    "user/oasis7.testnet.fourth",
+    "gui/not-a-uid/oasis7.testnet.fourth",
+    "gui/501",
+    "system/",
+):
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            module.macos_script(
+                {**base_node, "launchd_target": invalid_target},
+                "version", "commit", "run", "a" * 64,
+            )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError(f"invalid launchd target accepted: {invalid_target}")
+invalid_state_sets = (
+    ["/Applications/oasis7/data", "/Applications/oasis7/data"],
+    ["/Applications/oasis7/data", "/Applications/oasis7/data/checkpoints"],
+    ["/Applications/oasis7"],
+    ["/Applications/oasis7/current"],
+    ["/Applications/oasis7/config"],
+    ["/Applications/oasis7/CURRENT_VERSION"],
+    ["/Applications/oasis7/DEPLOYED_BUILDINFO"],
+)
+for invalid_states in invalid_state_sets:
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            module.macos_script(
+                {
+                    **base_node,
+                    "launchd_target": "gui/501/oasis7.testnet.fourth",
+                    "persistent_state_paths": invalid_states,
+                },
+                "version", "commit", "run", "a" * 64,
+            )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError(f"unsafe persistent state topology accepted: {invalid_states}")
+launchd_overlap_node = {
+    **base_node,
+    "launchd_target": "gui/501/oasis7.testnet.fourth",
+    "launchd_plist": "/Applications/oasis7/launchd/oasis7.testnet.fourth.plist",
+    "persistent_state_paths": ["/Applications/oasis7/launchd"],
+}
+try:
+    with contextlib.redirect_stderr(io.StringIO()):
+        module.macos_script(
+            launchd_overlap_node, "version", "commit", "run", "a" * 64
+        )
+except SystemExit:
+    pass
+else:
+    raise AssertionError("persistent state path containing launchd plist was accepted")
+scope_contract = "all_existing` plus `linux_macos_arm64"
+assert scope_contract in inventory_text and scope_contract in runbook_text
+assert "all_existing` | every package platform represented by the managed fleet" not in inventory_text
+PY
+then
+  package_contract_failed=1
+fi
 if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
 from pathlib import Path, PurePosixPath
 import base64
@@ -3062,4 +3271,4 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
 fi
 grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
 
-echo "ok: package rollout helper validates artifacts and standardizes linux/windows replacement plans"
+echo "ok: package rollout helper validates artifacts and standardizes linux/windows/macos replacement plans"

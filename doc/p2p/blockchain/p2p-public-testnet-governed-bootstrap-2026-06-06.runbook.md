@@ -275,9 +275,9 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 
 ### CI package scope selection
 1. 只升级 ECS Linux validators 和 Linux LAN observer 时，可使用 `Testnet Packages` 的 Linux artifact。
-2. 同时升级 macOS local observer 时，使用包含 Linux/macOS 的 package run，并分别校验 Linux 与 macOS runtime hash。
+2. 同时升级 macOS local observer 时，使用包含 `macos-arm64` 的 package run，并分别校验 Linux 与 macOS runtime hash/DMG native identity；当前 arm64 observer 不得由 `macos-x64` artifact 覆盖。
 3. 需要升级 Windows observer 时，必须使用包含 Windows artifact 的 CI scope；如果先前 run 只有 Linux/macOS，不得把 Linux artifact 复制到 Windows。
-4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。例如 Windows 可能来自后续 `all_existing` run，而 Linux/macOS 来自前一个 Linux/macOS run；验收以 runtime hash、commit lineage、status health 和高度对齐为准。
+4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。当前 workflow 中 `all_existing` 仍只生成 `linux-x64`、`macos-x64`、`windows-x64`；完整 managed-fleet packaging 必须对同一 requested ref/commit 协调执行 `all_existing` plus `linux_macos_arm64` runs，并记录两组 run ID、BUILDINFO 与 SHA256SUMS。验收以 runtime hash、commit lineage、status health 和高度对齐为准。
 
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
@@ -290,8 +290,18 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 
 ### Platform-specific update entrypoints
 1. Linux nodes use `scripts/p2p-public-testnet-package-node-upgrade.sh` with the node root and Linux bundle.
-2. macOS local observer uses the local observer install/upgrade path and launchd label `oasis7.testnet.fourth`; do not verify it with the Linux runtime hash.
+2. macOS local arm64 observer uses the generated `macos-arm64` operator script and an explicit `system/oasis7.testnet.fourth` or `gui/<numeric-uid>/oasis7.testnet.fourth` target; do not verify it with the Linux runtime hash or a verification-only DMG check.
 3. Windows observer uses the Windows installer artifact, updates `C:\oasis7-deploy\CURRENT_VERSION` and deploy metadata, and restarts scheduled task `Oasis7Observer`.
+
+### macOS arm64 observer fail-closed contract
+
+The package rollout helper generates a plan-only macOS script for the managed observer. It accepts only a concrete `system/<label>` or `gui/<numeric-uid>/<label>` target, derives the matching bootstrap domain (`system` or `gui/<uid>`), and rejects generic `user`, non-numeric GUI identities, or incomplete targets. Before bootout it re-verifies the exact planning-time DMG SHA-256, mounts the DMG at an explicit temporary mountpoint, requires Darwin/arm64 host capability and native arm64 payload identity, and creates a verified attempt-local preflight backup of the active runtime, every declared config, `CURRENT_VERSION`, and `DEPLOYED_BUILDINFO`—but not persistent state while the observer is running. Declared state roots must be normalized, unique, non-nested descendants of the node root and may not equal the node root or overlap/contain the runtime, config, `CURRENT_VERSION`, `DEPLOYED_BUILDINFO`, or launchd plist. The generated shell rejects symlink state roots again before backup, failed-state capture, and restore, before any rollback `rm -rf`.
+
+Next it boots out the original target. If bootout fails, it ensures the untouched original service is loaded and verifies `/healthz` contains `ok=true` and `/v1/chain/status` contains `running=true`; requiring `running=true` from healthz is invalid. After successful bootout—and while the observer is stopped—it copies and verifies every declared persistent-state path. A stopped-state backup failure follows the same original-service restart/health path. Runtime or provenance promotion begins only after this state closure passes, then the script bootstraps the derived domain and checks the same endpoint-specific fields while continuing to inspect the status payload for authority failures.
+
+Any post-promotion failure first preserves the failed active state under the attempt root for evidence. Rollback then replaces every active state path with its stopped pre-upgrade snapshot, restores runtime/config/`CURRENT_VERSION`/`DEPLOYED_BUILDINFO`, bootstraps the original domain, and verifies health. Rollback is idempotent and the attempt root is retained; EXIT cleanup only detaches and removes the explicit DMG mountpoint. An authority failure (`authority_failure`, state-sync fallback, unavailable consensus peer head, or execution-driver peer mismatch) always emits `state_sync_escalation_required=true`, even when failed-state capture or rollback itself cannot complete. It is not permission to restart repeatedly or to use validator data copying as recovery.
+
+The script validates package identity but does not add a signing/notarization requirement; release policy remains the authority if it already supplies one.
 
 ## 9. Phase C - Clean Rebuild Validators
 ### Goal
