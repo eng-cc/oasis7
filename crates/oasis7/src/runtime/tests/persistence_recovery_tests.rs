@@ -806,6 +806,110 @@ fn rollback_rejects_same_id_journal_body_substitution_before_mutation() {
 }
 
 #[test]
+fn rollback_v2_verifies_exact_nested_payload_bytes_and_rejects_field_tampering() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("stable target");
+    let snapshot = world.snapshot();
+    let journal = world.journal().clone();
+    let state_root = world.current_state_root_hash().expect("target root");
+    let commitment = rollback_journal_commitment(&snapshot, &journal, journal.len())
+        .expect("journal commitment");
+    let mut approval = signed_rollback_authorization(
+        &snapshot,
+        journal.len(),
+        state_root.as_str(),
+        Some("batch-t"),
+        "ROLLBACK-V2-BYTES",
+        "nested-v2-bytes",
+        "nonce-v2-bytes",
+        &on_call_key,
+        &governance_key,
+    );
+    approval.intent.schema_version = 2;
+    approval.intent.target_journal_commitment = Some(commitment.clone());
+    let nested = serde_json::json!({
+        "schema_version": 2,
+        "rollback_ticket": "ROLLBACK-V2-BYTES",
+        "rollback_checkpoint": {
+            "batch_id": "batch-c",
+            "snapshot_hash": approval.intent.snapshot_hash.clone(),
+            "journal_len": snapshot.journal_len
+        },
+        "replay_target": {
+            "batch_id": "batch-t",
+            "journal_len": journal.len(),
+            "state_root": state_root.clone(),
+            "journal_commitment": commitment.clone()
+        },
+        "expected_reorg_epoch": 0,
+        "max_replay_events": 0,
+        "max_replay_bytes": 4096,
+        "reason": "nested-v2-bytes",
+        "issued_at_ms": approval.intent.issued_at_ms,
+        "expires_at_ms": approval.intent.expires_at_ms,
+        "nonce": "nonce-v2-bytes"
+    });
+    let encode = |value: &serde_json::Value| {
+        let mut bytes = b"oasis7:governed-rollback-replay:v2\0".to_vec();
+        bytes.extend(serde_json::to_vec(value).expect("encode nested v2 intent"));
+        bytes
+    };
+    let payload = encode(&nested);
+    approval.signatures[0].signature_hex = hex::encode(on_call_key.sign(&payload).to_bytes());
+    approval.signatures[1].signature_hex = hex::encode(governance_key.sign(&payload).to_bytes());
+
+    for path in [
+        "/rollback_checkpoint/batch_id",
+        "/expected_reorg_epoch",
+        "/max_replay_events",
+        "/max_replay_bytes",
+    ] {
+        let mut tampered = nested.clone();
+        let slot = tampered.pointer_mut(path).expect("tamper field");
+        *slot = match slot {
+            serde_json::Value::String(value) => serde_json::Value::String(format!("{value}-x")),
+            serde_json::Value::Number(value) => {
+                serde_json::json!(value.as_u64().expect("u64") + 1)
+            }
+            _ => unreachable!(),
+        };
+        let mut candidate = world.clone();
+        candidate
+            .rollback_to_snapshot_with_reconciliation_v2(
+                snapshot.clone(),
+                journal.clone(),
+                "nested-v2-bytes",
+                Some("batch-t"),
+                approval.clone(),
+                &encode(&tampered),
+                ROLLBACK_NOW_MS,
+            )
+            .expect_err("any nested signed-field mutation must invalidate both signatures");
+    }
+
+    world
+        .rollback_to_snapshot_with_reconciliation_v2(
+            snapshot,
+            journal,
+            "nested-v2-bytes",
+            Some("batch-t"),
+            approval,
+            &payload,
+            ROLLBACK_NOW_MS,
+        )
+        .expect("two valid role signatures over exact nested v2 bytes succeed");
+}
+
+#[test]
 fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
     let on_call_key = rollback_test_key(7);
     let governance_key = rollback_test_key(9);
@@ -852,6 +956,7 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
             source_batch_id: "batch-fork-4".to_string(),
             source_event_id: 41,
             status: RollbackDispositionStatus::RejectedFork,
+            compensation: None,
             player_id: Some("player-1".to_string()),
             action_id: Some("action-9".to_string()),
         }],
@@ -859,6 +964,40 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
     world
         .record_rollback_outcome_recovery_metadata("nonce-durable-1", recovery_metadata.clone())
         .expect("complete durable rollback receipt metadata");
+    let affected = vec![RollbackSourceEventIdentity {
+        source_batch_id: "batch-fork-4".to_string(),
+        source_event_id: 41,
+    }];
+    let readiness_evidence = RollbackReadinessEvidence {
+        target_root_matches: true,
+        epoch_matches: true,
+        drift_free: true,
+        consensus_chain_valid: true,
+        receipt_retrievable: true,
+    };
+    assert!(matches!(
+        world.rollback_readiness("nonce-durable-1", &affected, &readiness_evidence),
+        RollbackReadiness::Blocked { .. }
+    ));
+    let receipt = RollbackReceiptProjection {
+        receipt_id: "receipt-durable-1".to_string(),
+        snapshot_height: world.state().time,
+        snapshot_hash: util::hash_json(&world.snapshot()).expect("receipt snapshot hash"),
+        log_cursor: world.journal().len() as u64,
+        acknowledged_at_tick: world.state().time,
+    };
+    world
+        .complete_rollback_outcome(
+            "nonce-durable-1",
+            recovery_metadata.clone(),
+            &affected,
+            receipt.clone(),
+        )
+        .expect("validate coverage and freeze immutable receipt");
+    assert_eq!(
+        world.rollback_readiness("nonce-durable-1", &affected, &readiness_evidence),
+        RollbackReadiness::Ready
+    );
 
     let dir = temp_dir("persist-rollback-replay-state");
     world
@@ -882,6 +1021,7 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
         restored_outcome.dispositions,
         recovery_metadata.dispositions
     );
+    assert_eq!(restored_outcome.receipt.as_ref(), Some(&receipt));
     let restored_snapshot = world.snapshot();
     assert_eq!(
         restored_snapshot.rollback_authority_registry,
@@ -930,6 +1070,28 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
     assert!(matches!(error, WorldError::RollbackNonceConflict { .. }));
     assert_eq!(world.state(), &state_after_first);
     assert_eq!(world.journal(), &journal_after_first);
+    let incomplete = RollbackOutcomeRecoveryMetadata {
+        target_batch_id: "batch-target-3".to_string(),
+        prior_reorg_epoch: 7,
+        committed_reorg_epoch: 8,
+        invalidated_batch_ids: vec!["batch-fork-4".to_string()],
+        dispositions: Vec::new(),
+    };
+    world
+        .record_rollback_outcome_recovery_metadata("nonce-durable-1", incomplete)
+        .expect_err(
+            "recovery readiness must remain false and reject metadata with uncovered events",
+        );
+    let mut changed_receipt = receipt;
+    changed_receipt.log_cursor += 1;
+    world
+        .complete_rollback_outcome(
+            "nonce-durable-1",
+            recovery_metadata,
+            &affected,
+            changed_receipt,
+        )
+        .expect_err("committed receipt projection must be immutable");
     let _ = fs::remove_dir_all(&dir);
 }
 

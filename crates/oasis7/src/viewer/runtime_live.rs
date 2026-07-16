@@ -58,6 +58,7 @@ mod gameplay_snapshot_lane;
 mod mapping;
 mod player_gameplay;
 mod recovery;
+mod recovery_receipt;
 mod session_policy;
 mod support;
 #[cfg(test)]
@@ -132,6 +133,8 @@ pub struct ViewerRuntimeLiveServer {
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
+    #[cfg(test)]
+    authoritative_recovery_dir_override: Option<PathBuf>,
 }
 
 const BACKGROUND_PLAY_TRANSIENT_FAILURE_BUDGET: u8 = 12;
@@ -153,7 +156,7 @@ impl ViewerRuntimeLiveServer {
     pub fn new(
         config: ViewerRuntimeLiveServerConfig,
     ) -> Result<Self, ViewerRuntimeLiveServerError> {
-        let (world, snapshot_config, seed_model) =
+        let (mut world, snapshot_config, seed_model) =
             if let Some(generated_world_dir) = config.generated_world_dir.as_deref() {
                 let (world, snapshot_config, seed_model) =
                     bootstrap_generated_sidecar_runtime_world(generated_world_dir)
@@ -178,6 +181,23 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             };
+        let mut recovered_reorg_epoch = 0;
+        if let Some(recovery_dir) = config
+            .generated_world_dir
+            .as_deref()
+            .map(|dir| dir.join("runtime-live-authoritative-recovery"))
+        {
+            if let Some(metadata) =
+                RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
+                    .map_err(ViewerRuntimeLiveServerError::Runtime)?
+            {
+                let ack: AuthoritativeRecoveryAck<u64> = serde_json::from_slice(&metadata)
+                    .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+                world = RuntimeWorld::load_from_dir(&recovery_dir)
+                    .map_err(ViewerRuntimeLiveServerError::Runtime)?;
+                recovered_reorg_epoch = ack.reorg_epoch;
+            }
+        }
         let initial_world_time = world.state().time;
         let llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -205,7 +225,7 @@ impl ViewerRuntimeLiveServer {
             authoritative_challenges: VecDeque::new(),
             next_authoritative_challenge_id: 1,
             stable_checkpoints: VecDeque::new(),
-            reorg_epoch: 0,
+            reorg_epoch: recovered_reorg_epoch,
             session_policy: RuntimeSessionPolicy::default(),
             session_revoke_metadata: BTreeMap::new(),
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
@@ -213,6 +233,8 @@ impl ViewerRuntimeLiveServer {
             latest_player_gameplay_causality: None,
             #[cfg(test)]
             recovery_fault_injection: None,
+            #[cfg(test)]
+            authoritative_recovery_dir_override: None,
         })
     }
 

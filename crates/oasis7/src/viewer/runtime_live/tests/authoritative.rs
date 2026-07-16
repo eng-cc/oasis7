@@ -2,8 +2,14 @@ use super::*;
 use crate::viewer::protocol::{
     RollbackApprovalSignature, RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackIntent,
 };
-use crate::viewer::runtime_live::authoritative::{RuntimeBatchChallengeState, is_valid_root_hash};
+use crate::viewer::runtime_live::authoritative::{
+    RuntimeBatchChallengeState, compute_runtime_snapshot_hash, is_valid_root_hash,
+};
 use ed25519_dalek::{Signer, SigningKey};
+use oasis7_proto::viewer::{
+    AuthoritativeRollbackV2Request, RollbackAuthorizationEnvelopeV2, RollbackCheckpointRef,
+    RollbackIntentV2, RollbackReplayTarget,
+};
 use sha2::{Digest, Sha256};
 
 fn configure_rollback_authorities(
@@ -444,6 +450,54 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
 }
 
 #[test]
+fn runtime_authoritative_recovery_receipt_is_immutable_after_later_progress() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let nonce = "viewer-immutable-receipt-1";
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "immutable-receipt",
+        nonce,
+        &on_call,
+        &governance,
+    );
+    let (committed, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "immutable-receipt".to_string(),
+                requested_by: None,
+                approval: Some(approval),
+            },
+        })
+        .expect("commit rollback");
+    let committed_receipt = committed
+        .rollback_receipt
+        .expect("committed rollback receipt");
+
+    server.world.step().expect("later world progress");
+    let (retried, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::GetRollbackReceipt {
+            authorization_nonce: nonce.to_string(),
+        })
+        .expect("retrieve persisted receipt after progress");
+
+    assert_eq!(
+        retried.rollback_receipt.as_ref(),
+        Some(&committed_receipt),
+        "later world progress must not rewrite any commit-time receipt field"
+    );
+}
+
+#[test]
 fn runtime_authoritative_recovery_rollback_rejects_missing_approval_before_mutation() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
@@ -759,6 +813,67 @@ fn runtime_authoritative_recovery_prepare_faults_are_atomic_and_classified() {
 }
 
 #[test]
+fn runtime_authoritative_recovery_does_not_swap_or_ack_before_persistence_commit() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-viewer-recovery-pre-commit-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let generation_root = recovery_dir
+        .join(".distfs-state")
+        .join("sidecar-generations");
+    std::fs::create_dir_all(&generation_root).expect("create generation root");
+    std::fs::write(
+        generation_root.join(".test-fail-before-index-commit"),
+        b"fail",
+    )
+    .expect("install pre-commit failpoint");
+
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "persistence-pre-commit",
+        "viewer-persistence-pre-commit",
+        &on_call,
+        &governance,
+    );
+    let world_before = server.world.snapshot();
+    let epoch_before = server.reorg_epoch;
+
+    let err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "persistence-pre-commit".to_string(),
+                requested_by: Some("ops".to_string()),
+                approval: Some(approval),
+            },
+        })
+        .expect_err("persistence failure must prevent acknowledgment");
+
+    assert_eq!(err.code, "rollback_persistence_commit_failed");
+    assert_eq!(server.world.snapshot(), world_before);
+    assert_eq!(server.reorg_epoch, epoch_before);
+    assert_eq!(
+        RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
+            .expect("inspect committed metadata"),
+        None,
+        "no acknowledgment metadata may become committed before the index commit point"
+    );
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
 fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
@@ -826,4 +941,63 @@ fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
             .as_deref()
             .is_some_and(|message| message.contains("snapshot_reload_required"))
     );
+}
+
+#[test]
+fn runtime_authoritative_recovery_rejects_checkpoint_after_replay_target_explicitly() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let second = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(second.final_height)
+        .expect("finalize second batch");
+    let first_checkpoint = server
+        .stable_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.batch_id == first.batch_id)
+        .expect("first checkpoint");
+    let second_checkpoint = server
+        .stable_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.batch_id == second.batch_id)
+        .expect("second checkpoint");
+    let request = AuthoritativeRollbackV2Request {
+        reason: "reversed-c-to-t".to_string(),
+        approval: RollbackAuthorizationEnvelopeV2 {
+            intent: RollbackIntentV2 {
+                schema_version: 2,
+                rollback_ticket: "ROLLBACK-2313-REVERSED".to_string(),
+                rollback_checkpoint: RollbackCheckpointRef {
+                    batch_id: second.batch_id,
+                    snapshot_hash: compute_runtime_snapshot_hash(&second_checkpoint.snapshot)
+                        .expect("second snapshot hash"),
+                    snapshot_journal_len: second_checkpoint.snapshot.journal_len,
+                },
+                replay_target: RollbackReplayTarget {
+                    batch_id: first.batch_id,
+                    target_journal_len: first_checkpoint.journal.len(),
+                    expected_target_state_root: first.state_root,
+                    journal_commitment: "unused-for-reversed-range".to_string(),
+                },
+                expected_reorg_epoch: server.reorg_epoch,
+                max_replay_events: 0,
+                max_replay_bytes: 0,
+                reason: "reversed-c-to-t".to_string(),
+                issued_at_ms: 1,
+                expires_at_ms: u64::MAX,
+                nonce: "nonce-reversed-c-to-t".to_string(),
+            },
+            signatures: Vec::new(),
+        },
+    };
+
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RollbackV2 { request })
+        .expect_err("checkpoint C after target T must fail before authorization work");
+    assert_eq!(error.code, "rollback_target_precedes_checkpoint");
 }

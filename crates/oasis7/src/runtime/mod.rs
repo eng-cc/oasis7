@@ -244,10 +244,11 @@ pub use signer::ReceiptSigner;
 // Snapshot
 pub use snapshot::{
     Journal, RollbackApprovalSignature, RollbackAuthorityRecord, RollbackAuthorityRegistry,
-    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackDispositionStatus, RollbackEvent,
-    RollbackEventDisposition, RollbackIntent, RollbackNonceOutcome,
-    RollbackOutcomeRecoveryMetadata, Snapshot, SnapshotCatalog, SnapshotMeta, SnapshotRecord,
-    SnapshotRetentionPolicy,
+    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackCompensationCaseRef,
+    RollbackCompensationState, RollbackDispositionStatus, RollbackEvent, RollbackEventDisposition,
+    RollbackIntent, RollbackNonceOutcome, RollbackOutcomeRecoveryMetadata, RollbackReadiness,
+    RollbackReadinessEvidence, RollbackReceiptProjection, RollbackSourceEventIdentity, Snapshot,
+    SnapshotCatalog, SnapshotMeta, SnapshotRecord, SnapshotRetentionPolicy,
 };
 
 // State

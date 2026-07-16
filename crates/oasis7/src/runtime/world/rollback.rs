@@ -5,7 +5,9 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use super::super::util::{hash_json, sha256_hex, to_canonical_cbor};
 use super::super::{
     Journal, RollbackAuthorityRegistry, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackEvent, RollbackNonceOutcome, RollbackOutcomeRecoveryMetadata, Snapshot, WorldError,
+    RollbackEvent, RollbackNonceOutcome, RollbackOutcomeRecoveryMetadata, RollbackReadiness,
+    RollbackReadinessEvidence, RollbackReceiptProjection, RollbackSourceEventIdentity, Snapshot,
+    WorldError,
 };
 use super::World;
 
@@ -16,6 +18,56 @@ struct RollbackJournalCommitment<'a> {
     snapshot_journal_len: usize,
     target_journal_len: usize,
     events: &'a [super::super::WorldEvent],
+}
+
+fn validate_rollback_dispositions(
+    affected_events: Option<&[RollbackSourceEventIdentity]>,
+    dispositions: &[super::super::RollbackEventDisposition],
+) -> Result<(), WorldError> {
+    let mut found = BTreeSet::new();
+    for disposition in dispositions {
+        let identity = RollbackSourceEventIdentity {
+            source_batch_id: disposition.source_batch_id.clone(),
+            source_event_id: disposition.source_event_id,
+        };
+        if identity.source_batch_id.trim().is_empty() || !found.insert(identity) {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback dispositions require unique source batch/event identities"
+                    .to_string(),
+            });
+        }
+        match disposition.status {
+            super::super::RollbackDispositionStatus::CompensationRequired => {
+                let case = disposition.compensation.as_ref().ok_or_else(|| {
+                    WorldError::DistributedValidationFailed {
+                        reason: "compensation_required disposition lacks case reference"
+                            .to_string(),
+                    }
+                })?;
+                if case.owner_id.trim().is_empty() || case.ticket_id.trim().is_empty() {
+                    return Err(WorldError::DistributedValidationFailed {
+                        reason: "compensation case requires owner and ticket".to_string(),
+                    });
+                }
+            }
+            _ if disposition.compensation.is_some() => {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "only compensation_required may reference compensation".to_string(),
+                });
+            }
+            _ => {}
+        }
+    }
+    if let Some(affected) = affected_events {
+        let expected = affected.iter().cloned().collect::<BTreeSet<_>>();
+        if expected.len() != affected.len() || expected != found {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback disposition coverage does not exactly match affected events"
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn rollback_journal_commitment(
@@ -52,17 +104,100 @@ impl World {
         nonce: &str,
         metadata: RollbackOutcomeRecoveryMetadata,
     ) -> Result<(), WorldError> {
+        if !metadata.invalidated_batch_ids.is_empty() && metadata.dispositions.is_empty() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback disposition coverage is incomplete".to_string(),
+            });
+        }
+        validate_rollback_dispositions(None, &metadata.dispositions)?;
         let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
             WorldError::DistributedValidationFailed {
                 reason: format!("rollback outcome for nonce {nonce} is not committed"),
             }
         })?;
+        if outcome.receipt.is_some() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "committed rollback receipt is immutable".to_string(),
+            });
+        }
         outcome.target_batch_id = metadata.target_batch_id;
         outcome.prior_reorg_epoch = metadata.prior_reorg_epoch;
         outcome.committed_reorg_epoch = metadata.committed_reorg_epoch;
         outcome.invalidated_batch_ids = metadata.invalidated_batch_ids;
         outcome.dispositions = metadata.dispositions;
         Ok(())
+    }
+
+    pub fn complete_rollback_outcome(
+        &mut self,
+        nonce: &str,
+        metadata: RollbackOutcomeRecoveryMetadata,
+        affected_events: &[RollbackSourceEventIdentity],
+        receipt: RollbackReceiptProjection,
+    ) -> Result<(), WorldError> {
+        validate_rollback_dispositions(Some(affected_events), &metadata.dispositions)?;
+        let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        if let Some(existing) = outcome.receipt.as_ref() {
+            if existing == &receipt
+                && outcome.target_batch_id == metadata.target_batch_id
+                && outcome.prior_reorg_epoch == metadata.prior_reorg_epoch
+                && outcome.committed_reorg_epoch == metadata.committed_reorg_epoch
+                && outcome.invalidated_batch_ids == metadata.invalidated_batch_ids
+                && outcome.dispositions == metadata.dispositions
+            {
+                return Ok(());
+            }
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "committed rollback receipt is immutable".to_string(),
+            });
+        }
+        outcome.target_batch_id = metadata.target_batch_id;
+        outcome.prior_reorg_epoch = metadata.prior_reorg_epoch;
+        outcome.committed_reorg_epoch = metadata.committed_reorg_epoch;
+        outcome.invalidated_batch_ids = metadata.invalidated_batch_ids;
+        outcome.dispositions = metadata.dispositions;
+        outcome.receipt = Some(receipt);
+        Ok(())
+    }
+
+    pub fn rollback_readiness(
+        &self,
+        nonce: &str,
+        affected_events: &[RollbackSourceEventIdentity],
+        evidence: &RollbackReadinessEvidence,
+    ) -> RollbackReadiness {
+        let Some(outcome) = self.rollback_nonce_outcomes.get(nonce) else {
+            return RollbackReadiness::Blocked {
+                reasons: vec!["rollback_outcome_missing".to_string()],
+            };
+        };
+        let mut reasons = Vec::new();
+        for (passed, reason) in [
+            (evidence.target_root_matches, "target_root_mismatch"),
+            (evidence.epoch_matches, "reorg_epoch_mismatch"),
+            (evidence.drift_free, "consensus_drift_present"),
+            (evidence.consensus_chain_valid, "consensus_chain_invalid"),
+            (evidence.receipt_retrievable, "receipt_not_retrievable"),
+            (outcome.receipt.is_some(), "immutable_receipt_missing"),
+        ] {
+            if !passed {
+                reasons.push(reason.to_string());
+            }
+        }
+        if let Err(error) =
+            validate_rollback_dispositions(Some(affected_events), &outcome.dispositions)
+        {
+            reasons.push(format!("disposition_coverage_invalid:{error:?}"));
+        }
+        if reasons.is_empty() {
+            RollbackReadiness::Ready
+        } else {
+            RollbackReadiness::Blocked { reasons }
+        }
     }
 
     pub fn rollback_to_snapshot(
@@ -83,6 +218,7 @@ impl World {
             reason,
             target_batch_id,
             approval,
+            None,
             now_ms,
         )
     }
@@ -95,13 +231,28 @@ impl World {
         reason: impl Into<String>,
         target_batch_id: Option<&str>,
         approval: RollbackAuthorizationEnvelope,
+        canonical_v2_payload: Option<&[u8]>,
         now_ms: u64,
     ) -> Result<(), WorldError> {
         let reason = reason.into();
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
-        let supplied_intent_hash = sha256_hex(&approval.intent.canonical_signing_payload()?);
+        let canonical_payload = match canonical_v2_payload {
+            Some(payload)
+                if approval.intent.schema_version == 2
+                    && payload.starts_with(b"oasis7:governed-rollback-replay:v2\0") =>
+            {
+                payload.to_vec()
+            }
+            Some(_) => {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "rollback v2 canonical payload domain mismatch".to_string(),
+                });
+            }
+            None => approval.intent.canonical_signing_payload()?,
+        };
+        let supplied_intent_hash = sha256_hex(&canonical_payload);
         if let Some(committed) = self.rollback_nonce_outcomes.get(&approval.intent.nonce) {
             if committed.canonical_intent_hash == supplied_intent_hash {
                 return Ok(());
@@ -117,6 +268,7 @@ impl World {
             &reason,
             target_batch_id,
             &approval,
+            canonical_payload.as_slice(),
             now_ms,
         )?;
 
@@ -206,6 +358,7 @@ impl World {
                 committed_reorg_epoch: 0,
                 invalidated_batch_ids: Vec::new(),
                 dispositions: Vec::new(),
+                receipt: None,
             },
         );
         *self = world;
@@ -221,6 +374,48 @@ impl World {
         approval: RollbackAuthorizationEnvelope,
         now_ms: u64,
     ) -> Result<(), WorldError> {
+        self.rollback_to_snapshot_with_reconciliation_payload(
+            snapshot,
+            journal,
+            reason,
+            target_batch_id,
+            approval,
+            None,
+            now_ms,
+        )
+    }
+
+    pub(crate) fn rollback_to_snapshot_with_reconciliation_v2(
+        &mut self,
+        snapshot: Snapshot,
+        journal: Journal,
+        reason: impl Into<String>,
+        target_batch_id: Option<&str>,
+        approval: RollbackAuthorizationEnvelope,
+        canonical_v2_payload: &[u8],
+        now_ms: u64,
+    ) -> Result<(), WorldError> {
+        self.rollback_to_snapshot_with_reconciliation_payload(
+            snapshot,
+            journal,
+            reason,
+            target_batch_id,
+            approval,
+            Some(canonical_v2_payload),
+            now_ms,
+        )
+    }
+
+    fn rollback_to_snapshot_with_reconciliation_payload(
+        &mut self,
+        snapshot: Snapshot,
+        journal: Journal,
+        reason: impl Into<String>,
+        target_batch_id: Option<&str>,
+        approval: RollbackAuthorizationEnvelope,
+        canonical_v2_payload: Option<&[u8]>,
+        now_ms: u64,
+    ) -> Result<(), WorldError> {
         let mut candidate = self.clone();
         let prior_journal_len = journal.len();
         let reconciliation_tick = snapshot.state.time;
@@ -232,6 +427,7 @@ impl World {
                 reason,
                 target_batch_id,
                 approval,
+                canonical_v2_payload,
                 now_ms,
             )
             .map_err(|error| match error {
@@ -275,6 +471,7 @@ impl World {
         reason: &str,
         target_batch_id: Option<&str>,
         envelope: &RollbackAuthorizationEnvelope,
+        canonical_payload: &[u8],
         now_ms: u64,
     ) -> Result<(String, String), WorldError> {
         let reject = |reason: String| WorldError::DistributedValidationFailed { reason };
@@ -315,7 +512,6 @@ impl World {
                 "rollback authorization requires exactly two signatures".to_string(),
             ));
         }
-        let payload = intent.canonical_signing_payload()?;
         let mut approved = BTreeMap::new();
         let mut approved_keys = BTreeSet::new();
         for approval in &envelope.signatures {
@@ -358,7 +554,7 @@ impl World {
                 .map_err(|_| reject("invalid rollback approval signature length".to_string()))?;
             VerifyingKey::from_bytes(&public_key)
                 .map_err(|_| reject("invalid rollback authority public key".to_string()))?
-                .verify(&payload, &Signature::from_bytes(&signature))
+                .verify(canonical_payload, &Signature::from_bytes(&signature))
                 .map_err(|_| {
                     reject("rollback approval signature verification failed".to_string())
                 })?;

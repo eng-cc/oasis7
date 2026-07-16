@@ -446,6 +446,8 @@ pub struct RollbackNonceOutcome {
     pub invalidated_batch_ids: Vec<String>,
     #[serde(default)]
     pub dispositions: Vec<RollbackEventDisposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<RollbackReceiptProjection>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -453,6 +455,8 @@ pub struct RollbackEventDisposition {
     pub source_batch_id: String,
     pub source_event_id: WorldEventId,
     pub status: RollbackDispositionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compensation: Option<RollbackCompensationCaseRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub player_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -462,9 +466,57 @@ pub struct RollbackEventDisposition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RollbackDispositionStatus {
+    PreservedAtTarget,
     Replayed,
     RejectedFork,
     CompensationRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RollbackSourceEventIdentity {
+    pub source_batch_id: String,
+    pub source_event_id: WorldEventId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackCompensationCaseRef {
+    pub owner_id: String,
+    pub ticket_id: String,
+    pub state: RollbackCompensationState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackCompensationState {
+    PendingAuthorization,
+    Authorized,
+    InProgress,
+    Completed,
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackReceiptProjection {
+    pub receipt_id: String,
+    pub snapshot_height: u64,
+    pub snapshot_hash: String,
+    pub log_cursor: u64,
+    pub acknowledged_at_tick: WorldTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackReadinessEvidence {
+    pub target_root_matches: bool,
+    pub epoch_matches: bool,
+    pub drift_free: bool,
+    pub consensus_chain_valid: bool,
+    pub receipt_retrievable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RollbackReadiness {
+    Ready,
+    Blocked { reasons: Vec<String> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

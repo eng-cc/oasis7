@@ -1,4 +1,5 @@
 use super::authoritative::compute_runtime_snapshot_hash;
+use super::recovery_receipt::{recovery_error, rollback_runtime_error};
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
 use sha2::{Digest, Sha256};
@@ -18,6 +19,25 @@ impl ViewerRuntimeLiveServer {
         fault: Option<RuntimeRecoveryFaultInjection>,
     ) {
         self.recovery_fault_injection = fault;
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_authoritative_recovery_dir_override(
+        &mut self,
+        dir: Option<std::path::PathBuf>,
+    ) {
+        self.authoritative_recovery_dir_override = dir;
+    }
+
+    fn authoritative_recovery_dir(&self) -> Option<std::path::PathBuf> {
+        #[cfg(test)]
+        if let Some(dir) = self.authoritative_recovery_dir_override.as_ref() {
+            return Some(dir.clone());
+        }
+        self.config
+            .generated_world_dir
+            .as_deref()
+            .map(|dir| dir.join("runtime-live-authoritative-recovery"))
     }
 
     pub(super) fn handle_authoritative_recovery_for_protocol(
@@ -97,6 +117,28 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         }
+        let canonical_v2_payload = intent.canonical_signing_payload().map_err(|err| {
+            recovery_error(
+                "rollback_intent_encode_failed",
+                format!("canonical rollback intent encoding failed: {err}"),
+                Some(intent.replay_target.batch_id.clone()),
+                None,
+                None,
+            )
+        })?;
+        let canonical_intent_hash = hex::encode(Sha256::digest(&canonical_v2_payload));
+        if let Some(outcome) = self.world.rollback_nonce_outcome(&intent.nonce) {
+            if outcome.canonical_intent_hash == canonical_intent_hash {
+                return self.get_rollback_receipt(intent.nonce);
+            }
+            return Err(recovery_error(
+                "rollback_nonce_conflict",
+                "authorization nonce is already bound to a different rollback intent",
+                Some(intent.replay_target.batch_id),
+                None,
+                None,
+            ));
+        }
         if intent.expected_reorg_epoch != self.reorg_epoch {
             return Err(recovery_error(
                 "rollback_reorg_epoch_mismatch",
@@ -106,24 +148,36 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         }
-        let canonical_intent_hash = hex::encode(Sha256::digest(
-            intent.canonical_signing_payload().map_err(|err| {
+        let checkpoint_index = self
+            .stable_checkpoints
+            .iter()
+            .position(|checkpoint| checkpoint.batch_id == intent.rollback_checkpoint.batch_id)
+            .ok_or_else(|| {
                 recovery_error(
-                    "rollback_intent_encode_failed",
-                    format!("canonical rollback intent encoding failed: {err}"),
+                    "rollback_checkpoint_not_found",
+                    "signed rollback checkpoint is not retained",
+                    Some(intent.rollback_checkpoint.batch_id.clone()),
+                    None,
+                    None,
+                )
+            })?;
+        let target_index = self
+            .stable_checkpoints
+            .iter()
+            .position(|checkpoint| checkpoint.batch_id == intent.replay_target.batch_id)
+            .ok_or_else(|| {
+                recovery_error(
+                    "stable_checkpoint_not_found",
+                    "signed replay target is not retained as finalized",
                     Some(intent.replay_target.batch_id.clone()),
                     None,
                     None,
                 )
-            })?,
-        ));
-        if let Some(outcome) = self.world.rollback_nonce_outcome(&intent.nonce) {
-            if outcome.canonical_intent_hash == canonical_intent_hash {
-                return self.get_rollback_receipt(intent.nonce);
-            }
+            })?;
+        if checkpoint_index >= target_index {
             return Err(recovery_error(
-                "rollback_nonce_conflict",
-                "authorization nonce is already bound to a different rollback intent",
+                "rollback_target_precedes_checkpoint",
+                "replay target must be a finalized checkpoint strictly after rollback checkpoint",
                 Some(intent.replay_target.batch_id),
                 None,
                 None,
@@ -149,102 +203,39 @@ impl ViewerRuntimeLiveServer {
             max_replay_events: Some(intent.max_replay_events),
             max_replay_bytes: Some(intent.max_replay_bytes),
         };
-        self.rollback_to_stable_checkpoint(AuthoritativeRollbackRequest {
-            target_batch_id: Some(target_batch_id),
-            reason: request.reason,
-            requested_by: None,
-            approval: Some(RollbackAuthorizationEnvelope {
-                intent: legacy,
-                signatures,
-            }),
-        })
+        self.rollback_to_stable_checkpoint_v2(
+            AuthoritativeRollbackRequest {
+                target_batch_id: Some(target_batch_id),
+                reason: request.reason,
+                requested_by: None,
+                approval: Some(RollbackAuthorizationEnvelope {
+                    intent: legacy,
+                    signatures,
+                }),
+            },
+            canonical_v2_payload,
+        )
     }
 
-    fn get_rollback_receipt(
-        &self,
-        authorization_nonce: String,
+    fn rollback_to_stable_checkpoint_v2(
+        &mut self,
+        request: AuthoritativeRollbackRequest,
+        canonical_v2_payload: Vec<u8>,
     ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
-        let outcome = self
-            .world
-            .rollback_nonce_outcome(&authorization_nonce)
-            .ok_or_else(|| {
-                recovery_error(
-                    "rollback_receipt_not_found",
-                    format!("no persisted rollback receipt for nonce {authorization_nonce}"),
-                    None,
-                    None,
-                    None,
-                )
-            })?;
-        let target_batch_id = outcome.target_batch_id.clone();
-        let cursor = self.current_recovery_cursor().map_err(|err| {
-            recovery_error(
-                "cursor_compute_failed",
-                format!("{err:?}"),
-                Some(target_batch_id.clone()),
-                None,
-                None,
-            )
-        })?;
-        Ok(AuthoritativeRecoveryAck {
-            status: AuthoritativeRecoveryStatus::RolledBack,
-            reorg_epoch: self.reorg_epoch,
-            snapshot_height: cursor.snapshot_height,
-            snapshot_hash: cursor.snapshot_hash.clone(),
-            log_cursor: cursor.log_cursor,
-            stable_batch_id: Some(target_batch_id.clone()),
-            player_id: None,
-            agent_id: None,
-            session_pubkey: None,
-            replaced_by_pubkey: None,
-            session_epoch: None,
-            message: Some("persisted rollback receipt".to_string()),
-            revoke_reason: None,
-            revoked_by: None,
-            rollback_receipt: Some(AuthoritativeRollbackReceipt {
-                receipt_id: format!(
-                    "rollback:{}:{}",
-                    outcome.rollback_ticket, authorization_nonce
-                ),
-                authorization_nonce,
-                rollback_ticket: outcome.rollback_ticket.clone(),
-                target_batch_id,
-                invalidated_batch_ids: outcome.invalidated_batch_ids.clone(),
-                prior_reorg_epoch: outcome.prior_reorg_epoch,
-                committed_reorg_epoch: outcome.committed_reorg_epoch,
-                replay_from_snapshot_height: cursor.snapshot_height,
-                replay_from_log_cursor: outcome.rollback_event_id,
-                snapshot_hash: cursor.snapshot_hash,
-                snapshot_reload_required: true,
-                player_dispositions: outcome
-                    .dispositions
-                    .iter()
-                    .filter_map(|entry| {
-                        Some(crate::viewer::protocol::PlayerRollbackDisposition {
-                            player_id: entry.player_id.clone()?,
-                            action_id: entry.action_id.clone()?,
-                            disposition: match entry.status {
-                                crate::runtime::RollbackDispositionStatus::Replayed => {
-                                    crate::viewer::protocol::PlayerActionDisposition::Replayed
-                                }
-                                crate::runtime::RollbackDispositionStatus::RejectedFork => {
-                                    crate::viewer::protocol::PlayerActionDisposition::RejectedFork
-                                }
-                                crate::runtime::RollbackDispositionStatus::CompensationRequired => {
-                                    crate::viewer::protocol::PlayerActionDisposition::CompensationRequired
-                                }
-                            },
-                        })
-                    })
-                    .collect(),
-            }),
-            acknowledged_at_tick: self.world.state().time,
-        })
+        self.rollback_to_stable_checkpoint_payload(request, Some(canonical_v2_payload))
     }
 
     fn rollback_to_stable_checkpoint(
         &mut self,
         request: AuthoritativeRollbackRequest,
+    ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        self.rollback_to_stable_checkpoint_payload(request, None)
+    }
+
+    fn rollback_to_stable_checkpoint_payload(
+        &mut self,
+        request: AuthoritativeRollbackRequest,
+        canonical_v2_payload: Option<Vec<u8>>,
     ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
         let approval = request.approval.ok_or_else(|| {
             recovery_error(
@@ -383,6 +374,76 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         };
+        let checkpoint_batch_id = approval
+            .intent
+            .rollback_checkpoint
+            .as_ref()
+            .map(|entry| entry.batch_id.as_str())
+            .unwrap_or(target_batch_id.as_str());
+        let checkpoint_batch_index = self
+            .authoritative_batches
+            .iter()
+            .position(|batch| batch.batch_id == checkpoint_batch_id)
+            .ok_or_else(|| {
+                recovery_error(
+                    "rollback_checkpoint_not_found",
+                    "rollback checkpoint is missing from authoritative batch history",
+                    Some(checkpoint_batch_id.to_string()),
+                    None,
+                    None,
+                )
+            })?;
+        if checkpoint_batch_index > batch_index
+            || (approval.intent.rollback_checkpoint.is_some()
+                && checkpoint_batch_index == batch_index)
+        {
+            return Err(recovery_error(
+                "rollback_target_precedes_checkpoint",
+                "replay target must be strictly after rollback checkpoint in authoritative history",
+                Some(target_batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+        let disposition_ticket = approval.intent.rollback_ticket.clone();
+        let dispositions = self
+            .authoritative_batches
+            .iter()
+            .enumerate()
+            .skip(checkpoint_batch_index.saturating_add(1))
+            .flat_map(|(index, batch)| {
+                let disposition_ticket = disposition_ticket.clone();
+                batch
+                    .events
+                    .iter()
+                    .map(move |event| crate::runtime::RollbackEventDisposition {
+                        source_batch_id: batch.batch_id.clone(),
+                        source_event_id: event.id,
+                        status: if index <= batch_index {
+                            crate::runtime::RollbackDispositionStatus::Replayed
+                        } else {
+                            crate::runtime::RollbackDispositionStatus::CompensationRequired
+                        },
+                        compensation: (index > batch_index).then(|| {
+                            crate::runtime::RollbackCompensationCaseRef {
+                                owner_id: "incident_commander_pending".to_string(),
+                                ticket_id: disposition_ticket.clone(),
+                                state:
+                                    crate::runtime::RollbackCompensationState::PendingAuthorization,
+                            }
+                        }),
+                        player_id: None,
+                        action_id: None,
+                    })
+            })
+            .collect::<Vec<_>>();
+        let affected_events = dispositions
+            .iter()
+            .map(|entry| crate::runtime::RollbackSourceEventIdentity {
+                source_batch_id: entry.source_batch_id.clone(),
+                source_event_id: entry.source_event_id,
+            })
+            .collect::<Vec<_>>();
         let invalidated_batch_ids = self
             .authoritative_batches
             .iter()
@@ -421,8 +482,8 @@ impl ViewerRuntimeLiveServer {
         let mut candidate_checkpoints = self.stable_checkpoints.clone();
         let candidate_reorg_epoch = self.reorg_epoch.saturating_add(1);
 
-        candidate_world
-            .rollback_to_snapshot_with_reconciliation(
+        let rollback_result = if let Some(payload) = canonical_v2_payload.as_deref() {
+            candidate_world.rollback_to_snapshot_with_reconciliation_v2(
                 checkpoint.snapshot.clone(),
                 checkpoint.journal.clone(),
                 rollback_reason,
@@ -464,9 +525,56 @@ impl ViewerRuntimeLiveServer {
                         })
                         .collect(),
                 },
-                current_unix_time_ms(),
+                payload,
+                super::recovery_receipt::current_unix_time_ms(),
             )
-            .map_err(|err| rollback_runtime_error(err, checkpoint.batch_id.clone()))?;
+        } else {
+            candidate_world.rollback_to_snapshot_with_reconciliation(
+                checkpoint.snapshot.clone(),
+                checkpoint.journal.clone(),
+                rollback_reason,
+                Some(target_batch_id.as_str()),
+                crate::runtime::RollbackAuthorizationEnvelope {
+                    intent: crate::runtime::RollbackIntent {
+                        schema_version: approval.intent.schema_version,
+                        rollback_ticket: approval.intent.rollback_ticket,
+                        snapshot_hash: approval.intent.snapshot_hash,
+                        snapshot_journal_len: approval.intent.snapshot_journal_len,
+                        target_journal_len: approval.intent.target_journal_len,
+                        target_journal_commitment: approval
+                            .intent
+                            .replay_target
+                            .as_ref()
+                            .map(|target| target.journal_commitment.clone()),
+                        expected_target_state_root: approval.intent.expected_target_state_root,
+                        target_batch_id: approval.intent.target_batch_id,
+                        reason: approval.intent.reason,
+                        issued_at_ms: approval.intent.issued_at_ms,
+                        expires_at_ms: approval.intent.expires_at_ms,
+                        nonce: approval.intent.nonce,
+                    },
+                    signatures: approval
+                        .signatures
+                        .into_iter()
+                        .map(|signature| crate::runtime::RollbackApprovalSignature {
+                            authority_id: signature.authority_id,
+                            role: match signature.role {
+                                crate::viewer::protocol::RollbackAuthorityRole::OnCall => {
+                                    crate::runtime::RollbackAuthorityRole::OnCall
+                                }
+                                crate::viewer::protocol::RollbackAuthorityRole::Governance => {
+                                    crate::runtime::RollbackAuthorityRole::Governance
+                                }
+                            },
+                            signature_scheme: signature.signature_scheme,
+                            signature_hex: signature.signature_hex,
+                        })
+                        .collect(),
+                },
+                super::recovery_receipt::current_unix_time_ms(),
+            )
+        };
+        rollback_result.map_err(|err| rollback_runtime_error(err, checkpoint.batch_id.clone()))?;
 
         #[cfg(test)]
         if self.recovery_fault_injection == Some(RuntimeRecoveryFaultInjection::ReconciliationDrift)
@@ -513,24 +621,35 @@ impl ViewerRuntimeLiveServer {
                     None,
                 )
             })?;
+        let snapshot_height = candidate_world.state().time;
+        let log_cursor = latest_runtime_event_seq(&candidate_world);
+        let receipt_id = format!("rollback:{rollback_ticket}:{authorization_nonce}");
         candidate_world
-            .record_rollback_outcome_recovery_metadata(
+            .complete_rollback_outcome(
                 authorization_nonce.as_str(),
                 crate::runtime::RollbackOutcomeRecoveryMetadata {
                     target_batch_id: checkpoint.batch_id.clone(),
                     prior_reorg_epoch: self.reorg_epoch,
                     committed_reorg_epoch: candidate_reorg_epoch,
                     invalidated_batch_ids: invalidated_batch_ids.clone(),
-                    dispositions: Vec::new(),
+                    dispositions: dispositions.clone(),
+                },
+                affected_events.as_slice(),
+                crate::runtime::RollbackReceiptProjection {
+                    receipt_id: receipt_id.clone(),
+                    snapshot_height,
+                    snapshot_hash: snapshot_hash.clone(),
+                    log_cursor,
+                    acknowledged_at_tick: snapshot_height,
                 },
             )
             .map_err(|err| rollback_runtime_error(err, checkpoint.batch_id.clone()))?;
         let ack = AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
             reorg_epoch: candidate_reorg_epoch,
-            snapshot_height: candidate_world.state().time,
+            snapshot_height,
             snapshot_hash: snapshot_hash.clone(),
-            log_cursor: latest_runtime_event_seq(&candidate_world),
+            log_cursor,
             stable_batch_id: Some(checkpoint.batch_id.clone()),
             player_id: None,
             agent_id: None,
@@ -541,20 +660,41 @@ impl ViewerRuntimeLiveServer {
             revoke_reason: None,
             revoked_by: None,
             rollback_receipt: Some(crate::viewer::protocol::AuthoritativeRollbackReceipt {
-                receipt_id: format!("rollback:{rollback_ticket}:{authorization_nonce}"),
-                authorization_nonce,
-                rollback_ticket,
+                receipt_id,
+                authorization_nonce: authorization_nonce.clone(),
+                rollback_ticket: rollback_ticket.clone(),
                 target_batch_id: checkpoint.batch_id.clone(),
                 invalidated_batch_ids,
                 prior_reorg_epoch: self.reorg_epoch,
                 committed_reorg_epoch: candidate_reorg_epoch,
-                replay_from_snapshot_height: candidate_world.state().time,
-                replay_from_log_cursor: latest_runtime_event_seq(&candidate_world),
+                replay_from_snapshot_height: snapshot_height,
+                replay_from_log_cursor: log_cursor,
                 snapshot_hash,
                 snapshot_reload_required: true,
-                player_dispositions: Vec::new(),
+                player_dispositions: super::recovery_receipt::viewer_dispositions(
+                    rollback_ticket.as_str(),
+                    authorization_nonce.as_str(),
+                    dispositions.as_slice(),
+                ),
+                ready_for_all_clear: !dispositions.iter().any(|entry| {
+                    matches!(
+                        entry.status,
+                        crate::runtime::RollbackDispositionStatus::CompensationRequired
+                    )
+                }),
+                readiness_blockers: dispositions
+                    .iter()
+                    .any(|entry| {
+                        matches!(
+                            entry.status,
+                            crate::runtime::RollbackDispositionStatus::CompensationRequired
+                        )
+                    })
+                    .then(|| "compensation_cases_unresolved".to_string())
+                    .into_iter()
+                    .collect(),
             }),
-            acknowledged_at_tick: candidate_world.state().time,
+            acknowledged_at_tick: snapshot_height,
         };
         #[cfg(test)]
         if self.recovery_fault_injection == Some(RuntimeRecoveryFaultInjection::AckEncode) {
@@ -566,7 +706,7 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         }
-        serde_json::to_vec(&ack).map_err(|err| {
+        let recovery_metadata = serde_json::to_vec(&ack).map_err(|err| {
             recovery_error(
                 "rollback_ack_encode_failed",
                 format!("{err:?}"),
@@ -575,6 +715,20 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
+
+        if let Some(recovery_dir) = self.authoritative_recovery_dir() {
+            candidate_world
+                .save_authoritative_recovery_generation(&recovery_dir, &recovery_metadata)
+                .map_err(|err| {
+                    recovery_error(
+                        "rollback_persistence_commit_failed",
+                        format!("{err:?}"),
+                        Some(checkpoint.batch_id.clone()),
+                        None,
+                        None,
+                    )
+                })?;
+        }
 
         self.world = candidate_world;
         self.authoritative_batches = candidate_batches;
@@ -1004,42 +1158,6 @@ impl ViewerRuntimeLiveServer {
         );
     }
 
-    fn session_revoke_metadata(
-        &self,
-        player_id: &str,
-        session_pubkey: &str,
-    ) -> Option<&RuntimeSessionRevokeMetadata> {
-        self.session_revoke_metadata
-            .get(&session_revoke_metadata_key(player_id, session_pubkey))
-    }
-
-    fn recovery_error_from_session_policy(
-        &self,
-        message: String,
-        player_id: String,
-        session_pubkey: Option<String>,
-    ) -> AuthoritativeRecoveryError {
-        let code = map_session_policy_error_code(message.as_str());
-        let (revoke_reason, revoked_by) = if code == "session_revoked" {
-            session_pubkey
-                .as_deref()
-                .and_then(|pubkey| self.session_revoke_metadata(player_id.as_str(), pubkey))
-                .map(|metadata| (metadata.revoke_reason.clone(), metadata.revoked_by.clone()))
-                .unwrap_or((None, None))
-        } else {
-            (None, None)
-        };
-        recovery_error_with_revoke_metadata(
-            code,
-            message,
-            None,
-            Some(player_id),
-            session_pubkey,
-            revoke_reason,
-            revoked_by,
-        )
-    }
-
     fn bind_player_session_agent(
         &mut self,
         agent_id: &str,
@@ -1070,82 +1188,5 @@ impl ViewerRuntimeLiveServer {
             self.enqueue_virtual_event(event);
         }
         Ok(())
-    }
-}
-
-fn current_unix_time_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
-        .unwrap_or(0)
-}
-
-fn rollback_runtime_error(
-    err: crate::runtime::WorldError,
-    batch_id: String,
-) -> AuthoritativeRecoveryError {
-    let debug = format!("{err:?}");
-    let code = match &err {
-        crate::runtime::WorldError::JournalMismatch => "rollback_journal_mismatch",
-        crate::runtime::WorldError::RollbackReplayJournalInvalid { .. } => {
-            "rollback_replay_journal_invalid"
-        }
-        crate::runtime::WorldError::RollbackReplayTargetInvalid { .. } => {
-            "rollback_replay_target_invalid"
-        }
-        crate::runtime::WorldError::RollbackTargetStateRootMismatch { .. } => {
-            "rollback_target_state_root_mismatch"
-        }
-        crate::runtime::WorldError::RollbackReconciliationFailed { .. } => {
-            "rollback_reconciliation_drift"
-        }
-        crate::runtime::WorldError::DistributedValidationFailed { reason }
-            if reason.contains("reconciliation drift") =>
-        {
-            "rollback_reconciliation_drift"
-        }
-        crate::runtime::WorldError::DistributedValidationFailed { .. } => {
-            "rollback_authorization_invalid"
-        }
-        _ => "internal_prepare_failed",
-    };
-    recovery_error(code, debug, Some(batch_id), None, None)
-}
-
-pub(super) fn recovery_error(
-    code: impl Into<String>,
-    message: impl Into<String>,
-    batch_id: Option<String>,
-    player_id: Option<String>,
-    session_pubkey: Option<String>,
-) -> AuthoritativeRecoveryError {
-    recovery_error_with_revoke_metadata(
-        code,
-        message,
-        batch_id,
-        player_id,
-        session_pubkey,
-        None,
-        None,
-    )
-}
-
-fn recovery_error_with_revoke_metadata(
-    code: impl Into<String>,
-    message: impl Into<String>,
-    batch_id: Option<String>,
-    player_id: Option<String>,
-    session_pubkey: Option<String>,
-    revoke_reason: Option<String>,
-    revoked_by: Option<String>,
-) -> AuthoritativeRecoveryError {
-    AuthoritativeRecoveryError {
-        code: code.into(),
-        message: message.into(),
-        batch_id,
-        player_id,
-        session_pubkey,
-        revoke_reason,
-        revoked_by,
     }
 }

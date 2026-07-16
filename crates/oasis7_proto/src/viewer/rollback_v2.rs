@@ -33,37 +33,8 @@ pub struct RollbackIntentV2 {
 
 impl RollbackIntentV2 {
     pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, serde_json::Error> {
-        #[derive(Serialize)]
-        struct RuntimeCompatibleIntent<'a> {
-            schema_version: u32,
-            rollback_ticket: &'a str,
-            snapshot_hash: &'a str,
-            snapshot_journal_len: usize,
-            target_journal_len: usize,
-            target_journal_commitment: &'a str,
-            expected_target_state_root: &'a str,
-            target_batch_id: Option<&'a str>,
-            reason: &'a str,
-            issued_at_ms: u64,
-            expires_at_ms: u64,
-            nonce: &'a str,
-        }
-        let normalized = RuntimeCompatibleIntent {
-            schema_version: self.schema_version,
-            rollback_ticket: &self.rollback_ticket,
-            snapshot_hash: &self.rollback_checkpoint.snapshot_hash,
-            snapshot_journal_len: self.rollback_checkpoint.snapshot_journal_len,
-            target_journal_len: self.replay_target.target_journal_len,
-            target_journal_commitment: &self.replay_target.journal_commitment,
-            expected_target_state_root: &self.replay_target.expected_target_state_root,
-            target_batch_id: Some(&self.replay_target.batch_id),
-            reason: &self.reason,
-            issued_at_ms: self.issued_at_ms,
-            expires_at_ms: self.expires_at_ms,
-            nonce: &self.nonce,
-        };
-        let mut payload = b"oasis7:world-rollback-authorization:v2\0".to_vec();
-        payload.extend(serde_json::to_vec(&normalized)?);
+        let mut payload = b"oasis7:governed-rollback-replay:v2\0".to_vec();
+        payload.extend(serde_json::to_vec(self)?);
         Ok(payload)
     }
 }
@@ -103,13 +74,24 @@ pub struct AuthoritativeRollbackReceipt {
     pub snapshot_reload_required: bool,
     #[serde(default)]
     pub player_dispositions: Vec<PlayerRollbackDisposition>,
+    #[serde(default)]
+    pub ready_for_all_clear: bool,
+    #[serde(default)]
+    pub readiness_blockers: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerRollbackDisposition {
-    pub player_id: String,
-    pub action_id: String,
+    pub disposition_id: String,
+    pub source_batch_id: String,
+    pub source_event_id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<String>,
     pub disposition: PlayerActionDisposition,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compensation_case_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -16,6 +16,8 @@ use super::super::{
 };
 use super::World;
 use super::module_tick_runtime::ModuleTickRoutingMetrics;
+#[path = "authoritative_recovery_generation.rs"]
+mod authoritative_recovery_generation;
 #[path = "persistence_support.rs"]
 mod persistence_support;
 use self::persistence_support::{
@@ -44,6 +46,7 @@ const SIDECAR_GENERATION_STAGING_DIR: &str = "generation.tmp";
 const SIDECAR_GENERATION_KEEP_LATEST: usize = 2;
 const SIDECAR_GENERATION_SNAPSHOT_MANIFEST_FILE: &str = "snapshot.manifest.json";
 const SIDECAR_GENERATION_JOURNAL_SEGMENTS_FILE: &str = "journal.segments.json";
+const SIDECAR_GENERATION_RECOVERY_METADATA_FILE: &str = "viewer-recovery.bin";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct SidecarGcResult {
@@ -96,6 +99,10 @@ struct SidecarGenerationRecord {
     snapshot_manifest_hash: String,
     manifest_hash: String,
     journal_segment_hashes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_metadata_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    recovery_metadata_hash: Option<String>,
     pinned_blob_hashes: Vec<String>,
     created_at_ms: i64,
 }
@@ -117,6 +124,8 @@ struct SidecarGenerationHashPayload<'a> {
     journal_segments_path: &'a str,
     snapshot_manifest_hash: &'a str,
     journal_segment_hashes: &'a [String],
+    recovery_metadata_path: &'a Option<String>,
+    recovery_metadata_hash: &'a Option<String>,
     pinned_blob_hashes: &'a [String],
     created_at_ms: i64,
 }
@@ -797,7 +806,7 @@ impl World {
         self.journal.save_json(journal_path)?;
         persisted_snapshot.save_json(snapshot_path)?;
         persist_tick_consensus_archive(dir, &persisted_snapshot, tick_consensus_archive.as_ref())?;
-        self.save_distfs_sidecar(dir, &persisted_snapshot)?;
+        self.save_distfs_sidecar(dir, &persisted_snapshot, None)?;
         self.save_module_store_to_dir(dir)?;
         Ok(())
     }
@@ -825,8 +834,13 @@ impl World {
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
-            if let Some(mut json_snapshot) =
-                load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
+            let has_committed_generation = persistence_support::load_sidecar_generation_index(
+                dir.join(DISTFS_STATE_DIR).as_path(),
+            )?
+            .is_some();
+            if !has_committed_generation
+                && let Some(mut json_snapshot) =
+                    load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
             {
                 let _ = write_distfs_recovery_audit(
                     dir,
@@ -982,7 +996,18 @@ impl World {
         Ok(world)
     }
 
-    fn save_distfs_sidecar(&self, dir: &Path, snapshot: &Snapshot) -> Result<(), WorldError> {
+    pub(super) fn save_distfs_sidecar(
+        &self,
+        dir: &Path,
+        snapshot: &Snapshot,
+        recovery_metadata: Option<&[u8]>,
+    ) -> Result<(), WorldError> {
+        let inherited_recovery_metadata = if recovery_metadata.is_none() {
+            Self::load_authoritative_recovery_metadata(dir)?
+        } else {
+            None
+        };
+        let recovery_metadata = recovery_metadata.or(inherited_recovery_metadata.as_deref());
         let store_root = dir.join(DISTFS_STATE_DIR);
         fs::create_dir_all(store_root.as_path())?;
         let store = LocalCasStore::new(store_root.as_path());
@@ -1011,6 +1036,7 @@ impl World {
             store_root.as_path(),
             &manifest,
             journal_segments.as_slice(),
+            recovery_metadata,
         )?;
         let snapshot_manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
         let journal_segments_path = dir.join(DISTFS_JOURNAL_SEGMENTS_FILE);
@@ -1023,6 +1049,42 @@ impl World {
         let snapshot_manifest_path = dir.join(DISTFS_SNAPSHOT_MANIFEST_FILE);
         let journal_segments_path = dir.join(DISTFS_JOURNAL_SEGMENTS_FILE);
         let store_root = dir.join(DISTFS_STATE_DIR);
+        if store_root.exists()
+            && let Some(index) = persistence_support::load_sidecar_generation_index(&store_root)?
+        {
+            for generation_id in std::iter::once(index.latest_generation.as_str())
+                .chain(index.rollback_safe_generation.as_deref())
+            {
+                let Some(record) = index.generations.get(generation_id) else {
+                    continue;
+                };
+                if persistence_support::validate_sidecar_generation_record(&store_root, record)
+                    .is_err()
+                {
+                    continue;
+                }
+                let (manifest, journal_segments) =
+                    persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
+                let store = LocalCasStore::new(&store_root);
+                let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+                let events: Vec<WorldEvent> =
+                    assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
+                let _ = write_distfs_recovery_audit(
+                    dir,
+                    if generation_id == index.latest_generation {
+                        "generation_restored"
+                    } else {
+                        "rollback_safe_generation_restored"
+                    },
+                    None,
+                );
+                return Ok(Some((snapshot, Journal { events })));
+            }
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "sidecar generation index has no valid latest or rollback-safe generation"
+                    .to_string(),
+            });
+        }
         if !snapshot_manifest_path.exists()
             || !journal_segments_path.exists()
             || !store_root.exists()

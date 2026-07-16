@@ -191,3 +191,83 @@ fn governed_rollback_v2_requires_distinct_checkpoint_and_later_replay_target_sha
         "rollback checkpoint C and replay target T must remain distinct on the wire"
     );
 }
+
+fn sample_v2_intent() -> RollbackIntentV2 {
+    RollbackIntentV2 {
+        schema_version: 2,
+        rollback_ticket: "ROLLBACK-2313".to_string(),
+        rollback_checkpoint: RollbackCheckpointRef {
+            batch_id: "batch-c".to_string(),
+            snapshot_hash: "snapshot-c".to_string(),
+            snapshot_journal_len: 8,
+        },
+        replay_target: RollbackReplayTarget {
+            batch_id: "batch-t".to_string(),
+            target_journal_len: 12,
+            expected_target_state_root: "state-t".to_string(),
+            journal_commitment: "journal-t".to_string(),
+        },
+        expected_reorg_epoch: 3,
+        max_replay_events: 4,
+        max_replay_bytes: 4096,
+        reason: "recover".to_string(),
+        issued_at_ms: 1_720_000_000_000,
+        expires_at_ms: 1_720_000_060_000,
+        nonce: "nonce-v2".to_string(),
+    }
+}
+
+#[test]
+fn v2_signature_binds_checkpoint_batch_identity() {
+    let original = sample_v2_intent();
+    let mut changed = original.clone();
+    changed.rollback_checkpoint.batch_id = "batch-other-c".to_string();
+    assert_ne!(
+        original
+            .canonical_signing_payload()
+            .expect("original payload"),
+        changed
+            .canonical_signing_payload()
+            .expect("changed payload"),
+        "changing only checkpoint batch identity must invalidate the signature and nonce digest"
+    );
+}
+
+#[test]
+fn v2_signature_binds_expected_reorg_epoch() {
+    let original = sample_v2_intent();
+    let mut changed = original.clone();
+    changed.expected_reorg_epoch += 1;
+    assert_ne!(
+        original
+            .canonical_signing_payload()
+            .expect("original payload"),
+        changed
+            .canonical_signing_payload()
+            .expect("changed payload")
+    );
+}
+
+#[test]
+fn v2_signature_binds_replay_event_and_byte_bounds() {
+    let original = sample_v2_intent();
+    for changed in [
+        RollbackIntentV2 {
+            max_replay_events: original.max_replay_events + 1,
+            ..original.clone()
+        },
+        RollbackIntentV2 {
+            max_replay_bytes: original.max_replay_bytes + 1,
+            ..original.clone()
+        },
+    ] {
+        assert_ne!(
+            original
+                .canonical_signing_payload()
+                .expect("original payload"),
+            changed
+                .canonical_signing_payload()
+                .expect("changed payload")
+        );
+    }
+}
