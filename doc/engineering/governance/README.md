@@ -6,7 +6,7 @@
 
 - 想确认项目 `local` / `test` / `production` 环境边界、云上服务清单、`public_testnet` 与 `mainnet` 的声明限制：`environment-lanes-and-inventory-2026-05-29.md`
 - 想执行一次人工触发的仓库健康巡检、选择检查范围或判定 findings 的归属：`repository-health-manual-inspection.runbook.md`
-- 想进行季度工程治理复核、记录趋势或 remediation owner：`engineering-quarterly-review-template-2026-03-11.md`，趋势基线见 `../evidence/engineering-governance-trend-baseline-2026-03-11.md`
+- 想进行季度工程治理复核、记录趋势或 remediation owner：使用 `repository-health-manual-inspection.runbook.md` 的“Quarterly Review”记录结构，趋势基线见 `../evidence/engineering-governance-trend-baseline-2026-03-11.md`
 
 ## 边界
 
