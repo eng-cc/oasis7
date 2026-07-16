@@ -508,6 +508,39 @@ mod tests {
         .expect("valid rollback registry")
     }
 
+    fn provision_rollback_fixture(world_dir: &std::path::Path, manifest_path: &std::path::Path) {
+        const ON_CALL: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+        const GOVERNANCE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+        let mut world = World::load_from_dir(world_dir).expect("load fixture world");
+        world
+            .set_rollback_authority_registry(rollback_registry(ON_CALL, GOVERNANCE))
+            .expect("set rollback registry");
+        world
+            .save_to_dir(world_dir)
+            .expect("save rollback registry");
+        let mut manifest: Vec<serde_json::Value> = serde_json::from_slice(
+            std::fs::read(manifest_path)
+                .expect("read fixture manifest")
+                .as_slice(),
+        )
+        .expect("decode fixture manifest");
+        manifest.extend([
+            serde_json::json!({
+                "slot_id": "ops.rollback.on_call.v1", "signer_id": "rollback-on-call-01",
+                "scheme": "ed25519", "threshold": 1, "public_key_hex": ON_CALL
+            }),
+            serde_json::json!({
+                "slot_id": "governance.rollback.v1", "signer_id": "rollback-governance-01",
+                "scheme": "ed25519", "threshold": 1, "public_key_hex": GOVERNANCE
+            }),
+        ]);
+        std::fs::write(
+            manifest_path,
+            serde_json::to_vec_pretty(&manifest).expect("encode fixture manifest"),
+        )
+        .expect("write fixture manifest");
+    }
+
     fn write_world_and_manifest() -> (PathBuf, PathBuf) {
         let root = temp_dir("fixture");
         std::fs::create_dir_all(&root).expect("create root");
@@ -668,6 +701,7 @@ mod tests {
     #[test]
     fn audit_report_passes_for_matching_two_of_three_registry() {
         let (world_dir, manifest_path) = write_world_and_manifest();
+        provision_rollback_fixture(&world_dir, &manifest_path);
         let options = CliOptions {
             world_dir,
             public_manifest: Some(manifest_path),
@@ -847,6 +881,7 @@ mod tests {
             .expect("encode manifest"),
         )
         .expect("write manifest");
+        provision_rollback_fixture(&world_dir, &manifest_path);
 
         let options = CliOptions {
             world_dir,
@@ -1074,6 +1109,7 @@ mod tests {
     #[test]
     fn strict_manifest_audit_accepts_the_same_entries_document_shape_as_import() {
         let (world_dir, manifest_path) = write_world_and_manifest();
+        provision_rollback_fixture(&world_dir, &manifest_path);
         let entries: Vec<serde_json::Value> = serde_json::from_slice(
             std::fs::read(manifest_path.as_path())
                 .expect("read array manifest")
