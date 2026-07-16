@@ -16,7 +16,7 @@
 
 - [x] self-evolution-file-based-pm-pointer-prd-retirement (PRD-ENGINEERING-021/025) [test_tier_required]: 删除已压缩为历史锚点且仍保留旧 `.pm/tasks` / `.pm/inbox/signals.jsonl` 语义提示的 file-based self-evolution historical pointer PRD，将当前规则入口收敛到 workflow source-of-truth，将仍有效的 repo-local memory / working_memory / stage-gate object-model 背景收敛到同名 design 文档。 Trace: #2042 (task_44d20868aeb9433d9fbfa7bea4177d60)
 
-- [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套，当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
+- [x] engineering-quarterly-cycle-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 quarterly governance cycle 一次性三件套；当时的收敛范围包含 baseline evidence、quarterly review template、doc-corpus maintenance governance project、workflow source-of-truth 和 GitHub task issue evidence comments，当前季度复核入口已进一步收敛到 repository-health manual inspection runbook。 Trace: #1885 (task_538d31b43c4645b79906ed64729a68c4)
 
 - [x] engineering-doc-legacy-semantics-governance (PRD-ENGINEERING-021/025/PRD-ENGINEERING-R1200) [test_tier_required]: 删除已被 Rust 1200 根治治理取代且仍暴露 `doc/devlog` / 一次性 round3 / `include!` 分段旧语义的 oversized Rust file splitting 三件套，将当前入口收敛到 `rust-1200-line-root-cause-governance-2026-03-29`、core review logs、git history 与 GitHub task issue evidence comments。 Trace: #1975 (task_1e15b6bcc6154e949c3a3338eb2d8194)
 
@@ -26,7 +26,7 @@
 
 - [x] core-doc-readme-public-entry-sync-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除已完成且继续占据 core 活跃索引的 2026-03 docs hub / 公共阅读路径同步三件套，将当前 docs hub 语义收敛到 `doc/README.md`、`doc/core/project.md`、doc structure standard 与 GitHub task issue evidence comments。 Trace: #1920 (task_25e251bae8eb4ccb8c375237eede524f)
 
-- [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套，将当前趋势基线与季度复核入口收敛到 baseline evidence、quarterly review template 和 GitHub task issue evidence comments，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
+- [x] governance-trend-tracking-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除 2026-03 engineering governance trend tracking 一次性建模三件套；当时的趋势基线与季度复核入口包含 baseline evidence、quarterly review template 和 GitHub task issue evidence comments，当前季度复核入口已进一步收敛到 repository-health manual inspection runbook，避免旧 `doc/devlog` / `.pm` 追溯语义继续占据 active PRD 索引。 Trace: #1829 (task_67086eec29e94e4990cc86ed59685d22)
 
 - [x] engineering-doc-governance-legacy-semantics (PRD-ENGINEERING-021/025/026) [test_tier_required]: 删除已完成且继续暴露旧证据语义的 `devlog-history-compaction` 一次性专题三件套，将 `doc/devlog` 当前入口收敛到 `doc/devlog/README.md` compact archive summary、GitHub task issue evidence comments 与 workflow source-of-truth。 Trace: #1879 (task_b2d9ecebdfa241e389069ddf2da9f843)
 

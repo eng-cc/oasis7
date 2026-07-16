@@ -84,3 +84,26 @@ When the owner chooses to run a quarterly review, compare recent manual inspecti
 - whether any reflection signals should become committed `.pm` tasks
 
 Quarterly conclusions should update the relevant engineering governance project/topic docs only when they change policy, thresholds, or active follow-up ownership.
+
+Record the review in the same GitHub-backed task evidence stream as the inspection. Use this compact structure instead of creating a separate dated template document:
+
+```markdown
+## Quarterly repository-health review
+
+- Review ID / quarter / date:
+- Owner role: `repository_health_engineer`
+- Review partners: roles required by the findings; include `qa_engineer` only for verification sufficiency or release-blocking judgment
+- Trigger: `quarterly` / `ad-hoc-governance-change`
+- Inputs: trend baseline, inspection command evidence, relevant engineering project/topic docs
+- Trend verdict: `pass` / `watchlist` / `fix_required`
+
+| ID | Category | Scope and evidence | Disposition | Owner | Priority |
+| --- | --- | --- | --- | --- | --- |
+| EQC-ISSUE-001 |  |  |  |  |  |
+
+- Blocking findings:
+- Follow-up reflection signals or GitHub-backed tasks:
+- Evidence comment URL:
+```
+
+Do not copy forward an audit-round counter from the 2026-03 baseline. The review identity and current task evidence establish the new observation window; the baseline remains a comparison input, not a mutable template.
