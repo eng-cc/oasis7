@@ -18,7 +18,8 @@ use super::driver_observability::{
     execution_record_recovery_ref_count,
 };
 use super::driver_persistence::{
-    persist_execution_bridge_state, persist_execution_world_with_chain_resource_context,
+    execution_world_persistence_files_missing, persist_execution_bridge_state,
+    persist_execution_world_with_chain_resource_context,
 };
 use super::simulator_mirror::persist_simulator_execution_world;
 use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord};
