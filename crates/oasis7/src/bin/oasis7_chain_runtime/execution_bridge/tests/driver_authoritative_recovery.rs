@@ -192,7 +192,8 @@ fn node_runtime_execution_driver_restart_fails_closed_when_authoritative_cas_is_
 }
 
 #[test]
-fn node_runtime_execution_driver_startup_fails_closed_when_state_head_lacks_exact_record() {
+fn node_runtime_execution_driver_startup_restores_lower_authoritative_head_when_state_head_lacks_exact_record()
+ {
     let dir = temp_dir("execution-driver-startup-stale-state-head");
     let state_path = dir.join("state.json");
     let world_dir = dir.join("world");
@@ -206,7 +207,7 @@ fn node_runtime_execution_driver_startup_fails_closed_when_state_head_lacks_exac
     )
     .expect("driver");
     let action_root = compute_consensus_action_root(&[]).expect("empty action root");
-    driver
+    let authoritative_height_one = driver
         .on_commit(NodeExecutionCommitContext {
             world_id: "w1".to_string(),
             node_id: "node-a".to_string(),
@@ -222,6 +223,19 @@ fn node_runtime_execution_driver_startup_fails_closed_when_state_head_lacks_exac
         .expect("seed authoritative record");
     drop(driver);
 
+    let authoritative_latest =
+        load_execution_bridge_record(records_dir.join("latest.json").as_path())
+            .expect("load latest authoritative record");
+    assert_eq!(authoritative_latest.height, 1);
+    assert_eq!(
+        authoritative_latest.execution_block_hash.as_str(),
+        authoritative_height_one.execution_block_hash.as_str()
+    );
+    assert_eq!(
+        authoritative_latest.execution_state_root.as_str(),
+        authoritative_height_one.execution_state_root.as_str()
+    );
+
     persist_execution_bridge_state(
         state_path.as_path(),
         &ExecutionBridgeState {
@@ -233,15 +247,26 @@ fn node_runtime_execution_driver_startup_fails_closed_when_state_head_lacks_exac
     )
     .expect("persist stale state head");
 
-    let err =
-        match NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root) {
-            Ok(_) => panic!("startup must reject an unverifiable state head"),
-            Err(err) => err,
-        };
-    assert!(
-        err.contains("authoritative startup record missing at height 2"),
-        "unexpected startup recovery error: {err}"
+    let restarted =
+        NodeRuntimeExecutionDriver::new(state_path.clone(), world_dir, records_dir, storage_root)
+            .expect("startup restores the lower authoritative head");
+    let restored_state =
+        load_execution_bridge_state(state_path.as_path()).expect("load restored state");
+
+    assert_eq!(restored_state.last_applied_committed_height, 1);
+    assert_eq!(
+        restored_state.last_execution_block_hash.as_deref(),
+        Some(authoritative_height_one.execution_block_hash.as_str())
     );
+    assert_eq!(
+        restored_state.last_execution_state_root.as_deref(),
+        Some(authoritative_height_one.execution_state_root.as_str())
+    );
+    assert_eq!(
+        restored_state.last_node_block_hash.as_deref(),
+        Some("node-h1")
+    );
+    assert_eq!(restarted.state.last_applied_committed_height, 1);
 
     let _ = fs::remove_dir_all(dir);
 }

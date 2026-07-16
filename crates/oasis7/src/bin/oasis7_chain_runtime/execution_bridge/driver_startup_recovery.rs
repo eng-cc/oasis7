@@ -57,10 +57,29 @@ impl NodeRuntimeExecutionDriver {
         let target_height = self.state.last_applied_committed_height;
         let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
         if !record_path.exists() {
-            return Err(format!(
-                "execution driver authoritative startup record missing at height {}",
-                target_height
-            ));
+            let latest_path = self.records_dir.join("latest.json");
+            let latest_record = load_execution_bridge_record(latest_path.as_path()).map_err(|err| {
+                format!(
+                    "execution driver authoritative startup latest record unavailable while state head {} lacks exact record: {}",
+                    target_height, err
+                )
+            })?;
+            if latest_record.height >= target_height || latest_record.world_id.trim().is_empty() {
+                return Err(format!(
+                    "execution driver authoritative startup latest record cannot reconcile missing state head {}: record_height={} world_id={}",
+                    target_height, latest_record.height, latest_record.world_id
+                ));
+            }
+            if !self.restore_execution_head_from_record(
+                latest_record.world_id.as_str(),
+                latest_record.height,
+            )? {
+                return Err(format!(
+                    "execution driver authoritative startup latest record missing at height {} while state head {} lacks exact record",
+                    latest_record.height, target_height
+                ));
+            }
+            return Ok(());
         }
         let record = load_execution_bridge_record(record_path.as_path()).map_err(|err| {
             format!(
