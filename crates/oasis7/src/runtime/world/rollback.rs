@@ -70,9 +70,17 @@ impl World {
         approval: RollbackAuthorizationEnvelope,
         now_ms: u64,
     ) -> Result<(), WorldError> {
-        self.rollback_to_snapshot(snapshot, journal, reason, target_batch_id, approval, now_ms)?;
+        let mut candidate = self.clone();
+        candidate.rollback_to_snapshot(
+            snapshot,
+            journal,
+            reason,
+            target_batch_id,
+            approval,
+            now_ms,
+        )?;
 
-        if let Some(drift) = self.first_tick_consensus_drift() {
+        if let Some(drift) = candidate.first_tick_consensus_drift() {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!(
                     "rollback reconciliation drift detected at tick {}: {}",
@@ -80,6 +88,7 @@ impl World {
                 ),
             });
         }
+        *self = candidate;
         Ok(())
     }
 

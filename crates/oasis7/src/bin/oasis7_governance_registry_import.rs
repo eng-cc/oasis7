@@ -7,7 +7,8 @@ use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
     GovernanceThresholdSignerPolicy, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
-    ReleaseSecurityPolicy, World, WorldState,
+    ReleaseSecurityPolicy, RollbackAuthorityRecord, RollbackAuthorityRegistry,
+    RollbackAuthorityRole, World, WorldState,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,6 +19,8 @@ const DEFAULT_CONTROLLER_THRESHOLD: u16 = 2;
 const DEFAULT_STAKING_CONTROLLER_ACCOUNT_ID: &str = "msig.staking_governance.v1";
 const DEFAULT_ECOSYSTEM_CONTROLLER_ACCOUNT_ID: &str = "msig.ecosystem_governance.v1";
 const DEFAULT_SECURITY_CONTROLLER_ACCOUNT_ID: &str = "msig.security_council.v1";
+const ROLLBACK_ON_CALL_SLOT_ID: &str = "ops.rollback.on_call.v1";
+const ROLLBACK_GOVERNANCE_SLOT_ID: &str = "governance.rollback.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
@@ -78,6 +81,7 @@ struct ImportSummary {
     imported_finality_slot_id: String,
     finality_signer_count: usize,
     controller_policy_count: usize,
+    rollback_authority_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     reconciled_latest_tick: Option<u64>,
 }
@@ -139,12 +143,16 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
         options.finality_slot_id.as_str(),
         &slot_thresholds,
     )?;
+    let rollback_registry = build_rollback_authority_registry(entries.as_slice())?;
     world
         .set_governance_finality_signer_registry(finality_registry.clone())
         .map_err(|err| format!("write finality registry failed: {err:?}"))?;
     world
         .set_governance_main_token_controller_registry(controller_registry.clone())
         .map_err(|err| format!("write controller registry failed: {err:?}"))?;
+    world
+        .set_rollback_authority_registry(rollback_registry.clone())
+        .map_err(|err| format!("write rollback authority registry failed: {err:?}"))?;
     let (world, reconciled_latest_tick) = reconcile_latest_tick_consensus_state_root(world)?;
     world
         .save_to_dir(options.world_dir.as_path())
@@ -155,8 +163,55 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
         imported_finality_slot_id: finality_registry.slot_id,
         finality_signer_count: finality_registry.signer_bindings.len(),
         controller_policy_count: controller_registry.controller_signer_policies.len(),
+        rollback_authority_count: rollback_registry.len(),
         reconciled_latest_tick,
     })
+}
+
+fn build_rollback_authority_registry(
+    entries: &[PublicManifestEntry],
+) -> Result<RollbackAuthorityRegistry, String> {
+    let build_record = |slot_id: &str, role: RollbackAuthorityRole| {
+        let matching = entries
+            .iter()
+            .filter(|entry| entry.slot_id.trim() == slot_id)
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
+            return Err(format!(
+                "public manifest requires exactly one rollback authority entry slot_id={slot_id} actual={}",
+                matching.len()
+            ));
+        }
+        let entry = matching[0];
+        validate_manifest_entry(entry)?;
+        if entry.threshold != Some(1) {
+            return Err(format!(
+                "rollback authority slot requires explicit threshold=1 slot_id={slot_id}"
+            ));
+        }
+        let authority_id = entry
+            .signer_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!("rollback authority slot requires signer_id slot_id={slot_id}")
+            })?;
+        Ok(RollbackAuthorityRecord {
+            authority_id: authority_id.to_string(),
+            role,
+            public_key_hex: entry.public_key_hex.trim().to_ascii_lowercase(),
+            active: true,
+        })
+    };
+    RollbackAuthorityRegistry::new([
+        build_record(ROLLBACK_ON_CALL_SLOT_ID, RollbackAuthorityRole::OnCall)?,
+        build_record(
+            ROLLBACK_GOVERNANCE_SLOT_ID,
+            RollbackAuthorityRole::Governance,
+        )?,
+    ])
+    .map_err(|err| format!("invalid rollback authority registry: {err:?}"))
 }
 
 fn reconcile_latest_tick_consensus_state_root(
@@ -252,10 +307,11 @@ fn build_main_token_controller_registry(
     slot_thresholds: &ManifestSlotThresholds,
 ) -> Result<GovernanceMainTokenControllerRegistry, String> {
     let mut controller_signer_policies = BTreeMap::new();
-    for entry in entries
-        .iter()
-        .filter(|entry| entry.slot_id != finality_slot_id)
-    {
+    for entry in entries.iter().filter(|entry| {
+        entry.slot_id != finality_slot_id
+            && entry.slot_id.trim() != ROLLBACK_ON_CALL_SLOT_ID
+            && entry.slot_id.trim() != ROLLBACK_GOVERNANCE_SLOT_ID
+    }) {
         validate_manifest_entry(entry)?;
         let slot_id = entry.slot_id.trim().to_string();
         let threshold = slot_thresholds
@@ -472,7 +528,9 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::{parse_options, run_import};
-    use oasis7::runtime::World;
+    use oasis7::runtime::{
+        RollbackAuthorityRecord, RollbackAuthorityRegistry, RollbackAuthorityRole, World,
+    };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -482,6 +540,27 @@ mod tests {
             .expect("duration")
             .as_nanos();
         std::env::temp_dir().join(format!("oasis7-governance-import-{prefix}-{unique}"))
+    }
+
+    fn governed_fixture(mut value: serde_json::Value) -> serde_json::Value {
+        let entries = if let Some(entries) = value.as_array_mut() {
+            entries
+        } else {
+            value["entries"].as_array_mut().expect("manifest entries")
+        };
+        entries.extend([
+            serde_json::json!({
+                "slot_id": "ops.rollback.on_call.v1", "signer_id": "fixture-rollback-on-call",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }),
+            serde_json::json!({
+                "slot_id": "governance.rollback.v1", "signer_id": "fixture-rollback-governance",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }),
+        ]);
+        value
     }
 
     #[test]
@@ -507,7 +586,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "node_id": "validator-a",
@@ -577,7 +656,7 @@ mod tests {
                     "scheme": "ed25519",
                     "public_key_hex": "aa738a832b0d3bf371d231a0bd8502fd411f2a9723246e5d7d215e8fb0ecbb7c"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -623,7 +702,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&serde_json::json!({
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!({
                 "schema_version": "test",
                 "entries": [
                     {
@@ -657,7 +736,7 @@ mod tests {
                         "public_key_hex": "d09de9413371ae42f643e4f8f31e2139611d1617809375b1ad884df3fb089448"
                     }
                 ]
-            }))
+            })))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -681,7 +760,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -762,7 +841,7 @@ mod tests {
                     "threshold": 1,
                     "public_key_hex": "b6517819f923b8b25989042b03e00854673b5517be88e3f568141373105ca77f"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -804,7 +883,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -825,7 +904,7 @@ mod tests {
                     "threshold": 2,
                     "public_key_hex": "b6517819f923b8b25989042b03e00854673b5517be88e3f568141373105ca77f"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -847,7 +926,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -914,7 +993,7 @@ mod tests {
                     "scheme": "ed25519",
                     "public_key_hex": "aa738a832b0d3bf371d231a0bd8502fd411f2a9723246e5d7d215e8fb0ecbb7c"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -956,5 +1035,183 @@ mod tests {
 
         let loaded = super::load_or_create_world(legacy_dir.as_path()).expect("load world");
         assert!(loaded.release_security_policy().is_production_hardened());
+    }
+
+    fn governed_manifest(on_call_key: &str, governance_key: &str) -> Vec<serde_json::Value> {
+        vec![
+            serde_json::json!({
+                "slot_id": "governance.finality.v1", "signer_id": "validator01",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "54e7a02919fff2d49a9c325def8cb0211ea7f7a75a9011b9d0678b9e2a7af6bc"
+            }),
+            serde_json::json!({
+                "slot_id": "msig.genesis.v1", "signer_id": "controller01",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "6249e5a58278dbc4e629a16b5d33f6b84c39e3ceeb10e963bb9ef64ea4daac30"
+            }),
+            serde_json::json!({
+                "slot_id": "msig.staking_governance.v1", "signer_id": "staking01",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "13c160fc0f516b9a5663aa00c2a5446be6467f68ce341fdd79cdb64224dffd20"
+            }),
+            serde_json::json!({
+                "slot_id": "msig.ecosystem_governance.v1", "signer_id": "ecosystem01",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "0241f2e23305407676f2a5cec6d154da74944b2a366b2b2b6913cb746d402d0e"
+            }),
+            serde_json::json!({
+                "slot_id": "msig.security_council.v1", "signer_id": "security01",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "d09de9413371ae42f643e4f8f31e2139611d1617809375b1ad884df3fb089448"
+            }),
+            serde_json::json!({
+                "slot_id": "ops.rollback.on_call.v1", "signer_id": "rollback-on-call-01",
+                "scheme": "ed25519", "threshold": 1, "public_key_hex": on_call_key
+            }),
+            serde_json::json!({
+                "slot_id": "governance.rollback.v1", "signer_id": "rollback-governance-01",
+                "scheme": "ed25519", "threshold": 1, "public_key_hex": governance_key
+            }),
+        ]
+    }
+
+    fn expected_rollback_registry(
+        on_call_key: &str,
+        governance_key: &str,
+    ) -> RollbackAuthorityRegistry {
+        RollbackAuthorityRegistry::new([
+            RollbackAuthorityRecord {
+                authority_id: "rollback-on-call-01".to_string(),
+                role: RollbackAuthorityRole::OnCall,
+                public_key_hex: on_call_key.to_string(),
+                active: true,
+            },
+            RollbackAuthorityRecord {
+                authority_id: "rollback-governance-01".to_string(),
+                role: RollbackAuthorityRole::Governance,
+                public_key_hex: governance_key.to_string(),
+                active: true,
+            },
+        ])
+        .expect("valid expected rollback registry")
+    }
+
+    fn write_manifest(path: &std::path::Path, entries: &[serde_json::Value]) {
+        std::fs::write(
+            path,
+            serde_json::to_vec_pretty(entries).expect("encode manifest"),
+        )
+        .expect("write manifest");
+    }
+
+    #[test]
+    fn import_bootstraps_persists_and_rotates_fixed_rollback_authority_slots() {
+        const OLD_ON_CALL: &str =
+            "1111111111111111111111111111111111111111111111111111111111111111";
+        const OLD_GOVERNANCE: &str =
+            "2222222222222222222222222222222222222222222222222222222222222222";
+        const NEW_ON_CALL: &str =
+            "3333333333333333333333333333333333333333333333333333333333333333";
+        const NEW_GOVERNANCE: &str =
+            "4444444444444444444444444444444444444444444444444444444444444444";
+        let root = temp_dir("rollback-authority-rotation");
+        std::fs::create_dir_all(&root).expect("create root");
+        let world_dir = root.join("world");
+        let manifest_path = root.join("public_manifest.json");
+
+        write_manifest(
+            manifest_path.as_path(),
+            governed_manifest(OLD_ON_CALL, OLD_GOVERNANCE).as_slice(),
+        );
+        run_import(super::CliOptions {
+            world_dir: world_dir.clone(),
+            public_manifest: manifest_path.clone(),
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_threshold: 1,
+        })
+        .expect("bootstrap governed rollback authorities");
+        let bootstrapped = World::load_from_dir(world_dir.as_path()).expect("reload bootstrap");
+        assert_eq!(
+            bootstrapped.snapshot().rollback_authority_registry,
+            expected_rollback_registry(OLD_ON_CALL, OLD_GOVERNANCE),
+            "the fixed rollback slots must be imported into durable world state"
+        );
+
+        write_manifest(
+            manifest_path.as_path(),
+            governed_manifest(NEW_ON_CALL, NEW_GOVERNANCE).as_slice(),
+        );
+        run_import(super::CliOptions {
+            world_dir: world_dir.clone(),
+            public_manifest: manifest_path,
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_threshold: 1,
+        })
+        .expect("rotate governed rollback authorities");
+        let rotated = World::load_from_dir(world_dir).expect("reload rotation");
+        assert_eq!(
+            rotated.snapshot().rollback_authority_registry,
+            expected_rollback_registry(NEW_ON_CALL, NEW_GOVERNANCE),
+            "rotation must replace, rather than append to, the prior authority set"
+        );
+    }
+
+    #[test]
+    fn invalid_rollback_authority_manifest_is_rejected_without_world_overwrite() {
+        const ON_CALL: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+        const GOVERNANCE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+        let root = temp_dir("rollback-authority-invalid-atomic");
+        std::fs::create_dir_all(&root).expect("create root");
+        let world_dir = root.join("world");
+        let manifest_path = root.join("public_manifest.json");
+        let mut baseline = World::new_production_hardened();
+        baseline
+            .set_rollback_authority_registry(expected_rollback_registry(ON_CALL, GOVERNANCE))
+            .expect("seed registry");
+        baseline
+            .save_to_dir(world_dir.as_path())
+            .expect("save baseline");
+        let baseline_snapshot = baseline.snapshot();
+
+        let mut cases = Vec::new();
+        let mut missing = governed_manifest(ON_CALL, GOVERNANCE);
+        missing.retain(|entry| entry["slot_id"] != "governance.rollback.v1");
+        cases.push(("missing fixed governance slot", missing));
+        let mut wrong_scheme = governed_manifest(ON_CALL, GOVERNANCE);
+        wrong_scheme[5]["scheme"] = serde_json::json!("secp256k1");
+        cases.push(("wrong signature scheme", wrong_scheme));
+        let mut wrong_threshold = governed_manifest(ON_CALL, GOVERNANCE);
+        wrong_threshold[5]["threshold"] = serde_json::json!(2);
+        cases.push(("wrong per-role threshold", wrong_threshold));
+        let mut duplicate = governed_manifest(ON_CALL, GOVERNANCE);
+        duplicate[6]["signer_id"] = duplicate[5]["signer_id"].clone();
+        duplicate[6]["public_key_hex"] = duplicate[5]["public_key_hex"].clone();
+        cases.push(("cross-role duplicate signer and key", duplicate));
+
+        let mut unexpectedly_accepted = Vec::new();
+        for (label, entries) in cases {
+            baseline
+                .save_to_dir(world_dir.as_path())
+                .expect("restore baseline");
+            write_manifest(manifest_path.as_path(), entries.as_slice());
+            if run_import(super::CliOptions {
+                world_dir: world_dir.clone(),
+                public_manifest: manifest_path.clone(),
+                finality_slot_id: "governance.finality.v1".to_string(),
+                default_threshold: 1,
+            })
+            .is_ok()
+            {
+                unexpectedly_accepted.push(label);
+            }
+            let persisted = World::load_from_dir(world_dir.as_path()).expect("reload baseline");
+            if persisted.snapshot() != baseline_snapshot {
+                unexpectedly_accepted.push(label);
+            }
+        }
+        assert!(
+            unexpectedly_accepted.is_empty(),
+            "invalid manifests accepted or overwrote world state: {unexpectedly_accepted:?}"
+        );
     }
 }

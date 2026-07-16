@@ -357,6 +357,10 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
         .expect("mutate original world after target snapshot");
     let snapshot_before = world.snapshot();
     let journal_before = world.journal().clone();
+    assert_ne!(
+        snapshot_before, drifted_snapshot,
+        "test precondition: rejected rollback candidate must differ from the current world"
+    );
     let approval = signed_rollback_authorization(
         &drifted_snapshot,
         None,
@@ -367,7 +371,7 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
         &governance_key,
     );
 
-    world
+    let error = world
         .rollback_to_snapshot_with_reconciliation(
             drifted_snapshot,
             drifted_journal,
@@ -377,6 +381,14 @@ fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
             ROLLBACK_NOW_MS,
         )
         .expect_err("drifted rollback candidate must be rejected");
+    assert!(
+        matches!(
+            error,
+            WorldError::DistributedValidationFailed { ref reason }
+                if reason.contains("tick consensus parent hash mismatch")
+        ),
+        "expected drift validation rejection, got {error:?}"
+    );
 
     assert_eq!(world.snapshot(), snapshot_before);
     assert_eq!(world.journal(), &journal_before);
@@ -457,7 +469,7 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
             .rollback_to_snapshot_with_reconciliation(
                 stable_snapshot,
                 stable_journal,
-                "invalid-approval-must-not-mutate",
+                "invalid-authorization-must-not-mutate",
                 expected_target_batch_id,
                 approval,
                 ROLLBACK_NOW_MS,

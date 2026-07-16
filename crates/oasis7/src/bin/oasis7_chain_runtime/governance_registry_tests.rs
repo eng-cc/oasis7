@@ -8,7 +8,8 @@ use oasis7::network_tier_manifest::{
 };
 use oasis7::runtime::{
     Action, GovernanceExecutionPolicy, GovernanceFinalitySignerRegistry,
-    GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy, World,
+    GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
+    RollbackAuthorityRecord, RollbackAuthorityRegistry, RollbackAuthorityRole, World,
 };
 use oasis7_node::{NodeConfig, NodeRole};
 use std::collections::{BTreeMap, BTreeSet};
@@ -402,6 +403,20 @@ fn network_tier_genesis_bootstrap_initializes_full_governance_world_for_empty_ob
                         "signer_id": "signer02",
                         "scheme": "ed25519",
                         "public_key_hex": "9999999999999999999999999999999999999999999999999999999999999999"
+                    },
+                    {
+                        "slot_id": "ops.rollback.on_call.v1",
+                        "signer_id": "rollback-on-call-01",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    },
+                    {
+                        "slot_id": "governance.rollback.v1",
+                        "signer_id": "rollback-governance-01",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     }
                 ]
             }))
@@ -515,6 +530,27 @@ fn network_tier_genesis_bootstrap_initializes_full_governance_world_for_empty_ob
     );
     assert_eq!(world.snapshot().tick_consensus_records.len(), 0);
     assert_eq!(world.journal().len(), 0);
+    assert_eq!(
+        world.snapshot().rollback_authority_registry,
+        RollbackAuthorityRegistry::new([
+            RollbackAuthorityRecord {
+                authority_id: "rollback-on-call-01".to_string(),
+                role: RollbackAuthorityRole::OnCall,
+                public_key_hex: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+                active: true,
+            },
+            RollbackAuthorityRecord {
+                authority_id: "rollback-governance-01".to_string(),
+                role: RollbackAuthorityRole::Governance,
+                public_key_hex: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+                active: true,
+            },
+        ])
+        .expect("valid governed rollback registry"),
+        "chain bootstrap must durably provision the fixed rollback authority slots"
+    );
 }
 
 #[test]
@@ -599,6 +635,20 @@ fn network_tier_genesis_bootstrap_resolves_repo_root_relative_child_refs() {
                         "scheme": "ed25519",
                         "threshold": 2,
                         "public_key_hex": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                    },
+                    {
+                        "slot_id": "ops.rollback.on_call.v1",
+                        "signer_id": "triad-rollback-on-call",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    },
+                    {
+                        "slot_id": "governance.rollback.v1",
+                        "signer_id": "triad-rollback-governance",
+                        "scheme": "ed25519",
+                        "threshold": 1,
+                        "public_key_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                     }
                 ]
             }))

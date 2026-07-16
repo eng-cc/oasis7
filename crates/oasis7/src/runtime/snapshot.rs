@@ -283,14 +283,55 @@ impl RollbackAuthorityRegistry {
                 });
             }
         }
+        for role in [
+            RollbackAuthorityRole::OnCall,
+            RollbackAuthorityRole::Governance,
+        ] {
+            let count = registry
+                .records
+                .values()
+                .filter(|record| record.role == role)
+                .count();
+            if count != 1 {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority registry requires exactly one active {role:?} authority"
+                    ),
+                });
+            }
+        }
+        if registry.records.values().any(|record| !record.active) {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority registry records must be active".to_string(),
+            });
+        }
+        let unique_keys = registry
+            .records
+            .values()
+            .map(|record| record.public_key_hex.trim().to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        if unique_keys.len() != registry.records.len() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority roles must use distinct Ed25519 public keys"
+                    .to_string(),
+            });
+        }
         Ok(registry)
     }
 
-    pub(crate) fn get(&self, authority_id: &str) -> Option<&RollbackAuthorityRecord> {
+    pub fn get(&self, authority_id: &str) -> Option<&RollbackAuthorityRecord> {
         self.records.get(authority_id)
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn records(&self) -> impl Iterator<Item = &RollbackAuthorityRecord> {
+        self.records.values()
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
 }
