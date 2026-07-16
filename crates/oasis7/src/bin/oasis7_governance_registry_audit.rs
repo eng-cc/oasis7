@@ -206,10 +206,13 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
             .collect::<BTreeSet<String>>();
         let rollback_registry = &world.snapshot().rollback_authority_registry;
         let rollback_slots_present = slots.contains_key(ROLLBACK_ON_CALL_SLOT_ID)
-            || slots.contains_key(ROLLBACK_GOVERNANCE_SLOT_ID);
-        let rollback_match = if !rollback_slots_present && rollback_registry.is_empty() {
+            && slots.contains_key(ROLLBACK_GOVERNANCE_SLOT_ID);
+        let rollback_match = if !options.strict_manifest_match
+            && !rollback_slots_present
+            && rollback_registry.is_empty()
+        {
             true
-        } else {
+        } else if rollback_slots_present {
             [
                 (
                     ROLLBACK_ON_CALL_SLOT_ID,
@@ -240,6 +243,8 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
                             .contains(record.public_key_hex.as_str())
                 })
             }) && rollback_registry.len() == 2
+        } else {
+            false
         };
         world_slot_ids == manifest_slot_ids
             && finality.manifest_match.unwrap_or(false)
@@ -1041,6 +1046,28 @@ mod tests {
             validate_audit_report(&options, &drift)
                 .iter()
                 .any(|error| error.contains("does not exactly match"))
+        );
+    }
+
+    #[test]
+    fn strict_manifest_audit_rejects_manifest_and_world_missing_both_rollback_slots() {
+        let (world_dir, manifest_path) = write_world_and_manifest();
+        let options = CliOptions {
+            world_dir,
+            public_manifest: Some(manifest_path),
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_expected_threshold: 2,
+            strict_manifest_match: true,
+            require_single_failure_tolerance: false,
+        };
+
+        let report = build_audit_report(&options).expect("build strict audit report");
+        assert_eq!(report.manifest_match_pass, Some(false));
+        assert!(
+            validate_audit_report(&options, &report)
+                .iter()
+                .any(|error| error.contains("does not exactly match")),
+            "strict audit must fail closed when both fixed rollback authority slots are absent"
         );
     }
 

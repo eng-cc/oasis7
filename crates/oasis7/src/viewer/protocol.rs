@@ -11,15 +11,16 @@ pub use proto::{
     AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
     AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryAck, AuthoritativeRecoveryCommand,
     AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackReceipt,
-    AuthoritativeRollbackRequest, AuthoritativeSessionRegisterRequest,
-    AuthoritativeSessionRevokeRequest, AuthoritativeSessionRotateRequest, ControlCompletionStatus,
-    GameplayActionError, GameplayActionRequest, HostedStrongAuthGrant, LiveControl,
-    NegotiatedViewerProtocol, PlaybackControl, PlayerAuthProof, PlayerAuthScheme,
+    AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
+    AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
+    AuthoritativeSessionRotateRequest, ControlCompletionStatus,
+    GOVERNED_ROLLBACK_REPLAY_CAPABILITY, GameplayActionError, GameplayActionRequest,
+    HostedStrongAuthGrant, LiveControl, NegotiatedViewerProtocol, PlaybackControl,
+    PlayerActionDisposition, PlayerAuthProof, PlayerAuthScheme, PlayerRollbackDisposition,
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
     PromptControlRollbackRequest, RollbackApprovalSignature, RollbackAuthorityRole,
-    RollbackAuthorizationEnvelope, RollbackIntent, SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
-    ViewerStream,
+    RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl,
+    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

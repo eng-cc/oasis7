@@ -13,11 +13,13 @@ use super::protocol::{
     AuthoritativeChallengeError, AuthoritativeChallengeResolveRequest,
     AuthoritativeChallengeStatus, AuthoritativeChallengeSubmitRequest, AuthoritativeFinalityState,
     AuthoritativeReconnectSyncRequest, AuthoritativeRecoveryAck, AuthoritativeRecoveryCommand,
-    AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackRequest,
+    AuthoritativeRecoveryError, AuthoritativeRecoveryStatus, AuthoritativeRollbackReceipt,
+    AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    GameplayActionError, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
-    ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream, viewer_event_kind_matches,
+    GameplayActionError, RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION,
+    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse,
+    ViewerStream, viewer_event_kind_matches,
 };
 use crate::geometry::GeoPos;
 use crate::observability::emit_stderr_or_event;
@@ -468,7 +470,7 @@ impl ViewerRuntimeLiveServer {
                         min_version: 1,
                         max_version: VIEWER_PROTOCOL_VERSION,
                         capabilities: vec![
-                            crate::viewer::protocol::SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY
+                            crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
                                 .to_string(),
                         ],
                         world_id: self.config.world_id.clone(),

@@ -29,6 +29,7 @@ mod release_manifest;
 mod resources;
 mod restricted_claim_grants;
 mod rollback;
+pub use rollback::rollback_journal_commitment;
 mod rules;
 mod scheduling;
 mod snapshot;
@@ -319,6 +320,7 @@ pub struct World {
     rollback_authority_registry: super::RollbackAuthorityRegistry,
     #[serde(default)]
     consumed_rollback_nonces: BTreeSet<String>,
+    rollback_nonce_outcomes: BTreeMap<String, super::RollbackNonceOutcome>,
 }
 
 impl World {
@@ -429,6 +431,7 @@ impl World {
             release_security_policy: ReleaseSecurityPolicy::default(),
             rollback_authority_registry: super::RollbackAuthorityRegistry::default(),
             consumed_rollback_nonces: BTreeSet::new(),
+            rollback_nonce_outcomes: BTreeMap::new(),
         }
     }
 

@@ -743,6 +743,7 @@ impl World {
             next_governance_identity_penalty_id: self.next_governance_identity_penalty_id,
             rollback_authority_registry: self.rollback_authority_registry.clone(),
             consumed_rollback_nonces: self.consumed_rollback_nonces.clone(),
+            rollback_nonce_outcomes: self.rollback_nonce_outcomes.clone(),
         }
     }
 
@@ -924,6 +925,7 @@ impl World {
         let mut world = Self::new_with_state(snapshot.state);
         world.rollback_authority_registry = snapshot.rollback_authority_registry;
         world.consumed_rollback_nonces = snapshot.consumed_rollback_nonces;
+        world.rollback_nonce_outcomes = snapshot.rollback_nonce_outcomes;
         world.journal = journal;
         world.manifest = snapshot.manifest;
         world.module_registry = snapshot.module_registry;

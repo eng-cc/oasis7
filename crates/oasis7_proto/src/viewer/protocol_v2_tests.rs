@@ -141,3 +141,53 @@ fn rollback_ack_round_trip_carries_replay_target_and_idempotent_receipt() {
         serde_json::json!(true)
     );
 }
+
+#[test]
+fn governed_rollback_v2_requires_distinct_checkpoint_and_later_replay_target_shape() {
+    let v2 = r#"{
+        "target_batch_id":"batch-target-12",
+        "reason":"recover-and-catch-up",
+        "approval":{
+            "intent":{
+                "schema_version":2,
+                "rollback_ticket":"ROLLBACK-2313",
+                "rollback_checkpoint":{
+                    "batch_id":"batch-checkpoint-8",
+                    "snapshot_hash":"snapshot-8",
+                    "journal_len":80
+                },
+                "replay_target":{
+                    "batch_id":"batch-target-12",
+                    "journal_len":120,
+                    "state_root":"state-root-12",
+                    "journal_commitment":"journal-commitment-12"
+                },
+                "expected_reorg_epoch":3,
+                "max_replay_events":40,
+                "max_replay_bytes":65536,
+                "reason":"recover-and-catch-up",
+                "issued_at_ms":1720000000000,
+                "expires_at_ms":1720000060000,
+                "nonce":"nonce-12"
+            },
+            "signatures":[]
+        }
+    }"#;
+    let decoded: AuthoritativeRollbackRequest =
+        serde_json::from_str(v2).expect("canonical v2 rollback wire shape must decode");
+    let encoded = serde_json::to_value(decoded).expect("re-encode canonical v2 rollback");
+
+    assert_eq!(
+        encoded["approval"]["intent"]["rollback_checkpoint"]["batch_id"],
+        serde_json::json!("batch-checkpoint-8")
+    );
+    assert_eq!(
+        encoded["approval"]["intent"]["replay_target"]["batch_id"],
+        serde_json::json!("batch-target-12")
+    );
+    assert_ne!(
+        encoded["approval"]["intent"]["rollback_checkpoint"]["batch_id"],
+        encoded["approval"]["intent"]["replay_target"]["batch_id"],
+        "rollback checkpoint C and replay target T must remain distinct on the wire"
+    );
+}

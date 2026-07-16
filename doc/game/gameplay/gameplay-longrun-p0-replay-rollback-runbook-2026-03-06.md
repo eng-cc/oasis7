@@ -1,6 +1,6 @@
 # Gameplay Long-Run P0：Replay/Rollback 运行手册（2026-03-06）
 
-审计轮次: 6
+审计轮次: 7
 
 - 关联 PRD：`doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
 - 覆盖任务：`TASK-GAME-014`（`PRD-GAME-006-02`）
@@ -12,12 +12,14 @@
 
 ## 2. 标准处置流程（Runbook）
 1. 漂移定位：调用 `first_tick_consensus_drift()` 获取首个 `mismatch_tick` 与原因。
-2. 影响区间确认：锁定最近稳定 `snapshot` 与对应 `journal`。
+2. 影响区间确认：分别锁定回滚 checkpoint C 与最终 replay target T。C 必须引用保留的稳定 batch、snapshot hash 与 snapshot journal len；T 必须是 C 之后仍可验证的 finalized batch，并绑定 target journal len、target state root 与 canonical journal commitment。禁止把 C 与 T 隐式视为同一位置，也禁止隐式选择“最新” target。
 3. 权限注册表预检：operator-local governance public manifest 必须恰好包含 `ops.rollback.on_call.v1` 与 `governance.rollback.v1` 两个固定槽位；两者均为显式 `scheme=ed25519`、`threshold=1`，且 `signer_id` 与公钥跨角色互不相同。先执行下述 import，再执行 strict audit；任一步失败或 world/manifest 不完全一致时禁止发起回滚。
-4. 签名信封确认：两位签名者分别对 schema v1 canonical intent 签名；intent 必须精确绑定 `rollback_ticket`、snapshot hash/journal len、`target_batch_id`、reason、签发/过期时间与一次性 nonce。Viewer wire 的 `approval` 是可选字段，因此旧客户端仍可被解码，但无签名 v1 请求会明确 fail closed 为 `rollback_approval_required`，不代表存在 Hello/capability negotiation。
-5. 回滚恢复：在信封有效期内执行 `rollback_to_snapshot_with_reconciliation(snapshot, journal, reason, approval, now_ms)`；runtime 是签名、registry、有效期和 nonce 的唯一授权判定方，Viewer 只转发完整信封并在变更 Viewer 状态前处理 runtime 结果。
-6. 恢复对账：再次执行 `first_tick_consensus_drift()` 与 `verify_tick_consensus_chain()`，必须均为“无漂移”。
-7. 防重放与审计：确认 nonce 已持久消费；相同信封再次提交必须被拒绝且状态不变。确认 `RollbackApplied` 已写入事件链，并保留 ticket、两个 authority id 与 authorization nonce。
+4. 协议与信封确认：客户端必须先完成 Viewer protocol v2 Hello，并确认唯一 canonical capability `governed_rollback_replay_v2`。只使用 `authoritative_recovery.rollback_v2`；legacy `rollback` 仅为 decode-only，返回 `rollback_shape_unsupported`，未协商 v2/capability 返回 `protocol_upgrade_required`。两位签名者分别对原始 v2 canonical intent bytes 签名；不得在签名后重新解释或替换字段。
+5. 签名内容复核：intent 必须精确绑定 `rollback_ticket`、C 的 batch/snapshot hash/journal len、T 的 batch/journal len/state root/journal commitment、`expected_reorg_epoch`、`max_replay_events`、`max_replay_bytes`、reason、签发/过期时间与 nonce。任何 legacy、partial、未知字段或字段不一致的 shape 均须在授权执行前 fail closed。
+6. 回滚与 replay：通过 Viewer 提交完整 `RollbackV2` 请求。Viewer 解析 C→T 的 finalized journal suffix，先校验 epoch、事件数/序列化字节上限和 runtime canonical journal commitment，再调用 direct runtime `rollback_to_snapshot_with_reconciliation(snapshot_C, journal_through_T, reason, target_batch_id_T, approval, now_ms)`。runtime 继续作为 registry、签名、有效期、nonce、journal commitment、target root 与 reconciliation 的最终判定方；只有 receipt 可序列化且所有校验成功后才能提交 Viewer 的 world、batch、challenge、checkpoint 与 reorg epoch 候选状态。
+7. 恢复对账：再次执行 `first_tick_consensus_drift()` 与 `verify_tick_consensus_chain()`，必须均为“无漂移”；实际 target state root 与 journal commitment 必须与签名 intent/持久化 outcome 一致，committed reorg epoch 必须与 receipt/outcome 一致。
+8. 幂等回执与审计：成功 outcome 按 nonce 与 canonical intent digest 持久化。相同 nonce + 相同 canonical intent 的重试不得再次 mutation 或增加 reorg epoch，必须返回同一逻辑 receipt；相同 nonce + 不同 intent 返回 `rollback_nonce_conflict`。断线重连或 operator 查询使用 `authoritative_recovery.get_rollback_receipt`，不得通过再次执行 rollback 猜测结果。确认 `RollbackApplied`、ticket、两个 authority id、nonce、target commitment/root 与 receipt evidence 均已归档。
+9. 玩家动作处置：对受 C→T/fork 影响的每个动作记录 `preserved_at_target`、`replayed`、`rejected_fork` 或 `compensation_required`。`compensation_required` 必须关联 owner、ticket 与状态；缺失或无法归类的动作视为未完成恢复。
 
 ## 3. 演练命令（required-tier）
 ```bash
@@ -28,7 +30,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime:
 
 public manifest 只携带公钥。两把 Ed25519 私钥必须分别由 on-call 与 governance 的外部 custody/HSM 保存，不得写入 manifest、world snapshot、Viewer 请求模板、仓库或同一 operator 主机；签名者只接收并签署 canonical intent bytes。
 
-Rollback + replay catch-up 只允许通过 Viewer protocol v2 执行；v1 请求必须返回 `protocol_upgrade_required`，不得回退到 snapshot-only rollback 或隐式选择“最新” replay target。v2 签名 intent 必须绑定 rollback checkpoint、不可变 replay target 身份/根、起始 reorg epoch 与资源上限。
+Viewer API 与 direct runtime API 不可混用：operator/客户端只调用已协商 capability 的 `RollbackV2` 与 `GetRollbackReceipt`；direct runtime API 是 Viewer 内部的执行边界，不提供 protocol negotiation、C/T 解析、玩家 disposition 汇总或对外 receipt 查询。排障时可比对两层证据，但不得绕过 Viewer 直接构造 partial intent 作为标准处置。
 
 ### Authority rotation / revocation
 
@@ -52,7 +54,7 @@ Rollback + replay catch-up 只允许通过 Viewer protocol v2 执行；v1 请求
 - 玩家更新：`<world/功能> 恢复工作处于 <audit|rollback|replay|verify> 阶段，当前影响=<已知/评估中>，暂无需玩家操作；下次更新=<time>。`
 - All-clear：`<world> 已完成授权注册表 strict audit、回放至授权 target root、无 drift 复核与 consensus chain 验证；<功能> 已恢复。受影响动作/回执处置=<摘要>，后续跟进=<ticket/status page>。`
 
-All-clear 必须同时满足：strict audit 成功、候选状态精确匹配签名授权的 replay target `state_root`、`first_tick_consensus_drift() == None`、`verify_tick_consensus_chain()` 通过，且受影响回执/补偿状态已归档。任一项未满足只能发进展更新，不得发 all-clear。
+All-clear 必须同时满足：strict audit 成功；receipt 可通过 `GetRollbackReceipt` 重取；receipt、持久化 outcome 与签名 intent 联合核对后 nonce/digest、C/T、journal commitment、target root 与 reorg epoch 一致；候选状态精确匹配 T 的 `state_root`；`first_tick_consensus_drift() == None`；`verify_tick_consensus_chain()` 通过；所有受影响动作均已有上述四类 disposition，且所有 `compensation_required` 均有关联 owner/ticket/status。任一项未满足只能发进展更新，不得发 all-clear。
 
 访问与脱敏：incident/change ticket 、完整 nonce、manifest 全文、strict audit/import 原始产物及 custody/HSM 记录仅向 IC、授权 operator、governance/security 和必要工程 owner 开放，按最小权限存入受控 incident sink。玩家/社区渠道只发布影响摘要、阶段和下次更新时间；对 ticket 使用公开状态页引用或脱敏别名，对 nonce 仅显示缩短摘要，manifest/audit 仅公布结论与非敏感 digest，不公布 signer id、公钥组合、文件路径、签名或 custody 细节。
 
@@ -61,10 +63,12 @@ All-clear 必须同时满足：strict audit 成功、候选状态精确匹配签
 - 漂移被成功定位到具体 `mismatch_tick`。
 - 回滚后 `first_tick_consensus_drift() == None`。
 - 回滚后 `verify_tick_consensus_chain()` 通过。
-- 缺少 Viewer `approval` 的请求返回 `rollback_approval_required`，且 world、journal、batch 与 reorg epoch 均不变。
-- 畸形、篡改、过期、目标不匹配、未知/停用 authority 或重放信封均在 mutation 前拒绝；Viewer 对 runtime 授权拒绝稳定映射为 `rollback_authorization_invalid`。
-- 事件链存在 `RollbackApplied` 记录，且 ticket、两个独立 authority id 与 nonce 和已验证信封完全一致。
+- 未协商 v2/capability 返回 `protocol_upgrade_required`；legacy `rollback` 返回 `rollback_shape_unsupported`；缺少完整 v2 approval、partial/未知字段、篡改、过期、C/T 或 epoch/bounds/commitment 不匹配、未知/停用 authority 均在 mutation 前拒绝，且 world、journal、batch 与 reorg epoch 不变。
+- 相同 nonce + 相同 canonical intent 的重试返回持久化 receipt 且不产生第二次 mutation；相同 nonce + 不同 intent 返回 `rollback_nonce_conflict`；`GetRollbackReceipt` 可在重连后取得成功 outcome。
+- 事件链存在唯一 `RollbackApplied` 记录，且 ticket、两个独立 authority id、nonce、C/T、journal commitment、target root 与已验证信封/receipt 完全一致。
+- 所有受影响玩家动作均有最终 disposition；`compensation_required` 记录均有关联 owner、ticket 与当前状态。
 
 ## 6. 失败处置
 - 若回滚后仍有漂移：立即阻断发布，保留快照/日志，升级到治理应急流程。
 - 若漂移定位失败：先执行一次完整快照恢复重放，再人工比对 `tick_consensus_records` 链路。
+- 若 receipt 无法重取、字段不完整、玩家 disposition 未完成或补偿无 owner/ticket：保持 rollback freeze 与玩家 holding，不得 all-clear；升级 runtime/viewer owner 补齐持久化证据后再复核。

@@ -129,6 +129,8 @@ pub struct Snapshot {
     pub rollback_authority_registry: RollbackAuthorityRegistry,
     #[serde(default)]
     pub consumed_rollback_nonces: BTreeSet<String>,
+    #[serde(default)]
+    pub rollback_nonce_outcomes: BTreeMap<String, RollbackNonceOutcome>,
 }
 
 fn module_limits_unbounded() -> ModuleLimits {
@@ -396,6 +398,8 @@ pub struct RollbackIntent {
     pub snapshot_hash: String,
     pub snapshot_journal_len: usize,
     pub target_journal_len: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_journal_commitment: Option<String>,
     pub expected_target_state_root: String,
     pub target_batch_id: Option<String>,
     pub reason: String,
@@ -406,7 +410,7 @@ pub struct RollbackIntent {
 
 impl RollbackIntent {
     pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, WorldError> {
-        if self.schema_version != 1 {
+        if !matches!(self.schema_version, 1 | 2) {
             return Err(WorldError::DistributedValidationFailed {
                 reason: format!(
                     "unsupported rollback intent schema version {}",
@@ -414,10 +418,62 @@ impl RollbackIntent {
                 ),
             });
         }
-        let mut payload = b"oasis7:world-rollback-authorization:v1\0".to_vec();
+        let domain = match self.schema_version {
+            1 => b"oasis7:world-rollback-authorization:v1\0".as_slice(),
+            2 => b"oasis7:world-rollback-authorization:v2\0".as_slice(),
+            _ => unreachable!(),
+        };
+        let mut payload = domain.to_vec();
         payload.extend(serde_json::to_vec(self)?);
         Ok(payload)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackNonceOutcome {
+    pub canonical_intent_hash: String,
+    pub rollback_ticket: String,
+    pub target_journal_commitment: String,
+    pub target_state_root: String,
+    pub rollback_event_id: WorldEventId,
+    #[serde(default)]
+    pub target_batch_id: String,
+    #[serde(default)]
+    pub prior_reorg_epoch: u64,
+    #[serde(default)]
+    pub committed_reorg_epoch: u64,
+    #[serde(default)]
+    pub invalidated_batch_ids: Vec<String>,
+    #[serde(default)]
+    pub dispositions: Vec<RollbackEventDisposition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackEventDisposition {
+    pub source_batch_id: String,
+    pub source_event_id: WorldEventId,
+    pub status: RollbackDispositionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackDispositionStatus {
+    Replayed,
+    RejectedFork,
+    CompensationRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackOutcomeRecoveryMetadata {
+    pub target_batch_id: String,
+    pub prior_reorg_epoch: u64,
+    pub committed_reorg_epoch: u64,
+    pub invalidated_batch_ids: Vec<String>,
+    pub dispositions: Vec<RollbackEventDisposition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

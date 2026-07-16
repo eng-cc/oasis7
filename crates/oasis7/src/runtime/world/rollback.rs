@@ -2,14 +2,69 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 
-use super::super::util::hash_json;
+use super::super::util::{hash_json, sha256_hex, to_canonical_cbor};
 use super::super::{
     Journal, RollbackAuthorityRegistry, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackEvent, Snapshot, WorldError,
+    RollbackEvent, RollbackNonceOutcome, RollbackOutcomeRecoveryMetadata, Snapshot, WorldError,
 };
 use super::World;
 
+#[derive(serde::Serialize)]
+struct RollbackJournalCommitment<'a> {
+    domain: &'static str,
+    snapshot_hash: &'a str,
+    snapshot_journal_len: usize,
+    target_journal_len: usize,
+    events: &'a [super::super::WorldEvent],
+}
+
+pub fn rollback_journal_commitment(
+    snapshot: &Snapshot,
+    journal: &Journal,
+    target_journal_len: usize,
+) -> Result<String, WorldError> {
+    if target_journal_len > journal.len() || snapshot.journal_len > target_journal_len {
+        return Err(WorldError::RollbackReplayTargetInvalid {
+            snapshot_journal_len: snapshot.journal_len,
+            target_journal_len,
+            supplied_journal_len: journal.len(),
+        });
+    }
+    let snapshot_hash = hash_json(snapshot)?;
+    Ok(sha256_hex(&to_canonical_cbor(
+        &RollbackJournalCommitment {
+            domain: "oasis7:rollback-journal-commitment:v1",
+            snapshot_hash: snapshot_hash.as_str(),
+            snapshot_journal_len: snapshot.journal_len,
+            target_journal_len,
+            events: &journal.events[..target_journal_len],
+        },
+    )?))
+}
+
 impl World {
+    pub fn rollback_nonce_outcome(&self, nonce: &str) -> Option<RollbackNonceOutcome> {
+        self.rollback_nonce_outcomes.get(nonce).cloned()
+    }
+
+    pub fn record_rollback_outcome_recovery_metadata(
+        &mut self,
+        nonce: &str,
+        metadata: RollbackOutcomeRecoveryMetadata,
+    ) -> Result<(), WorldError> {
+        let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        outcome.target_batch_id = metadata.target_batch_id;
+        outcome.prior_reorg_epoch = metadata.prior_reorg_epoch;
+        outcome.committed_reorg_epoch = metadata.committed_reorg_epoch;
+        outcome.invalidated_batch_ids = metadata.invalidated_batch_ids;
+        outcome.dispositions = metadata.dispositions;
+        Ok(())
+    }
+
     pub fn rollback_to_snapshot(
         &mut self,
         snapshot: Snapshot,
@@ -46,6 +101,17 @@ impl World {
         if snapshot.journal_len > journal.len() {
             return Err(WorldError::JournalMismatch);
         }
+        let supplied_intent_hash = sha256_hex(&approval.intent.canonical_signing_payload()?);
+        if let Some(committed) = self.rollback_nonce_outcomes.get(&approval.intent.nonce) {
+            if committed.canonical_intent_hash == supplied_intent_hash {
+                return Ok(());
+            }
+            return Err(WorldError::RollbackNonceConflict {
+                nonce: approval.intent.nonce.clone(),
+                committed_intent_hash: committed.canonical_intent_hash.clone(),
+                supplied_intent_hash,
+            });
+        }
         let verified = self.verify_rollback_authorization(
             &snapshot,
             &reason,
@@ -65,6 +131,21 @@ impl World {
         }
 
         self.validate_rollback_replay_journal(&snapshot, &journal)?;
+        let actual_journal_commitment =
+            rollback_journal_commitment(&snapshot, &journal, approval.intent.target_journal_len)?;
+        if approval.intent.schema_version >= 2 {
+            let expected_journal_commitment = approval
+                .intent
+                .target_journal_commitment
+                .as_deref()
+                .unwrap_or_default();
+            if expected_journal_commitment != actual_journal_commitment {
+                return Err(WorldError::RollbackJournalCommitmentMismatch {
+                    expected: expected_journal_commitment.to_string(),
+                    actual: actual_journal_commitment,
+                });
+            }
+        }
 
         let signer = self.receipt_signer.clone();
         let authority_registry = self.rollback_authority_registry.clone();
@@ -74,6 +155,7 @@ impl World {
         world.receipt_signer = signer;
         world.rollback_authority_registry = authority_registry;
         world.consumed_rollback_nonces = consumed_nonces;
+        world.rollback_nonce_outcomes = self.rollback_nonce_outcomes.clone();
 
         let actual_target_state_root = world.current_state_root_hash()?;
         if actual_target_state_root != approval.intent.expected_target_state_root {
@@ -84,6 +166,14 @@ impl World {
         }
 
         let snapshot_hash = hash_json(&snapshot)?;
+        let outcome_nonce = approval.intent.nonce.clone();
+        let outcome_ticket = approval.intent.rollback_ticket.clone();
+        let outcome_commitment = approval
+            .intent
+            .target_journal_commitment
+            .clone()
+            .unwrap_or_else(|| actual_journal_commitment.clone());
+        let outcome_state_root = approval.intent.expected_target_state_root.clone();
         let event = RollbackEvent {
             snapshot_hash,
             snapshot_journal_len: snapshot.journal_len,
@@ -97,6 +187,27 @@ impl World {
             authorization_nonce: approval.intent.nonce,
         };
         world.append_event(super::super::WorldEventBody::RollbackApplied(event), None)?;
+        let rollback_event_id = world
+            .journal
+            .events
+            .last()
+            .map(|event| event.id)
+            .unwrap_or(0);
+        world.rollback_nonce_outcomes.insert(
+            outcome_nonce,
+            RollbackNonceOutcome {
+                canonical_intent_hash: supplied_intent_hash,
+                rollback_ticket: outcome_ticket,
+                target_journal_commitment: outcome_commitment,
+                target_state_root: outcome_state_root,
+                rollback_event_id,
+                target_batch_id: approval.intent.target_batch_id.unwrap_or_default(),
+                prior_reorg_epoch: 0,
+                committed_reorg_epoch: 0,
+                invalidated_batch_ids: Vec::new(),
+                dispositions: Vec::new(),
+            },
+        );
         *self = world;
         Ok(())
     }

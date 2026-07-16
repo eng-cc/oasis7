@@ -71,6 +71,7 @@ fn signed_rollback_authorization(
         snapshot_hash: util::hash_json(snapshot).expect("snapshot hash"),
         snapshot_journal_len: snapshot.journal_len,
         target_journal_len,
+        target_journal_commitment: None,
         expected_target_state_root: expected_target_state_root.to_string(),
         target_batch_id: target_batch_id.map(str::to_string),
         reason: reason.to_string(),
@@ -725,6 +726,86 @@ fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation()
 }
 
 #[test]
+fn rollback_rejects_same_id_journal_body_substitution_before_mutation() {
+    // The signed target must commit to event contents, not merely IDs, length, and state root.
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("create stable checkpoint");
+
+    let stable_snapshot = world.snapshot();
+    let stable_journal = world.journal().clone();
+    let mut substituted_journal = stable_journal.clone();
+    let stable_state_root = world.current_state_root_hash().expect("stable state root");
+    let original_event = substituted_journal
+        .events
+        .first_mut()
+        .expect("checkpoint journal event");
+    original_event.body = WorldEventBody::SnapshotCreated(SnapshotMeta {
+        journal_len: stable_snapshot.journal_len,
+    });
+
+    world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(9, 9),
+    });
+    world.step().expect("mutate live world after checkpoint");
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let mut approval = signed_rollback_authorization(
+        &stable_snapshot,
+        substituted_journal.len(),
+        stable_state_root.as_str(),
+        Some("batch-stable-1"),
+        "ROLLBACK-2313-JOURNAL-COMMITMENT",
+        "same-id-body-substitution-must-reject",
+        "nonce-journal-body-substitution-1",
+        &on_call_key,
+        &governance_key,
+    );
+    approval.intent.schema_version = 2;
+    approval.intent.target_journal_commitment = Some(
+        rollback_journal_commitment(&stable_snapshot, &stable_journal, stable_journal.len())
+            .expect("canonical stable journal commitment"),
+    );
+    let payload = approval
+        .intent
+        .canonical_signing_payload()
+        .expect("canonical v2 rollback payload");
+    approval.signatures[0].signature_hex = hex::encode(on_call_key.sign(&payload).to_bytes());
+    approval.signatures[1].signature_hex = hex::encode(governance_key.sign(&payload).to_bytes());
+
+    world
+        .rollback_to_snapshot_with_reconciliation(
+            stable_snapshot,
+            substituted_journal,
+            "same-id-body-substitution-must-reject",
+            Some("batch-stable-1"),
+            approval,
+            ROLLBACK_NOW_MS,
+        )
+        .expect_err("signed journal commitment must reject same-ID event body substitution");
+
+    assert_eq!(
+        world.snapshot(),
+        snapshot_before,
+        "snapshot mutated on rejection"
+    );
+    assert_eq!(
+        world.journal(),
+        &journal_before,
+        "journal mutated on rejection"
+    );
+}
+
+#[test]
 fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
     let on_call_key = rollback_test_key(7);
     let governance_key = rollback_test_key(9);
@@ -762,12 +843,45 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
             ROLLBACK_NOW_MS,
         )
         .expect("first use succeeds");
+    let recovery_metadata = RollbackOutcomeRecoveryMetadata {
+        target_batch_id: "batch-target-3".to_string(),
+        prior_reorg_epoch: 7,
+        committed_reorg_epoch: 8,
+        invalidated_batch_ids: vec!["batch-fork-4".to_string(), "batch-fork-5".to_string()],
+        dispositions: vec![RollbackEventDisposition {
+            source_batch_id: "batch-fork-4".to_string(),
+            source_event_id: 41,
+            status: RollbackDispositionStatus::RejectedFork,
+            player_id: Some("player-1".to_string()),
+            action_id: Some("action-9".to_string()),
+        }],
+    };
+    world
+        .record_rollback_outcome_recovery_metadata("nonce-durable-1", recovery_metadata.clone())
+        .expect("complete durable rollback receipt metadata");
 
     let dir = temp_dir("persist-rollback-replay-state");
     world
         .save_to_dir(&dir)
         .expect("persist rollback replay state");
     let mut world = World::load_from_dir(&dir).expect("restore rollback replay state");
+    let restored_outcome = world
+        .rollback_nonce_outcome("nonce-durable-1")
+        .expect("public lookup returns persisted rollback outcome");
+    assert_eq!(
+        restored_outcome.target_batch_id,
+        recovery_metadata.target_batch_id
+    );
+    assert_eq!(restored_outcome.prior_reorg_epoch, 7);
+    assert_eq!(restored_outcome.committed_reorg_epoch, 8);
+    assert_eq!(
+        restored_outcome.invalidated_batch_ids,
+        recovery_metadata.invalidated_batch_ids
+    );
+    assert_eq!(
+        restored_outcome.dispositions,
+        recovery_metadata.dispositions
+    );
     let restored_snapshot = world.snapshot();
     assert_eq!(
         restored_snapshot.rollback_authority_registry,
@@ -784,14 +898,36 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
 
     world
         .rollback_to_snapshot(
-            old_snapshot,
-            old_journal,
+            old_snapshot.clone(),
+            old_journal.clone(),
             "durable-replay-test",
             None,
-            approval,
+            approval.clone(),
             ROLLBACK_NOW_MS,
         )
-        .expect_err("consumed nonce must survive rollback to an older snapshot");
+        .expect("exact retry must return the committed outcome without mutation");
+    assert_eq!(world.state(), &state_after_first);
+    assert_eq!(world.journal(), &journal_after_first);
+    assert_eq!(
+        world
+            .rollback_nonce_outcome("nonce-durable-1")
+            .expect("exact retry preserves stored outcome"),
+        restored_outcome
+    );
+
+    let mut altered = approval;
+    altered.intent.reason = "altered-intent".to_string();
+    let error = world
+        .rollback_to_snapshot(
+            old_snapshot,
+            old_journal,
+            "altered-intent",
+            None,
+            altered,
+            ROLLBACK_NOW_MS,
+        )
+        .expect_err("same nonce with altered canonical intent must conflict");
+    assert!(matches!(error, WorldError::RollbackNonceConflict { .. }));
     assert_eq!(world.state(), &state_after_first);
     assert_eq!(world.journal(), &journal_after_first);
     let _ = fs::remove_dir_all(&dir);

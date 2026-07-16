@@ -23,6 +23,15 @@ pub enum WorldError {
         expected: String,
         actual: String,
     },
+    RollbackJournalCommitmentMismatch {
+        expected: String,
+        actual: String,
+    },
+    RollbackNonceConflict {
+        nonce: String,
+        committed_intent_hash: String,
+        supplied_intent_hash: String,
+    },
     RollbackReconciliationFailed {
         tick: u64,
         reason: String,

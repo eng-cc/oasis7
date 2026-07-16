@@ -244,8 +244,10 @@ pub use signer::ReceiptSigner;
 // Snapshot
 pub use snapshot::{
     Journal, RollbackApprovalSignature, RollbackAuthorityRecord, RollbackAuthorityRegistry,
-    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackEvent, RollbackIntent, Snapshot,
-    SnapshotCatalog, SnapshotMeta, SnapshotRecord, SnapshotRetentionPolicy,
+    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackDispositionStatus, RollbackEvent,
+    RollbackEventDisposition, RollbackIntent, RollbackNonceOutcome,
+    RollbackOutcomeRecoveryMetadata, Snapshot, SnapshotCatalog, SnapshotMeta, SnapshotRecord,
+    SnapshotRetentionPolicy,
 };
 
 // State
@@ -256,6 +258,7 @@ pub use state::{
 };
 
 // World
+pub use world::rollback_journal_commitment;
 pub use world::{
     BuiltinReleaseManifestEntry, BuiltinReleaseManifestState, M1ScenarioBootstrapConfig,
     ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,

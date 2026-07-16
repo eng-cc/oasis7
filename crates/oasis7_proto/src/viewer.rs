@@ -1,8 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+mod rollback_v2;
+pub use rollback_v2::*;
+
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 
 pub const SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY: &str = "signed_authoritative_rollback_v1";
+pub const GOVERNED_ROLLBACK_REPLAY_CAPABILITY: &str = "governed_rollback_replay_v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NegotiatedViewerProtocol {
@@ -22,7 +26,7 @@ impl NegotiatedViewerProtocol {
     pub fn v2_signed_rollback() -> Self {
         Self {
             version: 2,
-            capabilities: vec![SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY.to_string()],
+            capabilities: vec![GOVERNED_ROLLBACK_REPLAY_CAPABILITY.to_string()],
         }
     }
 
@@ -31,7 +35,7 @@ impl NegotiatedViewerProtocol {
             && self
                 .capabilities
                 .iter()
-                .any(|value| value == SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY)
+                .any(|value| value == GOVERNED_ROLLBACK_REPLAY_CAPABILITY)
     }
 }
 
@@ -250,6 +254,12 @@ pub enum AuthoritativeRecoveryCommand {
     Rollback {
         request: AuthoritativeRollbackRequest,
     },
+    RollbackV2 {
+        request: AuthoritativeRollbackV2Request,
+    },
+    GetRollbackReceipt {
+        authorization_nonce: String,
+    },
     ReconnectSync {
         request: AuthoritativeReconnectSyncRequest,
     },
@@ -282,9 +292,13 @@ pub struct RollbackAuthorizationEnvelope {
 pub struct RollbackIntent {
     pub schema_version: u32,
     pub rollback_ticket: String,
+    #[serde(default)]
     pub snapshot_hash: String,
+    #[serde(default)]
     pub snapshot_journal_len: usize,
+    #[serde(default)]
     pub target_journal_len: usize,
+    #[serde(default)]
     pub expected_target_state_root: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_batch_id: Option<String>,
@@ -292,6 +306,16 @@ pub struct RollbackIntent {
     pub issued_at_ms: u64,
     pub expires_at_ms: u64,
     pub nonce: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_checkpoint: Option<RollbackCheckpointRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_target: Option<RollbackReplayTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_reorg_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_replay_events: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_replay_bytes: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -508,21 +532,6 @@ pub struct AuthoritativeRecoveryAck<Time> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rollback_receipt: Option<AuthoritativeRollbackReceipt>,
     pub acknowledged_at_tick: Time,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthoritativeRollbackReceipt {
-    pub receipt_id: String,
-    pub authorization_nonce: String,
-    pub rollback_ticket: String,
-    pub target_batch_id: String,
-    pub invalidated_batch_ids: Vec<String>,
-    pub prior_reorg_epoch: u64,
-    pub committed_reorg_epoch: u64,
-    pub replay_from_snapshot_height: u64,
-    pub replay_from_log_cursor: u64,
-    pub snapshot_hash: String,
-    pub snapshot_reload_required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

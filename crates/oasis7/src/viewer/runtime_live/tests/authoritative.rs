@@ -73,6 +73,11 @@ fn signed_rollback_envelope(
         issued_at_ms: now_ms.saturating_sub(1_000),
         expires_at_ms: now_ms.saturating_add(60_000),
         nonce: nonce.to_string(),
+        rollback_checkpoint: None,
+        replay_target: None,
+        expected_reorg_epoch: None,
+        max_replay_events: None,
+        max_replay_bytes: None,
     };
     let runtime_intent = crate::runtime::RollbackIntent {
         schema_version: intent.schema_version,
@@ -80,6 +85,7 @@ fn signed_rollback_envelope(
         snapshot_hash: intent.snapshot_hash.clone(),
         snapshot_journal_len: intent.snapshot_journal_len,
         target_journal_len: intent.target_journal_len,
+        target_journal_commitment: None,
         expected_target_state_root: intent.expected_target_state_root.clone(),
         target_batch_id: intent.target_batch_id.clone(),
         reason: intent.reason.clone(),
