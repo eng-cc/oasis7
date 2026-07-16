@@ -272,6 +272,73 @@ fn node_runtime_execution_driver_startup_restores_lower_authoritative_head_when_
 }
 
 #[test]
+fn node_runtime_execution_driver_startup_rejects_lower_v3_record_missing_journal_ref() {
+    let dir = temp_dir("execution-driver-startup-malformed-lower-v3-record");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("seed authoritative record");
+    drop(driver);
+
+    let record_path = execution_bridge_record_path(records_dir.as_path(), 1);
+    let mut malformed_record =
+        load_execution_bridge_record(record_path.as_path()).expect("load authoritative record");
+    assert_eq!(
+        malformed_record.schema_version,
+        EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+    );
+    malformed_record.journal_ref = None;
+    let malformed_bytes = serde_json::to_vec_pretty(&malformed_record)
+        .expect("serialize malformed authoritative record");
+    fs::write(record_path, malformed_bytes.as_slice()).expect("write malformed height record");
+    fs::write(records_dir.join("latest.json"), malformed_bytes)
+        .expect("write malformed latest record");
+    persist_execution_bridge_state(
+        state_path.as_path(),
+        &ExecutionBridgeState {
+            last_applied_committed_height: 2,
+            last_execution_block_hash: Some("stale-execution-hash".to_string()),
+            last_execution_state_root: Some("stale-state-root".to_string()),
+            last_node_block_hash: Some("stale-node-hash".to_string()),
+        },
+    )
+    .expect("persist ahead state head");
+
+    let err =
+        match NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root) {
+            Ok(_) => panic!("startup must reject malformed lower V3 authority"),
+            Err(err) => err,
+        };
+    assert!(
+        err.contains("authoritative v3 record missing exact CAS refs"),
+        "unexpected startup error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
     let dir = temp_dir("execution-driver-stale-state-reconcile");
     let state_path = dir.join("state.json");
@@ -402,6 +469,7 @@ fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_an
     let record_bytes = fs::read(record_path.as_path()).expect("read original record");
     let mut record_json: serde_json::Value =
         serde_json::from_slice(record_bytes.as_slice()).expect("parse original record");
+    record_json["schema_version"] = serde_json::json!(EXECUTION_BRIDGE_RECORD_SCHEMA_V2);
     record_json
         .as_object_mut()
         .expect("record json object")

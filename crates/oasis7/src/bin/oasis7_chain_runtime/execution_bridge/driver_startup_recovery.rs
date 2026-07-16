@@ -237,8 +237,7 @@ impl NodeRuntimeExecutionDriver {
                 )
             })?
             .to_string();
-        let allow_legacy_cache_recovery = record.schema_version
-            >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+        let allow_legacy_cache_recovery = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V3
             && target_height < self.state.last_applied_committed_height
             && !execution_world_persistence_files_missing(self.world_dir.as_path());
         if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
