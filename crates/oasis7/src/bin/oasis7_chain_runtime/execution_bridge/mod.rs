@@ -763,6 +763,21 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 
 mod checkpoint;
 mod checkpoint_manifest;
+
+pub(crate) fn load_latest_execution_checkpoint_status_evidence(
+    execution_records_dir: &Path,
+) -> Result<Option<(u32, String, u64, String)>, String> {
+    checkpoint::load_latest_execution_checkpoint_manifest(execution_records_dir).map(|manifest| {
+        manifest.map(|manifest| {
+            (
+                manifest.schema_version,
+                manifest.checkpoint_id,
+                manifest.height,
+                manifest.manifest_hash,
+            )
+        })
+    })
+}
 mod driver;
 mod driver_checkpoint_install;
 mod driver_committed_heights;

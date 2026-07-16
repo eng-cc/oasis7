@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -25,6 +26,9 @@ MANAGED_FIVE_NODE_NAMES = frozenset(
     }
 )
 MANAGED_FIVE_NODE_SEQUENCER = "sequencer"
+MANAGED_FIVE_NODE_STORAGE = "storage"
+MIN_CHECKPOINT_SCHEMA_VERSION = 2
+MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
 
 
 def utc_now() -> str:
@@ -73,6 +77,55 @@ def node_gates(status: dict[str, Any], sequencer_consensus: dict[str, Any]) -> l
     network_head = consensus.get("network_head")
     if not isinstance(network_head, dict) or network_head.get("decision") != "ready":
         gates.append("network_head_not_ready")
+    return gates
+
+
+def provider_checkpoint(status: dict[str, Any]) -> tuple[int, str, int, str] | None:
+    chain_proof = status.get("chain_proof")
+    if not isinstance(chain_proof, dict):
+        return None
+    checkpoint = chain_proof.get("latest_execution_checkpoint")
+    if not isinstance(checkpoint, dict):
+        return None
+    schema_version = checkpoint.get("schema_version")
+    checkpoint_id = checkpoint.get("checkpoint_id")
+    height = checkpoint.get("height")
+    manifest_hash = checkpoint.get("manifest_hash")
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or isinstance(height, bool)
+        or not isinstance(height, int)
+        or not isinstance(checkpoint_id, str)
+        or not isinstance(manifest_hash, str)
+    ):
+        return None
+    return schema_version, checkpoint_id, height, manifest_hash
+
+
+def provider_checkpoint_gates(captured: dict[str, dict[str, Any]]) -> list[str]:
+    checkpoints: dict[str, tuple[int, str, int, str]] = {}
+    gates: list[str] = []
+    for name in (MANAGED_FIVE_NODE_SEQUENCER, MANAGED_FIVE_NODE_STORAGE):
+        checkpoint = provider_checkpoint(captured[name])
+        if checkpoint is None:
+            gates.append("provider_checkpoint_missing")
+            continue
+        schema_version, checkpoint_id, height, manifest_hash = checkpoint
+        if schema_version < MIN_CHECKPOINT_SCHEMA_VERSION:
+            gates.append("provider_checkpoint_schema_invalid")
+        if not checkpoint_id.strip() or not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_hash):
+            gates.append("provider_checkpoint_identity_invalid")
+        if height <= 0:
+            gates.append("provider_checkpoint_height_invalid")
+        checkpoints[name] = checkpoint
+    if len(checkpoints) == 2:
+        _, sequencer_id, sequencer_height, sequencer_hash = checkpoints[MANAGED_FIVE_NODE_SEQUENCER]
+        _, storage_id, storage_height, storage_hash = checkpoints[MANAGED_FIVE_NODE_STORAGE]
+        if sequencer_id != storage_id or sequencer_hash.lower() != storage_hash.lower():
+            gates.append("provider_checkpoint_identity_mismatch")
+        if abs(sequencer_height - storage_height) > MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA:
+            gates.append("provider_checkpoint_height_incompatible")
     return gates
 
 
@@ -144,6 +197,8 @@ def main() -> int:
             failed_gates.extend(node_gates(node_evidence, sequencer_consensus))
         elif name == args.sequencer:
             failed_gates.extend(["head_mismatch", "network_head_not_ready"])
+    if args.managed_five_node:
+        failed_gates.extend(provider_checkpoint_gates(captured))
 
     unique_gates = sorted(set(failed_gates))
     evidence = {

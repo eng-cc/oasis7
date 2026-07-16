@@ -10,9 +10,18 @@ pub(crate) struct ChainProofStatus {
     pub(crate) claim_boundary: String,
     pub(crate) status: String,
     pub(crate) latest_world_head_proof: Option<LatestWorldHeadProofStatus>,
+    pub(crate) latest_execution_checkpoint: Option<LatestExecutionCheckpointStatus>,
     pub(crate) source_record_path: Option<String>,
     pub(crate) load_error: Option<String>,
     pub(crate) does_not_claim: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct LatestExecutionCheckpointStatus {
+    pub(crate) schema_version: u32,
+    pub(crate) checkpoint_id: String,
+    pub(crate) height: u64,
+    pub(crate) manifest_hash: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -43,6 +52,22 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
         "receipt proof verified".to_string(),
         "DA sampling verified".to_string(),
     ];
+    let latest_execution_checkpoint = execution_records_dir
+        .and_then(|records_dir| {
+            super::super::execution_bridge::load_latest_execution_checkpoint_status_evidence(
+                records_dir,
+            )
+            .ok()
+            .flatten()
+        })
+        .map(|(schema_version, checkpoint_id, height, manifest_hash)| {
+            LatestExecutionCheckpointStatus {
+                schema_version,
+                checkpoint_id,
+                height,
+                manifest_hash,
+            }
+        });
     let Some(execution_records_dir) = execution_records_dir else {
         return ChainProofStatus {
             schema_version,
@@ -50,6 +75,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
             claim_boundary,
             status: "unavailable".to_string(),
             latest_world_head_proof: None,
+            latest_execution_checkpoint,
             source_record_path: None,
             load_error: Some("execution_records_dir_unconfigured".to_string()),
             does_not_claim,
@@ -63,6 +89,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
             claim_boundary,
             status: "unavailable".to_string(),
             latest_world_head_proof: None,
+            latest_execution_checkpoint,
             source_record_path: Some(latest_path.display().to_string()),
             load_error: Some("execution_bridge_latest_record_missing".to_string()),
             does_not_claim,
@@ -77,6 +104,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
                 claim_boundary,
                 status: "stale_or_invalid".to_string(),
                 latest_world_head_proof: None,
+                latest_execution_checkpoint,
                 source_record_path: Some(latest_path.display().to_string()),
                 load_error: Some(format!("read latest execution record failed: {err}")),
                 does_not_claim,
@@ -92,6 +120,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
                 claim_boundary,
                 status: "stale_or_invalid".to_string(),
                 latest_world_head_proof: None,
+                latest_execution_checkpoint,
                 source_record_path: Some(latest_path.display().to_string()),
                 load_error: Some(format!("parse latest execution record failed: {err}")),
                 does_not_claim,
@@ -109,6 +138,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
             claim_boundary,
             status: "stale_or_invalid".to_string(),
             latest_world_head_proof: None,
+            latest_execution_checkpoint,
             source_record_path: Some(latest_path.display().to_string()),
             load_error: Some(format!(
                 "execution_bridge_record_schema_v{record_schema_version}_has_no_world_head_proof"
@@ -137,6 +167,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
             claim_boundary,
             status: "stale_or_invalid".to_string(),
             latest_world_head_proof: None,
+            latest_execution_checkpoint,
             source_record_path: Some(latest_path.display().to_string()),
             load_error: Some("height_missing".to_string()),
             does_not_claim,
@@ -196,6 +227,7 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
                 claim_boundary,
                 status: "stale_or_invalid".to_string(),
                 latest_world_head_proof: None,
+                latest_execution_checkpoint,
                 source_record_path: Some(latest_path.display().to_string()),
                 load_error: Some(format!(
                     "latest execution record missing proof metadata: {}",
@@ -212,8 +244,210 @@ pub(crate) fn build_chain_proof_status(execution_records_dir: Option<&Path>) -> 
         claim_boundary,
         status: "available".to_string(),
         latest_world_head_proof: Some(latest_world_head_proof),
+        latest_execution_checkpoint,
         source_record_path: Some(latest_path.display().to_string()),
         load_error: None,
         does_not_claim,
+    }
+}
+
+#[cfg(test)]
+mod checkpoint_status_tests {
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use serde::Serialize;
+
+    use super::build_chain_proof_status;
+
+    #[derive(Serialize)]
+    struct ManifestHashPayload<'a> {
+        schema_version: u32,
+        checkpoint_id: &'a str,
+        world_id: &'a str,
+        height: u64,
+        execution_block_hash: &'a str,
+        execution_state_root: &'a str,
+        latest_state_ref: &'a str,
+        snapshot_ref: Option<&'a str>,
+        journal_ref: Option<&'a str>,
+        pinned_refs: &'a [String],
+        created_at_ms: i64,
+    }
+
+    #[derive(Serialize)]
+    struct ManifestHashPayloadV2<'a> {
+        schema_version: u32,
+        checkpoint_id: &'a str,
+        world_id: &'a str,
+        height: u64,
+        execution_block_hash: &'a str,
+        execution_state_root: &'a str,
+        predecessor_execution_block_hash: Option<&'a str>,
+        latest_state_ref: &'a str,
+        snapshot_ref: Option<&'a str>,
+        journal_ref: Option<&'a str>,
+        pinned_refs: &'a [String],
+        created_at_ms: i64,
+    }
+
+    fn temp_dir(label: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("oasis7-{label}-{unique}"))
+    }
+
+    fn write_checkpoint_fixture(records_dir: &Path, schema_version: u32, height: u64) -> String {
+        let checkpoint_id = format!("checkpoint-{height:020}-exec-block");
+        let latest_state_ref = "snapshot-ref";
+        let snapshot_ref = Some("snapshot-ref");
+        let journal_ref = Some("journal-ref");
+        let pinned_refs = vec!["journal-ref".to_string(), "snapshot-ref".to_string()];
+        let created_at_ms = 1_700_000_000_000;
+        let hash_bytes = match schema_version {
+            1 => serde_cbor::to_vec(&ManifestHashPayload {
+                schema_version,
+                checkpoint_id: checkpoint_id.as_str(),
+                world_id: "live-a",
+                height,
+                execution_block_hash: "exec-block",
+                execution_state_root: "state-root",
+                latest_state_ref,
+                snapshot_ref,
+                journal_ref,
+                pinned_refs: pinned_refs.as_slice(),
+                created_at_ms,
+            })
+            .expect("encode v1 manifest hash payload"),
+            2 => serde_cbor::to_vec(&ManifestHashPayloadV2 {
+                schema_version,
+                checkpoint_id: checkpoint_id.as_str(),
+                world_id: "live-a",
+                height,
+                execution_block_hash: "exec-block",
+                execution_state_root: "state-root",
+                predecessor_execution_block_hash: Some("prev-exec-block"),
+                latest_state_ref,
+                snapshot_ref,
+                journal_ref,
+                pinned_refs: pinned_refs.as_slice(),
+                created_at_ms,
+            })
+            .expect("encode v2 manifest hash payload"),
+            other => panic!("unsupported fixture schema {other}"),
+        };
+        let manifest_hash = oasis7::runtime::blake3_hex(hash_bytes.as_slice());
+        let manifest_rel_path = format!("{height:020}/manifest.json");
+        let manifest_path = records_dir.join("checkpoints").join(&manifest_rel_path);
+        fs::create_dir_all(manifest_path.parent().expect("manifest parent"))
+            .expect("create checkpoint fixture dir");
+        let mut manifest = serde_json::json!({
+            "schema_version": schema_version,
+            "checkpoint_id": checkpoint_id,
+            "world_id": "live-a",
+            "height": height,
+            "execution_block_hash": "exec-block",
+            "execution_state_root": "state-root",
+            "latest_state_ref": latest_state_ref,
+            "snapshot_ref": snapshot_ref,
+            "journal_ref": journal_ref,
+            "pinned_refs": pinned_refs,
+            "manifest_hash": manifest_hash,
+            "created_at_ms": created_at_ms
+        });
+        if schema_version == 2 {
+            manifest["predecessor_execution_block_hash"] = serde_json::json!("prev-exec-block");
+        }
+        fs::write(
+            manifest_path,
+            serde_json::to_vec_pretty(&manifest).expect("encode manifest fixture"),
+        )
+        .expect("write manifest fixture");
+        fs::write(
+            records_dir.join("checkpoints/latest.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema_version": 1,
+                "checkpoint_id": manifest["checkpoint_id"],
+                "height": height,
+                "manifest_hash": manifest_hash,
+                "manifest_rel_path": manifest_rel_path,
+                "updated_at_ms": created_at_ms
+            }))
+            .expect("encode latest pointer fixture"),
+        )
+        .expect("write latest pointer fixture");
+        manifest_hash
+    }
+
+    #[test]
+    fn chain_status_reports_no_latest_execution_checkpoint_when_none_is_available() {
+        let dir = temp_dir("status-checkpoint-none");
+        fs::create_dir_all(dir.as_path()).expect("create records dir");
+
+        let status = build_chain_proof_status(Some(dir.as_path()));
+
+        assert!(status.latest_execution_checkpoint.is_none());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn chain_status_reports_retained_v1_execution_checkpoint_identity() {
+        let dir = temp_dir("status-checkpoint-v1");
+        let manifest_hash = write_checkpoint_fixture(dir.as_path(), 1, 20);
+
+        let status = build_chain_proof_status(Some(dir.as_path()));
+        let checkpoint = status
+            .latest_execution_checkpoint
+            .expect("retained v1 checkpoint evidence");
+
+        assert_eq!(checkpoint.schema_version, 1);
+        assert_eq!(checkpoint.height, 20);
+        assert_eq!(
+            checkpoint.checkpoint_id,
+            "checkpoint-00000000000000000020-exec-block"
+        );
+        assert_eq!(checkpoint.manifest_hash, manifest_hash);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn chain_status_reports_verified_v2_execution_checkpoint_identity() {
+        let dir = temp_dir("status-checkpoint-v2");
+        let manifest_hash = write_checkpoint_fixture(dir.as_path(), 2, 42);
+
+        let status = build_chain_proof_status(Some(dir.as_path()));
+        let checkpoint = status
+            .latest_execution_checkpoint
+            .as_ref()
+            .expect("verified v2 checkpoint evidence");
+
+        assert_eq!(checkpoint.schema_version, 2);
+        assert_eq!(checkpoint.height, 42);
+        assert_eq!(
+            checkpoint.checkpoint_id,
+            "checkpoint-00000000000000000042-exec-block"
+        );
+        assert_eq!(checkpoint.manifest_hash, manifest_hash);
+        let status_json = serde_json::to_value(&status).expect("serialize chain proof status");
+        assert_eq!(
+            status_json["latest_execution_checkpoint"]["schema_version"],
+            serde_json::json!(2)
+        );
+        assert_eq!(
+            status_json["latest_execution_checkpoint"]["height"],
+            serde_json::json!(42)
+        );
+        assert_eq!(
+            status_json["latest_execution_checkpoint"]["checkpoint_id"],
+            serde_json::json!("checkpoint-00000000000000000042-exec-block")
+        );
+        assert_eq!(
+            status_json["latest_execution_checkpoint"]["manifest_hash"],
+            serde_json::json!(manifest_hash)
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 }

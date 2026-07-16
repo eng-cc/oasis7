@@ -282,11 +282,13 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
 2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。
-3. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
-4. 如果 observer 从空状态或旧高度启动后报告 `replication no connected providers`、`consensus_peer_head_unavailable`、`execution driver peer mismatch` 或长期不追高，使用 Phase E/F 的 recovery seed 路径。
-5. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
-6. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state` 或先走 `scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote` / `reset-state` 的受控恢复路径。
-7. 如果 observer 本地 `committed_height` 高于 clean-rebuilt validator pair 的 fresh head，视为旧链状态接入新链；不要用重启作为修复结论，先修正部署/状态合同，再从 clean state 或受信 checkpoint 重建 observer。
+3. **Observer checkpoint gate（硬门）**：在任何 Linux、Windows 或 macOS observer 的 mutation command 前，两个 canonical provider 必须从其 manifest `status_url` 同时返回 `chain_proof.latest_execution_checkpoint`。每个对象必须有 `schema_version >= 2`、非空 `checkpoint_id`、64 位 hex `manifest_hash` 和正 `height`；两端 `checkpoint_id`、`manifest_hash` 必须相同，且 `abs(sequencer.height-storage.height) <= 1`。`null`、v1、malformed identity、仅一个 provider、identity mismatch 或 height 不兼容都 fail closed。`p2p-public-testnet-package-rollout.py` 生成的 observer wrapper/PowerShell/macOS script 内置此 gate；不得绕开 wrapper 直接调用 Linux primitive、Windows installer 或 macOS promotion script。
+4. gate 失败时，停止 observer rollout；先修复 provider package/config/deployment truth 或等待 pointer+manifest validation 后的 checkpoint 发布，再重新生成并执行 observer plan。不得用 restart、旧 seed 或 validator-to-validator 手工 copy 作为 gate 的替代。
+5. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
+6. 如果 observer 从空状态或旧高度启动后报告 `replication no connected providers`、`consensus_peer_head_unavailable`、`execution driver peer mismatch` 或长期不追高，使用 Phase E/F 的 recovery seed 路径。
+7. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
+8. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state` 或先走 `scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote` / `reset-state` 的受控恢复路径。
+9. 如果 observer 本地 `committed_height` 高于 clean-rebuilt validator pair 的 fresh head，视为旧链状态接入新链；不要用重启作为修复结论，先修正部署/状态合同，再从 clean state 或受信 checkpoint 重建 observer。
 
 ### Platform-specific update entrypoints
 1. Linux nodes use `scripts/p2p-public-testnet-package-node-upgrade.sh` with the node root and Linux bundle.

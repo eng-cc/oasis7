@@ -27,6 +27,8 @@ WINDOWS_GOVERNED_MANIFEST = (
 WINDOWS_GOVERNED_BOOTSTRAP = (
     r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt"
 )
+CANONICAL_PROVIDER_NAMES = ("sequencer", "storage")
+MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
 
 
 def die(message: str) -> None:
@@ -328,6 +330,96 @@ def artifact_ref(platform: str, version: str, asset_name: str, runtime_name: str
     return f"testnet-package-{platform}-{version}/{asset_name}!/bin/{runtime_name}"
 
 
+def canonical_provider_status_urls(manifest: dict[str, Any]) -> tuple[str, str]:
+    providers: dict[str, str] = {}
+    for node in manifest["nodes"]:
+        if not isinstance(node, dict):
+            continue
+        name = str(node.get("name") or "")
+        if name not in CANONICAL_PROVIDER_NAMES:
+            continue
+        if name in providers:
+            die(f"rollout manifest declares canonical provider {name} more than once")
+        status_url = node.get("status_url")
+        if not isinstance(status_url, str) or not status_url.endswith("/v1/chain/status"):
+            die(f"canonical provider {name} must declare a /v1/chain/status status_url")
+        providers[name] = status_url
+    missing = [name for name in CANONICAL_PROVIDER_NAMES if name not in providers]
+    if missing:
+        die("observer rollout requires canonical provider status_url entries: " + ", ".join(missing))
+    return providers["sequencer"], providers["storage"]
+
+
+def observer_checkpoint_gate_bash(sequencer_status_url: str, storage_status_url: str) -> str:
+    return f'''python3 - {shlex.quote(sequencer_status_url)} {shlex.quote(storage_status_url)} <<'PY'
+import json
+import re
+import sys
+from urllib.request import Request, urlopen
+
+MAX_HEIGHT_DELTA = {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}
+
+def checkpoint(name, url):
+    try:
+        with urlopen(Request(url, headers={{"Accept": "application/json"}}), timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as error:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} collection_failed={{error}}")
+    try:
+        value = payload["chain_proof"]["latest_execution_checkpoint"]
+    except (KeyError, TypeError):
+        value = None
+    if not isinstance(value, dict):
+        raise SystemExit(f"provider_checkpoint_gate={{name}} missing_latest_execution_checkpoint")
+    schema = value.get("schema_version")
+    checkpoint_id = value.get("checkpoint_id")
+    height = value.get("height")
+    manifest_hash = value.get("manifest_hash")
+    if isinstance(schema, bool) or not isinstance(schema, int) or schema < 2:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_schema_version")
+    if not isinstance(checkpoint_id, str) or not checkpoint_id.strip() or not isinstance(manifest_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{{64}}", manifest_hash):
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_checkpoint_identity")
+    if isinstance(height, bool) or not isinstance(height, int) or height <= 0:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_checkpoint_height")
+    return checkpoint_id, height, manifest_hash.lower()
+
+sequencer = checkpoint("sequencer", sys.argv[1])
+storage = checkpoint("storage", sys.argv[2])
+if sequencer[0] != storage[0] or sequencer[2] != storage[2]:
+    raise SystemExit("provider_checkpoint_gate identity_mismatch")
+if abs(sequencer[1] - storage[1]) > MAX_HEIGHT_DELTA:
+    raise SystemExit("provider_checkpoint_gate height_incompatible")
+print(f"provider_checkpoint_gate=passed checkpoint_id={{sequencer[0]}} height_delta={{abs(sequencer[1] - storage[1])}}")
+PY'''
+
+
+def observer_checkpoint_gate_powershell(sequencer_status_url: str, storage_status_url: str) -> str:
+    def ps_literal(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    return f'''function Get-ProviderCheckpoint {{
+  param([Parameter(Mandatory = $true)] [string] $Name, [Parameter(Mandatory = $true)] [string] $Url)
+  try {{ $status = Invoke-RestMethod -UseBasicParsing -Uri $Url -TimeoutSec 10 }} catch {{ throw "provider_checkpoint_gate=$Name collection_failed=$($_.Exception.Message)" }}
+  $checkpoint = $status.chain_proof.latest_execution_checkpoint
+  if ($null -eq $checkpoint) {{ throw "provider_checkpoint_gate=$Name missing_latest_execution_checkpoint" }}
+  if ($checkpoint.schema_version -isnot [int] -and $checkpoint.schema_version -isnot [long]) {{ throw "provider_checkpoint_gate=$Name invalid_schema_version" }}
+  if ([int64]$checkpoint.schema_version -lt 2) {{ throw "provider_checkpoint_gate=$Name invalid_schema_version" }}
+  $checkpointId = [string]$checkpoint.checkpoint_id
+  $manifestHash = [string]$checkpoint.manifest_hash
+  if ([string]::IsNullOrWhiteSpace($checkpointId) -or $manifestHash -notmatch '^[0-9a-fA-F]{{64}}$') {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_identity" }}
+  if ($checkpoint.height -isnot [int] -and $checkpoint.height -isnot [long]) {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_height" }}
+  $height = [int64]$checkpoint.height
+  if ($height -le 0) {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_height" }}
+  return [PSCustomObject]@{{ checkpoint_id = $checkpointId; height = $height; manifest_hash = $manifestHash.ToLowerInvariant() }}
+}}
+$sequencerCheckpoint = Get-ProviderCheckpoint -Name 'sequencer' -Url {ps_literal(sequencer_status_url)}
+$storageCheckpoint = Get-ProviderCheckpoint -Name 'storage' -Url {ps_literal(storage_status_url)}
+if ($sequencerCheckpoint.checkpoint_id -ne $storageCheckpoint.checkpoint_id -or $sequencerCheckpoint.manifest_hash -ne $storageCheckpoint.manifest_hash) {{ throw 'provider_checkpoint_gate identity_mismatch' }}
+if ([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height) -gt {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}) {{ throw 'provider_checkpoint_gate height_incompatible' }}
+Write-Output "provider_checkpoint_gate=passed checkpoint_id=$($sequencerCheckpoint.checkpoint_id) height_delta=$([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height))"
+'''
+
+
 def linux_command(
     node: dict[str, Any],
     linux_asset: Path,
@@ -401,6 +493,56 @@ def linux_plan_commands(
     ]
 
 
+def write_linux_observer_plan(
+    out_dir: Path,
+    node: dict[str, Any],
+    linux_asset: Path,
+    version: str,
+    commit: str,
+    run_id: str,
+    readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
+) -> tuple[Path, list[str], list[str]]:
+    name = str(node.get("name") or "linux-observer")
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
+    script_path = out_dir / f"{safe_name}-linux-observer-upgrade.sh"
+    host = str(node.get("host") or "")
+    if host:
+        user = str(node.get("user") or "root")
+        remote_bundle = str(node.get("remote_bundle") or linux_asset.name)
+        remote_script = str(node.get("remote_script") or "./scripts/p2p-public-testnet-package-node-upgrade.sh")
+        command = linux_command(
+            node,
+            linux_asset,
+            version,
+            commit,
+            run_id,
+            readiness_policy,
+            bundle_tar=remote_bundle,
+            script_path=remote_script,
+        )
+        remote_wrapper = str(node.get("remote_observer_gate_script") or script_path.name)
+        commands = [
+            shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_bundle}"]),
+            shell_join(["scp", str(script_path), f"{user}@{host}:{remote_wrapper}"]),
+            shell_join(["ssh", f"{user}@{host}", "bash", remote_wrapper]),
+        ]
+    else:
+        command = linux_command(node, linux_asset, version, commit, run_id, readiness_policy)
+        commands = [shell_join(["bash", str(script_path)])]
+    script_path.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+        + observer_checkpoint_gate_bash(sequencer_status_url, storage_status_url)
+        + "\n\nexec "
+        + shell_join(command)
+        + "\n",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+    return script_path, commands, command
+
+
 def windows_script(
     node: dict[str, Any],
     installer_name: str,
@@ -409,6 +551,8 @@ def windows_script(
     run_id: str,
     governed_hashes: dict[str, str],
     readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> str:
     def ps_literal(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -482,8 +626,13 @@ def windows_script(
         f"  {ps_literal(path)} = {ps_literal(digest)}"
         for path, digest in sorted(governed_hashes.items())
     )
+    checkpoint_gate = observer_checkpoint_gate_powershell(
+        sequencer_status_url, storage_status_url
+    )
     return f"""$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+{checkpoint_gate}
 
 function Set-JsonProperty {{
   param(
@@ -1437,6 +1586,8 @@ def write_windows_plan(
     run_id: str,
     governed_files: list[tuple[Path, str]],
     readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "windows-node")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -1497,6 +1648,8 @@ def write_windows_plan(
         run_id,
         remote_governed,
         readiness_policy,
+        sequencer_status_url,
+        storage_status_url,
     )
     script_path.write_text(script_text, encoding="utf-8")
     # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
@@ -1640,6 +1793,8 @@ def macos_script(
     commit: str,
     run_id: str,
     expected_dmg_sha256: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> str:
     name = str(node.get("name") or "macos-observer")
     node_root = macos_absolute_path(node, "node_root").rstrip("/")
@@ -1687,6 +1842,7 @@ def macos_script(
     q = shlex.quote
     config_entries = " ".join(q(path) for path in config_paths)
     state_entries = " ".join(q(path) for path in state_paths)
+    checkpoint_gate = observer_checkpoint_gate_bash(sequencer_status_url, storage_status_url)
     return f'''#!/usr/bin/env bash
 set -euo pipefail
 
@@ -1918,6 +2074,8 @@ assert_launchd_target_loaded || die "launchd target preflight failed"
 for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
 for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done
 
+{checkpoint_gate}
+
 actual_dmg_sha256="$(shasum -a 256 "$DMG_PATH" | awk '{{print $1}}')"
 [[ "$actual_dmg_sha256" == "$EXPECTED_DMG_SHA256" ]] || die "DMG checksum mismatch: expected=$EXPECTED_DMG_SHA256 actual=$actual_dmg_sha256"
 echo "dmg_sha256_verified=true sha256=$actual_dmg_sha256"
@@ -1996,14 +2154,29 @@ die "macOS observer readiness timed out"
 
 
 def write_macos_plan(
-    out_dir: Path, node: dict[str, Any], macos_asset: Path, version: str, commit: str, run_id: str
+    out_dir: Path,
+    node: dict[str, Any],
+    macos_asset: Path,
+    version: str,
+    commit: str,
+    run_id: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "macos-observer")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
     script_path = out_dir / f"{safe_name}-macos-arm64-upgrade.sh"
     expected_dmg_sha256 = sha256_file(macos_asset)
     script_path.write_text(
-        macos_script(node, version, commit, run_id, expected_dmg_sha256),
+        macos_script(
+            node,
+            version,
+            commit,
+            run_id,
+            expected_dmg_sha256,
+            sequencer_status_url,
+            storage_status_url,
+        ),
         encoding="utf-8",
     )
     script_path.chmod(0o755)
@@ -2060,6 +2233,13 @@ def main() -> int:
     platforms = sorted({str(node.get("platform") or "") for node in manifest["nodes"]})
     if "" in platforms:
         die("all nodes must declare platform")
+    names = [str(node.get("name") or "") for node in manifest["nodes"] if isinstance(node, dict)]
+    if len(names) != len(manifest["nodes"]) or not all(names) or len(set(names)) != len(names):
+        die("all rollout manifest nodes must have unique non-empty names")
+    observer_rollout_present = any(name not in CANONICAL_PROVIDER_NAMES for name in names)
+    provider_status_urls = (
+        canonical_provider_status_urls(manifest) if observer_rollout_present else None
+    )
 
     platform_dirs: dict[str, Path] = {}
     platform_infos: dict[str, dict[str, str]] = {}
@@ -2116,20 +2296,37 @@ def main() -> int:
         version = platform_provenance[platform]["package_version"]
         run_id = platform_provenance[platform]["run_id"]
         if platform == "linux-x64":
-            command = linux_command(
-                node,
-                platform_assets[platform],
-                version,
-                commit,
-                run_id,
-                args.readiness_policy,
-            )
-            node_plan["commands"].extend(
-                linux_plan_commands(node, platform_assets[platform], version, commit, run_id, args.readiness_policy)
-            )
+            if name in CANONICAL_PROVIDER_NAMES:
+                command = linux_command(
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                    args.readiness_policy,
+                )
+                node_plan["commands"].extend(
+                    linux_plan_commands(node, platform_assets[platform], version, commit, run_id, args.readiness_policy)
+                )
+            else:
+                assert provider_status_urls is not None
+                script_path, commands, command = write_linux_observer_plan(
+                    out_dir,
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                    args.readiness_policy,
+                    *provider_status_urls,
+                )
+                node_plan["observer_checkpoint_gate_script"] = str(script_path)
+                node_plan["commands"].extend(commands)
             if args.apply_local and not node.get("host"):
                 applied = subprocess.run(
-                    command,
+                    ["bash", str(node_plan["observer_checkpoint_gate_script"])]
+                    if name not in CANONICAL_PROVIDER_NAMES
+                    else command,
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -2138,6 +2335,9 @@ def main() -> int:
                 node_plan["apply_output"] = applied.stdout.strip().splitlines()
                 node_plan["applied"] = True
         elif platform == "windows-x64":
+            if name in CANONICAL_PROVIDER_NAMES:
+                die("canonical providers must use Linux rollout entries")
+            assert provider_status_urls is not None
             governed_files = windows_governed_files(
                 platform_dirs[platform], verified_files[platform]
             )
@@ -2150,6 +2350,7 @@ def main() -> int:
                 run_id,
                 governed_files,
                 args.readiness_policy,
+                *provider_status_urls,
             )
             node_plan["windows_script"] = str(script_path)
             node_plan["governed_bundle_path"] = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
@@ -2158,6 +2359,8 @@ def main() -> int:
             )
             node_plan["commands"].extend(commands)
         elif platform in {"macos-x64", "macos-arm64"}:
+            if name in CANONICAL_PROVIDER_NAMES:
+                die("canonical providers must use Linux rollout entries")
             if platform == "macos-arm64":
                 script_path, commands = write_macos_plan(
                     out_dir,
@@ -2166,6 +2369,7 @@ def main() -> int:
                     version,
                     commit,
                     run_id,
+                    *(provider_status_urls or ()),
                 )
                 node_plan["macos_script"] = str(script_path)
                 node_plan["native_identity"] = "aarch64-apple-darwin"

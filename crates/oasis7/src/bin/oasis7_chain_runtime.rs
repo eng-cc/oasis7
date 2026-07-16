@@ -165,6 +165,14 @@ mod execution_bridge {
         snapshot_execution_bridge_module_tick_routing_metrics,
     };
 
+    pub(crate) fn load_latest_execution_checkpoint_status_evidence(
+        execution_records_dir: &Path,
+    ) -> Result<Option<(u32, String, u64, String)>, String> {
+        super::execution_bridge_real_tests::real_execution_bridge::load_latest_execution_checkpoint_status_evidence(
+            execution_records_dir,
+        )
+    }
+
     #[derive(Debug)]
     pub(super) struct NodeRuntimeExecutionDriver;
 

@@ -1176,14 +1176,14 @@ cat >"$TMP_DIR/manifest.json" <<EOF
 {
   "nodes": [
     {
-      "name": "local-linux",
+      "name": "sequencer",
       "platform": "linux-x64",
       "node_root": "$node_root",
       "restart": false,
       "status_url": "http://127.0.0.1:6632/v1/chain/status"
     },
     {
-      "name": "remote-linux",
+      "name": "storage",
       "platform": "linux-x64",
       "host": "198.51.100.44",
       "user": "root",
@@ -1274,6 +1274,8 @@ text = module.windows_script(
     injected,
     {injected: "a" * 64},
     "rpc-running",
+    "http://127.0.0.1:6631/v1/chain/status",
+    "http://127.0.0.1:6632/v1/chain/status",
 )
 output_path.write_text(text, encoding="utf-8")
 assignments = (
@@ -1316,10 +1318,9 @@ node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).
 plan_current_target=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(readlink "$node_root/current")")
 test "$plan_current_target" = "$node_root_abs/releases/old"
 jq -e '
-  (.nodes[] | select(.name == "local-linux") | .applied == false)
-  and (.nodes[] | select(.name == "remote-linux") | .commands[0] | startswith("scp "))
-  and (.nodes[] | select(.name == "remote-linux") | .commands[1] | startswith("ssh root@198.51.100.44 "))
-  and (.nodes[] | select(.name == "remote-linux") | .commands[1] | contains("--bundle-tar /tmp/oasis7-linux-x64-bundle.tar.gz"))
+  (.nodes[] | select(.name == "sequencer") | .applied == false)
+  and (.nodes[] | select(.name == "storage") | .commands[0] | startswith("scp "))
+  and (.nodes[] | select(.name == "storage") | .commands[1] | startswith("ssh root@198.51.100.44 "))
   and (.nodes[] | select(.name == "windows-observer") | any(.commands[]; contains("staging_parent_ready=")))
   and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))
   and (.nodes[] | select(.name == "windows-observer") | .package_provenance.package_version == "0.0.0+testnet.89.419e119bc897")
@@ -1328,6 +1329,45 @@ jq -e '
   and (.nodes[] | select(.name == "macos-observer") | .package_provenance.run_id == "27605906796")
   and (.nodes[] | select(.name == "macos-observer") | .package_provenance.sha256sums_sha256 | length == 64)' \
   "$TMP_DIR/plan-only.json" >/dev/null
+
+observer_gate_manifest="$TMP_DIR/linux-observer-gate-manifest.json"
+jq '{nodes: [
+  (.nodes[] | select(.name == "sequencer")),
+  (.nodes[] | select(.name == "storage")),
+  {
+    name: "linux-lan-observer",
+    platform: "linux-x64",
+    host: "192.0.2.44",
+    user: "root",
+    node_root: "/opt/oasis7/p2p-testnet-local",
+    remote_bundle: "/tmp/oasis7-linux-x64-bundle.tar.gz",
+    remote_script: "/opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh",
+    status_url: "http://127.0.0.1:6633/v1/chain/status",
+    restart: false
+  }
+]}' "$TMP_DIR/manifest.json" >"$observer_gate_manifest"
+"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/linux-observer-gate-out" \
+  --json >"$TMP_DIR/linux-observer-gate-plan.json"
+python3 - "$TMP_DIR/linux-observer-gate-plan.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+observer = next(node for node in plan["nodes"] if node["name"] == "linux-lan-observer")
+assert len(observer["commands"]) == 3
+assert observer["commands"][0].startswith("scp ")
+assert observer["commands"][1].startswith("scp ")
+assert observer["commands"][2].startswith("ssh root@192.0.2.44 ")
+wrapper = Path(observer["observer_checkpoint_gate_script"])
+text = wrapper.read_text(encoding="utf-8")
+assert "provider_checkpoint_gate=passed" in text
+assert "latest_execution_checkpoint" in text
+assert "exec /opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh" in text
+PY
 
 cross_commit_package="$TMP_DIR/cross-commit-package"
 cp -R "$package_dir" "$cross_commit_package"
@@ -1444,6 +1484,8 @@ for token in (
     'restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO"',
     "rollback_service_health_verified=true",
     "state_sync_escalation_required=true",
+    "provider_checkpoint_gate=passed",
+    "latest_execution_checkpoint",
     "authority_failure",
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
     'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
@@ -1523,7 +1565,8 @@ for target, domain in (
     ("gui/501/oasis7.testnet.fourth", "gui/501"),
 ):
     generated = module.macos_script(
-        {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64
+        {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64,
+        "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
     )
     assert f"LAUNCHD_TARGET={target}" in generated
     assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
@@ -1551,6 +1594,7 @@ for invalid_target in (
             module.macos_script(
                 {**base_node, "launchd_target": invalid_target},
                 "version", "commit", "run", "a" * 64,
+                "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
             )
     except SystemExit:
         pass
@@ -1575,6 +1619,7 @@ for invalid_states in invalid_state_sets:
                     "persistent_state_paths": invalid_states,
                 },
                 "version", "commit", "run", "a" * 64,
+                "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
             )
     except SystemExit:
         pass
@@ -1589,7 +1634,8 @@ launchd_overlap_node = {
 try:
     with contextlib.redirect_stderr(io.StringIO()):
         module.macos_script(
-            launchd_overlap_node, "version", "commit", "run", "a" * 64
+            launchd_overlap_node, "version", "commit", "run", "a" * 64,
+            "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
         )
 except SystemExit:
     pass
@@ -1604,6 +1650,8 @@ assert "physical_state_path" in generated
 scope_contract = "all_existing` plus `linux_macos_arm64"
 assert scope_contract in inventory_text and scope_contract in runbook_text
 assert "all_existing` | every package platform represented by the managed fleet" not in inventory_text
+windows_script = Path(next(node for node in plan["nodes"] if node["name"] == "windows-observer")["windows_script"])
+assert "provider_checkpoint_gate=passed" in windows_script.read_text(encoding="utf-8")
 PY
 then
   package_contract_failed=1
@@ -2357,7 +2405,7 @@ jq -e \
   '.commit == $commit
     and .platform_provenance["linux-x64"].package_version == $version
     and .readiness_policy == "rpc-running"
-    and (.nodes[] | select(.name == "local-linux") | .applied == true)
+    and (.nodes[] | select(.name == "sequencer") | .applied == true)
     and (.nodes[] | select(.name == "windows-observer") | .windows_script | endswith("windows-observer-windows-upgrade.ps1"))' \
   "$TMP_DIR/plan.json" >/dev/null
 
@@ -3315,7 +3363,7 @@ PY
   --json >"$TMP_DIR/strict-plan.json"
 jq -e '
   .readiness_policy == "strict-ready"
-  and (.nodes[] | select(.name == "local-linux") | .commands[0] | contains("--post-restart-status-url"))' \
+  and (.nodes[] | select(.name == "sequencer") | .commands[0] | contains("--post-restart-status-url"))' \
   "$TMP_DIR/strict-plan.json" >/dev/null
 
 python3 - "$TMP_DIR/manifest.json" <<'PY'
