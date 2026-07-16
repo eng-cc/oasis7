@@ -18,6 +18,10 @@ use super::World;
 use super::module_tick_runtime::ModuleTickRoutingMetrics;
 #[path = "authoritative_recovery_generation.rs"]
 mod authoritative_recovery_generation;
+pub use authoritative_recovery_generation::{
+    AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
+    CommittedAuthoritativeRecoveryGeneration,
+};
 #[path = "persistence_support.rs"]
 mod persistence_support;
 use self::persistence_support::{

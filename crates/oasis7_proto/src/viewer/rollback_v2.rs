@@ -64,6 +64,18 @@ pub struct AuthoritativeRollbackReceipt {
     pub receipt_id: String,
     pub authorization_nonce: String,
     pub rollback_ticket: String,
+    #[serde(default)]
+    pub canonical_intent_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_checkpoint: Option<RollbackCheckpointRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_target: Option<RollbackReplayTarget>,
+    #[serde(default)]
+    pub journal_commitment: String,
+    #[serde(default)]
+    pub target_state_root: String,
+    #[serde(default)]
+    pub affected_event_census: Vec<RollbackSourceEventRef>,
     pub target_batch_id: String,
     pub invalidated_batch_ids: Vec<String>,
     pub prior_reorg_epoch: u64,
@@ -78,6 +90,12 @@ pub struct AuthoritativeRollbackReceipt {
     pub ready_for_all_clear: bool,
     #[serde(default)]
     pub readiness_blockers: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackSourceEventRef {
+    pub source_batch_id: String,
+    pub source_event_id: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

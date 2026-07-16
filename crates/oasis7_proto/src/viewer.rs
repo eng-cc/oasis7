@@ -3,40 +3,16 @@ use serde::{Deserialize, Serialize};
 mod rollback_v2;
 pub use rollback_v2::*;
 
-pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
+mod negotiation;
+pub use negotiation::*;
 
-pub const SIGNED_AUTHORITATIVE_ROLLBACK_CAPABILITY: &str = "signed_authoritative_rollback_v1";
-pub const GOVERNED_ROLLBACK_REPLAY_CAPABILITY: &str = "governed_rollback_replay_v2";
+pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NegotiatedViewerProtocol {
     pub version: u32,
     #[serde(default)]
     pub capabilities: Vec<String>,
-}
-
-impl NegotiatedViewerProtocol {
-    pub fn v1_without_capabilities() -> Self {
-        Self {
-            version: 1,
-            capabilities: Vec::new(),
-        }
-    }
-
-    pub fn v2_signed_rollback() -> Self {
-        Self {
-            version: 2,
-            capabilities: vec![GOVERNED_ROLLBACK_REPLAY_CAPABILITY.to_string()],
-        }
-    }
-
-    pub fn supports_signed_rollback(&self) -> bool {
-        self.version >= 2
-            && self
-                .capabilities
-                .iter()
-                .any(|value| value == GOVERNED_ROLLBACK_REPLAY_CAPABILITY)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -75,6 +51,12 @@ pub enum ViewerRequest {
     Hello {
         client: String,
         version: u32,
+    },
+    HelloV2 {
+        client: String,
+        version: u32,
+        #[serde(default)]
+        capabilities: Vec<String>,
     },
     Subscribe {
         streams: Vec<ViewerStream>,

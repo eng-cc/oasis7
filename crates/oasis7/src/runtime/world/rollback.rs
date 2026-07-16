@@ -20,6 +20,64 @@ struct RollbackJournalCommitment<'a> {
     events: &'a [super::super::WorldEvent],
 }
 
+#[derive(serde::Serialize)]
+struct RollbackAffectedCensusCommitment<'a> {
+    domain: &'static str,
+    events: &'a [RollbackSourceEventIdentity],
+}
+
+pub fn rollback_affected_census_digest(
+    affected_events: &[RollbackSourceEventIdentity],
+) -> Result<String, WorldError> {
+    let unique = affected_events.iter().cloned().collect::<BTreeSet<_>>();
+    if unique.len() != affected_events.len() {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "rollback affected census requires unique source identities".to_string(),
+        });
+    }
+    let canonical = unique.into_iter().collect::<Vec<_>>();
+    Ok(sha256_hex(&to_canonical_cbor(
+        &RollbackAffectedCensusCommitment {
+            domain: "oasis7:rollback-affected-census:v1",
+            events: canonical.as_slice(),
+        },
+    )?))
+}
+
+fn validate_receipt_projection(
+    outcome: &RollbackNonceOutcome,
+    affected_events: &[RollbackSourceEventIdentity],
+    receipt: &RollbackReceiptProjection,
+) -> Result<(), WorldError> {
+    let census_digest = rollback_affected_census_digest(affected_events)?;
+    let required = [
+        receipt.receipt_id.as_str(),
+        receipt.canonical_intent_digest.as_str(),
+        receipt.rollback_checkpoint_batch_id.as_str(),
+        receipt.rollback_checkpoint_snapshot_hash.as_str(),
+        receipt.replay_target_batch_id.as_str(),
+        receipt.replay_target_state_root.as_str(),
+        receipt.replay_target_journal_commitment.as_str(),
+        receipt.affected_census_digest.as_str(),
+    ];
+    if required.iter().any(|value| value.trim().is_empty())
+        || receipt.canonical_intent_digest != outcome.canonical_intent_hash
+        || receipt.rollback_checkpoint_snapshot_hash != outcome.rollback_checkpoint_snapshot_hash
+        || receipt.rollback_checkpoint_journal_len != outcome.rollback_checkpoint_journal_len
+        || receipt.replay_target_journal_len != outcome.target_journal_len
+        || receipt.replay_target_state_root != outcome.target_state_root
+        || receipt.replay_target_journal_commitment != outcome.target_journal_commitment
+        || receipt.affected_census_digest != census_digest
+        || receipt.affected_census_count != affected_events.len()
+    {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: "rollback receipt projection does not match immutable outcome evidence"
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn validate_rollback_dispositions(
     affected_events: Option<&[RollbackSourceEventIdentity]>,
     dispositions: &[super::super::RollbackEventDisposition],
@@ -136,11 +194,19 @@ impl World {
         receipt: RollbackReceiptProjection,
     ) -> Result<(), WorldError> {
         validate_rollback_dispositions(Some(affected_events), &metadata.dispositions)?;
+        let census_digest = rollback_affected_census_digest(affected_events)?;
         let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
             WorldError::DistributedValidationFailed {
                 reason: format!("rollback outcome for nonce {nonce} is not committed"),
             }
         })?;
+        if receipt.replay_target_batch_id != metadata.target_batch_id {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback receipt target batch does not match recovery metadata"
+                    .to_string(),
+            });
+        }
+        validate_receipt_projection(outcome, affected_events, &receipt)?;
         if let Some(existing) = outcome.receipt.as_ref() {
             if existing == &receipt
                 && outcome.target_batch_id == metadata.target_batch_id
@@ -156,12 +222,58 @@ impl World {
             });
         }
         outcome.target_batch_id = metadata.target_batch_id;
+        outcome.rollback_checkpoint_batch_id = receipt.rollback_checkpoint_batch_id.clone();
         outcome.prior_reorg_epoch = metadata.prior_reorg_epoch;
         outcome.committed_reorg_epoch = metadata.committed_reorg_epoch;
         outcome.invalidated_batch_ids = metadata.invalidated_batch_ids;
         outcome.dispositions = metadata.dispositions;
+        outcome.affected_census_digest = census_digest;
+        outcome.affected_census_count = affected_events.len();
+        outcome.readiness_blockers = receipt.readiness_blockers.clone();
         outcome.receipt = Some(receipt);
         Ok(())
+    }
+
+    pub fn rollback_receipt_projection(&self, nonce: &str) -> Option<RollbackReceiptProjection> {
+        self.rollback_nonce_outcomes
+            .get(nonce)
+            .and_then(|outcome| outcome.receipt.clone())
+    }
+
+    pub fn validate_rollback_receipt_projection(
+        &self,
+        nonce: &str,
+        affected_events: &[RollbackSourceEventIdentity],
+    ) -> Result<(), WorldError> {
+        let outcome = self.rollback_nonce_outcomes.get(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        let receipt =
+            outcome
+                .receipt
+                .as_ref()
+                .ok_or_else(|| WorldError::DistributedValidationFailed {
+                    reason: "rollback outcome has no immutable receipt projection".to_string(),
+                })?;
+        validate_rollback_dispositions(Some(affected_events), &outcome.dispositions)?;
+        validate_receipt_projection(outcome, affected_events, receipt)
+    }
+
+    pub fn rollback_readiness_without_evidence(&self, nonce: &str) -> RollbackReadiness {
+        let mut reasons = vec![
+            "target_root_evidence_missing".to_string(),
+            "epoch_evidence_missing".to_string(),
+            "drift_evidence_missing".to_string(),
+            "consensus_chain_evidence_missing".to_string(),
+            "receipt_retrievability_evidence_missing".to_string(),
+        ];
+        match self.rollback_nonce_outcomes.get(nonce) {
+            None => reasons.push("rollback_outcome_missing".to_string()),
+            Some(outcome) => reasons.extend(outcome.readiness_blockers.clone()),
+        }
+        RollbackReadiness::Blocked { reasons }
     }
 
     pub fn rollback_readiness(
@@ -349,9 +461,16 @@ impl World {
             outcome_nonce,
             RollbackNonceOutcome {
                 canonical_intent_hash: supplied_intent_hash,
+                rollback_checkpoint_batch_id: String::new(),
+                rollback_checkpoint_snapshot_hash: approval.intent.snapshot_hash.clone(),
+                rollback_checkpoint_journal_len: approval.intent.snapshot_journal_len,
                 rollback_ticket: outcome_ticket,
                 target_journal_commitment: outcome_commitment,
                 target_state_root: outcome_state_root,
+                target_journal_len: approval.intent.target_journal_len,
+                affected_census_digest: String::new(),
+                affected_census_count: 0,
+                readiness_blockers: vec!["explicit_readiness_evidence_missing".to_string()],
                 rollback_event_id,
                 target_batch_id: approval.intent.target_batch_id.unwrap_or_default(),
                 prior_reorg_epoch: 0,

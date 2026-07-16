@@ -1,6 +1,18 @@
 use super::*;
 use sha2::{Digest, Sha256};
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct RuntimeAuthoritativeRecoveryGeneration {
+    pub(super) schema_version: u32,
+    pub(super) ack: AuthoritativeRecoveryAck<u64>,
+    pub(super) authoritative_batches: VecDeque<RuntimeAuthoritativeBatchRecord>,
+    pub(super) next_authoritative_batch_id: u64,
+    pub(super) authoritative_challenges: VecDeque<RuntimeAuthoritativeChallengeRecord>,
+    pub(super) next_authoritative_challenge_id: u64,
+    pub(super) stable_checkpoints: VecDeque<RuntimeStableCheckpoint>,
+    pub(super) reorg_epoch: u64,
+}
+
 pub(super) fn current_unix_time_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -67,12 +79,6 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        let has_unresolved_compensation = outcome.dispositions.iter().any(|entry| {
-            matches!(
-                entry.status,
-                crate::runtime::RollbackDispositionStatus::CompensationRequired
-            )
-        });
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
             reorg_epoch: outcome.committed_reorg_epoch,
@@ -92,6 +98,28 @@ impl ViewerRuntimeLiveServer {
                 receipt_id: receipt.receipt_id.clone(),
                 authorization_nonce: authorization_nonce.clone(),
                 rollback_ticket: outcome.rollback_ticket.clone(),
+                canonical_intent_digest: outcome.canonical_intent_hash.clone(),
+                rollback_checkpoint: Some(crate::viewer::protocol::RollbackCheckpointRef {
+                    batch_id: receipt.rollback_checkpoint_batch_id.clone(),
+                    snapshot_hash: receipt.rollback_checkpoint_snapshot_hash.clone(),
+                    snapshot_journal_len: receipt.rollback_checkpoint_journal_len,
+                }),
+                replay_target: Some(crate::viewer::protocol::RollbackReplayTarget {
+                    batch_id: receipt.replay_target_batch_id.clone(),
+                    target_journal_len: receipt.replay_target_journal_len,
+                    expected_target_state_root: receipt.replay_target_state_root.clone(),
+                    journal_commitment: receipt.replay_target_journal_commitment.clone(),
+                }),
+                journal_commitment: outcome.target_journal_commitment.clone(),
+                target_state_root: outcome.target_state_root.clone(),
+                affected_event_census: outcome
+                    .dispositions
+                    .iter()
+                    .map(|entry| crate::viewer::protocol::RollbackSourceEventRef {
+                        source_batch_id: entry.source_batch_id.clone(),
+                        source_event_id: entry.source_event_id,
+                    })
+                    .collect(),
                 target_batch_id,
                 invalidated_batch_ids: outcome.invalidated_batch_ids.clone(),
                 prior_reorg_epoch: outcome.prior_reorg_epoch,
@@ -105,11 +133,12 @@ impl ViewerRuntimeLiveServer {
                     authorization_nonce.as_str(),
                     outcome.dispositions.as_slice(),
                 ),
-                ready_for_all_clear: !has_unresolved_compensation,
-                readiness_blockers: has_unresolved_compensation
-                    .then(|| "compensation_cases_unresolved".to_string())
-                    .into_iter()
-                    .collect(),
+                ready_for_all_clear: false,
+                readiness_blockers: if receipt.readiness_blockers.is_empty() {
+                    vec!["readiness_evaluation_required".to_string()]
+                } else {
+                    receipt.readiness_blockers.clone()
+                },
             }),
             acknowledged_at_tick: receipt.acknowledged_at_tick,
         })

@@ -432,9 +432,23 @@ impl RollbackIntent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RollbackNonceOutcome {
     pub canonical_intent_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_batch_id: String,
+    #[serde(default)]
+    pub rollback_checkpoint_snapshot_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_journal_len: usize,
     pub rollback_ticket: String,
     pub target_journal_commitment: String,
     pub target_state_root: String,
+    #[serde(default)]
+    pub target_journal_len: usize,
+    #[serde(default)]
+    pub affected_census_digest: String,
+    #[serde(default)]
+    pub affected_census_count: usize,
+    #[serde(default)]
+    pub readiness_blockers: Vec<String>,
     pub rollback_event_id: WorldEventId,
     #[serde(default)]
     pub target_batch_id: String,
@@ -498,6 +512,28 @@ pub enum RollbackCompensationState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RollbackReceiptProjection {
     pub receipt_id: String,
+    #[serde(default)]
+    pub canonical_intent_digest: String,
+    #[serde(default)]
+    pub rollback_checkpoint_batch_id: String,
+    #[serde(default)]
+    pub rollback_checkpoint_snapshot_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_journal_len: usize,
+    #[serde(default)]
+    pub replay_target_batch_id: String,
+    #[serde(default)]
+    pub replay_target_journal_len: usize,
+    #[serde(default)]
+    pub replay_target_state_root: String,
+    #[serde(default)]
+    pub replay_target_journal_commitment: String,
+    #[serde(default)]
+    pub affected_census_digest: String,
+    #[serde(default)]
+    pub affected_census_count: usize,
+    #[serde(default)]
+    pub readiness_blockers: Vec<String>,
     pub snapshot_height: u64,
     pub snapshot_hash: String,
     pub log_cursor: u64,

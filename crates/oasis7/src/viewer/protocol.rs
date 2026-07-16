@@ -19,8 +19,9 @@ pub use proto::{
     PlayerActionDisposition, PlayerAuthProof, PlayerAuthScheme, PlayerRollbackDisposition,
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
     PromptControlRollbackRequest, RollbackApprovalSignature, RollbackAuthorityRole,
-    RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl,
-    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackIntent, RollbackReplayTarget,
+    RollbackSourceEventRef, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

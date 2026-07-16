@@ -24,12 +24,16 @@ mod module_runtime_metering;
 mod module_tick_runtime;
 mod operability_release_gate;
 mod persistence;
+pub use persistence::{
+    AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
+    CommittedAuthoritativeRecoveryGeneration,
+};
 mod policy;
 mod release_manifest;
 mod resources;
 mod restricted_claim_grants;
 mod rollback;
-pub use rollback::rollback_journal_commitment;
+pub use rollback::{rollback_affected_census_digest, rollback_journal_commitment};
 mod rules;
 mod scheduling;
 mod snapshot;

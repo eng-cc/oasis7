@@ -2,6 +2,9 @@ use super::*;
 use ed25519_dalek::{Signer, SigningKey};
 use oasis7_distfs::assemble_snapshot;
 
+#[path = "persistence_recovery_retention_tests.rs"]
+mod persistence_recovery_retention_tests;
+
 const ISSUE160_SAMPLE_WORLD_ENV: &str = "OASIS7_VERIFY_ISSUE160_SAMPLE_WORLD";
 
 const ROLLBACK_NOW_MS: u64 = 1_720_000_000_000;
@@ -979,13 +982,39 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
         world.rollback_readiness("nonce-durable-1", &affected, &readiness_evidence),
         RollbackReadiness::Blocked { .. }
     ));
+    let committed = world
+        .rollback_nonce_outcome("nonce-durable-1")
+        .expect("committed outcome");
+    let affected_census_digest = rollback_affected_census_digest(&affected).expect("census digest");
     let receipt = RollbackReceiptProjection {
         receipt_id: "receipt-durable-1".to_string(),
+        canonical_intent_digest: committed.canonical_intent_hash,
+        rollback_checkpoint_batch_id: "batch-checkpoint-2".to_string(),
+        rollback_checkpoint_snapshot_hash: committed.rollback_checkpoint_snapshot_hash,
+        rollback_checkpoint_journal_len: committed.rollback_checkpoint_journal_len,
+        replay_target_batch_id: "batch-target-3".to_string(),
+        replay_target_journal_len: committed.target_journal_len,
+        replay_target_state_root: committed.target_state_root,
+        replay_target_journal_commitment: committed.target_journal_commitment,
+        affected_census_digest,
+        affected_census_count: affected.len(),
+        readiness_blockers: Vec::new(),
         snapshot_height: world.state().time,
         snapshot_hash: util::hash_json(&world.snapshot()).expect("receipt snapshot hash"),
         log_cursor: world.journal().len() as u64,
         acknowledged_at_tick: world.state().time,
     };
+    let mut tampered_receipt = receipt.clone();
+    tampered_receipt.affected_census_digest = "tampered-census".to_string();
+    let mut tampered_world = world.clone();
+    tampered_world
+        .complete_rollback_outcome(
+            "nonce-durable-1",
+            recovery_metadata.clone(),
+            &affected,
+            tampered_receipt,
+        )
+        .expect_err("projection must reject a census digest not derived from affected identities");
     world
         .complete_rollback_outcome(
             "nonce-durable-1",
@@ -994,6 +1023,25 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
             receipt.clone(),
         )
         .expect("validate coverage and freeze immutable receipt");
+    assert_eq!(
+        world.rollback_receipt_projection("nonce-durable-1"),
+        Some(receipt.clone())
+    );
+    world
+        .validate_rollback_receipt_projection("nonce-durable-1", &affected)
+        .expect("committed projection validates against independent census");
+    world
+        .complete_rollback_outcome(
+            "nonce-durable-1",
+            recovery_metadata.clone(),
+            &affected,
+            receipt.clone(),
+        )
+        .expect("exact completion retry is idempotent");
+    assert!(matches!(
+        world.rollback_readiness_without_evidence("nonce-durable-1"),
+        RollbackReadiness::Blocked { reasons } if !reasons.is_empty()
+    ));
     assert_eq!(
         world.rollback_readiness("nonce-durable-1", &affected, &readiness_evidence),
         RollbackReadiness::Ready
@@ -1022,6 +1070,14 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
         recovery_metadata.dispositions
     );
     assert_eq!(restored_outcome.receipt.as_ref(), Some(&receipt));
+    assert_eq!(restored_outcome.affected_census_count, affected.len());
+    assert_eq!(
+        restored_outcome.affected_census_digest,
+        receipt.affected_census_digest
+    );
+    world
+        .validate_rollback_receipt_projection("nonce-durable-1", &affected)
+        .expect("restored immutable projection validates");
     let restored_snapshot = world.snapshot();
     assert_eq!(
         restored_snapshot.rollback_authority_registry,
@@ -1092,61 +1148,5 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
             changed_receipt,
         )
         .expect_err("committed receipt projection must be immutable");
-    let _ = fs::remove_dir_all(&dir);
-}
-
-#[test]
-fn snapshot_retention_policy_prunes_old_entries() {
-    let mut world = World::new();
-    world.set_snapshot_retention(SnapshotRetentionPolicy { max_snapshots: 1 });
-
-    world.submit_action(Action::RegisterAgent {
-        agent_id: "agent-1".to_string(),
-        pos: pos(0, 0),
-    });
-    world.step().unwrap();
-    let snap1 = world.create_snapshot().unwrap();
-
-    world.submit_action(Action::MoveAgent {
-        agent_id: "agent-1".to_string(),
-        to: pos(3, 3),
-    });
-    world.step().unwrap();
-    let snap2 = world.create_snapshot().unwrap();
-
-    assert_eq!(world.snapshot_catalog().records.len(), 1);
-    let last_record = &world.snapshot_catalog().records[0];
-    assert_eq!(last_record.snapshot_hash, util::hash_json(&snap2).unwrap());
-    assert_ne!(last_record.snapshot_hash, util::hash_json(&snap1).unwrap());
-}
-
-#[test]
-fn snapshot_file_pruning_removes_old_files() {
-    let mut world = World::new();
-    world.set_snapshot_retention(SnapshotRetentionPolicy { max_snapshots: 1 });
-
-    let dir = std::env::temp_dir().join(format!(
-        "oasis7-snapshots-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
-    ));
-
-    world.save_snapshot_to_dir(&dir).unwrap();
-    world.submit_action(Action::RegisterAgent {
-        agent_id: "agent-1".to_string(),
-        pos: pos(0, 0),
-    });
-    world.step().unwrap();
-    world.save_snapshot_to_dir(&dir).unwrap();
-
-    let snapshots_dir = dir.join("snapshots");
-    let file_count = fs::read_dir(&snapshots_dir)
-        .unwrap()
-        .filter_map(|entry| entry.ok())
-        .count();
-    assert_eq!(file_count, 1);
-
     let _ = fs::remove_dir_all(&dir);
 }

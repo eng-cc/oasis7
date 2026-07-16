@@ -481,7 +481,7 @@ impl ViewerLiveSession {
         let mut request_llm_decision = false;
         let mut deferred_control = None;
         match request {
-            ViewerRequest::Hello { .. } => {
+            ViewerRequest::Hello { .. } | ViewerRequest::HelloV2 { .. } => {
                 let response = ViewerResponse::HelloAck {
                     server: "oasis7".to_string(),
                     version: VIEWER_PROTOCOL_VERSION,

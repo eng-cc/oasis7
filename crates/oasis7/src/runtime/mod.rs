@@ -259,13 +259,15 @@ pub use state::{
 };
 
 // World
-pub use world::rollback_journal_commitment;
 pub use world::{
-    BuiltinReleaseManifestEntry, BuiltinReleaseManifestState, M1ScenarioBootstrapConfig,
+    AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
+    BuiltinReleaseManifestEntry, BuiltinReleaseManifestState,
+    CommittedAuthoritativeRecoveryGeneration, M1ScenarioBootstrapConfig,
     ModuleTickRoutingDeterministicSnapshot, ModuleTickRoutingDurationBuckets,
     ModuleTickRoutingMetricsSnapshot, ReleaseSecurityPolicy, World, WorldRuntimeBackpressureStats,
     WorldRuntimeMemoryLimits,
 };
+pub use world::{rollback_affected_census_digest, rollback_journal_commitment};
 
 // World event
 pub use world_event::{ModuleRuntimeChargeEvent, WorldEvent, WorldEventBody};

@@ -59,6 +59,7 @@ mod mapping;
 mod player_gameplay;
 mod recovery;
 mod recovery_receipt;
+mod recovery_session;
 mod session_policy;
 mod support;
 #[cfg(test)]
@@ -181,7 +182,7 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             };
-        let mut recovered_reorg_epoch = 0;
+        let mut recovered_generation = None;
         if let Some(recovery_dir) = config
             .generated_world_dir
             .as_deref()
@@ -191,11 +192,29 @@ impl ViewerRuntimeLiveServer {
                 RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
                     .map_err(ViewerRuntimeLiveServerError::Runtime)?
             {
-                let ack: AuthoritativeRecoveryAck<u64> = serde_json::from_slice(&metadata)
-                    .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
+                let generation = serde_json::from_slice::<
+                    recovery_receipt::RuntimeAuthoritativeRecoveryGeneration,
+                >(&metadata)
+                .or_else(|generation_error| {
+                    serde_json::from_slice::<AuthoritativeRecoveryAck<u64>>(&metadata)
+                        .map(
+                            |ack| recovery_receipt::RuntimeAuthoritativeRecoveryGeneration {
+                                schema_version: 0,
+                                reorg_epoch: ack.reorg_epoch,
+                                ack,
+                                authoritative_batches: VecDeque::new(),
+                                next_authoritative_batch_id: 1,
+                                authoritative_challenges: VecDeque::new(),
+                                next_authoritative_challenge_id: 1,
+                                stable_checkpoints: VecDeque::new(),
+                            },
+                        )
+                        .map_err(|_| generation_error)
+                })
+                .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
                 world = RuntimeWorld::load_from_dir(&recovery_dir)
                     .map_err(ViewerRuntimeLiveServerError::Runtime)?;
-                recovered_reorg_epoch = ack.reorg_epoch;
+                recovered_generation = Some(generation);
             }
         }
         let initial_world_time = world.state().time;
@@ -206,7 +225,7 @@ impl ViewerRuntimeLiveServer {
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
-        Ok(Self {
+        let mut server = Self {
             config,
             world,
             initial_world_time,
@@ -220,12 +239,30 @@ impl ViewerRuntimeLiveServer {
             llm_sidecar,
             pending_virtual_events: VecDeque::new(),
             next_virtual_event_id,
-            authoritative_batches: VecDeque::new(),
-            next_authoritative_batch_id: 1,
-            authoritative_challenges: VecDeque::new(),
-            next_authoritative_challenge_id: 1,
-            stable_checkpoints: VecDeque::new(),
-            reorg_epoch: recovered_reorg_epoch,
+            authoritative_batches: recovered_generation
+                .as_ref()
+                .map(|generation| generation.authoritative_batches.clone())
+                .unwrap_or_default(),
+            next_authoritative_batch_id: recovered_generation
+                .as_ref()
+                .map(|generation| generation.next_authoritative_batch_id)
+                .unwrap_or(1),
+            authoritative_challenges: recovered_generation
+                .as_ref()
+                .map(|generation| generation.authoritative_challenges.clone())
+                .unwrap_or_default(),
+            next_authoritative_challenge_id: recovered_generation
+                .as_ref()
+                .map(|generation| generation.next_authoritative_challenge_id)
+                .unwrap_or(1),
+            stable_checkpoints: recovered_generation
+                .as_ref()
+                .map(|generation| generation.stable_checkpoints.clone())
+                .unwrap_or_default(),
+            reorg_epoch: recovered_generation
+                .as_ref()
+                .map(|generation| generation.reorg_epoch)
+                .unwrap_or(0),
             session_policy: RuntimeSessionPolicy::default(),
             session_revoke_metadata: BTreeMap::new(),
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
@@ -235,7 +272,9 @@ impl ViewerRuntimeLiveServer {
             recovery_fault_injection: None,
             #[cfg(test)]
             authoritative_recovery_dir_override: None,
-        })
+        };
+        server.rebuild_settlement_ranking_gate();
+        Ok(server)
     }
 
     pub fn run(self) -> Result<(), ViewerRuntimeLiveServerError> {
@@ -478,11 +517,40 @@ impl ViewerRuntimeLiveServer {
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         match request {
-            ViewerRequest::Hello { version, .. } => {
-                session.negotiated_protocol = if version >= 2 {
-                    crate::viewer::protocol::NegotiatedViewerProtocol::v2_signed_rollback()
+            ViewerRequest::Hello { version: _, .. } => {
+                session.negotiated_protocol =
+                    crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities();
+                let capabilities = Vec::new();
+                send_response(
+                    writer,
+                    &ViewerResponse::HelloAck {
+                        server: "oasis7".to_string(),
+                        version: VIEWER_PROTOCOL_VERSION,
+                        min_version: 1,
+                        max_version: VIEWER_PROTOCOL_VERSION,
+                        capabilities,
+                        world_id: self.config.world_id.clone(),
+                        control_profile: ViewerControlProfile::Live,
+                    },
+                )?;
+            }
+            ViewerRequest::HelloV2 {
+                version,
+                capabilities: offered,
+                ..
+            } => {
+                let selected = if version >= 2
+                    && self.authoritative_recovery_dir().is_some()
+                    && offered.iter().any(|capability| {
+                        capability == crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
+                    }) {
+                    vec![crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY.to_string()]
                 } else {
-                    crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities()
+                    Vec::new()
+                };
+                session.negotiated_protocol = crate::viewer::protocol::NegotiatedViewerProtocol {
+                    version,
+                    capabilities: selected.clone(),
                 };
                 send_response(
                     writer,
@@ -491,10 +559,7 @@ impl ViewerRuntimeLiveServer {
                         version: VIEWER_PROTOCOL_VERSION,
                         min_version: 1,
                         max_version: VIEWER_PROTOCOL_VERSION,
-                        capabilities: vec![
-                            crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY
-                                .to_string(),
-                        ],
+                        capabilities: selected,
                         world_id: self.config.world_id.clone(),
                         control_profile: ViewerControlProfile::Live,
                     },

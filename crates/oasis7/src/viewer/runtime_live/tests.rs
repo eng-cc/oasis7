@@ -454,6 +454,38 @@ fn runtime_live_default_snapshot_request_does_not_enable_ongoing_streams() {
 }
 
 #[test]
+fn runtime_live_hello_omits_governed_rollback_when_no_durable_sink_exists() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(
+            ViewerRequest::Hello {
+                version: VIEWER_PROTOCOL_VERSION,
+                client: "red-capability-probe".to_string(),
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("handle hello");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+    let capabilities = match responses.as_slice() {
+        [ViewerResponse::HelloAck { capabilities, .. }] => capabilities,
+        other => panic!("expected one hello ack, got {other:?}"),
+    };
+    assert!(
+        !capabilities
+            .iter()
+            .any(|capability| capability
+                == crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY),
+        "server must not offer governed rollback when it cannot durably commit it"
+    );
+}
+
+#[test]
 fn runtime_live_events_subscription_requests_recovery_metadata_without_initial_snapshot() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
