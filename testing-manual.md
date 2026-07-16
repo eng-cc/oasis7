@@ -593,11 +593,13 @@ OASIS7_CHAIN_STORAGE_PROFILE=dev_local bash -x <bundle>/run-chain-runtime.sh --h
 - 漂移定位/回滚演练门禁（TASK-GAME-014）：
 ```bash
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::persistence::rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift -- --nocapture
+env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime_authoritative_recovery_rollback -- --nocapture
 ```
 - 演练通过标准：
   - 能定位 `mismatch_tick`；
   - `rollback_to_snapshot_with_reconciliation` 后 `first_tick_consensus_drift() == None`；
   - `verify_tick_consensus_chain()` 通过。
+  - Viewer 缺少签名信封返回 `rollback_approval_required`；篡改、过期、目标不匹配或重放信封返回 `rollback_authorization_invalid`，且两类失败均不得改变 world、journal、batch 或 reorg epoch。
 - 参考文档：`doc/testing/longrun/chain-runtime-soak-script-reactivation-2026-02-28.prd.md`、`doc/testing/longrun/p2p-storage-consensus-longrun-online-stability-2026-02-24.prd.md`、`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。
 
 ### S9A：链上大世界状态底座自闭环

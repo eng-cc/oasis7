@@ -236,14 +236,42 @@ pub struct AuthoritativeRollbackRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval: Option<RollbackApprovalEvidence>,
+    pub approval: Option<RollbackAuthorizationEnvelope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RollbackApprovalEvidence {
+pub struct RollbackAuthorizationEnvelope {
+    pub intent: RollbackIntent,
+    pub signatures: Vec<RollbackApprovalSignature>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackIntent {
+    pub schema_version: u32,
     pub rollback_ticket: String,
-    pub on_call_approver: String,
-    pub governance_approver: String,
+    pub snapshot_hash: String,
+    pub snapshot_journal_len: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_batch_id: Option<String>,
+    pub reason: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub nonce: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalSignature {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackAuthorityRole {
+    OnCall,
+    Governance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

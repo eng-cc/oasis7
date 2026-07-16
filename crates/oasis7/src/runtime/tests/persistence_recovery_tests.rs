@@ -1,7 +1,77 @@
 use super::*;
+use ed25519_dalek::{Signer, SigningKey};
 use oasis7_distfs::assemble_snapshot;
 
 const ISSUE160_SAMPLE_WORLD_ENV: &str = "OASIS7_VERIFY_ISSUE160_SAMPLE_WORLD";
+
+const ROLLBACK_NOW_MS: u64 = 1_720_000_000_000;
+
+fn rollback_test_key(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32])
+}
+
+fn rollback_authority_registry(
+    on_call_key: &SigningKey,
+    governance_key: &SigningKey,
+) -> RollbackAuthorityRegistry {
+    RollbackAuthorityRegistry::new([
+        RollbackAuthorityRecord {
+            authority_id: "on-call-alice".to_string(),
+            role: RollbackAuthorityRole::OnCall,
+            public_key_hex: hex::encode(on_call_key.verifying_key().to_bytes()),
+            active: true,
+        },
+        RollbackAuthorityRecord {
+            authority_id: "governance-bob".to_string(),
+            role: RollbackAuthorityRole::Governance,
+            public_key_hex: hex::encode(governance_key.verifying_key().to_bytes()),
+            active: true,
+        },
+    ])
+    .expect("valid rollback authority registry")
+}
+
+fn signed_rollback_authorization(
+    snapshot: &Snapshot,
+    target_batch_id: Option<&str>,
+    ticket: &str,
+    reason: &str,
+    nonce: &str,
+    on_call_key: &SigningKey,
+    governance_key: &SigningKey,
+) -> RollbackAuthorizationEnvelope {
+    let intent = RollbackIntent {
+        schema_version: 1,
+        rollback_ticket: ticket.to_string(),
+        snapshot_hash: util::hash_json(snapshot).expect("snapshot hash"),
+        snapshot_journal_len: snapshot.journal_len,
+        target_batch_id: target_batch_id.map(str::to_string),
+        reason: reason.to_string(),
+        issued_at_ms: ROLLBACK_NOW_MS - 1_000,
+        expires_at_ms: ROLLBACK_NOW_MS + 60_000,
+        nonce: nonce.to_string(),
+    };
+    let payload = intent
+        .canonical_signing_payload()
+        .expect("canonical rollback signing payload");
+    RollbackAuthorizationEnvelope {
+        intent,
+        signatures: vec![
+            RollbackApprovalSignature {
+                authority_id: "on-call-alice".to_string(),
+                role: RollbackAuthorityRole::OnCall,
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(on_call_key.sign(&payload).to_bytes()),
+            },
+            RollbackApprovalSignature {
+                authority_id: "governance-bob".to_string(),
+                role: RollbackAuthorityRole::Governance,
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(governance_key.sign(&payload).to_bytes()),
+            },
+        ],
+    }
+}
 
 #[test]
 fn load_from_dir_falls_back_to_json_when_distfs_sidecar_is_invalid() {
@@ -126,7 +196,12 @@ fn sample_issue160_execution_world_matches_tick_consensus_after_distfs_restore()
 
 #[test]
 fn rollback_to_snapshot_resets_state() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
     let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-1".to_string(),
         pos: pos(0, 0),
@@ -145,16 +220,23 @@ fn rollback_to_snapshot_resets_state() {
     );
 
     let journal = world.journal().clone();
+    let approval = signed_rollback_authorization(
+        &snapshot,
+        None,
+        "ROLLBACK-LOW-LEVEL-TEST",
+        "test-rollback",
+        "nonce-low-level-1",
+        &on_call_key,
+        &governance_key,
+    );
     world
         .rollback_to_snapshot(
             snapshot.clone(),
             journal,
             "test-rollback",
-            RollbackApprovalEvidence {
-                rollback_ticket: "ROLLBACK-LOW-LEVEL-TEST".to_string(),
-                on_call_approver: "on-call-alice".to_string(),
-                governance_approver: "governance-bob".to_string(),
-            },
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
         )
         .unwrap();
 
@@ -165,7 +247,12 @@ fn rollback_to_snapshot_resets_state() {
 
 #[test]
 fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
     let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
     world
         .bind_node_identity("relay.node.1", "relay-public-key-1")
         .expect("bind relay identity");
@@ -194,16 +281,23 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
         .verify_tick_consensus_chain()
         .expect_err("drifted chain should fail verification");
 
+    let approval = signed_rollback_authorization(
+        &stable_snapshot,
+        None,
+        "ROLLBACK-2313",
+        "reconcile-after-drift",
+        "nonce-reconcile-1",
+        &on_call_key,
+        &governance_key,
+    );
     world
         .rollback_to_snapshot_with_reconciliation(
             stable_snapshot,
             stable_journal,
             "reconcile-after-drift",
-            RollbackApprovalEvidence {
-                rollback_ticket: "ROLLBACK-2313".to_string(),
-                on_call_approver: "on-call-alice".to_string(),
-                governance_approver: "governance-bob".to_string(),
-            },
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
         )
         .expect("rollback with reconciliation");
 
@@ -226,30 +320,28 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
         })
         .expect("rollback audit event");
     assert_eq!(rollback.rollback_ticket, "ROLLBACK-2313");
-    assert_eq!(rollback.on_call_approver, "on-call-alice");
-    assert_eq!(rollback.governance_approver, "governance-bob");
+    assert_eq!(rollback.on_call_authority_id, "on-call-alice");
+    assert_eq!(rollback.governance_authority_id, "governance-bob");
+    assert_eq!(rollback.authorization_nonce, "nonce-reconcile-1");
 }
 
 #[test]
-fn rollback_with_reconciliation_rejects_invalid_approval_before_mutation() {
-    for approval in [
-        RollbackApprovalEvidence {
-            rollback_ticket: " ".to_string(),
-            on_call_approver: "on-call-alice".to_string(),
-            governance_approver: "governance-bob".to_string(),
-        },
-        RollbackApprovalEvidence {
-            rollback_ticket: "ROLLBACK-2313".to_string(),
-            on_call_approver: " ".to_string(),
-            governance_approver: "governance-bob".to_string(),
-        },
-        RollbackApprovalEvidence {
-            rollback_ticket: "ROLLBACK-2313".to_string(),
-            on_call_approver: "same-person".to_string(),
-            governance_approver: "same-person".to_string(),
-        },
+fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    for invalid_case in [
+        "tampered_ticket",
+        "expired",
+        "same_key_wrong_role",
+        "target_mismatch",
     ] {
         let mut world = World::new();
+        world
+            .set_rollback_authority_registry(rollback_authority_registry(
+                &on_call_key,
+                &governance_key,
+            ))
+            .expect("configure rollback authorities");
         world.submit_action(Action::RegisterAgent {
             agent_id: "agent-1".to_string(),
             pos: pos(0, 0),
@@ -266,12 +358,46 @@ fn rollback_with_reconciliation_rejects_invalid_approval_before_mutation() {
         let state_before = world.state().clone();
         let journal_before = world.journal().clone();
 
+        let mut approval = signed_rollback_authorization(
+            &stable_snapshot,
+            Some("batch-stable-1"),
+            "ROLLBACK-2313",
+            "invalid-authorization-must-not-mutate",
+            invalid_case,
+            &on_call_key,
+            &governance_key,
+        );
+        match invalid_case {
+            "tampered_ticket" => approval.intent.rollback_ticket.push_str("-tampered"),
+            "expired" => approval.intent.expires_at_ms = ROLLBACK_NOW_MS - 1,
+            "same_key_wrong_role" => {
+                let payload = approval
+                    .intent
+                    .canonical_signing_payload()
+                    .expect("canonical payload");
+                approval.signatures[1].authority_id = "on-call-alice".to_string();
+                approval.signatures[1].role = RollbackAuthorityRole::Governance;
+                approval.signatures[1].signature_hex =
+                    hex::encode(on_call_key.sign(&payload).to_bytes());
+            }
+            "target_mismatch" => {}
+            _ => unreachable!(),
+        }
+
+        let expected_target_batch_id = if invalid_case == "target_mismatch" {
+            Some("batch-other")
+        } else {
+            Some("batch-stable-1")
+        };
+
         world
             .rollback_to_snapshot_with_reconciliation(
                 stable_snapshot,
                 stable_journal,
                 "invalid-approval-must-not-mutate",
+                expected_target_batch_id,
                 approval,
+                ROLLBACK_NOW_MS,
             )
             .expect_err("invalid rollback approval must be rejected");
 
@@ -286,6 +412,76 @@ fn rollback_with_reconciliation_rejects_invalid_approval_before_mutation() {
             "journal mutated before rejection"
         );
     }
+}
+
+#[test]
+fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("step");
+    let old_snapshot = world.snapshot();
+    let old_journal = world.journal().clone();
+    let approval = signed_rollback_authorization(
+        &old_snapshot,
+        None,
+        "ROLLBACK-2313-REPLAY",
+        "durable-replay-test",
+        "nonce-durable-1",
+        &on_call_key,
+        &governance_key,
+    );
+
+    world
+        .rollback_to_snapshot(
+            old_snapshot.clone(),
+            old_journal.clone(),
+            "durable-replay-test",
+            None,
+            approval.clone(),
+            ROLLBACK_NOW_MS,
+        )
+        .expect("first use succeeds");
+
+    let dir = temp_dir("persist-rollback-replay-state");
+    world
+        .save_to_dir(&dir)
+        .expect("persist rollback replay state");
+    let mut world = World::load_from_dir(&dir).expect("restore rollback replay state");
+    let restored_snapshot = world.snapshot();
+    assert_eq!(
+        restored_snapshot.rollback_authority_registry,
+        rollback_authority_registry(&on_call_key, &governance_key)
+    );
+    assert!(
+        restored_snapshot
+            .consumed_rollback_nonces
+            .contains("nonce-durable-1")
+    );
+
+    let state_after_first = world.state().clone();
+    let journal_after_first = world.journal().clone();
+
+    world
+        .rollback_to_snapshot(
+            old_snapshot,
+            old_journal,
+            "durable-replay-test",
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
+        )
+        .expect_err("consumed nonce must survive rollback to an older snapshot");
+    assert_eq!(world.state(), &state_after_first);
+    assert_eq!(world.journal(), &journal_after_first);
+    let _ = fs::remove_dir_all(&dir);
 }
 
 #[test]

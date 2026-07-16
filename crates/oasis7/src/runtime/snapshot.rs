@@ -125,6 +125,10 @@ pub struct Snapshot {
     pub governance_identity_penalties: BTreeMap<u64, GovernanceIdentityPenaltyRecord>,
     #[serde(default = "default_next_governance_identity_penalty_id")]
     pub next_governance_identity_penalty_id: u64,
+    #[serde(default)]
+    pub rollback_authority_registry: RollbackAuthorityRegistry,
+    #[serde(default)]
+    pub consumed_rollback_nonces: BTreeSet<String>,
 }
 
 fn module_limits_unbounded() -> ModuleLimits {
@@ -222,39 +226,114 @@ pub struct RollbackEvent {
     pub on_call_approver: String,
     #[serde(default)]
     pub governance_approver: String,
+    #[serde(default)]
+    pub on_call_authority_id: String,
+    #[serde(default)]
+    pub governance_authority_id: String,
+    #[serde(default)]
+    pub authorization_nonce: String,
 }
 
-/// Approval evidence required by the reconciled production rollback path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackAuthorityRole {
+    OnCall,
+    Governance,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RollbackApprovalEvidence {
-    pub rollback_ticket: String,
-    pub on_call_approver: String,
-    pub governance_approver: String,
+pub struct RollbackAuthorityRecord {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub public_key_hex: String,
+    pub active: bool,
 }
 
-impl RollbackApprovalEvidence {
-    pub(crate) fn validate(&self) -> Result<(), WorldError> {
-        if self.rollback_ticket.trim().is_empty() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "rollback approval requires a nonblank rollback_ticket".to_string(),
-            });
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackAuthorityRegistry {
+    records: BTreeMap<String, RollbackAuthorityRecord>,
+}
+
+impl RollbackAuthorityRegistry {
+    pub fn new(
+        records: impl IntoIterator<Item = RollbackAuthorityRecord>,
+    ) -> Result<Self, WorldError> {
+        let mut registry = Self::default();
+        for record in records {
+            let authority_id = record.authority_id.trim().to_string();
+            if authority_id.is_empty() || record.public_key_hex.trim().is_empty() {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "rollback authority requires nonblank id and public key".to_string(),
+                });
+            }
+            if hex::decode(record.public_key_hex.trim()).map(|bytes| bytes.len()) != Ok(32) {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority {authority_id} has invalid Ed25519 public key"
+                    ),
+                });
+            }
+            if registry
+                .records
+                .insert(authority_id.clone(), record)
+                .is_some()
+            {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!("duplicate rollback authority id {authority_id}"),
+                });
+            }
         }
-        if self.on_call_approver.trim().is_empty() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "rollback approval requires a nonblank on_call_approver".to_string(),
-            });
-        }
-        if self.governance_approver.trim().is_empty() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "rollback approval requires a nonblank governance_approver".to_string(),
-            });
-        }
-        if self.on_call_approver.trim() == self.governance_approver.trim() {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "rollback approval requires distinct on-call and governance approvers"
-                    .to_string(),
-            });
-        }
-        Ok(())
+        Ok(registry)
     }
+
+    pub(crate) fn get(&self, authority_id: &str) -> Option<&RollbackAuthorityRecord> {
+        self.records.get(authority_id)
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackIntent {
+    pub schema_version: u32,
+    pub rollback_ticket: String,
+    pub snapshot_hash: String,
+    pub snapshot_journal_len: usize,
+    pub target_batch_id: Option<String>,
+    pub reason: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub nonce: String,
+}
+
+impl RollbackIntent {
+    pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, WorldError> {
+        if self.schema_version != 1 {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "unsupported rollback intent schema version {}",
+                    self.schema_version
+                ),
+            });
+        }
+        let mut payload = b"oasis7:world-rollback-authorization:v1\0".to_vec();
+        payload.extend(serde_json::to_vec(self)?);
+        Ok(payload)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalSignature {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackAuthorizationEnvelope {
+    pub intent: RollbackIntent,
+    pub signatures: Vec<RollbackApprovalSignature>,
 }

@@ -1,6 +1,102 @@
 use super::*;
-use crate::viewer::protocol::RollbackApprovalEvidence;
+use crate::viewer::protocol::{
+    RollbackApprovalSignature, RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackIntent,
+};
 use crate::viewer::runtime_live::authoritative::{RuntimeBatchChallengeState, is_valid_root_hash};
+use ed25519_dalek::{Signer, SigningKey};
+use sha2::{Digest, Sha256};
+
+fn configure_rollback_authorities(
+    server: &mut ViewerRuntimeLiveServer,
+) -> (SigningKey, SigningKey) {
+    let on_call = SigningKey::from_bytes(&[41; 32]);
+    let governance = SigningKey::from_bytes(&[73; 32]);
+    server
+        .world
+        .set_rollback_authority_registry(
+            crate::runtime::RollbackAuthorityRegistry::new([
+                crate::runtime::RollbackAuthorityRecord {
+                    authority_id: "on-call-alice".to_string(),
+                    role: crate::runtime::RollbackAuthorityRole::OnCall,
+                    public_key_hex: hex::encode(on_call.verifying_key().to_bytes()),
+                    active: true,
+                },
+                crate::runtime::RollbackAuthorityRecord {
+                    authority_id: "governance-bob".to_string(),
+                    role: crate::runtime::RollbackAuthorityRole::Governance,
+                    public_key_hex: hex::encode(governance.verifying_key().to_bytes()),
+                    active: true,
+                },
+            ])
+            .expect("registry"),
+        )
+        .expect("configure rollback authorities");
+    (on_call, governance)
+}
+
+fn signed_rollback_envelope(
+    server: &ViewerRuntimeLiveServer,
+    batch_id: &str,
+    reason: &str,
+    nonce: &str,
+    on_call: &SigningKey,
+    governance: &SigningKey,
+) -> RollbackAuthorizationEnvelope {
+    let snapshot = &server
+        .stable_checkpoints
+        .iter()
+        .find(|checkpoint| checkpoint.batch_id == batch_id)
+        .expect("stable checkpoint")
+        .snapshot;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system clock")
+        .as_millis() as u64;
+    let intent = RollbackIntent {
+        schema_version: 1,
+        rollback_ticket: "ROLLBACK-2313".to_string(),
+        snapshot_hash: hex::encode(Sha256::digest(
+            serde_json::to_vec(snapshot).expect("snapshot json"),
+        )),
+        snapshot_journal_len: snapshot.journal_len,
+        target_batch_id: Some(batch_id.to_string()),
+        reason: reason.to_string(),
+        issued_at_ms: now_ms.saturating_sub(1_000),
+        expires_at_ms: now_ms.saturating_add(60_000),
+        nonce: nonce.to_string(),
+    };
+    let runtime_intent = crate::runtime::RollbackIntent {
+        schema_version: intent.schema_version,
+        rollback_ticket: intent.rollback_ticket.clone(),
+        snapshot_hash: intent.snapshot_hash.clone(),
+        snapshot_journal_len: intent.snapshot_journal_len,
+        target_batch_id: intent.target_batch_id.clone(),
+        reason: intent.reason.clone(),
+        issued_at_ms: intent.issued_at_ms,
+        expires_at_ms: intent.expires_at_ms,
+        nonce: intent.nonce.clone(),
+    };
+    let payload = runtime_intent
+        .canonical_signing_payload()
+        .expect("signing payload");
+    RollbackAuthorizationEnvelope {
+        intent,
+        signatures: vec![
+            RollbackApprovalSignature {
+                authority_id: "on-call-alice".to_string(),
+                role: RollbackAuthorityRole::OnCall,
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(on_call.sign(&payload).to_bytes()),
+            },
+            RollbackApprovalSignature {
+                authority_id: "governance-bob".to_string(),
+                role: RollbackAuthorityRole::Governance,
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: hex::encode(governance.sign(&payload).to_bytes()),
+            },
+        ],
+    }
+}
 
 fn commit_single_authoritative_batch(
     server: &mut ViewerRuntimeLiveServer,
@@ -297,6 +393,15 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
     assert_eq!(server.stable_checkpoints.len(), 1);
 
     let second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "test_reorg",
+        "viewer-valid-1",
+        &on_call,
+        &governance,
+    );
     assert_eq!(server.authoritative_batches.len(), 2);
     assert_eq!(server.authoritative_batches[1].batch_id, second.batch_id);
 
@@ -306,11 +411,7 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
                 target_batch_id: Some(first.batch_id.clone()),
                 reason: "test_reorg".to_string(),
                 requested_by: Some("ops".to_string()),
-                approval: Some(RollbackApprovalEvidence {
-                    rollback_ticket: "ROLLBACK-2313".to_string(),
-                    on_call_approver: "on-call-alice".to_string(),
-                    governance_approver: "governance-bob".to_string(),
-                }),
+                approval: Some(approval),
             },
         })
         .expect("rollback to first stable batch");
@@ -375,6 +476,49 @@ fn runtime_authoritative_recovery_rollback_rejects_missing_approval_before_mutat
 }
 
 #[test]
+fn runtime_authoritative_recovery_rollback_rejects_tampered_envelope_before_mutation() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize first batch");
+    let _second = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let mut approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "tampered-approval",
+        "viewer-tampered-1",
+        &on_call,
+        &governance,
+    );
+    approval.intent.reason = "changed-after-signing".to_string();
+    let state_before = server.world.state().clone();
+    let journal_before = server.world.journal().clone();
+    let batch_count_before = server.authoritative_batches.len();
+    let reorg_epoch_before = server.reorg_epoch;
+
+    let err = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "changed-after-signing".to_string(),
+                requested_by: Some("ops".to_string()),
+                approval: Some(approval),
+            },
+        })
+        .expect_err("tampered signed intent must fail closed");
+
+    assert_eq!(err.code, "rollback_authorization_invalid");
+    assert_eq!(server.world.state(), &state_before);
+    assert_eq!(server.world.journal(), &journal_before);
+    assert_eq!(server.authoritative_batches.len(), batch_count_before);
+    assert_eq!(server.reorg_epoch, reorg_epoch_before);
+}
+
+#[test]
 fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
@@ -385,6 +529,15 @@ fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
         .advance_authoritative_batch_finality(first.final_height)
         .expect("finalize first batch");
     let initial_cursor = latest_runtime_event_seq(&server.world);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "force_reorg",
+        "viewer-valid-2",
+        &on_call,
+        &governance,
+    );
 
     let (initial_ack, emit_snapshot_after_ack) = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
@@ -409,11 +562,7 @@ fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
                 target_batch_id: Some(first.batch_id),
                 reason: "force_reorg".to_string(),
                 requested_by: None,
-                approval: Some(RollbackApprovalEvidence {
-                    rollback_ticket: "ROLLBACK-2313-RECONNECT".to_string(),
-                    on_call_approver: "on-call-alice".to_string(),
-                    governance_approver: "governance-bob".to_string(),
-                }),
+                approval: Some(approval),
             },
         })
         .expect("rollback");

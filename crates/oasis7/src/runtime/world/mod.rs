@@ -314,6 +314,10 @@ pub struct World {
     builtin_release_manifest: BuiltinReleaseManifestState,
     #[serde(default)]
     release_security_policy: ReleaseSecurityPolicy,
+    #[serde(default)]
+    rollback_authority_registry: super::RollbackAuthorityRegistry,
+    #[serde(default)]
+    consumed_rollback_nonces: BTreeSet<String>,
 }
 
 impl World {
@@ -422,6 +426,8 @@ impl World {
             next_governance_identity_penalty_id: default_next_governance_identity_penalty_id(),
             builtin_release_manifest: BuiltinReleaseManifestState::default(),
             release_security_policy: ReleaseSecurityPolicy::default(),
+            rollback_authority_registry: super::RollbackAuthorityRegistry::default(),
+            consumed_rollback_nonces: BTreeSet::new(),
         }
     }
 

@@ -56,6 +56,15 @@ impl ViewerRuntimeLiveServer {
                     None,
                 )
             })?;
+        if approval.intent.target_batch_id.as_deref() != Some(target_batch_id.as_str()) {
+            return Err(recovery_error(
+                "rollback_authorization_invalid",
+                "rollback authorization is not bound to the selected batch",
+                Some(target_batch_id),
+                None,
+                None,
+            ));
+        }
         let checkpoint = self
             .stable_checkpoints
             .iter()
@@ -95,15 +104,42 @@ impl ViewerRuntimeLiveServer {
                 checkpoint.snapshot.clone(),
                 checkpoint.journal.clone(),
                 rollback_reason,
-                crate::runtime::RollbackApprovalEvidence {
-                    rollback_ticket: approval.rollback_ticket,
-                    on_call_approver: approval.on_call_approver,
-                    governance_approver: approval.governance_approver,
+                Some(target_batch_id.as_str()),
+                crate::runtime::RollbackAuthorizationEnvelope {
+                    intent: crate::runtime::RollbackIntent {
+                        schema_version: approval.intent.schema_version,
+                        rollback_ticket: approval.intent.rollback_ticket,
+                        snapshot_hash: approval.intent.snapshot_hash,
+                        snapshot_journal_len: approval.intent.snapshot_journal_len,
+                        target_batch_id: approval.intent.target_batch_id,
+                        reason: approval.intent.reason,
+                        issued_at_ms: approval.intent.issued_at_ms,
+                        expires_at_ms: approval.intent.expires_at_ms,
+                        nonce: approval.intent.nonce,
+                    },
+                    signatures: approval
+                        .signatures
+                        .into_iter()
+                        .map(|signature| crate::runtime::RollbackApprovalSignature {
+                            authority_id: signature.authority_id,
+                            role: match signature.role {
+                                crate::viewer::protocol::RollbackAuthorityRole::OnCall => {
+                                    crate::runtime::RollbackAuthorityRole::OnCall
+                                }
+                                crate::viewer::protocol::RollbackAuthorityRole::Governance => {
+                                    crate::runtime::RollbackAuthorityRole::Governance
+                                }
+                            },
+                            signature_scheme: signature.signature_scheme,
+                            signature_hex: signature.signature_hex,
+                        })
+                        .collect(),
                 },
+                current_unix_time_ms(),
             )
             .map_err(|err| {
                 recovery_error(
-                    "rollback_failed",
+                    "rollback_authorization_invalid",
                     format!("{err:?}"),
                     Some(checkpoint.batch_id.clone()),
                     None,
@@ -632,6 +668,13 @@ impl ViewerRuntimeLiveServer {
         }
         Ok(())
     }
+}
+
+fn current_unix_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or(0)
 }
 
 pub(super) fn recovery_error(
