@@ -149,6 +149,16 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     pub auto_restricted_starter_claim_amount: u64,
     #[serde(default)]
     pub eligible_claim_balance: u64,
+    #[serde(default)]
+    pub eligible_balance_after: u64,
+    #[serde(default)]
+    pub upkeep_runway_epochs: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_upkeep_due_epoch: Option<u64>,
+    #[serde(default)]
+    pub low_runway_warning: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_claim_action: Option<String>,
     pub release_cooldown_epochs: u64,
     pub grace_epochs: u64,
     pub idle_warning_epochs: u64,

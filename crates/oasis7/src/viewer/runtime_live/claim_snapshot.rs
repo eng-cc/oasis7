@@ -68,6 +68,50 @@ pub(super) fn build_player_agent_claim_snapshot(
             } else {
                 liquid_main_token_balance
             };
+            let blocked_reason = if quote.slot_index > 1
+                && liquid_main_token_balance < total_upfront_amount
+                && restricted_starter_claim_balance > 0
+            {
+                Some(format!(
+                    "restricted_balance_not_eligible_for_slot slot={} liquid={} restricted={} required={}",
+                    quote.slot_index,
+                    liquid_main_token_balance,
+                    restricted_starter_claim_balance,
+                    total_upfront_amount
+                ))
+            } else if eligible_claim_balance < total_upfront_amount {
+                Some(format!(
+                    "insufficient_claim_eligible_main_token eligible={} liquid={} restricted={} required={}",
+                    eligible_claim_balance,
+                    liquid_main_token_balance,
+                    restricted_starter_claim_balance,
+                    total_upfront_amount
+                ))
+            } else {
+                None
+            };
+            let eligible_balance_after = blocked_reason
+                .is_none()
+                .then(|| eligible_claim_balance.saturating_sub(total_upfront_amount))
+                .unwrap_or(0);
+            let upkeep_runway_epochs = if blocked_reason.is_none() && quote.upkeep_per_epoch > 0 {
+                eligible_balance_after / quote.upkeep_per_epoch
+            } else {
+                0
+            };
+            let next_upkeep_due_epoch = blocked_reason
+                .is_none()
+                .then(|| current_epoch.saturating_add(1));
+            let low_runway_warning =
+                blocked_reason.is_none() && upkeep_runway_epochs < quote.grace_epochs;
+            let recommended_claim_action = blocked_reason.is_none().then(|| {
+                if low_runway_warning {
+                    "wait_or_fund_first"
+                } else {
+                    "claim_now_route_fit"
+                }
+                .to_string()
+            });
             Some(PlayerAgentClaimQuoteSnapshot {
                 slot_index: quote.slot_index,
                 reputation_tier: quote.reputation_tier,
@@ -81,33 +125,17 @@ pub(super) fn build_player_agent_claim_snapshot(
                 restricted_starter_claim_balance,
                 auto_restricted_starter_claim_amount,
                 eligible_claim_balance,
+                eligible_balance_after,
+                upkeep_runway_epochs,
+                next_upkeep_due_epoch,
+                low_runway_warning,
+                recommended_claim_action,
                 release_cooldown_epochs: quote.release_cooldown_epochs,
                 grace_epochs: quote.grace_epochs,
                 idle_warning_epochs: quote.idle_warning_epochs,
                 forced_idle_reclaim_epochs: quote.forced_idle_reclaim_epochs,
                 forced_reclaim_penalty_bps: quote.forced_reclaim_penalty_bps,
-                blocked_reason: if quote.slot_index > 1
-                    && liquid_main_token_balance < total_upfront_amount
-                    && restricted_starter_claim_balance > 0
-                {
-                    Some(format!(
-                        "restricted_balance_not_eligible_for_slot slot={} liquid={} restricted={} required={}",
-                        quote.slot_index,
-                        liquid_main_token_balance,
-                        restricted_starter_claim_balance,
-                        total_upfront_amount
-                    ))
-                } else if eligible_claim_balance < total_upfront_amount {
-                    Some(format!(
-                        "insufficient_claim_eligible_main_token eligible={} liquid={} restricted={} required={}",
-                        eligible_claim_balance,
-                        liquid_main_token_balance,
-                        restricted_starter_claim_balance,
-                        total_upfront_amount
-                    ))
-                } else {
-                    None
-                },
+                blocked_reason,
             })
         }
         Err(reason) => Some(PlayerAgentClaimQuoteSnapshot {
@@ -124,6 +152,11 @@ pub(super) fn build_player_agent_claim_snapshot(
             auto_restricted_starter_claim_amount: 0,
             eligible_claim_balance: liquid_main_token_balance
                 .saturating_add(restricted_starter_claim_balance),
+            eligible_balance_after: 0,
+            upkeep_runway_epochs: 0,
+            next_upkeep_due_epoch: None,
+            low_runway_warning: false,
+            recommended_claim_action: None,
             release_cooldown_epochs: 0,
             grace_epochs: 0,
             idle_warning_epochs: 0,
