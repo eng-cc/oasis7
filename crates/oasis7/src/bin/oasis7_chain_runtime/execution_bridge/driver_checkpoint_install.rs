@@ -20,7 +20,10 @@ use super::driver_observability::{
 use super::driver_persistence::{
     persist_execution_bridge_state, persist_execution_world_with_chain_resource_context,
 };
-use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord};
+use super::{
+    EXECUTION_BRIDGE_RECORD_SCHEMA_V3, EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2,
+    ExecutionBridgeRecord,
+};
 
 pub(super) fn install_checkpoint_bundle(
     driver: &mut NodeRuntimeExecutionDriver,
@@ -47,6 +50,12 @@ pub(super) fn install_checkpoint_bundle(
                 )
             })?;
     manifest.validate()?;
+    if manifest.schema_version < EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2 {
+        return Err(format!(
+            "execution checkpoint v1 manifest cannot be installed at height {}: v2 predecessor anchor required",
+            context.height
+        ));
+    }
     let manifest_decode_ms = manifest_decode_started_at.elapsed();
     if manifest.world_id != context.world_id
         || manifest.height != context.height

@@ -482,20 +482,22 @@ fn node_runtime_execution_driver_rejects_checkpoint_bundle_snapshot_root_mismatc
         .export_checkpoint_bundle(2)
         .expect("export checkpoint")
         .expect("checkpoint bundle");
-    let malformed_manifest = super::super::ExecutionCheckpointManifest::new(
-        "world-checkpoint-root-mismatch".to_string(),
-        2,
-        second.execution_block_hash.clone(),
-        second.execution_state_root.clone(),
-        record_1
-            .latest_state_ref
-            .clone()
-            .expect("record 1 latest state ref"),
-        record_1.snapshot_ref.clone(),
-        record_1.journal_ref.clone(),
-        11_002,
-    )
-    .expect("malformed manifest with valid hash");
+    let malformed_manifest =
+        super::super::ExecutionCheckpointManifest::new_with_predecessor_execution_block_hash(
+            "world-checkpoint-root-mismatch".to_string(),
+            2,
+            second.execution_block_hash.clone(),
+            second.execution_state_root.clone(),
+            record_1.execution_block_hash.clone(),
+            record_1
+                .latest_state_ref
+                .clone()
+                .expect("record 1 latest state ref"),
+            record_1.snapshot_ref.clone(),
+            record_1.journal_ref.clone(),
+            11_002,
+        )
+        .expect("malformed manifest with valid hash");
     for content_hash in &malformed_manifest.pinned_refs {
         if bundle
             .blobs
@@ -545,6 +547,116 @@ fn node_runtime_execution_driver_rejects_checkpoint_bundle_snapshot_root_mismatc
     assert!(
         !execution_bridge_record_path(target_root.join("records").as_path(), 2).exists(),
         "failed checkpoint install must not persist a height-2 execution record"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_v1_checkpoint_bundle_before_target_mutation() {
+    let dir = temp_dir("execution-driver-checkpoint-v1-rejection");
+    let source_root = dir.join("source");
+    let target_root = dir.join("target");
+    let storage_profile = StorageProfileConfig {
+        execution_checkpoint_interval: 2,
+        execution_checkpoint_keep: 2,
+        ..StorageProfileConfig::for_profile(StorageProfile::DevLocal)
+    };
+    let mut source = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        source_root.join("bridge-state.json"),
+        source_root.join("world"),
+        source_root.join("records"),
+        source_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("source driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-v1-rejection".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "block-1".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 12_001,
+        })
+        .expect("commit 1");
+    let second = source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-v1-rejection".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "block-2".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 12_002,
+        })
+        .expect("commit 2");
+    let source_record = load_execution_bridge_record(
+        execution_bridge_record_path(source_root.join("records").as_path(), 2).as_path(),
+    )
+    .expect("source record");
+    let mut bundle = source
+        .export_checkpoint_bundle(2)
+        .expect("export checkpoint")
+        .expect("checkpoint bundle");
+    let v1_manifest = super::super::ExecutionCheckpointManifest::new(
+        "world-checkpoint-v1-rejection".to_string(),
+        2,
+        second.execution_block_hash.clone(),
+        second.execution_state_root.clone(),
+        source_record
+            .latest_state_ref
+            .clone()
+            .expect("source latest state ref"),
+        source_record.snapshot_ref.clone(),
+        source_record.journal_ref.clone(),
+        12_002,
+    )
+    .expect("v1 manifest");
+    bundle.manifest_json = serde_json::to_vec_pretty(&v1_manifest).expect("v1 manifest json");
+
+    let mut target = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        target_root.join("bridge-state.json"),
+        target_root.join("world"),
+        target_root.join("records"),
+        target_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("target driver");
+    let err = target
+        .install_checkpoint_bundle(
+            NodeExecutionCheckpointInstallContext {
+                world_id: "world-checkpoint-v1-rejection".to_string(),
+                node_id: "node-b".to_string(),
+                height: 2,
+                node_block_hash: "block-2".to_string(),
+                execution_block_hash: second.execution_block_hash,
+                execution_state_root: second.execution_state_root,
+                committed_at_unix_ms: 12_002,
+            },
+            bundle,
+        )
+        .expect_err("v1 checkpoint bundle must be rejected before target mutation");
+    assert!(err.contains("v1"), "unexpected v1 rejection error: {err}");
+    assert_eq!(target.state.last_applied_committed_height, 0);
+    assert!(
+        !execution_bridge_record_path(target_root.join("records").as_path(), 2).exists(),
+        "rejected v1 checkpoint must not persist a target execution record"
+    );
+    assert!(
+        !target
+            .execution_store
+            .has(v1_manifest.latest_state_ref.as_str())
+            .expect("check target store"),
+        "rejected v1 checkpoint must not copy target blobs"
     );
 
     let _ = fs::remove_dir_all(dir);

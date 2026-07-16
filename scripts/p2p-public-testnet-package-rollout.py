@@ -279,22 +279,39 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
     return files
 
 
-def require_same_build(platform_infos: dict[str, dict[str, str]]) -> dict[str, str]:
-    required = ("package_version", "commit", "run_id")
+def require_same_commit(platform_infos: dict[str, dict[str, str]]) -> str:
     first_platform = next(iter(platform_infos))
-    expected = {key: platform_infos[first_platform].get(key, "") for key in required}
-    for key, value in expected.items():
-        if not value:
-            die(f"{first_platform} BUILDINFO missing {key}")
+    expected = platform_infos[first_platform].get("commit", "")
+    if not expected:
+        die(f"{first_platform} BUILDINFO missing commit")
     for platform, info in platform_infos.items():
-        for key, expected_value in expected.items():
-            actual = info.get(key, "")
-            if actual != expected_value:
-                die(
-                    f"{platform} BUILDINFO {key}={actual!r} does not match "
-                    f"{first_platform} {key}={expected_value!r}"
-                )
+        actual = info.get("commit", "")
+        if actual != expected:
+            die(
+                f"{platform} BUILDINFO commit={actual!r} does not match "
+                f"{first_platform} commit={expected!r}"
+            )
     return expected
+
+
+def package_provenance(platform: str, platform_dir: Path, asset: Path, info: dict[str, str]) -> dict[str, str]:
+    package_version = info.get("package_version", "")
+    run_id = info.get("run_id", "")
+    commit = info.get("commit", "")
+    if not package_version or not run_id or not commit:
+        die(f"{platform} BUILDINFO missing package_version, run_id, or commit")
+    buildinfo = platform_dir / f"{platform}-BUILDINFO"
+    sums = platform_dir / f"{platform}-SHA256SUMS"
+    return {
+        "platform": platform,
+        "package_version": package_version,
+        "run_id": run_id,
+        "commit": commit,
+        "asset": asset.name,
+        "asset_sha256": sha256_file(asset),
+        "buildinfo_sha256": sha256_file(buildinfo),
+        "sha256sums_sha256": sha256_file(sums),
+    }
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -2062,15 +2079,20 @@ def main() -> int:
         if platform == "macos-arm64":
             require_macos_arm64_metadata(platform_infos[platform])
 
-    build = require_same_build(platform_infos)
-    version = build["package_version"]
-    commit = build["commit"]
-    run_id = build["run_id"]
+    commit = require_same_commit(platform_infos)
+    platform_provenance = {
+        platform: package_provenance(
+            platform,
+            platform_dirs[platform],
+            platform_assets[platform],
+            platform_infos[platform],
+        )
+        for platform in platforms
+    }
 
     plan: dict[str, Any] = {
-        "package_version": version,
         "commit": commit,
-        "run_id": run_id,
+        "platform_provenance": platform_provenance,
         "out_dir": str(out_dir),
         "readiness_policy": args.readiness_policy,
         "verified_files": verified_files,
@@ -2087,9 +2109,12 @@ def main() -> int:
             "name": name,
             "platform": platform,
             "host": node.get("host"),
+            "package_provenance": platform_provenance[platform],
             "commands": [],
             "applied": False,
         }
+        version = platform_provenance[platform]["package_version"]
+        run_id = platform_provenance[platform]["run_id"]
         if platform == "linux-x64":
             command = linux_command(
                 node,
@@ -2162,9 +2187,14 @@ def main() -> int:
     if args.json:
         print(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print(f"package_version={version}")
         print(f"commit={commit}")
-        print(f"run_id={run_id}")
+        for platform in platforms:
+            provenance = platform_provenance[platform]
+            print(
+                "package_provenance="
+                f"platform={platform} package_version={provenance['package_version']} "
+                f"run_id={provenance['run_id']} asset_sha256={provenance['asset_sha256']}"
+            )
         print(f"rollout_plan={plan_path}")
         for node in plan["nodes"]:
             print(f"node={node['name']} platform={node['platform']} applied={str(node['applied']).lower()}")

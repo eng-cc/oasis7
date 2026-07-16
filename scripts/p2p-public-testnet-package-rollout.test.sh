@@ -23,6 +23,8 @@ out_dir="$TMP_DIR/out"
 package_version="0.0.0+testnet.89.419e119bc897"
 commit="419e119bc897efaa34750bee04c63470d1156699"
 run_id="27605906795"
+macos_package_version="0.0.0+testnet.90.419e119bc897"
+macos_run_id="27605906796"
 
 mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
@@ -239,16 +241,16 @@ EOF
 
 cat >"$package_dir/macos/macos-arm64-BUILDINFO" <<EOF
 workflow=Testnet Packages
-run_id=$run_id
-run_number=89
+run_id=$macos_run_id
+run_number=90
 repository=eng-cc/oasis7
 requested_ref=$commit
 commit=$commit
 build_profile=release
-package_scope=all_existing
+package_scope=linux_macos_arm64
 platform=macos-arm64
 target_triple=aarch64-apple-darwin
-package_version=$package_version
+package_version=$macos_package_version
 published=false
 EOF
 
@@ -1319,8 +1321,42 @@ jq -e '
   and (.nodes[] | select(.name == "remote-linux") | .commands[1] | startswith("ssh root@198.51.100.44 "))
   and (.nodes[] | select(.name == "remote-linux") | .commands[1] | contains("--bundle-tar /tmp/oasis7-linux-x64-bundle.tar.gz"))
   and (.nodes[] | select(.name == "windows-observer") | any(.commands[]; contains("staging_parent_ready=")))
-  and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))' \
+  and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))
+  and (.nodes[] | select(.name == "windows-observer") | .package_provenance.package_version == "0.0.0+testnet.89.419e119bc897")
+  and (.nodes[] | select(.name == "windows-observer") | .package_provenance.run_id == "27605906795")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.package_version == "0.0.0+testnet.90.419e119bc897")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.run_id == "27605906796")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.sha256sums_sha256 | length == 64)' \
   "$TMP_DIR/plan-only.json" >/dev/null
+
+cross_commit_package="$TMP_DIR/cross-commit-package"
+cp -R "$package_dir" "$cross_commit_package"
+python3 - "$cross_commit_package/macos/macos-arm64-BUILDINFO" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(
+    path.read_text(encoding="utf-8").replace(
+        "commit=419e119bc897efaa34750bee04c63470d1156699",
+        "commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ),
+    encoding="utf-8",
+)
+PY
+(
+  cd "$cross_commit_package/macos"
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
+)
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$cross_commit_package" \
+  --out-dir "$TMP_DIR/cross-commit-out" \
+  >"$TMP_DIR/cross-commit.stdout" 2>"$TMP_DIR/cross-commit.stderr"; then
+  echo "expected cross-commit package mix to fail planning" >&2
+  exit 1
+fi
+grep -q 'BUILDINFO commit=' "$TMP_DIR/cross-commit.stderr"
 
 missing_remote_rollback_manifest="$TMP_DIR/missing-remote-rollback-backup-root.json"
 jq '(.nodes[] | select(.name == "windows-observer")) |= del(.rollback_backup_root)' \
@@ -2319,7 +2355,7 @@ jq -e \
   --arg commit "$commit" \
   --arg version "$package_version" \
   '.commit == $commit
-    and .package_version == $version
+    and .platform_provenance["linux-x64"].package_version == $version
     and .readiness_policy == "rpc-running"
     and (.nodes[] | select(.name == "local-linux") | .applied == true)
     and (.nodes[] | select(.name == "windows-observer") | .windows_script | endswith("windows-observer-windows-upgrade.ps1"))' \
