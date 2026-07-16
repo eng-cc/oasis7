@@ -852,6 +852,18 @@ fn compat_snapshot_exposes_slot_1_auto_funding_from_dedicated_pool() {
     assert_eq!(quote.slot_index, 1);
     assert_eq!(quote.auto_restricted_starter_claim_amount, 325);
     assert_eq!(quote.eligible_claim_balance, 325);
+    assert_eq!(quote.eligible_balance_after, 0);
+    assert_eq!(quote.upkeep_runway_epochs, 0);
+    assert_eq!(quote.next_upkeep_due_epoch, Some(claim.current_epoch + 1));
+    assert_eq!(
+        quote.projected_grace_entry_epoch,
+        Some(claim.current_epoch + 1)
+    );
+    assert!(quote.low_runway_warning);
+    assert_eq!(
+        quote.recommended_claim_action.as_deref(),
+        Some("wait_or_fund_first")
+    );
     assert_eq!(quote.blocked_reason, None);
 }
 
