@@ -18,8 +18,7 @@ use super::driver_observability::{
     execution_record_recovery_ref_count,
 };
 use super::driver_persistence::{
-    execution_world_persistence_files_missing, persist_execution_bridge_state,
-    persist_execution_world_with_chain_resource_context,
+    persist_execution_bridge_state, persist_execution_world_with_chain_resource_context,
 };
 use super::simulator_mirror::persist_simulator_execution_world;
 use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord};
@@ -57,17 +56,6 @@ impl NodeRuntimeExecutionDriver {
         let target_height = self.state.last_applied_committed_height;
         let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
         if !record_path.exists() {
-            // A state file can be ahead of retained records after an interrupted stale-height
-            // reconciliation. Keep that existing recovery path available, but only when an
-            // older durable head and its cache are present; an absent authority set still fails.
-            let latest_path = self.records_dir.join("latest.json");
-            let can_reconcile_stale_state = latest_path.exists()
-                && !execution_world_persistence_files_missing(self.world_dir.as_path())
-                && load_execution_bridge_record(latest_path.as_path())
-                    .is_ok_and(|latest| latest.height < target_height);
-            if can_reconcile_stale_state {
-                return Ok(());
-            }
             return Err(format!(
                 "execution driver authoritative startup record missing at height {}",
                 target_height

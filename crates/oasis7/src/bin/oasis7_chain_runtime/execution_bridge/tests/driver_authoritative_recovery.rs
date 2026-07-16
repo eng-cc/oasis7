@@ -192,6 +192,61 @@ fn node_runtime_execution_driver_restart_fails_closed_when_authoritative_cas_is_
 }
 
 #[test]
+fn node_runtime_execution_driver_startup_fails_closed_when_state_head_lacks_exact_record() {
+    let dir = temp_dir("execution-driver-startup-stale-state-head");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("seed authoritative record");
+    drop(driver);
+
+    persist_execution_bridge_state(
+        state_path.as_path(),
+        &ExecutionBridgeState {
+            last_applied_committed_height: 2,
+            last_execution_block_hash: Some("stale-execution-hash".to_string()),
+            last_execution_state_root: Some("stale-state-root".to_string()),
+            last_node_block_hash: Some("stale-node-hash".to_string()),
+        },
+    )
+    .expect("persist stale state head");
+
+    let err =
+        match NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root) {
+            Ok(_) => panic!("startup must reject an unverifiable state head"),
+            Err(err) => err,
+        };
+    assert!(
+        err.contains("authoritative startup record missing at height 2"),
+        "unexpected startup recovery error: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
     let dir = temp_dir("execution-driver-stale-state-reconcile");
     let state_path = dir.join("state.json");
