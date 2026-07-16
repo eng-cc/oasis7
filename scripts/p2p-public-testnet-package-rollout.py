@@ -479,7 +479,7 @@ function Get-TreeMetadata {{
   foreach ($file in $files) {{
     $relative = $file.FullName.Substring($rootItem.FullName.Length).TrimStart('\\').Replace('\\', '/')
     $fileHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    $payload = [System.Text.Encoding]::UTF8.GetBytes($relative + [char]0 + $fileHash + "`n")
+    $payload = [System.Text.Encoding]::UTF8.GetBytes($relative + [char]0 + $fileHash + [char]0 + [string]$file.Length + "`n")
     $stream.Write($payload, 0, $payload.Length)
     $totalBytes += $file.Length
   }}
@@ -706,6 +706,13 @@ $manifestJson = Get-Content $manifestItem.FullName -Raw | ConvertFrom-Json
 if ($null -eq $manifestJson.runtime_refs) {{
   throw "governed network manifest missing runtime_refs: $($manifestItem.FullName)"
 }}
+$networkManifestMetadata = [PSCustomObject]@{{
+  ref = [System.IO.Path]::GetFileName($manifestItem.FullName)
+  resolved_path = $manifestItem.FullName
+  kind = 'file'
+  sha256 = $expectedGovernedSha256[$manifestPath]
+  size_bytes = $manifestItem.Length
+}}
 
 $genesis = Get-Item $genesisPath -ErrorAction Stop
 $genesisJson = Get-Content $genesis.FullName -Raw | ConvertFrom-Json
@@ -761,7 +768,7 @@ Assert-TreeIntegrity $json.world_snapshot $worldSnapshotPath 'world_snapshot'
 Assert-TreeIntegrity $json.generated_world_sidecar $sidecarPath 'generated_world_sidecar'
 Assert-FileMetadata $json.world_generation_provenance $provenancePath 'world_generation_provenance'
 Assert-FileMetadata $json.governance_manifest (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) 'governance_manifest'
-Assert-FileMetadata $json.network_manifest $manifestItem.FullName 'network_manifest'
+Assert-FileMetadata $networkManifestMetadata $manifestItem.FullName 'network_manifest'
 foreach ($entry in @($json.evidence_refs)) {{
   Assert-FileMetadata $entry (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($entry.ref))) 'evidence_refs'
 }}
@@ -771,7 +778,8 @@ Set-ArtifactLocation $json.world_snapshot $activeWorldSnapshotPath 'generated-wo
 Set-ArtifactLocation $json.generated_world_sidecar $activeSidecarPath 'generated-world/generated-scenario-world'
 Set-ArtifactLocation $json.world_generation_provenance $activeProvenancePath 'generated-world/world-generation-provenance.json'
 Set-ArtifactLocation $json.governance_manifest (Join-Path $activeEvidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) ('doc/testing/evidence/' + [System.IO.Path]::GetFileName($json.governance_manifest.ref))
-Set-ArtifactLocation $json.network_manifest $activeManifestPath ([System.IO.Path]::GetFileName($activeManifestPath))
+Set-ArtifactLocation $networkManifestMetadata $activeManifestPath ([System.IO.Path]::GetFileName($activeManifestPath))
+Set-JsonProperty $json 'network_manifest' $networkManifestMetadata
 foreach ($entry in @($json.evidence_refs)) {{
   $entryName = [System.IO.Path]::GetFileName($entry.ref)
   Set-ArtifactLocation $entry (Join-Path $activeEvidenceDir $entryName) ('doc/testing/evidence/' + $entryName)
@@ -795,8 +803,8 @@ $structuredPaths = @(
   [PSCustomObject]@{{ field = 'world_generation_provenance.resolved_path'; path = $json.world_generation_provenance.resolved_path }},
   [PSCustomObject]@{{ field = 'governance_manifest.path'; path = $json.governance_manifest.path }},
   [PSCustomObject]@{{ field = 'governance_manifest.resolved_path'; path = $json.governance_manifest.resolved_path }},
-  [PSCustomObject]@{{ field = 'network_manifest.path'; path = $json.network_manifest.path }},
-  [PSCustomObject]@{{ field = 'network_manifest.resolved_path'; path = $json.network_manifest.resolved_path }},
+  [PSCustomObject]@{{ field = 'network_manifest.path'; path = $networkManifestMetadata.path }},
+  [PSCustomObject]@{{ field = 'network_manifest.resolved_path'; path = $networkManifestMetadata.resolved_path }},
   [PSCustomObject]@{{ field = 'runtime_refs.release_candidate_bundle_ref'; path = $manifestJson.runtime_refs.release_candidate_bundle_ref }},
   [PSCustomObject]@{{ field = 'runtime_refs.genesis_ref'; path = $manifestJson.runtime_refs.genesis_ref }},
   [PSCustomObject]@{{ field = 'runtime_refs.bootstrap_peer_ref'; path = $manifestJson.runtime_refs.bootstrap_peer_ref }},
@@ -977,6 +985,7 @@ try {{
   throw
 }}
 
+Write-Output 'rollback_closure_complete=true'
 Write-Output 'staged_sha_closure_complete=true'
 Write-Output 'promotion_begin=true'
 
