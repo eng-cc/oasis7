@@ -326,6 +326,21 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             }
         }
         if context.height == self.state.last_applied_committed_height {
+            let record = load_execution_bridge_record(
+                execution_bridge_record_path(self.records_dir.as_path(), context.height).as_path(),
+            )
+            .map_err(|err| {
+                format!(
+                    "execution driver stale-height restore authoritative record unavailable at height {}: {}",
+                    context.height, err
+                )
+            })?;
+            if record.height != context.height || record.world_id != context.world_id {
+                return Err(format!(
+                    "execution driver stale-height restore world_id mismatch at height {}: context={} record={}",
+                    context.height, context.world_id, record.world_id
+                ));
+            }
             let execution_block_hash =
                 self.state
                     .last_execution_block_hash
@@ -340,10 +355,18 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     .ok_or_else(|| {
                         "execution driver missing state root for current height".to_string()
                     })?;
+            if execution_block_hash != record.execution_block_hash
+                || execution_state_root != record.execution_state_root
+            {
+                return Err(format!(
+                    "execution driver stale-height restore state mismatch at height {}",
+                    context.height
+                ));
+            }
             return Ok(NodeExecutionCommitResult {
                 execution_height: context.height,
-                execution_block_hash,
-                execution_state_root,
+                execution_block_hash: record.execution_block_hash,
+                execution_state_root: record.execution_state_root,
             });
         }
         let next_expected_height = self.state.last_applied_committed_height.saturating_add(1);
