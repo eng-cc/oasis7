@@ -200,6 +200,27 @@ payload = json.loads(__import__("os").environ["BOOTSTRAP_JSON"])
 pm_task = payload.get("pm_task")
 if not pm_task:
     raise SystemExit("pm_task summary missing from new-task-worktree bootstrap output")
+snapshot_path = Path(pm_task.get("bootstrap_snapshot_path") or "")
+if not snapshot_path.is_file():
+    raise SystemExit(f"bootstrap snapshot missing: {snapshot_path}")
+snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+if snapshot.get("digest") != pm_task.get("bootstrap_snapshot_digest"):
+    raise SystemExit("bootstrap snapshot digest does not match worktree summary")
+if snapshot.get("task", {}).get("uid") != pm_task["task_uid"]:
+    raise SystemExit("bootstrap snapshot is bound to the wrong task UID")
+live_head = subprocess.check_output(["git", "-C", str(worktree), "rev-parse", "HEAD"], text=True).strip()
+if snapshot.get("git", {}).get("head") != live_head:
+    raise SystemExit("bootstrap snapshot is not bound to the worktree HEAD")
+subprocess.run(
+    [
+        str(worktree / "scripts/pm/bootstrap-task-snapshot.py"), "validate",
+        "--repo-root", str(worktree), "--task-uid", pm_task["task_uid"],
+        "--request-identity", "smoke bootstrap task",
+    ],
+    cwd=worktree,
+    check=True,
+    stdout=subprocess.DEVNULL,
+)
 config_summary = payload.get("config")
 if not config_summary:
     raise SystemExit("config summary missing from new-task-worktree output")
@@ -298,6 +319,8 @@ print(
             "execution_log_path": pm_task["execution_log_path"],
             "source_status_preserved": True,
             "workflow_started": True,
+            "bootstrap_snapshot_path": str(snapshot_path),
+            "bootstrap_snapshot_digest": snapshot["digest"],
             "worktree_path": str(worktree),
             "config_copied": config_copied,
             "shared_cargo_target_dir": str(reported_shared_target),

@@ -17,6 +17,7 @@ Use when the task already has written scope in `prd.md`, `project.md`, a handoff
 2. Record ordered steps and required professional slices in GitHub task issue evidence comments.
 3. Implement one bounded step in its declared write scope.
 4. Run the step-level verification and inspect the output.
+   Route commands expected to emit broad logs or search results through `./scripts/pm/bounded-command-output.py`; inspect the bounded summary and retain the reported full artifact/digest for debugging.
 5. Append result, evidence, deviation, and next step to the same task issue.
 6. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`.
 
