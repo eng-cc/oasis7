@@ -585,6 +585,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 
 ```bash
 ./scripts/p2p-public-testnet-fleet-health.py \
+  --managed-five-node \
   --sequencer sequencer \
   --node sequencer=http://39.104.204.172:6631/v1/chain/status \
   --node storage=http://39.104.205.67:6632/v1/chain/status \
@@ -594,6 +595,8 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
   --max-capture-span-seconds 30 \
   --output .tmp/public-testnet-fleet-health.json
 ```
+
+`--managed-five-node` is mandatory for this deployment closure. It fail-closes unless the supplied identities are exactly `sequencer` (ECS 204 provider), `storage` (ECS 205 provider), `linux-lan-observer`, `windows-observer`, and `macos-observer`, once each. The collector without that flag remains only for explicitly non-closure diagnostics and cannot be used for a `Fleet healthy` or recovery conclusion.
 
 ### Verdict rules
 1. **Fleet live**

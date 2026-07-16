@@ -15,6 +15,18 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 
+MANAGED_FIVE_NODE_NAMES = frozenset(
+    {
+        "sequencer",
+        "storage",
+        "linux-lan-observer",
+        "windows-observer",
+        "macos-observer",
+    }
+)
+MANAGED_FIVE_NODE_SEQUENCER = "sequencer"
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -68,6 +80,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Collect bounded public-testnet fleet-health evidence.")
     parser.add_argument("--node", action="append", required=True, type=parse_node, metavar="NAME=URL")
     parser.add_argument("--sequencer", required=True, help="Name of the sequencer node supplied by --node.")
+    parser.add_argument(
+        "--managed-five-node",
+        action="store_true",
+        help=(
+            "Require exactly the current managed public-testnet fleet: sequencer, storage, "
+            "linux-lan-observer, windows-observer, and macos-observer."
+        ),
+    )
     parser.add_argument("--max-capture-span-seconds", required=True, type=float)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
@@ -76,9 +96,27 @@ def main() -> int:
         parser.error("--max-capture-span-seconds must be finite and non-negative")
     nodes = dict(args.node)
     if len(nodes) != len(args.node):
+        if args.managed_five_node:
+            parser.error("managed five-node closure requires each canonical node exactly once; duplicate --node name")
         parser.error("--node names must be unique")
     if args.sequencer not in nodes:
         parser.error("--sequencer must name one supplied --node")
+    if args.managed_five_node:
+        supplied_names = frozenset(nodes)
+        if supplied_names != MANAGED_FIVE_NODE_NAMES:
+            missing = sorted(MANAGED_FIVE_NODE_NAMES - supplied_names)
+            unknown = sorted(supplied_names - MANAGED_FIVE_NODE_NAMES)
+            details = []
+            if missing:
+                details.append("missing=" + ",".join(missing))
+            if unknown:
+                details.append("unknown=" + ",".join(unknown))
+            parser.error(
+                "managed five-node closure requires exactly the canonical node identities "
+                "(" + "; ".join(details) + ")"
+            )
+        if args.sequencer != MANAGED_FIVE_NODE_SEQUENCER:
+            parser.error("managed five-node closure requires --sequencer sequencer")
 
     started_at = utc_now()
     started_monotonic = time.monotonic()
@@ -116,6 +154,7 @@ def main() -> int:
         "max_capture_span_seconds": args.max_capture_span_seconds,
         "nodes": captured,
         "sequencer": args.sequencer,
+        "scope": "managed_five_node" if args.managed_five_node else "generic",
         "verdict": "ready" if not unique_gates else "blocked",
     }
     write_evidence(args.output, evidence)

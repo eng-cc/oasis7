@@ -36,6 +36,9 @@ The `Testnet Packages` workflow uses `package_scope`:
 
 Full managed-fleet packaging therefore requires coordinated `all_existing` plus `linux_macos_arm64` runs against the same requested ref/commit. Operators must verify each run's BUILDINFO/SHA256SUMS and record the two run IDs; one `all_existing` run is not evidence that the arm64 observer was packaged.
 
+## Deployment-Closure Health Contract
+Use `p2p-public-testnet-fleet-health.py --managed-five-node` for this managed-fleet deployment closure. The preset requires exactly these logical identities, once each: `sequencer` (ECS 204 provider), `storage` (ECS 205 provider), `linux-lan-observer`, `windows-observer`, and `macos-observer`. It rejects omissions, duplicates, renamed identities, and unknown nodes before it writes health evidence. The collector's generic mode is for explicitly non-closure diagnostics only and cannot support a managed-fleet healthy conclusion.
+
 ## Update / Catch-Up SOP
 1. Capture preflight truth for every managed node: `CURRENT_VERSION`, runtime hash or artifact lineage, service manager state, status endpoint, height, peer id, and current errors.
 2. Download the CI artifacts for the selected `package_scope`; verify `BUILDINFO` and `SHA256SUMS`.
@@ -44,7 +47,7 @@ Full managed-fleet packaging therefore requires coordinated `all_existing` plus 
 5. Generate the macOS operator script through `p2p-public-testnet-package-rollout.py`. A bootout error or stopped-state backup failure must restart the untouched original service and verify `/healthz` reports `{"ok":true}` while `/v1/chain/status` reports `{"running":true}`. Status remains the authority-failure inspection surface. Any post-mutation failure must first copy the failed state under the attempt root, then replace active state with the stopped pre-upgrade snapshot, restore runtime/config/provenance, bootstrap the validated launchd domain, and verify those endpoint-specific fields. Authority failure always emits state-sync escalation, including when rollback fails.
 6. If a validator reports `execution driver peer mismatch`, recover the validator pair first. Do not seed observers from a pre-recovery validator state.
 7. If observers were seeded before validator recovery, reseed those observers again from recovered storage/sequencer state.
-8. Finish with a five-node health snapshot; do not use one ready node as a proxy for fleet readiness.
+8. Finish with a five-node health snapshot using `--managed-five-node`; do not use one ready node as a proxy for fleet readiness.
 
 ## Reseed Triggers
 Reseed is required or strongly recommended when:
