@@ -773,6 +773,86 @@ fn node_runtime_execution_driver_reconciles_stale_state_from_exact_record() {
 }
 
 #[test]
+fn node_runtime_execution_driver_restart_reconciles_newer_published_record_when_state_is_stale() {
+    let dir = temp_dir("execution-driver-restart-newer-published-record");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    let first = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 0,
+            epoch: 0,
+            node_block_hash: "node-h1".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 1_000,
+        })
+        .expect("commit height one");
+    let second = driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "node-h2".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 2_000,
+        })
+        .expect("commit height two");
+    drop(driver);
+
+    persist_execution_bridge_state(
+        state_path.as_path(),
+        &ExecutionBridgeState {
+            last_applied_committed_height: 1,
+            last_execution_block_hash: Some(first.execution_block_hash.clone()),
+            last_execution_state_root: Some(first.execution_state_root.clone()),
+            last_node_block_hash: Some("node-h1".to_string()),
+        },
+    )
+    .expect("simulate crash after height-two record publication");
+
+    let mut restarted =
+        NodeRuntimeExecutionDriver::new(state_path.clone(), world_dir, records_dir, storage_root)
+            .expect("restart reconciles newer authoritative record");
+    assert_eq!(restarted.state.last_applied_committed_height, 2);
+    let replayed = restarted
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "w1".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "node-h2".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 2_000,
+        })
+        .expect("equal-height delivery is idempotent after restart");
+    assert_eq!(replayed.execution_block_hash, second.execution_block_hash);
+    assert_eq!(replayed.execution_state_root, second.execution_state_root);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_recovers_malformed_v2_record_from_state_root_and_local_journal() {
     let dir = temp_dir("execution-driver-malformed-v2-recovery");
     let state_path = dir.join("state.json");

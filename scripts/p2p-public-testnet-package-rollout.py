@@ -397,7 +397,7 @@ def observer_checkpoint_gate_macos(
     sequencer_status_url: str, storage_status_url: str
 ) -> str:
     return """provider_checkpoint_gate_macos() {
-  local provider name url payload schema checkpoint_id height manifest_hash
+  local provider name url payload schema checkpoint_id checkpoint_id_without_whitespace height manifest_hash
   local sequencer_id sequencer_height sequencer_hash
   local storage_id storage_height storage_hash
   command -v plutil >/dev/null 2>&1 || {
@@ -423,7 +423,8 @@ def observer_checkpoint_gate_macos(
       echo "provider_checkpoint_gate=$name invalid_schema_version" >&2
       return 1
     fi
-    if [[ -z "$checkpoint_id" || ! "$manifest_hash" =~ ^[[:xdigit:]]{64}$ ]]; then
+    checkpoint_id_without_whitespace="${checkpoint_id//[[:space:]]/}"
+    if [[ -z "$checkpoint_id_without_whitespace" || ! "$manifest_hash" =~ ^[[:xdigit:]]{64}$ ]]; then
       echo "provider_checkpoint_gate=$name invalid_checkpoint_identity" >&2
       return 1
     fi

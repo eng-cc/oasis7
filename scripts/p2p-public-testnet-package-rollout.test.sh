@@ -1628,6 +1628,62 @@ assert 'IFS=$\'\\t\' read -r name url <<<"$provider"' in text
 assert '"sequencer\t' in text and '"storage\t' in text, (
     "macOS provider checkpoint gate must delimit native provider records with tabs"
 )
+gate_match = re.search(
+    r"(?ms)^(provider_checkpoint_gate_macos\(\) \{.*?^\})\n\nprovider_checkpoint_gate_macos$",
+    text,
+)
+assert gate_match, "macOS rollout must invoke the generated native checkpoint gate before mutation"
+gate_function = gate_match.group(1)
+native_mock_dir = script_path.parent / "native-checkpoint-whitespace-mocks"
+native_mock_dir.mkdir()
+(native_mock_dir / "curl").write_text(
+    """#!/usr/bin/env bash
+set -euo pipefail
+while (($#)); do
+  if [[ "$1" == "-o" ]]; then
+    printf '{}\\n' >"$2"
+    exit 0
+  fi
+  shift
+done
+exit 2
+""",
+    encoding="utf-8",
+)
+(native_mock_dir / "plutil").write_text(
+    """#!/usr/bin/env bash
+set -euo pipefail
+case "$2" in
+  chain_proof.latest_execution_checkpoint.schema_version) printf '2\\n' ;;
+  chain_proof.latest_execution_checkpoint.checkpoint_id) printf '   \\n' ;;
+  chain_proof.latest_execution_checkpoint.height) printf '4242\\n' ;;
+  chain_proof.latest_execution_checkpoint.manifest_hash) printf '%064d\\n' 0 ;;
+  *) exit 2 ;;
+esac
+""",
+    encoding="utf-8",
+)
+for native_mock in native_mock_dir.iterdir():
+    native_mock.chmod(0o755)
+whitespace_gate = script_path.parent / "native-checkpoint-whitespace-gate.sh"
+whitespace_gate.write_text(
+    "#!/usr/bin/env bash\nset -euo pipefail\n" + gate_function + "\nprovider_checkpoint_gate_macos\n",
+    encoding="utf-8",
+)
+whitespace_result = subprocess.run(
+    ["bash", str(whitespace_gate)],
+    env={**__import__("os").environ, "PATH": f"{native_mock_dir}:{__import__('os').environ['PATH']}"},
+    text=True,
+    capture_output=True,
+)
+assert whitespace_result.returncode != 0, (
+    "macOS checkpoint gate accepted identical whitespace-only checkpoint IDs: "
+    f"stdout={whitespace_result.stdout!r} stderr={whitespace_result.stderr!r}"
+)
+assert "invalid_checkpoint_identity" in whitespace_result.stderr, (
+    "macOS checkpoint gate must reject whitespace-only checkpoint IDs before mutation: "
+    f"stderr={whitespace_result.stderr!r}"
+)
 main_before_stop = text[preflight_backup_index:active_stop]
 assert "backup_persistent_state" not in main_before_stop
 assert "restart_original_service" in text[active_stop:promotion_index]

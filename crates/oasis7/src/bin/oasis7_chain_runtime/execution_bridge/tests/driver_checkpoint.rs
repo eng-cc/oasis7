@@ -3,7 +3,9 @@ use super::super::checkpoint::{
     execution_checkpoint_manifest_rel_path, load_execution_bridge_record,
     load_execution_checkpoint_manifest,
 };
-use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_bridge_state};
+use super::super::driver::{
+    NodeRuntimeExecutionDriver, load_execution_bridge_state, persist_execution_bridge_state,
+};
 use super::*;
 use oasis7::runtime::LocalCasStore;
 use oasis7_node::{
@@ -423,6 +425,123 @@ fn node_runtime_execution_driver_checkpoint_install_survives_restart_and_continu
         })
         .expect("continue at height N + 1 after checkpoint restart");
     assert_eq!(third.execution_height, 3);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_checkpoint_restart_reconciles_newer_published_record_when_state_is_stale()
+ {
+    let dir = temp_dir("execution-driver-checkpoint-restart-newer-published-record");
+    let source_root = dir.join("source");
+    let target_root = dir.join("target");
+    let storage_profile = StorageProfileConfig {
+        execution_checkpoint_interval: 2,
+        execution_checkpoint_keep: 2,
+        ..StorageProfileConfig::for_profile(StorageProfile::DevLocal)
+    };
+    let mut source = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        source_root.join("bridge-state.json"),
+        source_root.join("world"),
+        source_root.join("records"),
+        source_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("source driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-stale-state".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "block-1".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_001,
+        })
+        .expect("commit one");
+    let second = source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-stale-state".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "block-2".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_002,
+        })
+        .expect("commit two");
+    let bundle = source
+        .export_checkpoint_bundle(2)
+        .expect("export checkpoint")
+        .expect("checkpoint bundle");
+
+    let state_path = target_root.join("bridge-state.json");
+    let mut target = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path.clone(),
+        target_root.join("world"),
+        target_root.join("records"),
+        target_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("target driver");
+    target
+        .install_checkpoint_bundle(
+            NodeExecutionCheckpointInstallContext {
+                world_id: "world-checkpoint-stale-state".to_string(),
+                node_id: "node-b".to_string(),
+                height: 2,
+                node_block_hash: "block-2".to_string(),
+                execution_block_hash: second.execution_block_hash.clone(),
+                execution_state_root: second.execution_state_root.clone(),
+                committed_at_unix_ms: 10_002,
+            },
+            bundle,
+        )
+        .expect("install checkpoint");
+    drop(target);
+
+    persist_execution_bridge_state(
+        state_path.as_path(),
+        &ExecutionBridgeState {
+            last_applied_committed_height: 1,
+            last_execution_block_hash: Some("stale-execution-hash".to_string()),
+            last_execution_state_root: Some("stale-state-root".to_string()),
+            last_node_block_hash: Some("stale-node-hash".to_string()),
+        },
+    )
+    .expect("simulate crash after checkpoint record publication");
+
+    let mut restarted = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path,
+        target_root.join("world"),
+        target_root.join("records"),
+        target_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("checkpoint restart reconciles newer authoritative record");
+    assert_eq!(restarted.state.last_applied_committed_height, 2);
+    let replay_err = restarted
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-stale-state".to_string(),
+            node_id: "node-b".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "block-2".to_string(),
+            action_root,
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_002,
+        })
+        .expect_err("checkpoint-installed head rejects equal-height replay after recovery");
+    assert!(replay_err.contains("checkpoint-install"), "{replay_err}");
 
     let _ = fs::remove_dir_all(dir);
 }

@@ -22,7 +22,7 @@ use super::driver_persistence::{
     persist_execution_world_with_chain_resource_context,
 };
 use super::simulator_mirror::persist_simulator_execution_world;
-use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord};
+use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord, WorldHeadProofV1};
 
 impl NodeRuntimeExecutionDriver {
     fn recover_runtime_journal_from_loaded_world(
@@ -56,12 +56,40 @@ impl NodeRuntimeExecutionDriver {
     pub(super) fn restore_startup_execution_head(&mut self) -> Result<(), String> {
         let target_height = self.state.last_applied_committed_height;
         let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
-        if !record_path.exists() {
-            let latest_path = self.records_dir.join("latest.json");
-            let latest_record = load_execution_bridge_record(latest_path.as_path()).map_err(|err| {
+        let latest_path = self.records_dir.join("latest.json");
+        let latest_record = latest_path.exists().then(|| {
+            load_execution_bridge_record(latest_path.as_path()).map_err(|err| {
                 format!(
-                    "execution driver authoritative startup latest record unavailable while state head {} lacks exact record: {}",
+                    "execution driver authoritative startup latest record unavailable while reconciling state head {}: {}",
                     target_height, err
+                )
+            })
+        }).transpose()?;
+        if let Some(latest_record) = latest_record.as_ref()
+            && latest_record.height > target_height
+        {
+            if latest_record.world_id.trim().is_empty() {
+                return Err(format!(
+                    "execution driver authoritative startup newer latest record has empty world_id at height {}",
+                    latest_record.height
+                ));
+            }
+            if !self.restore_execution_head_from_record(
+                latest_record.world_id.as_str(),
+                latest_record.height,
+            )? {
+                return Err(format!(
+                    "execution driver authoritative startup newer latest record missing at height {} while state head is {}",
+                    latest_record.height, target_height
+                ));
+            }
+            return Ok(());
+        }
+        if !record_path.exists() {
+            let latest_record = latest_record.ok_or_else(|| {
+                format!(
+                    "execution driver authoritative startup latest record unavailable while state head {} lacks exact record",
+                    target_height
                 )
             })?;
             if latest_record.height >= target_height || latest_record.world_id.trim().is_empty() {
@@ -167,6 +195,56 @@ impl NodeRuntimeExecutionDriver {
         let checkpoint_install_record = record.checkpoint_ref.is_some()
             && record.proposer_id.is_none()
             && record.action_root.is_none();
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+            && !checkpoint_install_record
+        {
+            let proof_ref = record.world_head_proof_ref.as_deref().ok_or_else(|| {
+                format!(
+                    "execution driver authoritative v3 record missing world head proof ref at height {}",
+                    record.height
+                )
+            })?;
+            let expected_proof_hash = record.world_head_proof_hash.as_deref().ok_or_else(|| {
+                format!(
+                    "execution driver authoritative v3 record missing world head proof hash at height {}",
+                    record.height
+                )
+            })?;
+            let proof_bytes = self.execution_store.get_verified(proof_ref).map_err(|err| {
+                format!(
+                    "execution driver authoritative world head proof ref {} failed at height {}: {:?}",
+                    proof_ref, record.height, err
+                )
+            })?;
+            let proof = serde_cbor::from_slice::<WorldHeadProofV1>(proof_bytes.as_slice())
+                .map_err(|err| {
+                    format!(
+                        "execution driver decode world head proof failed at height {}: {}",
+                        record.height, err
+                    )
+                })?;
+            let actual_proof_hash = proof.proof_hash()?;
+            if actual_proof_hash != expected_proof_hash
+                || proof.world_id != record.world_id
+                || proof.height != record.height
+                || proof.timestamp_ms != record.timestamp_ms
+                || proof.execution.execution_block_hash != record.execution_block_hash
+                || proof.execution.execution_state_root != record.execution_state_root
+                || proof.execution.node_block_hash
+                    != record.node_block_hash.as_deref().unwrap_or("")
+                || proof.execution.action_root != record.action_root.as_deref().unwrap_or("")
+                || proof.consensus.proposer_id != record.proposer_id.as_deref().unwrap_or("")
+                || proof.snapshot_manifest_ref.content_hash != snapshot_ref
+                || proof.journal_segments_ref.content_hash
+                    != record.journal_ref.as_deref().unwrap_or("")
+            {
+                return Err(format!(
+                    "execution driver authoritative world head proof mismatch at height {}",
+                    record.height
+                ));
+            }
+        }
         let previous_execution_block_hash = if checkpoint_install_record {
             let checkpoint_ref = record.checkpoint_ref.as_deref().ok_or_else(|| {
                 format!(
