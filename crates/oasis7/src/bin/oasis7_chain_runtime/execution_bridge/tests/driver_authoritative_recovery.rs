@@ -1,9 +1,297 @@
-use super::super::checkpoint::{execution_bridge_record_path, load_execution_bridge_record};
+use super::super::checkpoint::{
+    execution_bridge_record_path, load_execution_bridge_record, persist_execution_bridge_record,
+};
 use super::super::driver::{
     NodeRuntimeExecutionDriver, load_execution_bridge_state, persist_execution_bridge_state,
 };
+use super::super::external_effect::{
+    execution_committed_actions_hash, load_execution_external_effect_materialization,
+    persist_execution_external_effect_materialization,
+};
 use super::*;
-use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consensus_action_root};
+use oasis7::consensus_action_payload::{
+    ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
+};
+use oasis7::runtime::LocalCasStore;
+use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter};
+use oasis7_node::{
+    NodeConsensusAction, NodeExecutionCommitContext, NodeExecutionHook,
+    compute_consensus_action_root,
+};
+
+fn simulator_committed_action(action_id: u64, max_amount: i64) -> NodeConsensusAction {
+    let payload =
+        encode_consensus_action_payload(&ConsensusActionPayloadEnvelope::from_simulator_action(
+            SimulatorAction::HarvestRadiation {
+                agent_id: "agent-0".to_string(),
+                max_amount,
+            },
+            ActionSubmitter::System,
+        ))
+        .expect("encode simulator action");
+    NodeConsensusAction::from_payload(action_id, "node-a", payload).expect("consensus action")
+}
+
+fn replay_context(
+    proposer_id: &str,
+    node_block_hash: &str,
+    committed_actions: Vec<NodeConsensusAction>,
+) -> NodeExecutionCommitContext {
+    let action_root =
+        compute_consensus_action_root(committed_actions.as_slice()).expect("action root");
+    NodeExecutionCommitContext {
+        world_id: "w1".to_string(),
+        node_id: "node-a".to_string(),
+        proposer_id: proposer_id.to_string(),
+        height: 1,
+        slot: 0,
+        epoch: 0,
+        node_block_hash: node_block_hash.to_string(),
+        action_root,
+        committed_actions,
+        committed_at_unix_ms: 1_000,
+    }
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_conflicting_equal_height_v3_record_identity() {
+    let dir = temp_dir("execution-driver-equal-height-v3-record-identity");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("driver");
+    let committed_action = simulator_committed_action(1, 1);
+    let accepted = replay_context("node-a", "node-h1", vec![committed_action]);
+    driver.on_commit(accepted).expect("seed commit");
+
+    for (field, conflicting) in [
+        (
+            "node_block_hash",
+            replay_context(
+                "node-a",
+                "node-h1-conflict",
+                vec![simulator_committed_action(1, 1)],
+            ),
+        ),
+        (
+            "proposer_id",
+            replay_context("node-b", "node-h1", vec![simulator_committed_action(1, 1)]),
+        ),
+        (
+            "action_root",
+            replay_context("node-a", "node-h1", vec![simulator_committed_action(2, 2)]),
+        ),
+    ] {
+        let err = driver
+            .on_commit(conflicting)
+            .expect_err("conflicting equal-height V3 replay must fail closed");
+        assert!(
+            err.contains(field),
+            "error must identify conflicting {field}: {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_conflicting_equal_height_v3_effect_identity_fields() {
+    let dir = temp_dir("execution-driver-equal-height-v3-effect-identity");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir, storage_root)
+            .expect("driver");
+    let accepted = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(accepted.clone()).expect("seed commit");
+
+    let mut conflicting_world_id = accepted.clone();
+    conflicting_world_id.world_id = "w2".to_string();
+    let mut conflicting_node_id = accepted.clone();
+    conflicting_node_id.node_id = "node-b".to_string();
+    let mut conflicting_slot = accepted.clone();
+    conflicting_slot.slot = 9;
+    let mut conflicting_epoch = accepted.clone();
+    conflicting_epoch.epoch = 7;
+    let mut conflicting_committed_at = accepted;
+    conflicting_committed_at.committed_at_unix_ms = 9_999;
+
+    for (field, conflicting) in [
+        ("world_id", conflicting_world_id),
+        ("node_id", conflicting_node_id),
+        ("slot", conflicting_slot),
+        ("epoch", conflicting_epoch),
+        ("committed_at_unix_ms", conflicting_committed_at),
+    ] {
+        let err = driver
+            .on_commit(conflicting)
+            .expect_err("conflicting equal-height V3 replay must fail closed");
+        assert!(
+            err.contains(field),
+            "error must identify conflicting {field}: {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+fn assert_tampered_authoritative_effect_identity_rejected(
+    field: &str,
+    mutate: fn(&mut ExecutionExternalEffectMaterialization),
+) {
+    let dir = temp_dir(format!("execution-driver-v3-effect-{field}").as_str());
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let accepted = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(accepted.clone()).expect("seed commit");
+
+    let record_path = execution_bridge_record_path(records_dir.as_path(), 1);
+    let mut record = load_execution_bridge_record(record_path.as_path()).expect("load record");
+    let effect_ref = record
+        .external_effect_ref
+        .as_deref()
+        .expect("V3 record has authoritative external effect");
+    let store = LocalCasStore::new(storage_root);
+    let mut effect = load_execution_external_effect_materialization(&store, effect_ref)
+        .expect("load authoritative external effect");
+    mutate(&mut effect);
+    record.external_effect_ref = Some(
+        persist_execution_external_effect_materialization(&store, &effect)
+            .expect("persist conflicting authoritative external effect"),
+    );
+    persist_execution_bridge_record(records_dir.as_path(), &record)
+        .expect("replace authoritative record effect reference");
+
+    let err = driver
+        .on_commit(accepted)
+        .expect_err("tampered authoritative V3 effect identity must fail closed");
+    assert!(
+        err.contains(field),
+        "error must identify conflicting authoritative effect {field}: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_tampered_authoritative_v3_effect_identity_fields() {
+    for (field, mutate) in [
+        (
+            "world_id",
+            (|effect: &mut ExecutionExternalEffectMaterialization| {
+                effect.world_id = "w2".to_string();
+            }) as fn(&mut ExecutionExternalEffectMaterialization),
+        ),
+        ("node_id", |effect| effect.node_id = "node-b".to_string()),
+        ("height", |effect| effect.height = 2),
+        ("slot", |effect| effect.slot = 9),
+        ("epoch", |effect| effect.epoch = 7),
+        ("node_block_hash", |effect| {
+            effect.node_block_hash = "node-h1-conflict".to_string();
+        }),
+        ("action_root", |effect| {
+            effect.action_root = "conflicting-action-root".to_string();
+        }),
+        ("committed_at_unix_ms", |effect| {
+            effect.committed_at_unix_ms = 9_999;
+        }),
+    ] {
+        assert_tampered_authoritative_effect_identity_rejected(field, mutate);
+    }
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_conflicting_equal_height_v3_record_timestamp() {
+    let dir = temp_dir("execution-driver-equal-height-v3-record-timestamp");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver =
+        NodeRuntimeExecutionDriver::new(state_path, world_dir, records_dir.clone(), storage_root)
+            .expect("driver");
+    let accepted = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(accepted.clone()).expect("seed commit");
+
+    let record_path = execution_bridge_record_path(records_dir.as_path(), 1);
+    let mut record = load_execution_bridge_record(record_path.as_path()).expect("load record");
+    record.timestamp_ms = 9_999;
+    persist_execution_bridge_record(records_dir.as_path(), &record)
+        .expect("persist conflicting record timestamp");
+
+    let err = driver
+        .on_commit(accepted)
+        .expect_err("conflicting equal-height V3 record timestamp must fail closed");
+    assert!(
+        err.contains("committed_at_unix_ms"),
+        "error must identify conflicting record timestamp: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_rejects_equal_height_replay_when_authoritative_effect_actions_conflict()
+ {
+    let dir = temp_dir("execution-driver-equal-height-v3-effect-actions");
+    let state_path = dir.join("state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_root = dir.join("store");
+    let mut driver = NodeRuntimeExecutionDriver::new(
+        state_path,
+        world_dir,
+        records_dir.clone(),
+        storage_root.clone(),
+    )
+    .expect("driver");
+    let accepted = replay_context("node-a", "node-h1", vec![simulator_committed_action(1, 1)]);
+    driver.on_commit(accepted.clone()).expect("seed commit");
+
+    let record_path = execution_bridge_record_path(records_dir.as_path(), 1);
+    let mut record = load_execution_bridge_record(record_path.as_path()).expect("load record");
+    let effect_ref = record
+        .external_effect_ref
+        .as_deref()
+        .expect("V3 record has authoritative external effect");
+    let store = LocalCasStore::new(storage_root);
+    let mut effect = load_execution_external_effect_materialization(&store, effect_ref)
+        .expect("load authoritative external effect");
+    effect.committed_actions[0].payload_hash = "conflicting-action-payload".to_string();
+    effect.committed_actions_hash =
+        execution_committed_actions_hash(effect.committed_actions.as_slice())
+            .expect("rehash conflicting authoritative actions");
+    record.external_effect_ref = Some(
+        persist_execution_external_effect_materialization(&store, &effect)
+            .expect("persist conflicting authoritative external effect"),
+    );
+    persist_execution_bridge_record(records_dir.as_path(), &record)
+        .expect("replace authoritative record effect reference");
+
+    let err = driver
+        .on_commit(accepted)
+        .expect_err("equal-height replay must reject conflicting authoritative effect actions");
+    assert!(
+        err.contains("committed_actions"),
+        "error must identify conflicting committed actions: {err}"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
 
 #[test]
 fn node_runtime_execution_driver_restart_recovers_latest_head_after_retention() {
