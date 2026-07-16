@@ -289,10 +289,8 @@ text=open(sys.argv[1],encoding='utf-8').read()
 match=re.search(r'for key in \(([^\n]+)\):\n\s+if str\(supplied', text)
 if not match or '"gate_epoch"' not in match.group(1):
     raise SystemExit('RED claim-ready: supplied gate_epoch is not compared with the fresh live gate epoch')
-if 'p.get("admin_merge_authorized") is True and p.get("use_admin_merge") is True' not in text:
-    raise SystemExit('RED claim-ready: admin-path revalidation is not selected from the trusted ready gate result')
-if 'LIVE_GATE_ARGS+=(--admin-merge-authorized)' not in text:
-    raise SystemExit('RED claim-ready: live admin-path revalidation drops the explicit path selection')
+if '--admin-merge-authorized' in text:
+    raise SystemExit('claim-ready must not require a per-task admin merge selection flag')
 PY
 
 # The workflow-behavior profile includes the task-transition fixture whose fake

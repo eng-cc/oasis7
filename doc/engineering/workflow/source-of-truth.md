@@ -106,18 +106,19 @@ informational.
 A successful gate emits a trusted receipt bound to issuer, repository, PR,
 head, observation time, and gate epoch. Holds and dispositions are accepted
 only from verified GitHub-backed evidence. When GitHub reports the current head
-as `MERGEABLE` but `BLOCKED` with `REVIEW_REQUIRED`, explicit task/user authority
-may select the repository admin merge path after a fresh recheck of required
-checks, mergeability, requested changes, conversation comments, and review
-threads. The authority record lives in the GitHub task issue and binds the task,
-repository, PR, current head, requester, `review_approval_only` scope, and
-reason; `record-admin-merge-authority.sh` writes and reads back the canonical
-`<!-- oasis7-admin-merge-authority -->` record with `disposition: authorized`.
-A caller flag alone is not authority. Admin merge remains forbidden for active holds, failed or missing
+as `MERGEABLE`, `REVIEW_REQUIRED`, and either `BLOCKED` solely by approval or
+`BEHIND`, repository standing policy selects the admin merge path by default
+after a fresh recheck of required
+checks, mergeability, requested changes, conversation comments, review threads,
+and merge holds. This exact approval-only state does not require a per-task
+authority comment, a caller flag, or another user prompt. The successful live
+gate still emits a head-bound readiness receipt and `use_admin_merge: true`;
+that receipt, not a local assertion, is the execution prerequisite.
+`record-admin-merge-authority.sh` may preserve an optional head-bound audit note for exceptional requester context, but it is not an additional gate.
+Admin merge remains forbidden for active holds, failed or missing
 checks, requested changes, actionable comments, unresolved threads,
 non-mergeable heads, or any blocking state not attributable to missing review
-approval. No separate collaboration/runtime producer is required for this
-human-authorized path.
+approval or the up-to-date protection represented by `BEHIND`. No separate collaboration/runtime producer is required for this repository-policy path.
 
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**

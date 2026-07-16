@@ -76,13 +76,8 @@ p['required_status_checks']=p['policy_discovery']['required_status_checks']
 p['admin_merge_authority']={'requester':'user','scope':'review_approval_only','reason':'fixture authorization','disposition':'authorized'}
 json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
 PY
-if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/blocked.json" \
-  --json >"$TMPDIR/blocked-without-authority.out"; then
-  echo "expected BLOCKED+REVIEW_REQUIRED without admin authorization to remain blocked" >&2
-  exit 1
-fi
 python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/blocked.json" \
-  --admin-merge-authorized --json >"$TMPDIR/blocked.out"
+  --json >"$TMPDIR/blocked.out"
 python3 - "$TMPDIR/blocked.out" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -98,7 +93,7 @@ p['policy_discovery']['active_rule_types'].append('required_deployments')
 json.dump(p,open(sys.argv[2],'w',encoding='utf-8'))
 PY
 if python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" --fixture "$TMPDIR/unsupported-rule.json" \
-  --admin-merge-authorized --json >"$TMPDIR/unsupported-rule.out"; then
+  --json >"$TMPDIR/unsupported-rule.out"; then
   echo "expected an additional active blocking rule to reject admin merge" >&2
   exit 1
 fi
