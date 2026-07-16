@@ -2,8 +2,6 @@
 
 审计轮次: 8
 
-更新时间：2026-06-23
-
 ## 入口
 - 模块 PRD：`doc/world-runtime/prd.md`
 - 模块设计总览：`doc/world-runtime/design.md`
@@ -20,26 +18,17 @@
 - 想直接进入线上模块发布合法性与 binary-only 边界：先读 `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-06-23）
-- `doc/world-runtime/`：120 份文件
-- `doc/world-runtime/runtime/`：57 份文件
-- `doc/world-runtime/wasm/`：25 份文件
-- `doc/world-runtime/module/`：16 份文件
-- 根目录入口：5 份文件
-- `doc/world-runtime/evidence/`：7 份文件
-- `doc/world-runtime/governance/`：6 份文件（先读 `doc/world-runtime/governance/README.md`）
-- `doc/world-runtime/templates/`：2 份文件
-- `doc/world-runtime/checklists/`：1 份文件
-
 ## 热点子域导航
-| 子域 | 文件数 | 适合回答的问题 |
-| --- | --- | --- |
-| `runtime/` | 57 | 确定性运行时主链路、数值正确性、retention / GC、replay contract 与存储预算 |
-| `wasm/` | 25 | Docker canonical build、执行器、模块级 observe runner、SDK、sandbox、ABI 与发布工件治理 |
-| `module/` | 16 | 模块生命周期、线上发布合法性、模块存储与订阅过滤边界 |
-| 根目录入口 | 5 | 模块主入口与当前高频导航 |
-| `evidence/` | 7 | 候选级指标、storage gate、profile consistency 与 soak 采证 |
-| `governance/` | 6 | 治理事件、收据安全与运行时审计边界；先从 `doc/world-runtime/governance/README.md` 按问题分流 |
+| 子域 | 适合回答的问题 |
+| --- | --- |
+| `runtime/` | 确定性运行时主链路、数值正确性、retention / GC、replay contract 与存储预算 |
+| `wasm/` | Docker canonical build、执行器、模块级 observe runner、SDK、sandbox、ABI 与发布工件治理 |
+| `module/` | 模块生命周期、线上发布合法性、模块存储与订阅过滤边界 |
+| 根目录入口 | 模块主入口与当前高频导航 |
+| `evidence/` | 候选级指标、storage gate、profile consistency 与 soak 采证 |
+| `governance/` | 治理事件、收据安全与运行时审计边界；先从 `doc/world-runtime/governance/README.md` 按问题分流 |
+
+当前模块库存与热点二级目录概览以 `./scripts/doc-inventory-report.sh` 输出为准；该报告不保证列出每个子域的精确数量，本索引也不复制数量快照。
 
 ## 活跃补充文档
 - `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`：Docker canonical build、receipt、identity 与 release evidence 主入口。

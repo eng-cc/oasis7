@@ -164,7 +164,8 @@ class FinalTrustRed(unittest.TestCase):
             result = gate.discover_required_policy("eng-cc/oasis7", "main")
         self.assertIn("unsupported_pull_request_policy", result["active_rule_types"])
 
-    def test_admin_path_uses_head_bound_human_authority_without_runtime_producer(self) -> None:
+    def test_approval_only_blocked_defaults_to_admin_merge_but_never_bypasses_real_blockers(self) -> None:
+        """Approval absence is the sole default admin bypass; every substantive gate still fails closed."""
         data = clean_pr()
         data["mergeStateStatus"] = "BLOCKED"
         data["reviewDecision"] = "REVIEW_REQUIRED"
@@ -173,19 +174,58 @@ class FinalTrustRed(unittest.TestCase):
             "active_rule_types": ["required_pull_request_reviews"],
             "required_status_checks": [],
         }
-        without_authority = gate.decision(data, True, evidence_mode="fixture")
-        self.assertEqual("blocked", without_authority["status"])
-        self.assertFalse(without_authority["use_admin_merge"])
-
-        data["admin_merge_authority"] = {
-            "requester": "user",
-            "scope": "review_approval_only",
-            "reason": "explicit fixture authorization",
-            "disposition": "authorized",
-        }
-        result = gate.decision(data, True, evidence_mode="fixture")
+        result = gate.decision(data, False, evidence_mode="fixture")
         self.assertEqual("ready", result["status"])
         self.assertTrue(result["ready_for_merge"])
+        self.assertTrue(result["use_admin_merge"])
+
+        blocked_cases = {
+            "requested changes": {"reviewDecision": "CHANGES_REQUESTED"},
+            "actionable comment": {
+                "comments": [{
+                    "id": "IC_actionable",
+                    "body": "Please fix this before merge.",
+                    "author": {"login": "reviewer"},
+                }],
+            },
+            "unresolved thread": {"threads": [{"id": "PRRT_open", "isResolved": False}]},
+            "nonmergeable": {"mergeable": "CONFLICTING"},
+        }
+        for label, updates in blocked_cases.items():
+            candidate = json.loads(json.dumps(data))
+            candidate.update(updates)
+            with self.subTest(label):
+                blocked = gate.decision(candidate, False, evidence_mode="fixture")
+                self.assertFalse(blocked["ready_for_merge"])
+                self.assertFalse(blocked["use_admin_merge"])
+
+        failed_check = json.loads(json.dumps(data))
+        failed_check["policy_discovery"]["required_status_checks"] = [
+            {"context": "required-gate", "app_id": None},
+        ]
+        failed_check["statusCheckRollup"] = [
+            {"name": "required-gate", "conclusion": "FAILURE"},
+        ]
+        blocked = gate.decision(failed_check, False, evidence_mode="fixture")
+        self.assertFalse(blocked["ready_for_merge"])
+        self.assertFalse(blocked["use_admin_merge"])
+
+    def test_behind_review_required_defaults_to_admin_merge_when_all_real_gates_are_clean(self) -> None:
+        """BEHIND is informational; approval-only policy must avoid a doomed ordinary merge attempt."""
+        data = clean_pr()
+        data["mergeStateStatus"] = "BEHIND"
+        data["reviewDecision"] = "REVIEW_REQUIRED"
+        data["policy_discovery"] = {
+            "status": "resolved",
+            "active_rule_types": ["required_pull_request_reviews"],
+            "required_status_checks": [],
+        }
+
+        result = gate.decision(data, False, evidence_mode="fixture")
+
+        self.assertEqual("ready", result["status"])
+        self.assertTrue(result["ready_for_merge"])
+        self.assertEqual([], result["blockers"])
         self.assertTrue(result["use_admin_merge"])
 
     def test_canonical_comment_identity_rejects_unrelated_stale_comment(self) -> None:
