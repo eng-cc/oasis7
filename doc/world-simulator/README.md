@@ -6,8 +6,8 @@
 - 想先回答 world-simulator 在做什么、覆盖哪些边界：`doc/world-simulator/prd.md`
 - 想看当前执行任务、负责人、测试层级与最新完成态：`doc/world-simulator/project.md`
 - 想确认 Viewer / player-facing surface 的统一视觉设计规范：`doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时读 `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
-- 想先进入 Viewer 热点子域，而不是在 213 份 Viewer Markdown 里盲扫：`doc/world-simulator/viewer/README.md`
-- 想先进入 Launcher 热点子域，而不是在 80+ 份启动器文档里盲扫：`doc/world-simulator/launcher/README.md`
+- 想先进入 Viewer 热点子域，而不是在专题文件中盲扫：`doc/world-simulator/viewer/README.md`
+- 想先进入 Launcher 热点子域，而不是在专题文件中盲扫：`doc/world-simulator/launcher/README.md`
 - 想先进入场景初始化、seed/location 或 asteroid-fragment 主题，而不是在场景专题三件套中逐项找：`doc/world-simulator/scenario/README.md`
 - 想执行 Viewer、走 Web 闭环或查操作步骤：`doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/world-simulator/prd.index.md`
@@ -24,7 +24,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解 world-simulator 的范围、主线能力与跨模块接口。
 - `project.md` 是执行台账，适合确认当前活跃任务、测试层级、阻断与最新完成项。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按文件名查找，不是新读者的首读入口。
-- `viewer/README.md` 是 `viewer/` 热点子域的 landing page，负责把 213 份 Viewer Markdown 按问题分流。
+- `viewer/README.md` 是 `viewer/` 热点子域的 landing page，负责把 Viewer 专题按问题分流。
 - `launcher/README.md` 是 `launcher/` 热点子域的 landing page，负责把启动器、控制面、explorer、runtime 边界与自引导体验按问题分流。
 - `scenario/README.md` 是 `scenario/` 子域的 landing page，负责把场景文件、world initialization、seed/location、资源生成与 asteroid-fragment 专题按问题分流。
 - `viewer/viewer-visual-design-spec-2026-06-05.design.md` 是 Viewer / player-facing surface 的 canonical 视觉设计规范，负责视觉方向、层级、pixel-world 可读性与视觉评审 gate。
