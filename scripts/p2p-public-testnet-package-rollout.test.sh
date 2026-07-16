@@ -508,17 +508,95 @@ public static void Main() {
 }
 }
 '@
+$providerStatusSource = @'
+using System;
+using System.Net;
+using System.Text;
+public static class FixtureProviderStatus {
+public static void Main(string[] args) {
+  int port = Int32.Parse(args[1]);
+  var listener = new HttpListener();
+  listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+  listener.Start();
+  while (true) {
+    var context = listener.GetContext();
+    byte[] payload = Encoding.UTF8.GetBytes("{\"chain_proof\":{\"latest_execution_checkpoint\":{\"schema_version\":2,\"checkpoint_id\":\"fixture-checkpoint-v2\",\"height\":4242,\"manifest_hash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}}}");
+    context.Response.ContentType = "application/json";
+    context.Response.OutputStream.Write(payload, 0, payload.Length);
+    context.Response.Close();
+  }
+}
+}
+'@
 $runtime = Join-Path $Directory 'oasis7_chain_runtime.exe'
 $knownGoodRuntime = Join-Path $Directory 'known-good-oasis7_chain_runtime.exe'
 $installer = Join-Path $Directory 'fixture-installer.exe'
+$providerStatus = Join-Path $Directory 'fixture-provider-status.exe'
 Add-Type -TypeDefinition $runtimeSource -OutputAssembly $runtime -OutputType ConsoleApplication
 $knownGoodRuntimeSource = $runtimeSource.Replace('FixtureRuntime', 'FixtureKnownGoodRuntime').Replace('{\"running\":true,\"fixture\":\"candidate\"}', '{\"running\":true,\"fixture\":\"known-good\"}')
 Add-Type -TypeDefinition $knownGoodRuntimeSource -OutputAssembly $knownGoodRuntime -OutputType ConsoleApplication
 Add-Type -TypeDefinition $installerSource -OutputAssembly $installer -OutputType ConsoleApplication
-return @{ Runtime = $runtime; KnownGoodRuntime = $knownGoodRuntime; Installer = $installer }
+Add-Type -TypeDefinition $providerStatusSource -OutputAssembly $providerStatus -OutputType ConsoleApplication
+return @{ Runtime = $runtime; KnownGoodRuntime = $knownGoodRuntime; Installer = $installer; ProviderStatus = $providerStatus }
 }
 
 $executables = Write-FixtureExecutables -Directory $fixtureRoot
+$fixtureProviderCheckpointId = 'fixture-checkpoint-v2'
+$fixtureProviderCheckpointHeight = 4242
+$fixtureProviderManifestHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+$fixtureProviderProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+
+function Start-FixtureProviderStatusServer([string] $Name) {
+for ($attempt = 1; $attempt -le 10; $attempt++) {
+  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+  $listener.Start()
+  $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+  $listener.Stop()
+  $process = Start-Process -FilePath $executables.ProviderStatus -ArgumentList '--port', "$port" -PassThru
+  $url = "http://127.0.0.1:$port/v1/chain/status"
+  for ($probe = 1; $probe -le 20; $probe++) {
+    Start-Sleep -Milliseconds 100
+    try {
+      $status = Invoke-RestMethod -UseBasicParsing -Uri $url -TimeoutSec 1
+      $checkpoint = $status.chain_proof.latest_execution_checkpoint
+      if ($checkpoint.schema_version -ne 2 -or
+          $checkpoint.checkpoint_id -ne $fixtureProviderCheckpointId -or
+          $checkpoint.height -ne $fixtureProviderCheckpointHeight -or
+          $checkpoint.manifest_hash -ne $fixtureProviderManifestHash) {
+        throw "fixture provider returned unexpected checkpoint evidence: name=$Name payload=$($status | ConvertTo-Json -Compress)"
+      }
+      $fixtureProviderProcesses.Add($process)
+      return $url
+    } catch {
+      if ($probe -eq 20) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "fixture provider did not become ready: name=$Name url=$url error=$($_.Exception.Message)"
+      }
+    }
+  }
+}
+throw "fixture provider failed to reserve a listener port: name=$Name"
+}
+
+function Assert-FixtureProviderStatus([string] $Name, [string] $Url) {
+try {
+  $status = Invoke-RestMethod -UseBasicParsing -Uri $Url -TimeoutSec 2
+  $checkpoint = $status.chain_proof.latest_execution_checkpoint
+  if ($checkpoint.schema_version -ne 2 -or
+      $checkpoint.checkpoint_id -ne $fixtureProviderCheckpointId -or
+      $checkpoint.height -ne $fixtureProviderCheckpointHeight -or
+      $checkpoint.manifest_hash -ne $fixtureProviderManifestHash) {
+    throw "unexpected checkpoint evidence: $($status | ConvertTo-Json -Compress)"
+  }
+} catch {
+  throw "fixture canonical provider unavailable or invalid: name=$Name url=$Url error=$($_.Exception.Message)"
+}
+}
+
+$fixtureProviderEndpoints = @{
+  Sequencer = Start-FixtureProviderStatusServer 'sequencer'
+  Storage = Start-FixtureProviderStatusServer 'storage'
+}
 
 function New-RolloutFixture {
 param([string] $Name, [switch] $ActiveConfigJunction, [switch] $RollbackRootJunction)
@@ -582,7 +660,16 @@ $action = New-ScheduledTaskAction -Execute (Join-Path $installRoot 'bin/oasis7_c
 Register-ScheduledTask -TaskName $taskName -Action $action -Force | Out-Null
 $fixtureTasks.Add($taskName)
 $manifest = @{
-  nodes = @(@{
+  nodes = @(
+  @{
+    name = 'sequencer'; platform = 'linux-x64'; node_root = (Join-Path $root 'sequencer-node'); restart = $false
+    status_url = $fixtureProviderEndpoints.Sequencer
+  },
+  @{
+    name = 'storage'; platform = 'linux-x64'; node_root = (Join-Path $root 'storage-node'); restart = $false
+    status_url = $fixtureProviderEndpoints.Storage
+  },
+  @{
     name = 'windows-fixture'; platform = 'windows-x64'; deploy_root = $deploy; install_root = $installRoot
     remote_installer = (Join-Path $deploy 'placeholder/oasis7-windows-x64.exe'); scheduled_task = $taskName
     status_url = "http://127.0.0.1:$port/v1/chain/status"; rollback_backup_root = $rollbackRoot; rollback_unlock_timeout_secs = 5
@@ -598,6 +685,8 @@ $outDir = Join-Path $root 'out'
 )
 Assert-Utf8NoBom $backupManifestPath
 Assert-Utf8NoBom $manifestPath
+Assert-FixtureProviderStatus 'sequencer' $fixtureProviderEndpoints.Sequencer
+Assert-FixtureProviderStatus 'storage' $fixtureProviderEndpoints.Storage
 & python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath --package-dir $env:OASIS7_FIXTURE_PACKAGE_DIR --out-dir $outDir --json | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
@@ -978,6 +1067,7 @@ try {
 )
 } finally {
 foreach ($taskName in $fixtureTasks) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
+foreach ($providerProcess in $fixtureProviderProcesses) { Stop-Process -Id $providerProcess.Id -Force -ErrorAction SilentlyContinue }
 Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 PS
@@ -1075,6 +1165,24 @@ assert "positive fixture rollout emitted rollback-required output" in fixture
 assert "positive rollout provenance hash diverged" in fixture
 assert "positive rollout RPC did not come from promoted candidate runtime" in fixture
 assert "positive fixture attempt diagnostics contain rollback-required state" in fixture
+assert "public static class FixtureProviderStatus" in fixture
+assert '"schema_version\\":2' in fixture
+assert "$fixtureProviderCheckpointId = 'fixture-checkpoint-v2'" in fixture
+assert "$fixtureProviderCheckpointHeight = 4242" in fixture
+assert "function Start-FixtureProviderStatusServer" in fixture
+assert "function Assert-FixtureProviderStatus" in fixture
+assert "name = 'sequencer'; platform = 'linux-x64'" in fixture
+assert "name = 'storage'; platform = 'linux-x64'" in fixture
+assert "status_url = $fixtureProviderEndpoints.Sequencer" in fixture
+assert "status_url = $fixtureProviderEndpoints.Storage" in fixture
+assert fixture.count("Assert-FixtureProviderStatus 'sequencer'") == 1
+assert fixture.count("Assert-FixtureProviderStatus 'storage'") == 1
+assert "foreach ($providerProcess in $fixtureProviderProcesses) { Stop-Process" in fixture
+provider_validation = fixture.index("Assert-FixtureProviderStatus 'sequencer' $fixtureProviderEndpoints.Sequencer")
+fixture_generation = fixture.index("& python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath")
+assert provider_validation < fixture_generation, (
+    "canonical provider checkpoint evidence must be available before every fixture rollout generation"
+)
 safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureDriveRoot\n")
 fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
 intentional_junction = fixture.index("New-Item -ItemType Junction")
@@ -3353,6 +3461,16 @@ manifest = json.loads(Path(sys.argv[1]).read_text())
 manifest["nodes"][0]["node_root"] = sys.argv[2]
 manifest["nodes"][0]["restart"] = True
 manifest["nodes"][0]["systemd_service"] = "oasis7-testnet-storage.service"
+manifest["nodes"].append(
+    {
+        "name": "strict-linux-observer",
+        "platform": "linux-x64",
+        "node_root": sys.argv[2],
+        "restart": True,
+        "systemd_service": "oasis7-testnet-storage.service",
+        "status_url": "http://127.0.0.1:6634/v1/chain/status",
+    }
+)
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
@@ -3372,7 +3490,9 @@ import json
 import sys
 
 manifest = json.loads(Path(sys.argv[1]).read_text())
-manifest["nodes"][0].pop("status_url", None)
+next(node for node in manifest["nodes"] if node["name"] == "strict-linux-observer").pop(
+    "status_url", None
+)
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
 if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
