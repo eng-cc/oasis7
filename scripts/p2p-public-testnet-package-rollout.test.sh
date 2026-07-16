@@ -1412,8 +1412,10 @@ for token in (
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
     'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
     "assert_state_roots_safe",
-    '[[ ! -L "$state_path" ]]',
-    '[[ "$require_present" == true && ! -d "$state_path" ]]',
+    "assert_no_symlink_components",
+    "resolve_existing_physical_directory",
+    "persistent state root escapes physical node root",
+    '[[ -e "$state_path" && ! -d "$state_path" ]]',
 ):
     assert token in text, f"macOS generated rollout contract missing: {token}"
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
@@ -1489,8 +1491,19 @@ for target, domain in (
     )
     assert f"LAUNCHD_TARGET={target}" in generated
     assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
+    assert "LAUNCHD_LABEL=" in generated
+    assert "assert_launchd_plist_label" in generated
+    assert "assert_launchd_target_loaded" in generated
     assert 'launchctl bootout "$LAUNCHD_TARGET"' in generated
     assert 'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"' in generated
+    bootstrap_positions = [
+        match.start()
+        for match in re.finditer('launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"', generated)
+    ]
+    assert all(
+        "assert_launchd_target_loaded" in generated[position : position + 180]
+        for position in bootstrap_positions
+    ), "every launchd bootstrap path must re-assert the exact target before health acceptance"
 for invalid_target in (
     "user/oasis7.testnet.fourth",
     "gui/not-a-uid/oasis7.testnet.fourth",
@@ -1546,6 +1559,12 @@ except SystemExit:
     pass
 else:
     raise AssertionError("persistent state path containing launchd plist was accepted")
+assert "assert_no_symlink_components" in generated
+assert "resolve_existing_physical_directory" in generated
+assert "physical_node_root" in generated
+assert "persistent state root escapes physical node root" in generated
+assert "persistent state root has symlink component" in generated
+assert "physical_state_path" in generated
 scope_contract = "all_existing` plus `linux_macos_arm64"
 assert scope_contract in inventory_text and scope_contract in runbook_text
 assert "all_existing` | every package platform represented by the managed fleet" not in inventory_text

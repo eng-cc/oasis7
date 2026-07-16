@@ -9,8 +9,8 @@ use oasis7::simulator::{
 };
 
 use super::checkpoint::{
-    execution_bridge_record_path, load_execution_bridge_record,
-    persist_execution_bridge_record_only,
+    execution_bridge_record_path, execution_checkpoint_root_dir, load_execution_bridge_record,
+    load_execution_checkpoint_manifest, persist_execution_bridge_record_only,
 };
 use super::driver::{ExecutionHashPayload, NodeRuntimeExecutionDriver};
 use super::driver_observability::{
@@ -164,7 +164,41 @@ impl NodeRuntimeExecutionDriver {
                 journal.len()
             ));
         }
-        let previous_execution_block_hash = if record.height == 1 {
+        let checkpoint_install_record = record.checkpoint_ref.is_some()
+            && record.proposer_id.is_none()
+            && record.action_root.is_none();
+        let previous_execution_block_hash = if checkpoint_install_record {
+            let checkpoint_ref = record.checkpoint_ref.as_deref().ok_or_else(|| {
+                format!(
+                    "execution checkpoint-install record missing checkpoint ref at height {}",
+                    record.height
+                )
+            })?;
+            let manifest = load_execution_checkpoint_manifest(
+                execution_checkpoint_root_dir(self.records_dir.as_path())
+                    .join(checkpoint_ref)
+                    .as_path(),
+            )?;
+            if manifest.world_id != record.world_id
+                || manifest.height != record.height
+                || manifest.execution_block_hash != record.execution_block_hash
+                || manifest.execution_state_root != record.execution_state_root
+            {
+                return Err(format!(
+                    "execution checkpoint-install manifest mismatch at height {}",
+                    record.height
+                ));
+            }
+            manifest
+                .predecessor_execution_block_hash
+                .filter(|hash| !hash.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "execution checkpoint-install manifest missing predecessor execution block hash at height {}",
+                        record.height
+                    )
+                })?
+        } else if record.height == 1 {
             "genesis".to_string()
         } else {
             let predecessor_path =

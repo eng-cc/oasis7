@@ -1599,7 +1599,7 @@ def macos_paths_overlap(first: str, second: str) -> bool:
     )
 
 
-def macos_launchd_contract(node: dict[str, Any]) -> tuple[str, str]:
+def macos_launchd_contract(node: dict[str, Any]) -> tuple[str, str, str]:
     name = str(node.get("name") or "macos-observer")
     target = str(node.get("launchd_target") or "")
     match = re.fullmatch(
@@ -1612,7 +1612,9 @@ def macos_launchd_contract(node: dict[str, Any]) -> tuple[str, str]:
             "system/<label> or gui/<numeric-uid>/<label>"
         )
     domain = "system" if match.group(1) else f"gui/{match.group(3)}"
-    return target, domain
+    label = match.group(2) or match.group(4)
+    assert label is not None
+    return target, domain, label
 
 
 def macos_script(
@@ -1624,7 +1626,7 @@ def macos_script(
 ) -> str:
     name = str(node.get("name") or "macos-observer")
     node_root = macos_absolute_path(node, "node_root").rstrip("/")
-    launchd_target, launchd_bootstrap_domain = macos_launchd_contract(node)
+    launchd_target, launchd_bootstrap_domain, launchd_label = macos_launchd_contract(node)
     launchd_plist = macos_absolute_path(node, "launchd_plist")
     runtime_path = macos_absolute_path(node, "runtime_path")
     healthz_url = str(node.get("healthz_url") or "")
@@ -1677,6 +1679,7 @@ RUNTIME_PATH={q(runtime_path)}
 LAUNCHD_PLIST={q(launchd_plist)}
 LAUNCHD_TARGET={q(launchd_target)}
 LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
+LAUNCHD_LABEL={q(launchd_label)}
 HEALTHZ_URL={q(healthz_url)}
 STATUS_URL={q(status_url)}
 PACKAGE_VERSION={q(version)}
@@ -1723,6 +1726,25 @@ restore_file() {{
   mv -f "$temporary" "$destination" || return 1
 }}
 
+assert_launchd_plist_label() {{
+  local plist_label
+  plist_label="$(/usr/libexec/PlistBuddy -c 'Print :Label' "$LAUNCHD_PLIST" 2>/dev/null)" || {{
+    echo "unable to read launchd plist Label: $LAUNCHD_PLIST" >&2
+    return 1
+  }}
+  [[ "$plist_label" == "$LAUNCHD_LABEL" ]] || {{
+    echo "launchd plist Label mismatch: target=$LAUNCHD_TARGET expected=$LAUNCHD_LABEL actual=$plist_label" >&2
+    return 1
+  }}
+}}
+
+assert_launchd_target_loaded() {{
+  launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1 || {{
+    echo "launchd target is not loaded: $LAUNCHD_TARGET" >&2
+    return 1
+  }}
+}}
+
 wait_for_service_health() {{
   local deadline=$((SECONDS + 120)) health status
   while (( SECONDS < deadline )); do
@@ -1744,23 +1766,60 @@ wait_for_service_health() {{
 restart_original_service() {{
   if ! launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1; then
     launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+    assert_launchd_target_loaded || return 1
   fi
+  assert_launchd_target_loaded || return 1
   wait_for_service_health || return 1
   echo "original_service_recovery_verified=true"
 }}
 
+assert_no_symlink_components() {{
+  local path="$1" component current=""
+  [[ "$path" == /* ]] || {{ echo "path is not absolute: $path" >&2; return 1; }}
+  IFS=/ read -r -a components <<<"${{path#/}}"
+  for component in "${{components[@]}}"; do
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || {{ echo "persistent state root has symlink component: $current" >&2; return 1; }}
+  done
+}}
+
+resolve_existing_physical_directory() {{
+  local path="$1"
+  [[ -d "$path" && ! -L "$path" ]] || return 1
+  (cd -P "$path" && pwd -P)
+}}
+
 assert_state_roots_safe() {{
-  local require_present="$1" state_path
+  local require_present="$1" state_path state_parent physical_node_root physical_state_path
+  assert_no_symlink_components "$NODE_ROOT" || return 1
+  physical_node_root="$(resolve_existing_physical_directory "$NODE_ROOT")" || {{
+    echo "node root is not a physical directory: $NODE_ROOT" >&2
+    return 1
+  }}
   for state_path in "${{STATE_PATHS[@]}}"; do
     if [[ "$require_present" == true && ! -e "$state_path" ]]; then
       echo "persistent state root missing: $state_path" >&2
       return 1
     fi
-    [[ ! -L "$state_path" ]] || {{ echo "persistent state root is a symlink: $state_path" >&2; return 1; }}
-    if [[ "$require_present" == true && ! -d "$state_path" ]]; then
+    assert_no_symlink_components "$state_path" || return 1
+    if [[ -e "$state_path" && ! -d "$state_path" ]]; then
       echo "persistent state root is not a directory: $state_path" >&2
       return 1
     fi
+    if [[ -e "$state_path" ]]; then
+      physical_state_path="$(resolve_existing_physical_directory "$state_path")" || return 1
+    else
+      state_parent="$(dirname "$state_path")"
+      physical_state_path="$(resolve_existing_physical_directory "$state_parent")/$(basename "$state_path")" || {{
+        echo "persistent state parent is not a physical directory: $state_parent" >&2
+        return 1
+      }}
+    fi
+    [[ "$physical_state_path" == "$physical_node_root/"* ]] || {{
+      echo "persistent state root escapes physical node root: state=$state_path resolved=$physical_state_path node_root=$physical_node_root" >&2
+      return 1
+    }}
   done
 }}
 
@@ -1813,6 +1872,7 @@ rollback() {{
   restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION" || return 1
   restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO" || return 1
   launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+  assert_launchd_target_loaded || return 1
   wait_for_service_health || return 1
   echo "rollback_service_health_verified=true"
   echo "rollback_complete=true"
@@ -1834,7 +1894,8 @@ trap on_error ERR
 [[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" == 1 ]] || die "native arm64 capability unavailable"
 [[ -f "$DMG_PATH" ]] || die "DMG missing: $DMG_PATH"
 [[ -f "$LAUNCHD_PLIST" ]] || die "launchd plist missing: $LAUNCHD_PLIST"
-launchctl print "$LAUNCHD_TARGET" >/dev/null || die "launchd target is not loaded: $LAUNCHD_TARGET"
+assert_launchd_plist_label || die "launchd plist Label preflight failed"
+assert_launchd_target_loaded || die "launchd target preflight failed"
 [[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
 [[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
 for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
@@ -1883,6 +1944,7 @@ install -m 755 "$PACKAGE_RUNTIME" "$RUNTIME_PATH"
 printf '%s\\n' "$PACKAGE_VERSION" >"$NODE_ROOT/CURRENT_VERSION"
 printf 'workflow=Testnet Packages\\nrun_id=%s\\ncommit=%s\\nplatform=macos-arm64\\n' "$PACKAGE_RUN_ID" "$PACKAGE_COMMIT" >"$NODE_ROOT/DEPLOYED_BUILDINFO"
 launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"
+assert_launchd_target_loaded || die "launchd target missing after promotion bootstrap"
 
 authority_failure=0
 deadline=$((SECONDS + 120))

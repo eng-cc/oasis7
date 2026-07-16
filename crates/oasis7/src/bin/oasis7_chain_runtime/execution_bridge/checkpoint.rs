@@ -10,119 +10,10 @@ use oasis7::runtime::{BlobStore, LocalCasStore};
 use super::{
     EXECUTION_BRIDGE_RECORD_SCHEMA_V2, EXECUTION_BRIDGE_RECORD_SCHEMA_V3,
     EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1, ExecutionBridgePinSet, ExecutionBridgeRecord,
-    ExecutionCheckpointLatestPointer, ExecutionCheckpointManifest,
-    ExecutionCheckpointManifestHashPayload, write_bytes_atomic,
+    ExecutionCheckpointLatestPointer, ExecutionCheckpointManifest, write_bytes_atomic,
 };
 
 const EXECUTION_BRIDGE_PIN_SCOPE: &str = "execution_bridge_v1";
-impl ExecutionCheckpointManifest {
-    pub(super) fn new(
-        world_id: String,
-        height: u64,
-        execution_block_hash: String,
-        execution_state_root: String,
-        latest_state_ref: String,
-        snapshot_ref: Option<String>,
-        journal_ref: Option<String>,
-        created_at_ms: i64,
-    ) -> Result<Self, String> {
-        let checkpoint_id = execution_checkpoint_id(height, execution_block_hash.as_str());
-        let mut pinned_refs = vec![latest_state_ref.clone()];
-        if let Some(snapshot_ref) = snapshot_ref.as_ref() {
-            pinned_refs.push(snapshot_ref.clone());
-        }
-        if let Some(journal_ref) = journal_ref.as_ref() {
-            pinned_refs.push(journal_ref.clone());
-        }
-        pinned_refs.sort();
-        pinned_refs.dedup();
-
-        let mut manifest = Self {
-            schema_version: EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1,
-            checkpoint_id,
-            world_id,
-            height,
-            execution_block_hash,
-            execution_state_root,
-            latest_state_ref,
-            snapshot_ref,
-            journal_ref,
-            pinned_refs,
-            manifest_hash: String::new(),
-            created_at_ms,
-        };
-        manifest.manifest_hash = manifest.compute_manifest_hash()?;
-        Ok(manifest)
-    }
-
-    fn compute_manifest_hash(&self) -> Result<String, String> {
-        let payload = ExecutionCheckpointManifestHashPayload {
-            schema_version: self.schema_version,
-            checkpoint_id: self.checkpoint_id.as_str(),
-            world_id: self.world_id.as_str(),
-            height: self.height,
-            execution_block_hash: self.execution_block_hash.as_str(),
-            execution_state_root: self.execution_state_root.as_str(),
-            latest_state_ref: self.latest_state_ref.as_str(),
-            snapshot_ref: self.snapshot_ref.as_deref(),
-            journal_ref: self.journal_ref.as_deref(),
-            pinned_refs: self.pinned_refs.as_slice(),
-            created_at_ms: self.created_at_ms,
-        };
-        Ok(oasis7::runtime::blake3_hex(
-            super::to_cbor(payload)?.as_slice(),
-        ))
-    }
-
-    pub(super) fn validate(&self) -> Result<(), String> {
-        if self.schema_version < EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1 {
-            return Err(format!(
-                "execution checkpoint manifest {} has invalid schema_version={}",
-                self.checkpoint_id, self.schema_version
-            ));
-        }
-        if self.height == 0 {
-            return Err(format!(
-                "execution checkpoint manifest {} has invalid height=0",
-                self.checkpoint_id
-            ));
-        }
-        if self.latest_state_ref.is_empty() {
-            return Err(format!(
-                "execution checkpoint manifest {} missing latest_state_ref",
-                self.checkpoint_id
-            ));
-        }
-        let mut expected_pins = vec![self.latest_state_ref.clone()];
-        if let Some(snapshot_ref) = self.snapshot_ref.as_ref() {
-            expected_pins.push(snapshot_ref.clone());
-        }
-        if let Some(journal_ref) = self.journal_ref.as_ref() {
-            expected_pins.push(journal_ref.clone());
-        }
-        expected_pins.sort();
-        expected_pins.dedup();
-        if expected_pins != self.pinned_refs {
-            return Err(format!(
-                "execution checkpoint manifest {} pin-set mismatch expected={:?} actual={:?}",
-                self.checkpoint_id, expected_pins, self.pinned_refs
-            ));
-        }
-        let expected_hash = self.compute_manifest_hash()?;
-        if self.manifest_hash != expected_hash {
-            return Err(format!(
-                "execution checkpoint manifest {} hash mismatch expected={} actual={}",
-                self.checkpoint_id, expected_hash, self.manifest_hash
-            ));
-        }
-        Ok(())
-    }
-}
-
-fn execution_checkpoint_id(height: u64, execution_block_hash: &str) -> String {
-    let short_hash: String = execution_block_hash.chars().take(16).collect();
-    format!("checkpoint-{:020}-{short_hash}", height)
-}
 
 pub(super) fn execution_checkpoint_root_dir(execution_records_dir: &Path) -> std::path::PathBuf {
     execution_records_dir.join("checkpoints")
@@ -997,11 +888,26 @@ pub(super) fn maybe_persist_execution_checkpoint_for_record(
             record.height
         )
     })?;
-    let manifest = ExecutionCheckpointManifest::new(
+    let predecessor_execution_block_hash = if record.height == 1 {
+        "genesis".to_string()
+    } else {
+        let predecessor = load_execution_bridge_record(
+            execution_bridge_record_path(execution_records_dir, record.height - 1).as_path(),
+        )?;
+        if predecessor.height != record.height - 1 || predecessor.world_id != record.world_id {
+            return Err(format!(
+                "execution checkpoint predecessor record mismatch at height {}",
+                record.height - 1
+            ));
+        }
+        predecessor.execution_block_hash
+    };
+    let manifest = ExecutionCheckpointManifest::new_with_predecessor_execution_block_hash(
         record.world_id.clone(),
         record.height,
         record.execution_block_hash.clone(),
         record.execution_state_root.clone(),
+        predecessor_execution_block_hash,
         latest_state_ref,
         record.snapshot_ref.clone(),
         record.journal_ref.clone(),
