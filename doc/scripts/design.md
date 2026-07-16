@@ -1,51 +1,46 @@
 # scripts 模块设计总览
 
-审计轮次: 6
+审计轮次: 7
 
-- 对应需求文档: `doc/scripts/prd.md`
-- 对应项目管理文档: `doc/scripts/project.md`
-- 对应文件级索引: `doc/scripts/prd.index.md`
+## 设计定位
 
-## 1. 设计定位
-`scripts` 模块的 `design.md` 负责描述自动化脚本、precommit、链路脚本和治理脚本的组织设计。
+本页描述 scripts 文档树的稳定抽象和阅读关系，不复制专题参数契约、
+任务状态或工程 workflow 规则。
 
-## 2. 阅读顺序
-1. `doc/scripts/prd.md`
-2. `doc/scripts/design.md`
-3. `doc/scripts/project.md`
-4. `doc/scripts/prd.index.md`
-5. 下钻 `precommit/`、`launcher/`、`wasm/` 等专题目录
+## 文档分层
 
-## 3. 设计结构
-- 开发前置层：precommit 与本地治理脚本。
-- 运行支撑层：launcher / runtime / wasm 相关脚本。
-- 文档治理层：doc-governance 与辅助脚本的组织方式。
+| 层级 | 文档 | 职责 |
+| --- | --- | --- |
+| landing | `doc/scripts/README.md` | 按读者意图选择权威入口 |
+| requirements | `doc/scripts/prd.md` | 定义模块边界、能力需求和验收标准 |
+| architecture | `doc/scripts/design.md` | 解释模块结构与文档分层 |
+| execution record | `doc/scripts/project.md` | 记录 PRD-ID、任务和验证证据映射 |
+| inventory | `doc/scripts/prd.index.md` | 提供专题三件套的精确文件索引 |
+| topic truth | `governance/`、`precommit/`、`wasm/` | 承载各主题的当前规范、设计和完成记录 |
 
-## 4. 集成点
-- `doc/engineering/prd.md`
-- `scripts/doc-governance-check.sh`
-- `testing-manual.md`
+工程任务生命周期不属于 scripts 模块的第二套设计层；它统一引用
+`doc/engineering/workflow/source-of-truth.md`。
 
-## 5. 专题导航
-- precommit 类规则进入 `precommit/`
-- launcher / chain / wasm 等专题保持同目录同 basename 管理
+## 能力结构
 
-## 设计目标
-- 提供 `scripts` 模块的总体设计入口。
+- 开发与验证入口：为本地开发、检查和测试提供稳定 wrapper，并把正式验收边界交给测试规范。
+- 任务与仓库治理 helper：实现 workflow 规范定义的机械操作，但不自行定义生命周期状态或门禁。
+- 运行支撑入口：组合 launcher、runtime、provider 与 WASM 工具；具体参数和兼容边界由对应专题或脚本 `--help` 持有。
+- 文档治理入口：通过模块索引和治理检查保持脚本、规范与验证证据可追溯。
 
-## 设计范围
-- 覆盖模块级结构、主链路、分层与专题导航。
-- 不替代专题 `*.design.md` 的细化设计。
+## 阅读顺序
 
-## 关键接口 / 入口
-- 需求入口：`doc/scripts/prd.md`
-- 执行入口：`doc/scripts/project.md`
-- 索引入口：`doc/scripts/prd.index.md`
+1. 从 `doc/scripts/README.md` 按目标选择入口。
+2. 需要模块契约时读 `doc/scripts/prd.md`；需要当前任务证据时读 `doc/scripts/project.md`。
+3. 需要某个治理问题时先进入对应专题 README，再读该专题的 PRD/design/project。
+4. 已知文件名时使用 `doc/scripts/prd.index.md` 精确定位。
 
-## 设计演进计划
-- M1 (2026-03-09): 在 ROUND-006 中补齐模块级 `design.md` 标准入口。
-- M2: 按专题继续补齐高复杂度主题的 `*.design.md`。
+## 集成边界
 
-## 设计风险
-- 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
-- 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
+- 工程生命周期：`doc/engineering/workflow/source-of-truth.md`
+- 测试策略与 suite 选择：`testing-manual.md`
+- 文档结构门禁：`scripts/doc-governance-check.sh`
+- 跨模块工程需求：`doc/engineering/prd.md`
+
+新增能力时先确定它属于模块级契约还是专题契约；只有跨多个专题的稳定
+结构才回写本页，参数、端口、临时兼容路径和任务完成明细留在各自 owner 文档。
