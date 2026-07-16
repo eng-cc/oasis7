@@ -5,6 +5,8 @@ use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
 use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce};
 use serde::{Deserialize, Serialize};
 
+mod driver_startup_recovery;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {
     pub last_applied_committed_height: u64,
