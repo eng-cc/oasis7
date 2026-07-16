@@ -569,6 +569,21 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 6. `connected_peers`
 7. `readiness.ready`
 8. `readiness.failed_gates`
+9. `consensus.network_head.decision`
+
+在作出 `Fleet healthy` 或 recovery update 结论前，使用 collector 生成唯一的 bounded same-window artifact；它会逐节点记录 UTC capture timestamp、全局 UTC start/finish timestamp 和 capture span，并在 span、head、readiness、failed gate、last error 或 network-head decision 不满足时 fail closed：
+
+```bash
+./scripts/p2p-public-testnet-fleet-health.py \
+  --sequencer sequencer \
+  --node sequencer=http://39.104.204.172:6631/v1/chain/status \
+  --node storage=http://39.104.205.67:6632/v1/chain/status \
+  --node linux-lan-observer=http://<linux-lan-observer>:6633/v1/chain/status \
+  --node windows-observer=http://<windows-observer>:5121/v1/chain/status \
+  --node macos-observer=http://127.0.0.1:19083/v1/chain/status \
+  --max-capture-span-seconds 30 \
+  --output .tmp/public-testnet-fleet-health.json
+```
 
 ### Verdict rules
 1. **Fleet live**
@@ -585,6 +600,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
    - `readiness.failed_gates=[]`
    - `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 与 validator head 对齐或在允许 lag 内
    - `consensus.network_head.decision=ready`
+   - 没有 repository-defined lag threshold 时，所有 current operator inventory 节点必须在**同一个 same capture window** 的快照中，使 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height` 都与 sequencer validator head **exactly equal**；不得把不同采样时间的“分别已追平”拼成 fleet healthy 结论
 
 如果只满足第一条，不得对外宣称 healthy、恢复完成或“完全健康”。
 
@@ -593,7 +609,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 1. **Merge announcement: n/a.** 合并 runbook、代码或 package 变更不等于 live deployment 已执行，不发布“网络已恢复”或“部署已完成”的 merge announcement。
 2. Phase C0 的 consumer-impact record 是 deployment/outage messaging 的来源。`active` 或 `unknown` 都必须按存在外部 consumer 处理：TPM 与 LiveOps/community 负责 outage 和 recovery updates，`producer_system_designer` 批准 wording，并在任何 host preflight/reset/redeploy continuation 前记录 update channel、recovery checkpoint 和 approval reference。只有 `none` 且 evidence source 与 timestamp 已留存时，才可只保留内部 operator 记录。validator 已停止也不豁免这项 determination 或沟通 gate。
 3. 需要对外说明时，必须使用 `testnet`、`resettable`、`non-mainnet` 边界，例如：`Oasis7 public testnet is undergoing a governed clean rebuild. This testnet is resettable and non-mainnet. Validators are temporarily unavailable; RPC, explorer, and guarded faucet may be unavailable or stale until full-fleet verification completes.`
-4. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足并留存 full-fleet snapshot 后，才可由已记录的 recovery update checkpoint 说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
+4. validator pair、单个 observer、RPC、explorer 或 faucet 单独恢复都不能触发 healthy announcement。只有本 Phase 的 `Fleet healthy` 全部满足、每个节点的 `consensus.network_head.decision=ready`、并留存满足上述 exact-equality same-capture-window head criterion 的 full-fleet snapshot 后，才可由已记录的 recovery update checkpoint 说明服务恢复；恢复说明仍必须保留 `testnet`、`resettable`、`non-mainnet` 边界，不得承诺旧 chain state、testnet asset 或 mainnet continuity。
 
 ## 14. Phase H - Failure Handling and Rollback
 ### Deployment rollback
@@ -612,6 +628,26 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 2. 保留 observer 当前 seed/state-sync 失败现场
 3. reset 受旧链状态影响的 observer，再从 clean-rebuilt storage/sequencer state 自动 catch-up 或重新导出的 current-chain verified bundle reseed
 4. 不得使用绑定旧链状态的 seed bundle，也不得保留旧 observer state 重新接入 clean-rebuilt validator pair
+
+### Windows package rollback 后的人工 handoff
+
+Windows package rollout 只要输出 `rollback_required=true`，就进入仍在进行中的 incident；`rollback_applied=true` 只证明已尝试恢复 known-good binary/config/deployment provenance，不代表 observer 已恢复，也不得触发 recovery messaging。值班 operator 必须先保留 rollout 输出列出的 `attempt_stdout`、`attempt_stderr`、`attempt_exit_marker` 及 `C:\oasis7-deploy\logs\package-rollout-attempts\` 下对应 attempt 文件；不得在 incident closeout 前删除 attempt staging、覆盖日志或只摘录最后一行替代原始证据。随后采集 `staged_sha_closure_complete=true`、`promotion_begin=true`、`promotion_complete=true` 三个 marker 是否存在，以及 `Get-ScheduledTask` 的实际 state/action，并按下列分支 handoff：
+
+1. **Preflight / closure failure, no restart.** 若缺少 `staged_sha_closure_complete=true` 或 `promotion_begin=true`，则 promotion/stop boundary 未获证明；即使 task 当前为 `State=Ready`，也不得执行 `Start-ScheduledTask`。保留 preflight/closure diagnostics，修复 staging closure、路径、hash、rollback root 或 task-action precondition 后重新生成并执行一次受控 rollout；若观察到 `State=Running`，也只保留现场并排查，不得以手工 restart 覆盖 preflight failure。
+2. **Promotion entered but not completed.** 若有 `promotion_begin=true` 但没有 `promotion_complete=true`，保留所有 marker 和 attempt diagnostics，并把 observed task state 作为 stop 的事实来源：生成器没有独立的 stop marker，不能从 `promotion_begin=true` 推断 task 已停止。只有同时得到 `rollback_required=true`、`rollback_applied=true`，并确认 task 为已停止的 `State=Ready` 时，才进入下一分支；`State=Running`、缺失 state 或任何其他 state 都继续 incident，禁止手工 start。
+3. **Restored post-stop rollback.** 仅当 `promotion_begin=true` 已记录、`rollback_applied=true` 已记录、installed/known-good runtime SHA-256、active governed config、`CURRENT_VERSION` / `DEPLOYED_BUILDINFO` 和 scheduled task action 都已闭合，且当前观察到 `State=Ready` 时，Windows node operator 才可人工执行 `Start-ScheduledTask -TaskName Oasis7Observer`。rollout 的“不自动重启”是安全边界；不得用修改脚本或删除诊断绕过。若已观察到 `State=Running`，不得再次 Start，先采集状态和日志。
+4. 在任何手工 start 后，运行本 runbook `Current five-node status` 的现有 Windows/fleet status checks，并记录 scheduled task `State=Running`、RPC `running=true`、`last_error=null`、`readiness.status=ready`、`readiness.failed_gates=[]`、每个节点 `consensus.network_head.decision=ready`，以及满足本 Phase exact-equality same-capture-window criterion 的 `consensus.committed_height`、`consensus.network_committed_height`、`consensus.last_execution_height`。任一项不满足时，`rollback_required=true` incident 继续 active。
+5. 在 task running、error clear、readiness、network-head decision 和 full-fleet same-window head checks 全部通过且证据已留存前，禁止发布“已恢复”“healthy”或同义 external messaging。外部 recovery update 仍遵循上文 `Operator communication boundary`：TPM 与 LiveOps/community 准备并发布 update，`producer_system_designer` 批准 wording；Windows operator 的本机检查结果本身不构成对外发布批准。
+
+最小 Windows handoff 命令：
+
+```powershell
+Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State,Actions
+Get-Content -LiteralPath '<attempt_stdout>','<attempt_stderr>','<attempt_exit_marker>'
+Get-ScheduledTask -TaskName Oasis7Observer | Select-Object TaskName,State
+Invoke-RestMethod -UseBasicParsing http://127.0.0.1:5121/v1/chain/status |
+  ConvertTo-Json -Depth 8
+```
 
 ### What not to do
 1. 不要为 observer attach 问题去修改 validator registry 真值
@@ -660,7 +696,9 @@ For current five-node fleet preflight, first load each managed node's real env/d
 
 默认模式只生成计划，不改节点；脚本会校验各平台 `*-BUILDINFO` 和 `*-SHA256SUMS`，并输出 Linux/Windows operator 命令和 `rollout-plan.json`。本地 Linux 节点需要显式加 `--apply-local` 才会调用 `p2p-public-testnet-package-node-upgrade.sh` 执行替换；远端 SSH、Windows PowerShell 和凭据注入仍由 operator 在脚本外执行，manifest 不写密码。
 
-Windows 计划脚本只更新受治理的 `public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json`，并用无 BOM UTF-8 回写 runtime hash/version。常规替换使用 `rpc-running` 保持“软件版本替换”和“网络恢复 ready”解耦；只有确认要把 ready 状态作为替换 gate 时才用 `strict-ready`。
+Windows 计划要求 `windows-x64-SHA256SUMS` 覆盖并传输受治理的 bundle、genesis、network manifest、bootstrap peers、`governance_bootstrap_refs` 中全部非空 evidence 源，以及 public-testnet 必需的 world snapshot、递归 generated-world sidecar 和 world-generation provenance。每个带 `host` 的远端 Windows node manifest entry 必须显式声明非空 `rollback_backup_root`，并指向该节点已验证的时间戳备份目录；计划生成不得为远端节点隐式回退到 `backups\known-good`。每个计划按 node/version/commit/run 派生唯一 attempt id，installer、完整 governed closure 和 upgrade script 只能传到 `C:\oasis7-deploy\staging\package-rollout\<attempt-id>`；pre-apply 命令不得写 `config/`、install root 或其他 active deployment 路径。每次传输前先在远端创建并确认 staging 父目录，传输后按精确预期 SHA-256 远端复核并输出 `staging_transfer_ack`；全部传输闭合后，apply 必须使用精确的 `user@host` SSH target，并通过同步的 `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <staged-script>` 子进程从该 attempt staging root 执行脚本，再把子进程 `$LASTEXITCODE` 原样返回给 SSH。远端 PowerShell 在停止 scheduled task 或执行 installer 前初始化唯一、只追加的 stdout、stderr、exit-marker 诊断，完成 staged 文件与目录树完整性、来源路径、basename 冲突及已配置 known-good rollback root 预检，并依次输出 `staged_sha_closure_complete=true`、`promotion_begin=true`；只有此后才能停止 task、安装 runtime 或把 staged config 通过临时文件提升到 active tree，全部提升完成后输出 `promotion_complete=true`。
+
+rollback runtime 优先从唯一的 `backup-manifest.json` 或 `backup-provenance.json` runtime path 解析，并在声明 SHA-256 时闭合校验；没有 manifest/provenance 时仅支持按顺序检查 `runtime/oasis7_chain_runtime.exe`、`bin/oasis7_chain_runtime.exe`，两者同时存在或都不存在均 fail closed，且最终路径必须保持在 rollback root 内。该 root 还必须提供与 node-local 相同相对路径的 `config/` bundle/genesis/manifest，以及 `CURRENT_VERSION`、`DEPLOYED_BUILDINFO`。脚本把所有已知 path-bearing bundle/manifest 字段改写为 active node-local 路径，并通过结构化路径分类拒绝残留 Unix/build-worktree 或非 deploy/install root 路径，随后用无 BOM UTF-8 临时文件原子替换本地化配置。常规替换使用 `rpc-running`，在 60–300 秒有界窗口内同时要求 runtime process 与 RPC `running=true`；`strict-ready` 另要求可用的 readiness truth 为 true。scheduled-task child 一旦终止且结果非零（包括 `255`），脚本立即保留并输出本次诊断文件的精确路径、传播 child exit code，并以 `rollback_required=true` 进入 known-good rollback。rollback 在任何 runtime 解锁等待前先比较 installed 与 known-good SHA，并输出 `rollback_runtime_restore_required`：hash 相等时跳过 runtime unlock/replacement；hash 不等时才执行有界解锁和 runtime 恢复。config 与 deployment provenance 也逐项比较 SHA，只恢复发生变化的 component，并输出 `rollback_component_restored` 或 `rollback_component_unchanged`。整个路径保留 identity/state；锁仍阻断确需执行的 runtime 恢复时才以 `lock_remains=true` fail closed，且不自动重启。
 
 ### Validator status
 ```bash

@@ -88,6 +88,8 @@ include!("tests_storage_replication.rs");
 mod non_sequencer_followers;
 mod replication_state_sync;
 mod restart_reconcile;
+#[path = "tests_consensus_progress_observer_failure.rs"]
+mod tests_consensus_progress_observer_failure;
 #[path = "tests_fetch_blob_chunking.rs"]
 mod tests_fetch_blob_chunking;
 #[path = "tests_hello_throttle.rs"]

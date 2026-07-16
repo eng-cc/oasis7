@@ -150,6 +150,7 @@ fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
         tick_count: 1,
         last_tick_unix_ms: Some(1_700_000_000_000),
         consensus,
+        consensus_progress_observer_error: None,
         last_error: None,
     };
     let network_head =
@@ -285,6 +286,7 @@ fn status_server_attaches_governance_slashing_receipts_from_execution_world() {
             }],
             ..NodeConsensusSnapshot::default()
         },
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
@@ -363,6 +365,7 @@ fn status_server_treats_accepted_slashing_appeal_as_resolved_receipt() {
             }],
             ..NodeConsensusSnapshot::default()
         },
+        consensus_progress_observer_error: None,
         last_error: None,
     };
 
