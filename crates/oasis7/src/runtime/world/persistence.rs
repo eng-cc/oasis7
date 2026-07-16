@@ -834,10 +834,7 @@ impl World {
     pub fn load_from_dir(dir: impl AsRef<Path>) -> Result<Self, WorldError> {
         let dir = dir.as_ref();
         if let Some((mut snapshot, journal)) = Self::try_load_from_distfs_sidecar(dir)? {
-            let has_committed_generation = persistence_support::load_sidecar_generation_index(
-                dir.join(DISTFS_STATE_DIR).as_path(),
-            )?
-            .is_some();
+            let has_committed_generation = Self::has_authoritative_recovery_generation(dir)?;
             if !has_committed_generation
                 && let Some(mut json_snapshot) =
                     load_json_snapshot_if_newer_chain_resource_context(dir, &snapshot)?
@@ -1051,6 +1048,10 @@ impl World {
         let store_root = dir.join(DISTFS_STATE_DIR);
         if store_root.exists()
             && let Some(index) = persistence_support::load_sidecar_generation_index(&store_root)?
+            && index
+                .generations
+                .get(index.latest_generation.as_str())
+                .is_some_and(|record| record.recovery_metadata_path.is_some())
         {
             for generation_id in std::iter::once(index.latest_generation.as_str())
                 .chain(index.rollback_safe_generation.as_deref())
@@ -1111,6 +1112,20 @@ impl World {
                 Ok(None)
             }
         }
+    }
+
+    fn has_authoritative_recovery_generation(dir: &Path) -> Result<bool, WorldError> {
+        let store_root = dir.join(DISTFS_STATE_DIR);
+        Ok(
+            persistence_support::load_sidecar_generation_index(&store_root)?
+                .and_then(|index| {
+                    index
+                        .generations
+                        .get(index.latest_generation.as_str())
+                        .cloned()
+                })
+                .is_some_and(|record| record.recovery_metadata_path.is_some()),
+        )
     }
 
     fn load_from_distfs_sidecar(
