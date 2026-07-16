@@ -5,7 +5,7 @@
 ## Current Boundary
 - `doc/devlog` is no longer a runtime source of truth.
 - The former daily files from 2026-02-03 through 2026-04-01 were summarized here and removed from the active repository surface.
-- Current task truth and execution-evidence authority are defined by the [engineering workflow source of truth](../engineering/workflow/source-of-truth.md#github-project-backed-pm-contract); this archive does not restate that mutable contract.
+- Current task truth and execution-evidence authority are defined by the [engineering workflow source of truth](../engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract); this archive does not restate that mutable contract.
 - Historical references that previously pointed to a specific daily file should use this summary as the compact archive pointer.
 
 ## Retired Corpus
