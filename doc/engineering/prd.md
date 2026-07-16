@@ -218,7 +218,6 @@
 - Integration Points:
   - `scripts/doc-governance-check.sh`
   - `doc/scripts/precommit/pre-commit.prd.md`
-  - `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
   - `doc/.governance/doc-root-md-allowlist.txt`
   - `doc/.governance/module-root-md-allowlist.txt`
   - historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments）
