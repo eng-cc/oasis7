@@ -1037,5 +1037,5 @@ mod tests {
 }
 
 #[cfg(test)]
-#[path = "oasis7_governance_registry_import_rollback_tests.rs"]
+#[path = "oasis7_governance_registry_import/rollback_tests.rs"]
 mod rollback_authority_tests;
