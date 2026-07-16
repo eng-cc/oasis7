@@ -78,17 +78,51 @@ def resolve_confined_source(stage_root: Path, candidate: Path, label: str) -> Pa
     return resolved
 
 
-def confined_source(stage_root: Path, raw_ref: str, metadata_path: Path, label: str) -> Path:
+def normalize_absolute_ref(raw_ref: str) -> str | None:
+    """Return a native absolute spelling for POSIX, Windows, or Git Bash refs."""
     normalized = raw_ref.replace("\\", "/")
     posix_ref = PurePosixPath(normalized)
+    if (
+        posix_ref.is_absolute()
+        and len(posix_ref.parts) >= 2
+        and len(posix_ref.parts[1]) == 1
+        and posix_ref.parts[1].isalpha()
+    ):
+        suffix = "/".join(posix_ref.parts[2:])
+        return f"{posix_ref.parts[1].upper()}:/{suffix}"
+    if Path(raw_ref).is_absolute():
+        return raw_ref
     windows_ref = PureWindowsPath(raw_ref)
-    raw_path = Path(raw_ref)
-    if raw_path.is_absolute() or windows_ref.is_absolute() or windows_ref.drive:
-        candidate = raw_path
+    if windows_ref.is_absolute():
+        return raw_ref
+    return None
+
+
+def confined_source(
+    stage_root: Path,
+    raw_ref: str,
+    metadata_path: Path,
+    label: str,
+    resolved_ref: str | None = None,
+) -> Path:
+    if resolved_ref is not None:
+        normalized_resolved = normalize_absolute_ref(resolved_ref)
+        if normalized_resolved is None:
+            die(f"{label} resolved_path is not absolute: {resolved_ref}")
+        candidate = Path(normalized_resolved)
     else:
-        if ".." in posix_ref.parts or posix_ref.is_absolute():
+        normalized = raw_ref.replace("\\", "/")
+        posix_ref = PurePosixPath(normalized)
+        windows_ref = PureWindowsPath(raw_ref)
+        normalized_raw = normalize_absolute_ref(raw_ref)
+        if normalized_raw is not None:
+            candidate = Path(normalized_raw)
+        elif windows_ref.drive:
             die(f"{label} ref escapes staged deployment closure: {raw_ref}")
-        candidate = metadata_path.parent / Path(*posix_ref.parts)
+        else:
+            if ".." in posix_ref.parts or posix_ref.is_absolute():
+                die(f"{label} ref escapes staged deployment closure: {raw_ref}")
+            candidate = metadata_path.parent / Path(*posix_ref.parts)
     return resolve_confined_source(stage_root, candidate, label)
 
 
@@ -170,7 +204,16 @@ class Localizer:
         raw_ref = metadata.get("ref")
         if not isinstance(raw_ref, str) or not raw_ref:
             die(f"{label} metadata has no ref")
-        source = confined_source(self.lexical_stage_root, raw_ref, metadata_path, label)
+        resolved_ref = metadata.get("resolved_path")
+        if resolved_ref is not None and (not isinstance(resolved_ref, str) or not resolved_ref):
+            die(f"{label} metadata has invalid resolved_path")
+        source = confined_source(
+            self.lexical_stage_root,
+            raw_ref,
+            metadata_path,
+            label,
+            resolved_ref,
+        )
         directory = metadata.get("kind") == "directory"
         destination = self.destination_for(source, directory=directory)
         metadata["ref"] = self.copy(source, destination, directory=directory)

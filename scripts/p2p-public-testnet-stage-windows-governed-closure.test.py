@@ -73,6 +73,26 @@ class WindowsGovernedClosureTests(unittest.TestCase):
         )
         return stage
 
+    def make_repo_relative_bundle_refs(self, stage: Path) -> Path:
+        bundle_path = stage / "config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+        bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+        for field in (
+            "world_snapshot",
+            "generated_world_sidecar",
+            "world_generation_provenance",
+            "governance_manifest",
+        ):
+            metadata = bundle[field]
+            source = Path(metadata["ref"])
+            metadata["ref"] = f"output/testnet-packages/assets/stage/{source.relative_to(stage).as_posix()}"
+            metadata["resolved_path"] = str(source)
+        for metadata in bundle["evidence_refs"]:
+            source = Path(metadata["ref"])
+            metadata["ref"] = f"output/testnet-packages/assets/stage/{source.relative_to(stage).as_posix()}"
+            metadata["resolved_path"] = str(source)
+        bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+        return bundle_path
+
     def test_localizes_complete_recursive_closure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -97,6 +117,59 @@ class WindowsGovernedClosureTests(unittest.TestCase):
             )
             governed = ROLLOUT_MODULE.windows_governed_files(platform_dir, verified)
             self.assertGreater(len(governed), 8)
+
+    def test_localizes_repo_relative_bundle_refs_from_absolute_resolved_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage = self.make_stage(root)
+            self.make_repo_relative_bundle_refs(stage)
+            out = root / "windows-governed-closure"
+
+            MODULE.localize(stage, out)
+
+            bundle = json.loads((out / MODULE.NAMES["bundle"]).read_text(encoding="utf-8"))
+            self.assertEqual(bundle["world_snapshot"]["ref"], "generated-world/world")
+            self.assertNotIn("resolved_path", bundle["world_snapshot"])
+
+    def test_normalizes_git_bash_and_windows_absolute_paths(self) -> None:
+        self.assertEqual(
+            MODULE.normalize_absolute_ref("/d/a/oasis7/stage/generated-world/world"),
+            "D:/a/oasis7/stage/generated-world/world",
+        )
+        windows_ref = r"D:\a\oasis7\stage\generated-world\world"
+        self.assertEqual(MODULE.normalize_absolute_ref(windows_ref), windows_ref)
+        self.assertIsNone(MODULE.normalize_absolute_ref("output/stage/generated-world/world"))
+
+    def test_rejects_resolved_path_outside_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage = self.make_stage(root)
+            bundle_path = self.make_repo_relative_bundle_refs(stage)
+            outside = root / "outside-world"
+            outside.mkdir()
+            (outside / "world.json").write_text("{}\n", encoding="utf-8")
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["world_snapshot"]["resolved_path"] = str(outside)
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                MODULE.localize(stage, root / "windows-governed-closure")
+            self.assertIn("escapes staged deployment closure", str(raised.exception))
+
+    def test_rejects_symlinked_resolved_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stage = self.make_stage(root)
+            bundle_path = self.make_repo_relative_bundle_refs(stage)
+            world_link = stage / "generated-world/world-link"
+            world_link.symlink_to(stage / "generated-world/world", target_is_directory=True)
+            bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+            bundle["world_snapshot"]["resolved_path"] = str(world_link)
+            bundle_path.write_text(json.dumps(bundle), encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                MODULE.localize(stage, root / "windows-governed-closure")
+            self.assertIn("contains symlink component", str(raised.exception))
 
     def test_rejects_localized_basename_collision(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
