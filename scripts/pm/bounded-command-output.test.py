@@ -122,6 +122,47 @@ class BoundedCommandOutputTests(unittest.TestCase):
             self.assertEqual(summary["exit_status"], 127)
             self.assertIn("command not found", summary["stderr"]["summary"])
 
+    def test_reused_label_fails_closed_without_running_or_replacing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = self.run_wrapper(root, "--", sys.executable, "-c", "print('first')")
+            self.assertEqual(first.returncode, 0, first.stderr.decode())
+            summary = json.loads(first.stdout)
+            artifact = root / summary["stdout"]["artifact"]
+            original = artifact.read_bytes()
+            marker = root / "second-ran"
+            second = self.run_wrapper(
+                root, "--", sys.executable, "-c", f"open({str(marker)!r}, 'w').write('bad')"
+            )
+            self.assertEqual(second.returncode, 73)
+            self.assertIn(b"immutable label already exists", second.stderr)
+            self.assertFalse(marker.exists())
+            self.assertEqual(artifact.read_bytes(), original)
+
+    def test_concurrent_same_label_has_one_immutable_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            commands = []
+            for payload in ("alpha", "beta"):
+                commands.append(
+                    subprocess.Popen(
+                        [
+                            sys.executable, str(SCRIPT), "--repo-root", str(root),
+                            "--task-uid", TASK_UID, "--label", "focused-test", "--",
+                            sys.executable, "-c", f"import time; time.sleep(.2); print({payload!r})",
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    )
+                )
+            results = [(process.returncode, stdout, stderr) for process in commands for stdout, stderr in [process.communicate()]]
+            self.assertEqual(sorted(code for code, _, _ in results), [0, 73])
+            winner = next(json.loads(stdout) for code, stdout, _ in results if code == 0)
+            artifact = root / winner["stdout"]["artifact"]
+            data = artifact.read_bytes()
+            self.assertIn(data, (b"alpha\n", b"beta\n"))
+            self.assertEqual(winner["stdout"]["sha256"], hashlib.sha256(data).hexdigest())
+
     @unittest.skipIf(os.name == "nt", "POSIX signal status contract")
     def test_signal_maps_to_shell_compatible_status(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

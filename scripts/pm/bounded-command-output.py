@@ -111,6 +111,9 @@ def main(argv: list[str] | None = None) -> int:
     artifact_dir = scratch_root / args.task_uid / "command-output" / args.label
     stdout_path = artifact_dir / "stdout.bin"
     stderr_path = artifact_dir / "stderr.bin"
+    if artifact_dir.exists():
+        print(f"bounded-command-output: immutable label already exists: {artifact_dir}", file=sys.stderr)
+        return 73
     # Capture outside the repository so commands that audit the live filesystem
     # cannot observe their own output artifacts changing beneath them.
     with tempfile.TemporaryDirectory(prefix="oasis7-command-output-") as temp_dir:
@@ -138,7 +141,12 @@ def main(argv: list[str] | None = None) -> int:
             except PermissionError as error:
                 stderr_file.write(f"command is not executable: {error.filename}\n".encode("utf-8"))
                 exit_status = 126
-        artifact_dir.mkdir(parents=True, exist_ok=True)
+        artifact_dir.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            artifact_dir.mkdir()
+        except FileExistsError:
+            print(f"bounded-command-output: concurrent immutable label claim lost: {artifact_dir}", file=sys.stderr)
+            return 73
         ignore = scratch_root / ".gitignore"
         if not ignore.exists():
             ignore.write_text("*\n", encoding="utf-8")

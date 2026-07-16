@@ -43,15 +43,24 @@ class ReviewBatchEpochTests(unittest.TestCase):
         return json.loads(result.stdout)
 
     def ledger(self, epoch: str, *, omit_health: bool = False, duplicate: bool = False,
-               wrong_head: bool = False, wrong_epoch: bool = False, bad_digest: bool = False) -> Path:
+               wrong_head: bool = False, wrong_epoch: bool = False, bad_digest: bool = False,
+               invalid_return: bool = False) -> Path:
         ledger = self.root / "slice-ledger.jsonl"
         rows = []
         roles = [("qa_engineer", "slice-qa")]
         if not omit_health:
             roles.append(("repository_health_engineer", "slice-health"))
         for role, slice_id in roles:
-            artifact = self.root / f"{slice_id}.md"
-            artifact.write_text(f"return from {role}\n", encoding="utf-8")
+            artifact = self.root / f"{slice_id}.json"
+            returned = {
+                "task_uid": TASK, "role": role, "slice_id": slice_id,
+                "status": "completed", "head": "c" * 40 if wrong_head else HEAD,
+                "epoch": "d" * 64 if wrong_epoch else epoch,
+                "disposition": "no_findings", "findings": [], "residual_risk": "none",
+            }
+            if invalid_return:
+                returned.pop("residual_risk")
+            artifact.write_text(json.dumps(returned) + "\n", encoding="utf-8")
             digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
             rows.append({
                 "task_uid": TASK, "role": role, "slice_id": slice_id,
@@ -78,12 +87,12 @@ class ReviewBatchEpochTests(unittest.TestCase):
     def test_complete_collection_is_idempotent_only_for_same_ledger(self) -> None:
         epoch = str(self.create()["epoch"])
         ledger = self.ledger(epoch)
-        first = json.loads(self.run_script("validate", "--batch", str(self.batch), "--ledger", str(ledger)).stdout)
-        retry = json.loads(self.run_script("validate", "--batch", str(self.batch), "--ledger", str(ledger)).stdout)
+        first = json.loads(self.run_script("collect", "--batch", str(self.batch), "--ledger", str(ledger)).stdout)
+        retry = json.loads(self.run_script("collect", "--batch", str(self.batch), "--ledger", str(ledger)).stdout)
         self.assertFalse(first["transport_retry"])
         self.assertTrue(retry["transport_retry"])
         ledger.write_text(ledger.read_text() + "\n", encoding="utf-8")
-        failure = self.run_script("validate", "--batch", str(self.batch), "--ledger", str(ledger), ok=False)
+        failure = self.run_script("collect", "--batch", str(self.batch), "--ledger", str(ledger), ok=False)
         self.assertIn("different complete collection", failure.stderr)
         recreate = self.run_script(
             "create", "--task-uid", TASK, "--head", HEAD, "--evidence-digest", EVIDENCE,
@@ -99,6 +108,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             ({"wrong_head": True}, "wrong head"),
             ({"wrong_epoch": True}, "wrong epoch"),
             ({"bad_digest": True}, "artifact digest mismatch"),
+            ({"invalid_return": True}, "residual_risk is missing"),
         ]
         for index, (options, message) in enumerate(cases):
             with self.subTest(message=message):
@@ -106,7 +116,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
                 self.batch = batch
                 epoch = str(self.create()["epoch"])
                 ledger = self.ledger(epoch, **options)
-                result = self.run_script("validate", "--batch", str(batch), "--ledger", str(ledger), ok=False)
+                result = self.run_script("collect", "--batch", str(batch), "--ledger", str(ledger), ok=False)
                 self.assertIn(message, result.stderr)
 
     def test_rejects_duplicate_expected_role_or_slice_id(self) -> None:

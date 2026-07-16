@@ -179,11 +179,36 @@ def validate(args: argparse.Namespace) -> dict[str, object]:
             raise ContractError(f"role {role} must bind exactly one returned artifact")
         artifact_path = resolve_artifact(ledger_path, artifacts[0], root)
         try:
-            actual_digest = sha256_bytes(artifact_path.read_bytes())
+            artifact_bytes = artifact_path.read_bytes()
         except OSError as exc:
             raise ContractError(f"cannot read artifact for role {role}: {artifact_path}") from exc
+        actual_digest = sha256_bytes(artifact_bytes)
         if actual_digest != digest:
             raise ContractError(f"artifact digest mismatch for role {role}")
+        try:
+            returned = json.loads(artifact_bytes)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ContractError(f"review artifact is not valid JSON for role {role}") from exc
+        if not isinstance(returned, dict):
+            raise ContractError(f"review artifact is not an object for role {role}")
+        identity_fields = {
+            "role": role, "slice_id": slice_id, "task_uid": batch["task_uid"],
+            "head": batch["frozen_head"], "epoch": batch["epoch"], "status": "completed",
+        }
+        for field, expected_value in identity_fields.items():
+            if returned.get(field) != expected_value:
+                raise ContractError(f"review artifact {field} mismatch for role {role}")
+        disposition = returned.get("disposition")
+        findings = returned.get("findings")
+        residual_risk = returned.get("residual_risk")
+        if disposition not in {"findings", "no_findings"}:
+            raise ContractError(f"review artifact disposition is invalid for role {role}")
+        if not isinstance(findings, list) or (disposition == "findings" and not findings):
+            raise ContractError(f"review artifact findings are invalid for role {role}")
+        if disposition == "no_findings" and findings:
+            raise ContractError(f"no_findings artifact contains findings for role {role}")
+        if not isinstance(residual_risk, str) or not residual_risk.strip():
+            raise ContractError(f"review artifact residual_risk is missing for role {role}")
     missing = expected - seen
     unexpected = seen - expected
     if missing:
@@ -214,9 +239,9 @@ def parser() -> argparse.ArgumentParser:
     create_parser.add_argument("--evidence-digest", required=True)
     create_parser.add_argument("--slice", action="append", default=[], metavar="ROLE=SLICE_ID")
     create_parser.add_argument("--out")
-    validate_parser = sub.add_parser("validate")
-    validate_parser.add_argument("--batch", required=True)
-    validate_parser.add_argument("--ledger", required=True)
+    collect_parser = sub.add_parser("collect")
+    collect_parser.add_argument("--batch", required=True)
+    collect_parser.add_argument("--ledger", required=True)
     return result
 
 
