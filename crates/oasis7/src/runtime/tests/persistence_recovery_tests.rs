@@ -326,6 +326,69 @@ fn rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift() {
 }
 
 #[test]
+fn rollback_reconciliation_drift_rejection_leaves_world_unchanged() {
+    let on_call_key = rollback_test_key(7);
+    let governance_key = rollback_test_key(9);
+    let mut world = World::new();
+    world
+        .set_rollback_authority_registry(rollback_authority_registry(&on_call_key, &governance_key))
+        .expect("configure rollback authorities");
+    world
+        .bind_node_identity("relay.node.1", "relay-public-key-1")
+        .expect("bind relay identity");
+    world.submit_action(Action::RegisterAgent {
+        agent_id: "agent-1".to_string(),
+        pos: pos(0, 0),
+    });
+    world.step().expect("step");
+    world
+        .record_tick_consensus_propagation_for_tick(0, "relay.node.1")
+        .expect("inject propagation record that breaks parent ordering");
+    assert!(world.first_tick_consensus_drift().is_some());
+    let drifted_snapshot = world.snapshot();
+    let drifted_journal = world.journal().clone();
+
+    world.submit_action(Action::MoveAgent {
+        agent_id: "agent-1".to_string(),
+        to: pos(9, 9),
+    });
+    world
+        .step()
+        .expect("mutate original world after target snapshot");
+    let snapshot_before = world.snapshot();
+    let journal_before = world.journal().clone();
+    let approval = signed_rollback_authorization(
+        &drifted_snapshot,
+        None,
+        "ROLLBACK-2313-DRIFT",
+        "reject-drifted-candidate",
+        "nonce-drift-rejected-1",
+        &on_call_key,
+        &governance_key,
+    );
+
+    world
+        .rollback_to_snapshot_with_reconciliation(
+            drifted_snapshot,
+            drifted_journal,
+            "reject-drifted-candidate",
+            None,
+            approval,
+            ROLLBACK_NOW_MS,
+        )
+        .expect_err("drifted rollback candidate must be rejected");
+
+    assert_eq!(world.snapshot(), snapshot_before);
+    assert_eq!(world.journal(), &journal_before);
+    assert!(
+        !world
+            .snapshot()
+            .consumed_rollback_nonces
+            .contains("nonce-drift-rejected-1")
+    );
+}
+
+#[test]
 fn rollback_rejects_tampered_expired_or_same_key_authorization_before_mutation() {
     let on_call_key = rollback_test_key(7);
     let governance_key = rollback_test_key(9);
