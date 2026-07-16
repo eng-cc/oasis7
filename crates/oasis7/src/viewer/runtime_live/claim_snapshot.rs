@@ -102,13 +102,15 @@ pub(super) fn build_player_agent_claim_snapshot(
             let next_upkeep_due_epoch = blocked_reason
                 .is_none()
                 .then(|| current_epoch.saturating_add(1));
+            let projected_grace_entry_epoch = next_upkeep_due_epoch
+                .map(|next_due_epoch| next_due_epoch.saturating_add(upkeep_runway_epochs));
             let low_runway_warning =
                 blocked_reason.is_none() && upkeep_runway_epochs < quote.grace_epochs;
             let recommended_claim_action = blocked_reason.is_none().then(|| {
                 if low_runway_warning {
                     "wait_or_fund_first"
                 } else {
-                    "claim_now_route_fit"
+                    "compare_candidates_first"
                 }
                 .to_string()
             });
@@ -128,6 +130,7 @@ pub(super) fn build_player_agent_claim_snapshot(
                 eligible_balance_after,
                 upkeep_runway_epochs,
                 next_upkeep_due_epoch,
+                projected_grace_entry_epoch,
                 low_runway_warning,
                 recommended_claim_action,
                 release_cooldown_epochs: quote.release_cooldown_epochs,
@@ -155,6 +158,7 @@ pub(super) fn build_player_agent_claim_snapshot(
             eligible_balance_after: 0,
             upkeep_runway_epochs: 0,
             next_upkeep_due_epoch: None,
+            projected_grace_entry_epoch: None,
             low_runway_warning: false,
             recommended_claim_action: None,
             release_cooldown_epochs: 0,

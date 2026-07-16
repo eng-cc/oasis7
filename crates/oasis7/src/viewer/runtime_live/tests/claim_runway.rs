@@ -17,7 +17,7 @@ fn bind_agent_for_snapshot(server: &mut ViewerRuntimeLiveServer, agent_id: &str)
 #[test]
 fn compat_snapshot_quotes_complete_epoch_runway_and_advisory_threshold() {
     for (balance, expected_after, expected_runway, expected_warning, expected_action) in [
-        (375, 50, 2, false, "claim_now_route_fit"),
+        (375, 50, 2, false, "compare_candidates_first"),
         (374, 49, 1, true, "wait_or_fund_first"),
     ] {
         let mut server = ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(
@@ -65,6 +65,10 @@ fn compat_snapshot_quotes_complete_epoch_runway_and_advisory_threshold() {
         assert_eq!(quote.eligible_balance_after, expected_after);
         assert_eq!(quote.upkeep_runway_epochs, expected_runway);
         assert_eq!(quote.next_upkeep_due_epoch, Some(claim.current_epoch + 1));
+        assert_eq!(
+            quote.projected_grace_entry_epoch,
+            Some(claim.current_epoch + 1 + expected_runway)
+        );
         assert_eq!(quote.low_runway_warning, expected_warning);
         assert_eq!(
             quote.recommended_claim_action.as_deref(),

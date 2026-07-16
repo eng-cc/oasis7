@@ -155,6 +155,8 @@ pub struct PlayerAgentClaimQuoteSnapshot {
     pub upkeep_runway_epochs: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_upkeep_due_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projected_grace_entry_epoch: Option<u64>,
     #[serde(default)]
     pub low_runway_warning: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
