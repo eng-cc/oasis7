@@ -312,7 +312,11 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     policy = data.get("policy_discovery")
     if isinstance(policy, dict) and policy.get("status") != "resolved":
         blockers.append(f"required-check policy capability blocked: {policy.get('reason') or 'unknown'}; {policy.get('resume') or 'rerun'}")
-    required_checks = data.get("required_status_checks")
+    required_checks = (
+        policy.get("required_status_checks")
+        if isinstance(policy, dict) and "required_status_checks" in policy
+        else data.get("required_status_checks")
+    )
     if required_checks is None:
         contexts = data.get("required_status_contexts")
         required_checks = ([{"context": str(x), "app_id": None} for x in contexts] if contexts is not None else
@@ -369,28 +373,19 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
         and "required_pull_request_reviews" in policy_rule_types
         and policy_rule_types <= allowed_admin_rule_types
     )
-    authority = data.get("admin_merge_authority") or {}
-    authority_receipt = authority.get("evidence_receipt") or {}
-    authority_ok = bool(
-        authority.get("disposition") == "authorized"
-        and authority.get("scope") == "review_approval_only"
-        and str(authority.get("requester") or "").strip()
-        and str(authority.get("reason") or "").strip()
-        and (evidence_mode == "fixture" or authority_receipt.get("live_rebuilt") is True)
-    )
     approval_only = (
-        merge_state == "BLOCKED"
+        merge_state in {"BLOCKED", "BEHIND"}
         and mergeable in {"MERGEABLE", "TRUE"}
         and str(data.get("reviewDecision") or "").upper() == "REVIEW_REQUIRED"
         and policy_proves_approval_only
     )
-    use_admin = False
-    if approval_only and admin_authorized and authority_ok:
-        use_admin = True
-    elif approval_only:
-        blockers.append("approval-only BLOCKED requires head-bound GitHub task/user admin authorization")
-    elif merge_state == "BLOCKED":
-        blockers.append("BLOCKED is not an authorized review-approval-only state")
+    # Standing repository policy selects admin merge only when approval absence
+    # (plus the informational up-to-date state BEHIND) is the entire remaining
+    # protection state. Existing blockers remain
+    # authoritative and can never be bypassed by this selection.
+    use_admin = approval_only and not blockers
+    if merge_state == "BLOCKED" and not approval_only:
+        blockers.append("BLOCKED is not a proven review-approval-only state")
     elif merge_state in {"DIRTY", "UNKNOWN", "UNSTABLE"}:
         blockers.append(f"blocking merge state: {merge_state}")
     observed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
@@ -400,8 +395,9 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
         "ready_for_merge": not blockers,
         "status": "ready" if not blockers else ("held" if isinstance(hold_truth, dict) and hold_truth.get("active") and hold in HOLDS else "blocked"),
         "merge_hold": hold,
-        "admin_merge_authorized": admin_authorized,
         "use_admin_merge": use_admin,
+        "merge_path": "admin_review_approval_only" if use_admin else "ordinary",
+        "merge_path_reason": "repository standing policy for proven approval-only protection" if use_admin else None,
         "blockers": blockers,
         "pr_number": data.get("number"),
         "pr_url": data.get("url"),
@@ -423,7 +419,7 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--task-uid")
     parser.add_argument("--merge-hold", choices=["normal_pr_ci_watch", *sorted(HOLDS)])
-    parser.add_argument("--admin-merge-authorized", action="store_true")
+    parser.add_argument("--admin-merge-authorized", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     data = json.loads(Path(args.fixture).read_text(encoding="utf-8")) if args.fixture else load_live(args.pr)

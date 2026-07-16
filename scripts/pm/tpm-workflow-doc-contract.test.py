@@ -201,9 +201,10 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIn("source-of-truth.md#ready-and-done", agents)
         self.assertNotRegex(agents, r"admin merge.{0,700}complete-ruleset")
 
-    def test_admin_merge_requires_explicit_authority_and_live_pr_recheck(self) -> None:
+    def test_admin_merge_defaults_for_approval_only_and_requires_live_recheck(self) -> None:
         normalized = re.sub(r"\s+", " ", SOURCE.read_text(encoding="utf-8").lower())
-        self.assertRegex(normalized, r"explicit task/user authority.{0,160}admin merge")
+        self.assertRegex(normalized, r"review_required.{0,240}admin merge path by default")
+        self.assertIn("does not require a per-task authority comment", normalized)
         for marker in ("required checks", "mergeability", "requested changes", "comments", "review threads"):
             self.assertIn(marker, normalized)
         self.assertNotIn("complete-ruleset runtime receipt", normalized)
