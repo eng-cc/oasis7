@@ -1449,6 +1449,18 @@ assert re.search(r"ok.*<<<\"\$health\"", health_function, re.DOTALL)
 assert re.search(r"running.*<<<\"\$status\"", health_function, re.DOTALL)
 assert not re.search(r"running.*<<<\"\$health\"", health_function, re.DOTALL)
 assert "authority_failure|state_sync_fallback_required" in health_function
+promotion_success_path = text[
+    text.index("authority_failure=0"):text.index('if [[ "$authority_failure" -eq 1 ]]')
+]
+assert re.search(r"ok.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must require healthz ok=true"
+)
+assert re.search(r"running.*<<<\"\$status\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must require status running=true"
+)
+assert not re.search(r"running.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must not require running=true from healthz"
+)
 backup_state_function = text[text.index("backup_persistent_state() {"):text.index("preserve_failed_state() {")]
 restore_state_function = text[text.index("restore_pre_upgrade_state() {"):text.index("rollback() {")]
 assert backup_state_function.index("assert_state_roots_safe") < backup_state_function.index("backup_path")

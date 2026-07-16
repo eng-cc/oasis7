@@ -196,6 +196,119 @@ fn node_runtime_execution_driver_exports_and_installs_checkpoint_bundle() {
 }
 
 #[test]
+fn node_runtime_execution_driver_rejects_equal_height_replay_after_checkpoint_install() {
+    let dir = temp_dir("execution-driver-checkpoint-equal-height-replay");
+    let source_root = dir.join("source");
+    let target_root = dir.join("target");
+    let storage_profile = StorageProfileConfig {
+        execution_checkpoint_interval: 2,
+        execution_checkpoint_keep: 2,
+        ..StorageProfileConfig::for_profile(StorageProfile::DevLocal)
+    };
+    let mut source = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        source_root.join("bridge-state.json"),
+        source_root.join("world"),
+        source_root.join("records"),
+        source_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("source driver");
+    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
+    source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-equal-height-replay".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "block-1".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_001,
+        })
+        .expect("commit 1");
+    let second = source
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-equal-height-replay".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "block-2".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_002,
+        })
+        .expect("commit 2");
+    let bundle = source
+        .export_checkpoint_bundle(2)
+        .expect("export checkpoint")
+        .expect("checkpoint bundle");
+
+    let mut target = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        target_root.join("bridge-state.json"),
+        target_root.join("world"),
+        target_root.join("records"),
+        target_root.join("storage"),
+        &storage_profile,
+    )
+    .expect("target driver");
+    target
+        .install_checkpoint_bundle(
+            NodeExecutionCheckpointInstallContext {
+                world_id: "world-checkpoint-equal-height-replay".to_string(),
+                node_id: "node-b".to_string(),
+                height: 2,
+                node_block_hash: "block-2".to_string(),
+                execution_block_hash: second.execution_block_hash,
+                execution_state_root: second.execution_state_root,
+                committed_at_unix_ms: 10_002,
+            },
+            bundle,
+        )
+        .expect("install checkpoint");
+
+    for context in [
+        NodeExecutionCommitContext {
+            world_id: "world-checkpoint-equal-height-replay".to_string(),
+            node_id: "node-b".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 2,
+            slot: 2,
+            epoch: 0,
+            node_block_hash: "block-2".to_string(),
+            action_root: action_root.clone(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_002,
+        },
+        NodeExecutionCommitContext {
+            world_id: "world-checkpoint-equal-height-replay".to_string(),
+            node_id: "node-c".to_string(),
+            proposer_id: "node-c".to_string(),
+            height: 2,
+            slot: 9,
+            epoch: 7,
+            node_block_hash: "conflicting-block".to_string(),
+            action_root: "conflicting-action-root".to_string(),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 99_999,
+        },
+    ] {
+        let err = target
+            .on_commit(context)
+            .expect_err("checkpoint-installed head must reject equal-height consensus replay");
+        assert!(
+            err.contains("checkpoint-install"),
+            "unexpected equal-height checkpoint replay error: {err}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
 fn node_runtime_execution_driver_rejects_checkpoint_bundle_snapshot_root_mismatch() {
     let dir = temp_dir("execution-driver-checkpoint-root-mismatch");
     let source_root = dir.join("source");

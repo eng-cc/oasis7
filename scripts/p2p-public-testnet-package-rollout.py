@@ -1893,7 +1893,7 @@ while (( SECONDS < deadline )); do
     authority_failure=1
     break
   fi
-  if grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
+  if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
      grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
     echo "startup_verified=true healthz=$HEALTHZ_URL status=$STATUS_URL"
     MUTATED=0

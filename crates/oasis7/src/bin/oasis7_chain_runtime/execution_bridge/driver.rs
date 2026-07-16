@@ -105,7 +105,10 @@ impl NodeRuntimeExecutionDriver {
             && record.proposer_id.is_none()
             && record.action_root.is_none();
         if checkpoint_install_record {
-            return Ok(());
+            return Err(format!(
+                "execution driver equal-height checkpoint-install record cannot authenticate consensus replay at height {}",
+                context.height
+            ));
         }
 
         let node_block_hash = record.node_block_hash.as_deref().ok_or_else(|| {
