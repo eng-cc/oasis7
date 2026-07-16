@@ -117,6 +117,8 @@ def tree_metadata(path: Path) -> dict[str, object]:
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(hashlib.sha256(payload).hexdigest().encode("ascii"))
+        digest.update(b"\0")
+        digest.update(str(len(payload)).encode("ascii"))
         digest.update(b"\n")
     return {
         "kind": "directory",
@@ -772,6 +774,34 @@ foreach ($case in @(@{Name='active-config-junction'; Active=$true; Rollback=$fal
   } finally { Remove-RolloutFixture $fixture }
 }
 
+# An incomplete known-good closure is a preflight failure: no task stop, runtime
+# install, or active config promotion is permitted before all rollback members
+# are available.  Keep this as a native fixture because a generated-script
+# source check cannot prove the scheduled task stayed running.
+$incompleteRollbackFixture = New-RolloutFixture -Name 'incomplete-rollback-closure'
+Assert-FixtureCaseIdentity $incompleteRollbackFixture 'incomplete-rollback-closure'
+try {
+  Start-ScheduledTask -TaskName $incompleteRollbackFixture.Task
+  Start-Sleep -Seconds 1
+  $before = Get-FixtureSnapshot $incompleteRollbackFixture
+  $missingRollbackMember = Join-Path $incompleteRollbackFixture.Rollback 'config/generated-world/world/journal.json'
+  if (!(Test-Path -LiteralPath $missingRollbackMember -PathType Leaf)) {
+    throw "incomplete rollback fixture lacks removable backup member: $missingRollbackMember"
+  }
+  Remove-Item -LiteralPath $missingRollbackMember -Force
+  $invocation = Invoke-FixtureRolloutExpectingFailure $incompleteRollbackFixture.Rollout
+  if ($invocation.ExitCode -eq 0) { throw 'incomplete rollback closure unexpectedly succeeded' }
+  $incompleteOutput = $invocation.Output -join "`n"
+  if ($incompleteOutput -notmatch 'known-good rollback config missing') {
+    throw "incomplete rollback closure did not report its missing backup member: $incompleteOutput"
+  }
+  Assert-Equal (Get-FixtureSnapshot $incompleteRollbackFixture) $before 'incomplete rollback closure mutated persisted state'
+  Assert-OriginalTaskAction $incompleteRollbackFixture
+  if ((Get-ScheduledTask -TaskName $incompleteRollbackFixture.Task).State -ne 'Running') {
+    throw 'incomplete rollback closure reached Stop-ScheduledTask'
+  }
+} finally { Remove-RolloutFixture $incompleteRollbackFixture }
+
 $phases = @('installer','governed_copy','bundle_move','genesis_move','manifest_move','current_version_write','deployed_buildinfo_write','task_action_restore')
 foreach ($phase in $phases) {
   $logicalCaseName = "phase-$phase"
@@ -1011,6 +1041,11 @@ assert "function Invoke-FixtureRollout([string] $Rollout)" in fixture
 assert "$ErrorActionPreference = 'Continue'" in fixture
 assert "$ErrorActionPreference = $previousErrorActionPreference" in fixture
 assert fixture.count("Invoke-FixtureRolloutExpectingFailure $fixture.Rollout") == 2
+assert "incomplete-rollback-closure" in fixture
+assert "$missingRollbackMember = Join-Path $incompleteRollbackFixture.Rollback 'config/generated-world/world/journal.json'" in fixture
+assert "known-good rollback config missing" in fixture
+assert "incomplete rollback closure mutated persisted state" in fixture
+assert "incomplete rollback closure reached Stop-ScheduledTask" in fixture
 assert fixture.count("Invoke-FixtureRollout $fixture.Rollout") == 1
 assert "positive fixture candidate and known-good runtimes must have distinct hashes" in fixture
 assert "staged_sha_closure_complete=true" in fixture
@@ -2284,6 +2319,24 @@ tree_contract_tokens = (
 )
 for token in tree_contract_tokens:
     assert token in text, f"Windows deployment omits tree integrity contract token: {token}"
+
+# The package producer hashes every recursive member as
+# relative-path NUL sha256 NUL decimal-size LF.  Omitting the size lets a
+# Windows verifier accept a different tree-hash stream from the package
+# metadata producer, even though it separately reports a total byte count.
+tree_metadata_match = re.search(
+    r"function Get-TreeMetadata\s*\{(?P<body>.*?)\n\}", text, re.DOTALL
+)
+assert tree_metadata_match, "generated Windows rollout omits Get-TreeMetadata"
+tree_metadata = tree_metadata_match.group("body")
+assert re.search(
+    r"\$relative\s*\+\s*\[char\]0\s*\+\s*\$fileHash\s*\+\s*\[char\]0\s*"
+    r"\+\s*\[string\]\$file\.Length\s*\+\s*\"`n\"",
+    tree_metadata,
+), (
+    "Windows tree metadata must hash canonical relative-path NUL sha256 NUL "
+    "decimal-size LF records, matching package metadata"
+)
 path_localization_index = min(text.index(field) for field in bundle_path_sections)
 tree_integrity_index = min(
     text.index("world_snapshot tree integrity mismatch"),
@@ -2324,6 +2377,37 @@ deadline_failure_match = re.search(
 assert deadline_failure_match, "rpc-running verification must check failure after its poll deadline"
 assert "throw " in deadline_failure_match.group("body"), (
     "rpc-running verification must exit nonzero after the poll deadline"
+)
+PY
+then
+  package_contract_failed=1
+fi
+
+if ! python3 - "$windows_script" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+stop_index = text.index("Stop-ScheduledTask -TaskName $taskName")
+install_index = text.index("$install = Start-Process")
+
+# The rollback source set must be completely validated before the first
+# task/runtime/config mutation.  A success marker is deliberately required so
+# the incomplete-backup branch cannot remain an implicit, rollout-time error.
+rollback_closure_marker = "rollback_closure_complete=true"
+assert rollback_closure_marker in text, (
+    "Windows rollout must emit rollback closure completion only after every "
+    "runtime, config, and provenance backup source has been preflighted"
+)
+rollback_closure_index = text.index(rollback_closure_marker)
+assert rollback_closure_index < stop_index, (
+    "incomplete rollback closure must fail before Stop-ScheduledTask"
+)
+assert rollback_closure_index < install_index, (
+    "incomplete rollback closure must fail before installer mutation"
+)
+assert rollback_closure_index < text.index("Copy-StagedFileAtomically"), (
+    "incomplete rollback closure must fail before active config promotion"
 )
 PY
 then
@@ -2798,10 +2882,69 @@ then
   package_contract_failed=1
 fi
 
+missing_network_metadata_package="$TMP_DIR/missing-network-manifest-metadata-package"
+cp -R "$package_dir" "$missing_network_metadata_package"
+python3 - "$missing_network_metadata_package/windows/public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+bundle_path = Path(sys.argv[1])
+bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+bundle.pop("network_manifest", None)
+bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+PY
+(
+  cd "$missing_network_metadata_package/windows"
+  find . -type f ! -name windows-x64-SHA256SUMS | sed 's#^\./##' | sort |
+    while IFS= read -r file; do shasum -a 256 "$file"; done >windows-x64-SHA256SUMS
+)
+missing_network_metadata_out="$TMP_DIR/missing-network-manifest-metadata-out"
+"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$missing_network_metadata_package" \
+  --out-dir "$missing_network_metadata_out" \
+  --json >"$TMP_DIR/missing-network-manifest-metadata-plan.json"
+if ! python3 - "$missing_network_metadata_out/windows-observer-windows-upgrade.ps1" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+assert "$json.network_manifest" not in text, (
+    "bundle network_manifest metadata is optional when the staged manifest is "
+    "already independently checksum-verified"
+)
+metadata_match = re.search(
+    r"\$networkManifestMetadata\s*=\s*\[PSCustomObject\]@\{(?P<body>.*?)\n\}",
+    text,
+    re.DOTALL,
+)
+assert metadata_match, (
+    "generated rollout must derive network manifest metadata from the verified "
+    "staged manifest when bundle metadata is absent"
+)
+metadata = metadata_match.group("body")
+assert "$expectedGovernedSha256[$manifestPath]" in metadata, (
+    "derived network manifest metadata must retain the staged checksum closure, "
+    "not self-attest from unverified manifest bytes"
+)
+assert re.search(
+    r"Assert-FileMetadata\s+\$networkManifestMetadata\s+\$manifestItem\.FullName\s+'network_manifest'",
+    text,
+), "network manifest integrity assertion must use verified staged metadata"
+assert re.search(
+    r"Set-ArtifactLocation\s+\$networkManifestMetadata\s+\$activeManifestPath",
+    text,
+), "localized network manifest must retain derived verified metadata"
+PY
+then
+  package_contract_failed=1
+fi
+
 if [[ "$package_contract_failed" -ne 0 ]]; then
   exit 1
 fi
-
 
 python3 -W error::SyntaxWarning "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" --help >/tmp/oasis7-package-rollout-help.out
 grep -q "mode is plan-only" /tmp/oasis7-package-rollout-help.out
