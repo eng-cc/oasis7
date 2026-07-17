@@ -2246,7 +2246,8 @@ status_rollout_state() {{
   while plutil -extract "observability.alerts.$alert_index" json -expect dictionary -o /dev/null "$status_file" >/dev/null 2>&1; do
     alert_code="$(plutil -extract "observability.alerts.$alert_index.code" raw -expect string -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
     case "$alert_code" in
-      authority_failure|consensus_peer_head_unavailable|execution_driver_peer_mismatch) rm -f "$status_file"; return 2 ;;
+      authority_failure|execution_driver_peer_mismatch) rm -f "$status_file"; return 2 ;;
+      consensus_peer_head_unavailable) rm -f "$status_file"; return 1 ;;
     esac
     ((alert_index += 1))
   done
@@ -2262,7 +2263,7 @@ status_rollout_state() {{
   network_head_available="$(plutil -extract observability.network_head_available raw -expect bool -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
   if [[ "$network_head_available" == false ]]; then
     rm -f "$status_file"
-    return 2
+    return 1
   fi
   running="$(plutil -extract running raw -expect bool -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
   rm -f "$status_file"

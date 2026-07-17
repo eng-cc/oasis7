@@ -1938,11 +1938,19 @@ PY2
     for failure_status in (
         {**healthy_status, "consensus": {"state_sync_fallback_required": True}},
         {"consensus": {"state_sync_fallback_required": True}},
+        {**healthy_status, "consensus": {"state_sync_fallback_required": True}, "observability": {"network_head_available": False, "alerts": []}},
+        {**healthy_status, "consensus": {"state_sync_fallback_required": True}, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
         {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "authority_failure"}]}},
-        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "execution_driver_peer_mismatch"}]}},
         {**healthy_status, "consensus_progress_observer_error": "execution driver peer mismatch at height 42"},
+        {**healthy_status, "last_error": "authority_failure while reconnecting peers"},
     ):
         assert status_rollout_result(failure_status).returncode == 2, failure_status
+    for retry_status in (
+        {**healthy_status, "observability": {"network_head_available": False, "alerts": []}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
+    ):
+        assert status_rollout_result(retry_status).returncode == 1, retry_status
     for invalid_status in (
         "not-json",
         {**healthy_status, "running": False},
