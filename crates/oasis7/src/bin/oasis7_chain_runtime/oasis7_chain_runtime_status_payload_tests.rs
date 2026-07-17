@@ -728,14 +728,45 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_comm
 }
 
 #[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_cold_start_outliers_warn() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 21,
+        p50_total_ms: Some(544),
+        p95_total_ms: Some(2_890),
+        max_total_ms: Some(4_161),
+        slow_count: 2,
+        last_slow_stage: Some("cas_put".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    assert_eq!(
+        runtime_perf.bottleneck,
+        RuntimePerfBottleneck::ActionExecution
+    );
+    assert_eq!(runtime_perf.action_execution.samples_total, 21);
+    assert_eq!(runtime_perf.action_execution.p95_ms, 2_890.0);
+    assert_eq!(runtime_perf.action_execution.max_ms, 4_161.0);
+
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+}
+
+#[test]
 fn runtime_perf_snapshot_from_execution_bridge_timing_marks_very_slow_commits_critical() {
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
         window_capacity: 128,
-        recent_commit_count: 4,
+        recent_commit_count: 32,
         p50_total_ms: Some(1_500),
         p95_total_ms: Some(2_500),
         max_total_ms: Some(2_500),
-        slow_count: 4,
+        slow_count: 32,
         last_slow_stage: Some("runtime_step".to_string()),
         stages: BTreeMap::new(),
     };

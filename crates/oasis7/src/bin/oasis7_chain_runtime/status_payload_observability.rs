@@ -18,7 +18,7 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
-const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 4;
+const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 32;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainP2pPathObservabilityStatus {
