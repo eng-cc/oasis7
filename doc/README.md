@@ -1,9 +1,5 @@
 # 工程文档总入口（模块设计）
 
-审计轮次: 6
-
-更新时间：2026-03-30
-
 本文件用于导航各模块设计文档与执行文档。所有新需求与在研需求均以模块 PRD 为唯一入口。
 
 ## 快速阅读路径（推荐）
@@ -27,14 +23,6 @@
 | 想做本地验证、回归或验收 | `testing-manual.md` | `doc/testing/prd.md` | 手册负责 suite 选择，testing 模块负责测试体系建模 |
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
 | 想补过程上下文或追溯具体任务决策 | `doc/<module>/project.md` | GitHub task issue evidence comments | 先靠正式追踪定位任务，再看 task-scoped evidence |
-
-## 根目录入口说明
-- 根目录 legacy redirect 仅保留兼容跳转；正文与执行状态统一回收到各模块目录。
-- 已删除的历史根入口示例：
-  - root game-test PRD/project shells；当前只使用 `doc/playability_test_result/game-test.prd.md` 与 `doc/playability_test_result/game-test.project.md`。
-  - root playability card shell；当前只使用 `doc/playability_test_result/playability_test_card.md`。
-  - root Viewer manual shell；当前只使用 `doc/world-simulator/viewer/viewer-manual.manual.md`。
-  - root world-simulator PRD/project shells；当前只使用 `doc/world-simulator/prd.md` 与 `doc/world-simulator/project.md`。
 
 ## 模块入口矩阵
 | 模块 | PRD 主文档 | 设计主文档 | 项目管理文档 | 设计关注点 |
@@ -67,4 +55,5 @@
 ## 共享规则
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 `project.md`，最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。
+- `doc/` 根目录只保留当前总入口；历史路径、已删除入口与迁移过程从 Git history 和 `doc/core/reviews/` 追溯，不在活跃导航重复列举。
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。
