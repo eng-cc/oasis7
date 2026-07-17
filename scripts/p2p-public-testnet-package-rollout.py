@@ -408,7 +408,7 @@ def observer_checkpoint_gate_macos(
     "sequencer	%s" \\
     "storage	%s"; do
     IFS=$'\\t' read -r name url <<<"$provider"
-    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.XXXXXX.json")" || return 1
+    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.json.XXXXXX")" || return 1
     if ! curl -fsS --connect-timeout 10 --max-time 10 "$url" -o "$payload"; then
       rm -f "$payload"
       echo "provider_checkpoint_gate=$name collection_failed" >&2
@@ -1877,6 +1877,21 @@ def macos_script(
             f"macOS node {name} governed_bundle_path must be a root-level file under "
             f"node_root: {governed_bundle_path}"
         )
+    canonical_governed_bundle_path = str(
+        node.get("canonical_governed_bundle_path")
+        or f"{node_root}/doc/testing/evidence/{PurePosixPath(governed_bundle_path).name}"
+    )
+    canonical_node = {**node, "canonical_governed_bundle_path": canonical_governed_bundle_path}
+    canonical_governed_bundle_path = macos_absolute_path(
+        canonical_node, "canonical_governed_bundle_path"
+    )
+    if not canonical_governed_bundle_path.startswith(f"{node_root}/"):
+        die(
+            f"macOS node {name} canonical_governed_bundle_path must stay under "
+            f"node_root: {canonical_governed_bundle_path}"
+        )
+    if canonical_governed_bundle_path == governed_bundle_path:
+        die(f"macOS node {name} canonical governed bundle must differ from active bundle")
     healthz_url = str(node.get("healthz_url") or "")
     status_url = str(node.get("status_url") or "")
     if not healthz_url or not status_url:
@@ -1929,6 +1944,7 @@ DMG_PATH="${{1:?usage: $0 /path/to/oasis7-macos-arm64.dmg}}"
 NODE_ROOT={q(node_root)}
 RUNTIME_PATH={q(runtime_path)}
 GOVERNED_BUNDLE_PATH={q(governed_bundle_path)}
+CANONICAL_GOVERNED_BUNDLE_PATH={q(canonical_governed_bundle_path)}
 LAUNCHD_PLIST={q(launchd_plist)}
 LAUNCHD_TARGET={q(launchd_target)}
 LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
@@ -1948,7 +1964,16 @@ MOUNT_ATTACHED=0
 ATTEMPT_ROOT=""
 MUTATED=0
 
-die() {{ echo "error: $*" >&2; exit 1; }}
+die() {{
+  local message="$*"
+  echo "error: $message" >&2
+  if [[ "$MUTATED" -eq 1 ]]; then
+    if ! rollback "fatal_error"; then
+      echo "rollback_failed=true fatal_error=$message" >&2
+    fi
+  fi
+  exit 1
+}}
 cleanup() {{
   if [[ "$MOUNT_ATTACHED" -eq 1 ]]; then
     hdiutil detach "$MOUNT_POINT" -quiet || true
@@ -1984,6 +2009,24 @@ runtime_sha256() {{
   shasum -a 256 "$1" | awk '{{print $1}}'
 }}
 
+file_size_bytes() {{ stat -f %z "$1"; }}
+
+tree_metadata() {{
+  local root="$1" records file relative digest size count=0 total=0 tree_hash
+  records="$(mktemp "${{TMPDIR:-/tmp}}/oasis7-tree-metadata.XXXXXX")" || return 1
+  while IFS= read -r file; do
+    relative="${{file#$root/}}"
+    digest="$(runtime_sha256 "$file")" || {{ rm -f "$records"; return 1; }}
+    size="$(file_size_bytes "$file")" || {{ rm -f "$records"; return 1; }}
+    printf '%s\\000%s\\000%s\n' "$relative" "$digest" "$size" >>"$records" || {{ rm -f "$records"; return 1; }}
+    count=$((count + 1))
+    total=$((total + size))
+  done < <(find "$root" -type f -print | LC_ALL=C sort)
+  tree_hash="$(runtime_sha256 "$records")" || {{ rm -f "$records"; return 1; }}
+  rm -f "$records"
+  printf '%s\t%s\t%s\n' "$tree_hash" "$count" "$total"
+}}
+
 verify_governed_bundle_runtime_metadata() {{
   local expected_sha256="$1" expected_size="$2" actual
   actual="$(plutil -extract runtime_build.path raw -expect string "$GOVERNED_BUNDLE_PATH")" || return 1
@@ -1998,18 +2041,161 @@ verify_governed_bundle_runtime_metadata() {{
   [[ "$actual" == "$expected_size" ]] || return 1
 }}
 
+verify_full_governed_bundle_schema() {{
+  local bundle_path="$1"
+  local field
+  [[ "$(plutil -extract schema_version raw -expect string "$bundle_path")" == "oasis7.release_candidate_bundle.v1" ]] || return 1
+  for field in runtime_build world_snapshot generated_world_sidecar world_generation_provenance governance_manifest; do
+    plutil -extract "$field" json -expect dictionary "$bundle_path" >/dev/null || return 1
+  done
+}}
+
+validate_legacy_flat_runtime_metadata() {{
+  local field value
+  for field in path ref resolved_path sha256 size_bytes; do
+    value="$(plutil -extract "$field" raw "$GOVERNED_BUNDLE_PATH")" || return 1
+    [[ -n "$value" ]] || return 1
+  done
+}}
+
+node_local_bundle_artifact_relative_path() {{
+  case "$1" in
+    world_snapshot) printf '%s\n' 'world' ;;
+    generated_world_sidecar) printf '%s\n' 'generated-world/generated-scenario-world' ;;
+    world_generation_provenance) printf '%s\n' 'generated-world/world-generation-provenance.json' ;;
+    governance_manifest) printf '%s\n' 'doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json' ;;
+    *) return 1 ;;
+  esac
+}}
+
+localize_bundle_artifact() {{
+  local source="$1" key="$2" relative_path local_path
+  relative_path="$(node_local_bundle_artifact_relative_path "$key")" || return 1
+  local_path="$NODE_ROOT/$relative_path"
+  [[ -e "$local_path" ]] || return 1
+  set_bundle_string "$source" "$key.ref" "$relative_path" || return 1
+  set_bundle_string "$source" "$key.path" "$local_path" || return 1
+  set_bundle_string "$source" "$key.resolved_path" "$local_path" || return 1
+}}
+
+set_bundle_string() {{
+  local source="$1" key="$2" value="$3"
+  if plutil -extract "$key" raw "$source" >/dev/null 2>&1; then
+    plutil -replace "$key" -string "$value" "$source"
+  else
+    plutil -insert "$key" -string "$value" "$source"
+  fi
+}}
+
+set_bundle_integer() {{
+  local source="$1" key="$2" value="$3"
+  if plutil -extract "$key" raw "$source" >/dev/null 2>&1; then
+    plutil -replace "$key" -integer "$value" "$source"
+  else
+    plutil -insert "$key" -integer "$value" "$source"
+  fi
+}}
+
+localize_optional_evidence_refs() {{
+  local source="$1" index=0 ref basename kind local_path expected_hash expected_size actual_hash actual_size
+  while plutil -extract "evidence_refs.$index" json -expect dictionary "$source" >/dev/null 2>&1; do
+    ref="$(plutil -extract "evidence_refs.$index.ref" raw -expect string "$source")" || return 1
+    kind="$(plutil -extract "evidence_refs.$index.kind" raw -expect string "$source")" || return 1
+    [[ "$kind" == file ]] || return 1
+    basename="$(basename "$ref")"
+    [[ -n "$basename" && "$basename" != . && "$basename" != .. && "$basename" != */* ]] || return 1
+    local_path="$NODE_ROOT/doc/testing/evidence/$basename"
+    if [[ -f "$local_path" ]]; then
+      expected_hash="$(plutil -extract "evidence_refs.$index.sha256" raw -expect string "$source")" || return 1
+      expected_size="$(plutil -extract "evidence_refs.$index.size_bytes" raw -expect integer "$source")" || return 1
+      actual_hash="$(runtime_sha256 "$local_path")" || return 1
+      actual_size="$(file_size_bytes "$local_path")" || return 1
+      [[ "$actual_hash" == "$expected_hash" && "$actual_size" == "$expected_size" ]] || return 1
+      set_bundle_string "$source" "evidence_refs.$index.ref" "doc/testing/evidence/$basename" || return 1
+      set_bundle_string "$source" "evidence_refs.$index.path" "$local_path" || return 1
+      set_bundle_string "$source" "evidence_refs.$index.resolved_path" "$local_path" || return 1
+      set_bundle_string "$source" "evidence_refs.$index.deployment_status" localized || return 1
+    else
+      set_bundle_string "$source" "evidence_refs.$index.ref" "optional-unresolved/$basename" || return 1
+      set_bundle_string "$source" "evidence_refs.$index.path" '' || return 1
+      set_bundle_string "$source" "evidence_refs.$index.resolved_path" '' || return 1
+      set_bundle_string "$source" "evidence_refs.$index.deployment_status" optional_unresolved || return 1
+    fi
+    index=$((index + 1))
+  done
+}}
+
+localize_canonical_governed_bundle() {{
+  local source="$1"
+  localize_bundle_artifact "$source" world_snapshot || return 1
+  localize_bundle_artifact "$source" generated_world_sidecar || return 1
+  localize_bundle_artifact "$source" world_generation_provenance || return 1
+  localize_bundle_artifact "$source" governance_manifest || return 1
+  localize_optional_evidence_refs "$source" || return 1
+  set_bundle_string "$source" repo_root "$NODE_ROOT" || return 1
+}}
+
+verify_required_node_local_bundle_artifacts() {{
+  local source="$1" key kind local_path expected_hash expected_size actual_hash actual_size
+  local expected_count expected_total actual_count actual_total
+  for key in world_snapshot generated_world_sidecar world_generation_provenance governance_manifest; do
+    kind="$(plutil -extract "$key.kind" raw -expect string "$source")" || return 1
+    case "$key:$kind" in
+      world_snapshot:directory|generated_world_sidecar:directory|world_generation_provenance:file|governance_manifest:file) ;;
+      *) return 1 ;;
+    esac
+    local_path="$NODE_ROOT/$(node_local_bundle_artifact_relative_path "$key")" || return 1
+    [[ -e "$local_path" ]] || return 1
+    if [[ "$kind" == directory ]]; then
+      [[ -f "$local_path/snapshot.json" && -f "$local_path/journal.json" ]] || return 1
+      expected_hash="$(plutil -extract "$key.sha256_tree" raw -expect string "$source")" || return 1
+      expected_count="$(plutil -extract "$key.file_count" raw -expect integer "$source")" || return 1
+      expected_total="$(plutil -extract "$key.total_bytes" raw -expect integer "$source")" || return 1
+      IFS=$'\t' read -r actual_hash actual_count actual_total < <(tree_metadata "$local_path") || return 1
+      if [[ "$actual_hash" != "$expected_hash" || "$actual_count" != "$expected_count" || "$actual_total" != "$expected_total" ]]; then
+        echo "node-local bundle tree integrity mismatch: artifact=$key path=$local_path expected_hash=$expected_hash actual_hash=$actual_hash expected_count=$expected_count actual_count=$actual_count expected_bytes=$expected_total actual_bytes=$actual_total" >&2
+        return 1
+      fi
+    else
+      expected_hash="$(plutil -extract "$key.sha256" raw -expect string "$source")" || return 1
+      expected_size="$(plutil -extract "$key.size_bytes" raw -expect integer "$source")" || return 1
+      actual_hash="$(runtime_sha256 "$local_path")" || return 1
+      actual_size="$(file_size_bytes "$local_path")" || return 1
+      if [[ "$actual_hash" != "$expected_hash" || "$actual_size" != "$expected_size" ]]; then
+        echo "node-local bundle file integrity mismatch: artifact=$key path=$local_path expected_hash=$expected_hash actual_hash=$actual_hash expected_bytes=$expected_size actual_bytes=$actual_size" >&2
+        return 1
+      fi
+    fi
+  done
+}}
+
+preflight_governed_bundle_schema() {{
+  [[ -f "$CANONICAL_GOVERNED_BUNDLE_PATH" ]] || {{ echo "canonical governed bundle missing" >&2; return 1; }}
+  verify_full_governed_bundle_schema "$CANONICAL_GOVERNED_BUNDLE_PATH" || {{ echo "canonical governed bundle schema invalid" >&2; return 1; }}
+  if ! plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null 2>&1; then
+    validate_legacy_flat_runtime_metadata || {{ echo "legacy governed runtime metadata invalid" >&2; return 1; }}
+  fi
+  verify_required_node_local_bundle_artifacts "$CANONICAL_GOVERNED_BUNDLE_PATH" || {{ echo "canonical governed bundle required node-local artifacts invalid" >&2; return 1; }}
+}}
+
 promote_governed_bundle_runtime_metadata() {{
-  local expected_sha256="$1" expected_size="$2" source temporary
-  plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || return 1
+  local expected_sha256="$1" expected_size="$2" source temporary source_bundle
   source="$GOVERNED_BUNDLE_PATH.rollout-$$.source.tmp"
   temporary="$GOVERNED_BUNDLE_PATH.rollout-$$.tmp"
   rm -f "$source" "$temporary"
-  cp -p "$GOVERNED_BUNDLE_PATH" "$source" || return 1
-  plutil -replace runtime_build.path -string "$RUNTIME_PATH" "$source" || return 1
-  plutil -replace runtime_build.ref -string "$RUNTIME_ARTIFACT_REF" "$source" || return 1
-  plutil -replace runtime_build.resolved_path -string "$RUNTIME_PATH" "$source" || return 1
-  plutil -replace runtime_build.sha256 -string "$expected_sha256" "$source" || return 1
-  plutil -replace runtime_build.size_bytes -integer "$expected_size" "$source" || return 1
+  if plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null 2>&1; then
+    source_bundle="$GOVERNED_BUNDLE_PATH"
+  else
+    source_bundle="$CANONICAL_GOVERNED_BUNDLE_PATH"
+  fi
+  cp -p "$source_bundle" "$source" || return 1
+  verify_full_governed_bundle_schema "$source" || return 1
+  localize_canonical_governed_bundle "$source" || return 1
+  set_bundle_string "$source" runtime_build.path "$RUNTIME_PATH" || return 1
+  set_bundle_string "$source" runtime_build.ref "$RUNTIME_ARTIFACT_REF" || return 1
+  set_bundle_string "$source" runtime_build.resolved_path "$RUNTIME_PATH" || return 1
+  set_bundle_string "$source" runtime_build.sha256 "$expected_sha256" || return 1
+  set_bundle_integer "$source" runtime_build.size_bytes "$expected_size" || return 1
   plutil -convert json -o "$temporary" "$source" || return 1
   mv -f "$temporary" "$GOVERNED_BUNDLE_PATH" || return 1
   rm -f "$source"
@@ -2192,7 +2378,7 @@ assert_launchd_plist_label || die "launchd plist Label preflight failed"
 assert_launchd_target_loaded || die "launchd target preflight failed"
 [[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
 [[ -f "$GOVERNED_BUNDLE_PATH" ]] || die "active governed bundle missing: $GOVERNED_BUNDLE_PATH"
-plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || die "active governed bundle runtime_build preflight failed"
+preflight_governed_bundle_schema || die "active governed bundle schema preflight failed"
 [[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
 for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
 for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done

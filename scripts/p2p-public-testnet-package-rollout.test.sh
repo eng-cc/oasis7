@@ -1324,6 +1324,7 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
       "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
       "governed_bundle_path": "/Applications/oasis7/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
+      "canonical_governed_bundle_path": "/Applications/oasis7/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
       "config_paths": ["/Applications/oasis7/config/node.env"],
       "persistent_state_paths": ["/Applications/oasis7/data", "/Applications/oasis7/store"],
       "healthz_url": "http://127.0.0.1:19083/healthz",
@@ -1539,6 +1540,24 @@ import json
 import re
 import subprocess
 import sys
+import os
+import shutil
+import tempfile
+
+def fixture_tree_metadata(path):
+    digest = hashlib.sha256()
+    files = sorted(item for item in path.rglob("*") if item.is_file())
+    total_bytes = 0
+    for item in files:
+        payload = item.read_bytes()
+        total_bytes += len(payload)
+        digest.update(item.relative_to(path).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(hashlib.sha256(payload).hexdigest().encode())
+        digest.update(b"\0")
+        digest.update(str(len(payload)).encode())
+        digest.update(b"\n")
+    return digest.hexdigest(), len(files), total_bytes
 
 plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 script_path = Path(sys.argv[2])
@@ -1556,6 +1575,239 @@ expected_dmg_sha256 = hashlib.sha256(dmg_path.read_bytes()).hexdigest()
 assert macos["expected_dmg_sha256"] == expected_dmg_sha256
 text = script_path.read_text(encoding="utf-8")
 subprocess.run(["bash", "-n", str(script_path)], check=True)
+spec = importlib.util.spec_from_file_location("package_rollout_macos_behavior", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+
+# Execute the generated macOS rollback path against deterministic command mocks.
+# The active root-level bundle deliberately uses the legacy flat metadata shape;
+# promotion is then failed while writing the reconstructed full bundle.
+with tempfile.TemporaryDirectory(prefix="oasis7-macos-rollback-") as tmp_raw:
+    tmp = Path(tmp_raw).resolve()
+    node_root = tmp / "node"
+    runtime = node_root / "current/bin/oasis7_chain_runtime"
+    config = node_root / "config/node.env"
+    state_paths = [node_root / "data", node_root / "store"]
+    evidence = node_root / "doc/testing/evidence"
+    canonical = evidence / "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+    legacy = node_root / "public-testnet-governed-bootstrap-bundle-2026-06-06.json"
+    launchd_plist = tmp / "oasis7.testnet.plist"
+    for path in [runtime.parent, config.parent, evidence, *state_paths]:
+        path.mkdir(parents=True, exist_ok=True)
+    runtime.write_bytes(b"runtime-before\\n")
+    runtime.chmod(0o755)
+    config.write_bytes(b"config-before\\n")
+    for index, state_path in enumerate(state_paths):
+        (state_path / "state.bin").write_bytes(f"state-before-{index}\\n".encode())
+    (node_root / "CURRENT_VERSION").write_text("before\\n", encoding="utf-8")
+    (node_root / "DEPLOYED_BUILDINFO").write_text("before-build\\n", encoding="utf-8")
+    world = node_root / "world"
+    world.mkdir(parents=True)
+    (world / "snapshot.json").write_text("world snapshot\\n", encoding="utf-8")
+    (world / "journal.json").write_text("world journal\\n", encoding="utf-8")
+    sidecar = node_root / "generated-world/generated-scenario-world"
+    sidecar.mkdir(parents=True)
+    (sidecar / "snapshot.json").write_text("sidecar snapshot\\n", encoding="utf-8")
+    (sidecar / "journal.json").write_text("sidecar journal\\n", encoding="utf-8")
+    provenance = node_root / "generated-world/world-generation-provenance.json"
+    provenance.write_text("{\"fixture\":true}\\n", encoding="utf-8")
+    governance = evidence / "public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+    governance.write_text("{}\\n", encoding="utf-8")
+    topology = evidence / "topology.md"
+    topology.write_text("topology\\n", encoding="utf-8")
+    world_hash, world_count, world_bytes = fixture_tree_metadata(world)
+    sidecar_hash, sidecar_count, sidecar_bytes = fixture_tree_metadata(sidecar)
+    canonical.write_text(json.dumps({
+        "schema_version": "oasis7.release_candidate_bundle.v1",
+        "runtime_build": {"ref": "old-runtime", "resolved_path": "/build-host/runtime", "kind": "file", "sha256": "0" * 64, "size_bytes": 1},
+        "world_snapshot": {"ref": ".tmp/build/world", "resolved_path": "/build-host/world", "kind": "directory", "sha256_tree": world_hash, "file_count": world_count, "total_bytes": world_bytes},
+        "generated_world_sidecar": {"ref": ".tmp/build/generated-scenario-world", "resolved_path": "/build-host/generated-scenario-world", "kind": "directory", "sha256_tree": sidecar_hash, "file_count": sidecar_count, "total_bytes": sidecar_bytes},
+        "world_generation_provenance": {"ref": ".tmp/build/world-generation-provenance.json", "resolved_path": "/build-host/world-generation-provenance.json", "kind": "file", "sha256": hashlib.sha256(provenance.read_bytes()).hexdigest(), "size_bytes": provenance.stat().st_size},
+        "governance_manifest": {"ref": ".tmp/build/validator-registry.json", "resolved_path": "/build-host/governance.json", "kind": "file", "sha256": hashlib.sha256(governance.read_bytes()).hexdigest(), "size_bytes": governance.stat().st_size},
+        "evidence_refs": [
+            {"ref": "deployment-truth.md", "resolved_path": "/build-host/deployment-truth.md", "kind": "file"},
+            {"ref": ".tmp/build/topology.md", "resolved_path": "/build-host/topology.md", "kind": "file", "sha256": hashlib.sha256(topology.read_bytes()).hexdigest(), "size_bytes": topology.stat().st_size},
+        ],
+    }) + "\n", encoding="utf-8")
+    legacy_bytes = json.dumps({"path": str(runtime), "ref": "legacy-runtime", "resolved_path": str(runtime), "sha256": "1" * 64, "size_bytes": 15}, indent=2).encode() + b"\n"
+    legacy.write_bytes(legacy_bytes)
+    launchd_plist.write_text("fixture", encoding="utf-8")
+    package_runtime = tmp / "candidate-runtime"
+    package_runtime.write_bytes(b"runtime-candidate\\n")
+    package_runtime.chmod(0o755)
+    dmg = tmp / "fixture.dmg"
+    dmg.write_bytes(b"fixture-dmg\\n")
+    mocks = tmp / "mocks"
+    mocks.mkdir()
+    def mock(name, body):
+        path = mocks / name
+        path.write_text("#!/usr/bin/env bash\nset -euo pipefail\n" + body.replace("\\n", "\n"), encoding="utf-8")
+        path.chmod(0o755)
+    mock("uname", '[[ "$1" == "-s" ]] && echo Darwin || echo arm64\\n')
+    mock("sysctl", 'echo 1\\n')
+    mock("lipo", 'echo arm64\\n')
+    mock("stat", '[[ "$1" == "-f" ]] && wc -c < "$3" | tr -d "[:space:]" || /usr/bin/stat "$@"\\n')
+    mock("ditto", 'cp -R "$1" "$2"\\n')
+    mock("hdiutil", 'if [[ "$1" == attach ]]; then for ((i=1;i<=$#;i++)); do [[ "${!i}" == -mountpoint ]] && j=$((i+1)) && mkdir -p "${!j}" && cp "$FIXTURE_PACKAGE_RUNTIME" "${!j}/oasis7_chain_runtime"; done; fi; true\\n')
+    mock("launchctl", 'echo "$*" >> "$FIXTURE_LAUNCH_LOG"; case "$1" in print) if [[ "${FIXTURE_FAIL_POST_BOOTSTRAP_PRINT:-}" == 1 && -f "$FIXTURE_POST_BOOTSTRAP_MARKER" && ! -f "$FIXTURE_POST_PRINT_FAILED" ]]; then : > "$FIXTURE_POST_PRINT_FAILED"; exit 1; fi; exit 0;; bootout) rm -f "$FIXTURE_LAUNCH_LOADED";; bootstrap) if [[ "${FIXTURE_FAIL_BOOTSTRAP_ONCE:-}" == 1 && ! -f "$FIXTURE_BOOTSTRAP_FAILED" ]]; then : > "$FIXTURE_BOOTSTRAP_FAILED"; exit 1; fi; : > "$FIXTURE_LAUNCH_LOADED"; : > "$FIXTURE_POST_BOOTSTRAP_MARKER";; esac\\n')
+    mock("curl", 'if [[ "$*" == *" -o "* ]]; then for ((i=1;i<=$#;i++)); do [[ "${!i}" == -o ]] && j=$((i+1)) && printf \'{"chain_proof":{"latest_execution_checkpoint":{"schema_version":2,"checkpoint_id":"fixture","height":1,"manifest_hash":"0000000000000000000000000000000000000000000000000000000000000000"}}}\' > "${!j}"; done; elif [[ "$*" == *healthz* ]]; then printf \'{"ok":true}\'; else printf \'{"running":true}\'; fi; true\\n')
+    mock("plutil", r'''python3 - "$@" <<'PY2'
+import json, os, sys
+args = sys.argv[1:]
+if args[0] == "-extract":
+    key, output, path = args[1], args[2], args[-1]
+    try:
+        value = json.load(open(path))
+        for part in key.split("."):
+            value = value[int(part)] if isinstance(value, list) else value[part]
+    except Exception:
+        raise SystemExit(1)
+    print(json.dumps(value) if output == "json" else str(value).lower() if isinstance(value, bool) else value)
+elif args[0] in ("-replace", "-insert"):
+    key, value, path = args[1], args[3], args[-1]
+    if os.environ.get("FIXTURE_FAIL_METADATA_PROMOTION") == "1" and key == "runtime_build.path":
+        raise SystemExit(1)
+    data = json.load(open(path))
+    target = data
+    parts = key.split(".")
+    for part in parts[:-1]:
+        target = target[int(part)] if isinstance(target, list) else target.setdefault(part, {})
+    target[parts[-1]] = int(value) if args[2] == "-integer" else value
+    open(path, "w").write(json.dumps(data))
+elif args[0] == "-convert":
+    open(args[3], "w").write(open(args[4]).read())
+else:
+    raise SystemExit(1)
+PY2
+''')
+    mock("PlistBuddy", 'echo oasis7.testnet.fixture\\n')
+    generated = tmp / "rollout.sh"
+    node = {
+        "name": "fixture", "node_root": str(node_root), "launchd_target": "system/oasis7.testnet.fixture",
+        "launchd_plist": str(launchd_plist), "runtime_path": str(runtime), "governed_bundle_path": str(legacy),
+        "healthz_url": "http://fixture/healthz", "status_url": "http://fixture/v1/chain/status",
+        "canonical_governed_bundle_path": str(canonical),
+        "config_paths": [str(config)], "persistent_state_paths": [str(path) for path in state_paths],
+    }
+    generated.write_text(module.macos_script(node, "fixture", "commit", "run", hashlib.sha256(dmg.read_bytes()).hexdigest(), "http://fixture/sequencer/v1/chain/status", "http://fixture/storage/v1/chain/status").replace("/usr/libexec/PlistBuddy", "PlistBuddy"), encoding="utf-8")
+    generated.chmod(0o755)
+    launch_loaded, launch_log = tmp / "loaded", tmp / "launch.log"
+    bootstrap_failed, post_bootstrap_marker, post_print_failed = tmp / "bootstrap.failed", tmp / "post-bootstrap", tmp / "post-print.failed"
+    launch_loaded.write_text("loaded", encoding="utf-8")
+    before_runtime, before_config = runtime.read_bytes(), config.read_bytes()
+    before_current = (node_root / "CURRENT_VERSION").read_bytes()
+    before_deployed = (node_root / "DEPLOYED_BUILDINFO").read_bytes()
+    before_states = [(path / "state.bin").read_bytes() for path in state_paths]
+    rollout_env = {**os.environ, "PATH": f"{mocks}:{os.environ['PATH']}", "FIXTURE_PACKAGE_RUNTIME": str(package_runtime), "FIXTURE_LAUNCH_LOADED": str(launch_loaded), "FIXTURE_LAUNCH_LOG": str(launch_log), "FIXTURE_BOOTSTRAP_FAILED": str(bootstrap_failed), "FIXTURE_POST_BOOTSTRAP_MARKER": str(post_bootstrap_marker), "FIXTURE_POST_PRINT_FAILED": str(post_print_failed)}
+    def assert_preupgrade_restored(label):
+        assert runtime.read_bytes() == before_runtime, label
+        assert config.read_bytes() == before_config, label
+        assert legacy.read_bytes() == legacy_bytes, label
+        assert (node_root / "CURRENT_VERSION").read_bytes() == before_current, label
+        assert (node_root / "DEPLOYED_BUILDINFO").read_bytes() == before_deployed, label
+        assert [(path / "state.bin").read_bytes() for path in state_paths] == before_states, label
+
+    result = subprocess.run(["bash", str(generated), str(dmg)], text=True, capture_output=True, env={**rollout_env, "FIXTURE_FAIL_METADATA_PROMOTION": "1"})
+    assert result.returncode != 0, "injected metadata promotion failure must fail rollout"
+    assert "rollback_begin=true reason=fatal_error" in result.stdout, (
+        f"metadata failure bypassed rollback: stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
+    assert_preupgrade_restored("metadata promotion die rollback")
+    assert launch_loaded.exists() and "bootstrap" in launch_log.read_text(encoding="utf-8")
+
+    canonical_bytes = canonical.read_bytes()
+    incomplete = json.loads(canonical_bytes)
+    incomplete.pop("generated_world_sidecar")
+    canonical.write_text(json.dumps(incomplete), encoding="utf-8")
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    incomplete_result = subprocess.run(["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env)
+    assert incomplete_result.returncode != 0 and "canonical governed bundle schema invalid" in incomplete_result.stderr
+    assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before
+    canonical.write_bytes(canonical_bytes)
+
+    for missing_path, label in ((world, "world_snapshot"), (sidecar, "generated_world_sidecar"), (provenance, "world_generation_provenance"), (governance, "governance_manifest")):
+        bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+        missing_was_dir = missing_path.is_dir()
+        if missing_was_dir:
+            saved_members = {
+                member.relative_to(missing_path): member.read_bytes()
+                for member in missing_path.rglob("*") if member.is_file()
+            }
+            shutil.rmtree(missing_path)
+        else:
+            saved_bytes = missing_path.read_bytes()
+            missing_path.unlink()
+        missing_required = subprocess.run(["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env)
+        assert missing_required.returncode != 0 and "required node-local artifacts invalid" in missing_required.stderr, label
+        assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, f"{label} absence must fail before launchd stop"
+        if missing_was_dir:
+            for relative, payload in saved_members.items():
+                target = missing_path / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+        else:
+            missing_path.write_bytes(saved_bytes)
+
+    for tamper_path, label in (
+        (world / "snapshot.json", "world_snapshot"),
+        (sidecar / "journal.json", "generated_world_sidecar"),
+        (provenance, "world_generation_provenance"),
+        (governance, "governance_manifest"),
+    ):
+        original = tamper_path.read_bytes()
+        tamper_path.write_bytes(original + b"tampered")
+        bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+        tampered = subprocess.run(["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env)
+        assert tampered.returncode != 0 and "required node-local artifacts invalid" in tampered.stderr, label
+        assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, label
+        tamper_path.write_bytes(original)
+
+    for marker in (post_bootstrap_marker, post_print_failed, bootstrap_failed):
+        marker.unlink(missing_ok=True)
+    post_mv_die = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True,
+        env={**rollout_env, "FIXTURE_FAIL_POST_BOOTSTRAP_PRINT": "1"},
+    )
+    assert post_mv_die.returncode != 0 and "rollback_begin=true reason=fatal_error" in post_mv_die.stdout
+    assert "governed_bundle_runtime_metadata_verified=true" in post_mv_die.stdout
+    assert_preupgrade_restored("post-bundle-mv die rollback")
+
+    for marker in (post_bootstrap_marker, post_print_failed, bootstrap_failed):
+        marker.unlink(missing_ok=True)
+    direct_err = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True,
+        env={**rollout_env, "FIXTURE_FAIL_BOOTSTRAP_ONCE": "1"},
+    )
+    assert direct_err.returncode != 0 and "rollback_begin=true reason=unexpected_failure" in direct_err.stdout
+    assert "governed_bundle_runtime_metadata_verified=true" in direct_err.stdout
+    assert_preupgrade_restored("direct ERR trap rollback")
+
+    for marker in (post_bootstrap_marker, post_print_failed, bootstrap_failed):
+        marker.unlink(missing_ok=True)
+    success = subprocess.run(["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env)
+    assert success.returncode == 0, f"legacy flat success failed: stdout={success.stdout!r} stderr={success.stderr!r}"
+    promoted = json.loads(legacy.read_text(encoding="utf-8"))
+    assert promoted["runtime_build"]["resolved_path"] == str(runtime)
+    assert promoted["world_snapshot"]["resolved_path"] == str(world)
+    assert promoted["generated_world_sidecar"]["resolved_path"] == str(sidecar)
+    assert promoted["world_generation_provenance"]["resolved_path"] == str(provenance)
+    assert promoted["governance_manifest"]["resolved_path"] == str(governance)
+    assert promoted["evidence_refs"][0]["deployment_status"] == "optional_unresolved"
+    assert promoted["evidence_refs"][0]["resolved_path"] == ""
+    assert promoted["evidence_refs"][1]["deployment_status"] == "localized"
+    assert promoted["evidence_refs"][1]["resolved_path"] == str(topology)
+    assert "/build-host/" not in json.dumps(promoted)
+for artifact, relative_path in (
+    ("world_snapshot", "world"),
+    ("generated_world_sidecar", "generated-world/generated-scenario-world"),
+    ("world_generation_provenance", "generated-world/world-generation-provenance.json"),
+    ("governance_manifest", "doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"),
+):
+    mapping_block = text[text.index("node_local_bundle_artifact_relative_path() {"):text.index("localize_bundle_artifact() {")]
+    assert f"{artifact})" in mapping_block and f"'{relative_path}'" in mapping_block, (
+        f"macOS bundle localization must use the live node path for {artifact}"
+    )
 for token in (
     f"EXPECTED_DMG_SHA256={expected_dmg_sha256}",
     'shasum -a 256 "$DMG_PATH"',
@@ -1599,6 +1851,7 @@ for token in (
     "provider_checkpoint_gate=passed",
     "latest_execution_checkpoint",
     "provider_checkpoint_gate_macos",
+    "oasis7-provider-checkpoint.json.XXXXXX",
     "plutil -extract",
     "authority_failure",
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
@@ -1622,10 +1875,12 @@ for token in (
     "governed_bundle_runtime_metadata_verified=true",
 ):
     assert token in text, f"macOS generated rollout contract missing: {token}"
+assert "oasis7-provider-checkpoint.XXXXXX.json" not in text
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
 mount_index = text.index("hdiutil attach")
 preflight_backup_index = text.index("preflight_backup_closure_complete=true")
 active_stop = text.index('launchctl bootout "$LAUNCHD_TARGET"', preflight_backup_index)
+artifact_integrity_preflight = text.index('preflight_governed_bundle_schema || die "active governed bundle schema preflight failed"')
 checkpoint_gate_index = text.index("provider_checkpoint_gate_macos")
 state_backup_call_index = text.index("if ! backup_persistent_state", active_stop)
 state_backup_index = text.index("rollback_closure_complete=true", state_backup_call_index)
@@ -1633,6 +1888,7 @@ promotion_index = text.index("promotion_begin=true", state_backup_index)
 assert checksum_index < mount_index < preflight_backup_index < active_stop < state_backup_index < promotion_index, (
     "required order is checksum/mount, preflight backup, bootout, stopped-state backup, promotion"
 )
+assert artifact_integrity_preflight < active_stop, "all localized artifact integrity must be proven before launchd stop"
 bundle_backup_index = text.index('backup_path "$GOVERNED_BUNDLE_PATH" "$ATTEMPT_ROOT/governed-bundle.json"')
 bundle_promote_index = text.index(
     'promote_governed_bundle_runtime_metadata "$PROMOTED_RUNTIME_SHA256" "$PROMOTED_RUNTIME_SIZE_BYTES"',
@@ -1645,7 +1901,7 @@ assert bundle_backup_index < active_stop < bundle_promote_index < bootstrap_afte
 bundle_promotion_function = text[
     text.index("promote_governed_bundle_runtime_metadata() {"):text.index("assert_launchd_plist_label() {")
 ]
-assert bundle_promotion_function.index("plutil -replace") < bundle_promotion_function.index(
+assert bundle_promotion_function.index("set_bundle_string") < bundle_promotion_function.index(
     'mv -f "$temporary" "$GOVERNED_BUNDLE_PATH"'
 ) < bundle_promotion_function.index("verify_governed_bundle_runtime_metadata"), (
     "governed bundle metadata must be updated in a temporary JSON file, atomically promoted, then verified"
@@ -1797,6 +2053,25 @@ for target, domain in (
         "assert_launchd_target_loaded" in generated[position : position + 180]
         for position in bootstrap_positions
     ), "every launchd bootstrap path must re-assert the exact target before health acceptance"
+assert "CANONICAL_GOVERNED_BUNDLE_PATH=/Applications/oasis7/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json" in generated
+explicit_canonical = "/Applications/oasis7/config/doc/testing/evidence/enriched-bundle.json"
+explicit_generated = module.macos_script(
+    {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": explicit_canonical},
+    "version", "commit", "run", "a" * 64,
+    "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+)
+assert f"CANONICAL_GOVERNED_BUNDLE_PATH={explicit_canonical}" in explicit_generated
+try:
+    with contextlib.redirect_stderr(io.StringIO()):
+        module.macos_script(
+            {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "canonical_governed_bundle_path": "/tmp/enriched-bundle.json"},
+            "version", "commit", "run", "a" * 64,
+            "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+        )
+except SystemExit:
+    pass
+else:
+    raise AssertionError("canonical governed bundle path escaping node_root was accepted")
 for invalid_target in (
     "user/oasis7.testnet.fourth",
     "gui/not-a-uid/oasis7.testnet.fourth",
