@@ -278,8 +278,8 @@
 - `doc/scripts/project.md`
 - `doc/scripts/precommit/pre-commit.prd.md`
 - `doc/scripts/precommit/pre-commit.project.md`
-- `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
-- `doc/scripts/precommit/precommit-remediation-playbook.project.md`
+- historical removed precommit remediation playbook PRD
+- historical removed precommit remediation playbook project record
 - historical removed viewer-tools doc set: capture-viewer-frame / texture-inspector topics
 - `doc/scripts/wasm/builtin-wasm-nightly-build-std.prd.md`
 - `doc/scripts/wasm/builtin-wasm-nightly-build-std.project.md`
