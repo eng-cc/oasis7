@@ -126,7 +126,11 @@ function truthyText(value) {
 }
 
 function playerReadableText(value) {
-  return truthyText(value) && !/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/.test(value);
+  return (
+    truthyText(value) &&
+    !/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/.test(value) &&
+    !/\b[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+\b/.test(value)
+  );
 }
 
 function actionsWithChoices(playerGameplay) {

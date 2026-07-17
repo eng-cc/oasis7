@@ -217,6 +217,27 @@ for (const field of ROLLBACK_QUOTE_FIELDS) {
   );
 }
 
+for (const field of ROLLBACK_QUOTE_FIELDS) {
+  const dottedRouteIdSamples = structuredClone(evidence.raw_snapshots);
+  const quotedRoute = dottedRouteIdSamples.find(
+    (snapshot) => snapshot.player_gameplay?.route_tradeoff?.rollback_available === true,
+  );
+  assert.ok(quotedRoute, `negative fixture for ${field}/route.choice requires a true rollback offer`);
+  quotedRoute.player_gameplay.route_tradeoff[field] = "route.choice";
+  const dottedRouteIdEvidence = buildTaskGame076AttractionEvidence({
+    samples: dottedRouteIdSamples,
+  });
+  assert.equal(
+    dottedRouteIdEvidence.second_run_design_card.status,
+    "second_run_hook_weak",
+    `${field}/route.choice must fail the design gate`,
+  );
+  assert.ok(
+    dottedRouteIdEvidence.second_run_design_card.missing.includes("route_rollback_quote_missing"),
+    `${field}/route.choice must identify the player-unreadable rollback quote`,
+  );
+}
+
 for (const mutation of ["delete", "null", "non_boolean"]) {
   const invalidRollbackAvailabilitySamples = structuredClone(evidence.raw_snapshots);
   const routeSample = invalidRollbackAvailabilitySamples.find(
