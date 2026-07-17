@@ -231,6 +231,7 @@ pub(super) struct RuntimeLiveSession {
     pub(super) metrics: RunnerMetrics,
     pub(super) transient_play_failures: u8,
     pub(super) initial_snapshot_sent: bool,
+    pub(super) negotiated_protocol: crate::viewer::protocol::NegotiatedViewerProtocol,
 }
 
 impl RuntimeLiveSession {
@@ -251,6 +252,8 @@ impl RuntimeLiveSession {
             metrics: RunnerMetrics::default(),
             transient_play_failures: 0,
             initial_snapshot_sent: false,
+            negotiated_protocol:
+                crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities(),
         }
     }
 

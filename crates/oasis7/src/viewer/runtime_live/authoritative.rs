@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeStableCheckpoint {
     pub(super) batch_id: String,
     pub(super) snapshot: RuntimeSnapshot,
@@ -10,7 +10,7 @@ pub(super) struct RuntimeStableCheckpoint {
     pub(super) log_cursor: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum RuntimeBatchChallengeState {
     None,
     Challenged,
@@ -18,7 +18,7 @@ pub(super) enum RuntimeBatchChallengeState {
     ResolvedFraudSlashed,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeAuthoritativeChallengeRecord {
     pub(super) challenge_id: String,
     pub(super) batch_id: String,
@@ -47,7 +47,7 @@ impl RuntimeAuthoritativeChallengeRecord {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeAuthoritativeBatchRecord {
     pub(super) batch_id: String,
     pub(super) tx_hash: String,

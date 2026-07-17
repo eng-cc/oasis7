@@ -180,10 +180,13 @@ impl<'a> ViewerSession<'a> {
         world_id: &str,
     ) -> Result<bool, ViewerServerError> {
         match request {
-            ViewerRequest::Hello { .. } => {
+            ViewerRequest::Hello { .. } | ViewerRequest::HelloV2 { .. } => {
                 let response = ViewerResponse::HelloAck {
                     server: "oasis7".to_string(),
                     version: VIEWER_PROTOCOL_VERSION,
+                    min_version: 1,
+                    max_version: VIEWER_PROTOCOL_VERSION,
+                    capabilities: Vec::new(),
                     world_id: world_id.to_string(),
                     control_profile: ViewerControlProfile::Playback,
                 };

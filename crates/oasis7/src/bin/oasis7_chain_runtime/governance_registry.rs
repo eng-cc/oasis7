@@ -4,7 +4,8 @@ use std::path::Path;
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
 use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
-    GovernanceThresholdSignerPolicy,
+    GovernanceThresholdSignerPolicy, RollbackAuthorityRecord, RollbackAuthorityRegistry,
+    RollbackAuthorityRole,
 };
 use oasis7_node::{
     NodeConfig, NodeMainTokenControllerBindingConfig, NodeMainTokenControllerSignerPolicy,
@@ -15,6 +16,8 @@ use serde::Deserialize;
 const DEFAULT_FINALITY_SLOT_ID: &str = "governance.finality.v1";
 const GOVERNANCE_REGISTRY_DEFAULT_VALIDATOR_STAKE: u64 = 100;
 const DEFAULT_CONTROLLER_THRESHOLD: u16 = 2;
+const ROLLBACK_ON_CALL_SLOT_ID: &str = "ops.rollback.on_call.v1";
+const ROLLBACK_GOVERNANCE_SLOT_ID: &str = "governance.rollback.v1";
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -104,6 +107,17 @@ pub(super) fn ensure_world_governance_validator_registry(
         return Ok(());
     }
     if world_has_effective_finality_registry(execution_world_dir)? {
+        if network_tier_requires_governance_validator_registry(loaded_network_tier_manifest) {
+            let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+            if !world_is_bootstrap_only(&world)
+                && world.snapshot().rollback_authority_registry.is_empty()
+            {
+                return Err(format!(
+                    "public-tier existing world is missing the governed rollback authority registry; run the dedicated governance registry import migration before restart: execution_world_dir={}",
+                    execution_world_dir.display()
+                ));
+            }
+        }
         return Ok(());
     }
     if let Some(manifest_path) = genesis_validator_registry_path {
@@ -160,7 +174,8 @@ fn import_network_tier_governance_bootstrap(
         })?
         .is_none();
     let needs_controller = world.governance_main_token_controller_registry().is_none();
-    if !needs_finality && !needs_controller {
+    let needs_rollback = world.snapshot().rollback_authority_registry.is_empty();
+    if !needs_finality && !needs_controller && !needs_rollback {
         return Ok(true);
     }
     if !world_is_bootstrap_only(&world) {
@@ -185,18 +200,27 @@ fn import_network_tier_governance_bootstrap(
             .map_err(|err| format!("write network-tier finality registry failed: {err:?}"))?;
     }
 
-    if needs_controller {
+    if needs_controller || needs_rollback {
         let governance_manifest_path = resolve_network_tier_runtime_ref_path(
             genesis_path.as_path(),
             bootstrap_refs.governance_public_manifest_ref.as_str(),
         );
         let controller_entries =
             load_governance_public_manifest_entries(governance_manifest_path.as_path())?;
-        let controller_registry =
-            build_main_token_controller_registry_from_entries(controller_entries.as_slice())?;
-        world
-            .set_governance_main_token_controller_registry(controller_registry)
-            .map_err(|err| format!("write network-tier controller registry failed: {err:?}"))?;
+        if needs_controller {
+            let controller_registry =
+                build_main_token_controller_registry_from_entries(controller_entries.as_slice())?;
+            world
+                .set_governance_main_token_controller_registry(controller_registry)
+                .map_err(|err| format!("write network-tier controller registry failed: {err:?}"))?;
+        }
+        if needs_rollback {
+            let rollback_registry =
+                build_rollback_authority_registry_from_entries(controller_entries.as_slice())?;
+            world
+                .set_rollback_authority_registry(rollback_registry)
+                .map_err(|err| format!("write network-tier rollback registry failed: {err:?}"))?;
+        }
     }
 
     world.save_to_dir(execution_world_dir).map_err(|err| {
@@ -376,10 +400,12 @@ fn build_main_token_controller_registry_from_entries(
     entries: &[GenesisValidatorRegistryEntry],
 ) -> Result<GovernanceMainTokenControllerRegistry, String> {
     let mut controller_signer_policies = BTreeMap::new();
-    for entry in entries
-        .iter()
-        .filter(|entry| entry.slot_id.as_deref() != Some(DEFAULT_FINALITY_SLOT_ID))
-    {
+    for entry in entries.iter().filter(|entry| {
+        !matches!(
+            entry.slot_id.as_deref().map(str::trim),
+            Some(DEFAULT_FINALITY_SLOT_ID | ROLLBACK_ON_CALL_SLOT_ID | ROLLBACK_GOVERNANCE_SLOT_ID)
+        )
+    }) {
         validate_governance_public_manifest_entry(entry)?;
         let slot_id = entry
             .slot_id
@@ -422,6 +448,52 @@ fn build_main_token_controller_registry_from_entries(
         restricted_starter_claim_admin_account_ids: BTreeSet::new(),
         controller_signer_policies,
     })
+}
+
+fn build_rollback_authority_registry_from_entries(
+    entries: &[GenesisValidatorRegistryEntry],
+) -> Result<RollbackAuthorityRegistry, String> {
+    let record = |slot_id: &str, role: RollbackAuthorityRole| {
+        let matching = entries
+            .iter()
+            .filter(|entry| entry.slot_id.as_deref().map(str::trim) == Some(slot_id))
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
+            return Err(format!(
+                "governance public manifest requires exactly one rollback authority slot_id={slot_id} actual={}",
+                matching.len()
+            ));
+        }
+        let entry = matching[0];
+        validate_governance_public_manifest_entry(entry)?;
+        if entry.threshold != Some(1) {
+            return Err(format!(
+                "rollback authority slot requires explicit threshold=1 slot_id={slot_id}"
+            ));
+        }
+        let authority_id = entry
+            .signer_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!("rollback authority slot requires signer_id slot_id={slot_id}")
+            })?;
+        Ok(RollbackAuthorityRecord {
+            authority_id: authority_id.to_string(),
+            role,
+            public_key_hex: genesis_validator_entry_public_key(entry)?.to_ascii_lowercase(),
+            active: true,
+        })
+    };
+    RollbackAuthorityRegistry::new([
+        record(ROLLBACK_ON_CALL_SLOT_ID, RollbackAuthorityRole::OnCall)?,
+        record(
+            ROLLBACK_GOVERNANCE_SLOT_ID,
+            RollbackAuthorityRole::Governance,
+        )?,
+    ])
+    .map_err(|err| format!("invalid governed rollback registry: {err:?}"))
 }
 
 fn execution_world_has_persisted_state(execution_world_dir: &Path) -> bool {

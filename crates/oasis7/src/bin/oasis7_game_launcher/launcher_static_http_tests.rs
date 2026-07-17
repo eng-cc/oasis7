@@ -1,9 +1,20 @@
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 use std::thread;
 
-use super::{DeploymentMode, make_temp_dir, start_static_http_server, stop_static_http_server};
+use super::{
+    DeploymentMode, make_temp_dir, sanitize_index_html_for_embedded_server,
+    start_static_http_server, stop_static_http_server,
+};
+
+#[test]
+fn sanitize_index_html_for_embedded_server_keeps_non_index_files_unchanged() {
+    let body = b"<script>.well-known/trunk/ws</script>";
+    let sanitized = sanitize_index_html_for_embedded_server(Path::new("app.js"), body, None);
+    assert_eq!(sanitized, body);
+}
 
 #[test]
 fn static_http_server_serves_large_static_asset_completely() {

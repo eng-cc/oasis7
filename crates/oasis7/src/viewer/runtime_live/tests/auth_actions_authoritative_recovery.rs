@@ -1,4 +1,438 @@
 use super::*;
+use sha2::{Digest, Sha256};
+
+fn install_viewer_recovery_precommit_failure(dir: &std::path::Path) {
+    let generation_root = dir.join(".distfs-state/sidecar-generations");
+    std::fs::create_dir_all(&generation_root).expect("create generation root");
+    std::fs::write(
+        generation_root.join(".test-fail-before-index-commit"),
+        b"fail",
+    )
+    .expect("install precommit failpoint");
+}
+
+fn persist_session_side_effect_projection(
+    recovery_dir: &std::path::Path,
+) -> (ViewerRuntimeLiveServer, String, String, Vec<u8>) {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.to_path_buf()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("agent");
+    let player_id = "player-session-projection".to_string();
+    let cached_ack = crate::viewer::AgentChatAck {
+        agent_id: agent_id.clone(),
+        accepted_at_tick: server.world.state().time,
+        message_len: "persisted chat".len(),
+        player_id: Some("cached-player".to_string()),
+        intent_tick: Some(server.world.state().time),
+        intent_seq: Some(77),
+        idempotent_replay: false,
+    };
+    server.llm_sidecar.record_chat_intent_ack(
+        "cached-player",
+        agent_id.as_str(),
+        77,
+        Some(server.world.state().time),
+        "persisted chat",
+        None,
+        &cached_ack,
+    );
+    let (public_key, private_key) = test_signer(96);
+    register_runtime_session(
+        &mut server,
+        player_id.as_str(),
+        Some(agent_id.as_str()),
+        9,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let metadata = RuntimeWorld::load_authoritative_recovery_metadata(recovery_dir)
+        .expect("load recovery metadata")
+        .expect("committed recovery metadata");
+    (server, agent_id, player_id, metadata)
+}
+
+fn assert_session_side_effect_projection(
+    server: &ViewerRuntimeLiveServer,
+    agent_id: &str,
+    player_id: &str,
+) {
+    assert_eq!(
+        server.llm_sidecar.agent_player_bindings.get(agent_id),
+        Some(&player_id.to_string())
+    );
+    assert_eq!(
+        server.llm_sidecar.player_agent_bindings.get(player_id),
+        Some(&agent_id.to_string())
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .contains_key(agent_id)
+    );
+    assert_eq!(
+        server.llm_sidecar.player_auth_last_nonce.get(player_id),
+        Some(&9)
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "cached-player",
+                agent_id,
+                77,
+                Some(server.world.state().time),
+                "persisted chat",
+                None,
+            )
+            .expect("lookup cached chat acknowledgement")
+            .is_some()
+    );
+    assert!(!server.pending_virtual_events.is_empty());
+}
+
+#[test]
+fn committed_fence_readback_restores_complete_session_side_effect_projection() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-projection-readback-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let (mut server, agent_id, player_id, metadata) =
+        persist_session_side_effect_projection(&recovery_dir);
+    let encoded: serde_json::Value =
+        serde_json::from_slice(&metadata).expect("decode recovery envelope");
+    assert!(encoded.get("session_side_effects").is_some());
+
+    server.llm_sidecar.agent_player_bindings.clear();
+    server.llm_sidecar.player_agent_bindings.clear();
+    server.llm_sidecar.agent_public_key_bindings.clear();
+    server.llm_sidecar.player_auth_last_nonce.clear();
+    server.llm_sidecar.player_chat_intent_acks.clear();
+    server.pending_virtual_events.clear();
+    server.authoritative_recovery_write_fence =
+        Some(hex::encode(Sha256::digest(metadata.as_slice())));
+    server
+        .resolve_authoritative_recovery_write_fence()
+        .expect("resolve committed generation");
+
+    assert_session_side_effect_projection(&server, agent_id.as_str(), player_id.as_str());
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
+fn recovery_restart_restores_complete_session_side_effect_projection() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-projection-restart-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let (_source, agent_id, player_id, metadata) =
+        persist_session_side_effect_projection(&recovery_dir);
+    let mut restarted =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("restarted server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    restarted.authoritative_recovery_write_fence =
+        Some(hex::encode(Sha256::digest(metadata.as_slice())));
+    restarted
+        .resolve_authoritative_recovery_write_fence()
+        .expect("restore committed generation after restart");
+
+    assert_session_side_effect_projection(&restarted, agent_id.as_str(), player_id.as_str());
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
+fn session_metadata_status_unknown_installs_write_fence() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-unknown-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("agent");
+    let (old_public, old_private) = test_signer(94);
+    register_runtime_session(
+        &mut server,
+        "player-unknown",
+        Some(agent_id.as_str()),
+        1,
+        old_public.as_str(),
+        old_private.as_str(),
+    );
+    let root = recovery_dir.join(".distfs-state/sidecar-generations");
+    std::fs::write(root.join(".test-fail-before-index-commit"), b"fail").expect("failpoint");
+    std::fs::write(root.join("index.json"), b"not-json").expect("corrupt index");
+    let (new_public, _) = test_signer(95);
+
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RotateSession {
+            request: AuthoritativeSessionRotateRequest {
+                player_id: "player-unknown".to_string(),
+                old_session_pubkey: old_public.clone(),
+                new_session_pubkey: new_public.clone(),
+                rotate_reason: "unknown".to_string(),
+                rotated_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("status unknown");
+
+    assert_eq!(error.code, "recovery_persistence_status_unknown");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "indeterminate session metadata commit must fence writes"
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-unknown", old_public.as_str())
+            .is_ok()
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-unknown", new_public.as_str())
+            .is_err()
+    );
+    server
+        .resolve_authoritative_recovery_write_fence()
+        .expect("resolve attempt");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "unknown readback must remain fenced"
+    );
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
+fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
+    let register_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-register-atomic-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    install_viewer_recovery_precommit_failure(&register_dir);
+    let mut register_server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    register_server.set_authoritative_recovery_dir_override(Some(register_dir.clone()));
+    let agent_id = register_server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (register_public, register_private) = test_signer(91);
+    let register_request = signed_session_register_request(
+        crate::viewer::AuthoritativeSessionRegisterRequest {
+            player_id: "player-register-atomic".to_string(),
+            public_key: None,
+            registration_grant: None,
+            auth: None,
+            requested_agent_id: Some(agent_id.clone()),
+            force_rebind: false,
+        },
+        1,
+        register_public.as_str(),
+        register_private.as_str(),
+    );
+    register_server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: register_request,
+        })
+        .expect_err("register persistence failure");
+    assert!(
+        register_server
+            .session_policy
+            .validate_known_session_key("player-register-atomic", register_public.as_str())
+            .is_err()
+    );
+    assert!(
+        !register_server
+            .llm_sidecar
+            .agent_player_bindings
+            .contains_key(agent_id.as_str())
+    );
+    assert!(
+        !register_server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .contains_key("player-register-atomic")
+    );
+
+    let mutation_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-mutation-atomic-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(mutation_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (old_public, old_private) = test_signer(92);
+    register_runtime_session(
+        &mut server,
+        "player-mutation-atomic",
+        Some(agent_id.as_str()),
+        1,
+        old_public.as_str(),
+        old_private.as_str(),
+    );
+    let cached_ack = crate::viewer::AgentChatAck {
+        agent_id: agent_id.clone(),
+        accepted_at_tick: server.world.state().time,
+        message_len: "persist me".len(),
+        player_id: Some("player-mutation-atomic".to_string()),
+        intent_tick: Some(server.world.state().time),
+        intent_seq: Some(44),
+        idempotent_replay: false,
+    };
+    server.llm_sidecar.record_chat_intent_ack(
+        "player-mutation-atomic",
+        agent_id.as_str(),
+        44,
+        Some(server.world.state().time),
+        "persist me",
+        Some(old_public.as_str()),
+        &cached_ack,
+    );
+    install_viewer_recovery_precommit_failure(&mutation_dir);
+    let (new_public, _) = test_signer(93);
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RotateSession {
+            request: AuthoritativeSessionRotateRequest {
+                player_id: "player-mutation-atomic".to_string(),
+                old_session_pubkey: old_public.clone(),
+                new_session_pubkey: new_public.clone(),
+                rotate_reason: "atomic-rotate".to_string(),
+                rotated_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("rotate persistence failure");
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", old_public.as_str())
+            .is_ok()
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "player-mutation-atomic",
+                agent_id.as_str(),
+                44,
+                Some(server.world.state().time),
+                "persist me",
+                Some(old_public.as_str()),
+            )
+            .expect("lookup cached acknowledgement")
+            .is_some(),
+        "failed rotation must restore chat acknowledgement idempotency state"
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", new_public.as_str())
+            .is_err()
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some(old_public.as_str())
+    );
+    assert!(
+        !server
+            .session_revoke_metadata
+            .contains_key(&session_revoke_metadata_key(
+                "player-mutation-atomic",
+                old_public.as_str()
+            ))
+    );
+
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: "player-mutation-atomic".to_string(),
+                session_pubkey: Some(old_public.clone()),
+                revoke_reason: "atomic-revoke".to_string(),
+                revoked_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("revoke persistence failure");
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", old_public.as_str())
+            .is_ok()
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "player-mutation-atomic",
+                agent_id.as_str(),
+                44,
+                Some(server.world.state().time),
+                "persist me",
+                Some(old_public.as_str()),
+            )
+            .expect("lookup cached acknowledgement after revoke failure")
+            .is_some(),
+        "failed revoke must restore chat acknowledgement idempotency state"
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some("player-mutation-atomic")
+    );
+    assert!(
+        !server
+            .session_revoke_metadata
+            .contains_key(&session_revoke_metadata_key(
+                "player-mutation-atomic",
+                old_public.as_str()
+            ))
+    );
+    let _ = std::fs::remove_dir_all(register_dir);
+    let _ = std::fs::remove_dir_all(mutation_dir);
+}
 
 #[cfg(unix)]
 #[test]
@@ -114,6 +548,126 @@ fn hosted_registration_persist_failure_rolls_back_binding_and_keeps_grant_retrya
         oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
     }
     let _ = std::fs::remove_dir_all(replay_dir);
+}
+
+#[test]
+fn hosted_registration_recovery_not_committed_keeps_grant_retryable_after_restart() {
+    let _guard = lock_test_llm_env();
+    let recovery_dir = runtime_live_temp_dir("hosted-grant-recovery-not-committed");
+    let replay_ledger = recovery_dir.with_extension("registration-replay.json");
+    let issuer_private_key = hex::encode([97_u8; 32]);
+    let issuer_public_key =
+        crate::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())
+            .expect("derive issuer public key");
+    unsafe {
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+            issuer_public_key,
+        );
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
+            replay_ledger.as_os_str(),
+        );
+    }
+
+    let hosted_player_id = "hosted-player-account-recovery-not-committed";
+    let (hosted_public_key, hosted_private_key) = test_signer(98);
+    let registration_grant = crate::viewer::issue_hosted_registration_grant(
+        hosted_player_id,
+        hosted_public_key.as_str(),
+        "device-recovery-not-committed",
+        "nonce-recovery-not-committed",
+        test_now_unix_ms(),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue registration grant");
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let request = |nonce| {
+        signed_session_register_request(
+            crate::viewer::AuthoritativeSessionRegisterRequest {
+                player_id: hosted_player_id.to_string(),
+                public_key: None,
+                registration_grant: Some(registration_grant.clone()),
+                auth: None,
+                requested_agent_id: Some(agent_id.clone()),
+                force_rebind: false,
+            },
+            nonce,
+            hosted_public_key.as_str(),
+            hosted_private_key.as_str(),
+        )
+    };
+
+    install_viewer_recovery_precommit_failure(&recovery_dir);
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(1),
+        })
+        .expect_err("recovery generation must not commit");
+    assert_eq!(error.code, "recovery_persistence_commit_failed");
+    let replay_bytes = std::fs::read(&replay_ledger).expect("grant nonce ledger must be durable");
+    assert!(
+        String::from_utf8_lossy(&replay_bytes).contains("nonce-recovery-not-committed"),
+        "the grant must have reached the durable replay ledger before recovery persistence failed"
+    );
+    drop(server);
+
+    std::fs::remove_file(
+        recovery_dir.join(".distfs-state/sidecar-generations/.test-fail-before-index-commit"),
+    )
+    .expect("remove precommit failpoint");
+    let mut restarted = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("restarted runtime server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let (ack, _) = restarted
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(2),
+        })
+        .expect("same grant must converge after a definitely uncommitted recovery generation");
+    assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
+
+    let other_recovery_dir = runtime_live_temp_dir("hosted-grant-other-recovery-domain");
+    let mut other_server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("other runtime server");
+    other_server.set_authoritative_recovery_dir_override(Some(other_recovery_dir.clone()));
+    let replay = other_server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(3),
+        })
+        .expect_err("another recovery domain must not resume the claimed grant");
+    assert!(
+        replay
+            .message
+            .contains("registration grant replay detected")
+    );
+
+    unsafe {
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
+    }
+    let _ = std::fs::remove_dir_all(recovery_dir);
+    let _ = std::fs::remove_dir_all(other_recovery_dir);
+    let _ = std::fs::remove_file(replay_ledger);
 }
 
 #[test]

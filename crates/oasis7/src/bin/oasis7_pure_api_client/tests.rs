@@ -140,6 +140,9 @@ fn collect_until_reports_timeout_when_peer_stays_open() {
         let hello = ViewerResponse::HelloAck {
             server: "oasis7".to_string(),
             version: VIEWER_PROTOCOL_VERSION,
+            min_version: 1,
+            max_version: VIEWER_PROTOCOL_VERSION,
+            capabilities: Vec::new(),
             world_id: "test-world".to_string(),
             control_profile: oasis7::viewer::ViewerControlProfile::Live,
         };

@@ -5,6 +5,7 @@ mod gameplay_actions;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 mod protocol;
+mod rollback_audit_evidence;
 #[cfg(not(target_arch = "wasm32"))]
 mod runtime_live;
 #[cfg(not(target_arch = "wasm32"))]
@@ -12,19 +13,21 @@ mod server;
 #[cfg(not(target_arch = "wasm32"))]
 mod web_bridge;
 
-pub(crate) use auth::consume_registration_grant_nonce;
+pub(crate) use auth::{
+    claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
+};
 
 pub use auth::{
-    HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV, HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
-    HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, PromptControlAuthIntent,
-    VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX, VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX,
-    VerifiedPlayerAuth, derive_hosted_registration_issuer_public_key,
-    issue_hosted_registration_grant, preflight_hosted_registration_replay_ledger,
-    sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
-    sign_hosted_prompt_control_strong_auth_grant, sign_prompt_control_apply_auth_proof,
-    sign_prompt_control_rollback_auth_proof, sign_session_register_auth_proof,
-    verify_agent_chat_auth_proof, verify_gameplay_action_auth_proof,
-    verify_hosted_prompt_control_apply_strong_auth_grant,
+    ExclusiveDirectoryProcessLock, HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
+    HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV, HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
+    PromptControlAuthIntent, VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX,
+    VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX, VerifiedPlayerAuth,
+    derive_hosted_registration_issuer_public_key, issue_hosted_registration_grant,
+    preflight_hosted_registration_replay_ledger, sign_agent_chat_auth_proof,
+    sign_gameplay_action_auth_proof, sign_hosted_prompt_control_strong_auth_grant,
+    sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
+    sign_session_register_auth_proof, verify_agent_chat_auth_proof,
+    verify_gameplay_action_auth_proof, verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
     verify_session_register_auth_proof,
@@ -62,6 +65,10 @@ pub use protocol::{
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
     PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
     ViewerRequest, ViewerResponse, ViewerStream,
+};
+pub use rollback_audit_evidence::{
+    RollbackStrictAuditEvidenceInput, build_unsigned_strict_audit_evidence,
+    strict_audit_artifact_digest, strict_audit_manifest_digest,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{

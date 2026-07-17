@@ -1,4 +1,6 @@
 use super::*;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 fn test_signer_with_seed(seed: u8) -> (String, String) {
     let private_key = [seed; 32];
@@ -417,4 +419,81 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
         std::env::remove_var(HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
         std::env::remove_var(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
     }
+}
+
+#[test]
+fn registration_recovery_claim_child_process() {
+    let Some(recovery_dir) = std::env::var_os("OASIS7_TEST_REGISTRATION_RECOVERY_OWNER") else {
+        return;
+    };
+    claim_registration_grant_nonce_for_recovery(
+        "shared-registration-nonce",
+        std::path::Path::new(&recovery_dir),
+    )
+    .expect("child recovery owner should claim the registration nonce");
+}
+
+#[test]
+fn registration_recovery_claim_is_atomic_across_processes() {
+    let root = std::env::temp_dir().join(format!(
+        "oasis7-registration-xproc-{}-{}",
+        std::process::id(),
+        now_unix_ms()
+    ));
+    let ledger = root.join("registration-replay.json");
+    let barrier = root.join("barrier");
+    let owner_a = root.join("recovery-owner-a");
+    let owner_b = root.join("recovery-owner-b");
+    std::fs::create_dir_all(&barrier).expect("create contention barrier");
+
+    let spawn_claimant = |owner: &std::path::Path| {
+        Command::new(std::env::current_exe().expect("current test executable"))
+            .args([
+                "--exact",
+                "viewer::auth::tests::registration_recovery_claim_child_process",
+                "--nocapture",
+            ])
+            .env(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, &ledger)
+            .env(
+                registration_replay::HOSTED_REGISTRATION_REPLAY_CLAIM_BARRIER_DIR_ENV,
+                &barrier,
+            )
+            .env("OASIS7_TEST_REGISTRATION_RECOVERY_OWNER", owner)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn registration replay claimant")
+    };
+    let child_a = spawn_claimant(&owner_a);
+    let child_b = spawn_claimant(&owner_b);
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while std::fs::read_dir(&barrier)
+        .expect("read barrier directory")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name().to_string_lossy().ends_with(".ready"))
+        .count()
+        < 2
+    {
+        assert!(
+            Instant::now() < deadline,
+            "both claimant processes must reach the post-read barrier"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    std::fs::write(barrier.join("release"), b"release").expect("release both claimants");
+
+    let output_a = child_a.wait_with_output().expect("wait for claimant A");
+    let output_b = child_b.wait_with_output().expect("wait for claimant B");
+    let successes = usize::from(output_a.status.success()) + usize::from(output_b.status.success());
+    assert_eq!(
+        successes,
+        1,
+        "exactly one recovery owner may claim a shared registration nonce; claimant A: {}; claimant B: {}",
+        String::from_utf8_lossy(&output_a.stderr),
+        String::from_utf8_lossy(&output_b.stderr),
+    );
+
+    let _ = std::fs::remove_dir_all(root);
 }

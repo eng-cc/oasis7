@@ -9,6 +9,37 @@ use oasis7_wasm_abi::ModuleCallErrorCode;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorldError {
     JournalMismatch,
+    RollbackReplayJournalInvalid {
+        index: usize,
+        expected_event_id: u64,
+        found_event_id: u64,
+    },
+    RollbackReplayTargetInvalid {
+        snapshot_journal_len: usize,
+        target_journal_len: usize,
+        supplied_journal_len: usize,
+    },
+    RollbackTargetStateRootMismatch {
+        expected: String,
+        actual: String,
+    },
+    RollbackJournalCommitmentMismatch {
+        expected: String,
+        actual: String,
+    },
+    RollbackNonceConflict {
+        nonce: String,
+        committed_intent_hash: String,
+        supplied_intent_hash: String,
+    },
+    RollbackAttributionResolutionConflict {
+        source_batch_id: String,
+        source_event_id: u64,
+    },
+    RollbackReconciliationFailed {
+        tick: u64,
+        reason: String,
+    },
     AgentNotFound {
         agent_id: String,
     },

@@ -124,8 +124,8 @@ enum RuntimeDecisionRunner {
     ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
 }
 
-#[derive(Clone, Debug)]
-struct RuntimeChatIntentAckRecord {
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub(in crate::viewer::runtime_live) struct RuntimeChatIntentAckRecord {
     ack: AgentChatAck,
     message_hash: String,
     public_key: Option<String>,
@@ -191,7 +191,8 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) player_agent_bindings: BTreeMap<String, String>,
     pub(in crate::viewer::runtime_live) agent_public_key_bindings: BTreeMap<String, String>,
     pub(in crate::viewer::runtime_live) player_auth_last_nonce: BTreeMap<String, u64>,
-    player_chat_intent_acks: BTreeMap<(String, String, u64), RuntimeChatIntentAckRecord>,
+    pub(in crate::viewer::runtime_live) player_chat_intent_acks:
+        BTreeMap<(String, String, u64), RuntimeChatIntentAckRecord>,
     llm_decision_mailbox: u64,
     runner: Option<RuntimeDecisionRunner>,
     shadow_kernel: Option<WorldKernel>,
@@ -396,7 +397,7 @@ impl RuntimeLlmSidecar {
             .insert(player_id.trim().to_string(), nonce);
     }
 
-    pub(super) fn find_chat_intent_replay(
+    pub(in crate::viewer::runtime_live) fn find_chat_intent_replay(
         &self,
         player_id: &str,
         agent_id: &str,
@@ -429,7 +430,7 @@ impl RuntimeLlmSidecar {
         Ok(Some(ack))
     }
 
-    pub(super) fn record_chat_intent_ack(
+    pub(in crate::viewer::runtime_live) fn record_chat_intent_ack(
         &mut self,
         player_id: &str,
         agent_id: &str,

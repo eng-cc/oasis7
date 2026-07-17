@@ -457,6 +457,8 @@ impl ViewerRuntimeLiveServer {
             let submitted_action_id = submitted
                 .action_id
                 .expect("chain gameplay submit must include action_id after ok=true validation");
+            self.runtime_action_players
+                .insert(submitted_action_id, verified.player_id.clone());
             if is_first_agent_claim {
                 self.bind_first_agent_claim_player(
                     request.target_agent_id.as_str(),
@@ -501,6 +503,8 @@ impl ViewerRuntimeLiveServer {
 
         let runtime_action = build_runtime_action_from_gameplay_request(&request)?;
         let runtime_action_id = self.world.submit_action(runtime_action);
+        self.runtime_action_players
+            .insert(runtime_action_id, verified.player_id.clone());
         if is_first_agent_claim {
             self.bind_first_agent_claim_player(
                 request.target_agent_id.as_str(),

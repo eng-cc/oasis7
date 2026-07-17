@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use super::error::WorldError;
@@ -69,6 +70,32 @@ pub fn write_json_to_path<T: Serialize>(value: &T, path: &Path) -> Result<(), Wo
     let data = serde_json::to_vec_pretty(value)?;
     fs::write(path, data)?;
     Ok(())
+}
+
+/// Atomically replace a file and make both its contents and directory entry durable.
+pub fn atomic_write_bytes_to_path(data: &[u8], path: &Path) -> Result<(), WorldError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| WorldError::DistributedValidationFailed {
+            reason: format!("atomic write path has no parent: {}", path.display()),
+        })?;
+    fs::create_dir_all(parent)?;
+    let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(tmp.as_path())?;
+    file.write_all(data)?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(tmp.as_path(), path)?;
+    fs::File::open(parent)?.sync_all()?;
+    Ok(())
+}
+
+pub fn atomic_write_json_to_path<T: Serialize>(value: &T, path: &Path) -> Result<(), WorldError> {
+    atomic_write_bytes_to_path(serde_json::to_vec_pretty(value)?.as_slice(), path)
 }
 
 /// Read a JSON file and deserialize it.

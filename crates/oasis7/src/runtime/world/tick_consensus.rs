@@ -623,7 +623,7 @@ impl World {
         ordered
     }
 
-    fn current_state_root_hash(&self) -> Result<String, WorldError> {
+    pub(crate) fn current_state_root_hash(&self) -> Result<String, WorldError> {
         let manifest_hash = self.current_manifest_hash()?;
         let policy_hash = hash_json(&self.policies)?;
         let projection = StateRootProjection {

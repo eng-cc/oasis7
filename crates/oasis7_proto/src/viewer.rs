@@ -1,6 +1,19 @@
 use serde::{Deserialize, Serialize};
 
-pub const VIEWER_PROTOCOL_VERSION: u32 = 1;
+mod rollback_v2;
+pub use rollback_v2::*;
+
+mod negotiation;
+pub use negotiation::*;
+
+pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NegotiatedViewerProtocol {
+    pub version: u32,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -38,6 +51,12 @@ pub enum ViewerRequest {
     Hello {
         client: String,
         version: u32,
+    },
+    HelloV2 {
+        client: String,
+        version: u32,
+        #[serde(default)]
+        capabilities: Vec<String>,
     },
     Subscribe {
         streams: Vec<ViewerStream>,
@@ -217,6 +236,23 @@ pub enum AuthoritativeRecoveryCommand {
     Rollback {
         request: AuthoritativeRollbackRequest,
     },
+    RollbackV2 {
+        request: AuthoritativeRollbackV2Request,
+    },
+    GetRollbackReceipt {
+        request: RollbackReceiptAccessRequest,
+    },
+    ReevaluateRollbackReadiness {
+        authorization_nonce: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audit_evidence: Option<RollbackStrictAuditEvidence>,
+    },
+    TransitionRollbackCompensation {
+        request: RollbackCompensationTransitionRequest,
+    },
+    ResolveRollbackAttribution {
+        request: RollbackAttributionResolutionRequest,
+    },
     ReconnectSync {
         request: AuthoritativeReconnectSyncRequest,
     },
@@ -235,6 +271,59 @@ pub struct AuthoritativeRollbackRequest {
     pub reason: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval: Option<RollbackAuthorizationEnvelope>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackAuthorizationEnvelope {
+    pub intent: RollbackIntent,
+    pub signatures: Vec<RollbackApprovalSignature>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackIntent {
+    pub schema_version: u32,
+    pub rollback_ticket: String,
+    #[serde(default)]
+    pub snapshot_hash: String,
+    #[serde(default)]
+    pub snapshot_journal_len: usize,
+    #[serde(default)]
+    pub target_journal_len: usize,
+    #[serde(default)]
+    pub expected_target_state_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_batch_id: Option<String>,
+    pub reason: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub nonce: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_checkpoint: Option<RollbackCheckpointRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_target: Option<RollbackReplayTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_reorg_epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_replay_events: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_replay_bytes: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalSignature {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackAuthorityRole {
+    OnCall,
+    Governance,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -435,6 +524,8 @@ pub struct AuthoritativeRecoveryAck<Time> {
     pub revoke_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revoked_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollback_receipt: Option<AuthoritativeRollbackReceipt>,
     pub acknowledged_at_tick: Time,
 }
 
@@ -470,6 +561,12 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     HelloAck {
         server: String,
         version: u32,
+        #[serde(default)]
+        min_version: u32,
+        #[serde(default)]
+        max_version: u32,
+        #[serde(default)]
+        capabilities: Vec<String>,
         world_id: String,
         #[serde(default)]
         control_profile: ViewerControlProfile,
@@ -1086,66 +1183,8 @@ mod tests {
         > = serde_json::from_str(&json).expect("deserialize response");
         assert_eq!(parsed, response);
     }
-
-    #[test]
-    fn viewer_response_round_trip_authoritative_recovery_ack() {
-        let response = ViewerResponse::<
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            u64,
-        >::AuthoritativeRecoveryAck {
-            ack: AuthoritativeRecoveryAck {
-                status: AuthoritativeRecoveryStatus::SessionRotated,
-                reorg_epoch: 2,
-                snapshot_height: 88,
-                snapshot_hash: "snapshot-hash-1".to_string(),
-                log_cursor: 123,
-                stable_batch_id: Some("batch-9".to_string()),
-                player_id: Some("player-1".to_string()),
-                agent_id: Some("agent-7".to_string()),
-                session_pubkey: Some("old-key".to_string()),
-                replaced_by_pubkey: Some("new-key".to_string()),
-                session_epoch: Some(5),
-                message: Some("session rotated".to_string()),
-                revoke_reason: Some("compromised".to_string()),
-                revoked_by: Some("ops".to_string()),
-                acknowledged_at_tick: 89,
-            },
-        };
-        let json = serde_json::to_string(&response).expect("serialize response");
-        let parsed: ViewerResponse<
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            u64,
-        > = serde_json::from_str(&json).expect("deserialize response");
-        assert_eq!(parsed, response);
-    }
-
-    #[test]
-    fn viewer_hello_ack_defaults_to_playback_profile_for_default_payload() {
-        let json = r#"{
-            "type":"hello_ack",
-            "server":"oasis7",
-            "version":1,
-            "world_id":"w1"
-        }"#;
-        let parsed: ViewerResponse<
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            serde_json::Value,
-            u64,
-        > = serde_json::from_str(json).expect("deserialize hello ack");
-        let ViewerResponse::HelloAck {
-            control_profile, ..
-        } = parsed
-        else {
-            panic!("expected hello ack");
-        };
-        assert_eq!(control_profile, ViewerControlProfile::Playback);
-    }
 }
+
+#[cfg(test)]
+#[path = "viewer/protocol_v2_tests.rs"]
+mod protocol_v2_tests;

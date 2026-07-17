@@ -35,7 +35,7 @@ fn sidecar_generation_manifest_path(store_root: &Path, generation_id: &str) -> s
     sidecar_generation_manifests_dir(store_root).join(format!("{generation_id}.json"))
 }
 
-fn load_sidecar_generation_index(
+pub(super) fn load_sidecar_generation_index(
     store_root: &Path,
 ) -> Result<Option<SidecarGenerationIndex>, WorldError> {
     let index_path = sidecar_generation_index_path(store_root);
@@ -87,12 +87,24 @@ fn sidecar_generation_journal_segments_rel_path(generation_id: &str, staging: bo
     }
 }
 
+fn sidecar_generation_recovery_metadata_rel_path(generation_id: &str, staging: bool) -> String {
+    let area = if staging {
+        SIDECAR_GENERATION_STAGING_DIR
+    } else {
+        SIDECAR_GENERATION_PAYLOADS_DIR
+    };
+    format!(
+        "{SIDECAR_GENERATION_ROOT_DIR}/{area}/{generation_id}/{SIDECAR_GENERATION_RECOVERY_METADATA_FILE}"
+    )
+}
+
 fn build_sidecar_generation_record(
     generation_id: String,
     snapshot_manifest_path: String,
     journal_segments_path: String,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    recovery_metadata: Option<&[u8]>,
     created_at_ms: i64,
 ) -> Result<SidecarGenerationRecord, WorldError> {
     let snapshot_manifest_hash = hash_json(manifest)?;
@@ -102,12 +114,21 @@ fn build_sidecar_generation_record(
         .collect::<Vec<_>>();
     let pinned_blob_hashes =
         build_sidecar_generation_pinned_blob_hashes(manifest, journal_segments);
+    let recovery_metadata_path = recovery_metadata.map(|_| {
+        sidecar_generation_recovery_metadata_rel_path(
+            generation_id.as_str(),
+            snapshot_manifest_path.contains(SIDECAR_GENERATION_STAGING_DIR),
+        )
+    });
+    let recovery_metadata_hash = recovery_metadata.map(super::super::super::util::sha256_hex);
     let manifest_hash = hash_json(&SidecarGenerationHashPayload {
         generation_id: generation_id.as_str(),
         snapshot_manifest_path: snapshot_manifest_path.as_str(),
         journal_segments_path: journal_segments_path.as_str(),
         snapshot_manifest_hash: snapshot_manifest_hash.as_str(),
         journal_segment_hashes: journal_segment_hashes.as_slice(),
+        recovery_metadata_path: &recovery_metadata_path,
+        recovery_metadata_hash: &recovery_metadata_hash,
         pinned_blob_hashes: pinned_blob_hashes.as_slice(),
         created_at_ms,
     })?;
@@ -119,12 +140,14 @@ fn build_sidecar_generation_record(
         snapshot_manifest_hash,
         manifest_hash,
         journal_segment_hashes,
+        recovery_metadata_path,
+        recovery_metadata_hash,
         pinned_blob_hashes,
         created_at_ms,
     })
 }
 
-fn read_sidecar_generation_payloads(
+pub(super) fn read_sidecar_generation_payloads(
     store_root: &Path,
     generation_record: &SidecarGenerationRecord,
 ) -> Result<(SnapshotManifest, Vec<JournalSegmentRef>), WorldError> {
@@ -137,6 +160,7 @@ fn read_sidecar_generation_payloads(
 }
 
 fn validate_sidecar_generation_record_payloads(
+    store_root: &Path,
     generation_record: &SidecarGenerationRecord,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
@@ -177,12 +201,30 @@ fn validate_sidecar_generation_record_payloads(
         });
     }
 
+    let recovery_metadata = match generation_record.recovery_metadata_path.as_deref() {
+        Some(relative) => Some(fs::read(store_root.join(relative))?),
+        None => None,
+    };
+    let recovery_metadata_hash = recovery_metadata
+        .as_deref()
+        .map(super::super::super::util::sha256_hex);
+    if recovery_metadata_hash != generation_record.recovery_metadata_hash {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "sidecar generation recovery metadata hash mismatch: generation_id={}",
+                generation_record.generation_id
+            ),
+        });
+    }
+
     let manifest_hash = hash_json(&SidecarGenerationHashPayload {
         generation_id: generation_record.generation_id.as_str(),
         snapshot_manifest_path: generation_record.snapshot_manifest_path.as_str(),
         journal_segments_path: generation_record.journal_segments_path.as_str(),
         snapshot_manifest_hash: snapshot_manifest_hash.as_str(),
         journal_segment_hashes: journal_segment_hashes.as_slice(),
+        recovery_metadata_path: &generation_record.recovery_metadata_path,
+        recovery_metadata_hash: &generation_record.recovery_metadata_hash,
         pinned_blob_hashes: pinned_blob_hashes.as_slice(),
         created_at_ms: generation_record.created_at_ms,
     })?;
@@ -198,13 +240,14 @@ fn validate_sidecar_generation_record_payloads(
     Ok(pinned_blob_hashes)
 }
 
-fn validate_sidecar_generation_record(
+pub(super) fn validate_sidecar_generation_record(
     store_root: &Path,
     generation_record: &SidecarGenerationRecord,
 ) -> Result<Vec<String>, WorldError> {
     let (manifest, journal_segments) =
         read_sidecar_generation_payloads(store_root, generation_record)?;
     validate_sidecar_generation_record_payloads(
+        store_root,
         generation_record,
         &manifest,
         journal_segments.as_slice(),
@@ -333,6 +376,22 @@ fn maybe_fail_after_sidecar_stage(store_root: &Path) -> Result<(), WorldError> {
     Ok(())
 }
 
+#[cfg(test)]
+fn maybe_fail_sidecar_commit_seam(store_root: &Path, seam: &str) -> Result<(), WorldError> {
+    let fail_path = sidecar_generation_root_dir(store_root).join(format!(".test-fail-{seam}"));
+    if fail_path.exists() {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!("sidecar test failpoint {seam}"),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(not(test))]
+fn maybe_fail_sidecar_commit_seam(_store_root: &Path, _seam: &str) -> Result<(), WorldError> {
+    Ok(())
+}
+
 #[cfg(not(test))]
 fn maybe_fail_after_sidecar_stage(_store_root: &Path) -> Result<(), WorldError> {
     Ok(())
@@ -342,6 +401,7 @@ fn stage_sidecar_generation(
     store_root: &Path,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    recovery_metadata: Option<&[u8]>,
 ) -> Result<(String, SidecarGenerationRecord), WorldError> {
     cleanup_stale_sidecar_generation_staging(store_root)?;
     fs::create_dir_all(sidecar_generation_manifests_dir(store_root).as_path())?;
@@ -349,22 +409,35 @@ fn stage_sidecar_generation(
     fs::create_dir_all(sidecar_generation_staging_dir(store_root).as_path())?;
 
     let created_at_ms = now_unix_ms();
+    let generation_nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
     let snapshot_manifest_hash = hash_json(manifest)?;
     let generation_id = format!(
-        "gen-{}-{}",
+        "gen-{}-{}-{}",
         created_at_ms,
+        generation_nonce,
         snapshot_manifest_hash.chars().take(12).collect::<String>()
     );
     let staging_payload_dir =
         sidecar_generation_staging_payload_dir(store_root, generation_id.as_str());
     fs::create_dir_all(staging_payload_dir.as_path())?;
-    write_json_to_path(
+    super::super::super::util::atomic_write_json_to_path(
         manifest,
         staging_payload_dir
             .join(SIDECAR_GENERATION_SNAPSHOT_MANIFEST_FILE)
             .as_path(),
     )?;
-    write_json_to_path(
+    if let Some(metadata) = recovery_metadata {
+        super::super::super::util::atomic_write_bytes_to_path(
+            metadata,
+            staging_payload_dir
+                .join(SIDECAR_GENERATION_RECOVERY_METADATA_FILE)
+                .as_path(),
+        )?;
+    }
+    super::super::super::util::atomic_write_json_to_path(
         &journal_segments.to_vec(),
         staging_payload_dir
             .join(SIDECAR_GENERATION_JOURNAL_SEGMENTS_FILE)
@@ -376,12 +449,14 @@ fn stage_sidecar_generation(
         sidecar_generation_journal_segments_rel_path(generation_id.as_str(), true),
         manifest,
         journal_segments,
+        recovery_metadata,
         created_at_ms,
     )?;
-    write_json_to_path(
+    super::super::super::util::atomic_write_json_to_path(
         &generation_record,
         staging_payload_dir.join("generation.json").as_path(),
     )?;
+    fs::File::open(staging_payload_dir.as_path())?.sync_all()?;
     Ok((generation_id, generation_record))
 }
 
@@ -392,6 +467,7 @@ fn validate_staged_sidecar_generation(
     let (manifest, journal_segments) =
         read_sidecar_generation_payloads(store_root, generation_record)?;
     let _ = validate_sidecar_generation_record_payloads(
+        store_root,
         generation_record,
         &manifest,
         journal_segments.as_slice(),
@@ -412,6 +488,7 @@ fn finalize_sidecar_generation(
     generation_id: &str,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    recovery_metadata: Option<&[u8]>,
 ) -> Result<SidecarGenerationRecord, WorldError> {
     let staging_payload_dir = sidecar_generation_staging_payload_dir(store_root, generation_id);
     let payload_dir = sidecar_generation_payload_dir(store_root, generation_id);
@@ -419,6 +496,7 @@ fn finalize_sidecar_generation(
         fs::remove_dir_all(payload_dir.as_path())?;
     }
     fs::rename(staging_payload_dir.as_path(), payload_dir.as_path())?;
+    fs::File::open(sidecar_generation_payloads_dir(store_root))?.sync_all()?;
     let staged_root = sidecar_generation_staging_dir(store_root);
     if staged_root.exists() {
         fs::create_dir_all(staged_root.as_path())?;
@@ -429,6 +507,7 @@ fn finalize_sidecar_generation(
         sidecar_generation_journal_segments_rel_path(generation_id, false),
         manifest,
         journal_segments,
+        recovery_metadata,
         now_unix_ms(),
     )
 }
@@ -437,22 +516,26 @@ pub(super) fn persist_sidecar_generation_index(
     store_root: &Path,
     manifest: &SnapshotManifest,
     journal_segments: &[JournalSegmentRef],
+    recovery_metadata: Option<&[u8]>,
 ) -> Result<(), WorldError> {
     let (generation_id, staged_record) =
-        stage_sidecar_generation(store_root, manifest, journal_segments)?;
+        stage_sidecar_generation(store_root, manifest, journal_segments, recovery_metadata)?;
     maybe_fail_after_sidecar_stage(store_root)?;
     validate_staged_sidecar_generation(store_root, &staged_record)?;
+    maybe_fail_sidecar_commit_seam(store_root, "after-stage-validation")?;
     let generation_record = finalize_sidecar_generation(
         store_root,
         generation_id.as_str(),
         manifest,
         journal_segments,
+        recovery_metadata,
     )?;
-    write_json_to_path(
+    super::super::super::util::atomic_write_json_to_path(
         &generation_record,
         sidecar_generation_manifest_path(store_root, generation_record.generation_id.as_str())
             .as_path(),
     )?;
+    maybe_fail_sidecar_commit_seam(store_root, "before-index-commit")?;
 
     let mut index = load_sidecar_generation_index(store_root)?.unwrap_or(SidecarGenerationIndex {
         schema_version: SIDECAR_GENERATION_INDEX_SCHEMA_V1,
@@ -504,12 +587,19 @@ pub(super) fn persist_sidecar_generation_index(
     }
 
     index.last_gc_result = SidecarGcResult::not_run();
-    write_json_to_path(&index, sidecar_generation_index_path(store_root).as_path())?;
+    super::super::super::util::atomic_write_json_to_path(
+        &index,
+        sidecar_generation_index_path(store_root).as_path(),
+    )?;
+    maybe_fail_sidecar_commit_seam(store_root, "after-index-commit")?;
     index.last_gc_result = match sweep_sidecar_orphan_blobs(store_root, &index) {
         Ok(result) => result,
         Err(err) => SidecarGcResult::failed(format!("{err:?}")),
     };
-    write_json_to_path(&index, sidecar_generation_index_path(store_root).as_path())?;
+    super::super::super::util::atomic_write_json_to_path(
+        &index,
+        sidecar_generation_index_path(store_root).as_path(),
+    )?;
     Ok(())
 }
 

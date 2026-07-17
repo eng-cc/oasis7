@@ -7,8 +7,10 @@ use oasis7::runtime::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
     GovernanceThresholdSignerPolicy, MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL,
     MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE, MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD,
-    ReleaseSecurityPolicy, World, WorldState,
+    ReleaseSecurityPolicy, RollbackAuthorityRecord, RollbackAuthorityRegistry,
+    RollbackAuthorityRole, World, WorldState,
 };
+use oasis7::viewer::ExclusiveDirectoryProcessLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -18,6 +20,8 @@ const DEFAULT_CONTROLLER_THRESHOLD: u16 = 2;
 const DEFAULT_STAKING_CONTROLLER_ACCOUNT_ID: &str = "msig.staking_governance.v1";
 const DEFAULT_ECOSYSTEM_CONTROLLER_ACCOUNT_ID: &str = "msig.ecosystem_governance.v1";
 const DEFAULT_SECURITY_CONTROLLER_ACCOUNT_ID: &str = "msig.security_council.v1";
+const ROLLBACK_ON_CALL_SLOT_ID: &str = "ops.rollback.on_call.v1";
+const ROLLBACK_GOVERNANCE_SLOT_ID: &str = "governance.rollback.v1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
@@ -78,6 +82,7 @@ struct ImportSummary {
     imported_finality_slot_id: String,
     finality_signer_count: usize,
     controller_policy_count: usize,
+    rollback_authority_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     reconciled_latest_tick: Option<u64>,
 }
@@ -112,6 +117,9 @@ fn main() {
 }
 
 fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
+    let _world_writer_lock =
+        ExclusiveDirectoryProcessLock::try_acquire(options.world_dir.as_path())
+            .map_err(|err| format!("acquire world writer lock failed: {err}"))?;
     let manifest_bytes = std::fs::read(options.public_manifest.as_path()).map_err(|err| {
         format!(
             "read public manifest {} failed: {err}",
@@ -139,12 +147,16 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
         options.finality_slot_id.as_str(),
         &slot_thresholds,
     )?;
+    let rollback_registry = build_rollback_authority_registry(entries.as_slice())?;
     world
         .set_governance_finality_signer_registry(finality_registry.clone())
         .map_err(|err| format!("write finality registry failed: {err:?}"))?;
     world
         .set_governance_main_token_controller_registry(controller_registry.clone())
         .map_err(|err| format!("write controller registry failed: {err:?}"))?;
+    world
+        .set_rollback_authority_registry(rollback_registry.clone())
+        .map_err(|err| format!("write rollback authority registry failed: {err:?}"))?;
     let (world, reconciled_latest_tick) = reconcile_latest_tick_consensus_state_root(world)?;
     world
         .save_to_dir(options.world_dir.as_path())
@@ -155,8 +167,55 @@ fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
         imported_finality_slot_id: finality_registry.slot_id,
         finality_signer_count: finality_registry.signer_bindings.len(),
         controller_policy_count: controller_registry.controller_signer_policies.len(),
+        rollback_authority_count: rollback_registry.len(),
         reconciled_latest_tick,
     })
+}
+
+fn build_rollback_authority_registry(
+    entries: &[PublicManifestEntry],
+) -> Result<RollbackAuthorityRegistry, String> {
+    let build_record = |slot_id: &str, role: RollbackAuthorityRole| {
+        let matching = entries
+            .iter()
+            .filter(|entry| entry.slot_id.trim() == slot_id)
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
+            return Err(format!(
+                "public manifest requires exactly one rollback authority entry slot_id={slot_id} actual={}",
+                matching.len()
+            ));
+        }
+        let entry = matching[0];
+        validate_manifest_entry(entry)?;
+        if entry.threshold != Some(1) {
+            return Err(format!(
+                "rollback authority slot requires explicit threshold=1 slot_id={slot_id}"
+            ));
+        }
+        let authority_id = entry
+            .signer_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!("rollback authority slot requires signer_id slot_id={slot_id}")
+            })?;
+        Ok(RollbackAuthorityRecord {
+            authority_id: authority_id.to_string(),
+            role,
+            public_key_hex: entry.public_key_hex.trim().to_ascii_lowercase(),
+            active: true,
+        })
+    };
+    RollbackAuthorityRegistry::new([
+        build_record(ROLLBACK_ON_CALL_SLOT_ID, RollbackAuthorityRole::OnCall)?,
+        build_record(
+            ROLLBACK_GOVERNANCE_SLOT_ID,
+            RollbackAuthorityRole::Governance,
+        )?,
+    ])
+    .map_err(|err| format!("invalid rollback authority registry: {err:?}"))
 }
 
 fn reconcile_latest_tick_consensus_state_root(
@@ -252,10 +311,11 @@ fn build_main_token_controller_registry(
     slot_thresholds: &ManifestSlotThresholds,
 ) -> Result<GovernanceMainTokenControllerRegistry, String> {
     let mut controller_signer_policies = BTreeMap::new();
-    for entry in entries
-        .iter()
-        .filter(|entry| entry.slot_id != finality_slot_id)
-    {
+    for entry in entries.iter().filter(|entry| {
+        entry.slot_id != finality_slot_id
+            && entry.slot_id.trim() != ROLLBACK_ON_CALL_SLOT_ID
+            && entry.slot_id.trim() != ROLLBACK_GOVERNANCE_SLOT_ID
+    }) {
         validate_manifest_entry(entry)?;
         let slot_id = entry.slot_id.trim().to_string();
         let threshold = slot_thresholds
@@ -484,6 +544,27 @@ mod tests {
         std::env::temp_dir().join(format!("oasis7-governance-import-{prefix}-{unique}"))
     }
 
+    fn governed_fixture(mut value: serde_json::Value) -> serde_json::Value {
+        let entries = if let Some(entries) = value.as_array_mut() {
+            entries
+        } else {
+            value["entries"].as_array_mut().expect("manifest entries")
+        };
+        entries.extend([
+            serde_json::json!({
+                "slot_id": "ops.rollback.on_call.v1", "signer_id": "fixture-rollback-on-call",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            }),
+            serde_json::json!({
+                "slot_id": "governance.rollback.v1", "signer_id": "fixture-rollback-governance",
+                "scheme": "ed25519", "threshold": 1,
+                "public_key_hex": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }),
+        ]);
+        value
+    }
+
     #[test]
     fn parse_options_accepts_required_flags() {
         let options = parse_options(
@@ -507,7 +588,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "node_id": "validator-a",
@@ -577,7 +658,7 @@ mod tests {
                     "scheme": "ed25519",
                     "public_key_hex": "aa738a832b0d3bf371d231a0bd8502fd411f2a9723246e5d7d215e8fb0ecbb7c"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -623,7 +704,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&serde_json::json!({
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!({
                 "schema_version": "test",
                 "entries": [
                     {
@@ -657,7 +738,7 @@ mod tests {
                         "public_key_hex": "d09de9413371ae42f643e4f8f31e2139611d1617809375b1ad884df3fb089448"
                     }
                 ]
-            }))
+            })))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -681,7 +762,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -762,7 +843,7 @@ mod tests {
                     "threshold": 1,
                     "public_key_hex": "b6517819f923b8b25989042b03e00854673b5517be88e3f568141373105ca77f"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -804,7 +885,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -825,7 +906,7 @@ mod tests {
                     "threshold": 2,
                     "public_key_hex": "b6517819f923b8b25989042b03e00854673b5517be88e3f568141373105ca77f"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -847,7 +928,7 @@ mod tests {
         let manifest_path = temp_dir.join("public_manifest.json");
         std::fs::write(
             manifest_path.as_path(),
-            serde_json::to_vec_pretty(&vec![
+            serde_json::to_vec_pretty(&governed_fixture(serde_json::json!([
                 serde_json::json!({
                     "slot_id": "governance.finality.v1",
                     "signer_id": "signer01",
@@ -914,7 +995,7 @@ mod tests {
                     "scheme": "ed25519",
                     "public_key_hex": "aa738a832b0d3bf371d231a0bd8502fd411f2a9723246e5d7d215e8fb0ecbb7c"
                 })
-            ])
+            ])))
             .expect("encode manifest"),
         )
         .expect("write manifest");
@@ -958,3 +1039,11 @@ mod tests {
         assert!(loaded.release_security_policy().is_production_hardened());
     }
 }
+
+#[cfg(test)]
+#[path = "oasis7_governance_registry_import/rollback_tests.rs"]
+mod rollback_authority_tests;
+
+#[cfg(test)]
+#[path = "oasis7_governance_registry_import/world_writer_lock_tests.rs"]
+mod world_writer_lock_tests;

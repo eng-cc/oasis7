@@ -455,6 +455,73 @@ fn runtime_live_default_snapshot_request_does_not_enable_ongoing_streams() {
 }
 
 #[test]
+fn runtime_live_hello_omits_governed_rollback_when_no_durable_sink_exists() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+
+    server
+        .handle_request(
+            ViewerRequest::Hello {
+                version: VIEWER_PROTOCOL_VERSION,
+                client: "red-capability-probe".to_string(),
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("handle hello");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+    let capabilities = match responses.as_slice() {
+        [ViewerResponse::HelloAck { capabilities, .. }] => capabilities,
+        other => panic!("expected one hello ack, got {other:?}"),
+    };
+    assert!(
+        !capabilities
+            .iter()
+            .any(|capability| capability
+                == crate::viewer::protocol::GOVERNED_ROLLBACK_REPLAY_CAPABILITY),
+        "server must not offer governed rollback when it cannot durably commit it"
+    );
+}
+
+#[test]
+fn runtime_live_status_unknown_fence_rejects_mutating_requests() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-status-unknown-fence-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let generation_root = recovery_dir.join(".distfs-state/sidecar-generations");
+    std::fs::create_dir_all(&generation_root).expect("generation root");
+    std::fs::write(generation_root.join("index.json"), b"not-json").expect("corrupt index");
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    server.authoritative_recovery_write_fence = Some("expected-generation-hash".to_string());
+    let world_before = server.world.snapshot();
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, _peer) = test_writer_pair();
+
+    let error = server
+        .handle_request(
+            ViewerRequest::LiveControl {
+                mode: crate::viewer::protocol::LiveControl::Step { count: 1 },
+                request_id: Some(1),
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect_err("status-unknown fence must reject writes");
+    assert!(format!("{error:?}").contains("read-only"));
+    assert_eq!(server.world.snapshot(), world_before);
+    assert!(server.authoritative_recovery_write_fence.is_some());
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
 fn runtime_live_events_subscription_requests_recovery_metadata_without_initial_snapshot() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))

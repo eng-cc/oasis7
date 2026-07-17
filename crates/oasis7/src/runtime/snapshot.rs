@@ -1,6 +1,6 @@
 //! Snapshot and journal types for world state persistence.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -125,6 +125,12 @@ pub struct Snapshot {
     pub governance_identity_penalties: BTreeMap<u64, GovernanceIdentityPenaltyRecord>,
     #[serde(default = "default_next_governance_identity_penalty_id")]
     pub next_governance_identity_penalty_id: u64,
+    #[serde(default)]
+    pub rollback_authority_registry: RollbackAuthorityRegistry,
+    #[serde(default)]
+    pub consumed_rollback_nonces: BTreeSet<String>,
+    #[serde(default)]
+    pub rollback_nonce_outcomes: BTreeMap<String, RollbackNonceOutcome>,
 }
 
 fn module_limits_unbounded() -> ModuleLimits {
@@ -216,4 +222,360 @@ pub struct RollbackEvent {
     pub snapshot_journal_len: usize,
     pub prior_journal_len: usize,
     pub reason: String,
+    #[serde(default)]
+    pub rollback_ticket: String,
+    #[serde(default)]
+    pub on_call_approver: String,
+    #[serde(default)]
+    pub governance_approver: String,
+    #[serde(default)]
+    pub on_call_authority_id: String,
+    #[serde(default)]
+    pub governance_authority_id: String,
+    #[serde(default)]
+    pub authorization_nonce: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackAuthorityRole {
+    OnCall,
+    Governance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackAuthorityRecord {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub public_key_hex: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct RollbackAuthorityRegistry {
+    records: BTreeMap<String, RollbackAuthorityRecord>,
+}
+
+impl<'de> Deserialize<'de> for RollbackAuthorityRegistry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct SerializedRegistry {
+            records: BTreeMap<String, RollbackAuthorityRecord>,
+        }
+
+        let serialized = SerializedRegistry::deserialize(deserializer)?;
+        if serialized.records.is_empty() {
+            return Ok(Self::default());
+        }
+        for (key, record) in &serialized.records {
+            if key != record.authority_id.trim() {
+                return Err(D::Error::custom(format!(
+                    "rollback authority registry key {key:?} does not match authority_id {:?}",
+                    record.authority_id
+                )));
+            }
+        }
+        Self::new(serialized.records.into_values()).map_err(|error| {
+            D::Error::custom(format!("invalid rollback authority registry: {error:?}"))
+        })
+    }
+}
+
+impl RollbackAuthorityRegistry {
+    pub fn new(
+        records: impl IntoIterator<Item = RollbackAuthorityRecord>,
+    ) -> Result<Self, WorldError> {
+        let mut registry = Self::default();
+        for mut record in records {
+            let authority_id = record.authority_id.trim().to_string();
+            if authority_id.is_empty() || record.public_key_hex.trim().is_empty() {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "rollback authority requires nonblank id and public key".to_string(),
+                });
+            }
+            if hex::decode(record.public_key_hex.trim()).map(|bytes| bytes.len()) != Ok(32) {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority {authority_id} has invalid Ed25519 public key"
+                    ),
+                });
+            }
+            record.authority_id = authority_id.clone();
+            record.public_key_hex = record.public_key_hex.trim().to_ascii_lowercase();
+            if registry
+                .records
+                .insert(authority_id.clone(), record)
+                .is_some()
+            {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!("duplicate rollback authority id {authority_id}"),
+                });
+            }
+        }
+        for role in [
+            RollbackAuthorityRole::OnCall,
+            RollbackAuthorityRole::Governance,
+        ] {
+            let count = registry
+                .records
+                .values()
+                .filter(|record| record.role == role)
+                .count();
+            if count != 1 {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority registry requires exactly one active {role:?} authority"
+                    ),
+                });
+            }
+        }
+        if registry.records.values().any(|record| !record.active) {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority registry records must be active".to_string(),
+            });
+        }
+        let unique_keys = registry
+            .records
+            .values()
+            .map(|record| record.public_key_hex.trim().to_ascii_lowercase())
+            .collect::<BTreeSet<_>>();
+        if unique_keys.len() != registry.records.len() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority roles must use distinct Ed25519 public keys"
+                    .to_string(),
+            });
+        }
+        Ok(registry)
+    }
+
+    pub fn validate(&self) -> Result<(), WorldError> {
+        if self.records.is_empty() {
+            return Ok(());
+        }
+        for (key, record) in &self.records {
+            if key != record.authority_id.trim() {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "rollback authority registry key {key:?} does not match authority_id {:?}",
+                        record.authority_id
+                    ),
+                });
+            }
+        }
+        let validated = Self::new(self.records.values().cloned())?;
+        if validated != *self {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback authority registry is not normalized".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn get(&self, authority_id: &str) -> Option<&RollbackAuthorityRecord> {
+        self.records.get(authority_id)
+    }
+
+    pub fn records(&self) -> impl Iterator<Item = &RollbackAuthorityRecord> {
+        self.records.values()
+    }
+
+    pub fn len(&self) -> usize {
+        self.records.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.records.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackIntent {
+    pub schema_version: u32,
+    pub rollback_ticket: String,
+    pub snapshot_hash: String,
+    pub snapshot_journal_len: usize,
+    pub target_journal_len: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_journal_commitment: Option<String>,
+    pub expected_target_state_root: String,
+    pub target_batch_id: Option<String>,
+    pub reason: String,
+    pub issued_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub nonce: String,
+}
+
+impl RollbackIntent {
+    pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, WorldError> {
+        if !matches!(self.schema_version, 1 | 2) {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "unsupported rollback intent schema version {}",
+                    self.schema_version
+                ),
+            });
+        }
+        let domain = match self.schema_version {
+            1 => b"oasis7:world-rollback-authorization:v1\0".as_slice(),
+            2 => b"oasis7:world-rollback-authorization:v2\0".as_slice(),
+            _ => unreachable!(),
+        };
+        let mut payload = domain.to_vec();
+        payload.extend(serde_json::to_vec(self)?);
+        Ok(payload)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackNonceOutcome {
+    pub canonical_intent_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_batch_id: String,
+    #[serde(default)]
+    pub rollback_checkpoint_snapshot_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_journal_len: usize,
+    pub rollback_ticket: String,
+    pub target_journal_commitment: String,
+    pub target_state_root: String,
+    #[serde(default)]
+    pub target_journal_len: usize,
+    #[serde(default)]
+    pub affected_census_digest: String,
+    #[serde(default)]
+    pub affected_census_count: usize,
+    #[serde(default)]
+    pub readiness_blockers: Vec<String>,
+    pub rollback_event_id: WorldEventId,
+    #[serde(default)]
+    pub target_batch_id: String,
+    #[serde(default)]
+    pub prior_reorg_epoch: u64,
+    #[serde(default)]
+    pub committed_reorg_epoch: u64,
+    #[serde(default)]
+    pub invalidated_batch_ids: Vec<String>,
+    #[serde(default)]
+    pub dispositions: Vec<RollbackEventDisposition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<RollbackReceiptProjection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackEventDisposition {
+    pub source_batch_id: String,
+    pub source_event_id: WorldEventId,
+    pub status: RollbackDispositionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compensation: Option<RollbackCompensationCaseRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub player_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<String>,
+    #[serde(default)]
+    pub system_authored: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackDispositionStatus {
+    PreservedAtTarget,
+    Replayed,
+    RejectedFork,
+    CompensationRequired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RollbackSourceEventIdentity {
+    pub source_batch_id: String,
+    pub source_event_id: WorldEventId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackCompensationCaseRef {
+    pub owner_id: String,
+    pub ticket_id: String,
+    pub state: RollbackCompensationState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollbackCompensationState {
+    PendingAuthorization,
+    Authorized,
+    InProgress,
+    Completed,
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackReceiptProjection {
+    pub receipt_id: String,
+    #[serde(default)]
+    pub canonical_intent_digest: String,
+    #[serde(default)]
+    pub rollback_checkpoint_batch_id: String,
+    #[serde(default)]
+    pub rollback_checkpoint_snapshot_hash: String,
+    #[serde(default)]
+    pub rollback_checkpoint_journal_len: usize,
+    #[serde(default)]
+    pub replay_target_batch_id: String,
+    #[serde(default)]
+    pub replay_target_journal_len: usize,
+    #[serde(default)]
+    pub replay_target_state_root: String,
+    #[serde(default)]
+    pub replay_target_journal_commitment: String,
+    #[serde(default)]
+    pub affected_census_digest: String,
+    #[serde(default)]
+    pub affected_census_count: usize,
+    #[serde(default)]
+    pub readiness_blockers: Vec<String>,
+    pub snapshot_height: u64,
+    pub snapshot_hash: String,
+    pub log_cursor: u64,
+    pub acknowledged_at_tick: WorldTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackReadinessEvidence {
+    pub target_root_matches: bool,
+    pub epoch_matches: bool,
+    pub drift_free: bool,
+    pub consensus_chain_valid: bool,
+    pub receipt_retrievable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RollbackReadiness {
+    Ready,
+    Blocked { reasons: Vec<String> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RollbackOutcomeRecoveryMetadata {
+    pub target_batch_id: String,
+    pub prior_reorg_epoch: u64,
+    pub committed_reorg_epoch: u64,
+    pub invalidated_batch_ids: Vec<String>,
+    pub dispositions: Vec<RollbackEventDisposition>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackApprovalSignature {
+    pub authority_id: String,
+    pub role: RollbackAuthorityRole,
+    pub signature_scheme: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackAuthorizationEnvelope {
+    pub intent: RollbackIntent,
+    pub signatures: Vec<RollbackApprovalSignature>,
 }

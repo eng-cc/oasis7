@@ -24,10 +24,16 @@ mod module_runtime_metering;
 mod module_tick_runtime;
 mod operability_release_gate;
 mod persistence;
+pub use persistence::{
+    AuthoritativeRecoveryCommitError, AuthoritativeRecoveryCommitStatus,
+    CommittedAuthoritativeRecoveryGeneration,
+};
 mod policy;
 mod release_manifest;
 mod resources;
 mod restricted_claim_grants;
+mod rollback;
+pub use rollback::{rollback_affected_census_digest, rollback_journal_commitment};
 mod rules;
 mod scheduling;
 mod snapshot;
@@ -314,6 +320,11 @@ pub struct World {
     builtin_release_manifest: BuiltinReleaseManifestState,
     #[serde(default)]
     release_security_policy: ReleaseSecurityPolicy,
+    #[serde(default)]
+    rollback_authority_registry: super::RollbackAuthorityRegistry,
+    #[serde(default)]
+    consumed_rollback_nonces: BTreeSet<String>,
+    rollback_nonce_outcomes: BTreeMap<String, super::RollbackNonceOutcome>,
 }
 
 impl World {
@@ -422,6 +433,9 @@ impl World {
             next_governance_identity_penalty_id: default_next_governance_identity_penalty_id(),
             builtin_release_manifest: BuiltinReleaseManifestState::default(),
             release_security_policy: ReleaseSecurityPolicy::default(),
+            rollback_authority_registry: super::RollbackAuthorityRegistry::default(),
+            consumed_rollback_nonces: BTreeSet::new(),
+            rollback_nonce_outcomes: BTreeMap::new(),
         }
     }
 
