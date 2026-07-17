@@ -696,6 +696,7 @@ impl ViewerRuntimeLiveServer {
                     })
                     .collect(),
                 rollback_readiness: self.rollback_readiness.clone(),
+                consumed_strict_audit_nonces: self.consumed_strict_audit_nonces.clone(),
                 runtime_action_players: self.runtime_action_players.clone(),
                 consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
                 session_side_effects: self.persisted_session_side_effects(),

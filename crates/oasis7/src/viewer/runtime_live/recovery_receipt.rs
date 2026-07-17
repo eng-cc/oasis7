@@ -18,6 +18,8 @@ pub(super) struct RuntimeAuthoritativeRecoveryGeneration {
     #[serde(default)]
     pub(super) rollback_readiness: BTreeMap<String, RuntimeRollbackReadinessRecord>,
     #[serde(default)]
+    pub(super) consumed_strict_audit_nonces: BTreeSet<String>,
+    #[serde(default)]
     pub(super) runtime_action_players: BTreeMap<u64, String>,
     #[serde(default)]
     pub(super) consumed_rollback_operator_nonces: BTreeSet<String>,
@@ -122,6 +124,15 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: crate::viewer::protocol::RollbackReceiptAccessRequest,
     ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        self.authoritative_recovery_dir().ok_or_else(|| {
+            recovery_error(
+                "rollback_durable_sink_required",
+                "complete receipt access requires a durable authoritative recovery sink",
+                None,
+                None,
+                None,
+            )
+        })?;
         let payload = request.canonical_signing_payload().map_err(|err| {
             recovery_error(
                 "rollback_receipt_authorization_invalid",
@@ -193,6 +204,7 @@ impl ViewerRuntimeLiveServer {
                 })
                 .collect(),
             rollback_readiness: self.rollback_readiness.clone(),
+            consumed_strict_audit_nonces: self.consumed_strict_audit_nonces.clone(),
             runtime_action_players: self.runtime_action_players.clone(),
             consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
             session_side_effects: self.persisted_session_side_effects(),
@@ -410,14 +422,10 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        if audit_evidence.as_ref().is_some_and(|audit| {
-            self.rollback_readiness.values().any(|record| {
-                record
-                    .strict_audit_evidence
-                    .as_ref()
-                    .is_some_and(|used| used.nonce == audit.nonce)
-            })
-        }) {
+        if audit_evidence
+            .as_ref()
+            .is_some_and(|audit| self.consumed_strict_audit_nonces.contains(&audit.nonce))
+        {
             return Err(recovery_error(
                 "strict_audit_evidence_replay",
                 "strict audit evidence nonce has already been consumed",
@@ -488,6 +496,10 @@ impl ViewerRuntimeLiveServer {
         if !valid_audit {
             blockers.push("fresh_strict_audit_evidence_required".to_string());
         }
+        let valid_audit_nonce = audit_evidence
+            .as_ref()
+            .filter(|_| valid_audit)
+            .map(|audit| audit.nonce.clone());
         blockers.sort();
         blockers.dedup();
         let record = RuntimeRollbackReadinessRecord {
@@ -514,6 +526,10 @@ impl ViewerRuntimeLiveServer {
         };
         let mut candidate_readiness = self.rollback_readiness.clone();
         candidate_readiness.insert(authorization_nonce.clone(), record);
+        let mut candidate_consumed_strict_audit_nonces = self.consumed_strict_audit_nonces.clone();
+        if let Some(nonce) = valid_audit_nonce {
+            candidate_consumed_strict_audit_nonces.insert(nonce);
+        }
         let mut ack = self.get_rollback_receipt(authorization_nonce.clone())?;
         if let Some(public_receipt) = ack.rollback_receipt.as_mut() {
             public_receipt.ready_for_all_clear = blockers.is_empty();
@@ -541,6 +557,7 @@ impl ViewerRuntimeLiveServer {
                 })
                 .collect(),
             rollback_readiness: candidate_readiness.clone(),
+            consumed_strict_audit_nonces: candidate_consumed_strict_audit_nonces.clone(),
             runtime_action_players: self.runtime_action_players.clone(),
             consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
             session_side_effects: self.persisted_session_side_effects(),
@@ -556,7 +573,11 @@ impl ViewerRuntimeLiveServer {
         })?;
         let candidate_world = self.world.clone();
         match self.commit_authoritative_recovery_envelope(&candidate_world, &metadata) {
-            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(_)) => Ok(ack),
+            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(_)) => {
+                self.rollback_readiness = candidate_readiness;
+                self.consumed_strict_audit_nonces = candidate_consumed_strict_audit_nonces;
+                Ok(ack)
+            }
             Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::NotCommitted {
                 current_generation_id,
             }) => Err(recovery_error(

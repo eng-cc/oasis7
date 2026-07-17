@@ -20,6 +20,105 @@ struct RollbackJournalCommitment<'a> {
     events: &'a [super::super::WorldEvent],
 }
 
+#[cfg(test)]
+mod status_aware_attribution_tests {
+    use super::*;
+
+    fn world_with_unknown(status: super::super::super::RollbackDispositionStatus) -> World {
+        let mut world = World::new();
+        world.rollback_nonce_outcomes.insert(
+            "nonce-status-aware".to_string(),
+            super::super::super::RollbackNonceOutcome {
+                canonical_intent_hash: "intent".to_string(),
+                rollback_checkpoint_batch_id: "checkpoint".to_string(),
+                rollback_checkpoint_snapshot_hash: "snapshot".to_string(),
+                rollback_checkpoint_journal_len: 0,
+                rollback_ticket: "ticket".to_string(),
+                target_journal_commitment: "commitment".to_string(),
+                target_state_root: "root".to_string(),
+                target_journal_len: 0,
+                affected_census_digest: "census".to_string(),
+                affected_census_count: 1,
+                readiness_blockers: vec!["player_attribution_incomplete".to_string()],
+                rollback_event_id: 1,
+                target_batch_id: "target".to_string(),
+                prior_reorg_epoch: 0,
+                committed_reorg_epoch: 1,
+                invalidated_batch_ids: Vec::new(),
+                dispositions: vec![super::super::super::RollbackEventDisposition {
+                    source_batch_id: "batch".to_string(),
+                    source_event_id: 7,
+                    status,
+                    compensation: None,
+                    player_id: None,
+                    action_id: Some("action-7".to_string()),
+                    system_authored: false,
+                }],
+                receipt: None,
+            },
+        );
+        world
+    }
+
+    fn assert_non_compensation_player_resolution(
+        status: super::super::super::RollbackDispositionStatus,
+    ) {
+        let mut world = world_with_unknown(status);
+        let source = super::super::super::RollbackSourceEventIdentity {
+            source_batch_id: "batch".to_string(),
+            source_event_id: 7,
+        };
+        world
+            .resolve_rollback_action_attribution(
+                "nonce-status-aware",
+                &source,
+                "player-7".to_string(),
+                super::super::super::RollbackCompensationCaseRef {
+                    owner_id: "must-not-be-used".to_string(),
+                    ticket_id: "must-not-be-used".to_string(),
+                    state: super::super::super::RollbackCompensationState::PendingAuthorization,
+                },
+            )
+            .expect("non-compensation attribution resolves");
+        let disposition = &world
+            .rollback_nonce_outcome("nonce-status-aware")
+            .expect("outcome")
+            .dispositions[0];
+        assert_eq!(disposition.status, status);
+        assert_eq!(disposition.player_id.as_deref(), Some("player-7"));
+        assert!(disposition.compensation.is_none());
+        assert!(!disposition.system_authored);
+        let snapshot = world.snapshot();
+        let journal = world.journal().clone();
+        let mut world = World::from_snapshot(snapshot, journal).expect("restart from snapshot");
+        let restored = &world
+            .rollback_nonce_outcome("nonce-status-aware")
+            .expect("restored outcome")
+            .dispositions[0];
+        assert_eq!(restored.status, status);
+        assert_eq!(restored.player_id.as_deref(), Some("player-7"));
+        assert!(restored.compensation.is_none());
+        assert!(matches!(
+            world.resolve_rollback_action_as_system_authored("nonce-status-aware", &source),
+            Err(WorldError::RollbackAttributionResolutionConflict { .. })
+        ));
+    }
+
+    #[test]
+    fn replayed_unknown_accepts_player_without_fabricating_compensation() {
+        assert_non_compensation_player_resolution(
+            super::super::super::RollbackDispositionStatus::Replayed,
+        );
+    }
+
+    #[test]
+    fn preserved_unknown_accepts_player_without_fabricating_compensation() {
+        assert_non_compensation_player_resolution(
+            super::super::super::RollbackDispositionStatus::PreservedAtTarget,
+        );
+    }
+}
+
 #[derive(serde::Serialize)]
 struct RollbackAffectedCensusCommitment<'a> {
     domain: &'static str,
@@ -330,15 +429,25 @@ impl World {
                 reason: "rollback action attribution is immutable once resolved".to_string(),
             });
         }
-        if disposition.status != super::super::RollbackDispositionStatus::RejectedFork {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "only rejected fork actions require attribution remediation".to_string(),
-            });
+        match disposition.status {
+            super::super::RollbackDispositionStatus::RejectedFork => {
+                disposition.player_id = Some(player_id);
+                disposition.system_authored = false;
+                disposition.status = super::super::RollbackDispositionStatus::CompensationRequired;
+                disposition.compensation = Some(compensation);
+            }
+            super::super::RollbackDispositionStatus::Replayed
+            | super::super::RollbackDispositionStatus::PreservedAtTarget => {
+                disposition.player_id = Some(player_id);
+                disposition.system_authored = false;
+                disposition.compensation = None;
+            }
+            super::super::RollbackDispositionStatus::CompensationRequired => {
+                return Err(WorldError::DistributedValidationFailed {
+                    reason: "rollback action attribution is immutable once resolved".to_string(),
+                });
+            }
         }
-        disposition.player_id = Some(player_id);
-        disposition.status = super::super::RollbackDispositionStatus::CompensationRequired;
-        disposition.compensation = Some(compensation);
-        disposition.system_authored = false;
         Ok(())
     }
 

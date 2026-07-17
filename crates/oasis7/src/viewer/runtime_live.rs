@@ -134,6 +134,7 @@ pub struct ViewerRuntimeLiveServer {
     session_policy: RuntimeSessionPolicy,
     session_revoke_metadata: BTreeMap<(String, String), RuntimeSessionRevokeMetadata>,
     rollback_readiness: BTreeMap<String, recovery_receipt::RuntimeRollbackReadinessRecord>,
+    consumed_strict_audit_nonces: BTreeSet<String>,
     settlement_ranking_gate: RuntimeSettlementRankingGate,
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
@@ -226,6 +227,7 @@ impl ViewerRuntimeLiveServer {
                                 session_policy: RuntimeSessionPolicy::default(),
                                 session_revoke_metadata: Vec::new(),
                                 rollback_readiness: BTreeMap::new(),
+                                consumed_strict_audit_nonces: BTreeSet::new(),
                                 runtime_action_players: BTreeMap::new(),
                                 consumed_rollback_operator_nonces: BTreeSet::new(),
                                 session_side_effects: Default::default(),
@@ -342,6 +344,10 @@ impl ViewerRuntimeLiveServer {
             rollback_readiness: recovered_generation
                 .as_ref()
                 .map(|generation| generation.rollback_readiness.clone())
+                .unwrap_or_default(),
+            consumed_strict_audit_nonces: recovered_generation
+                .as_ref()
+                .map(|generation| generation.consumed_strict_audit_nonces.clone())
                 .unwrap_or_default(),
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
             latest_player_gameplay_feedback: None,

@@ -21,6 +21,9 @@ mod receipt_v11_tests;
 #[path = "authoritative_receipt_v12.rs"]
 mod receipt_v12_tests;
 
+#[path = "authoritative_receipt_v13.rs"]
+mod receipt_v13_tests;
+
 fn configure_rollback_authorities(
     server: &mut ViewerRuntimeLiveServer,
 ) -> (SigningKey, SigningKey) {
@@ -460,9 +463,15 @@ fn runtime_authoritative_recovery_rollback_prunes_fork_batches() {
 
 #[test]
 fn runtime_authoritative_recovery_receipt_is_immutable_after_later_progress() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-viewer-immutable-receipt-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
     let first = commit_single_authoritative_batch(&mut server);
     server
         .advance_authoritative_batch_finality(first.final_height)
@@ -523,6 +532,7 @@ fn runtime_authoritative_recovery_receipt_is_immutable_after_later_progress() {
         Some(&committed_receipt),
         "later world progress must not rewrite any commit-time receipt field"
     );
+    let _ = std::fs::remove_dir_all(recovery_dir);
 }
 
 #[test]

@@ -226,6 +226,7 @@ fn complete_receipt_requires_governance_auth_and_replay_stays_rejected_after_res
     let mut restarted =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("restarted server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
     restarted.world = restored.world;
     restarted.consumed_rollback_operator_nonces = generation.consumed_rollback_operator_nonces;
     let replay = restarted
@@ -235,4 +236,51 @@ fn complete_receipt_requires_governance_auth_and_replay_stays_rejected_after_res
         .expect_err("receipt access nonce remains consumed after restart");
     assert_eq!(replay.code, "rollback_operator_authorization_replayed");
     let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
+fn complete_receipt_fails_closed_without_durable_recovery_sink() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize");
+    let _fork = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let rollback_nonce = "nonce-receipt-sinkless";
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "receipt-sinkless",
+        rollback_nonce,
+        &on_call,
+        &governance,
+    );
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "receipt-sinkless".to_string(),
+                requested_by: None,
+                approval: Some(approval),
+            },
+        })
+        .expect("rollback");
+    let request = signed_receipt_access_request(
+        rollback_nonce,
+        "governance-bob",
+        "receipt-sinkless-read",
+        &governance,
+    );
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::GetRollbackReceipt { request })
+        .expect_err("complete receipt requires durable nonce persistence");
+    assert_eq!(error.code, "rollback_durable_sink_required");
+    assert!(
+        !server
+            .consumed_rollback_operator_nonces
+            .contains("receipt-sinkless-read")
+    );
 }

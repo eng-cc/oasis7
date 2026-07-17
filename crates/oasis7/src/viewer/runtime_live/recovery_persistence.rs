@@ -44,6 +44,7 @@ impl ViewerRuntimeLiveServer {
             })
             .collect();
         self.rollback_readiness = generation.rollback_readiness;
+        self.consumed_strict_audit_nonces = generation.consumed_strict_audit_nonces;
         self.runtime_action_players = generation.runtime_action_players;
         self.consumed_rollback_operator_nonces = generation.consumed_rollback_operator_nonces;
         self.llm_sidecar.agent_player_bindings =

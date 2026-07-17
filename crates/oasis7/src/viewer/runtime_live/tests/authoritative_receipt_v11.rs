@@ -206,6 +206,12 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
             .expect("ready receipt")
             .ready_for_all_clear
     );
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
+            authorization_nonce: "nonce-readiness-transition".to_string(),
+            audit_evidence: None,
+        })
+        .expect("later blocked reevaluation must not forget consumed audit nonces");
     let replay = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),
@@ -235,15 +241,31 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
         .rollback_readiness
         .get("nonce-readiness-transition")
         .expect("restart preserves readiness evidence");
-    assert!(restarted_readiness.ready);
-    assert_eq!(
-        restarted_readiness.strict_audit_evidence_digest,
-        audit_evidence.evidence_digest
-    );
+    assert!(!restarted_readiness.ready);
+    assert!(restarted_readiness.strict_audit_evidence_digest.is_empty());
     assert_eq!(
         restarted_readiness.candidate_state_root, blocked_receipt.target_state_root,
         "persisted all-clear evidence records the observed candidate root"
     );
+    let restored = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
+        .expect("load generation")
+        .expect("persisted generation");
+    let generation: RuntimeAuthoritativeRecoveryGeneration =
+        serde_json::from_slice(&restored.recovery_metadata).expect("decode generation");
+    let mut restarted_server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("restarted server");
+    restarted_server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    restarted_server.world = restored.world;
+    restarted_server.rollback_readiness = generation.rollback_readiness;
+    restarted_server.consumed_strict_audit_nonces = generation.consumed_strict_audit_nonces;
+    let replay = restarted_server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
+            authorization_nonce: "nonce-readiness-transition".to_string(),
+            audit_evidence: Some(audit_evidence),
+        })
+        .expect_err("consumed audit nonce survives readiness overwrite and restart");
+    assert_eq!(replay.code, "strict_audit_evidence_replay");
     let _ = std::fs::remove_dir_all(recovery_dir);
 }
 #[test]

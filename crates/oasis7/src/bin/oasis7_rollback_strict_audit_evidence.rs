@@ -168,19 +168,49 @@ fn read_verifying_key(path: &Path) -> Result<VerifyingKey, String> {
 }
 
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    std::fs::write(path, bytes).map_err(|error| format!("write output failed: {error}"))?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|error| format!("secure output permissions failed: {error}"))?;
-    }
-    Ok(())
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "output path must name a file".to_string())?;
+    let temp_name = format!(
+        ".{}.{}.{}.tmp",
+        file_name.to_string_lossy(),
+        std::process::id(),
+        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+    );
+    let temp = parent.join(temp_name);
+    let result = (|| {
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options
+            .open(&temp)
+            .map_err(|error| format!("create private output failed: {error}"))?;
+        file.write_all(bytes)
+            .map_err(|error| format!("write private output failed: {error}"))?;
+        file.sync_all()
+            .map_err(|error| format!("sync private output failed: {error}"))?;
+        std::fs::hard_link(&temp, path)
+            .map_err(|error| format!("publish private output failed: {error}"))?;
+        Ok(())
+    })();
+    let _ = std::fs::remove_file(&temp);
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
     #[test]
     fn local_signer_preserves_exact_artifacts_without_emitting_private_key() {
@@ -246,6 +276,112 @@ mod tests {
                 &Signature::from_slice(&hex::decode(&evidence.signature_hex).unwrap()).unwrap(),
             )
             .expect("valid signature");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn outputs_are_private_non_destructive_and_symlink_safe() {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-strict-audit-safe-output-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let output = root.join("payload.bin");
+        write_private(&output, b"payload").expect("first publication");
+        assert_eq!(std::fs::metadata(&output).unwrap().mode() & 0o777, 0o600);
+        assert!(write_private(&output, b"replacement").is_err());
+        assert_eq!(std::fs::read(&output).unwrap(), b"payload");
+
+        let target = root.join("target");
+        std::fs::write(&target, b"preserve").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+        let link = root.join("output-link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        assert!(write_private(&link, b"overwrite").is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"preserve");
+        assert_eq!(std::fs::metadata(&target).unwrap().mode() & 0o777, 0o640);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn external_hsm_payload_and_assemble_round_trip() {
+        let root =
+            std::env::temp_dir().join(format!("oasis7-strict-audit-hsm-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let report = root.join("audit.json");
+        let manifest = root.join("manifest.json");
+        let payload = root.join("payload.bin");
+        let signature = root.join("signature.hex");
+        let public_key = root.join("public-key.hex");
+        let output = root.join("evidence.json");
+        std::fs::write(&report, br#"{"overall_status":"ready_for_ops_drill","overall_single_failure_tolerance_pass":true,"manifest_match_pass":true,"rollback_blockers":[]}"#).unwrap();
+        std::fs::write(&manifest, br#"{"entries":[]}"#).unwrap();
+        let common = vec![
+            "--audit-report",
+            report.to_str().unwrap(),
+            "--manifest",
+            manifest.to_str().unwrap(),
+            "--authority-id",
+            "governance-bob",
+            "--rollback-ticket",
+            "ROLLBACK-HSM",
+            "--receipt-id",
+            "receipt-hsm",
+            "--canonical-intent-digest",
+            "intent-hsm",
+            "--recovery-snapshot-hash",
+            "snapshot-hsm",
+            "--candidate-state-root",
+            "root-hsm",
+            "--reorg-epoch",
+            "7",
+            "--issued-at-ms",
+            "100",
+            "--expires-at-ms",
+            "200",
+            "--nonce",
+            "audit-hsm",
+        ];
+        let mut prepare = common.clone();
+        prepare.extend(["--canonical-payload-output", payload.to_str().unwrap()]);
+        run(prepare.into_iter().map(str::to_string)).expect("prepare payload");
+        let signing_key = SigningKey::from_bytes(&[91; 32]);
+        std::fs::write(
+            &signature,
+            hex::encode(
+                signing_key
+                    .sign(&std::fs::read(&payload).unwrap())
+                    .to_bytes(),
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            &public_key,
+            hex::encode(signing_key.verifying_key().to_bytes()),
+        )
+        .unwrap();
+        let mut assemble = common;
+        assemble.extend([
+            "--signature-file",
+            signature.to_str().unwrap(),
+            "--signer-public-key-file",
+            public_key.to_str().unwrap(),
+            "--output",
+            output.to_str().unwrap(),
+        ]);
+        run(assemble.into_iter().map(str::to_string)).expect("assemble evidence");
+        let evidence: oasis7_proto::viewer::RollbackStrictAuditEvidence =
+            serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap();
+        signing_key
+            .verifying_key()
+            .verify(
+                &evidence.canonical_signing_payload().unwrap(),
+                &Signature::from_slice(&hex::decode(evidence.signature_hex).unwrap()).unwrap(),
+            )
+            .expect("assembled signature verifies");
         let _ = std::fs::remove_dir_all(root);
     }
 }
