@@ -107,6 +107,8 @@ pub struct PlayerRollbackDisposition {
     pub player_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_id: Option<String>,
+    #[serde(default)]
+    pub system_authored: bool,
     pub disposition: PlayerActionDisposition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compensation_case_id: Option<String>,
@@ -247,8 +249,15 @@ pub struct RollbackAttributionResolutionRequest {
     pub authorization_nonce: String,
     pub source_batch_id: String,
     pub source_event_id: u64,
-    pub player_id: String,
+    pub resolution: RollbackAttributionResolution,
     pub authorization: RollbackOperatorAuthorization,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum RollbackAttributionResolution {
+    Player { player_id: String },
+    SystemAuthored,
 }
 
 impl RollbackAttributionResolutionRequest {

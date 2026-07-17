@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use super::auth::verify_session_register_auth_proof;
+use super::auth::verify_session_register_auth_proof_for_recovery;
 use super::live::ViewerLiveDecisionMode;
 use super::protocol::{
     AuthoritativeBatchFinality, AuthoritativeChallengeAck, AuthoritativeChallengeCommand,

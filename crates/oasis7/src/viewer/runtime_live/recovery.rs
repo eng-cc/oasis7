@@ -5,7 +5,9 @@ use sha2::{Digest, Sha256};
 
 #[cfg(test)]
 pub(super) use super::recovery_persistence::RuntimeRecoveryFaultInjection;
-use crate::viewer::consume_registration_grant_nonce;
+use crate::viewer::{
+    claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
+};
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn handle_authoritative_recovery_for_protocol(
@@ -312,6 +314,7 @@ impl ViewerRuntimeLiveServer {
                             compensation: None,
                             player_id: None,
                             action_id: Some(action_id.to_string()),
+                            system_authored: false,
                         });
                     }
                     continue;
@@ -344,6 +347,7 @@ impl ViewerRuntimeLiveServer {
                     compensation,
                     player_id: Some(player_id),
                     action_id: Some(action_id.to_string()),
+                    system_authored: false,
                 });
             }
         }
@@ -761,15 +765,16 @@ impl ViewerRuntimeLiveServer {
                 request.public_key.clone(),
             ));
         };
-        let verified = verify_session_register_auth_proof(&request, auth).map_err(|message| {
-            recovery_error(
-                control_plane::map_auth_verify_error_code(message.as_str()),
-                message,
-                None,
-                Some(request.player_id.clone()),
-                request.public_key.clone(),
-            )
-        })?;
+        let verified =
+            verify_session_register_auth_proof_for_recovery(&request, auth).map_err(|message| {
+                recovery_error(
+                    control_plane::map_auth_verify_error_code(message.as_str()),
+                    message,
+                    None,
+                    Some(request.player_id.clone()),
+                    request.public_key.clone(),
+                )
+            })?;
         let mutation_snapshot = self.session_mutation_snapshot();
         let session_registration_plan = match self.session_policy.validate_session_registration(
             verified.player_id.as_str(),
@@ -867,7 +872,14 @@ impl ViewerRuntimeLiveServer {
         };
 
         if let Some(registration_nonce) = verified.hosted_registration_nonce.as_deref() {
-            consume_registration_grant_nonce(registration_nonce).map_err(|message| {
+            let claim_result = match self.authoritative_recovery_dir() {
+                Some(recovery_dir) => claim_registration_grant_nonce_for_recovery(
+                    registration_nonce,
+                    recovery_dir.as_path(),
+                ),
+                None => consume_registration_grant_nonce(registration_nonce),
+            };
+            claim_result.map_err(|message| {
                 recovery_error(
                     control_plane::map_auth_verify_error_code(message.as_str()),
                     message,

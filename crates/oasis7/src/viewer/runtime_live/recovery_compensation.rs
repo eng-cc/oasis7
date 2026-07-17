@@ -146,7 +146,14 @@ impl ViewerRuntimeLiveServer {
             self.consumed_rollback_operator_nonces = previous_nonces;
             return Err(rollback_runtime_error(err, source.source_batch_id.clone()));
         }
-        let ack = self.get_rollback_receipt(request.authorization_nonce)?;
+        let ack = match self.get_rollback_receipt(request.authorization_nonce) {
+            Ok(ack) => ack,
+            Err(error) => {
+                self.world = previous;
+                self.consumed_rollback_operator_nonces = previous_nonces;
+                return Err(error);
+            }
+        };
         if let Err(error) = self.persist_current_recovery_generation(&ack) {
             self.world = previous;
             self.consumed_rollback_operator_nonces = previous_nonces;
@@ -179,28 +186,43 @@ impl ViewerRuntimeLiveServer {
         )));
         let previous = self.world.clone();
         let previous_nonces = self.consumed_rollback_operator_nonces.clone();
+        let previous_readiness = self.rollback_readiness.clone();
         self.consumed_rollback_operator_nonces
             .insert(request.authorization.nonce.clone());
-        if let Err(err) = self.world.resolve_rollback_action_attribution(
-            request.authorization_nonce.as_str(),
-            &source,
-            request.player_id,
-            crate::runtime::RollbackCompensationCaseRef {
-                owner_id: "player_support".to_string(),
-                ticket_id: format!("rollback-case-{}", &case_digest[..16]),
-                state: crate::runtime::RollbackCompensationState::PendingAuthorization,
-            },
-        ) {
+        let mutation = match request.resolution {
+            crate::viewer::protocol::RollbackAttributionResolution::Player { player_id } => {
+                self.world.resolve_rollback_action_attribution(
+                    request.authorization_nonce.as_str(),
+                    &source,
+                    player_id,
+                    crate::runtime::RollbackCompensationCaseRef {
+                        owner_id: "player_support".to_string(),
+                        ticket_id: format!("rollback-case-{}", &case_digest[..16]),
+                        state: crate::runtime::RollbackCompensationState::PendingAuthorization,
+                    },
+                )
+            }
+            crate::viewer::protocol::RollbackAttributionResolution::SystemAuthored => {
+                self.world.resolve_rollback_action_as_system_authored(
+                    request.authorization_nonce.as_str(),
+                    &source,
+                )
+            }
+        };
+        if let Err(err) = mutation {
             self.world = previous;
             self.consumed_rollback_operator_nonces = previous_nonces;
             return Err(rollback_runtime_error(err, source.source_batch_id.clone()));
         }
-        let ack = self.get_rollback_receipt(request.authorization_nonce)?;
-        if let Err(error) = self.persist_current_recovery_generation(&ack) {
-            self.world = previous;
-            self.consumed_rollback_operator_nonces = previous_nonces;
-            return Err(error);
-        }
+        let ack = match self.reevaluate_rollback_readiness(request.authorization_nonce, None) {
+            Ok(ack) => ack,
+            Err(error) => {
+                self.world = previous;
+                self.consumed_rollback_operator_nonces = previous_nonces;
+                self.rollback_readiness = previous_readiness;
+                return Err(error);
+            }
+        };
         Ok(ack)
     }
 }

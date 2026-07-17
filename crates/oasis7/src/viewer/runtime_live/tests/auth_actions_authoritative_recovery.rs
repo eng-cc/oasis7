@@ -551,6 +551,126 @@ fn hosted_registration_persist_failure_rolls_back_binding_and_keeps_grant_retrya
 }
 
 #[test]
+fn hosted_registration_recovery_not_committed_keeps_grant_retryable_after_restart() {
+    let _guard = lock_test_llm_env();
+    let recovery_dir = runtime_live_temp_dir("hosted-grant-recovery-not-committed");
+    let replay_ledger = recovery_dir.with_extension("registration-replay.json");
+    let issuer_private_key = hex::encode([97_u8; 32]);
+    let issuer_public_key =
+        crate::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())
+            .expect("derive issuer public key");
+    unsafe {
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+            issuer_public_key,
+        );
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
+            replay_ledger.as_os_str(),
+        );
+    }
+
+    let hosted_player_id = "hosted-player-account-recovery-not-committed";
+    let (hosted_public_key, hosted_private_key) = test_signer(98);
+    let registration_grant = crate::viewer::issue_hosted_registration_grant(
+        hosted_player_id,
+        hosted_public_key.as_str(),
+        "device-recovery-not-committed",
+        "nonce-recovery-not-committed",
+        test_now_unix_ms(),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue registration grant");
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let request = |nonce| {
+        signed_session_register_request(
+            crate::viewer::AuthoritativeSessionRegisterRequest {
+                player_id: hosted_player_id.to_string(),
+                public_key: None,
+                registration_grant: Some(registration_grant.clone()),
+                auth: None,
+                requested_agent_id: Some(agent_id.clone()),
+                force_rebind: false,
+            },
+            nonce,
+            hosted_public_key.as_str(),
+            hosted_private_key.as_str(),
+        )
+    };
+
+    install_viewer_recovery_precommit_failure(&recovery_dir);
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(1),
+        })
+        .expect_err("recovery generation must not commit");
+    assert_eq!(error.code, "recovery_persistence_commit_failed");
+    let replay_bytes = std::fs::read(&replay_ledger).expect("grant nonce ledger must be durable");
+    assert!(
+        String::from_utf8_lossy(&replay_bytes).contains("nonce-recovery-not-committed"),
+        "the grant must have reached the durable replay ledger before recovery persistence failed"
+    );
+    drop(server);
+
+    std::fs::remove_file(
+        recovery_dir.join(".distfs-state/sidecar-generations/.test-fail-before-index-commit"),
+    )
+    .expect("remove precommit failpoint");
+    let mut restarted = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("restarted runtime server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let (ack, _) = restarted
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(2),
+        })
+        .expect("same grant must converge after a definitely uncommitted recovery generation");
+    assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
+
+    let other_recovery_dir = runtime_live_temp_dir("hosted-grant-other-recovery-domain");
+    let mut other_server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("other runtime server");
+    other_server.set_authoritative_recovery_dir_override(Some(other_recovery_dir.clone()));
+    let replay = other_server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(3),
+        })
+        .expect_err("another recovery domain must not resume the claimed grant");
+    assert!(
+        replay
+            .message
+            .contains("registration grant replay detected")
+    );
+
+    unsafe {
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
+    }
+    let _ = std::fs::remove_dir_all(recovery_dir);
+    let _ = std::fs::remove_dir_all(other_recovery_dir);
+    let _ = std::fs::remove_file(replay_ledger);
+}
+
+#[test]
 fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
     let _guard = lock_test_llm_env();
     let replay_dir = runtime_live_temp_dir("hosted-grant-reload-key");

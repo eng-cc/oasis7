@@ -332,6 +332,40 @@ impl World {
         disposition.player_id = Some(player_id);
         disposition.status = super::super::RollbackDispositionStatus::CompensationRequired;
         disposition.compensation = Some(compensation);
+        disposition.system_authored = false;
+        Ok(())
+    }
+
+    pub fn resolve_rollback_action_as_system_authored(
+        &mut self,
+        nonce: &str,
+        source: &RollbackSourceEventIdentity,
+    ) -> Result<(), WorldError> {
+        let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        let disposition = outcome
+            .dispositions
+            .iter_mut()
+            .find(|entry| {
+                entry.source_batch_id == source.source_batch_id
+                    && entry.source_event_id == source.source_event_id
+            })
+            .ok_or_else(|| WorldError::DistributedValidationFailed {
+                reason: "rollback system-action source is not in the affected census".to_string(),
+            })?;
+        if disposition.player_id.is_some()
+            || disposition.action_id.is_none()
+            || disposition.compensation.is_some()
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "only unresolved non-player action evidence may be system-authored"
+                    .to_string(),
+            });
+        }
+        disposition.system_authored = true;
         Ok(())
     }
 

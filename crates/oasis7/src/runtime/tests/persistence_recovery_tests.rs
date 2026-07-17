@@ -962,6 +962,7 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
             compensation: None,
             player_id: Some("player-1".to_string()),
             action_id: Some("action-9".to_string()),
+            system_authored: false,
         }],
     };
     world

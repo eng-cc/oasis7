@@ -229,7 +229,11 @@ impl ViewerRuntimeLiveServer {
                     && self.world.verify_tick_consensus_chain().is_ok()
                     && outcome.dispositions.iter().all(|entry| {
                         entry.compensation.as_ref().is_none_or(|case| {
-                            case.state == crate::runtime::RollbackCompensationState::Completed
+                            matches!(
+                                case.state,
+                                crate::runtime::RollbackCompensationState::Completed
+                                    | crate::runtime::RollbackCompensationState::Rejected
+                            )
                         })
                     })
                     && record.strict_audit_evidence.as_ref().is_some_and(|audit| {
@@ -241,6 +245,18 @@ impl ViewerRuntimeLiveServer {
                         .is_ok()
                     })
             });
+        #[cfg(test)]
+        if self.recovery_fault_injection
+            == Some(super::recovery::RuntimeRecoveryFaultInjection::AckEncode)
+        {
+            return Err(recovery_error(
+                "rollback_ack_encode_failed",
+                "injected rollback acknowledgment encoding failure",
+                None,
+                None,
+                None,
+            ));
+        }
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
             reorg_epoch: outcome.committed_reorg_epoch,
@@ -404,11 +420,9 @@ impl ViewerRuntimeLiveServer {
         }) {
             blockers.push("compensation_cases_unresolved".to_string());
         }
-        if outcome
-            .dispositions
-            .iter()
-            .any(|entry| entry.action_id.is_some() && entry.player_id.is_none())
-        {
+        if outcome.dispositions.iter().any(|entry| {
+            entry.action_id.is_some() && entry.player_id.is_none() && !entry.system_authored
+        }) {
             blockers.push("player_attribution_incomplete".to_string());
         }
         let now_ms = current_unix_time_ms();
@@ -632,6 +646,7 @@ pub(super) fn viewer_dispositions(
                 source_event_id: entry.source_event_id,
                 player_id: entry.player_id.clone(),
                 action_id: entry.action_id.clone(),
+                system_authored: entry.system_authored,
                 disposition: match entry.status {
                     crate::runtime::RollbackDispositionStatus::PreservedAtTarget => {
                         crate::viewer::protocol::PlayerActionDisposition::PreservedAtTarget

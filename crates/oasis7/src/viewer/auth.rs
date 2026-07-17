@@ -1,10 +1,5 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::protocol::{
@@ -18,10 +13,7 @@ pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =
     "OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY";
 pub const HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV: &str =
     "OASIS7_HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY";
-pub const HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV: &str =
-    "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH";
 const HOSTED_REGISTRATION_GRANT_TTL_MS: u64 = 30_000;
-static HOSTED_REGISTRATION_REPLAY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub const VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX: &str = "awviewauth:v1:";
 const VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION: u8 = 1;
 pub const VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX: &str = "awhostedgrant:v1:";
@@ -702,6 +694,21 @@ pub fn verify_session_register_auth_proof(
     request: &AuthoritativeSessionRegisterRequest,
     proof: &PlayerAuthProof,
 ) -> Result<VerifiedPlayerAuth, String> {
+    verify_session_register_auth_proof_inner(request, proof, true)
+}
+
+pub(crate) fn verify_session_register_auth_proof_for_recovery(
+    request: &AuthoritativeSessionRegisterRequest,
+    proof: &PlayerAuthProof,
+) -> Result<VerifiedPlayerAuth, String> {
+    verify_session_register_auth_proof_inner(request, proof, false)
+}
+
+fn verify_session_register_auth_proof_inner(
+    request: &AuthoritativeSessionRegisterRequest,
+    proof: &PlayerAuthProof,
+    require_unused_hosted_grant: bool,
+) -> Result<VerifiedPlayerAuth, String> {
     verify_proof_scheme(proof)?;
     let request_player_id =
         normalize_required_field(request.player_id.as_str(), "session_register player_id")?;
@@ -740,6 +747,7 @@ pub fn verify_session_register_auth_proof(
             })?,
             request_player_id.as_str(),
             request_public_key.as_str(),
+            require_unused_hosted_grant,
         )?)
     } else {
         None
@@ -756,6 +764,7 @@ fn verify_hosted_registration_grant(
     grant: &str,
     player_id: &str,
     public_key: &str,
+    require_unused: bool,
 ) -> Result<String, String> {
     let mut parts = grant.split('.');
     if parts.next() != Some("v1") {
@@ -796,86 +805,24 @@ fn verify_hosted_registration_grant(
     verifying_key
         .verify(payload_bytes.as_slice(), &signature)
         .map_err(|err| format!("verify registration grant signature failed: {err}"))?;
-    ensure_registration_grant_nonce_unused(payload.nonce.as_str())?;
+    if require_unused {
+        ensure_registration_grant_nonce_unused(payload.nonce.as_str())?;
+    }
     Ok(payload.nonce)
-}
-
-fn ensure_registration_grant_nonce_unused(nonce: &str) -> Result<(), String> {
-    let path = registration_replay_ledger_path();
-    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
-    if read_consumed_registration_nonces(path.as_path())?.contains(nonce) {
-        return Err("registration grant replay detected".to_string());
-    }
-    Ok(())
-}
-
-pub(crate) fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String> {
-    let path = registration_replay_ledger_path();
-    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
-    let mut consumed = read_consumed_registration_nonces(path.as_path())?;
-    if !consumed.insert(nonce.to_string()) {
-        return Err("registration grant replay detected".to_string());
-    }
-    atomic_write_replay_ledger(path.as_path(), &consumed)
-}
-
-pub fn preflight_hosted_registration_replay_ledger() -> Result<(), String> {
-    let path = registration_replay_ledger_path();
-    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
-    let consumed = read_consumed_registration_nonces(path.as_path())?;
-    atomic_write_replay_ledger(path.as_path(), &consumed)
-}
-
-fn registration_replay_ledger_path() -> PathBuf {
-    std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-registration-replay.json"))
-}
-
-fn read_consumed_registration_nonces(path: &Path) -> Result<BTreeSet<String>, String> {
-    match fs::read(path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|err| format!("decode registration grant replay ledger failed: {err}")),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeSet::new()),
-        Err(err) => Err(format!(
-            "read registration grant replay ledger failed: {err}"
-        )),
-    }
-}
-
-fn atomic_write_replay_ledger(path: &Path, consumed: &BTreeSet<String>) -> Result<(), String> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)
-        .map_err(|err| format!("create registration replay directory failed: {err}"))?;
-    let temp = parent.join(format!(".registration-replay-{}.tmp", std::process::id()));
-    let bytes = serde_json::to_vec(consumed)
-        .map_err(|err| format!("encode registration replay ledger failed: {err}"))?;
-    let mut temp_file = fs::File::create(&temp)
-        .map_err(|err| format!("create registration replay ledger failed: {err}"))?;
-    temp_file
-        .write_all(bytes.as_slice())
-        .map_err(|err| format!("write registration replay ledger failed: {err}"))?;
-    temp_file
-        .sync_all()
-        .map_err(|err| format!("sync registration replay ledger failed: {err}"))?;
-    platform_atomic_replace(&temp, path)
-        .map_err(|err| format!("replace registration replay ledger failed: {err}"))?;
-    sync_parent_directory(parent)
-        .map_err(|err| format!("sync registration replay ledger directory failed: {err}"))
 }
 
 #[path = "auth_atomic_file.rs"]
 mod atomic_file;
-use atomic_file::{platform_atomic_replace, sync_parent_directory};
+
+#[path = "auth_registration_replay.rs"]
+mod registration_replay;
+use registration_replay::ensure_registration_grant_nonce_unused;
+pub use registration_replay::{
+    HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, preflight_hosted_registration_replay_ledger,
+};
+pub(crate) use registration_replay::{
+    claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
+};
 
 fn now_unix_ms() -> u64 {
     SystemTime::now()

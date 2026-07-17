@@ -15,6 +15,9 @@ use sha2::{Digest, Sha256};
 #[path = "authoritative_receipt.rs"]
 mod receipt_tests;
 
+#[path = "authoritative_receipt_v11.rs"]
+mod receipt_v11_tests;
+
 fn configure_rollback_authorities(
     server: &mut ViewerRuntimeLiveServer,
 ) -> (SigningKey, SigningKey) {

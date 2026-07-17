@@ -475,6 +475,8 @@ pub struct RollbackEventDisposition {
     pub player_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_id: Option<String>,
+    #[serde(default)]
+    pub system_authored: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

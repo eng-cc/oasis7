@@ -41,14 +41,15 @@ pub(super) fn verify_strict_audit_evidence(
     }
     let report: serde_json::Value = serde_json::from_slice(&audit.audit_report_bytes)
         .map_err(|_| "strict audit report bytes are not valid JSON".to_string())?;
-    if report
-        .get("overall_status")
-        .and_then(serde_json::Value::as_str)
-        != Some("pass")
-        || report
-            .get("overall_single_failure_tolerance_pass")
-            .and_then(serde_json::Value::as_bool)
-            != Some(true)
+    if !matches!(
+        report
+            .get("overall_status")
+            .and_then(serde_json::Value::as_str),
+        Some("pass" | "ready_for_ops_drill")
+    ) || report
+        .get("overall_single_failure_tolerance_pass")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
         || report
             .get("manifest_match_pass")
             .and_then(serde_json::Value::as_bool)

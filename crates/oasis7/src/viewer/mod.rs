@@ -12,7 +12,9 @@ mod server;
 #[cfg(not(target_arch = "wasm32"))]
 mod web_bridge;
 
-pub(crate) use auth::consume_registration_grant_nonce;
+pub(crate) use auth::{
+    claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
+};
 
 pub use auth::{
     HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV, HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
