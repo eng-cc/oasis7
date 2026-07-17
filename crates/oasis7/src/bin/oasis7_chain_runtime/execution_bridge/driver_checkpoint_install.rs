@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use oasis7::runtime::{
@@ -7,11 +9,150 @@ use oasis7::runtime::{
 use oasis7_node::{
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext, NodeExecutionCommitResult,
 };
+use serde::{Deserialize, Serialize};
 
 use super::checkpoint::{
-    execution_checkpoint_manifest_rel_path, persist_execution_bridge_record,
-    persist_execution_checkpoint_manifest, run_execution_bridge_retention_maintenance,
+    execution_bridge_record_path, execution_checkpoint_latest_path,
+    execution_checkpoint_manifest_path, execution_checkpoint_manifest_rel_path,
+    persist_execution_bridge_record, persist_execution_checkpoint_manifest,
+    run_execution_bridge_retention_maintenance,
 };
+
+const CHECKPOINT_INSTALL_TRANSACTION_FILE: &str = "checkpoint-install-transaction.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FileBackup {
+    path: PathBuf,
+    bytes: Option<Vec<u8>>,
+}
+
+impl FileBackup {
+    fn capture(path: PathBuf) -> Result<Self, String> {
+        let bytes = path
+            .exists()
+            .then(|| fs::read(path.as_path()))
+            .transpose()
+            .map_err(|err| {
+                format!(
+                    "read checkpoint install backup {} failed: {}",
+                    path.display(),
+                    err
+                )
+            })?;
+        Ok(Self { path, bytes })
+    }
+
+    fn restore(&self) -> Result<(), String> {
+        match &self.bytes {
+            Some(bytes) => super::write_bytes_atomic(self.path.as_path(), bytes.as_slice()),
+            None => match fs::remove_file(self.path.as_path()) {
+                Ok(()) => Ok(()),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(err) => Err(format!(
+                    "remove checkpoint install publication {} failed: {}",
+                    self.path.display(),
+                    err
+                )),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+enum CheckpointInstallTransactionPhase {
+    Prepared,
+    Committed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CheckpointInstallTransaction {
+    phase: CheckpointInstallTransactionPhase,
+    previous_state: super::ExecutionBridgeState,
+    backups: Vec<FileBackup>,
+}
+
+impl CheckpointInstallTransaction {
+    fn path(records_dir: &Path) -> PathBuf {
+        records_dir.join(CHECKPOINT_INSTALL_TRANSACTION_FILE)
+    }
+
+    fn prepare(driver: &NodeRuntimeExecutionDriver, height: u64) -> Result<Self, String> {
+        let records_dir = driver.records_dir.as_path();
+        let backups = [
+            driver.state_path.clone(),
+            driver.world_dir.join("snapshot.json"),
+            driver.world_dir.join("journal.json"),
+            execution_bridge_record_path(records_dir, height),
+            records_dir.join("latest.json"),
+            execution_checkpoint_manifest_path(records_dir, height),
+            execution_checkpoint_latest_path(records_dir),
+        ]
+        .into_iter()
+        .map(FileBackup::capture)
+        .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self {
+            phase: CheckpointInstallTransactionPhase::Prepared,
+            previous_state: driver.state.clone(),
+            backups,
+        })
+    }
+
+    fn persist(&self, records_dir: &Path) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(self)
+            .map_err(|err| format!("serialize checkpoint install transaction failed: {err}"))?;
+        super::write_bytes_atomic(Self::path(records_dir).as_path(), bytes.as_slice())
+    }
+
+    fn restore(&self) -> Result<(), String> {
+        for backup in &self.backups {
+            backup.restore()?;
+        }
+        Ok(())
+    }
+}
+
+fn remove_checkpoint_install_transaction(records_dir: &Path) -> Result<(), String> {
+    match fs::remove_file(CheckpointInstallTransaction::path(records_dir)) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(format!(
+            "remove checkpoint install transaction failed: {err}"
+        )),
+    }
+}
+
+pub(super) fn recover_checkpoint_install_transaction(
+    driver: &mut NodeRuntimeExecutionDriver,
+) -> Result<(), String> {
+    let path = CheckpointInstallTransaction::path(driver.records_dir.as_path());
+    if !path.exists() {
+        return Ok(());
+    }
+    let transaction: CheckpointInstallTransaction = serde_json::from_slice(
+        &fs::read(path.as_path())
+            .map_err(|err| format!("read checkpoint install transaction failed: {err}"))?,
+    )
+    .map_err(|err| format!("parse checkpoint install transaction failed: {err}"))?;
+    if transaction.phase == CheckpointInstallTransactionPhase::Prepared {
+        transaction.restore()?;
+        driver.state = transaction.previous_state;
+        let policy = driver.execution_world.release_security_policy().clone();
+        driver.execution_world = super::driver_persistence::load_execution_world_with_policy(
+            driver.world_dir.as_path(),
+            policy,
+        )?;
+    }
+    remove_checkpoint_install_transaction(driver.records_dir.as_path())
+}
+
+#[cfg(test)]
+pub(super) fn prepare_checkpoint_install_transaction_for_test(
+    driver: &NodeRuntimeExecutionDriver,
+    height: u64,
+) -> Result<(), String> {
+    let transaction = CheckpointInstallTransaction::prepare(driver, height)?;
+    transaction.persist(driver.records_dir.as_path())
+}
 use super::driver::NodeRuntimeExecutionDriver;
 use super::driver_observability::{
     CheckpointInstallObservation, emit_checkpoint_bundle_install_complete,
@@ -205,23 +346,6 @@ pub(super) fn install_checkpoint_bundle(
         commit_block_hash: restored_commit_block_hash,
         tick: restored_world.state().time,
     };
-    let mut persist_ms = Duration::default();
-    let world_persist_started_at = Instant::now();
-    persist_execution_world_with_chain_resource_context(
-        driver.world_dir.as_path(),
-        &restored_world,
-        restored_resource_context,
-        restored_resource_manifest.world_config_hash.as_str(),
-        restored_resource_manifest
-            .generation_algorithm_hash
-            .as_str(),
-    )?;
-    persist_ms += world_persist_started_at.elapsed();
-    driver.execution_world = restored_world;
-    let manifest_persist_started_at = Instant::now();
-    persist_execution_checkpoint_manifest(driver.records_dir.as_path(), &manifest)?;
-    persist_ms += manifest_persist_started_at.elapsed();
-
     let record = ExecutionBridgeRecord {
         schema_version: EXECUTION_BRIDGE_RECORD_SCHEMA_V3,
         world_id: context.world_id.clone(),
@@ -244,24 +368,64 @@ pub(super) fn install_checkpoint_bundle(
         simulator_mirror: None,
         timestamp_ms: context.committed_at_unix_ms,
     };
-    let record_persist_started_at = Instant::now();
-    persist_execution_bridge_record(driver.records_dir.as_path(), &record)?;
-    persist_ms += record_persist_started_at.elapsed();
-
-    driver.state.last_applied_committed_height = context.height;
-    driver.state.last_execution_block_hash = Some(context.execution_block_hash.clone());
-    driver.state.last_execution_state_root = Some(context.execution_state_root.clone());
-    driver.state.last_node_block_hash = Some(context.node_block_hash);
-    let state_persist_started_at = Instant::now();
-    persist_execution_bridge_state(driver.state_path.as_path(), &driver.state)?;
-    persist_ms += state_persist_started_at.elapsed();
-    let retention_started_at = Instant::now();
-    run_execution_bridge_retention_maintenance(
-        driver.records_dir.as_path(),
-        &driver.execution_store,
-        driver.hot_window_heights,
-    )?;
-    let retention_ms = retention_started_at.elapsed();
+    let previous_execution_world = driver.execution_world.clone();
+    let previous_state = driver.state.clone();
+    let mut transaction = CheckpointInstallTransaction::prepare(driver, context.height)?;
+    transaction.persist(driver.records_dir.as_path())?;
+    let mut persist_ms = Duration::default();
+    let install_result = (|| -> Result<Duration, String> {
+        let world_persist_started_at = Instant::now();
+        persist_execution_world_with_chain_resource_context(
+            driver.world_dir.as_path(),
+            &restored_world,
+            restored_resource_context,
+            restored_resource_manifest.world_config_hash.as_str(),
+            restored_resource_manifest
+                .generation_algorithm_hash
+                .as_str(),
+        )?;
+        persist_ms += world_persist_started_at.elapsed();
+        driver.execution_world = restored_world;
+        let manifest_persist_started_at = Instant::now();
+        persist_execution_checkpoint_manifest(driver.records_dir.as_path(), &manifest)?;
+        persist_ms += manifest_persist_started_at.elapsed();
+        let record_persist_started_at = Instant::now();
+        persist_execution_bridge_record(driver.records_dir.as_path(), &record)?;
+        persist_ms += record_persist_started_at.elapsed();
+        driver.state.last_applied_committed_height = context.height;
+        driver.state.last_execution_block_hash = Some(context.execution_block_hash.clone());
+        driver.state.last_execution_state_root = Some(context.execution_state_root.clone());
+        driver.state.last_node_block_hash = Some(context.node_block_hash.clone());
+        let state_persist_started_at = Instant::now();
+        persist_execution_bridge_state(driver.state_path.as_path(), &driver.state)?;
+        persist_ms += state_persist_started_at.elapsed();
+        transaction.phase = CheckpointInstallTransactionPhase::Committed;
+        transaction.persist(driver.records_dir.as_path())?;
+        let retention_started_at = Instant::now();
+        run_execution_bridge_retention_maintenance(
+            driver.records_dir.as_path(),
+            &driver.execution_store,
+            driver.hot_window_heights,
+        )?;
+        Ok(retention_started_at.elapsed())
+    })();
+    let retention_ms = match install_result {
+        Ok(value) => value,
+        Err(err) => {
+            driver.execution_world = previous_execution_world;
+            driver.state = previous_state;
+            if let Err(rollback_err) = transaction
+                .restore()
+                .and_then(|_| remove_checkpoint_install_transaction(driver.records_dir.as_path()))
+            {
+                return Err(format!(
+                    "checkpoint install failed: {err}; transaction rollback failed: {rollback_err}"
+                ));
+            }
+            return Err(err);
+        }
+    };
+    remove_checkpoint_install_transaction(driver.records_dir.as_path())?;
 
     emit_checkpoint_bundle_install_complete(CheckpointInstallObservation {
         world_id: context.world_id.as_str(),

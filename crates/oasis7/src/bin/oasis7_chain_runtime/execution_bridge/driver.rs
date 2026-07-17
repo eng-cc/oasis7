@@ -277,6 +277,7 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_interval,
             storage_profile.execution_checkpoint_keep as usize,
         );
+        super::driver_checkpoint_install::recover_checkpoint_install_transaction(&mut driver)?;
         remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
         let simulator_world_bootstrap_required =
             execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
