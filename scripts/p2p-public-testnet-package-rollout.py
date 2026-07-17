@@ -408,7 +408,7 @@ def observer_checkpoint_gate_macos(
     "sequencer	%s" \\
     "storage	%s"; do
     IFS=$'\\t' read -r name url <<<"$provider"
-    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.XXXXXX.json")" || return 1
+    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.json.XXXXXX")" || return 1
     if ! curl -fsS --connect-timeout 10 --max-time 10 "$url" -o "$payload"; then
       rm -f "$payload"
       echo "provider_checkpoint_gate=$name collection_failed" >&2

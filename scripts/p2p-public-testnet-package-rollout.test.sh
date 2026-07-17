@@ -1851,6 +1851,7 @@ for token in (
     "provider_checkpoint_gate=passed",
     "latest_execution_checkpoint",
     "provider_checkpoint_gate_macos",
+    "oasis7-provider-checkpoint.json.XXXXXX",
     "plutil -extract",
     "authority_failure",
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
@@ -1874,6 +1875,7 @@ for token in (
     "governed_bundle_runtime_metadata_verified=true",
 ):
     assert token in text, f"macOS generated rollout contract missing: {token}"
+assert "oasis7-provider-checkpoint.XXXXXX.json" not in text
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
 mount_index = text.index("hdiutil attach")
 preflight_backup_index = text.index("preflight_backup_closure_complete=true")
