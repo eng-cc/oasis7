@@ -185,6 +185,10 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 | 想理解世界规则、玩法和玩家边界 | [`world-rule.md`](./world-rule.md) | [`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md) |
 | 想参与开发或继续治理文档/代码 | [`doc/README.md`](./doc/README.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
 
+### 产品四大模块
+
+产品信息架构以 [`doc/product/README.md`](./doc/product/README.md) 为唯一总入口，固定分为“世界规则与核心玩法 / 大世界基础设施 / 智能体与世界模拟 / 玩家入口与发行”。工程模块、测试模块与文档治理入口继续由 `doc/README.md` 导航，不构成第五个产品模块。
+
 
 ## 深入阅读
 

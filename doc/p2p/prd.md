@@ -1,5 +1,7 @@
 # p2p PRD
 
+> 产品 authority：本文件拥有网络、共识、DistFS、复制、同步、恢复与节点可观测性的专业域契约；它向 `doc/product/world-infrastructure/prd.md` 提供分布式状态层证据，但不是并列的“大世界基础设施”产品入口。
+
 审计轮次: 14
 
 ## 目标
