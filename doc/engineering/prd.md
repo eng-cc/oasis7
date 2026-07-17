@@ -245,9 +245,7 @@
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.project.md`
-  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.prd.md`
-  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.design.md`
-  - `doc/engineering/doc-governance/testing-evidence-path-governance-2026-04-17.project.md`
+  - `doc/testing/evidence/README.md`（当前 testing evidence 子域分流与维护边界；一次性路径落位专题已退役）
   - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md`
   - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md`
   - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md`
