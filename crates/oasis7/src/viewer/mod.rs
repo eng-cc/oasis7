@@ -68,7 +68,7 @@ pub use protocol::{
 };
 pub use rollback_audit_evidence::{
     RollbackStrictAuditEvidenceInput, build_unsigned_strict_audit_evidence,
-    strict_audit_artifact_digest,
+    strict_audit_artifact_digest, strict_audit_manifest_digest,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{

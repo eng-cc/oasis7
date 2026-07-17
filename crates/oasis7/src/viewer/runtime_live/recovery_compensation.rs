@@ -209,10 +209,17 @@ impl ViewerRuntimeLiveServer {
                 )
             }
         };
-        if let Err(err) = mutation {
-            self.world = previous;
+        let changed = match mutation {
+            Ok(changed) => changed,
+            Err(err) => {
+                self.world = previous;
+                self.consumed_rollback_operator_nonces = previous_nonces;
+                return Err(rollback_runtime_error(err, source.source_batch_id.clone()));
+            }
+        };
+        if !changed {
             self.consumed_rollback_operator_nonces = previous_nonces;
-            return Err(rollback_runtime_error(err, source.source_batch_id.clone()));
+            return self.get_rollback_receipt(request.authorization_nonce);
         }
         let ack = match self.reevaluate_rollback_readiness(request.authorization_nonce, None) {
             Ok(ack) => ack,

@@ -38,6 +38,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), String> {
         .map_err(|error| format!("read audit report failed: {error}"))?;
     let manifest = std::fs::read(&options.manifest)
         .map_err(|error| format!("read manifest failed: {error}"))?;
+    verify_audited_manifest_binding(&report, &manifest)?;
     let mut evidence = build_unsigned_strict_audit_evidence(RollbackStrictAuditEvidenceInput {
         authority_id: options.authority_id,
         rollback_ticket: options.rollback_ticket,
@@ -97,6 +98,20 @@ fn run(args: impl Iterator<Item = String>) -> Result<(), String> {
     let encoded = serde_json::to_vec_pretty(&evidence)
         .map_err(|error| format!("encode evidence failed: {error}"))?;
     write_private(output, &encoded)
+}
+
+fn verify_audited_manifest_binding(report: &[u8], manifest: &[u8]) -> Result<(), String> {
+    let report: serde_json::Value = serde_json::from_slice(report)
+        .map_err(|_| "audit report must be valid JSON".to_string())?;
+    let digest = report
+        .get("audited_manifest_digest")
+        .and_then(serde_json::Value::as_str)
+        .filter(|digest| digest.len() == 64 && hex::decode(digest).is_ok())
+        .ok_or_else(|| "audit report manifest digest is missing or malformed".to_string())?;
+    if oasis7::viewer::strict_audit_manifest_digest(manifest) != digest {
+        return Err("audit report does not bind the supplied manifest".to_string());
+    }
+    Ok(())
 }
 
 fn parse_options(args: impl Iterator<Item = String>) -> Result<Options, String> {
@@ -168,42 +183,66 @@ fn read_verifying_key(path: &Path) -> Result<VerifyingKey, String> {
 }
 
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    use std::io::Write;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    write_private_for_platform(path, bytes, cfg!(unix))
+}
 
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| "output path must name a file".to_string())?;
-    let temp_name = format!(
-        ".{}.{}.{}.tmp",
-        file_name.to_string_lossy(),
-        std::process::id(),
-        NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
-    );
-    let temp = parent.join(temp_name);
-    let result = (|| {
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
+fn write_private_for_platform(
+    path: &Path,
+    bytes: &[u8],
+    private_creation_supported: bool,
+) -> Result<(), String> {
+    if !private_creation_supported {
+        return Err(
+            "private output creation is unsupported on this platform; no artifact was published"
+                .to_string(),
+        );
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = (path, bytes);
+        return Err(
+            "private output creation is unsupported on this platform; no artifact was published"
+                .to_string(),
+        );
+    }
+
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+        let parent = path.parent().unwrap_or_else(|| Path::new("."));
+        let file_name = path
+            .file_name()
+            .ok_or_else(|| "output path must name a file".to_string())?;
+        let temp_name = format!(
+            ".{}.{}.{}.tmp",
+            file_name.to_string_lossy(),
+            std::process::id(),
+            NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
+        );
+        let temp = parent.join(temp_name);
+        let result = (|| {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create_new(true);
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
-        }
-        let mut file = options
-            .open(&temp)
-            .map_err(|error| format!("create private output failed: {error}"))?;
-        file.write_all(bytes)
-            .map_err(|error| format!("write private output failed: {error}"))?;
-        file.sync_all()
-            .map_err(|error| format!("sync private output failed: {error}"))?;
-        std::fs::hard_link(&temp, path)
-            .map_err(|error| format!("publish private output failed: {error}"))?;
-        Ok(())
-    })();
-    let _ = std::fs::remove_file(&temp);
-    result
+            let mut file = options
+                .open(&temp)
+                .map_err(|error| format!("create private output failed: {error}"))?;
+            file.write_all(bytes)
+                .map_err(|error| format!("write private output failed: {error}"))?;
+            file.sync_all()
+                .map_err(|error| format!("sync private output failed: {error}"))?;
+            std::fs::hard_link(&temp, path)
+                .map_err(|error| format!("publish private output failed: {error}"))?;
+            Ok(())
+        })();
+        let _ = std::fs::remove_file(&temp);
+        result
+    }
 }
 
 #[cfg(test)]
@@ -211,6 +250,17 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    fn passing_report(manifest: &[u8]) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "overall_status": "ready_for_ops_drill",
+            "overall_single_failure_tolerance_pass": true,
+            "manifest_match_pass": true,
+            "rollback_blockers": [],
+            "audited_manifest_digest": oasis7::viewer::strict_audit_manifest_digest(manifest)
+        }))
+        .expect("audit report")
+    }
 
     #[test]
     fn local_signer_preserves_exact_artifacts_without_emitting_private_key() {
@@ -224,10 +274,10 @@ mod tests {
         let manifest = root.join("manifest.json");
         let key = root.join("governance.key");
         let output = root.join("evidence.json");
-        let report_bytes = br#"{"overall_status":"ready_for_ops_drill","overall_single_failure_tolerance_pass":true,"manifest_match_pass":true,"rollback_blockers":[]}"#;
         let manifest_bytes = br#"{"entries":[{"slot_id":"governance.rollback.v1"}]}"#;
+        let report_bytes = passing_report(manifest_bytes);
         let signing_key = SigningKey::from_bytes(&[73; 32]);
-        std::fs::write(&report, report_bytes).expect("write report");
+        std::fs::write(&report, &report_bytes).expect("write report");
         std::fs::write(&manifest, manifest_bytes).expect("write manifest");
         std::fs::write(&key, hex::encode(signing_key.to_bytes())).expect("write key");
         run([
@@ -306,6 +356,25 @@ mod tests {
     }
 
     #[test]
+    fn unsupported_private_output_platform_fails_closed_without_publication() {
+        let root = std::env::temp_dir().join(format!(
+            "oasis7-strict-audit-unsupported-output-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create temp dir");
+        let output = root.join("evidence.json");
+        let error = write_private_for_platform(&output, b"sensitive", false)
+            .expect_err("unsupported private creation must fail closed");
+        assert!(error.contains("unsupported"));
+        assert!(
+            !output.exists(),
+            "unsupported host must publish no artifact"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn external_hsm_payload_and_assemble_round_trip() {
         let root =
             std::env::temp_dir().join(format!("oasis7-strict-audit-hsm-{}", std::process::id()));
@@ -317,8 +386,9 @@ mod tests {
         let signature = root.join("signature.hex");
         let public_key = root.join("public-key.hex");
         let output = root.join("evidence.json");
-        std::fs::write(&report, br#"{"overall_status":"ready_for_ops_drill","overall_single_failure_tolerance_pass":true,"manifest_match_pass":true,"rollback_blockers":[]}"#).unwrap();
-        std::fs::write(&manifest, br#"{"entries":[]}"#).unwrap();
+        let manifest_bytes = br#"{"entries":[]}"#;
+        std::fs::write(&manifest, manifest_bytes).unwrap();
+        std::fs::write(&report, passing_report(manifest_bytes)).unwrap();
         let common = vec![
             "--audit-report",
             report.to_str().unwrap(),

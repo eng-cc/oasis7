@@ -68,18 +68,34 @@ mod status_aware_attribution_tests {
             source_batch_id: "batch".to_string(),
             source_event_id: 7,
         };
-        world
-            .resolve_rollback_action_attribution(
-                "nonce-status-aware",
-                &source,
-                "player-7".to_string(),
-                super::super::super::RollbackCompensationCaseRef {
-                    owner_id: "must-not-be-used".to_string(),
-                    ticket_id: "must-not-be-used".to_string(),
-                    state: super::super::super::RollbackCompensationState::PendingAuthorization,
-                },
-            )
-            .expect("non-compensation attribution resolves");
+        assert!(
+            world
+                .resolve_rollback_action_attribution(
+                    "nonce-status-aware",
+                    &source,
+                    "player-7".to_string(),
+                    super::super::super::RollbackCompensationCaseRef {
+                        owner_id: "must-not-be-used".to_string(),
+                        ticket_id: "must-not-be-used".to_string(),
+                        state: super::super::super::RollbackCompensationState::PendingAuthorization,
+                    },
+                )
+                .expect("non-compensation attribution resolves")
+        );
+        assert!(
+            !world
+                .resolve_rollback_action_attribution(
+                    "nonce-status-aware",
+                    &source,
+                    "player-7".to_string(),
+                    super::super::super::RollbackCompensationCaseRef {
+                        owner_id: "ignored-on-retry".to_string(),
+                        ticket_id: "ignored-on-retry".to_string(),
+                        state: super::super::super::RollbackCompensationState::PendingAuthorization,
+                    },
+                )
+                .expect("exact player attribution retry is a no-op")
+        );
         let disposition = &world
             .rollback_nonce_outcome("nonce-status-aware")
             .expect("outcome")
@@ -115,6 +131,63 @@ mod status_aware_attribution_tests {
     fn preserved_unknown_accepts_player_without_fabricating_compensation() {
         assert_non_compensation_player_resolution(
             super::super::super::RollbackDispositionStatus::PreservedAtTarget,
+        );
+    }
+
+    #[test]
+    fn rejected_player_and_system_terminal_retries_report_no_change() {
+        let source = super::super::super::RollbackSourceEventIdentity {
+            source_batch_id: "batch".to_string(),
+            source_event_id: 7,
+        };
+        let case = || super::super::super::RollbackCompensationCaseRef {
+            owner_id: "support".to_string(),
+            ticket_id: "ticket-7".to_string(),
+            state: super::super::super::RollbackCompensationState::PendingAuthorization,
+        };
+        let mut player_world =
+            world_with_unknown(super::super::super::RollbackDispositionStatus::RejectedFork);
+        assert!(
+            player_world
+                .resolve_rollback_action_attribution(
+                    "nonce-status-aware",
+                    &source,
+                    "player-7".to_string(),
+                    case(),
+                )
+                .expect("first player resolution changes state")
+        );
+        assert!(
+            !player_world
+                .resolve_rollback_action_attribution(
+                    "nonce-status-aware",
+                    &source,
+                    "player-7".to_string(),
+                    case(),
+                )
+                .expect("compensation-required retry is unchanged")
+        );
+        assert!(matches!(
+            player_world.resolve_rollback_action_attribution(
+                "nonce-status-aware",
+                &source,
+                "player-8".to_string(),
+                case(),
+            ),
+            Err(WorldError::RollbackAttributionResolutionConflict { .. })
+        ));
+
+        let mut system_world =
+            world_with_unknown(super::super::super::RollbackDispositionStatus::RejectedFork);
+        assert!(
+            system_world
+                .resolve_rollback_action_as_system_authored("nonce-status-aware", &source)
+                .expect("first system resolution changes state")
+        );
+        assert!(
+            !system_world
+                .resolve_rollback_action_as_system_authored("nonce-status-aware", &source)
+                .expect("system retry is unchanged")
         );
     }
 }
@@ -393,7 +466,7 @@ impl World {
         source: &RollbackSourceEventIdentity,
         player_id: String,
         compensation: super::super::RollbackCompensationCaseRef,
-    ) -> Result<(), WorldError> {
+    ) -> Result<bool, WorldError> {
         if player_id.trim().is_empty() {
             return Err(WorldError::DistributedValidationFailed {
                 reason: "rollback attribution requires a player id".to_string(),
@@ -420,13 +493,13 @@ impl World {
                 source_event_id: source.source_event_id,
             });
         }
-        if disposition
-            .player_id
-            .as_deref()
-            .is_some_and(|value| value != player_id)
-        {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: "rollback action attribution is immutable once resolved".to_string(),
+        if let Some(existing_player_id) = disposition.player_id.as_deref() {
+            if existing_player_id == player_id {
+                return Ok(false);
+            }
+            return Err(WorldError::RollbackAttributionResolutionConflict {
+                source_batch_id: source.source_batch_id.clone(),
+                source_event_id: source.source_event_id,
             });
         }
         match disposition.status {
@@ -448,14 +521,14 @@ impl World {
                 });
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     pub fn resolve_rollback_action_as_system_authored(
         &mut self,
         nonce: &str,
         source: &RollbackSourceEventIdentity,
-    ) -> Result<(), WorldError> {
+    ) -> Result<bool, WorldError> {
         let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
             WorldError::DistributedValidationFailed {
                 reason: format!("rollback outcome for nonce {nonce} is not committed"),
@@ -471,6 +544,9 @@ impl World {
             .ok_or_else(|| WorldError::DistributedValidationFailed {
                 reason: "rollback system-action source is not in the affected census".to_string(),
             })?;
+        if disposition.system_authored {
+            return Ok(false);
+        }
         if disposition.player_id.is_some() || disposition.compensation.is_some() {
             return Err(WorldError::RollbackAttributionResolutionConflict {
                 source_batch_id: source.source_batch_id.clone(),
@@ -484,7 +560,7 @@ impl World {
             });
         }
         disposition.system_authored = true;
-        Ok(())
+        Ok(true)
     }
 
     pub fn validate_rollback_receipt_projection(

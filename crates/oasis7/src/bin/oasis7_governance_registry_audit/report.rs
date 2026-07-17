@@ -3,6 +3,8 @@ use serde::Serialize;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct GovernanceRegistryAuditReport {
     pub(crate) world_dir: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) audited_manifest_digest: Option<String>,
     pub(crate) finality: GovernanceSlotAuditRow,
     pub(crate) controllers: Vec<GovernanceSlotAuditRow>,
     pub(crate) rollback_authorities: Vec<RollbackAuthorityAuditRow>,

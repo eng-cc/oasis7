@@ -1,4 +1,5 @@
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use serde::Deserialize;
 
 use super::*;
 
@@ -6,6 +7,82 @@ pub(super) const STRICT_AUDIT_FUTURE_SKEW_MS: u64 = 30_000;
 
 pub(super) fn strict_audit_evidence_digest(report: &[u8], manifest: &[u8]) -> String {
     crate::viewer::strict_audit_artifact_digest(report, manifest)
+}
+
+#[derive(Deserialize)]
+struct StrictAuditManifestEntry {
+    slot_id: String,
+    signer_id: String,
+    scheme: String,
+    public_key_hex: String,
+    #[serde(default)]
+    threshold: Option<u16>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StrictAuditManifest {
+    Entries(Vec<StrictAuditManifestEntry>),
+    Document {
+        entries: Vec<StrictAuditManifestEntry>,
+    },
+}
+
+fn verify_manifest_matches_active_registry(
+    world: &RuntimeWorld,
+    manifest_bytes: &[u8],
+) -> Result<(), String> {
+    let entries = match serde_json::from_slice::<StrictAuditManifest>(manifest_bytes)
+        .map_err(|_| "strict audit manifest bytes are not a valid public manifest".to_string())?
+    {
+        StrictAuditManifest::Entries(entries) | StrictAuditManifest::Document { entries } => {
+            entries
+        }
+    };
+    let expected = [
+        (
+            "ops.rollback.on_call.v1",
+            crate::runtime::RollbackAuthorityRole::OnCall,
+        ),
+        (
+            "governance.rollback.v1",
+            crate::runtime::RollbackAuthorityRole::Governance,
+        ),
+    ];
+    let registry = &world.snapshot().rollback_authority_registry;
+    if registry.len() != expected.len() {
+        return Err("strict audit manifest does not match active rollback registry".to_string());
+    }
+    for (slot_id, role) in expected {
+        let matching = entries
+            .iter()
+            .filter(|entry| entry.slot_id == slot_id)
+            .collect::<Vec<_>>();
+        if matching.len() != 1 {
+            return Err(
+                "strict audit manifest must contain each rollback authority slot exactly once"
+                    .to_string(),
+            );
+        }
+        let entry = matching[0];
+        let record = registry
+            .get(entry.signer_id.as_str())
+            .filter(|record| record.active && record.role == role)
+            .ok_or_else(|| {
+                "strict audit manifest signer is not active in rollback registry".to_string()
+            })?;
+        if entry.scheme != "ed25519"
+            || entry.threshold != Some(1)
+            || !record
+                .public_key_hex
+                .eq_ignore_ascii_case(entry.public_key_hex.trim())
+        {
+            return Err(
+                "strict audit manifest does not match active rollback registry".to_string(),
+            );
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn verify_strict_audit_evidence(
@@ -34,6 +111,16 @@ pub(super) fn verify_strict_audit_evidence(
     }
     let report: serde_json::Value = serde_json::from_slice(&audit.audit_report_bytes)
         .map_err(|_| "strict audit report bytes are not valid JSON".to_string())?;
+    let audited_manifest_digest = report
+        .get("audited_manifest_digest")
+        .and_then(serde_json::Value::as_str)
+        .filter(|digest| digest.len() == 64 && hex::decode(digest).is_ok())
+        .ok_or_else(|| "strict audit report manifest digest is missing or malformed".to_string())?;
+    if crate::viewer::strict_audit_manifest_digest(&audit.manifest_bytes) != audited_manifest_digest
+    {
+        return Err("strict audit report and attached manifest digest mismatch".to_string());
+    }
+    verify_manifest_matches_active_registry(world, &audit.manifest_bytes)?;
     if !matches!(
         report
             .get("overall_status")

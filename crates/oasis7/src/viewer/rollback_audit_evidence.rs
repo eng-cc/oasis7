@@ -28,6 +28,14 @@ pub fn strict_audit_artifact_digest(report: &[u8], manifest: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
+pub fn strict_audit_manifest_digest(manifest: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"oasis7:rollback-strict-audit-manifest:v1\0");
+    hasher.update((manifest.len() as u64).to_be_bytes());
+    hasher.update(manifest);
+    hex::encode(hasher.finalize())
+}
+
 pub fn build_unsigned_strict_audit_evidence(
     input: RollbackStrictAuditEvidenceInput,
 ) -> RollbackStrictAuditEvidence {

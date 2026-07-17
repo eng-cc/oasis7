@@ -3,14 +3,17 @@ use crate::viewer::runtime_live::recovery_receipt::RuntimeAuthoritativeRecoveryG
 
 #[path = "../../../bin/oasis7_governance_registry_audit/report.rs"]
 mod canonical_governance_audit_report;
+#[path = "authoritative_receipt_v14_manifest.rs"]
+mod manifest_binding_tests;
 
-fn canonical_clean_governance_audit_report_bytes() -> Vec<u8> {
+fn canonical_clean_governance_audit_report_bytes(audited_manifest_digest: String) -> Vec<u8> {
     use canonical_governance_audit_report::{
         GovernanceRegistryAuditReport, RollbackAuthorityAuditRow, audit_row,
     };
 
     serde_json::to_vec(&GovernanceRegistryAuditReport {
         world_dir: "/operator/world".to_string(),
+        audited_manifest_digest: Some(audited_manifest_digest),
         finality: audit_row("governance.finality.v1", 2, 3, 2, Some(true)),
         controllers: vec![audit_row("governance.controller.v1", 2, 3, 2, Some(true))],
         rollback_authorities: vec![
@@ -49,8 +52,28 @@ fn signed_strict_audit_evidence(
     issued_at_ms: u64,
     expires_at_ms: u64,
 ) -> crate::viewer::protocol::RollbackStrictAuditEvidence {
-    let audit_report_bytes = canonical_clean_governance_audit_report_bytes();
-    let manifest_bytes = br#"{"rollback_authorities":"exact-test-manifest"}"#.to_vec();
+    let manifest_bytes = serde_json::to_vec(&serde_json::json!({
+        "entries": server
+            .world
+            .snapshot()
+            .rollback_authority_registry
+            .records()
+            .map(|record| serde_json::json!({
+                "slot_id": match record.role {
+                    crate::runtime::RollbackAuthorityRole::OnCall => "ops.rollback.on_call.v1",
+                    crate::runtime::RollbackAuthorityRole::Governance => "governance.rollback.v1",
+                },
+                "signer_id": record.authority_id,
+                "scheme": "ed25519",
+                "public_key_hex": record.public_key_hex,
+                "threshold": 1
+            }))
+            .collect::<Vec<_>>()
+    }))
+    .expect("canonical test manifest");
+    let audit_report_bytes = canonical_clean_governance_audit_report_bytes(
+        crate::viewer::strict_audit_manifest_digest(&manifest_bytes),
+    );
     let mut evidence = crate::viewer::build_unsigned_strict_audit_evidence(
         crate::viewer::RollbackStrictAuditEvidenceInput {
             authority_id: "governance-bob".to_string(),
@@ -193,6 +216,16 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
             .rollback_receipt
             .expect("receipt")
             .ready_for_all_clear
+    );
+    manifest_binding_tests::assert_manifest_identity_mismatches_stay_blocked(
+        &mut server,
+        &audit_evidence,
+        &governance,
+    );
+    manifest_binding_tests::assert_missing_and_malformed_digest_stay_blocked(
+        &mut server,
+        &audit_evidence,
+        &governance,
     );
     let (ready, _) = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {

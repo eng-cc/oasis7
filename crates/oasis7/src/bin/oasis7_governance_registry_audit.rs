@@ -11,7 +11,10 @@ use serde::Deserialize;
 
 #[path = "oasis7_governance_registry_audit/report.rs"]
 mod audit_report;
+#[path = "oasis7_governance_registry_audit/manifest_digest.rs"]
+mod manifest_digest;
 use audit_report::{GovernanceRegistryAuditReport, RollbackAuthorityAuditRow, audit_row};
+use manifest_digest::audited_manifest_digest;
 
 const DEFAULT_FINALITY_SLOT_ID: &str = "governance.finality.v1";
 const DEFAULT_EXPECTED_THRESHOLD: u16 = 2;
@@ -98,6 +101,7 @@ fn main() {
 fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditReport, String> {
     let world = World::load_from_dir(options.world_dir.as_path())
         .map_err(|err| format!("load world {} failed: {err:?}", options.world_dir.display()))?;
+    let audited_manifest_digest = audited_manifest_digest(options.public_manifest.as_deref())?;
     let manifest_slots = if let Some(path) = options.public_manifest.as_ref() {
         Some(load_manifest_slot_expectations(
             path.as_path(),
@@ -307,6 +311,7 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
 
     Ok(GovernanceRegistryAuditReport {
         world_dir: options.world_dir.display().to_string(),
+        audited_manifest_digest,
         finality,
         controllers,
         rollback_authorities,

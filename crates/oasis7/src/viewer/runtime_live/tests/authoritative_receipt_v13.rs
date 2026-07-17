@@ -148,8 +148,56 @@ fn governed_player_attribution_preserves_non_rejected_census_semantics_across_re
     let mut restarted =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
             .expect("restart server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
     restarted.world = persisted.world;
+    restarted.rollback_readiness = generation.rollback_readiness;
     restarted.consumed_rollback_operator_nonces = generation.consumed_rollback_operator_nonces;
+    for (index, (batch_id, event_id, _, status)) in sources.iter().enumerate() {
+        let mut retry = crate::viewer::protocol::RollbackAttributionResolutionRequest {
+            authorization_nonce: rollback_nonce.to_string(),
+            source_batch_id: batch_id.clone(),
+            source_event_id: *event_id,
+            resolution: crate::viewer::protocol::RollbackAttributionResolution::Player {
+                player_id: format!("player-status-{index}"),
+            },
+            authorization: crate::viewer::protocol::RollbackOperatorAuthorization {
+                authority_id: "governance-bob".to_string(),
+                issued_at_ms: now_ms,
+                expires_at_ms: now_ms.saturating_add(60_000),
+                nonce: format!("operator-idempotent-player-retry-{index}"),
+                signature_scheme: "ed25519".to_string(),
+                signature_hex: String::new(),
+            },
+        };
+        retry.authorization.signature_hex = hex::encode(
+            governance
+                .sign(&retry.canonical_signing_payload().expect("payload"))
+                .to_bytes(),
+        );
+        let world_before = restarted.world.snapshot();
+        let nonces_before = restarted.consumed_rollback_operator_nonces.clone();
+        let readiness_before = restarted.rollback_readiness.clone();
+        let generation_before = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
+            .expect("load generation before retry")
+            .expect("generation before retry")
+            .recovery_metadata;
+        restarted
+            .handle_authoritative_recovery(
+                AuthoritativeRecoveryCommand::ResolveRollbackAttribution { request: retry },
+            )
+            .expect("exact terminal player retry is idempotent");
+        assert_eq!(restarted.world.snapshot(), world_before);
+        assert_eq!(restarted.consumed_rollback_operator_nonces, nonces_before);
+        assert_eq!(restarted.rollback_readiness, readiness_before);
+        assert_eq!(
+            RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
+                .expect("load generation after retry")
+                .expect("generation after retry")
+                .recovery_metadata,
+            generation_before,
+            "{status:?} retry must not rewrite the recovery generation"
+        );
+    }
     let (batch_id, event_id, _, _) = &sources[0];
     let mut conflicting = crate::viewer::protocol::RollbackAttributionResolutionRequest {
         authorization_nonce: rollback_nonce.to_string(),
