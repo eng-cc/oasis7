@@ -1938,17 +1938,90 @@ PY2
     for failure_status in (
         {**healthy_status, "consensus": {"state_sync_fallback_required": True}},
         {"consensus": {"state_sync_fallback_required": True}},
+        {**healthy_status, "consensus": {"state_sync_fallback_required": True}, "observability": {"network_head_available": False, "alerts": []}},
+        {**healthy_status, "consensus": {"state_sync_fallback_required": True}, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
         {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "authority_failure"}]}},
-        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "execution_driver_peer_mismatch"}]}},
         {**healthy_status, "consensus_progress_observer_error": "execution driver peer mismatch at height 42"},
+        {**healthy_status, "last_error": "authority_failure while reconnecting peers"},
     ):
         assert status_rollout_result(failure_status).returncode == 2, failure_status
+    transient_alert = {"code": "consensus_peer_head_unavailable"}
+    for fatal_alert_code in ("authority_failure", "execution_driver_peer_mismatch"):
+        fatal_alert = {"code": fatal_alert_code}
+        for ordered_alerts in (
+            [transient_alert, fatal_alert],
+            [fatal_alert, transient_alert],
+        ):
+            fatal_order_status = {
+                **healthy_status,
+                "observability": {
+                    "network_head_available": False,
+                    "alerts": ordered_alerts,
+                },
+            }
+            assert status_rollout_result(fatal_order_status).returncode == 2, fatal_order_status
+    for fatal_last_error in (
+        "authority_failure while reconnecting peers",
+        "execution driver peer mismatch at height 42",
+    ):
+        transient_with_fatal_error = {
+            **healthy_status,
+            "observability": {
+                "network_head_available": False,
+                "alerts": [transient_alert],
+            },
+            "last_error": fatal_last_error,
+        }
+        assert status_rollout_result(transient_with_fatal_error).returncode == 2, transient_with_fatal_error
+    for retry_status in (
+        {**healthy_status, "observability": {"network_head_available": False, "alerts": []}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
+    ):
+        assert status_rollout_result(retry_status).returncode == 1, retry_status
     for invalid_status in (
         "not-json",
         {**healthy_status, "running": False},
         {"running": True},
     ):
         assert status_rollout_result(invalid_status).returncode == 1, invalid_status
+
+    promotion_loop = text[text.index("authority_failure=0"):].replace(
+        "deadline=$((SECONDS + 120))",
+        "deadline=$((SECONDS + 2))",
+        1,
+    )
+    readiness_timeout_path = tmp / "readiness-timeout-path.sh"
+    readiness_timeout_path.write_text(
+        "#!/usr/bin/env bash\nset -uo pipefail\n"
+        + status_helper
+        + "\nHEALTHZ_URL=http://fixture/healthz\n"
+        + "STATUS_URL=http://fixture/status\n"
+        + "curl() {\n"
+        + "  if [[ \"${!#}\" == \"$STATUS_URL\" ]]; then\n"
+        + "    printf '%s' '{\"running\":true,\"consensus\":{\"state_sync_fallback_required\":false},\"observability\":{\"network_head_available\":false,\"alerts\":[{\"code\":\"consensus_peer_head_unavailable\"}]},\"consensus_progress_observer_error\":null,\"last_error\":null}'\n"
+        + "  else\n"
+        + "    printf '%s' '{\"ok\":false}'\n"
+        + "  fi\n"
+        + "}\n"
+        + "sleep() { SECONDS=$((SECONDS + $1)); }\n"
+        + "rollback() { printf 'rollback_reason=%s\\n' \"$1\"; }\n"
+        + "die() { printf 'die_message=%s\\n' \"$1\" >&2; exit 1; }\n"
+        + promotion_loop,
+        encoding="utf-8",
+    )
+    readiness_timeout_path.chmod(0o755)
+    timeout_result = subprocess.run(
+        ["bash", str(readiness_timeout_path)],
+        text=True,
+        capture_output=True,
+        env=rollout_env,
+        timeout=10,
+    )
+    assert timeout_result.returncode == 1, timeout_result
+    assert "rollback_reason=readiness_timeout" in timeout_result.stdout, timeout_result
+    assert "state_sync_escalation_required=true" not in timeout_result.stdout, timeout_result
+    assert "macOS observer readiness timed out" in timeout_result.stderr, timeout_result
 for artifact, relative_path in (
     ("world_snapshot", "world"),
     ("generated_world_sidecar", "generated-world/generated-scenario-world"),
