@@ -353,8 +353,26 @@ pub(super) fn recover_checkpoint_install_transaction(
     driver: &mut NodeRuntimeExecutionDriver,
 ) -> Result<(), String> {
     let path = CheckpointInstallTransaction::path(driver.records_dir.as_path());
-    if !path.exists() {
-        return Ok(());
+    let metadata = match fs::symlink_metadata(path.as_path()) {
+        Ok(metadata) => metadata,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(format!(
+                "read checkpoint install transaction metadata failed: {err}"
+            ));
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "checkpoint install transaction marker is a symbolic link: {}",
+            path.display()
+        ));
+    }
+    if !metadata.is_file() {
+        return Err(format!(
+            "checkpoint install transaction marker is not a regular file: {}",
+            path.display()
+        ));
     }
     let transaction: CheckpointInstallTransaction = serde_json::from_slice(
         &fs::read(path.as_path())

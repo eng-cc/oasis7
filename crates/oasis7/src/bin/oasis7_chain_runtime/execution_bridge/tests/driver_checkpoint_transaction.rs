@@ -13,6 +13,135 @@ use oasis7_node::{
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 
+fn assert_checkpoint_install_marker_startup_failure_preserves_publication<F>(
+    prefix: &str,
+    expected_error: &str,
+    install_marker: F,
+) where
+    F: FnOnce(&std::path::Path),
+{
+    let dir = temp_dir(prefix);
+    let state_path = dir.join("bridge-state.json");
+    let world_dir = dir.join("world");
+    let records_dir = dir.join("records");
+    let storage_profile = StorageProfileConfig::for_profile(StorageProfile::DevLocal);
+    let mut driver = NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        dir.join("storage"),
+        &storage_profile,
+    )
+    .expect("driver");
+    driver
+        .on_commit(NodeExecutionCommitContext {
+            world_id: "world-checkpoint-install-marker-startup".to_string(),
+            node_id: "node-a".to_string(),
+            proposer_id: "node-a".to_string(),
+            height: 1,
+            slot: 1,
+            epoch: 0,
+            node_block_hash: "block-1".to_string(),
+            action_root: compute_consensus_action_root(&[]).expect("empty action root"),
+            committed_actions: Vec::new(),
+            committed_at_unix_ms: 10_001,
+        })
+        .expect("commit");
+    drop(driver);
+
+    let marker = records_dir.join("checkpoint-install-transaction.json");
+    install_marker(marker.as_path());
+    let state_bytes = fs::read(state_path.as_path()).expect("state bytes before startup");
+    let snapshot_bytes =
+        fs::read(world_dir.join("snapshot.json")).expect("snapshot bytes before startup");
+    let journal_bytes =
+        fs::read(world_dir.join("journal.json")).expect("journal bytes before startup");
+    let latest_bytes =
+        fs::read(records_dir.join("latest.json")).expect("latest bytes before startup");
+
+    let err = match NodeRuntimeExecutionDriver::new_with_storage_profile(
+        state_path.clone(),
+        world_dir.clone(),
+        records_dir.clone(),
+        dir.join("storage"),
+        &storage_profile,
+    ) {
+        Ok(_) => panic!("startup must reject the checkpoint install marker"),
+        Err(err) => err,
+    };
+    assert!(
+        err.contains(expected_error),
+        "unexpected startup error: {err}"
+    );
+    assert_eq!(
+        fs::read(state_path).expect("state bytes after startup"),
+        state_bytes
+    );
+    assert_eq!(
+        fs::read(world_dir.join("snapshot.json")).expect("snapshot bytes after startup"),
+        snapshot_bytes
+    );
+    assert_eq!(
+        fs::read(world_dir.join("journal.json")).expect("journal bytes after startup"),
+        journal_bytes
+    );
+    assert_eq!(
+        fs::read(records_dir.join("latest.json")).expect("latest bytes after startup"),
+        latest_bytes
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn node_runtime_execution_driver_startup_rejects_malformed_checkpoint_install_marker_without_mutation()
+ {
+    assert_checkpoint_install_marker_startup_failure_preserves_publication(
+        "execution-driver-malformed-checkpoint-install-marker",
+        "parse checkpoint install transaction failed",
+        |marker| fs::write(marker, b"not-json").expect("write malformed marker"),
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn node_runtime_execution_driver_startup_rejects_checkpoint_install_marker_symlinks_without_mutation()
+ {
+    use std::os::unix::fs::symlink;
+
+    for (name, target, expected_target) in [
+        (
+            "execution-driver-valid-checkpoint-install-marker-symlink",
+            Some(b"not-json".as_slice()),
+            "marker-target.json",
+        ),
+        (
+            "execution-driver-dangling-checkpoint-install-marker-symlink",
+            None,
+            "missing-marker-target.json",
+        ),
+    ] {
+        assert_checkpoint_install_marker_startup_failure_preserves_publication(
+            name,
+            "symbolic link",
+            |marker| {
+                let target_path = marker.with_file_name(expected_target);
+                if let Some(target) = target {
+                    fs::write(target_path.as_path(), target).expect("write marker target");
+                }
+                symlink(target_path.as_path(), marker).expect("create marker symlink");
+                assert!(
+                    fs::symlink_metadata(marker)
+                        .expect("marker metadata")
+                        .file_type()
+                        .is_symlink(),
+                    "marker must remain a symlink"
+                );
+            },
+        );
+    }
+}
+
 #[test]
 fn node_runtime_execution_driver_checkpoint_install_startup_rolls_back_after_final_state_persist_fault()
  {
