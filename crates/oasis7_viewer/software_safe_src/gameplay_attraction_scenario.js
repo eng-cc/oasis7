@@ -125,6 +125,10 @@ function truthyText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function playerReadableText(value) {
+  return truthyText(value) && !/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/.test(value);
+}
+
 function actionsWithChoices(playerGameplay) {
   return (playerGameplay.available_actions || []).filter((action) => !action.disabled_reason);
 }
@@ -822,7 +826,7 @@ function buildSecondRunDesignCard(samples) {
     .every((gameplay) =>
       gameplay.route_tradeoff.rollback_available === false ||
       (gameplay.route_tradeoff.rollback_available === true &&
-        rollbackQuoteFields.every((field) => truthyText(gameplay.route_tradeoff[field]))),
+        rollbackQuoteFields.every((field) => playerReadableText(gameplay.route_tradeoff[field]))),
     );
   const routeTradeoffPersists = gameplays.some((gameplay) =>
     Array.isArray(gameplay.route_tradeoff?.affected_future_beats) &&
