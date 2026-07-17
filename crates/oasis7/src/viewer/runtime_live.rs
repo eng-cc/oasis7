@@ -59,6 +59,7 @@ mod mapping;
 mod player_gameplay;
 mod recovery;
 mod recovery_receipt;
+mod recovery_rollback_v2;
 mod recovery_session;
 mod session_policy;
 mod support;
@@ -129,9 +130,12 @@ pub struct ViewerRuntimeLiveServer {
     reorg_epoch: u64,
     session_policy: RuntimeSessionPolicy,
     session_revoke_metadata: BTreeMap<(String, String), RuntimeSessionRevokeMetadata>,
+    rollback_readiness: BTreeMap<String, recovery_receipt::RuntimeRollbackReadinessRecord>,
     settlement_ranking_gate: RuntimeSettlementRankingGate,
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
+    runtime_action_players: BTreeMap<u64, String>,
+    authoritative_recovery_write_fence: Option<String>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
     #[cfg(test)]
@@ -188,10 +192,18 @@ impl ViewerRuntimeLiveServer {
             .as_deref()
             .map(|dir| dir.join("runtime-live-authoritative-recovery"))
         {
-            if let Some(metadata) =
-                RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
+            std::fs::create_dir_all(&recovery_dir)?;
+            let preflight_path = recovery_dir.join(format!(
+                ".authoritative-recovery-preflight-{}",
+                std::process::id()
+            ));
+            std::fs::write(&preflight_path, b"authoritative-recovery-preflight")?;
+            std::fs::remove_file(&preflight_path)?;
+            if let Some(committed) =
+                RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
                     .map_err(ViewerRuntimeLiveServerError::Runtime)?
             {
+                let metadata = committed.recovery_metadata;
                 let generation = serde_json::from_slice::<
                     recovery_receipt::RuntimeAuthoritativeRecoveryGeneration,
                 >(&metadata)
@@ -207,13 +219,35 @@ impl ViewerRuntimeLiveServer {
                                 authoritative_challenges: VecDeque::new(),
                                 next_authoritative_challenge_id: 1,
                                 stable_checkpoints: VecDeque::new(),
+                                session_policy: RuntimeSessionPolicy::default(),
+                                session_revoke_metadata: Vec::new(),
+                                rollback_readiness: BTreeMap::new(),
+                                runtime_action_players: BTreeMap::new(),
                             },
                         )
                         .map_err(|_| generation_error)
                 })
                 .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
-                world = RuntimeWorld::load_from_dir(&recovery_dir)
-                    .map_err(ViewerRuntimeLiveServerError::Runtime)?;
+                world = committed.world;
+                if generation.ack.reorg_epoch != generation.reorg_epoch
+                    || generation
+                        .ack
+                        .rollback_receipt
+                        .as_ref()
+                        .is_some_and(|receipt| {
+                            world
+                                .rollback_nonce_outcome(receipt.authorization_nonce.as_str())
+                                .is_none_or(|outcome| {
+                                    outcome.canonical_intent_hash != receipt.canonical_intent_digest
+                                        || outcome.committed_reorg_epoch != generation.reorg_epoch
+                                })
+                        })
+                {
+                    return Err(ViewerRuntimeLiveServerError::Init(
+                        "authoritative recovery generation metadata/world integrity mismatch"
+                            .to_string(),
+                    ));
+                }
                 recovered_generation = Some(generation);
             }
         }
@@ -263,11 +297,40 @@ impl ViewerRuntimeLiveServer {
                 .as_ref()
                 .map(|generation| generation.reorg_epoch)
                 .unwrap_or(0),
-            session_policy: RuntimeSessionPolicy::default(),
-            session_revoke_metadata: BTreeMap::new(),
+            session_policy: recovered_generation
+                .as_ref()
+                .map(|generation| generation.session_policy.clone())
+                .unwrap_or_default(),
+            session_revoke_metadata: recovered_generation
+                .as_ref()
+                .map(|generation| {
+                    generation
+                        .session_revoke_metadata
+                        .iter()
+                        .map(|entry| {
+                            (
+                                session_revoke_metadata_key(
+                                    entry.player_id.as_str(),
+                                    entry.session_pubkey.as_str(),
+                                ),
+                                entry.metadata.clone(),
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            rollback_readiness: recovered_generation
+                .as_ref()
+                .map(|generation| generation.rollback_readiness.clone())
+                .unwrap_or_default(),
             settlement_ranking_gate: RuntimeSettlementRankingGate::default(),
             latest_player_gameplay_feedback: None,
             latest_player_gameplay_causality: None,
+            runtime_action_players: recovered_generation
+                .as_ref()
+                .map(|generation| generation.runtime_action_players.clone())
+                .unwrap_or_default(),
+            authoritative_recovery_write_fence: None,
             #[cfg(test)]
             recovery_fault_injection: None,
             #[cfg(test)]
@@ -438,14 +501,16 @@ impl ViewerRuntimeLiveServer {
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
             }
 
-            let (chain_link_enabled, chain_poll_interval) = {
+            let (write_fenced, chain_link_enabled, chain_poll_interval) = {
                 let server = lock_shared_server(&shared)?;
                 (
+                    server.authoritative_recovery_write_fence.is_some(),
                     server.chain_link_enabled(),
                     server.config.chain_poll_interval,
                 )
             };
-            if chain_link_enabled
+            if !write_fenced
+                && chain_link_enabled
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(chain_poll_interval)
             {
@@ -463,7 +528,9 @@ impl ViewerRuntimeLiveServer {
             }
 
             let mut server = lock_shared_server(&shared)?;
-            server.drive_auto_play(&mut session, &mut writer)?;
+            if server.authoritative_recovery_write_fence.is_none() {
+                server.drive_auto_play(&mut session, &mut writer)?;
+            }
         }
     }
 
@@ -493,7 +560,8 @@ impl ViewerRuntimeLiveServer {
                 Err(err) => return Err(ViewerRuntimeLiveServerError::Io(err)),
             }
 
-            if self.chain_link_enabled()
+            if self.authoritative_recovery_write_fence.is_none()
+                && self.chain_link_enabled()
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
             {
@@ -506,7 +574,9 @@ impl ViewerRuntimeLiveServer {
                 }
             }
 
-            self.drive_auto_play(&mut session, &mut writer)?;
+            if self.authoritative_recovery_write_fence.is_none() {
+                self.drive_auto_play(&mut session, &mut writer)?;
+            }
         }
     }
 
@@ -516,6 +586,21 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        self.resolve_authoritative_recovery_write_fence()?;
+        if self.authoritative_recovery_write_fence.is_some()
+            && !matches!(
+                &request,
+                ViewerRequest::Hello { .. }
+                    | ViewerRequest::HelloV2 { .. }
+                    | ViewerRequest::Subscribe { .. }
+                    | ViewerRequest::RequestSnapshot
+            )
+        {
+            return Err(ViewerRuntimeLiveServerError::Init(
+                "authoritative recovery commit status is unknown; runtime is read-only until durable generation readback resolves"
+                    .to_string(),
+            ));
+        }
         match request {
             ViewerRequest::Hello { version: _, .. } => {
                 session.negotiated_protocol =

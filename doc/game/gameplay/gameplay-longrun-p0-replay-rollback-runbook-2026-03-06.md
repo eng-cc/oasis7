@@ -25,8 +25,11 @@
 ```bash
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_import -- --world-dir <world-dir> --public-manifest <operator-local-public-manifest.json>
 env -u RUSTC_WRAPPER cargo run -p oasis7 --bin oasis7_governance_registry_audit -- --world-dir <world-dir> --public-manifest <operator-local-public-manifest.json> --strict-manifest-match
+./scripts/governed-rollback-v2-drill.sh
 env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime::tests::persistence::rollback_with_reconciliation_recovers_from_detected_tick_consensus_drift -- --nocapture
 ```
+
+`governed-rollback-v2-drill.sh` 是 repo-native 可执行协议演练门禁，覆盖 v2 Hello capability、RollbackV2 协商边界、不可变 receipt/同 nonce 重试、nonce conflict、重启恢复与 `GetRollbackReceipt` 证据链。任一子测试失败即保持 rollback freeze；脚本通过不替代 operator-local manifest import/strict audit 或真实 custody 签名证据。
 
 public manifest 只携带公钥。两把 Ed25519 私钥必须分别由 on-call 与 governance 的外部 custody/HSM 保存，不得写入 manifest、world snapshot、Viewer 请求模板、仓库或同一 operator 主机；签名者只接收并签署 canonical intent bytes。
 

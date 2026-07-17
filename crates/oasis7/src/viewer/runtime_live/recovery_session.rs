@@ -2,7 +2,42 @@ use super::authoritative::compute_runtime_snapshot_hash;
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
 
+pub(super) struct RuntimeSessionMutationSnapshot {
+    session_policy: RuntimeSessionPolicy,
+    session_revoke_metadata: BTreeMap<(String, String), RuntimeSessionRevokeMetadata>,
+    agent_player_bindings: BTreeMap<String, String>,
+    player_agent_bindings: BTreeMap<String, String>,
+    agent_public_key_bindings: BTreeMap<String, String>,
+    player_auth_last_nonce: BTreeMap<String, u64>,
+    pending_virtual_events: VecDeque<WorldEvent>,
+}
+
 impl ViewerRuntimeLiveServer {
+    pub(super) fn session_mutation_snapshot(&self) -> RuntimeSessionMutationSnapshot {
+        RuntimeSessionMutationSnapshot {
+            session_policy: self.session_policy.clone(),
+            session_revoke_metadata: self.session_revoke_metadata.clone(),
+            agent_player_bindings: self.llm_sidecar.agent_player_bindings.clone(),
+            player_agent_bindings: self.llm_sidecar.player_agent_bindings.clone(),
+            agent_public_key_bindings: self.llm_sidecar.agent_public_key_bindings.clone(),
+            player_auth_last_nonce: self.llm_sidecar.player_auth_last_nonce.clone(),
+            pending_virtual_events: self.pending_virtual_events.clone(),
+        }
+    }
+
+    pub(super) fn restore_session_mutation_snapshot(
+        &mut self,
+        snapshot: RuntimeSessionMutationSnapshot,
+    ) {
+        self.session_policy = snapshot.session_policy;
+        self.session_revoke_metadata = snapshot.session_revoke_metadata;
+        self.llm_sidecar.agent_player_bindings = snapshot.agent_player_bindings;
+        self.llm_sidecar.player_agent_bindings = snapshot.player_agent_bindings;
+        self.llm_sidecar.agent_public_key_bindings = snapshot.agent_public_key_bindings;
+        self.llm_sidecar.player_auth_last_nonce = snapshot.player_auth_last_nonce;
+        self.pending_virtual_events = snapshot.pending_virtual_events;
+    }
+
     pub(super) fn current_recovery_cursor(
         &self,
     ) -> Result<RuntimeRecoveryCursor, ViewerRuntimeLiveServerError> {

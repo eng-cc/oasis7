@@ -19,6 +19,60 @@ pub enum AuthoritativeRecoveryCommitError {
 }
 
 impl World {
+    pub fn load_authoritative_recovery_generation(
+        dir: impl AsRef<Path>,
+    ) -> Result<Option<CommittedAuthoritativeRecoveryGeneration>, WorldError> {
+        let dir = dir.as_ref();
+        let store_root = dir.join(DISTFS_STATE_DIR);
+        let Some(index) = persistence_support::load_sidecar_generation_index(&store_root)? else {
+            return Ok(None);
+        };
+        let mut saw_authoritative_generation = false;
+        for generation_id in std::iter::once(index.latest_generation.as_str())
+            .chain(index.rollback_safe_generation.as_deref())
+        {
+            let Some(record) = index.generations.get(generation_id) else {
+                continue;
+            };
+            if record.recovery_metadata_path.is_none() && record.recovery_metadata_hash.is_none() {
+                continue;
+            }
+            saw_authoritative_generation = true;
+            if persistence_support::validate_sidecar_generation_record(&store_root, record).is_err()
+            {
+                continue;
+            }
+            let metadata_path = record.recovery_metadata_path.as_deref().ok_or_else(|| {
+                WorldError::DistributedValidationFailed {
+                    reason: format!(
+                        "authoritative recovery generation has no metadata: generation_id={generation_id}"
+                    ),
+                }
+            })?;
+            let recovery_metadata = fs::read(store_root.join(metadata_path))?;
+            let (manifest, journal_segments) =
+                persistence_support::read_sidecar_generation_payloads(&store_root, record)?;
+            let store = LocalCasStore::new(&store_root);
+            let snapshot: Snapshot = assemble_snapshot(&manifest, &store)?;
+            let events: Vec<WorldEvent> =
+                assemble_journal(&journal_segments, &store, |event: &WorldEvent| event.id)?;
+            let world = World::from_snapshot(snapshot, Journal { events })?;
+            return Ok(Some(CommittedAuthoritativeRecoveryGeneration {
+                generation_id: generation_id.to_string(),
+                world,
+                recovery_metadata,
+            }));
+        }
+        if saw_authoritative_generation {
+            Err(WorldError::DistributedValidationFailed {
+                reason: "no valid committed authoritative recovery generation is available"
+                    .to_string(),
+            })
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Durably commits runtime state and opaque Viewer recovery metadata in one generation.
     /// The sidecar generation index replacement is the commit point.
     pub fn save_authoritative_recovery_generation(
@@ -166,31 +220,8 @@ impl World {
     pub fn load_authoritative_recovery_metadata(
         dir: impl AsRef<Path>,
     ) -> Result<Option<Vec<u8>>, WorldError> {
-        let store_root = dir.as_ref().join(DISTFS_STATE_DIR);
-        let Some(index) = persistence_support::load_sidecar_generation_index(store_root.as_path())?
-        else {
-            return Ok(None);
-        };
-        for generation_id in std::iter::once(index.latest_generation.as_str())
-            .chain(index.rollback_safe_generation.as_deref())
-        {
-            let Some(record) = index.generations.get(generation_id) else {
-                continue;
-            };
-            if persistence_support::validate_sidecar_generation_record(store_root.as_path(), record)
-                .is_err()
-            {
-                continue;
-            }
-            return record
-                .recovery_metadata_path
-                .as_deref()
-                .map(|relative| fs::read(store_root.join(relative)).map_err(WorldError::from))
-                .transpose();
-        }
-        Err(WorldError::DistributedValidationFailed {
-            reason: "no valid committed sidecar generation is available".to_string(),
-        })
+        Ok(Self::load_authoritative_recovery_generation(dir)?
+            .map(|generation| generation.recovery_metadata))
     }
 }
 
@@ -266,6 +297,27 @@ mod tests {
         );
         let restored = World::load_from_dir(&dir).expect("restore committed runtime generation");
         assert_eq!(restored.snapshot(), world.snapshot());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn authoritative_recovery_loader_returns_world_and_metadata_from_one_generation() {
+        let dir = temp_world_dir("recovery-generation-atomic-loader");
+        let mut world = World::new();
+        world
+            .save_authoritative_recovery_generation(&dir, b"receipt-old")
+            .expect("commit initial generation");
+        world.step().expect("advance replacement generation");
+        world
+            .save_authoritative_recovery_generation(&dir, b"receipt-new")
+            .expect("commit replacement generation");
+
+        let loaded = World::load_authoritative_recovery_generation(&dir)
+            .expect("load one committed generation")
+            .expect("committed generation");
+        assert_eq!(loaded.recovery_metadata, b"receipt-new");
+        assert_eq!(loaded.world.snapshot(), world.snapshot());
+        assert_eq!(loaded.world.journal(), world.journal());
         let _ = fs::remove_dir_all(dir);
     }
 

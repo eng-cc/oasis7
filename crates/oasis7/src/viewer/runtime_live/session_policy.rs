@@ -10,13 +10,13 @@ pub(super) struct RuntimeRecoveryCursor {
     pub(super) stable_batch_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeSessionRevokeMetadata {
     pub(super) revoke_reason: Option<String>,
     pub(super) revoked_by: Option<String>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeSessionPolicy {
     active_pubkey_by_player: BTreeMap<String, String>,
     revoked_pubkeys_by_player: BTreeMap<String, BTreeSet<String>>,

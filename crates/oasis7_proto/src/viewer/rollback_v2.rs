@@ -110,6 +110,26 @@ pub struct PlayerRollbackDisposition {
     pub disposition: PlayerActionDisposition,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compensation_case_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compensation: Option<PlayerCompensationStatus>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerCompensationStatus {
+    pub case_id: String,
+    pub responsible_party: String,
+    pub ticket_reference: String,
+    pub state: PlayerCompensationState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlayerCompensationState {
+    PendingAuthorization,
+    Authorized,
+    InProgress,
+    Completed,
+    Rejected,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

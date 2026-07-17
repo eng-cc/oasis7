@@ -7,7 +7,11 @@ use oasis7::runtime::{
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, MAIN_TOKEN_TREASURY_BUCKET_SECURITY_RESERVE,
     MAIN_TOKEN_TREASURY_BUCKET_STAKING_REWARD, World,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+#[path = "oasis7_governance_registry_audit/report.rs"]
+mod audit_report;
+use audit_report::{GovernanceRegistryAuditReport, RollbackAuthorityAuditRow, audit_row};
 
 const DEFAULT_FINALITY_SLOT_ID: &str = "governance.finality.v1";
 const DEFAULT_EXPECTED_THRESHOLD: u16 = 2;
@@ -54,29 +58,6 @@ struct ManifestSlotExpectation {
     threshold: u16,
     public_keys: BTreeSet<String>,
     signer_ids: BTreeSet<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct GovernanceRegistryAuditReport {
-    world_dir: String,
-    finality: GovernanceSlotAuditRow,
-    controllers: Vec<GovernanceSlotAuditRow>,
-    overall_single_failure_tolerance_pass: bool,
-    manifest_match_pass: Option<bool>,
-    overall_status: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct GovernanceSlotAuditRow {
-    slot_id: String,
-    threshold: u16,
-    signer_count: usize,
-    tolerated_failures: usize,
-    single_failure_tolerant: bool,
-    threshold_matches_expectation: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    manifest_match: Option<bool>,
-    status: String,
 }
 
 fn main() {
@@ -186,6 +167,65 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
         .collect::<Vec<_>>();
     controllers.sort_by(|left, right| left.slot_id.cmp(&right.slot_id));
 
+    let rollback_registry = &world.snapshot().rollback_authority_registry;
+    let mut rollback_blockers = Vec::new();
+    let rollback_authorities = [
+        (
+            ROLLBACK_ON_CALL_SLOT_ID,
+            "on_call",
+            oasis7::runtime::RollbackAuthorityRole::OnCall,
+        ),
+        (
+            ROLLBACK_GOVERNANCE_SLOT_ID,
+            "governance",
+            oasis7::runtime::RollbackAuthorityRole::Governance,
+        ),
+    ]
+    .into_iter()
+    .map(|(slot_id, role_label, role)| {
+        let record = rollback_registry
+            .records()
+            .find(|record| record.role == role);
+        let configured = record.is_some();
+        let active = record.is_some_and(|record| record.active);
+        let manifest_match = manifest_slots.as_ref().map(|slots| {
+            let Some(expected) = slots.get(slot_id) else {
+                return false;
+            };
+            record.is_some_and(|record| {
+                expected.threshold == 1
+                    && expected.signer_ids.len() == 1
+                    && expected.public_keys.len() == 1
+                    && expected.signer_ids.contains(record.authority_id.as_str())
+                    && expected
+                        .public_keys
+                        .contains(record.public_key_hex.as_str())
+            })
+        });
+        let status = if !configured {
+            "missing".to_string()
+        } else if !active {
+            "inactive".to_string()
+        } else if manifest_match == Some(false) {
+            "manifest_mismatch".to_string()
+        } else {
+            "ready".to_string()
+        };
+        if status != "ready" {
+            rollback_blockers.push(format!("{slot_id}:{status}"));
+        }
+        RollbackAuthorityAuditRow {
+            slot_id: slot_id.to_string(),
+            role: role_label.to_string(),
+            configured,
+            active,
+            threshold: 1,
+            manifest_match,
+            status,
+        }
+    })
+    .collect::<Vec<_>>();
+
     let overall_single_failure_tolerance_pass = finality.single_failure_tolerant
         && controllers.iter().all(|row| row.single_failure_tolerant);
     let threshold_expectation_pass = finality.threshold_matches_expectation
@@ -267,39 +307,12 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
         world_dir: options.world_dir.display().to_string(),
         finality,
         controllers,
+        rollback_authorities,
+        rollback_blockers,
         overall_single_failure_tolerance_pass,
         manifest_match_pass,
         overall_status,
     })
-}
-
-fn audit_row(
-    slot_id: &str,
-    threshold: u16,
-    signer_count: usize,
-    expected_threshold: u16,
-    manifest_match: Option<bool>,
-) -> GovernanceSlotAuditRow {
-    let tolerated_failures = signer_count.saturating_sub(usize::from(threshold));
-    let single_failure_tolerant = tolerated_failures >= 1;
-    let threshold_matches_expectation = threshold == expected_threshold;
-    let status = if !threshold_matches_expectation {
-        "threshold_mismatch".to_string()
-    } else if !single_failure_tolerant {
-        "single_failure_blocks_slot".to_string()
-    } else {
-        "single_failure_tolerant".to_string()
-    };
-    GovernanceSlotAuditRow {
-        slot_id: slot_id.to_string(),
-        threshold,
-        signer_count,
-        tolerated_failures,
-        single_failure_tolerant,
-        threshold_matches_expectation,
-        manifest_match,
-        status,
-    }
 }
 
 fn validate_audit_report(
@@ -512,6 +525,7 @@ mod tests {
         const ON_CALL: &str = "1111111111111111111111111111111111111111111111111111111111111111";
         const GOVERNANCE: &str = "2222222222222222222222222222222222222222222222222222222222222222";
         let mut world = World::load_from_dir(world_dir).expect("load fixture world");
+        let _ = std::fs::remove_dir_all(world_dir.join(".distfs-state"));
         world
             .set_rollback_authority_registry(rollback_registry(ON_CALL, GOVERNANCE))
             .expect("set rollback registry");
@@ -1082,6 +1096,31 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("does not exactly match"))
         );
+    }
+
+    #[test]
+    fn strict_audit_emits_redacted_per_slot_rollback_rows_without_custody_material() {
+        let (world_dir, manifest_path) = write_world_and_manifest();
+        provision_rollback_fixture(&world_dir, &manifest_path);
+        let options = CliOptions {
+            world_dir,
+            public_manifest: Some(manifest_path),
+            finality_slot_id: "governance.finality.v1".to_string(),
+            default_expected_threshold: 2,
+            strict_manifest_match: true,
+            require_single_failure_tolerance: false,
+        };
+
+        let report = build_audit_report(&options).expect("build strict audit report");
+        assert_eq!(report.rollback_authorities.len(), 2);
+        assert!(report.rollback_blockers.is_empty());
+        let encoded = serde_json::to_string(&report).expect("encode audit report");
+        assert!(encoded.contains("ops.rollback.on_call.v1"));
+        assert!(encoded.contains("governance.rollback.v1"));
+        assert!(!encoded.contains("rollback-on-call-01"));
+        assert!(!encoded.contains("rollback-governance-01"));
+        assert!(!encoded.contains("1111111111111111"));
+        assert!(!encoded.contains("2222222222222222"));
     }
 
     #[test]

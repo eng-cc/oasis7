@@ -240,6 +240,54 @@ impl World {
             .and_then(|outcome| outcome.receipt.clone())
     }
 
+    pub fn transition_rollback_compensation_case(
+        &mut self,
+        nonce: &str,
+        source: &RollbackSourceEventIdentity,
+        next: super::super::RollbackCompensationState,
+    ) -> Result<(), WorldError> {
+        let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        let disposition = outcome
+            .dispositions
+            .iter_mut()
+            .find(|entry| {
+                entry.source_batch_id == source.source_batch_id
+                    && entry.source_event_id == source.source_event_id
+            })
+            .ok_or_else(|| WorldError::DistributedValidationFailed {
+                reason: "rollback compensation source is not in the affected census".to_string(),
+            })?;
+        let case = disposition.compensation.as_mut().ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: "rollback disposition has no accountable compensation case".to_string(),
+            }
+        })?;
+        use super::super::RollbackCompensationState as State;
+        let allowed = case.state == next
+            || matches!(
+                (case.state, next),
+                (
+                    State::PendingAuthorization,
+                    State::Authorized | State::Rejected
+                ) | (State::Authorized, State::InProgress | State::Rejected)
+                    | (State::InProgress, State::Completed)
+            );
+        if !allowed {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "invalid rollback compensation transition: current={:?} next={next:?}",
+                    case.state
+                ),
+            });
+        }
+        case.state = next;
+        Ok(())
+    }
+
     pub fn validate_rollback_receipt_projection(
         &self,
         nonce: &str,

@@ -242,6 +242,9 @@ pub enum AuthoritativeRecoveryCommand {
     GetRollbackReceipt {
         authorization_nonce: String,
     },
+    ReevaluateRollbackReadiness {
+        authorization_nonce: String,
+    },
     ReconnectSync {
         request: AuthoritativeReconnectSyncRequest,
     },

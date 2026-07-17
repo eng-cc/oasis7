@@ -1,5 +1,176 @@
 use super::*;
 
+fn install_viewer_recovery_precommit_failure(dir: &std::path::Path) {
+    let generation_root = dir.join(".distfs-state/sidecar-generations");
+    std::fs::create_dir_all(&generation_root).expect("create generation root");
+    std::fs::write(
+        generation_root.join(".test-fail-before-index-commit"),
+        b"fail",
+    )
+    .expect("install precommit failpoint");
+}
+
+#[test]
+fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
+    let register_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-register-atomic-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    install_viewer_recovery_precommit_failure(&register_dir);
+    let mut register_server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    register_server.set_authoritative_recovery_dir_override(Some(register_dir.clone()));
+    let agent_id = register_server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (register_public, register_private) = test_signer(91);
+    let register_request = signed_session_register_request(
+        crate::viewer::AuthoritativeSessionRegisterRequest {
+            player_id: "player-register-atomic".to_string(),
+            public_key: None,
+            auth: None,
+            requested_agent_id: Some(agent_id.clone()),
+            force_rebind: false,
+        },
+        1,
+        register_public.as_str(),
+        register_private.as_str(),
+    );
+    register_server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: register_request,
+        })
+        .expect_err("register persistence failure");
+    assert!(
+        register_server
+            .session_policy
+            .validate_known_session_key("player-register-atomic", register_public.as_str())
+            .is_err()
+    );
+    assert!(
+        !register_server
+            .llm_sidecar
+            .agent_player_bindings
+            .contains_key(agent_id.as_str())
+    );
+    assert!(
+        !register_server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .contains_key("player-register-atomic")
+    );
+
+    let mutation_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-mutation-atomic-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    server.set_authoritative_recovery_dir_override(Some(mutation_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (old_public, old_private) = test_signer(92);
+    register_runtime_session(
+        &mut server,
+        "player-mutation-atomic",
+        Some(agent_id.as_str()),
+        1,
+        old_public.as_str(),
+        old_private.as_str(),
+    );
+    install_viewer_recovery_precommit_failure(&mutation_dir);
+    let (new_public, _) = test_signer(93);
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RotateSession {
+            request: AuthoritativeSessionRotateRequest {
+                player_id: "player-mutation-atomic".to_string(),
+                old_session_pubkey: old_public.clone(),
+                new_session_pubkey: new_public.clone(),
+                rotate_reason: "atomic-rotate".to_string(),
+                rotated_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("rotate persistence failure");
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", old_public.as_str())
+            .is_ok()
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", new_public.as_str())
+            .is_err()
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some(old_public.as_str())
+    );
+    assert!(
+        !server
+            .session_revoke_metadata
+            .contains_key(&session_revoke_metadata_key(
+                "player-mutation-atomic",
+                old_public.as_str()
+            ))
+    );
+
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: "player-mutation-atomic".to_string(),
+                session_pubkey: Some(old_public.clone()),
+                revoke_reason: "atomic-revoke".to_string(),
+                revoked_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("revoke persistence failure");
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-mutation-atomic", old_public.as_str())
+            .is_ok()
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some("player-mutation-atomic")
+    );
+    assert!(
+        !server
+            .session_revoke_metadata
+            .contains_key(&session_revoke_metadata_key(
+                "player-mutation-atomic",
+                old_public.as_str()
+            ))
+    );
+    let _ = std::fs::remove_dir_all(register_dir);
+    let _ = std::fs::remove_dir_all(mutation_dir);
+}
+
 #[test]
 fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
     let _guard = lock_test_llm_env();
