@@ -16,6 +16,21 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         }
+        let requested_reason = request.reason.trim();
+        let rollback_reason = if requested_reason.is_empty() {
+            "authoritative_recovery_rollback"
+        } else {
+            requested_reason
+        };
+        if intent.reason != rollback_reason {
+            return Err(recovery_error(
+                "rollback_authorization_invalid",
+                "outer rollback request reason does not match the signed intent reason",
+                Some(intent.replay_target.batch_id),
+                None,
+                None,
+            ));
+        }
         let canonical_v2_payload = intent.canonical_signing_payload().map_err(|err| {
             recovery_error(
                 "rollback_intent_encode_failed",

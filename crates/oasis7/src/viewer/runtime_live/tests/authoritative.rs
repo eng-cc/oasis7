@@ -27,6 +27,9 @@ mod receipt_v13_tests;
 #[path = "authoritative_receipt_v15_atomicity.rs"]
 mod receipt_v15_atomicity_tests;
 
+#[path = "authoritative_rollback_v2_exact_retry_tests.rs"]
+mod rollback_v2_exact_retry_tests;
+
 fn configure_rollback_authorities(
     server: &mut ViewerRuntimeLiveServer,
 ) -> (SigningKey, SigningKey) {

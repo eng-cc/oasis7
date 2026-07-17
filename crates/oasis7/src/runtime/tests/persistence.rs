@@ -5,6 +5,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "persistence_recovery_exact_retry_tests.rs"]
+mod recovery_exact_retry_tests;
 #[path = "persistence_recovery_tests.rs"]
 mod recovery_tests;
 #[path = "persistence_resource_tests.rs"]

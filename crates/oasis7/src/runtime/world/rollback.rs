@@ -696,7 +696,10 @@ impl World {
                     supplied_intent_hash,
                 });
             }
-            self.verify_rollback_authorization_envelope(
+            self.verify_rollback_authorization(
+                &snapshot,
+                &reason,
+                target_batch_id,
                 &approval,
                 canonical_payload.as_slice(),
                 now_ms,
@@ -711,6 +714,7 @@ impl World {
             &approval,
             canonical_payload.as_slice(),
             now_ms,
+            false,
         )?;
 
         if approval.intent.target_journal_len < snapshot.journal_len
@@ -921,6 +925,7 @@ impl World {
         envelope: &RollbackAuthorizationEnvelope,
         canonical_payload: &[u8],
         now_ms: u64,
+        allow_consumed_nonce: bool,
     ) -> Result<(String, String), WorldError> {
         let reject = |reason: String| WorldError::DistributedValidationFailed { reason };
         if self.rollback_authority_registry.is_empty() {
@@ -942,7 +947,12 @@ impl World {
                 "rollback authorization does not match the exact operation".to_string(),
             ));
         }
-        self.verify_rollback_authorization_envelope(envelope, canonical_payload, now_ms, false)
+        self.verify_rollback_authorization_envelope(
+            envelope,
+            canonical_payload,
+            now_ms,
+            allow_consumed_nonce,
+        )
     }
 
     pub(crate) fn authenticate_committed_rollback_retry(
