@@ -59,3 +59,44 @@ fn static_http_server_serves_large_static_asset_completely() {
     assert!(String::from_utf8_lossy(&response[..split_at]).starts_with("HTTP/1.1 200 OK"));
     assert_eq!(&response[split_at..], large_body.as_slice());
 }
+
+#[test]
+fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
+    let temp_dir = make_temp_dir("unauthenticated_issue");
+    fs::write(temp_dir.join("index.html"), b"ok").expect("write index");
+    let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
+    let port = probe.local_addr().expect("probe addr").port();
+    drop(probe);
+    let mut server = start_static_http_server(
+        DeploymentMode::HostedPublicJoin,
+        "127.0.0.1:0",
+        "127.0.0.1",
+        port,
+        temp_dir.as_path(),
+        None,
+    )
+    .expect("start static HTTP server");
+
+    let mut response = Vec::new();
+    for _ in 0..50 {
+        match TcpStream::connect(("127.0.0.1", port)) {
+            Ok(mut stream) => {
+                stream
+                    .write_all(
+                        b"GET /api/public/player-session/issue HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
+                    )
+                    .expect("write request");
+                stream.read_to_end(&mut response).expect("read response");
+                break;
+            }
+            Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
+        }
+    }
+    stop_static_http_server(&mut server);
+
+    assert!(
+        String::from_utf8_lossy(&response).starts_with("HTTP/1.1 405 Method Not Allowed"),
+        "public unauthenticated GET issue route must not allocate a session"
+    );
+    let _ = fs::remove_dir_all(temp_dir);
+}

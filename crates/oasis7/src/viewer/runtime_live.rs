@@ -74,7 +74,7 @@ use authoritative::{
 };
 use claim_snapshot::build_player_agent_claim_snapshot;
 pub use config::{ChainLinkPolicy, ViewerRuntimeLiveServerConfig, ViewerRuntimeLiveServerError};
-use control_plane::RuntimeLlmSidecar;
+use control_plane::{RuntimeLlmSidecar, RuntimePlayerBindingPlan};
 use control_utils::{control_mode_for_action, control_mode_label, runtime_control_error_details};
 use decision_trace::{append_decision_upstream_trace, decision_trace_provider_error_retryable};
 use gameplay_snapshot::{

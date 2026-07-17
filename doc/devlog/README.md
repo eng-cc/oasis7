@@ -5,7 +5,7 @@
 ## Current Boundary
 - `doc/devlog` is no longer a runtime source of truth.
 - The former daily files from 2026-02-03 through 2026-04-01 were summarized here and removed from the active repository surface.
-- Current task truth lives in GitHub task issues, GitHub Project items, `.pm/github-project-sync/tasks.json`, and the relevant `doc/<module>/project.md` / `doc/<module>/prd.md`.
+- Current task truth and execution-evidence authority are defined by the [engineering workflow source of truth](../engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract); this archive does not restate that mutable contract.
 - Historical references that previously pointed to a specific daily file should use this summary as the compact archive pointer.
 
 ## Retired Corpus
@@ -48,6 +48,6 @@ Total retired daily files: 57. Former line count: 42,309.
 | `2026-03-10.md` | 1311 | Governance rounds, release evidence, runtime/viewer handoffs, and QA records converged. |
 
 ## Usage
-- For current status, read GitHub task issue evidence comments and the relevant module `project.md`; do not use this page as current truth.
+- For current status, follow the canonical workflow authority linked above; do not use this page as current truth.
 - For historical orientation, use the monthly summaries above, then follow the referenced module/topic documents.
-- Do not add new daily files under `doc/devlog`; create or update GitHub task issue evidence comments instead.
+- Do not add new daily files under `doc/devlog`; use the current execution-evidence sink defined by the canonical workflow instead.

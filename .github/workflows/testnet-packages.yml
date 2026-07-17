@@ -24,6 +24,7 @@ on:
         options:
           - linux_only
           - linux_macos_x64
+          - linux_macos_arm64
           - all_existing
 
 env:
@@ -59,6 +60,9 @@ jobs:
               ;;
             linux_macos_x64)
               matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"}]}'
+              ;;
+            linux_macos_arm64)
+              matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-arm64","asset_name":"oasis7-macos-arm64.dmg","target_triple":"aarch64-apple-darwin"}]}'
               ;;
             all_existing)
               matrix='{"include":[{"os":"ubuntu-24.04","platform":"linux-x64","asset_name":"oasis7-linux-x86_64.AppImage","target_triple":"native"},{"os":"macos-14","platform":"macos-x64","asset_name":"oasis7-macos-x64.dmg","target_triple":"x86_64-apple-darwin"},{"os":"windows-2022","platform":"windows-x64","asset_name":"oasis7-windows-x64.exe","target_triple":"native"}]}'
@@ -232,6 +236,10 @@ jobs:
             --platform "${{ matrix.platform }}" \
             --bundle-dir "output/testnet-packages/assets/oasis7-${{ matrix.platform }}" \
             | tee "output/testnet-packages/assets/${{ matrix.platform }}-entrypoint-validation.log"
+          if [[ "${{ matrix.platform }}" == "macos-arm64" ]]; then
+            runtime="output/testnet-packages/assets/oasis7-${{ matrix.platform }}/bin/oasis7_chain_runtime"
+            file "${runtime}" | grep -Eq 'Mach-O.*arm64'
+          fi
       - name: Stage bundle manifest
         shell: bash
         run: |
@@ -291,7 +299,8 @@ jobs:
           closure="${assets}/windows-governed-closure"
           python3 ./scripts/p2p-public-testnet-stage-windows-governed-closure.py \
             --runtime-build-ref "${assets}/oasis7-windows-x64/bin/oasis7_chain_runtime.exe" \
-            --out-dir "${closure}"
+            --out-dir "${closure}" \
+            --bash-executable "${BASH}"
 
           required=(
             public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json

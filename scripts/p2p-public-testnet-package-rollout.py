@@ -27,6 +27,8 @@ WINDOWS_GOVERNED_MANIFEST = (
 WINDOWS_GOVERNED_BOOTSTRAP = (
     r"C:\oasis7-deploy\config\public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.windows.txt"
 )
+CANONICAL_PROVIDER_NAMES = ("sequencer", "storage")
+MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
 
 
 def die(message: str) -> None:
@@ -103,6 +105,7 @@ def platform_asset(platform_dir: Path, platform: str) -> Path:
         "linux-x64": "oasis7-linux-x64-bundle.tar.gz",
         "windows-x64": "oasis7-windows-x64.exe",
         "macos-x64": "oasis7-macos-x64.dmg",
+        "macos-arm64": "oasis7-macos-arm64.dmg",
     }
     name = names.get(platform)
     if not name:
@@ -122,6 +125,16 @@ def require_verified_files(platform: str, platform_dir: Path, buildinfo: Path, a
     for rel_name in required:
         if rel_name not in verified_set:
             die(f"{platform} checksum file does not cover required artifact: {rel_name}")
+
+
+def require_macos_arm64_metadata(info: dict[str, str]) -> None:
+    if info.get("platform") != "macos-arm64":
+        die(f"macos-arm64 BUILDINFO platform mismatch: {info.get('platform', '')!r}")
+    if info.get("target_triple") != "aarch64-apple-darwin":
+        die(
+            "macos-arm64 BUILDINFO target_triple must be "
+            "aarch64-apple-darwin"
+        )
 
 
 def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tuple[Path, str]]:
@@ -268,22 +281,39 @@ def windows_governed_files(platform_dir: Path, verified: list[str]) -> list[tupl
     return files
 
 
-def require_same_build(platform_infos: dict[str, dict[str, str]]) -> dict[str, str]:
-    required = ("package_version", "commit", "run_id")
+def require_same_commit(platform_infos: dict[str, dict[str, str]]) -> str:
     first_platform = next(iter(platform_infos))
-    expected = {key: platform_infos[first_platform].get(key, "") for key in required}
-    for key, value in expected.items():
-        if not value:
-            die(f"{first_platform} BUILDINFO missing {key}")
+    expected = platform_infos[first_platform].get("commit", "")
+    if not expected:
+        die(f"{first_platform} BUILDINFO missing commit")
     for platform, info in platform_infos.items():
-        for key, expected_value in expected.items():
-            actual = info.get(key, "")
-            if actual != expected_value:
-                die(
-                    f"{platform} BUILDINFO {key}={actual!r} does not match "
-                    f"{first_platform} {key}={expected_value!r}"
-                )
+        actual = info.get("commit", "")
+        if actual != expected:
+            die(
+                f"{platform} BUILDINFO commit={actual!r} does not match "
+                f"{first_platform} commit={expected!r}"
+            )
     return expected
+
+
+def package_provenance(platform: str, platform_dir: Path, asset: Path, info: dict[str, str]) -> dict[str, str]:
+    package_version = info.get("package_version", "")
+    run_id = info.get("run_id", "")
+    commit = info.get("commit", "")
+    if not package_version or not run_id or not commit:
+        die(f"{platform} BUILDINFO missing package_version, run_id, or commit")
+    buildinfo = platform_dir / f"{platform}-BUILDINFO"
+    sums = platform_dir / f"{platform}-SHA256SUMS"
+    return {
+        "platform": platform,
+        "package_version": package_version,
+        "run_id": run_id,
+        "commit": commit,
+        "asset": asset.name,
+        "asset_sha256": sha256_file(asset),
+        "buildinfo_sha256": sha256_file(buildinfo),
+        "sha256sums_sha256": sha256_file(sums),
+    }
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -298,6 +328,166 @@ def load_manifest(path: Path) -> dict[str, Any]:
 
 def artifact_ref(platform: str, version: str, asset_name: str, runtime_name: str) -> str:
     return f"testnet-package-{platform}-{version}/{asset_name}!/bin/{runtime_name}"
+
+
+def canonical_provider_status_urls(manifest: dict[str, Any]) -> tuple[str, str]:
+    providers: dict[str, str] = {}
+    for node in manifest["nodes"]:
+        if not isinstance(node, dict):
+            continue
+        name = str(node.get("name") or "")
+        if name not in CANONICAL_PROVIDER_NAMES:
+            continue
+        if name in providers:
+            die(f"rollout manifest declares canonical provider {name} more than once")
+        status_url = node.get("status_url")
+        if not isinstance(status_url, str) or not status_url.endswith("/v1/chain/status"):
+            die(f"canonical provider {name} must declare a /v1/chain/status status_url")
+        providers[name] = status_url
+    missing = [name for name in CANONICAL_PROVIDER_NAMES if name not in providers]
+    if missing:
+        die("observer rollout requires canonical provider status_url entries: " + ", ".join(missing))
+    return providers["sequencer"], providers["storage"]
+
+
+def observer_checkpoint_gate_bash(sequencer_status_url: str, storage_status_url: str) -> str:
+    return f'''python3 - {shlex.quote(sequencer_status_url)} {shlex.quote(storage_status_url)} <<'PY'
+import json
+import re
+import sys
+from urllib.request import Request, urlopen
+
+MAX_HEIGHT_DELTA = {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}
+
+def checkpoint(name, url):
+    try:
+        with urlopen(Request(url, headers={{"Accept": "application/json"}}), timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as error:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} collection_failed={{error}}")
+    try:
+        value = payload["chain_proof"]["latest_execution_checkpoint"]
+    except (KeyError, TypeError):
+        value = None
+    if not isinstance(value, dict):
+        raise SystemExit(f"provider_checkpoint_gate={{name}} missing_latest_execution_checkpoint")
+    schema = value.get("schema_version")
+    checkpoint_id = value.get("checkpoint_id")
+    height = value.get("height")
+    manifest_hash = value.get("manifest_hash")
+    if isinstance(schema, bool) or not isinstance(schema, int) or schema < 2:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_schema_version")
+    if not isinstance(checkpoint_id, str) or not checkpoint_id.strip() or not isinstance(manifest_hash, str) or not re.fullmatch(r"[0-9a-fA-F]{{64}}", manifest_hash):
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_checkpoint_identity")
+    if isinstance(height, bool) or not isinstance(height, int) or height <= 0:
+        raise SystemExit(f"provider_checkpoint_gate={{name}} invalid_checkpoint_height")
+    return checkpoint_id, height, manifest_hash.lower()
+
+sequencer = checkpoint("sequencer", sys.argv[1])
+storage = checkpoint("storage", sys.argv[2])
+if sequencer[0] != storage[0] or sequencer[2] != storage[2]:
+    raise SystemExit("provider_checkpoint_gate identity_mismatch")
+if abs(sequencer[1] - storage[1]) > MAX_HEIGHT_DELTA:
+    raise SystemExit("provider_checkpoint_gate height_incompatible")
+print(f"provider_checkpoint_gate=passed checkpoint_id={{sequencer[0]}} height_delta={{abs(sequencer[1] - storage[1])}}")
+PY'''
+
+
+def observer_checkpoint_gate_macos(
+    sequencer_status_url: str, storage_status_url: str
+) -> str:
+    return """provider_checkpoint_gate_macos() {
+  local provider name url payload schema checkpoint_id checkpoint_id_without_whitespace height manifest_hash
+  local sequencer_id sequencer_height sequencer_hash
+  local storage_id storage_height storage_hash
+  command -v plutil >/dev/null 2>&1 || {
+    echo "provider_checkpoint_gate=macos_native_parser_unavailable" >&2
+    return 1
+  }
+  for provider in \\
+    "sequencer	%s" \\
+    "storage	%s"; do
+    IFS=$'\\t' read -r name url <<<"$provider"
+    payload="$(mktemp "${TMPDIR:-/tmp}/oasis7-provider-checkpoint.XXXXXX.json")" || return 1
+    if ! curl -fsS --connect-timeout 10 --max-time 10 "$url" -o "$payload"; then
+      rm -f "$payload"
+      echo "provider_checkpoint_gate=$name collection_failed" >&2
+      return 1
+    fi
+    schema="$(plutil -extract chain_proof.latest_execution_checkpoint.schema_version raw -o - "$payload" 2>/dev/null || true)"
+    checkpoint_id="$(plutil -extract chain_proof.latest_execution_checkpoint.checkpoint_id raw -o - "$payload" 2>/dev/null || true)"
+    height="$(plutil -extract chain_proof.latest_execution_checkpoint.height raw -o - "$payload" 2>/dev/null || true)"
+    manifest_hash="$(plutil -extract chain_proof.latest_execution_checkpoint.manifest_hash raw -o - "$payload" 2>/dev/null || true)"
+    rm -f "$payload"
+    if ! [[ "$schema" =~ ^[0-9]+$ ]] || (( schema < 2 )); then
+      echo "provider_checkpoint_gate=$name invalid_schema_version" >&2
+      return 1
+    fi
+    checkpoint_id_without_whitespace="${checkpoint_id//[[:space:]]/}"
+    if [[ -z "$checkpoint_id_without_whitespace" || ! "$manifest_hash" =~ ^[[:xdigit:]]{64}$ ]]; then
+      echo "provider_checkpoint_gate=$name invalid_checkpoint_identity" >&2
+      return 1
+    fi
+    if ! [[ "$height" =~ ^[0-9]+$ ]] || (( height <= 0 )); then
+      echo "provider_checkpoint_gate=$name invalid_checkpoint_height" >&2
+      return 1
+    fi
+    manifest_hash="$(tr '[:upper:]' '[:lower:]' <<<"$manifest_hash")"
+    if [[ "$name" == sequencer ]]; then
+      sequencer_id="$checkpoint_id"
+      sequencer_height="$height"
+      sequencer_hash="$manifest_hash"
+    else
+      storage_id="$checkpoint_id"
+      storage_height="$height"
+      storage_hash="$manifest_hash"
+    fi
+  done
+  if [[ "$sequencer_id" != "$storage_id" || "$sequencer_hash" != "$storage_hash" ]]; then
+    echo "provider_checkpoint_gate identity_mismatch" >&2
+    return 1
+  fi
+  if (( sequencer_height - storage_height > %d || storage_height - sequencer_height > %d )); then
+    echo "provider_checkpoint_gate height_incompatible" >&2
+    return 1
+  fi
+  echo "provider_checkpoint_gate=passed checkpoint_id=$sequencer_id height_delta=$(( sequencer_height - storage_height < 0 ? storage_height - sequencer_height : sequencer_height - storage_height ))"
+}
+
+provider_checkpoint_gate_macos
+""" % (
+        sequencer_status_url,
+        storage_status_url,
+        MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
+        MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA,
+    )
+
+
+def observer_checkpoint_gate_powershell(sequencer_status_url: str, storage_status_url: str) -> str:
+    def ps_literal(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    return f'''function Get-ProviderCheckpoint {{
+  param([Parameter(Mandatory = $true)] [string] $Name, [Parameter(Mandatory = $true)] [string] $Url)
+  try {{ $status = Invoke-RestMethod -UseBasicParsing -Uri $Url -TimeoutSec 10 }} catch {{ throw "provider_checkpoint_gate=$Name collection_failed=$($_.Exception.Message)" }}
+  $checkpoint = $status.chain_proof.latest_execution_checkpoint
+  if ($null -eq $checkpoint) {{ throw "provider_checkpoint_gate=$Name missing_latest_execution_checkpoint" }}
+  if ($checkpoint.schema_version -isnot [int] -and $checkpoint.schema_version -isnot [long]) {{ throw "provider_checkpoint_gate=$Name invalid_schema_version" }}
+  if ([int64]$checkpoint.schema_version -lt 2) {{ throw "provider_checkpoint_gate=$Name invalid_schema_version" }}
+  $checkpointId = [string]$checkpoint.checkpoint_id
+  $manifestHash = [string]$checkpoint.manifest_hash
+  if ([string]::IsNullOrWhiteSpace($checkpointId) -or $manifestHash -notmatch '^[0-9a-fA-F]{{64}}$') {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_identity" }}
+  if ($checkpoint.height -isnot [int] -and $checkpoint.height -isnot [long]) {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_height" }}
+  $height = [int64]$checkpoint.height
+  if ($height -le 0) {{ throw "provider_checkpoint_gate=$Name invalid_checkpoint_height" }}
+  return [PSCustomObject]@{{ checkpoint_id = $checkpointId; height = $height; manifest_hash = $manifestHash.ToLowerInvariant() }}
+}}
+$sequencerCheckpoint = Get-ProviderCheckpoint -Name 'sequencer' -Url {ps_literal(sequencer_status_url)}
+$storageCheckpoint = Get-ProviderCheckpoint -Name 'storage' -Url {ps_literal(storage_status_url)}
+if ($sequencerCheckpoint.checkpoint_id -ne $storageCheckpoint.checkpoint_id -or $sequencerCheckpoint.manifest_hash -ne $storageCheckpoint.manifest_hash) {{ throw 'provider_checkpoint_gate identity_mismatch' }}
+if ([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height) -gt {MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA}) {{ throw 'provider_checkpoint_gate height_incompatible' }}
+Write-Output "provider_checkpoint_gate=passed checkpoint_id=$($sequencerCheckpoint.checkpoint_id) height_delta=$([Math]::Abs($sequencerCheckpoint.height - $storageCheckpoint.height))"
+'''
 
 
 def linux_command(
@@ -373,6 +563,56 @@ def linux_plan_commands(
     ]
 
 
+def write_linux_observer_plan(
+    out_dir: Path,
+    node: dict[str, Any],
+    linux_asset: Path,
+    version: str,
+    commit: str,
+    run_id: str,
+    readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
+) -> tuple[Path, list[str], list[str]]:
+    name = str(node.get("name") or "linux-observer")
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
+    script_path = out_dir / f"{safe_name}-linux-observer-upgrade.sh"
+    host = str(node.get("host") or "")
+    if host:
+        user = str(node.get("user") or "root")
+        remote_bundle = str(node.get("remote_bundle") or linux_asset.name)
+        remote_script = str(node.get("remote_script") or "./scripts/p2p-public-testnet-package-node-upgrade.sh")
+        command = linux_command(
+            node,
+            linux_asset,
+            version,
+            commit,
+            run_id,
+            readiness_policy,
+            bundle_tar=remote_bundle,
+            script_path=remote_script,
+        )
+        remote_wrapper = str(node.get("remote_observer_gate_script") or script_path.name)
+        commands = [
+            shell_join(["scp", str(linux_asset), f"{user}@{host}:{remote_bundle}"]),
+            shell_join(["scp", str(script_path), f"{user}@{host}:{remote_wrapper}"]),
+            shell_join(["ssh", f"{user}@{host}", "bash", remote_wrapper]),
+        ]
+    else:
+        command = linux_command(node, linux_asset, version, commit, run_id, readiness_policy)
+        commands = [shell_join(["bash", str(script_path)])]
+    script_path.write_text(
+        "#!/usr/bin/env bash\nset -euo pipefail\n\n"
+        + observer_checkpoint_gate_bash(sequencer_status_url, storage_status_url)
+        + "\n\nexec "
+        + shell_join(command)
+        + "\n",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+    return script_path, commands, command
+
+
 def windows_script(
     node: dict[str, Any],
     installer_name: str,
@@ -381,6 +621,8 @@ def windows_script(
     run_id: str,
     governed_hashes: dict[str, str],
     readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> str:
     def ps_literal(value: str) -> str:
         return "'" + value.replace("'", "''") + "'"
@@ -454,8 +696,13 @@ def windows_script(
         f"  {ps_literal(path)} = {ps_literal(digest)}"
         for path, digest in sorted(governed_hashes.items())
     )
+    checkpoint_gate = observer_checkpoint_gate_powershell(
+        sequencer_status_url, storage_status_url
+    )
     return f"""$ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+{checkpoint_gate}
 
 function Set-JsonProperty {{
   param(
@@ -479,7 +726,7 @@ function Get-TreeMetadata {{
   foreach ($file in $files) {{
     $relative = $file.FullName.Substring($rootItem.FullName.Length).TrimStart('\\').Replace('\\', '/')
     $fileHash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    $payload = [System.Text.Encoding]::UTF8.GetBytes($relative + [char]0 + $fileHash + "`n")
+    $payload = [System.Text.Encoding]::UTF8.GetBytes($relative + [char]0 + $fileHash + [char]0 + [string]$file.Length + "`n")
     $stream.Write($payload, 0, $payload.Length)
     $totalBytes += $file.Length
   }}
@@ -706,6 +953,13 @@ $manifestJson = Get-Content $manifestItem.FullName -Raw | ConvertFrom-Json
 if ($null -eq $manifestJson.runtime_refs) {{
   throw "governed network manifest missing runtime_refs: $($manifestItem.FullName)"
 }}
+$networkManifestMetadata = [PSCustomObject]@{{
+  ref = [System.IO.Path]::GetFileName($manifestItem.FullName)
+  resolved_path = $manifestItem.FullName
+  kind = 'file'
+  sha256 = $expectedGovernedSha256[$manifestPath]
+  size_bytes = $manifestItem.Length
+}}
 
 $genesis = Get-Item $genesisPath -ErrorAction Stop
 $genesisJson = Get-Content $genesis.FullName -Raw | ConvertFrom-Json
@@ -761,7 +1015,7 @@ Assert-TreeIntegrity $json.world_snapshot $worldSnapshotPath 'world_snapshot'
 Assert-TreeIntegrity $json.generated_world_sidecar $sidecarPath 'generated_world_sidecar'
 Assert-FileMetadata $json.world_generation_provenance $provenancePath 'world_generation_provenance'
 Assert-FileMetadata $json.governance_manifest (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) 'governance_manifest'
-Assert-FileMetadata $json.network_manifest $manifestItem.FullName 'network_manifest'
+Assert-FileMetadata $networkManifestMetadata $manifestItem.FullName 'network_manifest'
 foreach ($entry in @($json.evidence_refs)) {{
   Assert-FileMetadata $entry (Join-Path $evidenceDir ([System.IO.Path]::GetFileName($entry.ref))) 'evidence_refs'
 }}
@@ -771,7 +1025,8 @@ Set-ArtifactLocation $json.world_snapshot $activeWorldSnapshotPath 'generated-wo
 Set-ArtifactLocation $json.generated_world_sidecar $activeSidecarPath 'generated-world/generated-scenario-world'
 Set-ArtifactLocation $json.world_generation_provenance $activeProvenancePath 'generated-world/world-generation-provenance.json'
 Set-ArtifactLocation $json.governance_manifest (Join-Path $activeEvidenceDir ([System.IO.Path]::GetFileName($json.governance_manifest.ref))) ('doc/testing/evidence/' + [System.IO.Path]::GetFileName($json.governance_manifest.ref))
-Set-ArtifactLocation $json.network_manifest $activeManifestPath ([System.IO.Path]::GetFileName($activeManifestPath))
+Set-ArtifactLocation $networkManifestMetadata $activeManifestPath ([System.IO.Path]::GetFileName($activeManifestPath))
+Set-JsonProperty $json 'network_manifest' $networkManifestMetadata
 foreach ($entry in @($json.evidence_refs)) {{
   $entryName = [System.IO.Path]::GetFileName($entry.ref)
   Set-ArtifactLocation $entry (Join-Path $activeEvidenceDir $entryName) ('doc/testing/evidence/' + $entryName)
@@ -795,8 +1050,8 @@ $structuredPaths = @(
   [PSCustomObject]@{{ field = 'world_generation_provenance.resolved_path'; path = $json.world_generation_provenance.resolved_path }},
   [PSCustomObject]@{{ field = 'governance_manifest.path'; path = $json.governance_manifest.path }},
   [PSCustomObject]@{{ field = 'governance_manifest.resolved_path'; path = $json.governance_manifest.resolved_path }},
-  [PSCustomObject]@{{ field = 'network_manifest.path'; path = $json.network_manifest.path }},
-  [PSCustomObject]@{{ field = 'network_manifest.resolved_path'; path = $json.network_manifest.resolved_path }},
+  [PSCustomObject]@{{ field = 'network_manifest.path'; path = $networkManifestMetadata.path }},
+  [PSCustomObject]@{{ field = 'network_manifest.resolved_path'; path = $networkManifestMetadata.resolved_path }},
   [PSCustomObject]@{{ field = 'runtime_refs.release_candidate_bundle_ref'; path = $manifestJson.runtime_refs.release_candidate_bundle_ref }},
   [PSCustomObject]@{{ field = 'runtime_refs.genesis_ref'; path = $manifestJson.runtime_refs.genesis_ref }},
   [PSCustomObject]@{{ field = 'runtime_refs.bootstrap_peer_ref'; path = $manifestJson.runtime_refs.bootstrap_peer_ref }},
@@ -977,6 +1232,7 @@ try {{
   throw
 }}
 
+Write-Output 'rollback_closure_complete=true'
 Write-Output 'staged_sha_closure_complete=true'
 Write-Output 'promotion_begin=true'
 
@@ -1400,6 +1656,8 @@ def write_windows_plan(
     run_id: str,
     governed_files: list[tuple[Path, str]],
     readiness_policy: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
 ) -> tuple[Path, list[str]]:
     name = str(node.get("name") or "windows-node")
     safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
@@ -1460,6 +1718,8 @@ def write_windows_plan(
         run_id,
         remote_governed,
         readiness_policy,
+        sequencer_status_url,
+        storage_status_url,
     )
     script_path.write_text(script_text, encoding="utf-8")
     # Rewrite without BOM explicitly; Windows PowerShell accepts this and the runtime JSON writer also uses no-BOM.
@@ -1546,6 +1806,466 @@ def write_windows_plan(
     return script_path, commands
 
 
+def macos_absolute_path(node: dict[str, Any], field: str) -> str:
+    value = node.get(field)
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or ".." in PurePosixPath(value).parts
+    ):
+        die(f"macOS node {node.get('name', '<unnamed>')} must declare absolute {field}")
+    return str(PurePosixPath(value))
+
+
+def macos_string_paths(node: dict[str, Any], field: str) -> list[str]:
+    values = node.get(field)
+    if not isinstance(values, list) or not values or not all(
+        isinstance(value, str)
+        and value.startswith("/")
+        and ".." not in PurePosixPath(value).parts
+        for value in values
+    ):
+        die(f"macOS node {node.get('name', '<unnamed>')} must declare non-empty absolute {field}")
+    return [str(PurePosixPath(value)) for value in values]
+
+
+def macos_paths_overlap(first: str, second: str) -> bool:
+    first_path = PurePosixPath(first)
+    second_path = PurePosixPath(second)
+    return (
+        first_path == second_path
+        or first_path in second_path.parents
+        or second_path in first_path.parents
+    )
+
+
+def macos_launchd_contract(node: dict[str, Any]) -> tuple[str, str, str]:
+    name = str(node.get("name") or "macos-observer")
+    target = str(node.get("launchd_target") or "")
+    match = re.fullmatch(
+        r"(?:(system)/([A-Za-z0-9][A-Za-z0-9._-]*)|gui/([0-9]+)/([A-Za-z0-9][A-Za-z0-9._-]*))",
+        target,
+    )
+    if not match:
+        die(
+            f"macOS node {name} launchd_target must be "
+            "system/<label> or gui/<numeric-uid>/<label>"
+        )
+    domain = "system" if match.group(1) else f"gui/{match.group(3)}"
+    label = match.group(2) or match.group(4)
+    assert label is not None
+    return target, domain, label
+
+
+def macos_script(
+    node: dict[str, Any],
+    version: str,
+    commit: str,
+    run_id: str,
+    expected_dmg_sha256: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
+) -> str:
+    name = str(node.get("name") or "macos-observer")
+    node_root = macos_absolute_path(node, "node_root").rstrip("/")
+    launchd_target, launchd_bootstrap_domain, launchd_label = macos_launchd_contract(node)
+    launchd_plist = macos_absolute_path(node, "launchd_plist")
+    runtime_path = macos_absolute_path(node, "runtime_path")
+    healthz_url = str(node.get("healthz_url") or "")
+    status_url = str(node.get("status_url") or "")
+    if not healthz_url or not status_url:
+        die(f"macOS node {name} must declare healthz_url and status_url")
+    if not healthz_url.endswith("/healthz") or not status_url.endswith("/v1/chain/status"):
+        die(f"macOS node {name} must use /healthz and /v1/chain/status endpoints")
+    config_paths = macos_string_paths(node, "config_paths")
+    state_paths = macos_string_paths(node, "persistent_state_paths")
+    config_root = f"{node_root}/config/"
+    for path in config_paths:
+        if not path.startswith(config_root):
+            die(f"macOS node {name} config path escapes node_root/config: {path}")
+    for path in state_paths:
+        if not path.startswith(f"{node_root}/"):
+            die(f"macOS node {name} persistent state path escapes node_root: {path}")
+        if path == node_root:
+            die(f"macOS node {name} persistent state path equals node_root: {path}")
+    for index, path in enumerate(state_paths):
+        for other in state_paths[index + 1 :]:
+            if macos_paths_overlap(path, other):
+                die(
+                    f"macOS node {name} persistent state paths duplicate or nest: "
+                    f"{path} and {other}"
+                )
+    protected_paths = [
+        runtime_path,
+        *config_paths,
+        f"{node_root}/CURRENT_VERSION",
+        f"{node_root}/DEPLOYED_BUILDINFO",
+        launchd_plist,
+    ]
+    for path in state_paths:
+        for protected in protected_paths:
+            if macos_paths_overlap(path, protected):
+                die(
+                    f"macOS node {name} persistent state path overlaps protected path: "
+                    f"state={path} protected={protected}"
+                )
+    q = shlex.quote
+    config_entries = " ".join(q(path) for path in config_paths)
+    state_entries = " ".join(q(path) for path in state_paths)
+    checkpoint_gate = observer_checkpoint_gate_macos(
+        sequencer_status_url, storage_status_url
+    )
+    return f'''#!/usr/bin/env bash
+set -euo pipefail
+
+DMG_PATH="${{1:?usage: $0 /path/to/oasis7-macos-arm64.dmg}}"
+NODE_ROOT={q(node_root)}
+RUNTIME_PATH={q(runtime_path)}
+LAUNCHD_PLIST={q(launchd_plist)}
+LAUNCHD_TARGET={q(launchd_target)}
+LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
+LAUNCHD_LABEL={q(launchd_label)}
+HEALTHZ_URL={q(healthz_url)}
+STATUS_URL={q(status_url)}
+PACKAGE_VERSION={q(version)}
+PACKAGE_COMMIT={q(commit)}
+PACKAGE_RUN_ID={q(run_id)}
+EXPECTED_DMG_SHA256={expected_dmg_sha256}
+STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot
+CONFIG_TARGETS=({config_entries})
+STATE_PATHS=({state_entries})
+MOUNT_POINT=""
+MOUNT_ATTACHED=0
+ATTEMPT_ROOT=""
+MUTATED=0
+
+die() {{ echo "error: $*" >&2; exit 1; }}
+cleanup() {{
+  if [[ "$MOUNT_ATTACHED" -eq 1 ]]; then
+    hdiutil detach "$MOUNT_POINT" -quiet || true
+    MOUNT_ATTACHED=0
+  fi
+  [[ -z "$MOUNT_POINT" ]] || rm -rf "$MOUNT_POINT"
+}}
+trap cleanup EXIT
+
+backup_path() {{
+  local source="$1" destination="$2"
+  [[ -e "$source" ]] || return 1
+  mkdir -p "$(dirname "$destination")" || return 1
+  if [[ -d "$source" ]]; then
+    ditto "$source" "$destination" || return 1
+    diff -qr "$source" "$destination" >/dev/null || return 1
+  else
+    cp -p "$source" "$destination" || return 1
+    cmp -s "$source" "$destination" || return 1
+  fi
+}}
+
+restore_file() {{
+  local source="$1" destination="$2" temporary
+  [[ -f "$source" ]] || return 1
+  mkdir -p "$(dirname "$destination")" || return 1
+  temporary="$destination.rollout-restore-$$.tmp"
+  cp -p "$source" "$temporary" || return 1
+  mv -f "$temporary" "$destination" || return 1
+}}
+
+assert_launchd_plist_label() {{
+  local plist_label
+  plist_label="$(/usr/libexec/PlistBuddy -c 'Print :Label' "$LAUNCHD_PLIST" 2>/dev/null)" || {{
+    echo "unable to read launchd plist Label: $LAUNCHD_PLIST" >&2
+    return 1
+  }}
+  [[ "$plist_label" == "$LAUNCHD_LABEL" ]] || {{
+    echo "launchd plist Label mismatch: target=$LAUNCHD_TARGET expected=$LAUNCHD_LABEL actual=$plist_label" >&2
+    return 1
+  }}
+}}
+
+assert_launchd_target_loaded() {{
+  launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1 || {{
+    echo "launchd target is not loaded: $LAUNCHD_TARGET" >&2
+    return 1
+  }}
+}}
+
+wait_for_service_health() {{
+  local deadline=$((SECONDS + 120)) health status
+  while (( SECONDS < deadline )); do
+    health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
+    status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
+    if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+      echo "authority_failure_detected=true" >&2
+      return 2
+    fi
+    if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
+       grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}}
+
+restart_original_service() {{
+  if ! launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1; then
+    launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+    assert_launchd_target_loaded || return 1
+  fi
+  assert_launchd_target_loaded || return 1
+  wait_for_service_health || return 1
+  echo "original_service_recovery_verified=true"
+}}
+
+assert_no_symlink_components() {{
+  local path="$1" component current=""
+  [[ "$path" == /* ]] || {{ echo "path is not absolute: $path" >&2; return 1; }}
+  IFS=/ read -r -a components <<<"${{path#/}}"
+  for component in "${{components[@]}}"; do
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || {{ echo "persistent state root has symlink component: $current" >&2; return 1; }}
+  done
+}}
+
+resolve_existing_physical_directory() {{
+  local path="$1"
+  [[ -d "$path" && ! -L "$path" ]] || return 1
+  (cd -P "$path" && pwd -P)
+}}
+
+assert_state_roots_safe() {{
+  local require_present="$1" state_path state_parent physical_node_root physical_state_path
+  assert_no_symlink_components "$NODE_ROOT" || return 1
+  physical_node_root="$(resolve_existing_physical_directory "$NODE_ROOT")" || {{
+    echo "node root is not a physical directory: $NODE_ROOT" >&2
+    return 1
+  }}
+  for state_path in "${{STATE_PATHS[@]}}"; do
+    if [[ "$require_present" == true && ! -e "$state_path" ]]; then
+      echo "persistent state root missing: $state_path" >&2
+      return 1
+    fi
+    assert_no_symlink_components "$state_path" || return 1
+    if [[ -e "$state_path" && ! -d "$state_path" ]]; then
+      echo "persistent state root is not a directory: $state_path" >&2
+      return 1
+    fi
+    if [[ -e "$state_path" ]]; then
+      physical_state_path="$(resolve_existing_physical_directory "$state_path")" || return 1
+    else
+      state_parent="$(dirname "$state_path")"
+      physical_state_path="$(resolve_existing_physical_directory "$state_parent")/$(basename "$state_path")" || {{
+        echo "persistent state parent is not a physical directory: $state_parent" >&2
+        return 1
+      }}
+    fi
+    [[ "$physical_state_path" == "$physical_node_root/"* ]] || {{
+      echo "persistent state root escapes physical node root: state=$state_path resolved=$physical_state_path node_root=$physical_node_root" >&2
+      return 1
+    }}
+  done
+}}
+
+backup_persistent_state() {{
+  local index
+  assert_state_roots_safe true || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    backup_path "${{STATE_PATHS[$index]}}" "$ATTEMPT_ROOT/state/$index" || return 1
+  done
+  echo "state_backup_closure_complete=true root=$ATTEMPT_ROOT/state"
+}}
+
+preserve_failed_state() {{
+  local index
+  assert_state_roots_safe true || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    backup_path "${{STATE_PATHS[$index]}}" "$ATTEMPT_ROOT/failed-state/$index" || return 1
+  done
+  echo "failed_state_evidence_complete=true root=$ATTEMPT_ROOT/failed-state"
+}}
+
+restore_pre_upgrade_state() {{
+  local index target
+  assert_state_roots_safe false || return 1
+  for index in "${{!STATE_PATHS[@]}}"; do
+    target="${{STATE_PATHS[$index]}}"
+    [[ -e "$ATTEMPT_ROOT/state/$index" ]] || return 1
+    rm -rf "$target" || return 1
+    ditto "$ATTEMPT_ROOT/state/$index" "$target" || return 1
+    diff -qr "$ATTEMPT_ROOT/state/$index" "$target" >/dev/null || return 1
+    echo "rollback_state_restored=true policy=$STATE_ROLLBACK_POLICY path=$target"
+  done
+}}
+
+rollback() {{
+  local reason="$1" index
+  [[ "$MUTATED" -eq 1 ]] || return 0
+  MUTATED=0
+  trap - ERR
+  echo "rollback_begin=true reason=$reason"
+  if launchctl print "$LAUNCHD_TARGET" >/dev/null 2>&1; then
+    launchctl bootout "$LAUNCHD_TARGET" || return 1
+  fi
+  preserve_failed_state || return 1
+  restore_pre_upgrade_state || return 1
+  restore_file "$ATTEMPT_ROOT/runtime/oasis7_chain_runtime" "$RUNTIME_PATH" || return 1
+  for index in "${{!CONFIG_TARGETS[@]}}"; do
+    restore_file "$ATTEMPT_ROOT/config/$index" "${{CONFIG_TARGETS[$index]}}" || return 1
+  done
+  restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION" || return 1
+  restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO" || return 1
+  launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
+  assert_launchd_target_loaded || return 1
+  wait_for_service_health || return 1
+  echo "rollback_service_health_verified=true"
+  echo "rollback_complete=true"
+}}
+
+on_error() {{
+  local status=$?
+  trap - ERR
+  if ! rollback "unexpected_failure"; then
+    echo "rollback_failed=true original_exit=$status" >&2
+    exit 1
+  fi
+  exit "$status"
+}}
+trap on_error ERR
+
+[[ "$(uname -s)" == Darwin ]] || die "macOS operator script must run on Darwin"
+[[ "$(uname -m)" == arm64 ]] || die "macOS observer requires native arm64 host"
+[[ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" == 1 ]] || die "native arm64 capability unavailable"
+[[ -f "$DMG_PATH" ]] || die "DMG missing: $DMG_PATH"
+[[ -f "$LAUNCHD_PLIST" ]] || die "launchd plist missing: $LAUNCHD_PLIST"
+assert_launchd_plist_label || die "launchd plist Label preflight failed"
+assert_launchd_target_loaded || die "launchd target preflight failed"
+[[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
+[[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
+for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
+for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done
+
+{checkpoint_gate}
+
+actual_dmg_sha256="$(shasum -a 256 "$DMG_PATH" | awk '{{print $1}}')"
+[[ "$actual_dmg_sha256" == "$EXPECTED_DMG_SHA256" ]] || die "DMG checksum mismatch: expected=$EXPECTED_DMG_SHA256 actual=$actual_dmg_sha256"
+echo "dmg_sha256_verified=true sha256=$actual_dmg_sha256"
+MOUNT_POINT="$(mktemp -d "${{TMPDIR:-/tmp}}/oasis7-macos-dmg.XXXXXX")"
+hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_POINT" "$DMG_PATH" >/dev/null
+MOUNT_ATTACHED=1
+PACKAGE_RUNTIME="$(find "$MOUNT_POINT" -type f -name oasis7_chain_runtime -perm -u+x -print -quit)"
+[[ -n "$PACKAGE_RUNTIME" ]] || die "DMG lacks executable oasis7_chain_runtime"
+if command -v lipo >/dev/null 2>&1; then
+  lipo -archs "$PACKAGE_RUNTIME" | tr ' ' '\\n' | grep -qx arm64 || die "DMG runtime is not arm64"
+else
+  file "$PACKAGE_RUNTIME" | grep -q arm64 || die "cannot verify arm64 runtime identity"
+fi
+echo "native_identity_verified=aarch64-apple-darwin"
+
+ATTEMPT_ROOT="$(mktemp -d "$NODE_ROOT/.package-rollout-attempt.XXXXXX")"
+backup_path "$RUNTIME_PATH" "$ATTEMPT_ROOT/runtime/oasis7_chain_runtime" || die "runtime preflight backup failed"
+backup_path "$NODE_ROOT/CURRENT_VERSION" "$ATTEMPT_ROOT/CURRENT_VERSION" || die "CURRENT_VERSION preflight backup failed"
+backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO" "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" || die "DEPLOYED_BUILDINFO preflight backup failed"
+for index in "${{!CONFIG_TARGETS[@]}}"; do
+  backup_path "${{CONFIG_TARGETS[$index]}}" "$ATTEMPT_ROOT/config/$index" || die "config preflight backup failed: ${{CONFIG_TARGETS[$index]}}"
+done
+echo "preflight_backup_closure_complete=true root=$ATTEMPT_ROOT"
+
+if ! launchctl bootout "$LAUNCHD_TARGET"; then
+  echo "original_service_stop_failed=true" >&2
+  restart_original_service || die "original service recovery failed after bootout error"
+  exit 1
+fi
+echo "original_service_stopped=true"
+if ! backup_persistent_state; then
+  echo "state_backup_failed_before_promotion=true" >&2
+  restart_original_service || die "original service recovery failed after state backup error"
+  exit 1
+fi
+echo "rollback_closure_complete=true root=$ATTEMPT_ROOT"
+
+MUTATED=1
+echo "promotion_begin=true"
+install -m 755 "$PACKAGE_RUNTIME" "$RUNTIME_PATH"
+printf '%s\\n' "$PACKAGE_VERSION" >"$NODE_ROOT/CURRENT_VERSION"
+printf 'workflow=Testnet Packages\\nrun_id=%s\\ncommit=%s\\nplatform=macos-arm64\\n' "$PACKAGE_RUN_ID" "$PACKAGE_COMMIT" >"$NODE_ROOT/DEPLOYED_BUILDINFO"
+launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"
+assert_launchd_target_loaded || die "launchd target missing after promotion bootstrap"
+
+authority_failure=0
+deadline=$((SECONDS + 120))
+while (( SECONDS < deadline )); do
+  health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
+  status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
+  if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+    authority_failure=1
+    break
+  fi
+  if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
+     grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+    echo "startup_verified=true healthz=$HEALTHZ_URL status=$STATUS_URL"
+    MUTATED=0
+    trap - ERR
+    exit 0
+  fi
+  sleep 2
+done
+if [[ "$authority_failure" -eq 1 ]]; then
+  rollback_status=0
+  rollback "authority_failure" || rollback_status=$?
+  echo "state_sync_escalation_required=true reason=authority_failure rollback_status=$rollback_status action=use_verified_state_sync"
+  exit 1
+fi
+if ! rollback "readiness_timeout"; then
+  echo "rollback_failed=true reason=readiness_timeout" >&2
+  exit 1
+fi
+die "macOS observer readiness timed out"
+'''
+
+
+def write_macos_plan(
+    out_dir: Path,
+    node: dict[str, Any],
+    macos_asset: Path,
+    version: str,
+    commit: str,
+    run_id: str,
+    sequencer_status_url: str,
+    storage_status_url: str,
+) -> tuple[Path, list[str]]:
+    name = str(node.get("name") or "macos-observer")
+    safe_name = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in name)
+    script_path = out_dir / f"{safe_name}-macos-arm64-upgrade.sh"
+    expected_dmg_sha256 = sha256_file(macos_asset)
+    script_path.write_text(
+        macos_script(
+            node,
+            version,
+            commit,
+            run_id,
+            expected_dmg_sha256,
+            sequencer_status_url,
+            storage_status_url,
+        ),
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+    host = str(node.get("host") or "")
+    if not host:
+        return script_path, [shell_join(["bash", str(script_path), str(macos_asset)])]
+    user = str(node.get("user") or "root")
+    remote_dmg = str(node.get("remote_dmg") or macos_asset.name)
+    remote_script = str(node.get("remote_script") or script_path.name)
+    remote_target = f"{user}@{host}"
+    return script_path, [
+        shell_join(["scp", str(macos_asset), f"{remote_target}:{remote_dmg}"]),
+        shell_join(["scp", str(script_path), f"{remote_target}:{remote_script}"]),
+        shell_join(["ssh", remote_target, "bash", remote_script, remote_dmg]),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -1585,6 +2305,13 @@ def main() -> int:
     platforms = sorted({str(node.get("platform") or "") for node in manifest["nodes"]})
     if "" in platforms:
         die("all nodes must declare platform")
+    names = [str(node.get("name") or "") for node in manifest["nodes"] if isinstance(node, dict)]
+    if len(names) != len(manifest["nodes"]) or not all(names) or len(set(names)) != len(names):
+        die("all rollout manifest nodes must have unique non-empty names")
+    observer_rollout_present = any(name not in CANONICAL_PROVIDER_NAMES for name in names)
+    provider_status_urls = (
+        canonical_provider_status_urls(manifest) if observer_rollout_present else None
+    )
 
     platform_dirs: dict[str, Path] = {}
     platform_infos: dict[str, dict[str, str]] = {}
@@ -1601,16 +2328,23 @@ def main() -> int:
         platform_infos[platform] = read_buildinfo(buildinfo)
         platform_assets[platform] = platform_asset(platform_dir, platform)
         require_verified_files(platform, platform_dir, buildinfo, platform_assets[platform], verified_files[platform])
+        if platform == "macos-arm64":
+            require_macos_arm64_metadata(platform_infos[platform])
 
-    build = require_same_build(platform_infos)
-    version = build["package_version"]
-    commit = build["commit"]
-    run_id = build["run_id"]
+    commit = require_same_commit(platform_infos)
+    platform_provenance = {
+        platform: package_provenance(
+            platform,
+            platform_dirs[platform],
+            platform_assets[platform],
+            platform_infos[platform],
+        )
+        for platform in platforms
+    }
 
     plan: dict[str, Any] = {
-        "package_version": version,
         "commit": commit,
-        "run_id": run_id,
+        "platform_provenance": platform_provenance,
         "out_dir": str(out_dir),
         "readiness_policy": args.readiness_policy,
         "verified_files": verified_files,
@@ -1627,24 +2361,44 @@ def main() -> int:
             "name": name,
             "platform": platform,
             "host": node.get("host"),
+            "package_provenance": platform_provenance[platform],
             "commands": [],
             "applied": False,
         }
+        version = platform_provenance[platform]["package_version"]
+        run_id = platform_provenance[platform]["run_id"]
         if platform == "linux-x64":
-            command = linux_command(
-                node,
-                platform_assets[platform],
-                version,
-                commit,
-                run_id,
-                args.readiness_policy,
-            )
-            node_plan["commands"].extend(
-                linux_plan_commands(node, platform_assets[platform], version, commit, run_id, args.readiness_policy)
-            )
+            if name in CANONICAL_PROVIDER_NAMES:
+                command = linux_command(
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                    args.readiness_policy,
+                )
+                node_plan["commands"].extend(
+                    linux_plan_commands(node, platform_assets[platform], version, commit, run_id, args.readiness_policy)
+                )
+            else:
+                assert provider_status_urls is not None
+                script_path, commands, command = write_linux_observer_plan(
+                    out_dir,
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                    args.readiness_policy,
+                    *provider_status_urls,
+                )
+                node_plan["observer_checkpoint_gate_script"] = str(script_path)
+                node_plan["commands"].extend(commands)
             if args.apply_local and not node.get("host"):
                 applied = subprocess.run(
-                    command,
+                    ["bash", str(node_plan["observer_checkpoint_gate_script"])]
+                    if name not in CANONICAL_PROVIDER_NAMES
+                    else command,
                     check=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
@@ -1653,6 +2407,9 @@ def main() -> int:
                 node_plan["apply_output"] = applied.stdout.strip().splitlines()
                 node_plan["applied"] = True
         elif platform == "windows-x64":
+            if name in CANONICAL_PROVIDER_NAMES:
+                die("canonical providers must use Linux rollout entries")
+            assert provider_status_urls is not None
             governed_files = windows_governed_files(
                 platform_dirs[platform], verified_files[platform]
             )
@@ -1665,6 +2422,7 @@ def main() -> int:
                 run_id,
                 governed_files,
                 args.readiness_policy,
+                *provider_status_urls,
             )
             node_plan["windows_script"] = str(script_path)
             node_plan["governed_bundle_path"] = str(node.get("governed_bundle_path") or WINDOWS_GOVERNED_BUNDLE)
@@ -1672,12 +2430,29 @@ def main() -> int:
                 node.get("governed_genesis_path") or WINDOWS_GOVERNED_GENESIS
             )
             node_plan["commands"].extend(commands)
-        elif platform == "macos-x64":
-            node_plan["note"] = (
-                "macos-x64 packages are installer artifacts only; this rollout helper verifies "
-                "the artifact but does not replace a running observer unless a platform-specific "
-                "operator script is supplied."
-            )
+        elif platform in {"macos-x64", "macos-arm64"}:
+            if name in CANONICAL_PROVIDER_NAMES:
+                die("canonical providers must use Linux rollout entries")
+            if platform == "macos-arm64":
+                script_path, commands = write_macos_plan(
+                    out_dir,
+                    node,
+                    platform_assets[platform],
+                    version,
+                    commit,
+                    run_id,
+                    *(provider_status_urls or ()),
+                )
+                node_plan["macos_script"] = str(script_path)
+                node_plan["native_identity"] = "aarch64-apple-darwin"
+                node_plan["expected_dmg_sha256"] = sha256_file(platform_assets[platform])
+                node_plan["state_sync_escalation"] = "explicit_on_authority_failure"
+                node_plan["commands"].extend(commands)
+            else:
+                node_plan["note"] = (
+                    "macos-x64 packages remain verification-only installer artifacts; the "
+                    "native observer rollout contract currently applies only to macos-arm64."
+                )
         else:
             die(f"unsupported platform in node {name}: {platform}")
         plan["nodes"].append(node_plan)
@@ -1688,9 +2463,14 @@ def main() -> int:
     if args.json:
         print(json.dumps(plan, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print(f"package_version={version}")
         print(f"commit={commit}")
-        print(f"run_id={run_id}")
+        for platform in platforms:
+            provenance = platform_provenance[platform]
+            print(
+                "package_provenance="
+                f"platform={platform} package_version={provenance['package_version']} "
+                f"run_id={provenance['run_id']} asset_sha256={provenance['asset_sha256']}"
+            )
         print(f"rollout_plan={plan_path}")
         for node in plan["nodes"]:
             print(f"node={node['name']} platform={node['platform']} applied={str(node['applied']).lower()}")

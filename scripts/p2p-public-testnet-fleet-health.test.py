@@ -17,10 +17,19 @@ from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 COLLECTOR = ROOT_DIR / "scripts" / "p2p-public-testnet-fleet-health.py"
+RUNBOOK = ROOT_DIR / "doc" / "p2p" / "blockchain" / "p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md"
+INVENTORY = ROOT_DIR / "doc" / "testing" / "evidence" / "public-testnet-five-node-inventory-2026-06-23.md"
+NO_CHECKPOINT = object()
 
 
-def status(*, head: int = 42, ready: bool = True, decision: str = "ready") -> dict[str, Any]:
-    return {
+def status(
+    *,
+    head: int = 42,
+    ready: bool = True,
+    decision: str = "ready",
+    checkpoint: object = NO_CHECKPOINT,
+) -> dict[str, Any]:
+    result = {
         "running": True,
         "last_error": None,
         "readiness": {"status": "ready" if ready else "not_ready", "failed_gates": []},
@@ -30,6 +39,18 @@ def status(*, head: int = 42, ready: bool = True, decision: str = "ready") -> di
             "last_execution_height": head,
             "network_head": {"decision": decision},
         },
+    }
+    if checkpoint is not NO_CHECKPOINT:
+        result["chain_proof"] = {"latest_execution_checkpoint": checkpoint}
+    return result
+
+
+def checkpoint(*, height: int = 42, checkpoint_id: str = "checkpoint-v2", manifest_hash: str = "a" * 64) -> dict[str, Any]:
+    return {
+        "schema_version": 2,
+        "checkpoint_id": checkpoint_id,
+        "height": height,
+        "manifest_hash": manifest_hash,
     }
 
 
@@ -80,24 +101,32 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
         output: Path,
         *,
         max_span_seconds: float | str = 1.0,
+        nodes: list[tuple[str, str]] | None = None,
+        managed_five_node: bool = False,
     ) -> subprocess.CompletedProcess[str]:
+        nodes = nodes or [
+            ("sequencer", fixture.endpoint("sequencer")),
+            ("storage", fixture.endpoint("storage")),
+            ("observer", fixture.endpoint("observer")),
+        ]
+        command = [
+            sys.executable,
+            str(COLLECTOR),
+            "--sequencer",
+            "sequencer",
+        ]
+        for name, endpoint in nodes:
+            command.extend(["--node", f"{name}={endpoint}"])
+        if managed_five_node:
+            command.append("--managed-five-node")
+        command.extend([
+            "--max-capture-span-seconds",
+            str(max_span_seconds),
+            "--output",
+            str(output),
+        ])
         return subprocess.run(
-            [
-                sys.executable,
-                str(COLLECTOR),
-                "--sequencer",
-                "sequencer",
-                "--node",
-                f"sequencer={fixture.endpoint('sequencer')}",
-                "--node",
-                f"storage={fixture.endpoint('storage')}",
-                "--node",
-                f"observer={fixture.endpoint('observer')}",
-                "--max-capture-span-seconds",
-                str(max_span_seconds),
-                "--output",
-                str(output),
-            ],
+            command,
             cwd=ROOT_DIR,
             text=True,
             capture_output=True,
@@ -220,6 +249,91 @@ class FleetHealthCollectorContractTest(unittest.TestCase):
                 self.assertIn(expected_gate, result.stderr)
                 evidence = json.loads(output.read_text(encoding="utf-8"))
                 self.assertIn(expected_gate, evidence["failed_gates"])
+
+    def test_managed_five_node_mode_accepts_only_the_canonical_full_fleet(self) -> None:
+        names = ("sequencer", "storage", "linux-lan-observer", "windows-observer", "macos-observer")
+        responses = {f"/{name}": (status(), 0.0) for name in names}
+        responses["/sequencer"] = (status(checkpoint=checkpoint(height=42)), 0.0)
+        responses["/storage"] = (status(checkpoint=checkpoint(height=43)), 0.0)
+        with tempfile.TemporaryDirectory() as temp_dir, FleetHealthFixture(responses) as fixture:
+            output = Path(temp_dir) / "fleet-health.json"
+            nodes = [(name, fixture.endpoint(name)) for name in names]
+            result = self.run_collector(fixture, output, nodes=nodes, managed_five_node=True)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            evidence = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["verdict"], "ready")
+            self.assertEqual(set(evidence["nodes"]), set(names))
+
+    def test_managed_five_node_mode_requires_compatible_v2_provider_checkpoints(self) -> None:
+        names = ("sequencer", "storage", "linux-lan-observer", "windows-observer", "macos-observer")
+        cases: dict[str, tuple[object | None, object | None, str]] = {
+            "null": (None, checkpoint(), "provider_checkpoint_missing"),
+            "v1": ({**checkpoint(), "schema_version": 1}, checkpoint(), "provider_checkpoint_schema_invalid"),
+            "malformed_identity": ({**checkpoint(), "checkpoint_id": " "}, checkpoint(), "provider_checkpoint_identity_invalid"),
+            "malformed_hash": ({**checkpoint(), "manifest_hash": "not-a-checkpoint-hash"}, checkpoint(), "provider_checkpoint_identity_invalid"),
+            "one_provider_only": (checkpoint(), None, "provider_checkpoint_missing"),
+            "height_incompatibility": (checkpoint(height=42), checkpoint(height=44), "provider_checkpoint_height_incompatible"),
+            "identity_mismatch": (checkpoint(), checkpoint(checkpoint_id="other"), "provider_checkpoint_identity_mismatch"),
+        }
+        for case, (sequencer_checkpoint, storage_checkpoint, expected_gate) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp_dir:
+                responses = {f"/{name}": (status(), 0.0) for name in names}
+                responses["/sequencer"] = (status(checkpoint=sequencer_checkpoint), 0.0)
+                responses["/storage"] = (status(checkpoint=storage_checkpoint), 0.0)
+                with FleetHealthFixture(responses) as fixture:
+                    output = Path(temp_dir) / "fleet-health.json"
+                    nodes = [(name, fixture.endpoint(name)) for name in names]
+                    result = self.run_collector(fixture, output, nodes=nodes, managed_five_node=True)
+
+                self.assertNotEqual(result.returncode, 0)
+                evidence = json.loads(output.read_text(encoding="utf-8"))
+                self.assertIn(expected_gate, evidence["failed_gates"])
+
+    def test_managed_five_node_mode_rejects_omission_rename_and_duplicate_before_evidence(self) -> None:
+        names = ("sequencer", "storage", "linux-lan-observer", "windows-observer", "macos-observer")
+        responses = {f"/{name}": (status(), 0.0) for name in names}
+        with tempfile.TemporaryDirectory() as temp_dir, FleetHealthFixture(responses) as fixture:
+            cases = {
+                "omission": [(name, fixture.endpoint(name)) for name in names if name != "macos-observer"],
+                "rename": [
+                    ("sequencer", fixture.endpoint("sequencer")),
+                    ("storage", fixture.endpoint("storage")),
+                    ("linux-lan-observer", fixture.endpoint("linux-lan-observer")),
+                    ("windows-observer", fixture.endpoint("windows-observer")),
+                    ("local-macos-observer", fixture.endpoint("macos-observer")),
+                ],
+                "duplicate": [
+                    ("sequencer", fixture.endpoint("sequencer")),
+                    ("storage", fixture.endpoint("storage")),
+                    ("linux-lan-observer", fixture.endpoint("linux-lan-observer")),
+                    ("windows-observer", fixture.endpoint("windows-observer")),
+                    ("windows-observer", fixture.endpoint("macos-observer")),
+                ],
+            }
+            for name, nodes in cases.items():
+                with self.subTest(case=name):
+                    output = Path(temp_dir) / f"{name}.json"
+                    result = self.run_collector(fixture, output, nodes=nodes, managed_five_node=True)
+
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("managed five-node", result.stderr)
+                    self.assertFalse(output.exists(), "invalid managed fleet must not write evidence")
+
+    def test_deployment_closure_docs_require_the_managed_five_node_preset(self) -> None:
+        runbook = RUNBOOK.read_text(encoding="utf-8")
+        inventory = INVENTORY.read_text(encoding="utf-8")
+
+        self.assertIn("--managed-five-node", runbook)
+        self.assertIn("--managed-five-node", inventory)
+        for identity in (
+            "sequencer",
+            "storage",
+            "linux-lan-observer",
+            "windows-observer",
+            "macos-observer",
+        ):
+            self.assertIn(identity, inventory)
 
 
 if __name__ == "__main__":

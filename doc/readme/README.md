@@ -36,13 +36,13 @@
 - 跟踪 README 与设计/实现的一致性缺口。
 - 承接 release communication、公告底稿、运营 runbook 与根 README 状态同步等对外口径闭环。
 
-## 热点子域导航（2026-07-04 快照）
-- `governance/`（56 份 Markdown）：release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口，已删除旧根 README 对齐和顶层链接检查一次性专题三件套。
-- `gap/`（28，含本地入口）：README 与实现/流程间差距闭环；先从 `gap/README.md` 区分主收口、增量和历史追溯。
-- `production/`（16）：生产收口、阶段边界、readiness 主题及受台账约束的 production 素材；先从 `production/README.md` 分流。
+## 热点子域导航
+- `governance/`：release communication、渠道运营 runbook、奖励与 invite 包；当前已补 `governance/README.md` 作为热点子域入口，已删除旧根 README 对齐和顶层链接检查一次性专题三件套。
+- `gap/`：README 与实现/流程间差距闭环；先从 `gap/README.md` 区分主收口、增量和历史追溯。
+- `production/`：生产收口、阶段边界、readiness 主题及受台账约束的 production 素材；先从 `production/README.md` 分流。
 
 ## 高密度提示
-- `doc/readme/` 当前共有 105 份 Markdown 文件；这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
+- 本页不维护容易漂移的文件数量快照；当前模块库存与热点子目录统一以 `./scripts/doc-inventory-report.sh` 为准。这一层入口不再尝试把 canonical、material 与 execution 专题全部摊平展示。
 - 需要完整活跃专题清单时，进入 `doc/readme/prd.index.md`；进入 `governance/`、`gap/` 或 `production/` 时，优先先读各自的 `README.md` 再继续下钻；需要素材包、执行记录或历史专题时，再按具体子域进入。
 
 ## 根目录收口

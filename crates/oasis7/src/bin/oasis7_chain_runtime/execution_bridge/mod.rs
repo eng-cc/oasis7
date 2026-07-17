@@ -5,6 +5,8 @@ use oasis7::runtime::{BlobStore, LocalCasStore, blake3_hex};
 use oasis7_proto::distributed::{BlobRef, WIRE_ENCODING_CBOR, WorldBlock, WorldHeadAnnounce};
 use serde::{Deserialize, Serialize};
 
+mod driver_startup_recovery;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ExecutionBridgeState {
     pub last_applied_committed_height: u64,
@@ -599,6 +601,7 @@ pub(super) fn persist_world_head_proof_for_record(
 }
 
 pub(super) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1: u32 = 1;
+pub(super) const EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V2: u32 = 2;
 
 fn execution_checkpoint_manifest_schema_v1() -> u32 {
     EXECUTION_CHECKPOINT_MANIFEST_SCHEMA_V1
@@ -613,6 +616,8 @@ pub(super) struct ExecutionCheckpointManifest {
     pub height: u64,
     pub execution_block_hash: String,
     pub execution_state_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub predecessor_execution_block_hash: Option<String>,
     pub latest_state_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_ref: Option<String>,
@@ -643,6 +648,22 @@ pub(super) struct ExecutionCheckpointManifestHashPayload<'a> {
     pub height: u64,
     pub execution_block_hash: &'a str,
     pub execution_state_root: &'a str,
+    pub latest_state_ref: &'a str,
+    pub snapshot_ref: Option<&'a str>,
+    pub journal_ref: Option<&'a str>,
+    pub pinned_refs: &'a [String],
+    pub created_at_ms: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(super) struct ExecutionCheckpointManifestHashPayloadV2<'a> {
+    pub schema_version: u32,
+    pub checkpoint_id: &'a str,
+    pub world_id: &'a str,
+    pub height: u64,
+    pub execution_block_hash: &'a str,
+    pub execution_state_root: &'a str,
+    pub predecessor_execution_block_hash: Option<&'a str>,
     pub latest_state_ref: &'a str,
     pub snapshot_ref: Option<&'a str>,
     pub journal_ref: Option<&'a str>,
@@ -741,11 +762,28 @@ fn to_cbor<T: Serialize>(value: T) -> Result<Vec<u8>, String> {
 }
 
 mod checkpoint;
+mod checkpoint_manifest;
+
+pub(crate) fn load_latest_execution_checkpoint_status_evidence(
+    execution_records_dir: &Path,
+) -> Result<Option<(u32, String, u64, String)>, String> {
+    checkpoint::load_latest_execution_checkpoint_manifest(execution_records_dir).map(|manifest| {
+        manifest.map(|manifest| {
+            (
+                manifest.schema_version,
+                manifest.checkpoint_id,
+                manifest.height,
+                manifest.manifest_hash,
+            )
+        })
+    })
+}
 mod driver;
 mod driver_checkpoint_install;
 mod driver_committed_heights;
 mod driver_observability;
 mod driver_persistence;
+mod durable_transaction;
 mod external_effect;
 mod simulator_mirror;
 #[cfg(test)]

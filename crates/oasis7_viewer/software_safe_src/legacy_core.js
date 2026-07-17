@@ -1,6 +1,7 @@
 import { createViewerAuthSurfaceModule } from "./viewer_auth_surface_module.js";
 import { createViewerFeedbackModule } from "./viewer_feedback_module.js";
 import { createViewerHostedAuthStateModule } from "./viewer_hosted_auth_state_module.js";
+import { createViewerHostedSessionRefreshModule } from "./viewer_hosted_session_refresh_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
@@ -362,34 +363,15 @@ async function refreshHostedAdmissionState() {
   }
 }
 
-async function refreshHostedPlayerLease() {
-  const playerId = String(state.auth.playerId || "").trim();
-  const releaseToken = String(state.auth.releaseToken || "").trim();
-  if (!playerId || !releaseToken || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
-    return null;
-  }
-  try {
-    const response = await fetch(
-      `${HOSTED_PLAYER_SESSION_REFRESH_ROUTE}?player_id=${encodeURIComponent(playerId)}&release_token=${encodeURIComponent(releaseToken)}`,
-      {
-        method: "POST",
-        cache: "no-store",
-        headers: { Accept: "application/json" },
-      },
-    );
-    const payload = await response.json();
-    if (payload?.admission) {
-      state.hostedAdmission = clone(payload.admission);
-    }
-    if (!response.ok || !payload?.ok) {
-      throw new Error(payload?.error || payload?.error_code || `hosted player-session refresh failed with HTTP ${response.status}`);
-    }
-    return payload;
-  } catch (error) {
-    state.auth.error = String(error);
-    return null;
-  }
-}
+const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
+  clone,
+  ensureHostedAuthSigningKey,
+  fetchImpl: fetch,
+  legacyViewerAuthBootstrapSource: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  persistHostedPlayerSession,
+  refreshRoute: HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
+  state,
+});
 
 function stopHostedSessionRefreshLoop() {
   if (hostedSessionRefreshTimer) {
@@ -1909,6 +1891,7 @@ async function completeHostedAccountLogin() {
   state.auth.error = null;
   render();
   try {
+    const keypair = await generateEphemeralEd25519Keypair();
     const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
       method: "POST",
       cache: "no-store",
@@ -1919,6 +1902,7 @@ async function completeHostedAccountLogin() {
       body: JSON.stringify({
         challenge_id: challengeId,
         otp_code: otpCode,
+        public_key: keypair.publicKey,
       }),
     });
     const payload = await response.json();
@@ -1929,7 +1913,6 @@ async function completeHostedAccountLogin() {
       throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
     }
     state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-    const keypair = await generateEphemeralEd25519Keypair();
     state.auth = {
       available: true,
       hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
@@ -1942,6 +1925,7 @@ async function completeHostedAccountLogin() {
       publicKey: keypair.publicKey,
       privateKey: keypair.privateKey,
       releaseToken: String(payload.grant.release_token || "").trim() || null,
+      registrationGrant: String(payload.grant.registration_grant || "").trim() || null,
       error: null,
       revokeReason: null,
       revokedBy: null,
@@ -2269,6 +2253,9 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
     player_id: auth.playerId,
     public_key: auth.publicKey,
   };
+  if (auth.registrationGrant) {
+    request.registration_grant = auth.registrationGrant;
+  }
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
   }
@@ -3216,6 +3203,9 @@ function adoptHostedRecoveryAck(ack) {
     : ack.status === "session_revoked"
       ? "guest"
       : "issued";
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    state.auth.registrationGrant = null;
+  }
   state.auth.runtimeStatus = ack.status === "session_revoked"
     ? "revoked"
     : nextBoundAgentId

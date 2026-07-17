@@ -15,6 +15,35 @@ pub(super) struct RuntimeSessionMutationSnapshot {
 }
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn plan_player_session_agent_binding(
+        &mut self,
+        agent_id: &str,
+        player_id: &str,
+        public_key: Option<&str>,
+        allow_player_rebind: bool,
+    ) -> Result<RuntimePlayerBindingPlan, String> {
+        if allow_player_rebind {
+            if !self.world.state().agents.contains_key(agent_id) {
+                return Err(format!("agent not found: {agent_id}"));
+            }
+        } else {
+            control_plane::ensure_agent_player_binding_target_runtime(
+                &self.world,
+                &self.llm_sidecar,
+                agent_id,
+                player_id,
+                public_key,
+            )
+            .map_err(|err| err.message)?;
+        }
+        self.llm_sidecar.plan_agent_player_binding(
+            agent_id,
+            player_id,
+            public_key,
+            allow_player_rebind,
+        )
+    }
+
     pub(super) fn restore_persisted_session_side_effects(
         llm_sidecar: &mut RuntimeLlmSidecar,
         persisted: &super::recovery_receipt::RuntimePersistedSessionSideEffects,

@@ -183,6 +183,11 @@ jobs:
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
+      - name: Run execution bridge binary unit suite
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}
+        run: >-
+          env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime
+          execution_bridge_real_tests::real_execution_bridge::tests
 
   windows-package-rollout-behavior:
     if: github.event_name == 'pull_request'
@@ -196,6 +201,15 @@ jobs:
         run: |
           set -euo pipefail
           bash ./scripts/p2p-public-testnet-package-rollout.test.sh
+
+  testnet-packages-macos-arm64-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify additive macOS arm64 package contract
+        shell: bash
+        run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
 
   public-testnet-fleet-health-contract:
     if: github.event_name == 'pull_request'

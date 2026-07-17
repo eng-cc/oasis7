@@ -1,0 +1,609 @@
+use std::time::{Duration, Instant};
+
+use oasis7::runtime::{
+    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal,
+    Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
+};
+use oasis7::simulator::{
+    WorldJournal as SimulatorJournal, WorldKernel, WorldSnapshot as SimulatorSnapshot,
+};
+
+use super::checkpoint::{
+    execution_bridge_record_path, execution_checkpoint_root_dir, load_execution_bridge_record,
+    load_execution_checkpoint_manifest, persist_execution_bridge_record_only,
+};
+use super::driver::{ExecutionHashPayload, NodeRuntimeExecutionDriver};
+use super::driver_observability::{
+    RestoreObservation, emit_stale_height_restore_complete, emit_stale_height_restore_start,
+    execution_record_recovery_ref_count,
+};
+use super::driver_persistence::{
+    execution_world_persistence_files_missing, persist_execution_bridge_state,
+    persist_execution_world_with_chain_resource_context,
+};
+use super::simulator_mirror::persist_simulator_execution_world;
+use super::{EXECUTION_BRIDGE_RECORD_SCHEMA_V3, ExecutionBridgeRecord, WorldHeadProofV1};
+
+impl NodeRuntimeExecutionDriver {
+    fn recover_runtime_journal_from_loaded_world(
+        &self,
+        snapshot: &RuntimeSnapshot,
+        target_height: u64,
+    ) -> Result<RuntimeJournal, String> {
+        let loaded_journal = self.execution_world.journal().clone();
+        if snapshot.journal_len > loaded_journal.len() {
+            return Err(format!(
+                "execution record at height {} missing journal_ref and loaded execution world only has {} events, need at least {}",
+                target_height,
+                loaded_journal.len(),
+                snapshot.journal_len
+            ));
+        }
+
+        let mut recovered = loaded_journal;
+        recovered.events.truncate(snapshot.journal_len);
+        let recovered_last_event_id = recovered.events.last().map(|event| event.id).unwrap_or(0);
+        if recovered_last_event_id != snapshot.last_event_id {
+            return Err(format!(
+                "execution record at height {} missing journal_ref and loaded execution world journal prefix mismatches snapshot last_event_id expected={} actual={}",
+                target_height, snapshot.last_event_id, recovered_last_event_id
+            ));
+        }
+
+        Ok(recovered)
+    }
+
+    pub(super) fn restore_startup_execution_head(&mut self) -> Result<(), String> {
+        let target_height = self.state.last_applied_committed_height;
+        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
+        let latest_path = self.records_dir.join("latest.json");
+        let latest_record = latest_path.exists().then(|| {
+            load_execution_bridge_record(latest_path.as_path()).map_err(|err| {
+                format!(
+                    "execution driver authoritative startup latest record unavailable while reconciling state head {}: {}",
+                    target_height, err
+                )
+            })
+        }).transpose()?;
+        if let Some(latest_record) = latest_record.as_ref()
+            && latest_record.height > target_height
+        {
+            if latest_record.world_id.trim().is_empty() {
+                return Err(format!(
+                    "execution driver authoritative startup newer latest record has empty world_id at height {}",
+                    latest_record.height
+                ));
+            }
+            if !self.restore_execution_head_from_record(
+                latest_record.world_id.as_str(),
+                latest_record.height,
+            )? {
+                return Err(format!(
+                    "execution driver authoritative startup newer latest record missing at height {} while state head is {}",
+                    latest_record.height, target_height
+                ));
+            }
+            return Ok(());
+        }
+        if !record_path.exists() {
+            let latest_record = latest_record.ok_or_else(|| {
+                format!(
+                    "execution driver authoritative startup latest record unavailable while state head {} lacks exact record",
+                    target_height
+                )
+            })?;
+            if latest_record.height >= target_height || latest_record.world_id.trim().is_empty() {
+                return Err(format!(
+                    "execution driver authoritative startup latest record cannot reconcile missing state head {}: record_height={} world_id={}",
+                    target_height, latest_record.height, latest_record.world_id
+                ));
+            }
+            if !self.restore_execution_head_from_record(
+                latest_record.world_id.as_str(),
+                latest_record.height,
+            )? {
+                return Err(format!(
+                    "execution driver authoritative startup latest record missing at height {} while state head {} lacks exact record",
+                    latest_record.height, target_height
+                ));
+            }
+            return Ok(());
+        }
+        let record = load_execution_bridge_record(record_path.as_path()).map_err(|err| {
+            format!(
+                "execution driver authoritative startup record unavailable at height {}: {}",
+                target_height, err
+            )
+        })?;
+        if record.height != target_height || record.world_id.trim().is_empty() {
+            return Err(format!(
+                "execution driver authoritative startup record mismatch at height {}: record_height={} world_id={}",
+                target_height, record.height, record.world_id
+            ));
+        }
+        if self.state.last_execution_block_hash.as_deref()
+            != Some(record.execution_block_hash.as_str())
+            || self.state.last_execution_state_root.as_deref()
+                != Some(record.execution_state_root.as_str())
+            || self.state.last_node_block_hash.as_deref() != record.node_block_hash.as_deref()
+        {
+            return Err(format!(
+                "execution driver authoritative startup state head mismatch at height {}",
+                target_height
+            ));
+        }
+        if !self.restore_execution_head_from_record(record.world_id.as_str(), target_height)? {
+            return Err(format!(
+                "execution driver authoritative startup record missing at height {}",
+                target_height
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_recovered_execution_record(
+        &self,
+        record: &ExecutionBridgeRecord,
+        snapshot_ref: &str,
+        snapshot_bytes: &[u8],
+        snapshot: &RuntimeSnapshot,
+        journal: &RuntimeJournal,
+        allow_legacy_cache_recovery: bool,
+    ) -> Result<(), String> {
+        if record.height == 0 || record.world_id.trim().is_empty() {
+            return Err(format!(
+                "execution driver authoritative record has invalid identity height={} world_id={}",
+                record.height, record.world_id
+            ));
+        }
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+        {
+            let checkpoint_install_record = record.checkpoint_ref.is_some()
+                && record.proposer_id.is_none()
+                && record.action_root.is_none();
+            if record.latest_state_ref.as_deref() != Some(snapshot_ref)
+                || record.snapshot_ref.as_deref() != Some(snapshot_ref)
+                || record.journal_ref.as_deref().is_none_or(str::is_empty)
+                || record.node_block_hash.as_deref().is_none_or(str::is_empty)
+                || (!checkpoint_install_record
+                    && (record.proposer_id.as_deref().is_none_or(str::is_empty)
+                        || record.action_root.as_deref().is_none_or(str::is_empty)))
+            {
+                return Err(format!(
+                    "execution driver authoritative v3 record missing or mismatching refs at height {}",
+                    record.height
+                ));
+            }
+        }
+        let actual_state_root = blake3_hex(snapshot_bytes);
+        if actual_state_root != record.execution_state_root {
+            return Err(format!(
+                "execution driver authoritative snapshot root mismatch at height {}: expected={} actual={}",
+                record.height, record.execution_state_root, actual_state_root
+            ));
+        }
+        if snapshot.journal_len != record.journal_len || journal.len() != record.journal_len {
+            return Err(format!(
+                "execution driver authoritative journal length mismatch at height {}: snapshot={} record={} actual={}",
+                record.height,
+                snapshot.journal_len,
+                record.journal_len,
+                journal.len()
+            ));
+        }
+        let checkpoint_install_record = record.checkpoint_ref.is_some()
+            && record.proposer_id.is_none()
+            && record.action_root.is_none();
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+            && !checkpoint_install_record
+        {
+            let proof_ref = record.world_head_proof_ref.as_deref().ok_or_else(|| {
+                format!(
+                    "execution driver authoritative v3 record missing world head proof ref at height {}",
+                    record.height
+                )
+            })?;
+            let expected_proof_hash = record.world_head_proof_hash.as_deref().ok_or_else(|| {
+                format!(
+                    "execution driver authoritative v3 record missing world head proof hash at height {}",
+                    record.height
+                )
+            })?;
+            let proof_bytes = self.execution_store.get_verified(proof_ref).map_err(|err| {
+                format!(
+                    "execution driver authoritative world head proof ref {} failed at height {}: {:?}",
+                    proof_ref, record.height, err
+                )
+            })?;
+            let proof = serde_cbor::from_slice::<WorldHeadProofV1>(proof_bytes.as_slice())
+                .map_err(|err| {
+                    format!(
+                        "execution driver decode world head proof failed at height {}: {}",
+                        record.height, err
+                    )
+                })?;
+            let actual_proof_hash = proof.proof_hash()?;
+            if actual_proof_hash != expected_proof_hash
+                || proof.world_id != record.world_id
+                || proof.height != record.height
+                || proof.timestamp_ms != record.timestamp_ms
+                || proof.execution.execution_block_hash != record.execution_block_hash
+                || proof.execution.execution_state_root != record.execution_state_root
+                || proof.execution.node_block_hash
+                    != record.node_block_hash.as_deref().unwrap_or("")
+                || proof.execution.action_root != record.action_root.as_deref().unwrap_or("")
+                || proof.consensus.proposer_id != record.proposer_id.as_deref().unwrap_or("")
+                || proof.snapshot_manifest_ref.content_hash != snapshot_ref
+                || proof.journal_segments_ref.content_hash
+                    != record.journal_ref.as_deref().unwrap_or("")
+            {
+                return Err(format!(
+                    "execution driver authoritative world head proof mismatch at height {}",
+                    record.height
+                ));
+            }
+        }
+        let previous_execution_block_hash = if checkpoint_install_record {
+            let checkpoint_ref = record.checkpoint_ref.as_deref().ok_or_else(|| {
+                format!(
+                    "execution checkpoint-install record missing checkpoint ref at height {}",
+                    record.height
+                )
+            })?;
+            let manifest = load_execution_checkpoint_manifest(
+                execution_checkpoint_root_dir(self.records_dir.as_path())
+                    .join(checkpoint_ref)
+                    .as_path(),
+            )?;
+            if manifest.world_id != record.world_id
+                || manifest.height != record.height
+                || manifest.execution_block_hash != record.execution_block_hash
+                || manifest.execution_state_root != record.execution_state_root
+            {
+                return Err(format!(
+                    "execution checkpoint-install manifest mismatch at height {}",
+                    record.height
+                ));
+            }
+            manifest
+                .predecessor_execution_block_hash
+                .filter(|hash| !hash.is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "execution checkpoint-install manifest missing predecessor execution block hash at height {}",
+                        record.height
+                    )
+                })?
+        } else if record.height == 1 {
+            "genesis".to_string()
+        } else {
+            let predecessor_path =
+                execution_bridge_record_path(self.records_dir.as_path(), record.height - 1);
+            let predecessor = load_execution_bridge_record(predecessor_path.as_path()).map_err(|err| {
+                format!(
+                    "execution driver authoritative predecessor record unavailable at height {}: {}",
+                    record.height - 1,
+                    err
+                )
+            })?;
+            if predecessor.height != record.height - 1 || predecessor.world_id != record.world_id {
+                return Err(format!(
+                    "execution driver authoritative predecessor record mismatch at height {}",
+                    record.height - 1
+                ));
+            }
+            predecessor.execution_block_hash
+        };
+        let expected_execution_block_hash = blake3_hex(
+            super::to_cbor(ExecutionHashPayload {
+                world_id: record.world_id.as_str(),
+                height: record.height,
+                prev_execution_block_hash: previous_execution_block_hash.as_str(),
+                execution_state_root: record.execution_state_root.as_str(),
+                journal_len: record.journal_len,
+            })?
+            .as_slice(),
+        );
+        if expected_execution_block_hash != record.execution_block_hash {
+            return Err(format!(
+                "execution driver authoritative execution block mismatch at height {}: expected={} actual={}",
+                record.height, expected_execution_block_hash, record.execution_block_hash
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn restore_execution_head_from_record(
+        &mut self,
+        expected_world_id: &str,
+        target_height: u64,
+    ) -> Result<bool, String> {
+        let restore_started_at = Instant::now();
+        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
+        if !record_path.exists() {
+            return Ok(false);
+        }
+
+        let mut record = load_execution_bridge_record(record_path.as_path())?;
+        if record.height != target_height {
+            return Err(format!(
+                "execution driver record height mismatch at path height {}: record_height={}",
+                target_height, record.height
+            ));
+        }
+        if record.world_id != expected_world_id {
+            return Err(format!(
+                "execution driver stale-height restore world_id mismatch at height {}: expected={} actual={}",
+                target_height, expected_world_id, record.world_id
+            ));
+        }
+        let world_policy = self.execution_world.release_security_policy().clone();
+        let snapshot_ref = record
+            .recovery_snapshot_ref()
+            .ok_or_else(|| {
+                format!(
+                    "execution record at height {} missing latest_state_ref",
+                    target_height
+                )
+            })?
+            .to_string();
+        let allow_legacy_cache_recovery = record.schema_version < EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && target_height < self.state.last_applied_committed_height
+            && !execution_world_persistence_files_missing(self.world_dir.as_path());
+        if record.schema_version >= EXECUTION_BRIDGE_RECORD_SCHEMA_V3
+            && !allow_legacy_cache_recovery
+            && (record.latest_state_ref.as_deref() != Some(snapshot_ref.as_str())
+                || record.snapshot_ref.as_deref() != Some(snapshot_ref.as_str())
+                || record.journal_ref.as_deref().is_none_or(str::is_empty))
+        {
+            return Err(format!(
+                "execution driver authoritative v3 record missing exact CAS refs at height {}",
+                target_height
+            ));
+        }
+        let pinned_ref_count = execution_record_recovery_ref_count(&record);
+        let simulator_mirror_present = record.simulator_mirror.is_some();
+        emit_stale_height_restore_start(
+            expected_world_id,
+            target_height,
+            pinned_ref_count,
+            simulator_mirror_present,
+        );
+
+        let snapshot_blob_started_at = Instant::now();
+        let snapshot_bytes = self
+            .execution_store
+            .get_verified(snapshot_ref.as_str())
+            .map_err(|err| {
+                format!(
+                    "execution driver authoritative CAS snapshot ref {} failed at height {}: {:?}",
+                    snapshot_ref, target_height, err
+                )
+            })?;
+        let mut blob_store_ms = snapshot_blob_started_at.elapsed();
+        let mut blob_count = 1_usize;
+        let mut bundle_bytes = snapshot_bytes.len();
+        let snapshot_bytes_len = snapshot_bytes.len();
+
+        let runtime_decode_started_at = Instant::now();
+        let snapshot = serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice())
+            .map_err(|err| {
+                format!(
+                    "execution driver decode runtime snapshot failed at height {}: {}",
+                    target_height, err
+                )
+            })?;
+        let journal_bytes_len;
+        let (journal, recovered_journal_ref) = match record.journal_ref.as_deref() {
+            Some(journal_ref) => {
+                let journal_blob_started_at = Instant::now();
+                let journal_bytes =
+                    self.execution_store
+                        .get_verified(journal_ref)
+                        .map_err(|err| {
+                            format!(
+                                "execution driver authoritative CAS journal ref {} failed at height {}: {:?}",
+                                journal_ref, target_height, err
+                            )
+                        })?;
+                blob_store_ms += journal_blob_started_at.elapsed();
+                blob_count = blob_count.saturating_add(1);
+                journal_bytes_len = journal_bytes.len();
+                bundle_bytes = bundle_bytes.saturating_add(journal_bytes_len);
+                let journal = serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode runtime journal failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+                (journal, None)
+            }
+            None => {
+                let journal =
+                    self.recover_runtime_journal_from_loaded_world(&snapshot, target_height)?;
+                let journal_bytes = super::to_cbor(journal.clone())?;
+                journal_bytes_len = journal_bytes.len();
+                bundle_bytes = bundle_bytes.saturating_add(journal_bytes_len);
+                let recovered_ref = self
+                    .execution_store
+                    .put_bytes(journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver recover journal CAS put failed at height {}: {:?}",
+                            target_height, err
+                        )
+                    })?;
+                (journal, Some(recovered_ref))
+            }
+        };
+        self.validate_recovered_execution_record(
+            &record,
+            snapshot_ref.as_str(),
+            snapshot_bytes.as_slice(),
+            &snapshot,
+            &journal,
+            allow_legacy_cache_recovery,
+        )?;
+        let decode_ms = runtime_decode_started_at.elapsed();
+
+        let restored_resource_manifest = snapshot.chain_resource_manifest.clone();
+        let restored_resource_delta = snapshot.latest_chain_resource_delta.clone();
+        let runtime_rebuild_started_at = Instant::now();
+        let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal).map_err(|err| {
+            format!(
+                "execution driver rebuild runtime world failed at height {}: {:?}",
+                target_height, err
+            )
+        })?;
+        restored_world.set_release_security_policy(world_policy);
+        let mut rebuild_ms = runtime_rebuild_started_at.elapsed();
+        let restored_commit_block_hash = restored_resource_delta
+            .as_ref()
+            .and_then(|delta| delta.commit_block_hash.as_deref())
+            .or(restored_resource_manifest.created_at_block_hash.as_deref());
+        let restored_resource_context = ChainResourceDerivationContext {
+            world_id: restored_resource_manifest.world_id.as_str(),
+            chain_id: restored_resource_manifest.chain_id.as_str(),
+            genesis_ref: restored_resource_manifest.genesis_ref.as_deref(),
+            created_at_height: restored_resource_manifest.created_at_height,
+            manifest_height: restored_resource_manifest.manifest_height,
+            commit_block_hash: restored_commit_block_hash,
+            tick: restored_world.state().time,
+        };
+        let mut persist_ms = Duration::default();
+        let world_persist_started_at = Instant::now();
+        persist_execution_world_with_chain_resource_context(
+            self.world_dir.as_path(),
+            &restored_world,
+            restored_resource_context,
+            restored_resource_manifest.world_config_hash.as_str(),
+            restored_resource_manifest
+                .generation_algorithm_hash
+                .as_str(),
+        )?;
+        persist_ms += world_persist_started_at.elapsed();
+        self.execution_world = restored_world;
+
+        let simulator_restore_started_at = Instant::now();
+        let mut simulator_snapshot_bytes_len = 0_usize;
+        let mut simulator_journal_bytes_len = 0_usize;
+        if let Some(simulator_mirror) = record.simulator_mirror.as_ref() {
+            let simulator_blob_started_at = Instant::now();
+            let simulator_snapshot_bytes = self
+                .execution_store
+                .get_verified(simulator_mirror.snapshot_ref.as_str())
+                .map_err(|err| {
+                    format!(
+                        "execution driver restore simulator snapshot ref {} failed at height {}: {:?}",
+                        simulator_mirror.snapshot_ref, target_height, err
+                    )
+                })?;
+            let simulator_journal_bytes = self
+                .execution_store
+                .get_verified(simulator_mirror.journal_ref.as_str())
+                .map_err(|err| {
+                    format!(
+                        "execution driver restore simulator journal ref {} failed at height {}: {:?}",
+                        simulator_mirror.journal_ref, target_height, err
+                    )
+                })?;
+            blob_store_ms += simulator_blob_started_at.elapsed();
+            blob_count = blob_count.saturating_add(2);
+            simulator_snapshot_bytes_len = simulator_snapshot_bytes.len();
+            simulator_journal_bytes_len = simulator_journal_bytes.len();
+            bundle_bytes = bundle_bytes
+                .saturating_add(simulator_snapshot_bytes_len)
+                .saturating_add(simulator_journal_bytes_len);
+            let simulator_snapshot =
+                serde_cbor::from_slice::<SimulatorSnapshot>(simulator_snapshot_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode simulator snapshot failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+            let simulator_journal =
+                serde_cbor::from_slice::<SimulatorJournal>(simulator_journal_bytes.as_slice())
+                    .map_err(|err| {
+                        format!(
+                            "execution driver decode simulator journal failed at height {}: {}",
+                            target_height, err
+                        )
+                    })?;
+            let simulator_rebuild_started_at = Instant::now();
+            let restored_simulator =
+                WorldKernel::from_snapshot(simulator_snapshot, simulator_journal).map_err(
+                    |err| {
+                        format!(
+                            "execution driver rebuild simulator mirror failed at height {}: {:?}",
+                            target_height, err
+                        )
+                    },
+                )?;
+            rebuild_ms += simulator_rebuild_started_at.elapsed();
+            let simulator_persist_started_at = Instant::now();
+            persist_simulator_execution_world(
+                self.simulator_world_dir.as_path(),
+                &restored_simulator,
+                None,
+            )?;
+            persist_ms += simulator_persist_started_at.elapsed();
+            self.simulator_mirror = restored_simulator;
+        }
+        let simulator_restore_ms = if simulator_mirror_present {
+            simulator_restore_started_at.elapsed()
+        } else {
+            Duration::default()
+        };
+
+        if record.latest_state_ref.is_none()
+            || record.snapshot_ref.is_none()
+            || record.journal_ref.is_none()
+        {
+            if record.latest_state_ref.is_none() {
+                record.latest_state_ref = Some(snapshot_ref.clone());
+            }
+            if record.snapshot_ref.is_none() {
+                record.snapshot_ref = Some(snapshot_ref.clone());
+            }
+            if record.journal_ref.is_none() {
+                record.journal_ref = recovered_journal_ref;
+            }
+            let record_persist_started_at = Instant::now();
+            persist_execution_bridge_record_only(self.records_dir.as_path(), &record)?;
+            persist_ms += record_persist_started_at.elapsed();
+        }
+
+        self.state.last_applied_committed_height = record.height;
+        self.state.last_execution_block_hash = Some(record.execution_block_hash);
+        self.state.last_execution_state_root = Some(record.execution_state_root);
+        self.state.last_node_block_hash = record.node_block_hash;
+        let state_persist_started_at = Instant::now();
+        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
+        persist_ms += state_persist_started_at.elapsed();
+
+        emit_stale_height_restore_complete(RestoreObservation {
+            world_id: expected_world_id,
+            height: target_height,
+            pinned_ref_count,
+            blob_count,
+            bundle_bytes,
+            snapshot_bytes: snapshot_bytes_len,
+            journal_bytes: journal_bytes_len,
+            simulator_mirror_present,
+            simulator_snapshot_bytes: simulator_snapshot_bytes_len,
+            simulator_journal_bytes: simulator_journal_bytes_len,
+            blob_store_ms,
+            decode_ms,
+            rebuild_ms,
+            simulator_restore_ms,
+            persist_ms,
+            total_ms: restore_started_at.elapsed(),
+        });
+
+        Ok(true)
+    }
+}

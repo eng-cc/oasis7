@@ -6,8 +6,8 @@
 - 想先回答 world-simulator 在做什么、覆盖哪些边界：`doc/world-simulator/prd.md`
 - 想看当前执行任务、负责人、测试层级与最新完成态：`doc/world-simulator/project.md`
 - 想确认 Viewer / player-facing surface 的统一视觉设计规范：`doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md`；涉及 brand book、token、icon/status、资产准入和截图矩阵时读 `doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md`
-- 想先进入 Viewer 热点子域，而不是在 213 份 Viewer Markdown 里盲扫：`doc/world-simulator/viewer/README.md`
-- 想先进入 Launcher 热点子域，而不是在 80+ 份启动器文档里盲扫：`doc/world-simulator/launcher/README.md`
+- 想先进入 Viewer 热点子域，而不是在专题文件中盲扫：`doc/world-simulator/viewer/README.md`
+- 想先进入 Launcher 热点子域，而不是在专题文件中盲扫：`doc/world-simulator/launcher/README.md`
 - 想先进入场景初始化、seed/location 或 asteroid-fragment 主题，而不是在场景专题三件套中逐项找：`doc/world-simulator/scenario/README.md`
 - 想执行 Viewer、走 Web 闭环或查操作步骤：`doc/world-simulator/viewer/viewer-manual.manual.md`
 - 想按子域或文件名继续下钻，而不是从长表里逐行找：`doc/world-simulator/prd.index.md`
@@ -24,7 +24,7 @@
 - `prd.md` 是模块权威规格入口，适合先理解 world-simulator 的范围、主线能力与跨模块接口。
 - `project.md` 是执行台账，适合确认当前活跃任务、测试层级、阻断与最新完成项。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按文件名查找，不是新读者的首读入口。
-- `viewer/README.md` 是 `viewer/` 热点子域的 landing page，负责把 213 份 Viewer Markdown 按问题分流。
+- `viewer/README.md` 是 `viewer/` 热点子域的 landing page，负责把 Viewer 专题按问题分流。
 - `launcher/README.md` 是 `launcher/` 热点子域的 landing page，负责把启动器、控制面、explorer、runtime 边界与自引导体验按问题分流。
 - `scenario/README.md` 是 `scenario/` 子域的 landing page，负责把场景文件、world initialization、seed/location、资源生成与 asteroid-fragment 专题按问题分流。
 - `viewer/viewer-visual-design-spec-2026-06-05.design.md` 是 Viewer / player-facing surface 的 canonical 视觉设计规范，负责视觉方向、层级、pixel-world 可读性与视觉评审 gate。
@@ -42,19 +42,18 @@
 - 汇总 Web 闭环、启动器可用性、场景初始化与规则执行相关专题。
 - 承接 world-simulator 与 runtime / viewer / testing 的跨模块体验收口。
 
-## 热点子域导航（2026-07-03 复算）
-- `viewer/`（199）：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
-- `launcher/`（87）：启动器、控制面、转账、explorer 与自引导体验；先看 `launcher/README.md`，再按簇进入 release/distribution、control plane、explorer、runtime 边界或 self-guided 专题。
-- `llm/`（54）：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
-- `kernel/`（36）：规则桥接、WASM 执行、资源与 runtime 约束。
-- `m4/`（36）：M4 方案与配套设计。
+## 热点子域导航
+- `viewer/`：Viewer、Web 闭环、`software_safe`、2D/3D 与操作手册；先看 `viewer/README.md`，再按簇进入 `viewer-manual.manual.md` 或具体专题。
+- `launcher/`：启动器、控制面、转账、explorer 与自引导体验；先看 `launcher/README.md`，再按簇进入 release/distribution、control plane、explorer、runtime 边界或 self-guided 专题。
+- `llm/`：provider、loopback、本地桥接、体验等价和 direct-connect 相关口径。
+- `kernel/`：规则桥接、WASM 执行、资源与 runtime 约束。
+- `m4/`：M4 方案与配套设计。
 - `scenario/`：场景初始化、配置与模板；先读 `scenario/README.md`，再按问题进入专题。
-- `prd/`（8）：验收模板、质量趋势与补充附件。
+- `prd/`：验收模板、质量趋势与补充附件。
 
 ## 高密度提示
-- `doc/world-simulator/` 当前共有 472 份 Markdown；这一层入口不再尝试把热点专题直接摊平展示。
-- `doc/world-simulator/viewer/` 当前共有 213 份 Markdown；模块级入口只负责把你送到 `viewer/README.md`，不再在根入口直接承担 Viewer 子域分流。
-- `doc/world-simulator/launcher/` 当前共有 87 份 Markdown；模块级入口只负责把你送到 `launcher/README.md`，不再在根入口直接承担 Launcher 子域分流。
+- 本页不维护容易漂移的文件数量快照；当前模块库存与热点子目录统一以 `./scripts/doc-inventory-report.sh` 为准。
+- 模块级入口只负责把你送到 `viewer/README.md` 或 `launcher/README.md`，不再在根入口直接承担子域分流。
 - 需要完整活跃专题清单时，进入 `doc/world-simulator/prd.index.md`；需要历史回溯时，再按具体任务或专题路径进入。
 
 ## 根目录 legacy

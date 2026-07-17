@@ -36,6 +36,8 @@ config.toml
 .distfs/
 __pycache__/
 *.py[cod]
+# Persistent task-scoped post-merge finalizer flock state.
+.pm/github-project-sync/tasks.json.task_*.finalizer-lock
 # Local generated builtin wasm artifacts; tracked release truth lives in manifests/DistFS blobs.
 crates/oasis7/src/runtime/world/artifacts/m1_builtin_modules/*.wasm
 crates/oasis7/src/runtime/world/artifacts/m4_builtin_modules/*.wasm
@@ -52,5 +54,7 @@ node_modules/
 crates/oasis7_viewer/.software-safe-build/
 crates/oasis7_viewer/dist
 crates/oasis7/explorer-index.json
+**/.oasis7-hosted-player-sessions.json
+**/.oasis7-hosted-registration-replay.json
 tools/provider/oasis7_provider_workspace/.provider/
 tools/provider/oasis7_provider_workspace/.openclaw/

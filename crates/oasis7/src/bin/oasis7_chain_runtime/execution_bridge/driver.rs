@@ -6,13 +6,10 @@ use oasis7::consensus_action_payload::{
     ConsensusActionPayloadBody, decode_consensus_action_payload,
 };
 use oasis7::runtime::{
-    BlobStore, ChainResourceDerivationContext, Journal as RuntimeJournal, LocalCasStore,
-    RuntimeCommittedTickContext, Snapshot as RuntimeSnapshot, World as RuntimeWorld, blake3_hex,
+    BlobStore, ChainResourceDerivationContext, LocalCasStore, RuntimeCommittedTickContext,
+    World as RuntimeWorld, blake3_hex,
 };
-use oasis7::simulator::{
-    Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldJournal as SimulatorJournal,
-    WorldKernel, WorldSnapshot as SimulatorSnapshot,
-};
+use oasis7::simulator::{Action as SimulatorAction, ActionSubmitter, WorldEventKind, WorldKernel};
 use oasis7_node::{
     EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE, NodeExecutionCheckpointBlob,
     NodeExecutionCheckpointBundle, NodeExecutionCheckpointInstallContext,
@@ -29,25 +26,22 @@ use super::checkpoint::{
     execution_bridge_record_path, execution_checkpoint_root_dir,
     fail_execution_bridge_retention_transaction, load_execution_bridge_record,
     load_execution_checkpoint_manifest, maybe_persist_execution_checkpoint_for_record,
-    persist_execution_bridge_record, persist_execution_bridge_record_only,
-    promote_interrupted_execution_bridge_retention,
+    persist_execution_bridge_record, promote_interrupted_execution_bridge_retention,
     run_execution_bridge_incremental_retention_maintenance,
     run_execution_bridge_retention_maintenance,
 };
 use super::driver_observability::{
-    CommitObservation, RestoreObservation, SimulatorMirrorCommitObservation,
-    emit_commit_observation, emit_stale_height_restore_complete, emit_stale_height_restore_start,
-    execution_record_recovery_ref_count,
+    CommitObservation, SimulatorMirrorCommitObservation, emit_commit_observation,
 };
 pub(crate) use super::driver_persistence::load_execution_world;
 pub(crate) use super::driver_persistence::{
     execution_world_persistence_files_missing, load_execution_bridge_state,
     load_execution_world_with_policy, persist_execution_bridge_state, persist_execution_world,
-    persist_execution_world_with_chain_resource_context,
     remove_partial_execution_world_persistence_files,
 };
 use super::external_effect::{
     build_execution_external_effect_materialization,
+    load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
 };
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
@@ -99,6 +93,144 @@ pub(crate) struct NodeRuntimeExecutionDriver {
 }
 
 impl NodeRuntimeExecutionDriver {
+    fn validate_equal_height_replay_identity(
+        &self,
+        record: &ExecutionBridgeRecord,
+        context: &NodeExecutionCommitContext,
+    ) -> Result<(), String> {
+        if record.schema_version < super::EXECUTION_BRIDGE_RECORD_SCHEMA_V3 {
+            return Ok(());
+        }
+        let checkpoint_install_record = record.checkpoint_ref.is_some()
+            && record.proposer_id.is_none()
+            && record.action_root.is_none();
+        if checkpoint_install_record {
+            return Err(format!(
+                "execution driver equal-height checkpoint-install record cannot authenticate consensus replay at height {}",
+                context.height
+            ));
+        }
+
+        let node_block_hash = record.node_block_hash.as_deref().ok_or_else(|| {
+            format!(
+                "execution driver equal-height V3 record missing node_block_hash at height {}",
+                context.height
+            )
+        })?;
+        if node_block_hash != context.node_block_hash {
+            return Err(format!(
+                "execution driver equal-height V3 node_block_hash mismatch at height {}: expected={} actual={}",
+                context.height, node_block_hash, context.node_block_hash
+            ));
+        }
+        let proposer_id = record.proposer_id.as_deref().ok_or_else(|| {
+            format!(
+                "execution driver equal-height V3 record missing proposer_id at height {}",
+                context.height
+            )
+        })?;
+        if proposer_id != context.proposer_id {
+            return Err(format!(
+                "execution driver equal-height V3 proposer_id mismatch at height {}: expected={} actual={}",
+                context.height, proposer_id, context.proposer_id
+            ));
+        }
+        let action_root = record.action_root.as_deref().ok_or_else(|| {
+            format!(
+                "execution driver equal-height V3 record missing action_root at height {}",
+                context.height
+            )
+        })?;
+        if action_root != context.action_root {
+            return Err(format!(
+                "execution driver equal-height V3 action_root mismatch at height {}: expected={} actual={}",
+                context.height, action_root, context.action_root
+            ));
+        }
+        if record.timestamp_ms != context.committed_at_unix_ms {
+            return Err(format!(
+                "execution driver equal-height V3 committed_at_unix_ms mismatch at height {}: expected={} actual={}",
+                context.height, record.timestamp_ms, context.committed_at_unix_ms
+            ));
+        }
+
+        let external_effect_ref = record.external_effect_ref.as_deref().ok_or_else(|| {
+            format!(
+                "execution driver equal-height V3 record missing authoritative external effect at height {}",
+                context.height
+            )
+        })?;
+        let external_effect = load_execution_external_effect_materialization(
+            &self.execution_store,
+            external_effect_ref,
+        )?;
+        if external_effect.world_id != context.world_id {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect world_id mismatch at height {}: expected={} actual={}",
+                context.height, context.world_id, external_effect.world_id
+            ));
+        }
+        if external_effect.node_id != context.node_id {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect node_id mismatch at height {}: expected={} actual={}",
+                context.height, context.node_id, external_effect.node_id
+            ));
+        }
+        if external_effect.height != context.height {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect height mismatch: expected={} actual={}",
+                context.height, external_effect.height
+            ));
+        }
+        if external_effect.slot != context.slot {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect slot mismatch at height {}: expected={} actual={}",
+                context.height, context.slot, external_effect.slot
+            ));
+        }
+        if external_effect.epoch != context.epoch {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect epoch mismatch at height {}: expected={} actual={}",
+                context.height, context.epoch, external_effect.epoch
+            ));
+        }
+        if external_effect.node_block_hash != context.node_block_hash {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect node_block_hash mismatch at height {}: expected={} actual={}",
+                context.height, context.node_block_hash, external_effect.node_block_hash
+            ));
+        }
+        if external_effect.action_root != context.action_root {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect action_root mismatch at height {}: expected={} actual={}",
+                context.height, context.action_root, external_effect.action_root
+            ));
+        }
+        if external_effect.committed_at_unix_ms != context.committed_at_unix_ms {
+            return Err(format!(
+                "execution driver equal-height V3 authoritative effect committed_at_unix_ms mismatch at height {}: expected={} actual={}",
+                context.height, context.committed_at_unix_ms, external_effect.committed_at_unix_ms
+            ));
+        }
+        let mut committed_actions: Vec<_> = context
+            .committed_actions
+            .iter()
+            .map(|action| super::ExecutionCommittedActionAnchor {
+                action_id: action.action_id,
+                submitter_player_id: action.submitter_player_id.clone(),
+                payload_hash: action.payload_hash.clone(),
+            })
+            .collect();
+        committed_actions.sort_by(|left, right| left.action_id.cmp(&right.action_id));
+        if external_effect.committed_actions != committed_actions {
+            return Err(format!(
+                "execution driver equal-height V3 committed_actions mismatch at height {}",
+                context.height
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn new(
         state_path: std::path::PathBuf,
         world_dir: std::path::PathBuf,
@@ -121,6 +253,10 @@ impl NodeRuntimeExecutionDriver {
         storage_root: std::path::PathBuf,
         storage_profile: &StorageProfileConfig,
     ) -> Result<Self, String> {
+        let checkpoint_install_transaction =
+            super::driver_checkpoint_install::load_checkpoint_install_transaction(
+                records_dir.as_path(),
+            )?;
         promote_interrupted_execution_bridge_retention(records_dir.as_path())?;
         let state = load_execution_bridge_state(state_path.as_path())?;
         let release_security_policy =
@@ -145,20 +281,28 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_interval,
             storage_profile.execution_checkpoint_keep as usize,
         );
+        super::driver_checkpoint_install::recover_checkpoint_install_transaction(
+            &mut driver,
+            checkpoint_install_transaction,
+        )?;
         remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
         let simulator_world_bootstrap_required =
             execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
         driver.simulator_mirror =
             load_simulator_execution_world(driver.simulator_world_dir.as_path())?;
-        if execution_world_bootstrap_required {
-            persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
-        }
-        if simulator_world_bootstrap_required {
-            persist_simulator_execution_world(
-                driver.simulator_world_dir.as_path(),
-                &driver.simulator_mirror,
-                None,
-            )?;
+        if driver.state.last_applied_committed_height > 0 {
+            driver.restore_startup_execution_head()?;
+        } else {
+            if execution_world_bootstrap_required {
+                persist_execution_world(driver.world_dir.as_path(), &driver.execution_world)?;
+            }
+            if simulator_world_bootstrap_required {
+                persist_simulator_execution_world(
+                    driver.simulator_world_dir.as_path(),
+                    &driver.simulator_mirror,
+                    None,
+                )?;
+            }
         }
         Ok(driver)
     }
@@ -301,298 +445,6 @@ impl NodeRuntimeExecutionDriver {
             observation,
         ))
     }
-
-    fn recover_runtime_journal_from_loaded_world(
-        &self,
-        snapshot: &RuntimeSnapshot,
-        target_height: u64,
-    ) -> Result<RuntimeJournal, String> {
-        let loaded_journal = self.execution_world.journal().clone();
-        if snapshot.journal_len > loaded_journal.len() {
-            return Err(format!(
-                "execution record at height {} missing journal_ref and loaded execution world only has {} events, need at least {}",
-                target_height,
-                loaded_journal.len(),
-                snapshot.journal_len
-            ));
-        }
-
-        let mut recovered = loaded_journal;
-        recovered.events.truncate(snapshot.journal_len);
-        let recovered_last_event_id = recovered.events.last().map(|event| event.id).unwrap_or(0);
-        if recovered_last_event_id != snapshot.last_event_id {
-            return Err(format!(
-                "execution record at height {} missing journal_ref and loaded execution world journal prefix mismatches snapshot last_event_id expected={} actual={}",
-                target_height, snapshot.last_event_id, recovered_last_event_id
-            ));
-        }
-
-        Ok(recovered)
-    }
-
-    fn restore_execution_head_from_record(
-        &mut self,
-        expected_world_id: &str,
-        target_height: u64,
-    ) -> Result<bool, String> {
-        let restore_started_at = Instant::now();
-        let record_path = execution_bridge_record_path(self.records_dir.as_path(), target_height);
-        if !record_path.exists() {
-            return Ok(false);
-        }
-
-        let mut record = load_execution_bridge_record(record_path.as_path())?;
-        if record.world_id != expected_world_id {
-            return Err(format!(
-                "execution driver stale-height restore world_id mismatch at height {}: expected={} actual={}",
-                target_height, expected_world_id, record.world_id
-            ));
-        }
-        let world_policy = self.execution_world.release_security_policy().clone();
-        let snapshot_ref = record
-            .recovery_snapshot_ref()
-            .ok_or_else(|| {
-                format!(
-                    "execution record at height {} missing latest_state_ref",
-                    target_height
-                )
-            })?
-            .to_string();
-        let pinned_ref_count = execution_record_recovery_ref_count(&record);
-        let simulator_mirror_present = record.simulator_mirror.is_some();
-        emit_stale_height_restore_start(
-            expected_world_id,
-            target_height,
-            pinned_ref_count,
-            simulator_mirror_present,
-        );
-
-        let snapshot_blob_started_at = Instant::now();
-        let snapshot_bytes = self
-            .execution_store
-            .get_verified(snapshot_ref.as_str())
-            .map_err(|err| {
-                format!(
-                    "execution driver restore snapshot ref {} failed at height {}: {:?}",
-                    snapshot_ref, target_height, err
-                )
-            })?;
-        let mut blob_store_ms = snapshot_blob_started_at.elapsed();
-        let mut blob_count = 1_usize;
-        let mut bundle_bytes = snapshot_bytes.len();
-        let snapshot_bytes_len = snapshot_bytes.len();
-
-        let runtime_decode_started_at = Instant::now();
-        let snapshot = serde_cbor::from_slice::<RuntimeSnapshot>(snapshot_bytes.as_slice())
-            .map_err(|err| {
-                format!(
-                    "execution driver decode runtime snapshot failed at height {}: {}",
-                    target_height, err
-                )
-            })?;
-        let journal_bytes_len;
-        let (journal, recovered_journal_ref) = match record.journal_ref.as_deref() {
-            Some(journal_ref) => {
-                let journal_blob_started_at = Instant::now();
-                let journal_bytes =
-                    self.execution_store
-                        .get_verified(journal_ref)
-                        .map_err(|err| {
-                            format!(
-                                "execution driver restore journal ref {} failed at height {}: {:?}",
-                                journal_ref, target_height, err
-                            )
-                        })?;
-                blob_store_ms += journal_blob_started_at.elapsed();
-                blob_count = blob_count.saturating_add(1);
-                journal_bytes_len = journal_bytes.len();
-                bundle_bytes = bundle_bytes.saturating_add(journal_bytes_len);
-                let journal = serde_cbor::from_slice::<RuntimeJournal>(journal_bytes.as_slice())
-                    .map_err(|err| {
-                        format!(
-                            "execution driver decode runtime journal failed at height {}: {}",
-                            target_height, err
-                        )
-                    })?;
-                (journal, None)
-            }
-            None => {
-                let journal =
-                    self.recover_runtime_journal_from_loaded_world(&snapshot, target_height)?;
-                let journal_bytes = super::to_cbor(journal.clone())?;
-                journal_bytes_len = journal_bytes.len();
-                bundle_bytes = bundle_bytes.saturating_add(journal_bytes_len);
-                let recovered_ref = self
-                    .execution_store
-                    .put_bytes(journal_bytes.as_slice())
-                    .map_err(|err| {
-                        format!(
-                            "execution driver recover journal CAS put failed at height {}: {:?}",
-                            target_height, err
-                        )
-                    })?;
-                (journal, Some(recovered_ref))
-            }
-        };
-        let decode_ms = runtime_decode_started_at.elapsed();
-
-        let restored_resource_manifest = snapshot.chain_resource_manifest.clone();
-        let restored_resource_delta = snapshot.latest_chain_resource_delta.clone();
-        let runtime_rebuild_started_at = Instant::now();
-        let mut restored_world = RuntimeWorld::from_snapshot(snapshot, journal).map_err(|err| {
-            format!(
-                "execution driver rebuild runtime world failed at height {}: {:?}",
-                target_height, err
-            )
-        })?;
-        restored_world.set_release_security_policy(world_policy);
-        let mut rebuild_ms = runtime_rebuild_started_at.elapsed();
-        let restored_commit_block_hash = restored_resource_delta
-            .as_ref()
-            .and_then(|delta| delta.commit_block_hash.as_deref())
-            .or(restored_resource_manifest.created_at_block_hash.as_deref());
-        let restored_resource_context = ChainResourceDerivationContext {
-            world_id: restored_resource_manifest.world_id.as_str(),
-            chain_id: restored_resource_manifest.chain_id.as_str(),
-            genesis_ref: restored_resource_manifest.genesis_ref.as_deref(),
-            created_at_height: restored_resource_manifest.created_at_height,
-            manifest_height: restored_resource_manifest.manifest_height,
-            commit_block_hash: restored_commit_block_hash,
-            tick: restored_world.state().time,
-        };
-        let mut persist_ms = Duration::default();
-        let world_persist_started_at = Instant::now();
-        persist_execution_world_with_chain_resource_context(
-            self.world_dir.as_path(),
-            &restored_world,
-            restored_resource_context,
-            restored_resource_manifest.world_config_hash.as_str(),
-            restored_resource_manifest
-                .generation_algorithm_hash
-                .as_str(),
-        )?;
-        persist_ms += world_persist_started_at.elapsed();
-        self.execution_world = restored_world;
-
-        let simulator_restore_started_at = Instant::now();
-        let mut simulator_snapshot_bytes_len = 0_usize;
-        let mut simulator_journal_bytes_len = 0_usize;
-        if let Some(simulator_mirror) = record.simulator_mirror.as_ref() {
-            let simulator_blob_started_at = Instant::now();
-            let simulator_snapshot_bytes = self
-                .execution_store
-                .get_verified(simulator_mirror.snapshot_ref.as_str())
-                .map_err(|err| {
-                    format!(
-                        "execution driver restore simulator snapshot ref {} failed at height {}: {:?}",
-                        simulator_mirror.snapshot_ref, target_height, err
-                    )
-                })?;
-            let simulator_journal_bytes = self
-                .execution_store
-                .get_verified(simulator_mirror.journal_ref.as_str())
-                .map_err(|err| {
-                    format!(
-                        "execution driver restore simulator journal ref {} failed at height {}: {:?}",
-                        simulator_mirror.journal_ref, target_height, err
-                    )
-                })?;
-            blob_store_ms += simulator_blob_started_at.elapsed();
-            blob_count = blob_count.saturating_add(2);
-            simulator_snapshot_bytes_len = simulator_snapshot_bytes.len();
-            simulator_journal_bytes_len = simulator_journal_bytes.len();
-            bundle_bytes = bundle_bytes
-                .saturating_add(simulator_snapshot_bytes_len)
-                .saturating_add(simulator_journal_bytes_len);
-            let simulator_snapshot =
-                serde_cbor::from_slice::<SimulatorSnapshot>(simulator_snapshot_bytes.as_slice())
-                    .map_err(|err| {
-                        format!(
-                            "execution driver decode simulator snapshot failed at height {}: {}",
-                            target_height, err
-                        )
-                    })?;
-            let simulator_journal =
-                serde_cbor::from_slice::<SimulatorJournal>(simulator_journal_bytes.as_slice())
-                    .map_err(|err| {
-                        format!(
-                            "execution driver decode simulator journal failed at height {}: {}",
-                            target_height, err
-                        )
-                    })?;
-            let simulator_rebuild_started_at = Instant::now();
-            let restored_simulator =
-                WorldKernel::from_snapshot(simulator_snapshot, simulator_journal).map_err(
-                    |err| {
-                        format!(
-                            "execution driver rebuild simulator mirror failed at height {}: {:?}",
-                            target_height, err
-                        )
-                    },
-                )?;
-            rebuild_ms += simulator_rebuild_started_at.elapsed();
-            let simulator_persist_started_at = Instant::now();
-            persist_simulator_execution_world(
-                self.simulator_world_dir.as_path(),
-                &restored_simulator,
-                None,
-            )?;
-            persist_ms += simulator_persist_started_at.elapsed();
-            self.simulator_mirror = restored_simulator;
-        }
-        let simulator_restore_ms = if simulator_mirror_present {
-            simulator_restore_started_at.elapsed()
-        } else {
-            Duration::default()
-        };
-
-        if record.latest_state_ref.is_none()
-            || record.snapshot_ref.is_none()
-            || record.journal_ref.is_none()
-        {
-            if record.latest_state_ref.is_none() {
-                record.latest_state_ref = Some(snapshot_ref.clone());
-            }
-            if record.snapshot_ref.is_none() {
-                record.snapshot_ref = Some(snapshot_ref.clone());
-            }
-            if record.journal_ref.is_none() {
-                record.journal_ref = recovered_journal_ref;
-            }
-            let record_persist_started_at = Instant::now();
-            persist_execution_bridge_record_only(self.records_dir.as_path(), &record)?;
-            persist_ms += record_persist_started_at.elapsed();
-        }
-
-        self.state.last_applied_committed_height = record.height;
-        self.state.last_execution_block_hash = Some(record.execution_block_hash);
-        self.state.last_execution_state_root = Some(record.execution_state_root);
-        self.state.last_node_block_hash = record.node_block_hash;
-        let state_persist_started_at = Instant::now();
-        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
-        persist_ms += state_persist_started_at.elapsed();
-
-        emit_stale_height_restore_complete(RestoreObservation {
-            world_id: expected_world_id,
-            height: target_height,
-            pinned_ref_count,
-            blob_count,
-            bundle_bytes,
-            snapshot_bytes: snapshot_bytes_len,
-            journal_bytes: journal_bytes_len,
-            simulator_mirror_present,
-            simulator_snapshot_bytes: simulator_snapshot_bytes_len,
-            simulator_journal_bytes: simulator_journal_bytes_len,
-            blob_store_ms,
-            decode_ms,
-            rebuild_ms,
-            simulator_restore_ms,
-            persist_ms,
-            total_ms: restore_started_at.elapsed(),
-        });
-
-        Ok(true)
-    }
 }
 
 impl NodeExecutionHook for NodeRuntimeExecutionDriver {
@@ -621,6 +473,22 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             }
         }
         if context.height == self.state.last_applied_committed_height {
+            let record = load_execution_bridge_record(
+                execution_bridge_record_path(self.records_dir.as_path(), context.height).as_path(),
+            )
+            .map_err(|err| {
+                format!(
+                    "execution driver stale-height restore authoritative record unavailable at height {}: {}",
+                    context.height, err
+                )
+            })?;
+            if record.height != context.height || record.world_id != context.world_id {
+                return Err(format!(
+                    "execution driver stale-height restore world_id mismatch at height {}: context={} record={}",
+                    context.height, context.world_id, record.world_id
+                ));
+            }
+            self.validate_equal_height_replay_identity(&record, &context)?;
             let execution_block_hash =
                 self.state
                     .last_execution_block_hash
@@ -635,10 +503,18 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                     .ok_or_else(|| {
                         "execution driver missing state root for current height".to_string()
                     })?;
+            if execution_block_hash != record.execution_block_hash
+                || execution_state_root != record.execution_state_root
+            {
+                return Err(format!(
+                    "execution driver stale-height restore state mismatch at height {}",
+                    context.height
+                ));
+            }
             return Ok(NodeExecutionCommitResult {
                 execution_height: context.height,
-                execution_block_hash,
-                execution_state_root,
+                execution_block_hash: record.execution_block_hash,
+                execution_state_root: record.execution_state_root,
             });
         }
         let next_expected_height = self.state.last_applied_committed_height.saturating_add(1);
@@ -716,12 +592,22 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             )
         })?;
 
-        let rollback_state = match (expected_execution_block_hash, expected_execution_state_root) {
-            (Some(_), Some(_)) => {
-                Some((self.execution_world.clone(), self.simulator_mirror.clone()))
-            }
-            _ => None,
-        };
+        let previous_execution_world = self.execution_world.clone();
+        let previous_simulator_mirror = self.simulator_mirror.clone();
+        let previous_state = self.state.clone();
+        macro_rules! rollback_on_error {
+            ($result:expr) => {
+                match $result {
+                    Ok(value) => value,
+                    Err(err) => {
+                        self.execution_world = previous_execution_world;
+                        self.simulator_mirror = previous_simulator_mirror;
+                        self.state = previous_state;
+                        return Err(err);
+                    }
+                }
+            };
+        }
         let runtime_step_started_at = Instant::now();
         for action in decoded_runtime_actions {
             self.execution_world.submit_action(action);
@@ -735,21 +621,24 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             authority_node_id: context.node_id.clone(),
             committed_at_unix_ms: context.committed_at_unix_ms,
         };
-        self.execution_world
-            .step_with_modules_for_committed_context(
-                &mut *self.execution_sandbox,
-                &committed_tick_context,
-            )
-            .map_err(|err| {
-                format!(
-                    "execution driver world.step failed at height {}: {:?}",
-                    context.height, err
+        rollback_on_error!(
+            self.execution_world
+                .step_with_modules_for_committed_context(
+                    &mut *self.execution_sandbox,
+                    &committed_tick_context,
                 )
-            })?;
+                .map_err(|err| {
+                    format!(
+                        "execution driver world.step failed at height {}: {:?}",
+                        context.height, err
+                    )
+                })
+        );
         let runtime_step_ms = runtime_step_started_at.elapsed();
         let simulator_step_started_at = Instant::now();
-        let (simulator_mirror, simulator_observation) =
-            self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())?;
+        let (simulator_mirror, simulator_observation) = rollback_on_error!(
+            self.apply_simulator_actions(&context, decoded_simulator_actions.as_slice())
+        );
         let simulator_step_ms = simulator_step_started_at.elapsed();
 
         let runtime_resource_commit_hash =
@@ -771,21 +660,23 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         );
         let journal_value = self.execution_world.journal().clone();
         let serialize_started_at = Instant::now();
-        let snapshot_bytes = super::to_cbor(snapshot_value)?;
-        let journal_bytes = super::to_cbor(journal_value)?;
+        let snapshot_bytes = rollback_on_error!(super::to_cbor(snapshot_value));
+        let journal_bytes = rollback_on_error!(super::to_cbor(journal_value));
         let serialize_ms = serialize_started_at.elapsed();
         let snapshot_bytes_len = snapshot_bytes.len();
         let journal_bytes_len = journal_bytes.len();
 
         let cas_put_started_at = Instant::now();
-        let snapshot_ref = self
-            .execution_store
-            .put_bytes(snapshot_bytes.as_slice())
-            .map_err(|err| format!("execution driver CAS snapshot put failed: {:?}", err))?;
-        let journal_ref = self
-            .execution_store
-            .put_bytes(journal_bytes.as_slice())
-            .map_err(|err| format!("execution driver CAS journal put failed: {:?}", err))?;
+        let snapshot_ref = rollback_on_error!(
+            self.execution_store
+                .put_bytes(snapshot_bytes.as_slice())
+                .map_err(|err| format!("execution driver CAS snapshot put failed: {:?}", err))
+        );
+        let journal_ref = rollback_on_error!(
+            self.execution_store
+                .put_bytes(journal_bytes.as_slice())
+                .map_err(|err| format!("execution driver CAS journal put failed: {:?}", err))
+        );
         let mut cas_put_ms = cas_put_started_at.elapsed();
 
         let execution_state_root = blake3_hex(snapshot_bytes.as_slice());
@@ -801,18 +692,17 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             execution_state_root: execution_state_root.as_str(),
             journal_len: self.execution_world.journal().len(),
         };
-        let execution_block_hash = blake3_hex(super::to_cbor(hash_payload)?.as_slice());
+        let execution_block_hash =
+            blake3_hex(rollback_on_error!(super::to_cbor(hash_payload)).as_slice());
         if let (Some(expected_block_hash), Some(expected_state_root)) =
             (expected_execution_block_hash, expected_execution_state_root)
         {
             if execution_block_hash != expected_block_hash
                 || execution_state_root != expected_state_root
             {
-                if let Some((previous_execution_world, previous_simulator_mirror)) = rollback_state
-                {
-                    self.execution_world = previous_execution_world;
-                    self.simulator_mirror = previous_simulator_mirror;
-                }
+                self.execution_world = previous_execution_world;
+                self.simulator_mirror = previous_simulator_mirror;
+                self.state = previous_state;
                 return Err(format!(
                     "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
                     context.height,
@@ -835,18 +725,19 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
                 tick: self.simulator_mirror.time(),
             };
             let simulator_persist_started_at = Instant::now();
-            persist_simulator_execution_world(
+            rollback_on_error!(persist_simulator_execution_world(
                 self.simulator_world_dir.as_path(),
                 &self.simulator_mirror,
                 Some(resource_context),
-            )?;
+            ));
             simulator_persist_ms = simulator_persist_started_at.elapsed();
         }
         let external_effect_started_at = Instant::now();
-        let external_effect_ref = persist_execution_external_effect_materialization(
-            &self.execution_store,
-            &external_effect,
-        )?;
+        let external_effect_ref =
+            rollback_on_error!(persist_execution_external_effect_materialization(
+                &self.execution_store,
+                &external_effect,
+            ));
         cas_put_ms += external_effect_started_at.elapsed();
         let prev_node_block_hash = self.state.last_node_block_hash.clone();
         let node_block_hash = Some(context.node_block_hash.clone());
@@ -868,34 +759,41 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             context.committed_at_unix_ms,
         );
         let checkpoint_started_at = Instant::now();
-        record.checkpoint_ref = maybe_persist_execution_checkpoint_for_record(
+        record.checkpoint_ref = rollback_on_error!(maybe_persist_execution_checkpoint_for_record(
             self.records_dir.as_path(),
             &record,
             self.checkpoint_interval_heights,
             self.checkpoint_keep_latest,
-        )?;
+        ));
         let checkpoint_ms = checkpoint_started_at.elapsed();
-        let checkpoint_manifest = record
-            .checkpoint_ref
-            .as_deref()
-            .map(|checkpoint_ref| {
-                load_execution_checkpoint_manifest(
-                    execution_checkpoint_root_dir(self.records_dir.as_path())
-                        .join(checkpoint_ref)
-                        .as_path(),
-                )
-            })
-            .transpose()?;
+        let checkpoint_manifest = rollback_on_error!(
+            record
+                .checkpoint_ref
+                .as_deref()
+                .map(|checkpoint_ref| {
+                    load_execution_checkpoint_manifest(
+                        execution_checkpoint_root_dir(self.records_dir.as_path())
+                            .join(checkpoint_ref)
+                            .as_path(),
+                    )
+                })
+                .transpose()
+        );
         let world_head_proof_started_at = Instant::now();
-        persist_world_head_proof_for_record(
+        rollback_on_error!(persist_world_head_proof_for_record(
             &self.execution_store,
             &mut record,
             checkpoint_manifest.as_ref(),
-        )?;
+        ));
         let world_head_proof_ms = world_head_proof_started_at.elapsed();
         let record_persist_started_at = Instant::now();
-        begin_execution_bridge_retention_transaction(self.records_dir.as_path())?;
-        persist_execution_bridge_record(self.records_dir.as_path(), &record)?;
+        rollback_on_error!(begin_execution_bridge_retention_transaction(
+            self.records_dir.as_path()
+        ));
+        rollback_on_error!(persist_execution_bridge_record(
+            self.records_dir.as_path(),
+            &record
+        ));
         let record_persist_ms = record_persist_started_at.elapsed();
 
         self.state.last_applied_committed_height = context.height;
@@ -904,18 +802,12 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
         self.state.last_node_block_hash = node_block_hash;
 
         let state_persist_started_at = Instant::now();
-        persist_execution_bridge_state(self.state_path.as_path(), &self.state)?;
+        rollback_on_error!(persist_execution_bridge_state(
+            self.state_path.as_path(),
+            &self.state
+        ));
         let state_persist_ms = state_persist_started_at.elapsed();
-        let world_persist_started_at = Instant::now();
-        persist_execution_world_with_chain_resource_context(
-            self.world_dir.as_path(),
-            &self.execution_world,
-            runtime_resource_context,
-            runtime_resource_context_hash.as_str(),
-            runtime_resource_context_hash.as_str(),
-        )?;
-        let world_persist_ms = world_persist_started_at.elapsed();
-        let persist_world_ms = state_persist_ms + world_persist_ms;
+        let persist_world_ms = state_persist_ms;
         let retention_started_at = Instant::now();
         let reconcile_due = self.retention_reconcile_pending
             && self

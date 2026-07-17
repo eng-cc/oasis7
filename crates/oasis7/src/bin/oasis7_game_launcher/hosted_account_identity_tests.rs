@@ -129,6 +129,99 @@ fn hosted_account_login_complete_rejects_wrong_otp() {
 }
 
 #[test]
+fn hosted_account_correct_otp_remains_retryable_after_world_full() {
+    let mut broker = HostedAccountIdentityBroker::with_store_path(temp_store_path("retry-full"))
+        .expect("broker");
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let mut occupied = Vec::new();
+    for _ in 0..8 {
+        occupied.push(
+            issuer
+                .issue(DeploymentMode::HostedPublicJoin)
+                .grant
+                .expect("fill slot"),
+        );
+    }
+    let start = broker.start_login(
+        DeploymentMode::HostedPublicJoin,
+        "email",
+        "retry-full@example.com",
+    );
+    let challenge = start.challenge.expect("challenge");
+    let otp = pending_otp_code(&broker, challenge.challenge_id.as_str());
+
+    let full = broker.complete_login(
+        DeploymentMode::HostedPublicJoin,
+        challenge.challenge_id.as_str(),
+        otp.as_str(),
+        &mut issuer,
+    );
+    assert_eq!(full.error_code.as_deref(), Some("world_full"));
+
+    let released = occupied.pop().expect("occupied slot");
+    assert!(
+        issuer
+            .release(
+                DeploymentMode::HostedPublicJoin,
+                released.player_id.as_str(),
+                released.release_token.as_str(),
+            )
+            .ok
+    );
+    let retried = broker.complete_login(
+        DeploymentMode::HostedPublicJoin,
+        challenge.challenge_id.as_str(),
+        otp.as_str(),
+        &mut issuer,
+    );
+    assert!(
+        retried.ok,
+        "verified OTP must survive downstream capacity failure: {retried:?}"
+    );
+}
+
+#[test]
+fn hosted_account_correct_otp_remains_retryable_after_store_failure() {
+    let root = temp_store_path("retry-store-root");
+    let store_path = root.join("accounts.json");
+    let mut broker = HostedAccountIdentityBroker::with_store_path(store_path)
+        .expect("broker before failure is injected");
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let start = broker.start_login(
+        DeploymentMode::HostedPublicJoin,
+        "email",
+        "retry-store@example.com",
+    );
+    let challenge = start.challenge.expect("challenge");
+    let otp = pending_otp_code(&broker, challenge.challenge_id.as_str());
+
+    std::fs::write(&root, b"blocks directory creation").expect("inject store failure");
+    let failed = broker.complete_login(
+        DeploymentMode::HostedPublicJoin,
+        challenge.challenge_id.as_str(),
+        otp.as_str(),
+        &mut issuer,
+    );
+    assert_eq!(
+        failed.error_code.as_deref(),
+        Some("account_store_persist_failed")
+    );
+
+    std::fs::remove_file(&root).expect("remove injected failure");
+    let retried = broker.complete_login(
+        DeploymentMode::HostedPublicJoin,
+        challenge.challenge_id.as_str(),
+        otp.as_str(),
+        &mut issuer,
+    );
+    assert!(
+        retried.ok,
+        "verified OTP must survive persistence failure: {retried:?}"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn hosted_account_login_complete_locks_after_repeated_invalid_otp() {
     let mut broker =
         HostedAccountIdentityBroker::with_store_path(temp_store_path("otp-lock")).expect("broker");

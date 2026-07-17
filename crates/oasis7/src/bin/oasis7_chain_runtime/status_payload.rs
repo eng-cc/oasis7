@@ -17,6 +17,8 @@ use serde::Serialize;
 use std::path::Path;
 #[path = "status_payload_chain_proof.rs"]
 mod status_payload_chain_proof;
+#[path = "status_payload_consensus.rs"]
+mod status_payload_consensus;
 #[path = "status_payload_module_tick_routing.rs"]
 mod status_payload_module_tick_routing;
 #[path = "status_payload_network_head.rs"]
@@ -28,6 +30,9 @@ mod status_payload_publication;
 #[path = "status_payload_runtime_errors.rs"]
 mod status_payload_runtime_errors;
 use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
+use status_payload_consensus::{
+    ChainConsensusStatus, ChainPendingConsensusActionsStatus, ChainPendingProposalStatus,
+};
 use status_payload_module_tick_routing::{
     ChainModuleTickRoutingStatus, build_module_tick_routing_status,
 };
@@ -178,96 +183,6 @@ pub(super) struct ChainNodeObservabilityAlert {
     pub(super) severity: String,
     pub(super) code: String,
     pub(super) summary: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainConsensusStatus {
-    pub(super) slot: u64,
-    pub(super) epoch: u64,
-    pub(super) ticks_per_slot: u64,
-    pub(super) tick_phase: u64,
-    pub(super) proposal_tick_phase: u64,
-    pub(super) last_observed_slot: u64,
-    pub(super) missed_slot_count: u64,
-    pub(super) last_observed_tick: u64,
-    pub(super) missed_tick_count: u64,
-    pub(super) adaptive_tick_scheduler_enabled: bool,
-    pub(super) latest_height: u64,
-    pub(super) committed_height: u64,
-    pub(super) last_committed_at_ms: Option<i64>,
-    pub(super) last_commit_age_ms: Option<i64>,
-    pub(super) network_committed_height: u64,
-    pub(super) replication_enabled: bool,
-    pub(super) replication_persisted_height: u64,
-    pub(super) replication_gap_sync_blocked_height: Option<u64>,
-    pub(super) replication_gap_sync_blocked_reason: Option<String>,
-    pub(super) replication_gap_sync_repair_attempt_height: Option<u64>,
-    pub(super) replication_gap_sync_repair_attempt_summary: Option<String>,
-    pub(super) replication_gap_sync_repair_attempt_route_snapshot:
-        Option<oasis7_node::NodeReplicationGapSyncRouteSnapshot>,
-    pub(super) storage_challenge_network_degraded_height: Option<u64>,
-    pub(super) storage_challenge_network_degraded_reason: Option<String>,
-    pub(super) state_sync_fallback_required: bool,
-    pub(super) state_sync_snapshot_available: bool,
-    pub(super) state_sync_trusted_checkpoint_required_height: Option<u64>,
-    pub(super) state_sync_fallback_reason: Option<String>,
-    pub(super) consensus_participation_held: bool,
-    pub(super) consensus_participation_hold_reason: Option<String>,
-    pub(super) recent_finality_latency: ChainFinalityLatencyStatus,
-    pub(super) pending_proposal: Option<ChainPendingProposalStatus>,
-    pub(super) pending_consensus_actions: ChainPendingConsensusActionsStatus,
-    pub(super) inbound_timing_rejections: ChainInboundTimingRejectionsStatus,
-    pub(super) last_status: Option<String>,
-    pub(super) last_block_hash: Option<String>,
-    pub(super) last_execution_height: u64,
-    pub(super) last_execution_block_hash: Option<String>,
-    pub(super) last_execution_state_root: Option<String>,
-    pub(super) known_peer_heads: usize,
-    pub(super) validator_set_hash: String,
-    pub(super) validator_stake_root: String,
-    pub(super) validator_stake_proof_count: usize,
-    pub(super) misbehavior_evidence_count: usize,
-    pub(super) slashing_intent_count: usize,
-    pub(super) pending_slashing_intent_count: usize,
-    pub(super) slashing_receipt_count: usize,
-    pub(super) applied_slashing_receipt_count: usize,
-    pub(super) quarantined_validator_count: usize,
-    pub(super) slashable_stake_total: u64,
-    pub(super) network_head: ChainConsensusNetworkHeadStatus,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainPendingProposalStatus {
-    pub(super) height: u64,
-    pub(super) slot: u64,
-    pub(super) epoch: u64,
-    pub(super) proposer_id: String,
-    pub(super) opened_at_ms: i64,
-    pub(super) age_ms: i64,
-    pub(super) action_count: usize,
-    pub(super) action_payload_bytes: usize,
-    pub(super) attestation_count: usize,
-    pub(super) approved_stake: u64,
-    pub(super) rejected_stake: u64,
-    pub(super) required_stake: u64,
-    pub(super) total_stake: u64,
-    pub(super) approval_progress_bps: u16,
-    pub(super) rejection_progress_bps: u16,
-    pub(super) remaining_approval_stake: u64,
-    pub(super) status: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainPendingConsensusActionsStatus {
-    pub(super) queued_action_count: usize,
-    pub(super) queued_payload_bytes: usize,
-    pub(super) reserved_requeue_action_count: usize,
-    pub(super) reserved_requeue_payload_bytes: usize,
-    pub(super) available_capacity: usize,
-    pub(super) max_capacity: usize,
-    pub(super) submit_buffer_action_count: usize,
-    pub(super) submit_buffer_payload_bytes: usize,
-    pub(super) submit_buffer_max_capacity: usize,
 }
 
 pub(super) fn build_chain_node_observability_status(
@@ -856,10 +771,56 @@ fn build_chain_node_observability_status_with_transactions(
     }
 }
 
+#[cfg(test)]
 pub(super) fn build_chain_status_payload(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,
     execution_records_dir: Option<&Path>,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    live_p2p_recommendation: &NodeUserModeRecommendation,
+    applied_effective_user_mode: Option<String>,
+    effective_p2p_policy: NodeNetworkPolicy,
+    live_snapshot: &Libp2pReachabilitySnapshot,
+    p2p_detection: NodeReachabilityAutoDetection,
+    release_security_policy: ReleaseSecurityPolicy,
+    reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
+    storage_metrics: storage_metrics::StorageMetricsSnapshot,
+    wasm: ChainWasmStatus,
+    runtime_perf: Option<RuntimePerfSnapshot>,
+    traffic: ChainTrafficStatus,
+    transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
+    replication: super::ChainReplicationDebugStatus,
+) -> ChainStatusResponse {
+    let derived_storage_root = execution_records_dir
+        .and_then(Path::parent)
+        .map(|runtime_root| runtime_root.join("store"));
+    build_chain_status_payload_with_storage_root(
+        snapshot,
+        execution_world_dir,
+        execution_records_dir,
+        derived_storage_root.as_deref(),
+        loaded_network_tier_manifest,
+        live_p2p_recommendation,
+        applied_effective_user_mode,
+        effective_p2p_policy,
+        live_snapshot,
+        p2p_detection,
+        release_security_policy,
+        reward_runtime_metrics,
+        storage_metrics,
+        wasm,
+        runtime_perf,
+        traffic,
+        transactions,
+        replication,
+    )
+}
+
+pub(super) fn build_chain_status_payload_with_storage_root(
+    snapshot: NodeSnapshot,
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+    execution_storage_root: Option<&Path>,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
     live_p2p_recommendation: &NodeUserModeRecommendation,
     applied_effective_user_mode: Option<String>,
@@ -993,7 +954,7 @@ pub(super) fn build_chain_status_payload(
     let applied_slashing_receipt_count = applied_slashing_receipt_hashes(&snapshot).len();
     let world_resource =
         build_world_resource_status(&snapshot, execution_world_dir, loaded_network_tier_manifest);
-    let chain_proof = build_chain_proof_status(execution_records_dir);
+    let chain_proof = build_chain_proof_status(execution_records_dir, execution_storage_root);
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
     let pending_proposal = snapshot
         .consensus

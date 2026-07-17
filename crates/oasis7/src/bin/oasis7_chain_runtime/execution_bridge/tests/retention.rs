@@ -726,6 +726,13 @@ fn checkpoint_gc_removes_every_pin_shard_pruned_after_keep_reduction() {
     fs::create_dir_all(records_dir.as_path()).expect("create records dir");
 
     for height in [2, 4, 6] {
+        let predecessor = persist_test_execution_record_with_store_refs(
+            records_dir.as_path(),
+            &store,
+            height - 1,
+        );
+        persist_execution_bridge_record(records_dir.as_path(), &predecessor)
+            .expect("persist checkpoint predecessor record");
         let mut record =
             persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, height);
         record.checkpoint_ref =
@@ -765,6 +772,10 @@ fn checkpoint_gc_removes_every_pin_shard_pruned_after_keep_reduction() {
         )
         .expect("publish unknown shard");
 
+    let predecessor =
+        persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, 7);
+    persist_execution_bridge_record(records_dir.as_path(), &predecessor)
+        .expect("persist retained checkpoint predecessor record");
     let mut record =
         persist_test_execution_record_with_store_refs(records_dir.as_path(), &store, 8);
     record.checkpoint_ref =

@@ -37,17 +37,14 @@
 - 汇总 runtime / wasm / module / governance / integration / testing 六类专题。
 - 承接候选级证据、发布门禁指标与跨模块 runtime 收口事项。
 
-## 热点子域导航（2026-06-23 快照）
-- `runtime/`（57）：运行时主链路、数值正确性、存储治理、retention 与 replay contract。
-- `wasm/`（25）：Docker canonical build、执行器、观测指标、模块级 observe runner、SDK、sandbox 与 ABI 治理。
-- `module/`（16）：模块生命周期、线上发布合法性、模块存储与订阅过滤专题。
-- 根目录入口（5）：模块主入口与当前高频导航。
-- `evidence/`（7）：候选级指标、soak、storage gate 与 profile consistency 采证。
-- `governance/`（6）：治理事件、审计导出与收据安全专题；先从 `doc/world-runtime/governance/README.md` 按问题分流。
+## 按子域进入
+- 运行时主链路、数值正确性、存储治理、retention 与 replay contract：`runtime/`。
+- Docker canonical build、执行器、观测、SDK、sandbox 与 ABI 治理：`wasm/`。
+- 模块生命周期、线上发布合法性、存储与订阅过滤：`module/`。
+- 治理事件、审计导出与收据安全：`governance/README.md`。
+- 候选级指标、soak、storage gate 与 profile consistency 采证：`evidence/`。
 
-## 高密度提示
-- `doc/world-runtime/` 当前共有 120 份文件，其中 `runtime/` 占 57 份；默认入口不再尝试把 runtime/wasm/module 长表直接摊平展示。
-- 需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要 evidence / template / checklist 时，再按子域定向进入。
+本页不维护容易漂移的文件数量快照或子域长表。需要完整活跃专题清单时，进入 `doc/world-runtime/prd.index.md`；需要当前模块库存与热点二级目录概览时，运行 `./scripts/doc-inventory-report.sh`。
 
 ## 历史根入口
 - root world-runtime PRD/project legacy redirect shells 已删除。

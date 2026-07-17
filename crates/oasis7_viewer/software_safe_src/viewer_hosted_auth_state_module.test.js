@@ -33,6 +33,7 @@ describe("viewer hosted auth state module", () => {
         masked_login_hint: "p***@example.test",
         device_session_id: "device-session-1",
         release_token: "release-token-1",
+        registration_grant: "registration-grant-1",
         issued_at_unix_ms: 1234,
         session_epoch: 7,
       }),
@@ -48,6 +49,7 @@ describe("viewer hosted auth state module", () => {
       maskedLoginHint: "p***@example.test",
       deviceSessionId: "device-session-1",
       releaseToken: "release-token-1",
+      registrationGrant: "registration-grant-1",
       source: "hosted_browser_storage",
       registrationStatus: "issued",
       sessionEpoch: 7,
@@ -61,6 +63,7 @@ describe("viewer hosted auth state module", () => {
       maskedLoginHint: "p***@example.test",
       deviceSessionId: "device-session-1",
       releaseToken: "release-token-1",
+      registrationGrant: "registration-grant-1",
       issuedAtUnixMs: 1234,
       sessionEpoch: 7,
     });

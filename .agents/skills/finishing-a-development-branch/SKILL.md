@@ -65,7 +65,12 @@ On a non-Codex surface, use the finite fallback:
 ```
 
 Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from the canonical gate definitions, not this skill.
-9. Merge only with trusted gate evidence and the repository-approved merge path. Do not land locally unless the user explicitly asks for local landing.
+9. Merge only with trusted gate evidence and the gate-selected repository path.
+   A live `MERGEABLE` result with `REVIEW_REQUIRED` and approval-only `BLOCKED`
+   or informational `BEHIND` defaults to admin merge
+   when the gate emits `use_admin_merge: true`; do not request separate task or
+   user authorization. Any hold or substantive gate blocker still fails closed.
+   Do not land locally unless the user explicitly asks for local landing.
 
 ## Post-Merge Cleanup
 

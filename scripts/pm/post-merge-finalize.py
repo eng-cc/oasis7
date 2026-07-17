@@ -71,15 +71,9 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
 
-def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
+def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
     """Self-validating terminal authority; no prevalidated object is accepted."""
     root=pathlib.Path(root).resolve(); path=root/".pm/github-project-sync/tasks.json"
-    # One task-scoped singleton covers validation, every remote effect, ledger
-    # CAS transition, terminal mapping commit, and issue-close readback.
-    finalizer_lock=path.with_name(f"{path.name}.{task_uid}.finalizer-lock")
-    finalizer_lock.parent.mkdir(parents=True,exist_ok=True)
-    finalizer_lock_fd=os.open(finalizer_lock,os.O_CREAT|os.O_RDWR,0o600)
-    fcntl.flock(finalizer_lock_fd,fcntl.LOCK_EX)
     canonical=subprocess.run([sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
         "--task-uid",task_uid,"--create","--path",str(terminal_receipt_path),"--name","terminal-cleanup-receipt.json"],text=True,capture_output=True)
     if canonical.returncode: fail(canonical.stderr.strip() or "noncanonical terminal receipt")
@@ -215,6 +209,20 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
     if str(closed_issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
     _ledger_transition(ledger_path,task_uid,"issue_close","committed")
     print(json.dumps({"status":"finalized","task_uid":task_uid},sort_keys=True)); return 0
+
+def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
+    """Serialize terminal effects on one persistent task-scoped flock inode."""
+    root=pathlib.Path(root).resolve(); path=root/".pm/github-project-sync/tasks.json"
+    # One task-scoped singleton covers validation, every remote effect, ledger
+    # CAS transition, terminal mapping commit, and issue-close readback.
+    finalizer_lock=path.with_name(f"{path.name}.{task_uid}.finalizer-lock")
+    finalizer_lock.parent.mkdir(parents=True,exist_ok=True)
+    finalizer_lock_fd=os.open(finalizer_lock,os.O_CREAT|os.O_RDWR,0o600)
+    try:
+        fcntl.flock(finalizer_lock_fd,fcntl.LOCK_EX)
+        return _write_terminal_locked(root,task_uid,terminal_receipt_path)
+    finally:
+        os.close(finalizer_lock_fd)
 
 def main() -> int:
     p=argparse.ArgumentParser()

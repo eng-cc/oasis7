@@ -616,6 +616,14 @@ def command_audit(args: argparse.Namespace) -> int:
     elif extra_mapped:
         warnings.append(f"mapping has {len(extra_mapped)} tasks outside selected statuses")
 
+    selected_task = None
+    if task_uid and task_uid in tasks:
+        task = tasks[task_uid]
+        selected_task = {
+            "task_uid": task_uid,
+            "target": str(task.get("status") or ""),
+            "workflow_phase": str(task.get("workflow_phase") or ""),
+        }
     result = {
         "status": "failed" if errors else "ok",
         "project_owner": args.project_owner,
@@ -629,6 +637,8 @@ def command_audit(args: argparse.Namespace) -> int:
         "errors": errors,
         "warnings": warnings,
     }
+    if selected_task is not None:
+        result["selected_task"] = selected_task
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

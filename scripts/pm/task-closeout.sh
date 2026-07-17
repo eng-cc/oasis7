@@ -193,6 +193,43 @@ PY
   trap - EXIT
 fi
 
+# A caller-owned CI receipt is immutable. When only its observation window has
+# expired, perform one complete live same-identity validation into a temp receipt.
+REFRESHED_CI_READY_RECEIPT=""
+if [[ "$TARGET_STATUS" == "ready" && -n "$CI_READY_RECEIPT" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
+  CI_RECEIPT_STALE="$(python3 - "$CI_READY_RECEIPT" <<'PY'
+import datetime as d,json,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+seen=d.datetime.fromisoformat(str(r.get('observed_at','')).replace('Z','+00:00'))
+print('1' if not 0 <= (d.datetime.now(d.timezone.utc)-seen).total_seconds() <= 600 else '0')
+PY
+)" || die "ci-ready receipt observed_at is invalid"
+  if [[ "$CI_RECEIPT_STALE" == "1" ]]; then
+    REFRESHED_CI_READY_RECEIPT="$(mktemp)"
+    trap 'rm -f "$REFRESHED_CI_READY_RECEIPT"' EXIT
+    CI_IDENTITY_JSON="$(python3 - "$CI_READY_RECEIPT" <<'PY'
+import json,sys
+r=json.load(open(sys.argv[1],encoding='utf-8'))
+print(json.dumps([r.get(k,'') for k in ('repository','task_issue_number','pr_number','check_name','check_app_id','planner_digest')]))
+PY
+)"
+    CI_REPOSITORY="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[0])' "$CI_IDENTITY_JSON")"
+    CI_TASK_ISSUE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[1])' "$CI_IDENTITY_JSON")"
+    CI_PR_NUMBER="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[2])' "$CI_IDENTITY_JSON")"
+    CI_CHECK_NAME="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[3])' "$CI_IDENTITY_JSON")"
+    CI_CHECK_APP="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[4])' "$CI_IDENTITY_JSON")"
+    CI_PLANNER_DIGEST="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[5])' "$CI_IDENTITY_JSON")"
+    python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
+      --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
+      --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
+      --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
+      --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
+      --refresh-same-identity --json >"$REFRESHED_CI_READY_RECEIPT" \
+      || die "stale ci-ready receipt failed same-identity refresh"
+    CI_READY_RECEIPT="$REFRESHED_CI_READY_RECEIPT"
+  fi
+fi
+
 selected_task_audit() {
   "$SCRIPT_DIR/github-project-workflow.sh" --json audit --task-uid "$TASK_UID"
 }
@@ -251,7 +288,30 @@ if ! CLOSEOUT_JSON="$(python3 "$SCRIPT_DIR/github-project-task.py" "${CLOSEOUT_A
   die "remote closeout was incomplete; run ./scripts/pm/refresh-task-cache.sh --task-uid $TASK_UID --json, verify selected-task audit, then retry task-closeout"
 fi
 
-RESULT_JSON="$(python3 - "$ROLE" "$TARGET_STATUS" "$CLAIM_READY_JSON" "$TASK_AUDIT_JSON" "$CLOSEOUT_JSON" <<'PY'
+# Independent selected-task postcondition readback. This is the second bounded
+# task-scoped audit (after the pre-transition audit), never a broad Project read.
+POSTCONDITION_AUDIT_JSON="$(selected_task_audit)" \
+  || die "selected-task postcondition readback failed after closeout"
+python3 - "$TASK_UID" "$TARGET_STATUS" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" "$VERIFICATION_PROFILE" <<'PY'
+import json,sys
+task_uid,target=json.loads(json.dumps(sys.argv[1])),sys.argv[2]
+closeout=json.loads(sys.argv[3]); audit=json.loads(sys.argv[4])
+VERIFICATION_PROFILE=sys.argv[5]
+expected_phase={'ready':'pre_pr_ready','done':'task_done','deferred':'blocked'}[target]
+# github-project-workflow audit is itself the selected live task/Project
+# postcondition authority. Its successful exit is required above; older fixture
+# adapters return only {"status":"ok"}, while production returns richer detail.
+if audit.get('status') == 'ok' and set(audit) == {'status'}:
+ if VERIFICATION_PROFILE != 'fixture_repository_state':
+  raise SystemExit('task-closeout: live selected-task postcondition audit lacks structured task readback')
+else:
+ readback=audit.get('selected_task') if isinstance(audit.get('selected_task'),dict) else audit
+ if (readback.get('task_uid') != task_uid or readback.get('target') != target
+     or readback.get('workflow_phase') != expected_phase):
+  raise SystemExit('task-closeout: selected-task postcondition audit lacks expected status/phase')
+PY
+
+RESULT_JSON="$(python3 - "$ROLE" "$TARGET_STATUS" "$CLAIM_READY_JSON" "$TASK_AUDIT_JSON" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" <<'PY'
 import json
 import sys
 
@@ -260,6 +320,7 @@ target_status = sys.argv[2]
 claim = json.loads(sys.argv[3])
 audit = json.loads(sys.argv[4])
 closeout = json.loads(sys.argv[5])
+postcondition = json.loads(sys.argv[6])
 payload = {
     "task_uid": closeout["task_uid"],
     "role": role,
@@ -270,6 +331,7 @@ payload = {
     "claim_verification": claim,
     "task_audit": audit,
     "workflow_close": closeout,
+    "postcondition_readback": postcondition,
     "move_task": closeout,
     "pm_lint": {"status": "skipped", "ran": False, "reason": "repo-local .pm/tasks retired"},
     "recommended_next_command": "./scripts/prepare-task-pr.sh",

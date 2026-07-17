@@ -8,9 +8,10 @@ usage() {
   cat <<'USAGE'
 Usage: record-admin-merge-authority.sh --task-uid <uid> --pr-number <n> --requester <identity> --reason <text> [--repo owner/name] [--json]
 
-Record and read back a GitHub task-issue authorization for the
-review-approval-only repository admin merge path. The record binds the live PR
-head; it does not authorize bypassing any other gate.
+Optionally record and read back a GitHub task-issue audit note for the default
+review-approval-only repository admin merge path. Repository standing policy,
+not this note, selects that path. The note binds the live PR head and never
+authorizes bypassing another gate.
 USAGE
 }
 

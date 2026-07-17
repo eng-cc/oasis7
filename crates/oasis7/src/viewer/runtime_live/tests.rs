@@ -356,6 +356,7 @@ fn register_runtime_session_with_options(
         crate::viewer::AuthoritativeSessionRegisterRequest {
             player_id: player_id.to_string(),
             public_key: None,
+            registration_grant: None,
             auth: None,
             requested_agent_id: agent_id.map(ToOwned::to_owned),
             force_rebind,
@@ -636,6 +637,7 @@ fn runtime_live_agent_chat_echo_flushes_virtual_event_immediately_over_socket() 
         crate::viewer::AuthoritativeSessionRegisterRequest {
             player_id: "player-a".to_string(),
             public_key: None,
+            registration_grant: None,
             auth: None,
             requested_agent_id: Some(agent_id.clone()),
             force_rebind: false,
