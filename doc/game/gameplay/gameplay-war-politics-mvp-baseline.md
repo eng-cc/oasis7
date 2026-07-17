@@ -51,24 +51,40 @@
 
 | 维度 | 基线值 | 成本/收益/冷却含义 | 实现锚点 |
 |---|---|---|---|
-| 宣战强度 `intensity` | `1..=10` | 强度越高，宣战收益越高，但持续时长也更长 | `crates/oasis7/src/runtime/world/event_processing.rs` |
+| 宣战强度 `intensity` | `1..=10` | 强度提高进攻评分与结算变化幅度，也增加宣战资源成本、冲突时长及 m5 模块疲劳 | `crates/oasis7/src/runtime/world/event_processing.rs`、`crates/oasis7_builtin_wasm_modules/m5_gameplay_war_core/src/lib.rs` |
+| 宣战动员成本 | 电力 `12 + 4 * intensity`；数据 `8 + 3 * intensity` | 由进攻方在宣战时支付，形成随强度增长的前置投入 | `crates/oasis7/src/runtime/world/event_processing.rs` |
 | 战争持续时长 | `6 + 2 * intensity` ticks | 形成显式投入成本（占用冲突窗口） | `crates/oasis7/src/runtime/state.rs`、`crates/oasis7_builtin_wasm_modules/m5_gameplay_war_core/src/lib.rs` |
-| 战争结算评分 | `aggressor_score = members*10 + intensity`；`defender_score = members*10` | 进攻方获得强度加成；防守方依赖组织规模 | `crates/oasis7/src/runtime/world/gameplay_loop.rs` |
+| 战争结算评分 | core fallback：`members*10 + reputation/10`，进攻方再加 `intensity`；m5 模块再减 `fatigue/4` | 推荐强度必须使用当前激活结算路径的完整评分项，不能只看成员数 | `crates/oasis7/src/runtime/world/gameplay_loop.rs`、`crates/oasis7_builtin_wasm_modules/m5_gameplay_war_core/src/lib.rs` |
 | 胜负判定 | `aggressor_score >= defender_score` 时进攻方胜 | 平分时进攻方胜，鼓励主动冲突但保留成员规模价值 | `crates/oasis7/src/runtime/world/gameplay_loop.rs` |
 | 同对联盟重入 | 同一联盟对在 active 期间不可重复宣战 | 作为首轮“冲突冷却”约束，避免刷宣战事件 | `crates/oasis7/src/runtime/world/event_processing.rs` |
 
 ### 1.1 战争推荐操作区间（用于评审）
 
-- 推荐强度带：`2..=6`。
-- 强度 `7..=10` 仅建议在成员差距不利时使用；其代价是更长冲突占用窗口。
-- 若连续 3 天 `conflict_freq_100ticks > 8`，优先下调推荐强度上限（而非直接改常量上限）。
+当前评分和平分规则下，`minimum_winning_intensity` 表示“在当前预览快照与激活结算路径中，达到目标胜负结果的最低强度”，而不是通用强度带。
+
+预览必须先计算不含进攻强度的双方基础评分：
+
+- core fallback：`10 * members + reputation / 10`。
+- m5 战争模块：`10 * members + reputation / 10 - fatigue / 4`。
+- 整数除法按实现截断；进攻方在基础分之上再加 `intensity`，平分时进攻方胜出。
+
+在 `1..=10` 中选择能使进攻总分不低于防守总分的最小值；若不存在，推荐补强、谈判或等待。成员数相同且双方声望、有效疲劳也相同时，强度 `1` 是最低胜利强度；这只是等条件示例，不是仅由成员差推导的通用结论。
+
+- 高于最低胜利强度会增加动员资源、冲突占用时间、声望/资源结算幅度及 m5 模块疲劳；玩家必须同时看到这些变化，而不能把“更容易达成胜判”等同于“更高净收益”。
+- 若连续 3 天 `conflict_freq_100ticks > 8`，先检查最低胜利强度的重复宣战是否构成刷取路径；本基线不通过调整推荐带代替数值平衡。
 
 ### 1.2 战争收益说明
 
 - 当前实现中的核心收益是状态与叙事收益：`winner_alliance_id`、战报摘要、冲突历史沉淀。
 - 额外经济/元进度收益通过 gameplay 模块 directive 注入，不在战争内核硬编码。
+- 当前胜方每个成员获得 `2 * intensity` 声望，败方每个成员失去 `3 * intensity` 声望；败方名义资源损失为电力 `6 * intensity`、数据 `4 * intensity`。core fallback 会按现有非负余额限制实际损失，m5 模块则发出完整名义变化，因此预览必须标识激活的结算路径。
+- 预览中的 `expected_narrative_or_module_reward` 必须区分战争内核保证的胜负/历史结果与可选模块奖励；未获得模块回执时，不得把可选奖励显示为保证收益。
 
-### 1.3 宣战后果预览
+### 1.3 当前平衡边界
+
+当前基线仍存在“当预览快照已冻结时，选择最低胜利强度”的局部支配策略；但胜利阈值同时受成员、声望及模块疲劳影响，不能化约为固定成员差表。未来若受控重启战争主线，必须通过独立平衡任务验证动员成本、结算幅度、疲劳和平分优势是否形成有意义的风险收益选择。本轮仅纠正文档口径，不完成数值重平衡。
+
+### 1.4 宣战后果预览
 
 当玩家准备 `DeclareWar`、调整强度、暂缓或先谈判时，玩家侧必须能读取 `war_declaration_quote` / `conflict_outcome_preview`，用于判断当前宣战是否值得、强度是否合适、冲突窗口会被占用多久，以及结算后果是否优于替代行动。
 
@@ -77,7 +93,8 @@
 - `target_alliance_id`
 - `action_kind`: `declare_war` / `change_intensity` / `defer` / `negotiate_first`
 - `intensity`
-- `recommended_intensity_band`
+- `settlement_path`: `core_fallback` / `m5_gameplay_war_core`
+- `minimum_winning_intensity: u32 | null`：按 `settlement_path` 对应的当前成员、聚合声望、模块疲劳与平分规则推导的最低胜利强度；无可达强度时返回 `null`，并由 `recommended_war_action` 返回“补强/谈判/等待”
 - `war_duration_ticks`
 - `aggressor_score_estimate`
 - `defender_score_estimate`
@@ -91,7 +108,7 @@
 - `recommended_war_action`
 - `why_this_war_is_worth_or_risky`
 
-Edge case: 当玩家准备 `DeclareWar` 或调整强度，但看不到预计胜负、持续时间、冲突占用、结算风险、推荐强度或替代行动理由时，标记为 `war_declaration_quote_missing`。
+Edge case: 当玩家准备 `DeclareWar` 或调整强度，但看不到激活结算路径、预计胜负、持续时间、冲突占用、结算风险、最低胜利强度或替代行动理由时，标记为 `war_declaration_quote_missing`。
 
 Acceptance: 玩家宣战前至少能看懂“为什么现在打、打谁、用多大强度、会持续多久、大概能不能赢、输了/赢了会发生什么、是否应该先谈判或补强”。
 
