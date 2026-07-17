@@ -185,7 +185,7 @@ for (const field of ROLLBACK_QUOTE_FIELDS) {
       `${field}/${mutation} must fail the design gate`,
     );
     assert.ok(
-      invalidRollbackEvidence.second_run_design_card.missing.includes("rollback_quote"),
+      invalidRollbackEvidence.second_run_design_card.missing.includes("route_rollback_quote_missing"),
       `${field}/${mutation} must identify the incomplete rollback quote`,
     );
   }

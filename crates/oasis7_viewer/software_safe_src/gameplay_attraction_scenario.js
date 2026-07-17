@@ -849,7 +849,7 @@ function buildSecondRunDesignCard(samples) {
   if (!namedCommissionOutput) missing.push("named_commission_output");
   if (!opportunityGeneratedFromChoice) missing.push("opportunity_generated_from_choice");
   if (!choiceReflectiveReturnGoal) missing.push("choice_reflective_return_goal");
-  if (!rollbackQuotesComplete) missing.push("rollback_quote");
+  if (!rollbackQuotesComplete) missing.push("route_rollback_quote_missing");
   return {
     status: missing.length === 0 ? "second_run_hook_pass" : "second_run_hook_weak",
     route_tradeoff_persists_across_beats: routeTradeoffPersists,
