@@ -6,6 +6,9 @@ use super::super::checkpoint::{
 use super::super::driver::{
     NodeRuntimeExecutionDriver, load_execution_bridge_state, persist_execution_bridge_state,
 };
+use super::super::driver_checkpoint_install::{
+    CheckpointInstallFault, set_checkpoint_install_fault_for_test,
+};
 use super::*;
 use oasis7::runtime::LocalCasStore;
 use oasis7_node::{
@@ -547,166 +550,6 @@ fn node_runtime_execution_driver_checkpoint_restart_reconciles_newer_published_r
 }
 
 #[test]
-fn node_runtime_execution_driver_checkpoint_install_rolls_back_publication_when_final_state_persist_fails()
- {
-    let dir = temp_dir("execution-driver-checkpoint-final-state-persist-rollback");
-    let source_root = dir.join("source");
-    let target_root = dir.join("target");
-    let storage_profile = StorageProfileConfig {
-        execution_checkpoint_interval: 2,
-        execution_checkpoint_keep: 2,
-        ..StorageProfileConfig::for_profile(StorageProfile::DevLocal)
-    };
-    let mut source = NodeRuntimeExecutionDriver::new_with_storage_profile(
-        source_root.join("bridge-state.json"),
-        source_root.join("world"),
-        source_root.join("records"),
-        source_root.join("storage"),
-        &storage_profile,
-    )
-    .expect("source driver");
-    let action_root = compute_consensus_action_root(&[]).expect("empty action root");
-    source
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-            node_id: "node-a".to_string(),
-            proposer_id: "node-a".to_string(),
-            height: 1,
-            slot: 1,
-            epoch: 0,
-            node_block_hash: "block-1".to_string(),
-            action_root: action_root.clone(),
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 10_001,
-        })
-        .expect("source commit 1");
-    let second = source
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-            node_id: "node-a".to_string(),
-            proposer_id: "node-a".to_string(),
-            height: 2,
-            slot: 2,
-            epoch: 0,
-            node_block_hash: "block-2".to_string(),
-            action_root: action_root.clone(),
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 10_002,
-        })
-        .expect("source commit 2");
-    let bundle = source
-        .export_checkpoint_bundle(2)
-        .expect("export checkpoint")
-        .expect("checkpoint bundle");
-
-    let state_path = target_root.join("bridge-state.json");
-    let world_dir = target_root.join("world");
-    let records_dir = target_root.join("records");
-    let mut target = NodeRuntimeExecutionDriver::new_with_storage_profile(
-        state_path.clone(),
-        world_dir.clone(),
-        records_dir.clone(),
-        target_root.join("storage"),
-        &storage_profile,
-    )
-    .expect("target driver");
-    target
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-            node_id: "node-b".to_string(),
-            proposer_id: "node-a".to_string(),
-            height: 1,
-            slot: 1,
-            epoch: 0,
-            node_block_hash: "block-1".to_string(),
-            action_root: action_root.clone(),
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 10_001,
-        })
-        .expect("target commit 1");
-    let original_state = target.state.clone();
-    let original_world_state = target.execution_world.state().clone();
-    let original_world_journal = target.execution_world.journal().clone();
-
-    let failing_state_path = target_root.join("state-write-failure");
-    fs::create_dir_all(failing_state_path.as_path()).expect("create failing state path directory");
-    target.state_path = failing_state_path;
-    let err = target
-        .install_checkpoint_bundle(
-            NodeExecutionCheckpointInstallContext {
-                world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-                node_id: "node-b".to_string(),
-                height: 2,
-                node_block_hash: "block-2".to_string(),
-                execution_block_hash: second.execution_block_hash.clone(),
-                execution_state_root: second.execution_state_root.clone(),
-                committed_at_unix_ms: 10_002,
-            },
-            bundle.clone(),
-        )
-        .expect_err("final execution bridge state persistence must reject checkpoint install");
-    assert!(
-        err.contains("state"),
-        "unexpected state persistence error: {err}"
-    );
-    assert_eq!(target.state, original_state);
-    assert_eq!(target.execution_world.state(), &original_world_state);
-    assert_eq!(target.execution_world.journal(), &original_world_journal);
-    assert!(
-        !execution_bridge_record_path(records_dir.as_path(), 2).exists(),
-        "failed checkpoint install must not leave a height-2 record"
-    );
-    assert!(
-        !execution_checkpoint_manifest_path(records_dir.as_path(), 2).exists(),
-        "failed checkpoint install must not leave a height-2 checkpoint manifest"
-    );
-
-    target.state_path = state_path.clone();
-    drop(target);
-    let mut restarted = NodeRuntimeExecutionDriver::new_with_storage_profile(
-        state_path,
-        world_dir,
-        records_dir,
-        target_root.join("storage"),
-        &storage_profile,
-    )
-    .expect("restart must not recover failed checkpoint publication");
-    assert_eq!(restarted.state.last_applied_committed_height, 1);
-
-    restarted
-        .install_checkpoint_bundle(
-            NodeExecutionCheckpointInstallContext {
-                world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-                node_id: "node-b".to_string(),
-                height: 2,
-                node_block_hash: "block-2".to_string(),
-                execution_block_hash: second.execution_block_hash.clone(),
-                execution_state_root: second.execution_state_root.clone(),
-                committed_at_unix_ms: 10_002,
-            },
-            bundle,
-        )
-        .expect("retry after repaired state path");
-    let replay_err = restarted
-        .on_commit(NodeExecutionCommitContext {
-            world_id: "world-checkpoint-final-state-persist-rollback".to_string(),
-            node_id: "node-b".to_string(),
-            proposer_id: "node-a".to_string(),
-            height: 2,
-            slot: 2,
-            epoch: 0,
-            node_block_hash: "block-2".to_string(),
-            action_root,
-            committed_actions: Vec::new(),
-            committed_at_unix_ms: 10_002,
-        })
-        .expect_err("retried checkpoint-installed head rejects equal-height replay");
-    assert!(replay_err.contains("checkpoint-install"), "{replay_err}");
-
-    let _ = fs::remove_dir_all(dir);
-}
-
-#[test]
 fn node_runtime_execution_driver_startup_rolls_back_prepared_checkpoint_install_transaction() {
     let dir = temp_dir("execution-driver-checkpoint-prepared-transaction-recovery");
     let source_root = dir.join("source");
@@ -790,31 +633,30 @@ fn node_runtime_execution_driver_startup_rolls_back_prepared_checkpoint_install_
     let previous_state_bytes = fs::read(state_path.as_path()).expect("previous state bytes");
     let previous_snapshot_bytes =
         fs::read(world_dir.join("snapshot.json")).expect("previous snapshot bytes");
-
-    super::super::driver_checkpoint_install::prepare_checkpoint_install_transaction_for_test(
-        &target, 2,
-    )
-    .expect("prepare interrupted checkpoint transaction");
-    let source_record = load_execution_bridge_record(
-        execution_bridge_record_path(source_root.join("records").as_path(), 2).as_path(),
-    )
-    .expect("source record 2");
-    let source_manifest = load_execution_checkpoint_manifest(
-        execution_checkpoint_manifest_path(source_root.join("records").as_path(), 2).as_path(),
-    )
-    .expect("source manifest 2");
-    let source_state = load_execution_bridge_state(source_root.join("bridge-state.json").as_path())
-        .expect("source state 2");
-    source
-        .execution_world
-        .save_to_dir(world_dir.as_path())
-        .expect("leak target world persistence");
-    persist_execution_checkpoint_manifest(records_dir.as_path(), &source_manifest)
-        .expect("leak target checkpoint manifest and latest pointer");
-    persist_execution_bridge_record(records_dir.as_path(), &source_record)
-        .expect("leak target record and latest pointer");
-    persist_execution_bridge_state(state_path.as_path(), &source_state)
-        .expect("leak target bridge state");
+    let sidecar = world_dir
+        .join("distfs")
+        .join("module-store")
+        .join("index.bin");
+    fs::create_dir_all(sidecar.parent().expect("sidecar parent")).expect("create sidecar parent");
+    fs::write(sidecar.as_path(), b"old world sidecar").expect("write old world sidecar");
+    set_checkpoint_install_fault_for_test(Some(
+        CheckpointInstallFault::AfterRecordLatestPublication,
+    ));
+    let err = target
+        .install_checkpoint_bundle(
+            NodeExecutionCheckpointInstallContext {
+                world_id: "world-checkpoint-prepared-transaction-recovery".to_string(),
+                node_id: "node-b".to_string(),
+                height: 2,
+                node_block_hash: "block-2".to_string(),
+                execution_block_hash: second.execution_block_hash.clone(),
+                execution_state_root: second.execution_state_root.clone(),
+                committed_at_unix_ms: 10_002,
+            },
+            bundle.clone(),
+        )
+        .expect_err("record/latest fault must simulate an interrupted publication");
+    assert!(err.contains("after record/latest publication"), "{err}");
 
     assert!(
         records_dir
@@ -833,12 +675,17 @@ fn node_runtime_execution_driver_startup_rolls_back_prepared_checkpoint_install_
         load_execution_bridge_state(state_path.as_path())
             .expect("leaked state")
             .last_applied_committed_height,
-        2
+        1,
+        "record/latest fault must occur before final state persistence"
     );
     assert_ne!(
         fs::read(world_dir.join("snapshot.json")).expect("leaked snapshot bytes"),
         previous_snapshot_bytes,
         "partial publication must replace the previous world cache before restart"
+    );
+    assert!(
+        !sidecar.exists(),
+        "published world directory must not inherit an old DistFS sidecar"
     );
     drop(target);
 
@@ -857,6 +704,10 @@ fn node_runtime_execution_driver_startup_rolls_back_prepared_checkpoint_install_
     assert_eq!(
         fs::read(state_path.as_path()).expect("rolled-back state bytes"),
         previous_state_bytes
+    );
+    assert_eq!(
+        fs::read(sidecar.as_path()).expect("rolled-back DistFS sidecar"),
+        b"old world sidecar"
     );
     assert!(!execution_bridge_record_path(records_dir.as_path(), 2).exists());
     assert!(!execution_checkpoint_manifest_path(records_dir.as_path(), 2).exists());

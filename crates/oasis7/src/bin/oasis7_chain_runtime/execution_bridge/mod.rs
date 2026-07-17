@@ -783,6 +783,7 @@ mod driver_checkpoint_install;
 mod driver_committed_heights;
 mod driver_observability;
 mod driver_persistence;
+mod durable_transaction;
 mod external_effect;
 mod simulator_mirror;
 #[cfg(test)]

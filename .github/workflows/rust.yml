@@ -183,6 +183,11 @@ jobs:
           OASIS7_CI_RUN_LAUNCHER_WEB_BUILD: ${{ steps.scope.outputs.run_launcher_web_build }}
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
         run: CI_VERBOSE=1 ./scripts/ci-tests.sh required
+      - name: Run execution bridge binary unit suite
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}
+        run: >-
+          env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime
+          execution_bridge_real_tests::real_execution_bridge::tests
 
   windows-package-rollout-behavior:
     if: github.event_name == 'pull_request'
