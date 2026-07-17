@@ -43,14 +43,11 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#what">先看玩法</a>
-        <a href="#today">现在能做什么</a>
-        <a href="#proof">证据链</a>
-        <a href="#download">开发预览</a>
-        <a href="#roadmap">路线</a>
-        <a href="doc/cn/index.html">文档中心</a>
-        <a href="story/index.html">长篇故事</a>
-        <a href="#contribute">跟进</a>
+        <a href="#what">怎么玩</a>
+        <a href="#proof">真实画面</a>
+        <a href="#download">预览构建</a>
+        <a href="#roadmap">当前边界</a>
+        <a href="#contribute">继续探索</a>
       </nav>
       <button class="menu-button" type="button" aria-label="切换菜单" data-menu-toggle>
         ☰
@@ -80,7 +77,7 @@
         <div class="hero-grid">
           <div>
             <p class="eyebrow">AI Agent 文明模拟游戏</p>
-            <h1>带着一支 AI Agent 文明，在破碎小行星带里建设、交易与治理</h1>
+            <h1>带着 AI Agent 文明，在破碎小行星带建设、交易与治理</h1>
             <p class="subtitle">
               你站在文明外部决定方向：是扩张矿带、稳定产线，还是把一段临时协作变成可审计的协议。Agent 会在有限的电力、算力、存储和带宽里自己采集、生产、交易、协作和治理，
               让价格、关系和政策在同一个持续世界里留下后果。当前公开的是玩法技术预览。
@@ -109,16 +106,16 @@
               </article>
               <article class="metric-box">
                 <strong data-counter-target="1">0</strong>
-                <span>同一个世界会继续生产、交易、协作，不会因为你停下就归零</span>
+                <span>同一个世界的状态与后果可以被保存和继续观察；这不代表 always-on 托管</span>
               </article>
             </div>
           </div>
 
           <aside class="hero-visual">
             <figure class="hero-figure">
-              <span class="visual-kicker">World-state slice</span>
-              <img src="assets/images/world-constellation.svg" alt="破碎小行星带里的文明节点、物流与协作关系图" />
-              <figcaption>这是当前玩法关系的抽象状态图：用扩张、断供和重新分工来表达一局可能升温的局面，不当作真实 runtime 截图证据。</figcaption>
+              <span class="visual-kicker">Controlled Viewer capture</span>
+              <img src="assets/images/screenshots/asteroid_fragment_bootstrap.webp" alt="受控 asteroid_fragment_bootstrap 场景中的 oasis7 Viewer 世界画面" />
+              <figcaption>仓库内 `asteroid_fragment_bootstrap` 受控场景的 Viewer 截图；它只证明该场景可被观察，不代表公开网页可玩入口、正式发布或当前线上世界状态。</figcaption>
             </figure>
             <div class="pulse-panel">
               <p class="panel-title">你最先会看到的局面</p>
@@ -132,28 +129,6 @@
         </div>
       </section>
 
-      <section class="section" data-reveal>
-        <h2>先看一局会怎么演下去</h2>
-        <p class="section-intro">
-          这类游戏最迷人的，不是点了多少按钮，而是你能看着一片混乱慢慢长成一套会自己运转的秩序。一个矿带吃紧，整条产线就会抖；一段协作关系重谈，整个局势就会变脸。真正让人停不下来的，是你做的每一次判断，都会一路改写后面的扩张、风险和节奏。
-        </p>
-        <div class="grid cards-3">
-          <article class="card card-spotlight">
-            <h3>资源先紧起来</h3>
-            <p>某条矿线一断，价格就会抬头，生产会失衡，原本还能忍的邻居会突然开始抢矿、囤货和重谈供给。</p>
-          </article>
-          <article class="card">
-            <h3>协作会先谈，再改约</h3>
-            <p>一开始大家可能还会交易、让利、签短期协定；一旦资源吃紧或目标不一致，谈判就会变成改约和重新分工。</p>
-          </article>
-          <article class="card">
-            <h3>决定落地以后，世界会记账</h3>
-            <p>治理和供给调整不是一次提示播放完就结束。路线会被重排，政策会被改写，价格会留下后劲，你回来时还能看到完整后果链。</p>
-          </article>
-        </div>
-        <p class="section-footnote" data-homepage-claim="future-platform-boundary">后续会往开放世界游戏平台演进，但当前还不是 creator-facing 的 mod / 模块平台。</p>
-      </section>
-
       <section id="what" class="section" data-reveal>
         <h2>30 秒看懂 oasis7</h2>
         <p class="section-intro">
@@ -162,7 +137,7 @@
         <div class="grid cards-2">
           <article class="card card-spotlight">
             <h3>它是什么</h3>
-            <p>它把工业、经济和治理放进同一个持续运行的小行星带世界里，不是看完就结束的一次性演示。</p>
+            <p>它把工业、经济和治理放进同一个可保存状态与后果的小行星带世界里，不是看完就丢失结果的一次性演示；当前不承诺 always-on 托管。</p>
           </article>
           <article class="card">
             <h3>你扮演谁</h3>
@@ -282,7 +257,7 @@
 
       <section id="proof" class="section" data-reveal>
         <h2>现在已经能验证到哪一步</h2>
-        <p class="section-intro">这部分证明的不是“已经能玩了”，而是“你给输入以后，Agent 和世界确实会留下可回看的后果链”。</p>
+        <p class="section-intro">当前是 limited playable technical preview。这里进一步展示：输入、Agent 决策与世界变化已经能留下可回看的后果链；它不等同 closed beta、公开发售、赛季或公开网页加入。</p>
         <div class="proof-switcher" data-proof-switcher>
           <p class="proof-switcher-label">切换证据场景</p>
           <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
@@ -506,8 +481,9 @@
       </section>
 
       <section id="roadmap" class="section" data-reveal>
-        <h2>为什么现在还不是可玩版</h2>
+        <h2>技术预览与公开发售之间还有什么</h2>
         <p class="section-intro">项目路线已经比较清楚了：第一阶段先把 `oasis7` 做成开放世界沙盒游戏；后续才会再往平台化走。后半句是目标态，不是当前已经对外开放的能力。</p>
+        <p class="section-footnote" data-homepage-claim="future-platform-boundary">后续会往开放世界游戏平台演进，但当前还不是 creator-facing 的 mod / 模块平台。</p>
         <div class="grid cards-2">
           <article class="card">
             <h3>第一阶段：开放世界沙盒游戏</h3>
@@ -537,14 +513,14 @@
           </article>
           <article class="timeline-item next">
             <span class="status-tag next">下一阶段</span>
-            <h3>D4 · 可玩版本收敛</h3>
-            <p>等验证链路更稳一些，才会往真正的可玩版本收。</p>
+            <h3>D4 · 公开发售收敛</h3>
+            <p>当前 limited playable technical preview 继续收紧验证、接入与信任边界，再走向公开玩家发售。</p>
           </article>
         </div>
       </section>
 
       <section id="architecture" class="section" data-reveal>
-        <h2>为什么这个世界能持续运行</h2>
+        <h2>为什么世界状态与后果能够延续</h2>
         <p class="section-intro">如果你更关心底层怎么搭，这里是关键：玩法层、运行时、viewer 和治理层是分开约束的。世界变化要按统一规则落地，也得留下证据。</p>
         <figure class="architecture-figure">
           <img src="assets/images/architecture-flow.svg" alt="oasis7 引擎架构流示意图" loading="lazy" />

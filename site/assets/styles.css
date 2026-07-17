@@ -395,7 +395,7 @@ h2 {
 
 h1 {
   margin: 0.78rem 0 0.66rem;
-  font-size: clamp(2.18rem, 4.25vw, 3.42rem);
+  font-size: clamp(2.18rem, 3.8vw, 3.15rem);
   letter-spacing: 0.012em;
   max-width: 14ch;
 }
@@ -547,9 +547,7 @@ h3 {
   position: absolute;
   inset: 0.68rem;
   border-radius: 13px;
-  background:
-    radial-gradient(circle at 24% 32%, rgba(67, 239, 187, 0.18), transparent 18%),
-    radial-gradient(circle at 72% 62%, rgba(255, 184, 107, 0.12), transparent 22%);
+  background: linear-gradient(180deg, rgba(3, 10, 17, 0.06), rgba(3, 10, 17, 0.22));
   pointer-events: none;
   z-index: 1;
 }
@@ -574,7 +572,7 @@ h3 {
 .hero-figure img {
   width: 100%;
   height: auto;
-  aspect-ratio: 1.24 / 1;
+  aspect-ratio: 3 / 2;
   display: block;
   border-radius: 11px;
   border: 1px solid rgba(131, 188, 220, 0.24);
