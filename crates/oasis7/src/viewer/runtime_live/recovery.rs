@@ -197,6 +197,10 @@ impl ViewerRuntimeLiveServer {
             )
         })?;
 
+        let current_bound_agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .map(ToOwned::to_owned);
         let (bound_agent_id, binding_plan) = match request
             .requested_agent_id
             .as_deref()
@@ -204,12 +208,14 @@ impl ViewerRuntimeLiveServer {
             .filter(|value| !value.is_empty())
         {
             Some(agent_id) => {
+                let rotates_current_binding =
+                    rotates_session_key && current_bound_agent_id.as_deref() == Some(agent_id);
                 let plan = self
                     .plan_player_session_agent_binding(
                         agent_id,
                         verified.player_id.as_str(),
                         Some(verified.public_key.as_str()),
-                        request.force_rebind || rotates_session_key,
+                        request.force_rebind || rotates_current_binding,
                     )
                     .map_err(|message| {
                         recovery_error(
@@ -223,10 +229,7 @@ impl ViewerRuntimeLiveServer {
                 (Some(agent_id.to_string()), Some(plan))
             }
             None if rotates_session_key => {
-                let bound_agent_id = self
-                    .llm_sidecar
-                    .bound_agent_for_player(verified.player_id.as_str())
-                    .map(ToOwned::to_owned);
+                let bound_agent_id = current_bound_agent_id.clone();
                 let plan = match bound_agent_id.as_deref() {
                     Some(agent_id) => Some(
                         self.plan_player_session_agent_binding(
@@ -249,12 +252,7 @@ impl ViewerRuntimeLiveServer {
                 };
                 (bound_agent_id, plan)
             }
-            None => (
-                self.llm_sidecar
-                    .bound_agent_for_player(verified.player_id.as_str())
-                    .map(ToOwned::to_owned),
-                None,
-            ),
+            None => (current_bound_agent_id, None),
         };
 
         if let Some(registration_nonce) = verified.hosted_registration_nonce.as_deref() {

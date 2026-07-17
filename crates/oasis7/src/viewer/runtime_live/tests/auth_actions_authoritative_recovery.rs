@@ -137,18 +137,21 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
     }
 
     let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::TwoBases)
             .with_decision_mode(ViewerLiveDecisionMode::Llm),
     )
     .expect("runtime server");
-    let agent_id = server
+    let agent_ids: Vec<_> = server
         .world
         .state()
         .agents
         .keys()
-        .next()
         .cloned()
-        .expect("seed agent");
+        .take(2)
+        .collect();
+    assert_eq!(agent_ids.len(), 2, "two bases must seed two agents");
+    let agent_id = agent_ids[0].clone();
+    let other_agent_id = agent_ids[1].clone();
     let hosted_player_id = "hosted-player-account-reload-key";
     let (old_public_key, _) = test_signer(97);
     let (new_public_key, new_private_key) = test_signer(98);
@@ -179,14 +182,14 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
         issuer_private_key.as_str(),
     )
     .expect("issue refreshed registration grant");
-    let request = |auth_nonce| {
+    let request = |requested_agent_id: &str, auth_nonce| {
         signed_session_register_request(
             crate::viewer::AuthoritativeSessionRegisterRequest {
                 player_id: hosted_player_id.to_string(),
                 public_key: None,
                 registration_grant: Some(registration_grant.clone()),
                 auth: None,
-                requested_agent_id: Some(agent_id.clone()),
+                requested_agent_id: Some(requested_agent_id.to_string()),
                 force_rebind: false,
             },
             auth_nonce,
@@ -195,9 +198,20 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
         )
     };
 
+    let unauthorized_rebind = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(other_agent_id.as_str(), 2),
+        })
+        .expect_err("reload key rotation must not imply permission to change agents");
+    assert_eq!(unauthorized_rebind.code, "player_bind_failed");
+    assert!(
+        !replay_ledger.exists(),
+        "rejected agent change must not consume the reload grant"
+    );
+
     let (ack, _) = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
-            request: request(2),
+            request: request(agent_id.as_str(), 3),
         })
         .expect("authenticated refresh grant should rotate the browser reload key");
     assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
@@ -229,7 +243,7 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
 
     let replay_error = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
-            request: request(3),
+            request: request(agent_id.as_str(), 4),
         })
         .expect_err("a committed reload grant must remain single use");
     assert_eq!(replay_error.code, "auth_invalid");
