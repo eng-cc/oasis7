@@ -49,14 +49,16 @@ fn execution_bridge_commit_timing_snapshot_records_recent_and_stage_totals() {
         persist_world_ms: Duration::from_millis(12),
         checkpoint_ms: Duration::from_millis(13),
         retention_ms: Duration::from_millis(14),
-        total_ms: Duration::from_millis(700),
+        total_ms: Duration::from_millis(1_200),
     });
 
     let snapshot = snapshot_execution_bridge_commit_timing();
     assert_eq!(snapshot.recent_commit_count, 2);
     assert_eq!(snapshot.p50_total_ms, Some(120));
-    assert_eq!(snapshot.p95_total_ms, Some(700));
-    assert_eq!(snapshot.max_total_ms, Some(700));
+    assert_eq!(snapshot.p95_total_ms, Some(1_200));
+    assert_eq!(snapshot.max_total_ms, Some(1_200));
+    assert_eq!(snapshot.recent_over_budget_count, 1);
+    assert_eq!(snapshot.recent_over_budget_ratio_ppm, 500_000);
     assert_eq!(snapshot.slow_count, 1);
     assert_eq!(snapshot.last_slow_stage.as_deref(), Some("runtime_step"));
     assert_eq!(snapshot.stages["runtime_step"].count, 2);

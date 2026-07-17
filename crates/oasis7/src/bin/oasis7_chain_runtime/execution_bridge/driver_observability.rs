@@ -50,6 +50,8 @@ pub(crate) struct ExecutionBridgeStageTimingSnapshot {
 pub(crate) struct ExecutionBridgeCommitTimingSnapshot {
     pub(crate) window_capacity: usize,
     pub(crate) recent_commit_count: usize,
+    pub(crate) recent_over_budget_count: u64,
+    pub(crate) recent_over_budget_ratio_ppm: u64,
     pub(crate) p50_total_ms: Option<u64>,
     pub(crate) p95_total_ms: Option<u64>,
     pub(crate) max_total_ms: Option<u64>,
@@ -290,10 +292,21 @@ impl ExecutionBridgeCommitTimingState {
 
     fn snapshot(&self) -> ExecutionBridgeCommitTimingSnapshot {
         let mut samples: Vec<u64> = self.recent_total_ms.iter().copied().collect();
+        let recent_over_budget_count = samples
+            .iter()
+            .filter(|&&total_ms| total_ms >= duration_ms_u64(EXECUTION_BRIDGE_TOTAL_WARN_THRESHOLD))
+            .count() as u64;
+        let recent_over_budget_ratio_ppm = if samples.is_empty() {
+            0
+        } else {
+            recent_over_budget_count.saturating_mul(1_000_000) / samples.len() as u64
+        };
         samples.sort_unstable();
         ExecutionBridgeCommitTimingSnapshot {
             window_capacity: EXECUTION_BRIDGE_COMMIT_TIMING_WINDOW,
             recent_commit_count: samples.len(),
+            recent_over_budget_count,
+            recent_over_budget_ratio_ppm,
             p50_total_ms: percentile_ms(samples.as_slice(), 50),
             p95_total_ms: percentile_ms(samples.as_slice(), 95),
             max_total_ms: samples.last().copied(),
