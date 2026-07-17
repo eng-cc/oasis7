@@ -1652,7 +1652,19 @@ with tempfile.TemporaryDirectory(prefix="oasis7-macos-rollback-") as tmp_raw:
     mock("ditto", 'cp -R "$1" "$2"\\n')
     mock("hdiutil", 'if [[ "$1" == attach ]]; then for ((i=1;i<=$#;i++)); do [[ "${!i}" == -mountpoint ]] && j=$((i+1)) && mkdir -p "${!j}" && cp "$FIXTURE_PACKAGE_RUNTIME" "${!j}/oasis7_chain_runtime"; done; fi; true\\n')
     mock("launchctl", 'echo "$*" >> "$FIXTURE_LAUNCH_LOG"; case "$1" in print) if [[ "${FIXTURE_FAIL_POST_BOOTSTRAP_PRINT:-}" == 1 && -f "$FIXTURE_POST_BOOTSTRAP_MARKER" && ! -f "$FIXTURE_POST_PRINT_FAILED" ]]; then : > "$FIXTURE_POST_PRINT_FAILED"; exit 1; fi; exit 0;; bootout) rm -f "$FIXTURE_LAUNCH_LOADED";; bootstrap) if [[ "${FIXTURE_FAIL_BOOTSTRAP_ONCE:-}" == 1 && ! -f "$FIXTURE_BOOTSTRAP_FAILED" ]]; then : > "$FIXTURE_BOOTSTRAP_FAILED"; exit 1; fi; : > "$FIXTURE_LAUNCH_LOADED"; : > "$FIXTURE_POST_BOOTSTRAP_MARKER";; esac\\n')
-    mock("curl", 'if [[ "$*" == *" -o "* ]]; then for ((i=1;i<=$#;i++)); do [[ "${!i}" == -o ]] && j=$((i+1)) && printf \'{"chain_proof":{"latest_execution_checkpoint":{"schema_version":2,"checkpoint_id":"fixture","height":1,"manifest_hash":"0000000000000000000000000000000000000000000000000000000000000000"}}}\' > "${!j}"; done; elif [[ "$*" == *healthz* ]]; then printf \'{"ok":true}\'; else printf \'{"running":true}\'; fi; true\\n')
+    mock("curl", """if [[ "$*" == *" -o "* ]]; then
+  for ((i=1;i<=$#;i++)); do
+    [[ "${!i}" == -o ]] && j=$((i+1)) && printf '{"chain_proof":{"latest_execution_checkpoint":{"schema_version":2,"checkpoint_id":"fixture","height":1,"manifest_hash":"0000000000000000000000000000000000000000000000000000000000000000"}}}' > "${!j}"
+  done
+elif [[ "$*" == *healthz* ]]; then
+  printf '{"ok":true}'
+elif [[ -n "${FIXTURE_STATUS_JSON+x}" ]]; then
+  printf '%s' "$FIXTURE_STATUS_JSON"
+else
+  printf '%s' '{"running":true,"consensus":{"state_sync_fallback_required":false},"observability":{"network_head_available":true,"alerts":[]},"consensus_progress_observer_error":null,"last_error":null}'
+fi
+true
+""")
     mock("plutil", r'''python3 - "$@" <<'PY2'
 import json, os, sys
 args = sys.argv[1:]
@@ -1888,6 +1900,55 @@ PY2
             assert hashlib.sha256(native_active.read_bytes()).hexdigest() == active_before, (
                 "native macOS plutil helper mutated active governed bundle: " + native_helper[0]
             )
+    status_helper = text[text.index("status_rollout_state() {"):text.index("wait_for_service_health() {")]
+    status_helper_path = tmp / "status-rollout-state.sh"
+    status_helper_path.write_text(
+        "#!/usr/bin/env bash\nset -uo pipefail\n" + status_helper
+        + "\nstatus_rollout_state \"$(cat \"$1\")\"\n",
+        encoding="utf-8",
+    )
+    status_helper_path.chmod(0o755)
+    def status_rollout_result(payload):
+        fixture = tmp / "status-rollout-state.json"
+        fixture.write_text(json.dumps(payload) if isinstance(payload, dict) else payload, encoding="utf-8")
+        return subprocess.run(
+            ["bash", str(status_helper_path), str(fixture)], text=True, capture_output=True,
+            env=rollout_env,
+        )
+
+    healthy_status = {
+        "running": True,
+        "consensus": {"state_sync_fallback_required": False},
+        "observability": {"network_head_available": True, "alerts": []},
+        "consensus_progress_observer_error": None,
+        "last_error": None,
+    }
+    assert status_rollout_result(healthy_status).returncode == 0, "false state-sync fallback must not trigger rollback"
+    if sys.platform == "darwin" and Path("/usr/bin/plutil").is_file():
+        native_status_result = subprocess.run(
+            ["bash", str(status_helper_path), str(tmp / "status-rollout-state.json")],
+            text=True,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        assert native_status_result.returncode == 0, (
+            "native plutil rejected healthy status semantics: "
+            f"stdout={native_status_result.stdout!r} stderr={native_status_result.stderr!r}"
+        )
+    for failure_status in (
+        {**healthy_status, "consensus": {"state_sync_fallback_required": True}},
+        {"consensus": {"state_sync_fallback_required": True}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "authority_failure"}]}},
+        {**healthy_status, "observability": {"network_head_available": True, "alerts": [{"code": "consensus_peer_head_unavailable"}]}},
+        {**healthy_status, "consensus_progress_observer_error": "execution driver peer mismatch at height 42"},
+    ):
+        assert status_rollout_result(failure_status).returncode == 2, failure_status
+    for invalid_status in (
+        "not-json",
+        {**healthy_status, "running": False},
+        {"running": True},
+    ):
+        assert status_rollout_result(invalid_status).returncode == 1, invalid_status
 for artifact, relative_path in (
     ("world_snapshot", "world"),
     ("generated_world_sidecar", "generated-world/generated-scenario-world"),
@@ -1945,7 +2006,7 @@ for token in (
     "plutil -extract",
     "authority_failure",
     'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
-    'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
+    "status_rollout_state",
     "assert_state_roots_safe",
     "assert_no_symlink_components",
     "resolve_existing_physical_directory",
@@ -1969,8 +2030,8 @@ assert "oasis7-provider-checkpoint.XXXXXX.json" not in text
 extract_lines = [line.strip() for line in text.splitlines() if "plutil -extract" in line]
 assert extract_lines, "macOS generated rollout must contain plutil extraction reads"
 for extract_line in extract_lines:
-    assert " -o - " in extract_line, (
-        "macOS plutil extraction read must explicitly write to stdout: " + extract_line
+    assert " -o - " in extract_line or " -o /dev/null " in extract_line, (
+        "macOS plutil extraction must use an explicit output target: " + extract_line
     )
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
 mount_index = text.index("hdiutil attach")
@@ -2089,23 +2150,23 @@ assert re.search(r"rollback.*\|\|.*rollback_status", authority_path, re.DOTALL),
 )
 health_function = text[text.index("wait_for_service_health() {"):text.index("restart_original_service() {")]
 assert '"ok"[[:space:]]*:[[:space:]]*true' in health_function
-assert '"running"[[:space:]]*:[[:space:]]*true' in health_function
 assert re.search(r"ok.*<<<\"\$health\"", health_function, re.DOTALL)
-assert re.search(r"running.*<<<\"\$status\"", health_function, re.DOTALL)
 assert not re.search(r"running.*<<<\"\$health\"", health_function, re.DOTALL)
-assert "authority_failure|state_sync_fallback_required" in health_function
+assert "status_rollout_state \"$status\"" in health_function
+assert "state_sync_fallback_required" in text
+assert "plutil -extract consensus.state_sync_fallback_required raw -expect bool" in text
+assert "plutil -extract observability.alerts" in text
+assert "grep -Eq 'authority_failure|state_sync_fallback_required" not in text
 promotion_success_path = text[
     text.index("authority_failure=0"):text.index('if [[ "$authority_failure" -eq 1 ]]')
 ]
 assert re.search(r"ok.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
     "post-promotion health verification must require healthz ok=true"
 )
-assert re.search(r"running.*<<<\"\$status\"", promotion_success_path, re.DOTALL), (
-    "post-promotion health verification must require status running=true"
-)
 assert not re.search(r"running.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
     "post-promotion health verification must not require running=true from healthz"
 )
+assert "status_rollout_state \"$status\"" in promotion_success_path
 backup_state_function = text[text.index("backup_persistent_state() {"):text.index("preserve_failed_state() {")]
 restore_state_function = text[text.index("restore_pre_upgrade_state() {"):text.index("rollback() {")]
 assert backup_state_function.index("assert_state_roots_safe") < backup_state_function.index("backup_path")
