@@ -316,7 +316,7 @@ function defaultAttractionSamples() {
             risk_delta: -2,
             stability_delta: 3,
             rollback_available: true,
-            rollback_deadline_beat: "Rollback is available until incident_recovery begins.",
+            rollback_deadline_beat: "Rollback is available until incident recovery begins.",
             rollback_cost_summary: "Spend 1 action and give up 1 stability to reopen the route choice.",
             rollback_kept_benefit: "Keep the Starter Batch: Alloy Plate x3 already produced.",
             rollback_lost_benefit: "Lose the stabilized line's lower jam risk for the next incident.",

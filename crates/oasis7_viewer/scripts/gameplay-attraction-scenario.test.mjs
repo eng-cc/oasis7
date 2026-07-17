@@ -32,6 +32,11 @@ function assertCompleteRollbackQuote(routeTradeoff, label) {
       `${label} ${field} must be player-readable text`,
     );
     assert.ok(routeTradeoff[field].trim(), `${label} ${field} must not be empty`);
+    assert.doesNotMatch(
+      routeTradeoff[field],
+      /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/,
+      `${label} ${field} must not expose an internal snake_case identifier`,
+    );
   }
 }
 
