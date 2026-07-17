@@ -16,6 +16,23 @@ pub(super) struct RuntimeSessionRevokeMetadata {
     pub(super) revoked_by: Option<String>,
 }
 
+pub(super) struct RuntimeSessionRegistrationPlan {
+    player_id: String,
+    public_key: String,
+    replaced_public_key: Option<String>,
+    session_epoch: u64,
+}
+
+impl RuntimeSessionRegistrationPlan {
+    pub(super) fn session_epoch(&self) -> u64 {
+        self.session_epoch
+    }
+
+    pub(super) fn rotates_key(&self) -> bool {
+        self.replaced_public_key.is_some()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(super) struct RuntimeSessionPolicy {
     active_pubkey_by_player: BTreeMap<String, String>,
@@ -24,11 +41,12 @@ pub(super) struct RuntimeSessionPolicy {
 }
 
 impl RuntimeSessionPolicy {
-    pub(super) fn register_session(
-        &mut self,
+    pub(super) fn validate_session_registration(
+        &self,
         player_id: &str,
         public_key: &str,
-    ) -> Result<u64, String> {
+        allow_key_rotation: bool,
+    ) -> Result<RuntimeSessionRegistrationPlan, String> {
         let player_id = player_id.trim();
         let public_key = public_key.trim();
         if player_id.is_empty() {
@@ -48,24 +66,41 @@ impl RuntimeSessionPolicy {
             ));
         }
 
-        match self.active_pubkey_by_player.get(player_id) {
-            Some(active) if active == public_key => {}
+        let (replaced_public_key, session_epoch) = match self.active_pubkey_by_player.get(player_id)
+        {
+            Some(active) if active == public_key => (None, self.session_epoch(player_id)),
+            Some(active) if allow_key_rotation => (
+                Some(active.clone()),
+                self.session_epoch(player_id).saturating_add(1).max(1),
+            ),
             Some(active) => {
                 return Err(format!(
                     "session_key_mismatch: player {} active session_pubkey {} does not match {}",
                     player_id, active, public_key
                 ));
             }
-            None => {
-                self.active_pubkey_by_player
-                    .insert(player_id.to_string(), public_key.to_string());
-                self.session_epoch_by_player
-                    .entry(player_id.to_string())
-                    .or_insert(1);
-            }
-        }
+            None => (None, 1),
+        };
 
-        Ok(self.session_epoch(player_id))
+        Ok(RuntimeSessionRegistrationPlan {
+            player_id: player_id.to_string(),
+            public_key: public_key.to_string(),
+            replaced_public_key,
+            session_epoch,
+        })
+    }
+
+    pub(super) fn commit_session_registration(&mut self, plan: RuntimeSessionRegistrationPlan) {
+        if let Some(replaced_public_key) = plan.replaced_public_key {
+            self.revoked_pubkeys_by_player
+                .entry(plan.player_id.clone())
+                .or_default()
+                .insert(replaced_public_key);
+        }
+        self.active_pubkey_by_player
+            .insert(plan.player_id.clone(), plan.public_key);
+        self.session_epoch_by_player
+            .insert(plan.player_id, plan.session_epoch);
     }
 
     pub(super) fn validate_known_session_key(

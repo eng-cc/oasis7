@@ -254,6 +254,8 @@ pub struct AuthoritativeSessionRegisterRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registration_grant: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<PlayerAuthProof>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_agent_id: Option<String>,

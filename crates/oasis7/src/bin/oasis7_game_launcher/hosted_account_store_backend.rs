@@ -591,6 +591,11 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
     }
     let raw = serde_json::to_string_pretty(store)
         .map_err(|err| format!("failed to serialize hosted account store: {err}"))?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("hosted-account-store.json");
+    let temp_path = path.with_file_name(format!(".{file_name}.tmp-{}", std::process::id()));
     #[cfg(unix)]
     {
         let mut file = fs::OpenOptions::new()
@@ -598,17 +603,17 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
             .truncate(true)
             .write(true)
             .mode(0o600)
-            .open(path)
+            .open(&temp_path)
             .map_err(|err| {
                 format!(
                     "failed to open hosted account store `{}`: {err}",
-                    path.display()
+                    temp_path.display()
                 )
             })?;
         file.write_all(raw.as_bytes()).map_err(|err| {
             format!(
                 "failed to write hosted account store `{}`: {err}",
-                path.display()
+                temp_path.display()
             )
         })?;
         file.set_permissions(fs::Permissions::from_mode(0o600))
@@ -618,17 +623,83 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
                     path.display()
                 )
             })?;
+        file.sync_all().map_err(|err| {
+            format!(
+                "failed to sync hosted account store `{}`: {err}",
+                temp_path.display()
+            )
+        })?;
+        fs::rename(&temp_path, path).map_err(|err| {
+            format!(
+                "failed to atomically replace hosted account store `{}`: {err}",
+                path.display()
+            )
+        })?;
+        if let Some(parent) = path.parent() {
+            fs::File::open(parent)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|err| {
+                    format!(
+                        "failed to sync hosted account store directory `{}`: {err}",
+                        parent.display()
+                    )
+                })?;
+        }
         return Ok(());
     }
     #[cfg(not(unix))]
     {
-        fs::write(path, raw).map_err(|err| {
+        let mut file = fs::File::create(&temp_path).map_err(|err| {
             format!(
-                "failed to write hosted account store `{}`: {err}",
-                path.display()
+                "failed to create hosted account store temp file `{}`: {err}",
+                temp_path.display()
             )
-        })
+        })?;
+        file.write_all(raw.as_bytes())
+            .and_then(|_| file.sync_all())
+            .and_then(|_| platform_atomic_replace(&temp_path, path))
+            .map_err(|err| {
+                format!(
+                    "failed to write hosted account store `{}`: {err}",
+                    path.display()
+                )
+            })
     }
+}
+
+#[cfg(windows)]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
 }
 
 fn build_hosted_account_id(sequence: u64) -> String {

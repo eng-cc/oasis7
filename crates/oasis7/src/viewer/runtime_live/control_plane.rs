@@ -20,7 +20,8 @@ mod agent_chat_intent;
 mod llm_sidecar;
 use agent_chat_intent::resolve_agent_chat_intent;
 pub(super) use llm_sidecar::{
-    RuntimeLlmSidecar, simulator_action_label, simulator_action_to_runtime,
+    RuntimeLlmSidecar, RuntimePlayerBindingPlan, simulator_action_label,
+    simulator_action_to_runtime,
 };
 
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";

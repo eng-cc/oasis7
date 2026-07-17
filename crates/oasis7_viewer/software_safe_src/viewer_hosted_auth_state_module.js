@@ -93,6 +93,7 @@ export function createViewerHostedAuthStateModule({
           maskedLoginHint: auth.maskedLoginHint || null,
           deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
           releaseToken: auth.releaseToken || null,
+          registrationGrant: auth.registrationGrant || null,
           issuedAtUnixMs: auth.issuedAtUnixMs ?? null,
           sessionEpoch: auth.sessionEpoch ?? null,
         }),
@@ -117,6 +118,7 @@ export function createViewerHostedAuthStateModule({
       const parsed = JSON.parse(raw);
       const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
       const playerId = String(parsed?.playerId || parsed?.player_id || "").trim();
+      const registrationGrant = String(parsed?.registrationGrant || parsed?.registration_grant || "").trim();
       const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
       const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
       const releaseToken = String(parsed?.releaseToken || parsed?.release_token || "").trim();
@@ -140,6 +142,7 @@ export function createViewerHostedAuthStateModule({
           maskedLoginHint: maskedLoginHint || null,
           deviceSessionId: deviceSessionId || releaseToken,
           releaseToken,
+          registrationGrant: registrationGrant || null,
           issuedAtUnixMs: normalizedIssuedAtUnixMs,
           sessionEpoch: normalizedSessionEpoch,
         }),
@@ -152,6 +155,7 @@ export function createViewerHostedAuthStateModule({
         maskedLoginHint: maskedLoginHint || null,
         deviceSessionId: deviceSessionId || releaseToken,
         releaseToken,
+        registrationGrant: registrationGrant || null,
         source: "hosted_browser_storage",
         registrationStatus: "issued",
         sessionEpoch: normalizedSessionEpoch,

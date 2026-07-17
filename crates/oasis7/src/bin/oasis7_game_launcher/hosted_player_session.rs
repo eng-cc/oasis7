@@ -1,6 +1,10 @@
 use super::hosted_access::{DeploymentMode, hosted_player_access_contract};
-use serde::Serialize;
+use rand_core::{OsRng, RngCore};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) const HOSTED_PLAYER_SESSION_ISSUE_ROUTE: &str = "/api/public/player-session/issue";
@@ -40,6 +44,8 @@ pub(super) struct HostedPlayerSessionIssueGrant {
     pub(super) issued_at_unix_ms: u64,
     pub(super) auth_mode: String,
     pub(super) release_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) registration_grant: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +81,23 @@ pub(super) struct HostedPlayerSessionAdmissionResponse {
     pub(super) error: Option<String>,
     pub(super) deployment_mode: String,
     pub(super) admission: HostedPlayerSessionAdmissionSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) registration_grant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) device_session_id: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct HostedPlayerSessionLedger {
+    next_sequence: u64,
+    issued_players_total: u64,
+    released_players_total: u64,
+    issue_timestamps_unix_ms: VecDeque<u64>,
+    active_release_tokens_by_player: BTreeMap<String, String>,
+    active_players_by_release_token: BTreeMap<String, String>,
+    last_seen_unix_ms_by_release_token: BTreeMap<String, u64>,
+    runtime_seen_players: BTreeSet<String>,
+    runtime_revoked_players: BTreeSet<String>,
 }
 
 #[derive(Debug, Default)]
@@ -92,9 +115,56 @@ pub(super) struct HostedPlayerSessionIssuer {
     last_runtime_active_players: BTreeSet<String>,
     runtime_seen_players: BTreeSet<String>,
     runtime_revoked_players: BTreeSet<String>,
+    ledger_path: Option<PathBuf>,
 }
 
 impl HostedPlayerSessionIssuer {
+    pub(super) fn with_ledger_path(path: PathBuf) -> Result<Self, String> {
+        let ledger = match fs::read(&path) {
+            Ok(bytes) => serde_json::from_slice::<HostedPlayerSessionLedger>(&bytes)
+                .map_err(|err| format!("decode hosted session ledger failed: {err}"))?,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                HostedPlayerSessionLedger::default()
+            }
+            Err(err) => return Err(format!("read hosted session ledger failed: {err}")),
+        };
+        let mut issuer = Self {
+            next_sequence: ledger.next_sequence,
+            issued_players_total: ledger.issued_players_total,
+            released_players_total: ledger.released_players_total,
+            issue_timestamps_unix_ms: ledger.issue_timestamps_unix_ms,
+            active_release_tokens_by_player: ledger.active_release_tokens_by_player,
+            active_players_by_release_token: ledger.active_players_by_release_token,
+            last_seen_unix_ms_by_release_token: ledger.last_seen_unix_ms_by_release_token,
+            runtime_seen_players: ledger.runtime_seen_players,
+            runtime_revoked_players: ledger.runtime_revoked_players,
+            ledger_path: Some(path),
+            ..Self::default()
+        };
+        issuer.prune_old_timestamps();
+        issuer.prune_expired_slots();
+        issuer.persist_ledger()?;
+        Ok(issuer)
+    }
+
+    fn persist_ledger(&self) -> Result<(), String> {
+        let Some(path) = self.ledger_path.as_deref() else {
+            return Ok(());
+        };
+        let ledger = HostedPlayerSessionLedger {
+            next_sequence: self.next_sequence,
+            issued_players_total: self.issued_players_total,
+            released_players_total: self.released_players_total,
+            issue_timestamps_unix_ms: self.issue_timestamps_unix_ms.clone(),
+            active_release_tokens_by_player: self.active_release_tokens_by_player.clone(),
+            active_players_by_release_token: self.active_players_by_release_token.clone(),
+            last_seen_unix_ms_by_release_token: self.last_seen_unix_ms_by_release_token.clone(),
+            runtime_seen_players: self.runtime_seen_players.clone(),
+            runtime_revoked_players: self.runtime_revoked_players.clone(),
+        };
+        atomic_write_json(path, &ledger)
+    }
+
     pub(super) fn observe_runtime_active_players<'a, I>(&mut self, active_players: I)
     where
         I: IntoIterator<Item = &'a str>,
@@ -137,6 +207,7 @@ impl HostedPlayerSessionIssuer {
         for player_id in stale_players {
             let _ = self.release_slot_for_player(player_id.as_str(), true);
         }
+        let _ = self.persist_ledger();
     }
 
     pub(super) fn record_runtime_probe_failure(&mut self, error: String) {
@@ -160,6 +231,8 @@ impl HostedPlayerSessionIssuer {
                 contract.admission.issue_rate_limit_per_minute,
                 contract.admission.max_player_sessions,
             ),
+            registration_grant: None,
+            device_session_id: None,
         }
     }
 
@@ -168,6 +241,7 @@ impl HostedPlayerSessionIssuer {
         deployment_mode: DeploymentMode,
         player_id: &str,
         release_token: &str,
+        registration_public_key: Option<&str>,
     ) -> HostedPlayerSessionAdmissionResponse {
         let contract = hosted_player_access_contract(deployment_mode);
         self.prune_old_timestamps();
@@ -186,6 +260,8 @@ impl HostedPlayerSessionIssuer {
                 ),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         }
         let token = release_token.trim();
@@ -196,6 +272,8 @@ impl HostedPlayerSessionIssuer {
                 error: Some("release_token is required".to_string()),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         }
         let expected_player_id = player_id.trim();
@@ -206,6 +284,8 @@ impl HostedPlayerSessionIssuer {
                 error: Some("player_id is required".to_string()),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         }
         if self.runtime_revoked_players.contains(expected_player_id) {
@@ -217,15 +297,23 @@ impl HostedPlayerSessionIssuer {
                 ),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         }
-        let Some(bound_player_id) = self.active_players_by_release_token.get(token) else {
+        let token_digest = release_token_digest(token);
+        let Some(bound_player_id) = self
+            .active_players_by_release_token
+            .get(token_digest.as_str())
+        else {
             return HostedPlayerSessionAdmissionResponse {
                 ok: false,
                 error_code: Some("release_token_invalid".to_string()),
                 error: Some("release_token does not map to an active player slot".to_string()),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         };
         if bound_player_id != expected_player_id {
@@ -235,10 +323,54 @@ impl HostedPlayerSessionIssuer {
                 error: Some("player_id does not match the active slot owner".to_string()),
                 deployment_mode: deployment_mode.as_str().to_string(),
                 admission,
+                registration_grant: None,
+                device_session_id: None,
             };
         }
         self.last_seen_unix_ms_by_release_token
-            .insert(token.to_string(), now_unix_ms());
+            .insert(token_digest, now_unix_ms());
+        let (registration_grant, device_session_id) = match registration_public_key
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(public_key) => {
+                let issued_at_unix_ms = now_unix_ms();
+                self.next_sequence = self.next_sequence.saturating_add(1);
+                let device_session_id =
+                    build_device_session_id(issued_at_unix_ms, self.next_sequence);
+                match build_registration_grant(
+                    expected_player_id,
+                    public_key,
+                    device_session_id.as_str(),
+                    issued_at_unix_ms,
+                ) {
+                    Ok(grant) => (Some(grant), Some(device_session_id)),
+                    Err(error) => {
+                        return HostedPlayerSessionAdmissionResponse {
+                            ok: false,
+                            error_code: Some("registration_grant_issue_failed".to_string()),
+                            error: Some(error),
+                            deployment_mode: deployment_mode.as_str().to_string(),
+                            admission,
+                            registration_grant: None,
+                            device_session_id: None,
+                        };
+                    }
+                }
+            }
+            None => (None, None),
+        };
+        if let Err(error) = self.persist_ledger() {
+            return HostedPlayerSessionAdmissionResponse {
+                ok: false,
+                error_code: Some("session_ledger_persist_failed".to_string()),
+                error: Some(error),
+                deployment_mode: deployment_mode.as_str().to_string(),
+                admission,
+                registration_grant: None,
+                device_session_id: None,
+            };
+        }
         HostedPlayerSessionAdmissionResponse {
             ok: true,
             error_code: None,
@@ -248,6 +380,8 @@ impl HostedPlayerSessionIssuer {
                 contract.admission.issue_rate_limit_per_minute,
                 contract.admission.max_player_sessions,
             ),
+            registration_grant,
+            device_session_id,
         }
     }
 
@@ -255,7 +389,7 @@ impl HostedPlayerSessionIssuer {
         &mut self,
         deployment_mode: DeploymentMode,
     ) -> HostedPlayerSessionIssueResponse {
-        self.issue_internal(deployment_mode, None)
+        self.issue_internal(deployment_mode, None, None)
     }
 
     pub(super) fn issue_for_player(
@@ -263,13 +397,23 @@ impl HostedPlayerSessionIssuer {
         deployment_mode: DeploymentMode,
         player_id: &str,
     ) -> HostedPlayerSessionIssueResponse {
-        self.issue_internal(deployment_mode, Some(player_id))
+        self.issue_internal(deployment_mode, Some(player_id), None)
+    }
+
+    pub(super) fn issue_for_player_and_key(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        player_id: &str,
+        public_key: &str,
+    ) -> HostedPlayerSessionIssueResponse {
+        self.issue_internal(deployment_mode, Some(player_id), Some(public_key))
     }
 
     fn issue_internal(
         &mut self,
         deployment_mode: DeploymentMode,
         player_id_override: Option<&str>,
+        registration_public_key: Option<&str>,
     ) -> HostedPlayerSessionIssueResponse {
         let contract = hosted_player_access_contract(deployment_mode);
         self.prune_old_timestamps();
@@ -318,7 +462,10 @@ impl HostedPlayerSessionIssuer {
             contract.admission.issue_rate_limit_per_minute,
             contract.admission.max_player_sessions,
         );
-        if admission.effective_player_sessions >= admission.max_player_sessions {
+        let reassociating_runtime_player = self.last_runtime_active_players.contains(&player_id);
+        if admission.effective_player_sessions >= admission.max_player_sessions
+            && !reassociating_runtime_player
+        {
             return HostedPlayerSessionIssueResponse {
                 ok: false,
                 error_code: Some("world_full".to_string()),
@@ -332,18 +479,78 @@ impl HostedPlayerSessionIssuer {
             };
         }
 
+        let device_session_id = build_device_session_id(issued_at_unix_ms, self.next_sequence);
+        let release_token = build_release_token();
+        let registration_grant = match registration_public_key {
+            Some(public_key) => {
+                let mut nonce = [0_u8; 32];
+                OsRng.fill_bytes(&mut nonce);
+                let issuer_private_key =
+                    match std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
+                    {
+                        Ok(value) => value,
+                        Err(_) => {
+                            return HostedPlayerSessionIssueResponse {
+                                ok: false,
+                                error_code: Some("registration_issuer_not_configured".to_string()),
+                                error: Some(
+                                    "hosted registration issuer private key is not configured"
+                                        .to_string(),
+                                ),
+                                deployment_mode: deployment_mode.as_str().to_string(),
+                                admission,
+                                grant: None,
+                            };
+                        }
+                    };
+                match oasis7::viewer::issue_hosted_registration_grant(
+                    player_id.as_str(),
+                    public_key,
+                    device_session_id.as_str(),
+                    hex::encode(nonce).as_str(),
+                    issued_at_unix_ms,
+                    issuer_private_key.as_str(),
+                ) {
+                    Ok(grant) => Some(grant),
+                    Err(error) => {
+                        return HostedPlayerSessionIssueResponse {
+                            ok: false,
+                            error_code: Some("registration_grant_issue_failed".to_string()),
+                            error: Some(error),
+                            deployment_mode: deployment_mode.as_str().to_string(),
+                            admission,
+                            grant: None,
+                        };
+                    }
+                }
+            }
+            None => None,
+        };
         self.issued_players_total = self.issued_players_total.saturating_add(1);
         self.issue_timestamps_unix_ms.push_back(issued_at_unix_ms);
-        let device_session_id = build_device_session_id(issued_at_unix_ms, self.next_sequence);
-        let release_token = build_release_token(issued_at_unix_ms, self.next_sequence);
+        let release_token_digest = release_token_digest(release_token.as_str());
         self.active_release_tokens_by_player
-            .insert(player_id.clone(), release_token.clone());
+            .insert(player_id.clone(), release_token_digest.clone());
         self.active_players_by_release_token
-            .insert(release_token.clone(), player_id.clone());
+            .insert(release_token_digest.clone(), player_id.clone());
         self.last_seen_unix_ms_by_release_token
-            .insert(release_token.clone(), issued_at_unix_ms);
+            .insert(release_token_digest, issued_at_unix_ms);
         self.runtime_seen_players.remove(player_id.as_str());
         self.runtime_revoked_players.remove(player_id.as_str());
+        if let Err(error) = self.persist_ledger() {
+            let _ = self.release_slot_for_player(player_id.as_str(), false);
+            return HostedPlayerSessionIssueResponse {
+                ok: false,
+                error_code: Some("session_ledger_persist_failed".to_string()),
+                error: Some(error),
+                deployment_mode: deployment_mode.as_str().to_string(),
+                admission: self.admission_snapshot(
+                    contract.admission.issue_rate_limit_per_minute,
+                    contract.admission.max_player_sessions,
+                ),
+                grant: None,
+            };
+        }
         admission = self.admission_snapshot(
             contract.admission.issue_rate_limit_per_minute,
             contract.admission.max_player_sessions,
@@ -361,6 +568,7 @@ impl HostedPlayerSessionIssuer {
                 issued_at_unix_ms,
                 auth_mode: "browser_local_ephemeral_ed25519".to_string(),
                 release_token,
+                registration_grant,
             }),
         }
     }
@@ -421,7 +629,12 @@ impl HostedPlayerSessionIssuer {
                 admission,
             };
         }
-        let Some(bound_player_id) = self.active_players_by_release_token.get(token).cloned() else {
+        let token_digest = release_token_digest(token);
+        let Some(bound_player_id) = self
+            .active_players_by_release_token
+            .get(token_digest.as_str())
+            .cloned()
+        else {
             return HostedPlayerSessionReleaseResponse {
                 ok: false,
                 error_code: Some("release_token_invalid".to_string()),
@@ -440,6 +653,18 @@ impl HostedPlayerSessionIssuer {
             };
         }
         let _ = self.release_slot_for_player(bound_player_id.as_str(), false);
+        if let Err(error) = self.persist_ledger() {
+            return HostedPlayerSessionReleaseResponse {
+                ok: false,
+                error_code: Some("session_ledger_persist_failed".to_string()),
+                error: Some(error),
+                deployment_mode: deployment_mode.as_str().to_string(),
+                admission: self.admission_snapshot(
+                    contract.admission.issue_rate_limit_per_minute,
+                    contract.admission.max_player_sessions,
+                ),
+            };
+        }
         HostedPlayerSessionReleaseResponse {
             ok: true,
             error_code: None,
@@ -557,12 +782,109 @@ impl HostedPlayerSessionIssuer {
     }
 }
 
+fn atomic_write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .map_err(|err| format!("create hosted session ledger directory failed: {err}"))?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("hosted-player-sessions.json");
+    let temp_path = parent.join(format!(".{file_name}.tmp-{}", std::process::id()));
+    let bytes = serde_json::to_vec(value)
+        .map_err(|err| format!("encode hosted session ledger failed: {err}"))?;
+    let mut temp_file = fs::File::create(&temp_path)
+        .map_err(|err| format!("create hosted session ledger temp file failed: {err}"))?;
+    temp_file
+        .write_all(bytes.as_slice())
+        .map_err(|err| format!("write hosted session ledger temp file failed: {err}"))?;
+    temp_file
+        .sync_all()
+        .map_err(|err| format!("sync hosted session ledger temp file failed: {err}"))?;
+    platform_atomic_replace(&temp_path, path)
+        .map_err(|err| format!("replace hosted session ledger failed: {err}"))?;
+    sync_parent_directory(parent)
+        .map_err(|err| format!("sync hosted session ledger directory failed: {err}"))
+}
+
+#[cfg(windows)]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: &Path) -> std::io::Result<()> {
+    fs::File::open(parent).and_then(|directory| directory.sync_all())
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_parent: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
 fn build_player_id(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-player-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
 
-fn build_release_token(issued_at_unix_ms: u64, sequence: u64) -> String {
-    format!("hosted-release-{issued_at_unix_ms:016x}-{sequence:08x}")
+fn build_release_token() -> String {
+    let mut credential = [0_u8; 32];
+    OsRng.fill_bytes(&mut credential);
+    hex::encode(credential)
+}
+
+fn build_registration_grant(
+    player_id: &str,
+    public_key: &str,
+    device_session_id: &str,
+    issued_at_unix_ms: u64,
+) -> Result<String, String> {
+    let issuer_private_key =
+        std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
+            .map_err(|_| "hosted registration issuer private key is not configured".to_string())?;
+    let mut nonce = [0_u8; 32];
+    OsRng.fill_bytes(&mut nonce);
+    oasis7::viewer::issue_hosted_registration_grant(
+        player_id,
+        public_key,
+        device_session_id,
+        hex::encode(nonce).as_str(),
+        issued_at_unix_ms,
+        issuer_private_key.as_str(),
+    )
+}
+
+fn release_token_digest(token: &str) -> String {
+    blake3::hash(token.as_bytes()).to_hex().to_string()
 }
 
 fn build_device_session_id(issued_at_unix_ms: u64, sequence: u64) -> String {
@@ -579,314 +901,5 @@ fn now_unix_ms() -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn hosted_player_session_issue_returns_structured_grant() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let response = issuer.issue(DeploymentMode::HostedPublicJoin);
-        assert!(response.ok);
-        assert_eq!(response.error_code, None);
-        assert_eq!(response.deployment_mode, "hosted_public_join");
-        let grant = response.grant.expect("grant");
-        assert!(grant.player_id.starts_with("hosted-player-"));
-        assert!(
-            grant
-                .device_session_id
-                .starts_with("hosted-device-session-")
-        );
-        assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
-        assert!(grant.release_token.starts_with("hosted-release-"));
-        assert_eq!(response.admission.active_player_sessions, 1);
-        assert_eq!(response.admission.effective_player_sessions, 1);
-        assert_eq!(response.admission.issued_players_total, 1);
-        assert_eq!(response.admission.issued_in_current_window, 1);
-    }
-
-    #[test]
-    fn hosted_player_session_issue_for_player_reuses_stable_player_id() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let first = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");
-        let second = issuer.issue_for_player(DeploymentMode::HostedPublicJoin, "stable-player-1");
-        let first_grant = first.grant.expect("first grant");
-        let second_grant = second.grant.expect("second grant");
-        assert_eq!(first_grant.player_id, "stable-player-1");
-        assert_eq!(second_grant.player_id, "stable-player-1");
-        assert_ne!(first_grant.release_token, second_grant.release_token);
-    }
-
-    #[test]
-    fn hosted_player_session_issue_is_disabled_for_trusted_local_only() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let response = issuer.issue(DeploymentMode::TrustedLocalOnly);
-        assert!(!response.ok);
-        assert_eq!(
-            response.error_code.as_deref(),
-            Some("player_session_issue_disabled")
-        );
-        assert!(response.grant.is_none());
-    }
-
-    #[test]
-    fn hosted_player_session_issue_enforces_max_player_sessions() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        for _ in 0..8 {
-            let response = issuer.issue(DeploymentMode::HostedPublicJoin);
-            assert!(response.ok);
-        }
-        let response = issuer.issue(DeploymentMode::HostedPublicJoin);
-        assert!(!response.ok);
-        assert_eq!(response.error_code.as_deref(), Some("world_full"));
-        assert_eq!(response.admission.active_player_sessions, 8);
-        assert_eq!(response.admission.effective_player_sessions, 8);
-    }
-
-    #[test]
-    fn hosted_player_session_issue_counts_runtime_only_occupancy_toward_world_full() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        issuer.observe_runtime_active_players([
-            "runtime-player-1",
-            "runtime-player-2",
-            "runtime-player-3",
-            "runtime-player-4",
-            "runtime-player-5",
-            "runtime-player-6",
-            "runtime-player-7",
-            "runtime-player-8",
-        ]);
-
-        let response = issuer.issue(DeploymentMode::HostedPublicJoin);
-        assert!(!response.ok);
-        assert_eq!(response.error_code.as_deref(), Some("world_full"));
-        assert_eq!(response.admission.active_player_sessions, 0);
-        assert_eq!(response.admission.runtime_bound_player_sessions, 8);
-        assert_eq!(response.admission.runtime_only_player_sessions, 8);
-        assert_eq!(response.admission.effective_player_sessions, 8);
-    }
-
-    #[test]
-    fn hosted_player_session_release_frees_active_slot() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        let release = issuer.release(
-            DeploymentMode::HostedPublicJoin,
-            grant.player_id.as_str(),
-            grant.release_token.as_str(),
-        );
-        assert!(release.ok);
-        assert_eq!(release.admission.active_player_sessions, 0);
-        assert_eq!(release.admission.released_players_total, 1);
-    }
-
-    #[test]
-    fn hosted_player_session_admission_reports_current_snapshot() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let _ = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let response = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert!(response.ok);
-        assert_eq!(response.admission.active_player_sessions, 1);
-        assert_eq!(response.admission.effective_player_sessions, 1);
-        assert_eq!(response.admission.max_player_sessions, 8);
-        assert_eq!(response.admission.runtime_bound_player_sessions, 0);
-        assert_eq!(response.admission.runtime_only_player_sessions, 0);
-        assert_eq!(response.admission.runtime_probe_status, "not_started");
-        assert_eq!(response.admission.runtime_probe_error, None);
-        assert_eq!(response.admission.slot_lease_ttl_ms, SLOT_LEASE_TTL_MS);
-        assert_eq!(
-            response.admission.pending_registration_ttl_ms,
-            PENDING_REGISTRATION_TTL_MS
-        );
-    }
-
-    #[test]
-    fn hosted_player_session_refresh_keeps_slot_alive() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let token = issue.grant.expect("grant").release_token;
-        let response = issuer.refresh(
-            DeploymentMode::HostedPublicJoin,
-            "hosted-player-test",
-            token.as_str(),
-        );
-        assert!(!response.ok);
-        assert_eq!(response.error_code.as_deref(), Some("player_id_mismatch"));
-
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        let response = issuer.refresh(
-            DeploymentMode::HostedPublicJoin,
-            grant.player_id.as_str(),
-            grant.release_token.as_str(),
-        );
-        assert!(response.ok);
-        assert_eq!(response.admission.active_player_sessions, 1);
-        assert_eq!(response.admission.effective_player_sessions, 1);
-    }
-
-    #[test]
-    fn hosted_player_session_release_requires_matching_player_id() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-
-        let missing_player_id = issuer.release(
-            DeploymentMode::HostedPublicJoin,
-            "",
-            grant.release_token.as_str(),
-        );
-        assert!(!missing_player_id.ok);
-        assert_eq!(
-            missing_player_id.error_code.as_deref(),
-            Some("player_id_required")
-        );
-
-        let mismatch = issuer.release(
-            DeploymentMode::HostedPublicJoin,
-            "hosted-player-other",
-            grant.release_token.as_str(),
-        );
-        assert!(!mismatch.ok);
-        assert_eq!(mismatch.error_code.as_deref(), Some("player_id_mismatch"));
-
-        let ok = issuer.release(
-            DeploymentMode::HostedPublicJoin,
-            grant.player_id.as_str(),
-            grant.release_token.as_str(),
-        );
-        assert!(ok.ok);
-    }
-
-    #[test]
-    fn hosted_player_session_runtime_reconcile_releases_seen_players_missing_from_runtime() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-
-        issuer.observe_runtime_active_players([grant.player_id.as_str()]);
-        let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert_eq!(admission.admission.active_player_sessions, 1);
-        assert_eq!(admission.admission.effective_player_sessions, 1);
-        assert_eq!(admission.admission.runtime_bound_player_sessions, 1);
-        assert_eq!(admission.admission.runtime_only_player_sessions, 0);
-        assert_eq!(admission.admission.runtime_probe_status, "ok");
-
-        issuer.observe_runtime_active_players(std::iter::empty::<&str>());
-        let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert_eq!(admission.admission.active_player_sessions, 0);
-        assert_eq!(admission.admission.effective_player_sessions, 0);
-        assert_eq!(admission.admission.runtime_bound_player_sessions, 0);
-        assert_eq!(admission.admission.runtime_only_player_sessions, 0);
-        assert_eq!(admission.admission.released_players_total, 1);
-
-        let refresh = issuer.refresh(
-            DeploymentMode::HostedPublicJoin,
-            grant.player_id.as_str(),
-            grant.release_token.as_str(),
-        );
-        assert!(!refresh.ok);
-        assert_eq!(refresh.error_code.as_deref(), Some("session_revoked"));
-    }
-
-    #[test]
-    fn hosted_player_session_runtime_probe_failure_surfaces_in_admission() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        issuer.record_runtime_probe_failure("connect runtime live failed".to_string());
-        let response = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert_eq!(response.admission.runtime_probe_status, "error");
-        assert_eq!(
-            response.admission.runtime_probe_error.as_deref(),
-            Some("connect runtime live failed")
-        );
-        assert!(response.admission.last_runtime_probe_unix_ms.is_some());
-    }
-
-    #[test]
-    fn hosted_player_session_admission_reports_runtime_only_occupancy_separately() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        issuer.observe_runtime_active_players([grant.player_id.as_str(), "runtime-player-extra"]);
-
-        let response = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert!(response.ok);
-        assert_eq!(response.admission.active_player_sessions, 1);
-        assert_eq!(response.admission.runtime_bound_player_sessions, 2);
-        assert_eq!(response.admission.runtime_only_player_sessions, 1);
-        assert_eq!(response.admission.effective_player_sessions, 2);
-    }
-
-    #[test]
-    fn hosted_player_session_pending_registration_slots_expire_before_full_lease_ttl() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        let token = grant.release_token;
-        let stale_seen_at = now_unix_ms()
-            .saturating_sub(PENDING_REGISTRATION_TTL_MS)
-            .saturating_sub(1);
-        issuer
-            .last_seen_unix_ms_by_release_token
-            .insert(token.clone(), stale_seen_at);
-
-        let response = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert!(response.ok);
-        assert_eq!(response.admission.active_player_sessions, 0);
-        assert_eq!(response.admission.effective_player_sessions, 0);
-        assert_eq!(response.admission.released_players_total, 1);
-    }
-
-    #[test]
-    fn hosted_player_session_runtime_seen_slots_keep_full_lease_ttl() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        issuer.observe_runtime_active_players([grant.player_id.as_str()]);
-        let token = grant.release_token;
-        let still_alive_seen_at = now_unix_ms()
-            .saturating_sub(PENDING_REGISTRATION_TTL_MS)
-            .saturating_sub(1);
-        issuer
-            .last_seen_unix_ms_by_release_token
-            .insert(token.clone(), still_alive_seen_at);
-
-        let response = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert!(response.ok);
-        assert_eq!(response.admission.active_player_sessions, 1);
-        assert_eq!(response.admission.effective_player_sessions, 1);
-    }
-
-    #[test]
-    fn hosted_player_session_runtime_probe_refreshes_runtime_bound_slot_before_expiry_prune() {
-        let mut issuer = HostedPlayerSessionIssuer::default();
-        let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
-        let grant = issue.grant.expect("grant");
-        issuer.observe_runtime_active_players([grant.player_id.as_str()]);
-
-        let stale_seen_at = now_unix_ms()
-            .saturating_sub(SLOT_LEASE_TTL_MS)
-            .saturating_sub(1);
-        issuer
-            .last_seen_unix_ms_by_release_token
-            .insert(grant.release_token.clone(), stale_seen_at);
-
-        issuer.observe_runtime_active_players([grant.player_id.as_str()]);
-
-        let admission = issuer.admission(DeploymentMode::HostedPublicJoin);
-        assert!(admission.ok);
-        assert_eq!(admission.admission.active_player_sessions, 1);
-        assert_eq!(admission.admission.runtime_bound_player_sessions, 1);
-        assert_eq!(admission.admission.runtime_only_player_sessions, 0);
-        assert_eq!(admission.admission.effective_player_sessions, 1);
-        assert_eq!(admission.admission.released_players_total, 0);
-
-        let refresh = issuer.refresh(
-            DeploymentMode::HostedPublicJoin,
-            grant.player_id.as_str(),
-            grant.release_token.as_str(),
-        );
-        assert!(refresh.ok);
-    }
-}
+#[path = "hosted_player_session_tests.rs"]
+mod tests;

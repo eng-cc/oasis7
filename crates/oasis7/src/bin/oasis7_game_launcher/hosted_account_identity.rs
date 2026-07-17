@@ -157,7 +157,7 @@ impl HostedAccountIdentityBroker {
     }
 
     #[cfg(test)]
-    fn with_store_path(store_path: PathBuf) -> Result<Self, String> {
+    pub(super) fn with_store_path(store_path: PathBuf) -> Result<Self, String> {
         Ok(Self {
             store_backend: HostedAccountStoreBackend::with_file_store_path(store_path)?,
             smtp_config: None,
@@ -337,6 +337,17 @@ impl HostedAccountIdentityBroker {
         otp_code: &str,
         issuer: &mut HostedPlayerSessionIssuer,
     ) -> HostedAccountLoginCompleteResponse {
+        self.complete_login_with_key(deployment_mode, challenge_id, otp_code, None, issuer)
+    }
+
+    pub(super) fn complete_login_with_key(
+        &mut self,
+        deployment_mode: DeploymentMode,
+        challenge_id: &str,
+        otp_code: &str,
+        public_key: Option<&str>,
+        issuer: &mut HostedPlayerSessionIssuer,
+    ) -> HostedAccountLoginCompleteResponse {
         if deployment_mode != DeploymentMode::HostedPublicJoin {
             return HostedAccountLoginCompleteResponse {
                 ok: false,
@@ -430,6 +441,8 @@ impl HostedAccountIdentityBroker {
         ) {
             Ok(record) => record,
             Err(err) => {
+                self.pending_challenges
+                    .insert(challenge.challenge_id.clone(), challenge);
                 return HostedAccountLoginCompleteResponse {
                     ok: false,
                     error_code: Some("account_store_persist_failed".to_string()),
@@ -441,7 +454,18 @@ impl HostedAccountIdentityBroker {
                 };
             }
         };
-        let issue = issuer.issue_for_player(deployment_mode, record.player_id.as_str());
+        let issue = match public_key.map(str::trim).filter(|value| !value.is_empty()) {
+            Some(public_key) => issuer.issue_for_player_and_key(
+                deployment_mode,
+                record.player_id.as_str(),
+                public_key,
+            ),
+            None => issuer.issue_for_player(deployment_mode, record.player_id.as_str()),
+        };
+        if !issue.ok {
+            self.pending_challenges
+                .insert(challenge.challenge_id.clone(), challenge);
+        }
         let account = Some(account_summary_from_record(&record));
         response_from_issue(deployment_mode, issue, account)
     }

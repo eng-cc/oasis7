@@ -1,5 +1,11 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::protocol::{
     AgentChatRequest, AuthoritativeSessionRegisterRequest, GameplayActionRequest,
@@ -8,6 +14,14 @@ use super::protocol::{
 };
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
+pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY";
+pub const HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY";
+pub const HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH";
+const HOSTED_REGISTRATION_GRANT_TTL_MS: u64 = 30_000;
+static HOSTED_REGISTRATION_REPLAY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub const VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX: &str = "awviewauth:v1:";
 const VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION: u8 = 1;
 pub const VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX: &str = "awhostedgrant:v1:";
@@ -23,6 +37,7 @@ pub struct VerifiedPlayerAuth {
     pub player_id: String,
     pub public_key: String,
     pub nonce: u64,
+    pub hosted_registration_nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -101,6 +116,59 @@ struct SessionRegisterSigningPayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     requested_agent_id: Option<&'a str>,
     force_rebind: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct HostedRegistrationGrantPayload {
+    player_id: String,
+    public_key: String,
+    device_session_id: String,
+    nonce: String,
+    issued_at_unix_ms: u64,
+    expires_at_unix_ms: u64,
+}
+
+pub fn issue_hosted_registration_grant(
+    player_id: &str,
+    public_key: &str,
+    device_session_id: &str,
+    nonce: &str,
+    issued_at_unix_ms: u64,
+    issuer_private_key_hex: &str,
+) -> Result<String, String> {
+    let payload = HostedRegistrationGrantPayload {
+        player_id: normalize_required_field(player_id, "registration grant player_id")?,
+        public_key: normalize_public_key_field(public_key, "registration grant public_key")?,
+        device_session_id: normalize_required_field(
+            device_session_id,
+            "registration grant device_session_id",
+        )?,
+        nonce: normalize_required_field(nonce, "registration grant nonce")?,
+        issued_at_unix_ms,
+        expires_at_unix_ms: issued_at_unix_ms.saturating_add(HOSTED_REGISTRATION_GRANT_TTL_MS),
+    };
+    let bytes = serde_json::to_vec(&payload)
+        .map_err(|err| format!("encode hosted registration grant failed: {err}"))?;
+    let signing_key = signing_key_from_hex(
+        issuer_private_key_hex,
+        "hosted registration issuer private key",
+    )?;
+    let signature = signing_key.sign(bytes.as_slice());
+    Ok(format!(
+        "v1.{}.{}",
+        hex::encode(bytes),
+        hex::encode(signature.to_bytes())
+    ))
+}
+
+pub fn derive_hosted_registration_issuer_public_key(
+    issuer_private_key_hex: &str,
+) -> Result<String, String> {
+    let signing_key = signing_key_from_hex(
+        issuer_private_key_hex,
+        "hosted registration issuer private key",
+    )?;
+    Ok(hex::encode(signing_key.verifying_key().to_bytes()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -220,6 +288,7 @@ pub fn verify_prompt_control_apply_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -306,6 +375,7 @@ pub fn verify_prompt_control_rollback_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -491,6 +561,7 @@ pub fn verify_agent_chat_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -577,6 +648,7 @@ pub fn verify_gameplay_action_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -661,11 +733,157 @@ pub fn verify_session_register_auth_proof(
         proof.signature.as_str(),
         signing_payload.as_slice(),
     )?;
+    let hosted_registration_nonce = if request_player_id.starts_with("hosted-player-account-") {
+        Some(verify_hosted_registration_grant(
+            request.registration_grant.as_deref().ok_or_else(|| {
+                "hosted session registration requires a registration grant".to_string()
+            })?,
+            request_player_id.as_str(),
+            request_public_key.as_str(),
+        )?)
+    } else {
+        None
+    };
     Ok(VerifiedPlayerAuth {
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce,
     })
+}
+
+fn verify_hosted_registration_grant(
+    grant: &str,
+    player_id: &str,
+    public_key: &str,
+) -> Result<String, String> {
+    let mut parts = grant.split('.');
+    if parts.next() != Some("v1") {
+        return Err("registration grant version is unsupported".to_string());
+    }
+    let payload_hex = parts
+        .next()
+        .ok_or_else(|| "registration grant payload is missing".to_string())?;
+    let signature_hex = parts
+        .next()
+        .ok_or_else(|| "registration grant signature is missing".to_string())?;
+    if parts.next().is_some() {
+        return Err("registration grant format is invalid".to_string());
+    }
+    let payload_bytes = hex::decode(payload_hex)
+        .map_err(|err| format!("decode registration grant payload failed: {err}"))?;
+    let payload: HostedRegistrationGrantPayload = serde_json::from_slice(&payload_bytes)
+        .map_err(|err| format!("decode registration grant failed: {err}"))?;
+    if payload.player_id != player_id || payload.public_key != public_key {
+        return Err("registration grant binding does not match session request".to_string());
+    }
+    if now_unix_ms() > payload.expires_at_unix_ms {
+        return Err("registration grant expired".to_string());
+    }
+    let trusted_key = std::env::var(HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV).map_err(|_| {
+        "trusted hosted registration issuer public key is not configured".to_string()
+    })?;
+    let trusted_key_bytes = decode_hex_array::<32>(
+        trusted_key.as_str(),
+        "hosted registration issuer public key",
+    )?;
+    let verifying_key = VerifyingKey::from_bytes(&trusted_key_bytes)
+        .map_err(|err| format!("parse hosted registration issuer public key failed: {err}"))?;
+    let signature_bytes = hex::decode(signature_hex)
+        .map_err(|err| format!("decode registration grant signature failed: {err}"))?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|err| format!("parse registration grant signature failed: {err}"))?;
+    verifying_key
+        .verify(payload_bytes.as_slice(), &signature)
+        .map_err(|err| format!("verify registration grant signature failed: {err}"))?;
+    ensure_registration_grant_nonce_unused(payload.nonce.as_str())?;
+    Ok(payload.nonce)
+}
+
+fn ensure_registration_grant_nonce_unused(nonce: &str) -> Result<(), String> {
+    let path = registration_replay_ledger_path();
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    if read_consumed_registration_nonces(path.as_path())?.contains(nonce) {
+        return Err("registration grant replay detected".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String> {
+    let path = registration_replay_ledger_path();
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let mut consumed = read_consumed_registration_nonces(path.as_path())?;
+    if !consumed.insert(nonce.to_string()) {
+        return Err("registration grant replay detected".to_string());
+    }
+    atomic_write_replay_ledger(path.as_path(), &consumed)
+}
+
+pub fn preflight_hosted_registration_replay_ledger() -> Result<(), String> {
+    let path = registration_replay_ledger_path();
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let consumed = read_consumed_registration_nonces(path.as_path())?;
+    atomic_write_replay_ledger(path.as_path(), &consumed)
+}
+
+fn registration_replay_ledger_path() -> PathBuf {
+    std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-registration-replay.json"))
+}
+
+fn read_consumed_registration_nonces(path: &Path) -> Result<BTreeSet<String>, String> {
+    match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|err| format!("decode registration grant replay ledger failed: {err}")),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeSet::new()),
+        Err(err) => Err(format!(
+            "read registration grant replay ledger failed: {err}"
+        )),
+    }
+}
+
+fn atomic_write_replay_ledger(path: &Path, consumed: &BTreeSet<String>) -> Result<(), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .map_err(|err| format!("create registration replay directory failed: {err}"))?;
+    let temp = parent.join(format!(".registration-replay-{}.tmp", std::process::id()));
+    let bytes = serde_json::to_vec(consumed)
+        .map_err(|err| format!("encode registration replay ledger failed: {err}"))?;
+    let mut temp_file = fs::File::create(&temp)
+        .map_err(|err| format!("create registration replay ledger failed: {err}"))?;
+    temp_file
+        .write_all(bytes.as_slice())
+        .map_err(|err| format!("write registration replay ledger failed: {err}"))?;
+    temp_file
+        .sync_all()
+        .map_err(|err| format!("sync registration replay ledger failed: {err}"))?;
+    platform_atomic_replace(&temp, path)
+        .map_err(|err| format!("replace registration replay ledger failed: {err}"))?;
+    sync_parent_directory(parent)
+        .map_err(|err| format!("sync registration replay ledger directory failed: {err}"))
+}
+
+#[path = "auth_atomic_file.rs"]
+mod atomic_file;
+use atomic_file::{platform_atomic_replace, sync_parent_directory};
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 fn build_prompt_control_apply_signing_payload(
@@ -960,104 +1178,9 @@ fn decode_hex_array<const N: usize>(raw: &str, label: &str) -> Result<[u8; N], S
     Ok(fixed)
 }
 
-fn verify_hosted_prompt_control_strong_auth_grant(
-    expected_action_id: &str,
-    request_agent_id: &str,
-    request_player_id: &str,
-    request_public_key: Option<&str>,
-    grant: &HostedStrongAuthGrant,
-    required_signer_public_key: &str,
-    now_unix_ms: u64,
-) -> Result<(), String> {
-    if grant.version != VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION {
-        return Err(format!(
-            "hosted strong-auth grant version mismatch: expected={} actual={}",
-            VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION, grant.version
-        ));
-    }
-    let action_id = normalize_prompt_control_grant_operation(grant.action_id.as_str())?;
-    if action_id != expected_action_id {
-        return Err("hosted strong-auth grant action_id does not match request".to_string());
-    }
-    let request_agent_id =
-        normalize_required_field(request_agent_id, "hosted strong-auth request agent_id")?;
-    let request_player_id =
-        normalize_required_field(request_player_id, "hosted strong-auth request player_id")?;
-    let request_public_key = normalize_required_optional_public_key(
-        request_public_key,
-        "hosted strong-auth request public_key",
-    )?;
-    let grant_player_id = normalize_required_field(
-        grant.player_id.as_str(),
-        "hosted strong-auth grant player_id",
-    )?;
-    let grant_player_public_key = normalize_public_key_field(
-        grant.player_public_key.as_str(),
-        "hosted strong-auth grant player_public_key",
-    )?;
-    let grant_agent_id =
-        normalize_required_field(grant.agent_id.as_str(), "hosted strong-auth grant agent_id")?;
-    if request_player_id != grant_player_id {
-        return Err("hosted strong-auth grant player_id does not match request".to_string());
-    }
-    if request_public_key != grant_player_public_key {
-        return Err("hosted strong-auth grant public_key does not match request".to_string());
-    }
-    if request_agent_id != grant_agent_id {
-        return Err("hosted strong-auth grant agent_id does not match request".to_string());
-    }
-    if grant.expires_at_unix_ms <= grant.issued_at_unix_ms {
-        return Err(
-            "hosted strong-auth grant expires_at_unix_ms must be greater than issued_at_unix_ms"
-                .to_string(),
-        );
-    }
-    if now_unix_ms > grant.expires_at_unix_ms {
-        return Err("hosted strong-auth grant has expired".to_string());
-    }
-    let required_signer_public_key = normalize_public_key_field(
-        required_signer_public_key,
-        "hosted strong-auth required signer public key",
-    )?;
-    let grant_signer_public_key = normalize_public_key_field(
-        grant.signer_public_key.as_str(),
-        "hosted strong-auth grant signer public key",
-    )?;
-    if grant_signer_public_key != required_signer_public_key {
-        return Err("hosted strong-auth grant signer is not allowlisted".to_string());
-    }
-    let signing_payload = build_hosted_prompt_control_strong_auth_grant_payload(
-        action_id,
-        grant_player_id.as_str(),
-        grant_player_public_key.as_str(),
-        grant_agent_id.as_str(),
-        grant.issued_at_unix_ms,
-        grant.expires_at_unix_ms,
-    )?;
-    verify_hosted_strong_auth_grant_signature(
-        grant_signer_public_key.as_str(),
-        grant.signature.as_str(),
-        signing_payload.as_slice(),
-    )
-}
-
-fn verify_hosted_strong_auth_grant_signature(
-    public_key_hex: &str,
-    signature: &str,
-    signing_payload: &[u8],
-) -> Result<(), String> {
-    let public_key_bytes = decode_hex_array::<32>(public_key_hex, "hosted strong-auth public key")?;
-    let signature_hex = signature
-        .strip_prefix(VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX)
-        .ok_or_else(|| "hosted strong-auth signature is not awhostedgrant:v1".to_string())?;
-    let signature_bytes = decode_hex_array::<64>(signature_hex, "hosted strong-auth signature")?;
-    let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
-        .map_err(|err| format!("parse hosted strong-auth public key failed: {err}"))?;
-    verifying_key
-        .verify(signing_payload, &Signature::from_bytes(&signature_bytes))
-        .map_err(|err| format!("verify hosted strong-auth signature failed: {err}"))
-}
-
+#[path = "auth_hosted_strong_auth.rs"]
+mod hosted_strong_auth;
+use hosted_strong_auth::*;
 #[cfg(test)]
 #[path = "auth_tests.rs"]
 mod tests;

@@ -39,6 +39,18 @@ struct HostedAccountLoginCompleteRequest {
     challenge_id: String,
     #[serde(default)]
     otp_code: String,
+    #[serde(default)]
+    public_key: String,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct HostedPlayerSessionRefreshRequest {
+    #[serde(default)]
+    player_id: String,
+    #[serde(default)]
+    release_token: String,
+    #[serde(default)]
+    public_key: String,
 }
 
 pub(super) fn handle_http_connection(
@@ -88,8 +100,11 @@ pub(super) fn handle_http_connection(
         || is_login_start_route
         || is_login_complete_route
         || is_strong_auth_grant_route;
-    let post_only_route =
-        is_release_route || is_refresh_route || is_login_start_route || is_login_complete_route;
+    let post_only_route = is_issue_route
+        || is_release_route
+        || is_refresh_route
+        || is_login_start_route
+        || is_login_complete_route;
     let head_mutation_route = is_issue_route
         || is_release_route
         || is_refresh_route
@@ -114,12 +129,23 @@ pub(super) fn handle_http_connection(
         return Ok(());
     }
     if is_refresh_route {
-        let player_id = parse_query_value(target, "player_id").unwrap_or_default();
-        let release_token = parse_query_value(target, "release_token").unwrap_or_default();
+        let payload: HostedPlayerSessionRefreshRequest =
+            serde_json::from_str(request_body).unwrap_or_default();
+        let player_id = if payload.player_id.trim().is_empty() {
+            parse_query_value(target, "player_id").unwrap_or_default()
+        } else {
+            payload.player_id
+        };
+        let release_token = if payload.release_token.trim().is_empty() {
+            parse_query_value(target, "release_token").unwrap_or_default()
+        } else {
+            payload.release_token
+        };
         let response = refresh_hosted_player_session(
             deployment_mode,
             player_id.as_str(),
             release_token.as_str(),
+            Some(payload.public_key.as_str()),
             hosted_session_issuer,
         )?;
         write_json_response(&mut stream, 200, &response, head_only)
@@ -127,9 +153,14 @@ pub(super) fn handle_http_connection(
         return Ok(());
     }
     if is_issue_route {
-        let response = issue_hosted_player_session(deployment_mode, hosted_session_issuer)?;
-        write_json_response(&mut stream, 200, &response, head_only)
-            .map_err(|err| format!("failed to write hosted session issue response: {err}"))?;
+        write_http_response(
+            &mut stream,
+            401,
+            "text/plain",
+            b"Account login required",
+            false,
+        )
+        .map_err(|err| format!("failed to write hosted session issue rejection: {err}"))?;
         return Ok(());
     }
     if is_release_route {
@@ -183,6 +214,7 @@ pub(super) fn handle_http_connection(
             deployment_mode,
             challenge_id.as_str(),
             otp_code.as_str(),
+            payload.public_key.as_str(),
             hosted_session_issuer,
             hosted_account_broker,
         )?;
@@ -300,6 +332,7 @@ fn complete_hosted_account_login(
     deployment_mode: DeploymentMode,
     challenge_id: &str,
     otp_code: &str,
+    public_key: &str,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
     hosted_account_broker: &Arc<Mutex<HostedAccountIdentityBroker>>,
 ) -> Result<HostedAccountLoginCompleteResponse, String> {
@@ -309,7 +342,13 @@ fn complete_hosted_account_login(
     let mut issuer = hosted_session_issuer
         .lock()
         .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
-    Ok(broker.complete_login(deployment_mode, challenge_id, otp_code, &mut issuer))
+    Ok(broker.complete_login_with_key(
+        deployment_mode,
+        challenge_id,
+        otp_code,
+        Some(public_key),
+        &mut issuer,
+    ))
 }
 
 fn reconcile_hosted_runtime_presence(
@@ -352,12 +391,18 @@ fn refresh_hosted_player_session(
     deployment_mode: DeploymentMode,
     player_id: &str,
     release_token: &str,
+    registration_public_key: Option<&str>,
     hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
 ) -> Result<HostedPlayerSessionAdmissionResponse, String> {
     let mut issuer = hosted_session_issuer
         .lock()
         .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
-    Ok(issuer.refresh(deployment_mode, player_id, release_token))
+    Ok(issuer.refresh(
+        deployment_mode,
+        player_id,
+        release_token,
+        registration_public_key,
+    ))
 }
 
 fn release_hosted_player_session(

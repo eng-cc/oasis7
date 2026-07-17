@@ -1,6 +1,7 @@
 use super::authoritative::compute_runtime_snapshot_hash;
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
+use crate::viewer::consume_registration_grant_nonce;
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn handle_authoritative_recovery(
@@ -158,11 +159,12 @@ impl ViewerRuntimeLiveServer {
                 request.public_key.clone(),
             )
         })?;
-        let session_epoch = match self
-            .session_policy
-            .register_session(verified.player_id.as_str(), verified.public_key.as_str())
-        {
-            Ok(session_epoch) => session_epoch,
+        let session_registration_plan = match self.session_policy.validate_session_registration(
+            verified.player_id.as_str(),
+            verified.public_key.as_str(),
+            verified.hosted_registration_nonce.is_some(),
+        ) {
+            Ok(plan) => plan,
             Err(message) => {
                 return Err(self.recovery_error_from_session_policy(
                     message,
@@ -171,8 +173,10 @@ impl ViewerRuntimeLiveServer {
                 ));
             }
         };
+        let session_epoch = session_registration_plan.session_epoch();
+        let rotates_session_key = session_registration_plan.rotates_key();
         self.llm_sidecar
-            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
+            .validate_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
             .map_err(|message| {
                 recovery_error(
                     "auth_nonce_replay",
@@ -183,36 +187,6 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
 
-        let bound_agent_id = match request
-            .requested_agent_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            Some(agent_id) => {
-                self.bind_player_session_agent(
-                    agent_id,
-                    verified.player_id.as_str(),
-                    Some(verified.public_key.as_str()),
-                    request.force_rebind,
-                )
-                .map_err(|message| {
-                    recovery_error(
-                        "player_bind_failed",
-                        message,
-                        None,
-                        Some(verified.player_id.clone()),
-                        Some(verified.public_key.clone()),
-                    )
-                })?;
-                Some(agent_id.to_string())
-            }
-            None => self
-                .llm_sidecar
-                .bound_agent_for_player(verified.player_id.as_str())
-                .map(ToOwned::to_owned),
-        };
-
         let cursor = self.current_recovery_cursor().map_err(|err| {
             recovery_error(
                 "cursor_compute_failed",
@@ -222,6 +196,86 @@ impl ViewerRuntimeLiveServer {
                 Some(verified.public_key.clone()),
             )
         })?;
+
+        let current_bound_agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .map(ToOwned::to_owned);
+        let (bound_agent_id, binding_plan) = match request
+            .requested_agent_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            Some(agent_id) => {
+                let rotates_current_binding =
+                    rotates_session_key && current_bound_agent_id.as_deref() == Some(agent_id);
+                let plan = self
+                    .plan_player_session_agent_binding(
+                        agent_id,
+                        verified.player_id.as_str(),
+                        Some(verified.public_key.as_str()),
+                        request.force_rebind || rotates_current_binding,
+                    )
+                    .map_err(|message| {
+                        recovery_error(
+                            "player_bind_failed",
+                            message,
+                            None,
+                            Some(verified.player_id.clone()),
+                            Some(verified.public_key.clone()),
+                        )
+                    })?;
+                (Some(agent_id.to_string()), Some(plan))
+            }
+            None if rotates_session_key => {
+                let bound_agent_id = current_bound_agent_id.clone();
+                let plan = match bound_agent_id.as_deref() {
+                    Some(agent_id) => Some(
+                        self.plan_player_session_agent_binding(
+                            agent_id,
+                            verified.player_id.as_str(),
+                            Some(verified.public_key.as_str()),
+                            true,
+                        )
+                        .map_err(|message| {
+                            recovery_error(
+                                "player_bind_failed",
+                                message,
+                                None,
+                                Some(verified.player_id.clone()),
+                                Some(verified.public_key.clone()),
+                            )
+                        })?,
+                    ),
+                    None => None,
+                };
+                (bound_agent_id, plan)
+            }
+            None => (current_bound_agent_id, None),
+        };
+
+        if let Some(registration_nonce) = verified.hosted_registration_nonce.as_deref() {
+            consume_registration_grant_nonce(registration_nonce).map_err(|message| {
+                recovery_error(
+                    control_plane::map_auth_verify_error_code(message.as_str()),
+                    message,
+                    None,
+                    Some(verified.player_id.clone()),
+                    Some(verified.public_key.clone()),
+                )
+            })?;
+        }
+
+        self.session_policy
+            .commit_session_registration(session_registration_plan);
+        self.llm_sidecar
+            .commit_player_auth_nonce(verified.player_id.as_str(), verified.nonce);
+        if let Some(plan) = binding_plan {
+            for event in self.llm_sidecar.apply_agent_player_binding_plan(plan) {
+                self.enqueue_virtual_event(event);
+            }
+        }
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::SessionRegistered,
             reorg_epoch: self.reorg_epoch,
@@ -587,13 +641,13 @@ impl ViewerRuntimeLiveServer {
         )
     }
 
-    fn bind_player_session_agent(
+    fn plan_player_session_agent_binding(
         &mut self,
         agent_id: &str,
         player_id: &str,
         public_key: Option<&str>,
         allow_player_rebind: bool,
-    ) -> Result<(), String> {
+    ) -> Result<RuntimePlayerBindingPlan, String> {
         if allow_player_rebind {
             if !self.world.state().agents.contains_key(agent_id) {
                 return Err(format!("agent not found: {agent_id}"));
@@ -608,15 +662,12 @@ impl ViewerRuntimeLiveServer {
             )
             .map_err(|err| err.message)?;
         }
-        for event in self.llm_sidecar.bind_agent_player(
+        self.llm_sidecar.plan_agent_player_binding(
             agent_id,
             player_id,
             public_key,
             allow_player_rebind,
-        )? {
-            self.enqueue_virtual_event(event);
-        }
-        Ok(())
+        )
     }
 }
 
