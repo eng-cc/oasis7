@@ -117,6 +117,132 @@ fn hosted_registration_persist_failure_rolls_back_binding_and_keeps_grant_retrya
 }
 
 #[test]
+fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
+    let _guard = lock_test_llm_env();
+    let replay_dir = runtime_live_temp_dir("hosted-grant-reload-key");
+    let replay_ledger = replay_dir.join("registration-replay.json");
+    let issuer_private_key = hex::encode([96_u8; 32]);
+    let issuer_public_key =
+        crate::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())
+            .expect("derive issuer public key");
+    unsafe {
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+            issuer_public_key,
+        );
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
+            replay_ledger.as_os_str(),
+        );
+    }
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let hosted_player_id = "hosted-player-account-reload-key";
+    let (old_public_key, _) = test_signer(97);
+    let (new_public_key, new_private_key) = test_signer(98);
+
+    let initial_session_plan = server
+        .session_policy
+        .validate_session_registration(hosted_player_id, old_public_key.as_str(), false)
+        .expect("plan pre-reload session");
+    server
+        .session_policy
+        .commit_session_registration(initial_session_plan);
+    server
+        .llm_sidecar
+        .bind_agent_player(
+            agent_id.as_str(),
+            hosted_player_id,
+            Some(old_public_key.as_str()),
+            false,
+        )
+        .expect("seed pre-reload player binding");
+
+    let registration_grant = crate::viewer::issue_hosted_registration_grant(
+        hosted_player_id,
+        new_public_key.as_str(),
+        "device-reload-key",
+        "nonce-reload-key",
+        test_now_unix_ms(),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue refreshed registration grant");
+    let request = |auth_nonce| {
+        signed_session_register_request(
+            crate::viewer::AuthoritativeSessionRegisterRequest {
+                player_id: hosted_player_id.to_string(),
+                public_key: None,
+                registration_grant: Some(registration_grant.clone()),
+                auth: None,
+                requested_agent_id: Some(agent_id.clone()),
+                force_rebind: false,
+            },
+            auth_nonce,
+            new_public_key.as_str(),
+            new_private_key.as_str(),
+        )
+    };
+
+    let (ack, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(2),
+        })
+        .expect("authenticated refresh grant should rotate the browser reload key");
+    assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
+    assert_eq!(ack.player_id.as_deref(), Some(hosted_player_id));
+    assert_eq!(ack.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key(hosted_player_id, old_public_key.as_str())
+            .is_err(),
+        "the pre-reload key must no longer authorize the hosted session"
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key(hosted_player_id, new_public_key.as_str())
+            .is_ok(),
+        "the refreshed browser key must become the active session key"
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .get(agent_id.as_str())
+            .map(String::as_str),
+        Some(new_public_key.as_str()),
+        "the existing player/agent binding must rotate to the refreshed browser key"
+    );
+
+    let replay_error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(3),
+        })
+        .expect_err("a committed reload grant must remain single use");
+    assert_eq!(replay_error.code, "auth_invalid");
+    assert!(replay_error.message.contains("registration grant replay"));
+
+    unsafe {
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
+    }
+    let _ = std::fs::remove_dir_all(replay_dir);
+}
+
+#[test]
 fn runtime_agent_chat_rejects_intent_seq_conflict_on_payload_change() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

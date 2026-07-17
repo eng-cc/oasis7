@@ -159,11 +159,12 @@ impl ViewerRuntimeLiveServer {
                 request.public_key.clone(),
             )
         })?;
-        let session_epoch = match self.session_policy.validate_session_registration(
+        let session_registration_plan = match self.session_policy.validate_session_registration(
             verified.player_id.as_str(),
             verified.public_key.as_str(),
+            verified.hosted_registration_nonce.is_some(),
         ) {
-            Ok(session_epoch) => session_epoch,
+            Ok(plan) => plan,
             Err(message) => {
                 return Err(self.recovery_error_from_session_policy(
                     message,
@@ -172,6 +173,8 @@ impl ViewerRuntimeLiveServer {
                 ));
             }
         };
+        let session_epoch = session_registration_plan.session_epoch();
+        let rotates_session_key = session_registration_plan.rotates_key();
         self.llm_sidecar
             .validate_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
             .map_err(|message| {
@@ -206,7 +209,7 @@ impl ViewerRuntimeLiveServer {
                         agent_id,
                         verified.player_id.as_str(),
                         Some(verified.public_key.as_str()),
-                        request.force_rebind,
+                        request.force_rebind || rotates_session_key,
                     )
                     .map_err(|message| {
                         recovery_error(
@@ -218,6 +221,33 @@ impl ViewerRuntimeLiveServer {
                         )
                     })?;
                 (Some(agent_id.to_string()), Some(plan))
+            }
+            None if rotates_session_key => {
+                let bound_agent_id = self
+                    .llm_sidecar
+                    .bound_agent_for_player(verified.player_id.as_str())
+                    .map(ToOwned::to_owned);
+                let plan = match bound_agent_id.as_deref() {
+                    Some(agent_id) => Some(
+                        self.plan_player_session_agent_binding(
+                            agent_id,
+                            verified.player_id.as_str(),
+                            Some(verified.public_key.as_str()),
+                            true,
+                        )
+                        .map_err(|message| {
+                            recovery_error(
+                                "player_bind_failed",
+                                message,
+                                None,
+                                Some(verified.player_id.clone()),
+                                Some(verified.public_key.clone()),
+                            )
+                        })?,
+                    ),
+                    None => None,
+                };
+                (bound_agent_id, plan)
             }
             None => (
                 self.llm_sidecar
@@ -240,7 +270,7 @@ impl ViewerRuntimeLiveServer {
         }
 
         self.session_policy
-            .commit_session_registration(verified.player_id.as_str(), verified.public_key.as_str());
+            .commit_session_registration(session_registration_plan);
         self.llm_sidecar
             .commit_player_auth_nonce(verified.player_id.as_str(), verified.nonce);
         if let Some(plan) = binding_plan {
