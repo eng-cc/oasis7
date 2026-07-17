@@ -2151,7 +2151,7 @@ verify_required_node_local_bundle_artifacts() {{
       # location is the running chain's mutable world. Require that the live
       # world remains a directory without comparing it to bootstrap-era tree
       # metadata; immutable generated artifacts remain hash-checked below.
-      [[ -d "$local_path" ]] || return 1
+      [[ -d "$local_path" && ! -L "$local_path" ]] || return 1
       continue
     fi
     if [[ "$kind" == directory ]]; then

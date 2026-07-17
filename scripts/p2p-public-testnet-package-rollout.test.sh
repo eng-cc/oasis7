@@ -1750,6 +1750,35 @@ PY2
         else:
             missing_path.write_bytes(saved_bytes)
 
+    world_real = node_root / "world.real"
+    world.rename(world_real)
+    outside_world = tmp / "outside-world"
+    outside_world.mkdir()
+    (outside_world / "snapshot.json").write_text("outside snapshot\n", encoding="utf-8")
+    (outside_world / "journal.json").write_text("outside journal\n", encoding="utf-8")
+    world.symlink_to(outside_world, target_is_directory=True)
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    symlinked_world = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env
+    )
+    assert symlinked_world.returncode != 0 and "required node-local artifacts invalid" in symlinked_world.stderr
+    assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, (
+        "symlinked world must fail before launchd stop"
+    )
+    world.unlink()
+
+    world.write_text("not a directory\n", encoding="utf-8")
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    file_world = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env
+    )
+    assert file_world.returncode != 0 and "required node-local artifacts invalid" in file_world.stderr
+    assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, (
+        "regular-file world must fail before launchd stop"
+    )
+    world.unlink()
+    world_real.rename(world)
+
     # The live world is mutable chain state: it may advance after the governed
     # bootstrap snapshot was created, so its bootstrap tree metadata is
     # provenance rather than a preflight equality constraint.
