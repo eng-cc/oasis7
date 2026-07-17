@@ -292,6 +292,11 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
     restarted_server.world = restored.world;
     restarted_server.rollback_readiness = generation.rollback_readiness;
     restarted_server.consumed_strict_audit_nonces = generation.consumed_strict_audit_nonces;
+    manifest_binding_tests::assert_rogue_manifest_rejected_before_restart_readiness_mutation(
+        &restarted_server,
+        &audit_evidence,
+        &governance,
+    );
     let replay = restarted_server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),

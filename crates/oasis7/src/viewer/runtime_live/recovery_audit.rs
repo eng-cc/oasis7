@@ -49,6 +49,11 @@ fn verify_manifest_matches_active_registry(
             crate::runtime::RollbackAuthorityRole::Governance,
         ),
     ];
+    if entries.len() != expected.len() {
+        return Err(
+            "strict audit manifest must exactly match rollback authority slots".to_string(),
+        );
+    }
     let registry = &world.snapshot().rollback_authority_registry;
     if registry.len() != expected.len() {
         return Err("strict audit manifest does not match active rollback registry".to_string());

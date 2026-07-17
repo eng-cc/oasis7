@@ -22,6 +22,83 @@ pub(super) fn assert_manifest_identity_mismatches_stay_blocked(
     stale.audit_report_bytes = serde_json::to_vec(&report).expect("stale report");
     sign_mutated_evidence(&mut stale, governance);
     assert_blocked(server, stale, "stale registry receipt");
+
+    for (nonce, mutate_entries) in [
+        (
+            "audit-duplicate-manifest-entry",
+            duplicate_first_manifest_entry as fn(&mut Vec<serde_json::Value>),
+        ),
+        (
+            "audit-rogue-extra-manifest-entry",
+            push_rogue_manifest_entry,
+        ),
+    ] {
+        let mut evidence = audit_evidence.clone();
+        evidence.nonce = nonce.to_string();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&evidence.manifest_bytes).expect("manifest document");
+        mutate_entries(
+            manifest["entries"]
+                .as_array_mut()
+                .expect("manifest entries"),
+        );
+        evidence.manifest_bytes = serde_json::to_vec(&manifest).expect("mutated manifest");
+        let mut report: serde_json::Value =
+            serde_json::from_slice(&evidence.audit_report_bytes).expect("audit report");
+        report["audited_manifest_digest"] = serde_json::Value::String(
+            crate::viewer::strict_audit_manifest_digest(&evidence.manifest_bytes),
+        );
+        evidence.audit_report_bytes = serde_json::to_vec(&report).expect("mutated report");
+        sign_mutated_evidence(&mut evidence, governance);
+        assert_blocked(server, evidence, "non-canonical full-set receipt");
+    }
+}
+
+fn duplicate_first_manifest_entry(entries: &mut Vec<serde_json::Value>) {
+    entries.push(entries.first().expect("first manifest entry").clone());
+}
+
+fn push_rogue_manifest_entry(entries: &mut Vec<serde_json::Value>) {
+    entries.push(serde_json::json!({
+        "slot_id": "governance.rollback.stale.v0",
+        "signer_id": "retired-governance",
+        "scheme": "ed25519",
+        "public_key_hex": "00".repeat(32),
+        "threshold": 1
+    }));
+}
+
+pub(super) fn assert_rogue_manifest_rejected_before_restart_readiness_mutation(
+    server: &ViewerRuntimeLiveServer,
+    audit_evidence: &crate::viewer::protocol::RollbackStrictAuditEvidence,
+    governance: &ed25519_dalek::SigningKey,
+) {
+    let mut evidence = audit_evidence.clone();
+    evidence.nonce = "audit-restarted-rogue-extra-manifest-entry".to_string();
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&evidence.manifest_bytes).expect("manifest document");
+    push_rogue_manifest_entry(
+        manifest["entries"]
+            .as_array_mut()
+            .expect("manifest entries"),
+    );
+    evidence.manifest_bytes = serde_json::to_vec(&manifest).expect("mutated manifest");
+    let mut report: serde_json::Value =
+        serde_json::from_slice(&evidence.audit_report_bytes).expect("audit report");
+    report["audited_manifest_digest"] = serde_json::Value::String(
+        crate::viewer::strict_audit_manifest_digest(&evidence.manifest_bytes),
+    );
+    evidence.audit_report_bytes = serde_json::to_vec(&report).expect("mutated report");
+    sign_mutated_evidence(&mut evidence, governance);
+    assert!(
+        crate::viewer::runtime_live::recovery_audit::verify_strict_audit_evidence(
+            &server.world,
+            &evidence,
+            crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms(),
+        )
+        .is_err(),
+        "restarted verifier must reject rogue manifest before readiness mutation"
+    );
 }
 
 fn sign_mutated_evidence(
