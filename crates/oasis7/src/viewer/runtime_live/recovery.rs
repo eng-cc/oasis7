@@ -159,10 +159,10 @@ impl ViewerRuntimeLiveServer {
                 request.public_key.clone(),
             )
         })?;
-        let session_epoch = match self
-            .session_policy
-            .register_session(verified.player_id.as_str(), verified.public_key.as_str())
-        {
+        let session_epoch = match self.session_policy.validate_session_registration(
+            verified.player_id.as_str(),
+            verified.public_key.as_str(),
+        ) {
             Ok(session_epoch) => session_epoch,
             Err(message) => {
                 return Err(self.recovery_error_from_session_policy(
@@ -173,7 +173,7 @@ impl ViewerRuntimeLiveServer {
             }
         };
         self.llm_sidecar
-            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
+            .validate_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
             .map_err(|message| {
                 recovery_error(
                     "auth_nonce_replay",
@@ -239,6 +239,10 @@ impl ViewerRuntimeLiveServer {
             })?;
         }
 
+        self.session_policy
+            .commit_session_registration(verified.player_id.as_str(), verified.public_key.as_str());
+        self.llm_sidecar
+            .commit_player_auth_nonce(verified.player_id.as_str(), verified.nonce);
         if let Some(plan) = binding_plan {
             for event in self.llm_sidecar.apply_agent_player_binding_plan(plan) {
                 self.enqueue_virtual_event(event);

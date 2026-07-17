@@ -82,6 +82,21 @@ fn hosted_registration_persist_failure_rolls_back_binding_and_keeps_grant_retrya
         None,
         "failed registration must roll back the committed binding"
     );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key(hosted_player_id, hosted_public_key.as_str())
+            .is_err(),
+        "failed registration must not commit the active session key"
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get(hosted_player_id),
+        None,
+        "failed registration must not consume the request auth nonce"
+    );
 
     std::fs::set_permissions(&replay_dir, std::fs::Permissions::from_mode(0o700))
         .expect("restore replay directory permissions");

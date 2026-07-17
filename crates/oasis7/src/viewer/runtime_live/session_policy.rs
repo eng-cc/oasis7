@@ -24,8 +24,8 @@ pub(super) struct RuntimeSessionPolicy {
 }
 
 impl RuntimeSessionPolicy {
-    pub(super) fn register_session(
-        &mut self,
+    pub(super) fn validate_session_registration(
+        &self,
         player_id: &str,
         public_key: &str,
     ) -> Result<u64, String> {
@@ -56,16 +56,20 @@ impl RuntimeSessionPolicy {
                     player_id, active, public_key
                 ));
             }
-            None => {
-                self.active_pubkey_by_player
-                    .insert(player_id.to_string(), public_key.to_string());
-                self.session_epoch_by_player
-                    .entry(player_id.to_string())
-                    .or_insert(1);
-            }
+            None => return Ok(1),
         }
 
         Ok(self.session_epoch(player_id))
+    }
+
+    pub(super) fn commit_session_registration(&mut self, player_id: &str, public_key: &str) {
+        let player_id = player_id.trim();
+        self.active_pubkey_by_player
+            .entry(player_id.to_string())
+            .or_insert_with(|| public_key.trim().to_string());
+        self.session_epoch_by_player
+            .entry(player_id.to_string())
+            .or_insert(1);
     }
 
     pub(super) fn validate_known_session_key(

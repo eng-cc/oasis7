@@ -359,6 +359,16 @@ impl RuntimeLlmSidecar {
         player_id: &str,
         nonce: u64,
     ) -> Result<(), String> {
+        self.validate_player_auth_nonce(player_id, nonce)?;
+        self.commit_player_auth_nonce(player_id, nonce);
+        Ok(())
+    }
+
+    pub(in crate::viewer::runtime_live) fn validate_player_auth_nonce(
+        &self,
+        player_id: &str,
+        nonce: u64,
+    ) -> Result<(), String> {
         let player_id = player_id.trim();
         if player_id.is_empty() {
             return Err("player_id cannot be empty".to_string());
@@ -374,9 +384,16 @@ impl RuntimeLlmSidecar {
                 ));
             }
         }
-        self.player_auth_last_nonce
-            .insert(player_id.to_string(), nonce);
         Ok(())
+    }
+
+    pub(in crate::viewer::runtime_live) fn commit_player_auth_nonce(
+        &mut self,
+        player_id: &str,
+        nonce: u64,
+    ) {
+        self.player_auth_last_nonce
+            .insert(player_id.trim().to_string(), nonce);
     }
 
     pub(super) fn find_chat_intent_replay(
