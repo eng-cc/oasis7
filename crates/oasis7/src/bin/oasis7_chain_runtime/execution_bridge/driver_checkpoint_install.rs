@@ -58,7 +58,7 @@ enum CheckpointInstallTransactionPhase {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct CheckpointInstallTransaction {
+pub(super) struct CheckpointInstallTransaction {
     phase: CheckpointInstallTransactionPhase,
     transaction_id: String,
     height: u64,
@@ -349,13 +349,15 @@ fn remove_checkpoint_install_transaction(records_dir: &Path) -> Result<(), Strin
     remove_file_durable(CheckpointInstallTransaction::path(records_dir).as_path())
 }
 
-pub(super) fn recover_checkpoint_install_transaction(
-    driver: &mut NodeRuntimeExecutionDriver,
-) -> Result<(), String> {
-    let path = CheckpointInstallTransaction::path(driver.records_dir.as_path());
+pub(super) fn load_checkpoint_install_transaction(
+    records_dir: &Path,
+) -> Result<Option<CheckpointInstallTransaction>, String> {
+    #[cfg(test)]
+    CHECKPOINT_INSTALL_TRANSACTION_LOAD_COUNT.with(|count| count.set(count.get() + 1));
+    let path = CheckpointInstallTransaction::path(records_dir);
     let metadata = match fs::symlink_metadata(path.as_path()) {
         Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => {
             return Err(format!(
                 "read checkpoint install transaction metadata failed: {err}"
@@ -380,6 +382,16 @@ pub(super) fn recover_checkpoint_install_transaction(
     )
     .map_err(|err| format!("parse checkpoint install transaction failed: {err}"))?;
     transaction.validate()?;
+    Ok(Some(transaction))
+}
+
+pub(super) fn recover_checkpoint_install_transaction(
+    driver: &mut NodeRuntimeExecutionDriver,
+    transaction: Option<CheckpointInstallTransaction>,
+) -> Result<(), String> {
+    let Some(transaction) = transaction else {
+        return Ok(());
+    };
     if transaction.phase == CheckpointInstallTransactionPhase::Prepared {
         transaction.restore(driver)?;
         driver.state = transaction.previous_state.clone();
@@ -453,6 +465,23 @@ pub(super) enum CheckpointInstallFault {
 static CHECKPOINT_INSTALL_FAULT: std::sync::Mutex<
     Vec<(std::thread::ThreadId, CheckpointInstallFault)>,
 > = std::sync::Mutex::new(Vec::new());
+
+#[cfg(test)]
+thread_local! {
+    static CHECKPOINT_INSTALL_TRANSACTION_LOAD_COUNT: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+pub(super) fn reset_checkpoint_install_transaction_load_count_for_test() {
+    CHECKPOINT_INSTALL_TRANSACTION_LOAD_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(super) fn checkpoint_install_transaction_load_count_for_test() -> usize {
+    CHECKPOINT_INSTALL_TRANSACTION_LOAD_COUNT.with(std::cell::Cell::get)
+}
 
 #[cfg(test)]
 pub(super) fn set_checkpoint_install_fault_for_test(fault: Option<CheckpointInstallFault>) {

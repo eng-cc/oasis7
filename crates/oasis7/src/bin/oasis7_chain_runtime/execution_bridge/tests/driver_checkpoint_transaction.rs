@@ -4,7 +4,9 @@ use super::super::checkpoint::{
 };
 use super::super::driver::{NodeRuntimeExecutionDriver, load_execution_bridge_state};
 use super::super::driver_checkpoint_install::{
-    CheckpointInstallFault, set_checkpoint_install_fault_for_test,
+    CheckpointInstallFault, checkpoint_install_transaction_load_count_for_test,
+    reset_checkpoint_install_transaction_load_count_for_test,
+    set_checkpoint_install_fault_for_test,
 };
 use super::*;
 use oasis7_node::{
@@ -12,6 +14,80 @@ use oasis7_node::{
     compute_consensus_action_root,
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StartupPublicationEntry {
+    Directory(std::path::PathBuf),
+    File(std::path::PathBuf, Vec<u8>),
+    Symlink(std::path::PathBuf, std::path::PathBuf),
+}
+
+fn snapshot_startup_publication_tree(root: &std::path::Path) -> Vec<StartupPublicationEntry> {
+    fn visit(
+        root: &std::path::Path,
+        path: &std::path::Path,
+        entries: &mut Vec<StartupPublicationEntry>,
+    ) {
+        let relative = path
+            .strip_prefix(root)
+            .expect("startup publication path must remain below root")
+            .to_path_buf();
+        let metadata = fs::symlink_metadata(path).expect("read startup publication metadata");
+        if metadata.file_type().is_symlink() {
+            entries.push(StartupPublicationEntry::Symlink(
+                relative,
+                fs::read_link(path).expect("read startup publication symlink"),
+            ));
+            return;
+        }
+        if metadata.is_file() {
+            entries.push(StartupPublicationEntry::File(
+                relative,
+                fs::read(path).expect("read startup publication file"),
+            ));
+            return;
+        }
+        assert!(
+            metadata.is_dir(),
+            "unexpected startup publication entry: {path:?}"
+        );
+        entries.push(StartupPublicationEntry::Directory(relative));
+        let mut children = fs::read_dir(path)
+            .expect("read startup publication directory")
+            .map(|entry| entry.expect("read startup publication child").path())
+            .collect::<Vec<_>>();
+        children.sort();
+        for child in children {
+            visit(root, child.as_path(), entries);
+        }
+    }
+
+    let mut entries = Vec::new();
+    visit(root, root, &mut entries);
+    entries
+}
+
+fn startup_publication_tree_digest(entries: &[StartupPublicationEntry]) -> String {
+    oasis7::runtime::blake3_hex(format!("{entries:?}").as_bytes())
+}
+
+fn syntactically_valid_checkpoint_install_marker() -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "phase": "Prepared",
+        "transaction_id": "marker-target",
+        "height": 1,
+        "previous_state": super::super::ExecutionBridgeState::default(),
+        "world_was_present": true,
+        "backups": [
+            { "artifact": "State", "bytes": null },
+            { "artifact": "Record", "bytes": null },
+            { "artifact": "LatestRecord", "bytes": null },
+            { "artifact": "Manifest", "bytes": null },
+            { "artifact": "LatestManifest", "bytes": null }
+        ]
+    }))
+    .expect("serialize valid checkpoint install marker")
+}
 
 fn assert_checkpoint_install_marker_startup_failure_preserves_publication<F>(
     prefix: &str,
@@ -51,14 +127,12 @@ fn assert_checkpoint_install_marker_startup_failure_preserves_publication<F>(
 
     let marker = records_dir.join("checkpoint-install-transaction.json");
     install_marker(marker.as_path());
-    let state_bytes = fs::read(state_path.as_path()).expect("state bytes before startup");
-    let snapshot_bytes =
-        fs::read(world_dir.join("snapshot.json")).expect("snapshot bytes before startup");
-    let journal_bytes =
-        fs::read(world_dir.join("journal.json")).expect("journal bytes before startup");
-    let latest_bytes =
-        fs::read(records_dir.join("latest.json")).expect("latest bytes before startup");
+    fs::remove_file(world_dir.join("journal.json"))
+        .expect("create partial world persistence before startup");
+    let before = snapshot_startup_publication_tree(dir.as_path());
+    let before_digest = startup_publication_tree_digest(before.as_slice());
 
+    reset_checkpoint_install_transaction_load_count_for_test();
     let err = match NodeRuntimeExecutionDriver::new_with_storage_profile(
         state_path.clone(),
         world_dir.clone(),
@@ -74,20 +148,18 @@ fn assert_checkpoint_install_marker_startup_failure_preserves_publication<F>(
         "unexpected startup error: {err}"
     );
     assert_eq!(
-        fs::read(state_path).expect("state bytes after startup"),
-        state_bytes
+        checkpoint_install_transaction_load_count_for_test(),
+        1,
+        "startup must load and validate the transaction marker exactly once"
+    );
+    let after = snapshot_startup_publication_tree(dir.as_path());
+    assert_eq!(
+        startup_publication_tree_digest(after.as_slice()),
+        before_digest
     );
     assert_eq!(
-        fs::read(world_dir.join("snapshot.json")).expect("snapshot bytes after startup"),
-        snapshot_bytes
-    );
-    assert_eq!(
-        fs::read(world_dir.join("journal.json")).expect("journal bytes after startup"),
-        journal_bytes
-    );
-    assert_eq!(
-        fs::read(records_dir.join("latest.json")).expect("latest bytes after startup"),
-        latest_bytes
+        after, before,
+        "startup must not mutate the publication tree"
     );
 
     let _ = fs::remove_dir_all(dir);
@@ -112,7 +184,7 @@ fn node_runtime_execution_driver_startup_rejects_checkpoint_install_marker_symli
     for (name, target, expected_target) in [
         (
             "execution-driver-valid-checkpoint-install-marker-symlink",
-            Some(b"not-json".as_slice()),
+            Some(syntactically_valid_checkpoint_install_marker()),
             "marker-target.json",
         ),
         (
@@ -126,7 +198,7 @@ fn node_runtime_execution_driver_startup_rejects_checkpoint_install_marker_symli
             "symbolic link",
             |marker| {
                 let target_path = marker.with_file_name(expected_target);
-                if let Some(target) = target {
+                if let Some(target) = target.as_deref() {
                     fs::write(target_path.as_path(), target).expect("write marker target");
                 }
                 symlink(target_path.as_path(), marker).expect("create marker symlink");
@@ -258,6 +330,7 @@ fn node_runtime_execution_driver_checkpoint_install_startup_rolls_back_after_fin
     let restart_state_path = state_path.clone();
     let restart_world_dir = world_dir.clone();
     let restart_records_dir = records_dir.clone();
+    reset_checkpoint_install_transaction_load_count_for_test();
     let mut restarted = NodeRuntimeExecutionDriver::new_with_storage_profile(
         state_path,
         world_dir,
@@ -266,6 +339,7 @@ fn node_runtime_execution_driver_checkpoint_install_startup_rolls_back_after_fin
         &storage_profile,
     )
     .expect("restart must roll back final-state-persist checkpoint publication");
+    assert_eq!(checkpoint_install_transaction_load_count_for_test(), 1);
     assert_eq!(restarted.state.last_applied_committed_height, 1);
     assert_eq!(restarted.state, original_state);
     assert_eq!(restarted.execution_world.state(), &original_world_state);
@@ -312,6 +386,7 @@ fn node_runtime_execution_driver_checkpoint_install_startup_rolls_back_after_fin
         "Committed"
     );
     drop(restarted);
+    reset_checkpoint_install_transaction_load_count_for_test();
     let mut restarted = NodeRuntimeExecutionDriver::new_with_storage_profile(
         restart_state_path,
         restart_world_dir,
@@ -320,6 +395,7 @@ fn node_runtime_execution_driver_checkpoint_install_startup_rolls_back_after_fin
         &storage_profile,
     )
     .expect("restart must finalize a durable Committed marker");
+    assert_eq!(checkpoint_install_transaction_load_count_for_test(), 1);
     assert_eq!(restarted.state.last_applied_committed_height, 2);
     assert!(
         !records_dir

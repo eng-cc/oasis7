@@ -253,6 +253,10 @@ impl NodeRuntimeExecutionDriver {
         storage_root: std::path::PathBuf,
         storage_profile: &StorageProfileConfig,
     ) -> Result<Self, String> {
+        let checkpoint_install_transaction =
+            super::driver_checkpoint_install::load_checkpoint_install_transaction(
+                records_dir.as_path(),
+            )?;
         promote_interrupted_execution_bridge_retention(records_dir.as_path())?;
         let state = load_execution_bridge_state(state_path.as_path())?;
         let release_security_policy =
@@ -277,7 +281,10 @@ impl NodeRuntimeExecutionDriver {
             storage_profile.execution_checkpoint_interval,
             storage_profile.execution_checkpoint_keep as usize,
         );
-        super::driver_checkpoint_install::recover_checkpoint_install_transaction(&mut driver)?;
+        super::driver_checkpoint_install::recover_checkpoint_install_transaction(
+            &mut driver,
+            checkpoint_install_transaction,
+        )?;
         remove_partial_execution_world_persistence_files(driver.simulator_world_dir.as_path())?;
         let simulator_world_bootstrap_required =
             execution_world_persistence_files_missing(driver.simulator_world_dir.as_path());
