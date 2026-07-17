@@ -1750,8 +1750,53 @@ PY2
         else:
             missing_path.write_bytes(saved_bytes)
 
+    world_real = node_root / "world.real"
+    world.rename(world_real)
+    outside_world = tmp / "outside-world"
+    outside_world.mkdir()
+    (outside_world / "snapshot.json").write_text("outside snapshot\n", encoding="utf-8")
+    (outside_world / "journal.json").write_text("outside journal\n", encoding="utf-8")
+    world.symlink_to(outside_world, target_is_directory=True)
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    symlinked_world = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env
+    )
+    assert symlinked_world.returncode != 0 and "required node-local artifacts invalid" in symlinked_world.stderr
+    assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, (
+        "symlinked world must fail before launchd stop"
+    )
+    world.unlink()
+
+    world.write_text("not a directory\n", encoding="utf-8")
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    file_world = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True, env=rollout_env
+    )
+    assert file_world.returncode != 0 and "required node-local artifacts invalid" in file_world.stderr
+    assert launch_log.read_text(encoding="utf-8").count("bootout") == bootout_count_before, (
+        "regular-file world must fail before launchd stop"
+    )
+    world.unlink()
+    world_real.rename(world)
+
+    # The live world is mutable chain state: it may advance after the governed
+    # bootstrap snapshot was created, so its bootstrap tree metadata is
+    # provenance rather than a preflight equality constraint.
+    (world / "post-bootstrap-state.json").write_text("evolved live world\n", encoding="utf-8")
+    bootout_count_before = launch_log.read_text(encoding="utf-8").count("bootout")
+    evolved_world = subprocess.run(
+        ["bash", str(generated), str(dmg)], text=True, capture_output=True,
+        env={**rollout_env, "FIXTURE_FAIL_METADATA_PROMOTION": "1"},
+    )
+    assert evolved_world.returncode != 0 and "required node-local artifacts invalid" not in evolved_world.stderr, (
+        "evolved mutable live world must pass bootstrap integrity preflight: "
+        f"stdout={evolved_world.stdout!r} stderr={evolved_world.stderr!r}"
+    )
+    assert "rollback_begin=true reason=fatal_error" in evolved_world.stdout
+    assert launch_log.read_text(encoding="utf-8").count("bootout") > bootout_count_before
+    assert_preupgrade_restored("evolved mutable world rollback")
+
     for tamper_path, label in (
-        (world / "snapshot.json", "world_snapshot"),
         (sidecar / "journal.json", "generated_world_sidecar"),
         (provenance, "world_generation_provenance"),
         (governance, "governance_manifest"),

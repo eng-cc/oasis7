@@ -2146,6 +2146,14 @@ verify_required_node_local_bundle_artifacts() {{
     esac
     local_path="$NODE_ROOT/$(node_local_bundle_artifact_relative_path "$key")" || return 1
     [[ -e "$local_path" ]] || return 1
+    if [[ "$key" == world_snapshot ]]; then
+      # world_snapshot records the governed bootstrap tree, but this node-local
+      # location is the running chain's mutable world. Require that the live
+      # world remains a directory without comparing it to bootstrap-era tree
+      # metadata; immutable generated artifacts remain hash-checked below.
+      [[ -d "$local_path" && ! -L "$local_path" ]] || return 1
+      continue
+    fi
     if [[ "$kind" == directory ]]; then
       [[ -f "$local_path/snapshot.json" && -f "$local_path/journal.json" ]] || return 1
       expected_hash="$(plutil -extract "$key.sha256_tree" raw -expect string -o - "$source")" || return 1
