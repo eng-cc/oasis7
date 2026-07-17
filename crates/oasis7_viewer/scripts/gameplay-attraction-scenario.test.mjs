@@ -16,6 +16,30 @@ function assertCardShape(card) {
   assert.ok(card.no_op_or_follow_up_route);
 }
 
+const ROLLBACK_QUOTE_FIELDS = [
+  "rollback_deadline_beat",
+  "rollback_cost_summary",
+  "rollback_kept_benefit",
+  "rollback_lost_benefit",
+];
+
+function assertCompleteRollbackQuote(routeTradeoff, label) {
+  assert.equal(routeTradeoff.rollback_available, true, `${label} must expose an available rollback`);
+  for (const field of ROLLBACK_QUOTE_FIELDS) {
+    assert.equal(
+      typeof routeTradeoff[field],
+      "string",
+      `${label} ${field} must be player-readable text`,
+    );
+    assert.ok(routeTradeoff[field].trim(), `${label} ${field} must not be empty`);
+    assert.doesNotMatch(
+      routeTradeoff[field],
+      /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/,
+      `${label} ${field} must not expose an internal snake_case identifier`,
+    );
+  }
+}
+
 const evidence = buildTaskGame076AttractionEvidence();
 
 assert.equal(evidence.task, "TASK-GAME-076");
@@ -79,6 +103,14 @@ assert.notEqual(
   evidence.route_branch_regression.accelerate.midrun_visible_metric_delta,
   evidence.route_branch_regression.stabilize.midrun_visible_metric_delta,
 );
+assertCompleteRollbackQuote(
+  evidence.route_branch_regression.accelerate,
+  "accelerate route rollback quote",
+);
+assertCompleteRollbackQuote(
+  evidence.route_branch_regression.stabilize,
+  "stabilize route rollback quote",
+);
 const firstVisibleOutput = evidence.raw_snapshots.find(
   (snapshot) => snapshot.task_game_076_scenario?.variant === "first_visible_output",
 );
@@ -95,6 +127,10 @@ assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.midrun_feedback);
 assert.equal(firstVisibleOutput.player_gameplay.route_tradeoff.midrun_feedback.timing, "before_incident_recovery");
 assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.visible_consequence_text);
 assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.forecast_delta_text);
+assertCompleteRollbackQuote(
+  firstVisibleOutput.player_gameplay.route_tradeoff,
+  "first-visible route rollback quote",
+);
 const returnPackage = evidence.raw_snapshots.find(
   (snapshot) => snapshot.task_game_076_scenario?.variant === "return_package",
 );
@@ -132,6 +168,104 @@ assert.equal(evidence.weak_sample_regression.status, "pass");
 assert.equal(evidence.weak_sample_regression.detected_verdict, "progression_pass_but_attraction_weak");
 assert.equal(evidence.boredom_negative_regression.status, "pass");
 assert.equal(evidence.boredom_negative_regression.detected_status, "attraction_weak");
+
+for (const field of ROLLBACK_QUOTE_FIELDS) {
+  for (const mutation of ["delete", "blank"]) {
+    const invalidRollbackSamples = structuredClone(evidence.raw_snapshots);
+    const quotedRoute = invalidRollbackSamples.find(
+      (snapshot) => snapshot.player_gameplay?.route_tradeoff?.rollback_available === true,
+    );
+    assert.ok(quotedRoute, `negative fixture for ${field}/${mutation} requires a true rollback offer`);
+    if (mutation === "delete") {
+      delete quotedRoute.player_gameplay.route_tradeoff[field];
+    } else {
+      quotedRoute.player_gameplay.route_tradeoff[field] = "   ";
+    }
+    const invalidRollbackEvidence = buildTaskGame076AttractionEvidence({
+      samples: invalidRollbackSamples,
+    });
+    assert.equal(
+      invalidRollbackEvidence.second_run_design_card.status,
+      "second_run_hook_weak",
+      `${field}/${mutation} must fail the design gate`,
+    );
+    assert.ok(
+      invalidRollbackEvidence.second_run_design_card.missing.includes("route_rollback_quote_missing"),
+      `${field}/${mutation} must identify the incomplete rollback quote`,
+    );
+  }
+}
+
+for (const field of ROLLBACK_QUOTE_FIELDS) {
+  const internalRouteIdSamples = structuredClone(evidence.raw_snapshots);
+  const quotedRoute = internalRouteIdSamples.find(
+    (snapshot) => snapshot.player_gameplay?.route_tradeoff?.rollback_available === true,
+  );
+  assert.ok(quotedRoute, `negative fixture for ${field}/internal_route_choice_id requires a true rollback offer`);
+  quotedRoute.player_gameplay.route_tradeoff[field] = "internal_route_choice_id";
+  const internalRouteIdEvidence = buildTaskGame076AttractionEvidence({
+    samples: internalRouteIdSamples,
+  });
+  assert.equal(
+    internalRouteIdEvidence.second_run_design_card.status,
+    "second_run_hook_weak",
+    `${field}/internal_route_choice_id must fail the design gate`,
+  );
+  assert.ok(
+    internalRouteIdEvidence.second_run_design_card.missing.includes("route_rollback_quote_missing"),
+    `${field}/internal_route_choice_id must identify the player-unreadable rollback quote`,
+  );
+}
+
+for (const field of ROLLBACK_QUOTE_FIELDS) {
+  const dottedRouteIdSamples = structuredClone(evidence.raw_snapshots);
+  const quotedRoute = dottedRouteIdSamples.find(
+    (snapshot) => snapshot.player_gameplay?.route_tradeoff?.rollback_available === true,
+  );
+  assert.ok(quotedRoute, `negative fixture for ${field}/route.choice requires a true rollback offer`);
+  quotedRoute.player_gameplay.route_tradeoff[field] = "route.choice";
+  const dottedRouteIdEvidence = buildTaskGame076AttractionEvidence({
+    samples: dottedRouteIdSamples,
+  });
+  assert.equal(
+    dottedRouteIdEvidence.second_run_design_card.status,
+    "second_run_hook_weak",
+    `${field}/route.choice must fail the design gate`,
+  );
+  assert.ok(
+    dottedRouteIdEvidence.second_run_design_card.missing.includes("route_rollback_quote_missing"),
+    `${field}/route.choice must identify the player-unreadable rollback quote`,
+  );
+}
+
+for (const mutation of ["delete", "null", "non_boolean"]) {
+  const invalidRollbackAvailabilitySamples = structuredClone(evidence.raw_snapshots);
+  const routeSample = invalidRollbackAvailabilitySamples.find(
+    (snapshot) => snapshot.player_gameplay?.route_tradeoff,
+  );
+  assert.ok(routeSample, `negative fixture for rollback_available/${mutation} requires a real route sample`);
+  if (mutation === "delete") {
+    delete routeSample.player_gameplay.route_tradeoff.rollback_available;
+  } else if (mutation === "null") {
+    routeSample.player_gameplay.route_tradeoff.rollback_available = null;
+  } else {
+    routeSample.player_gameplay.route_tradeoff.rollback_available = "available";
+  }
+  const invalidRollbackAvailabilityEvidence = buildTaskGame076AttractionEvidence({
+    samples: invalidRollbackAvailabilitySamples,
+  });
+  assert.equal(
+    invalidRollbackAvailabilityEvidence.second_run_design_card.status,
+    "second_run_hook_weak",
+    `rollback_available/${mutation} must fail the design gate`,
+  );
+  assert.ok(
+    invalidRollbackAvailabilityEvidence.second_run_design_card.missing.includes(
+      "route_rollback_quote_missing",
+    ),
+    `rollback_available/${mutation} must identify the invalid rollback availability`,
+  );
+}
 
 const weakEvidence = buildTaskGame076AttractionEvidence({
   samples: [

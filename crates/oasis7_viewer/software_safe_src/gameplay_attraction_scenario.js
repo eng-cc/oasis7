@@ -125,6 +125,14 @@ function truthyText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function playerReadableText(value) {
+  return (
+    truthyText(value) &&
+    !/\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/.test(value) &&
+    !/\b[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+\b/.test(value)
+  );
+}
+
 function actionsWithChoices(playerGameplay) {
   return (playerGameplay.available_actions || []).filter((action) => !action.disabled_reason);
 }
@@ -316,6 +324,10 @@ function defaultAttractionSamples() {
             risk_delta: -2,
             stability_delta: 3,
             rollback_available: true,
+            rollback_deadline_beat: "Rollback is available until incident recovery begins.",
+            rollback_cost_summary: "Spend 1 action and give up 1 stability to reopen the route choice.",
+            rollback_kept_benefit: "Keep the Starter Batch: Alloy Plate x3 already produced.",
+            rollback_lost_benefit: "Lose the stabilized line's lower jam risk for the next incident.",
             affected_future_beats: ["micro_commission", "incident_recovery", "return_package"],
             next_commission_modifier: "starter_batch requires 1 less recovery step",
             incident_risk_modifier: "input jam risk lowered; output pace slower",
@@ -666,6 +678,18 @@ function routeSnapshot({ mode }) {
           risk_delta: isAccelerate ? 2 : -2,
           stability_delta: isAccelerate ? -1 : 3,
           rollback_available: true,
+          rollback_deadline_beat: isAccelerate
+            ? "Rollback is available until the fast plate surge order is accepted."
+            : "Rollback is available until the Edge Outpost delivery is accepted.",
+          rollback_cost_summary: isAccelerate
+            ? "Spend 1 action and forfeit 1 accelerated output to reopen the route choice."
+            : "Spend 1 action and give up 1 stability to reopen the route choice.",
+          rollback_kept_benefit: isAccelerate
+            ? "Keep 2 of the 3 accelerated output already produced."
+            : "Keep the stable starter batch already produced.",
+          rollback_lost_benefit: isAccelerate
+            ? "Lose access to the high-yield fast plate surge order."
+            : "Lose the stabilized line's lower jam risk for the next incident.",
           affected_future_beats: ["micro_commission", "incident_recovery", "return_package"],
           next_commission_modifier: isAccelerate
             ? "starter_batch gains +1 output but needs quick patch readiness"
@@ -771,6 +795,11 @@ function buildRouteBranchRegression() {
       first_action_on_return: accelerateGameplay.return_package?.first_action_on_return,
       incident_route_consequence_text: accelerateGameplay.incident_recovery?.route_consequence_text,
       midrun_visible_metric_delta: accelerateGameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta,
+      rollback_available: accelerateGameplay.route_tradeoff?.rollback_available,
+      rollback_deadline_beat: accelerateGameplay.route_tradeoff?.rollback_deadline_beat,
+      rollback_cost_summary: accelerateGameplay.route_tradeoff?.rollback_cost_summary,
+      rollback_kept_benefit: accelerateGameplay.route_tradeoff?.rollback_kept_benefit,
+      rollback_lost_benefit: accelerateGameplay.route_tradeoff?.rollback_lost_benefit,
     },
     stabilize: {
       route_commitment_id: stabilizeGameplay.route_tradeoff?.route_commitment_id,
@@ -779,12 +808,30 @@ function buildRouteBranchRegression() {
       first_action_on_return: stabilizeGameplay.return_package?.first_action_on_return,
       incident_route_consequence_text: stabilizeGameplay.incident_recovery?.route_consequence_text,
       midrun_visible_metric_delta: stabilizeGameplay.route_tradeoff?.midrun_feedback?.visible_metric_delta,
+      rollback_available: stabilizeGameplay.route_tradeoff?.rollback_available,
+      rollback_deadline_beat: stabilizeGameplay.route_tradeoff?.rollback_deadline_beat,
+      rollback_cost_summary: stabilizeGameplay.route_tradeoff?.rollback_cost_summary,
+      rollback_kept_benefit: stabilizeGameplay.route_tradeoff?.rollback_kept_benefit,
+      rollback_lost_benefit: stabilizeGameplay.route_tradeoff?.rollback_lost_benefit,
     },
   };
 }
 
 function buildSecondRunDesignCard(samples) {
   const gameplays = samples.map((sample) => sample.player_gameplay || {});
+  const rollbackQuoteFields = [
+    "rollback_deadline_beat",
+    "rollback_cost_summary",
+    "rollback_kept_benefit",
+    "rollback_lost_benefit",
+  ];
+  const rollbackQuotesComplete = gameplays
+    .filter((gameplay) => gameplay.route_tradeoff != null)
+    .every((gameplay) =>
+      gameplay.route_tradeoff.rollback_available === false ||
+      (gameplay.route_tradeoff.rollback_available === true &&
+        rollbackQuoteFields.every((field) => playerReadableText(gameplay.route_tradeoff[field]))),
+    );
   const routeTradeoffPersists = gameplays.some((gameplay) =>
     Array.isArray(gameplay.route_tradeoff?.affected_future_beats) &&
     gameplay.route_tradeoff.affected_future_beats.length >= 2 &&
@@ -814,6 +861,7 @@ function buildSecondRunDesignCard(samples) {
   if (!namedCommissionOutput) missing.push("named_commission_output");
   if (!opportunityGeneratedFromChoice) missing.push("opportunity_generated_from_choice");
   if (!choiceReflectiveReturnGoal) missing.push("choice_reflective_return_goal");
+  if (!rollbackQuotesComplete) missing.push("route_rollback_quote_missing");
   return {
     status: missing.length === 0 ? "second_run_hook_pass" : "second_run_hook_weak",
     route_tradeoff_persists_across_beats: routeTradeoffPersists,
