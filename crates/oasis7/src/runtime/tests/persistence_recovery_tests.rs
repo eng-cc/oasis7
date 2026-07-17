@@ -1112,6 +1112,53 @@ fn rollback_nonce_is_durable_and_cannot_be_replayed_through_an_old_snapshot() {
         restored_outcome
     );
 
+    let invalid_exact_retries = [
+        {
+            let mut missing = approval.clone();
+            missing.signatures.clear();
+            (missing, ROLLBACK_NOW_MS, false)
+        },
+        {
+            let mut forged = approval.clone();
+            for signature in &mut forged.signatures {
+                signature.signature_hex = "00".repeat(64);
+            }
+            (forged, ROLLBACK_NOW_MS, false)
+        },
+        (approval.clone(), approval.intent.expires_at_ms + 1, false),
+        (approval.clone(), ROLLBACK_NOW_MS, true),
+    ];
+    for (invalid_approval, verification_time_ms, rotate) in invalid_exact_retries {
+        if rotate {
+            world
+                .set_rollback_authority_registry(rollback_authority_registry(
+                    &rollback_test_key(11),
+                    &rollback_test_key(13),
+                ))
+                .expect("rotate rollback authorities");
+        }
+        let observed = |world: &World| {
+            (
+                world.snapshot(),
+                world.journal().clone(),
+                world.rollback_nonce_outcome("nonce-durable-1"),
+                world.rollback_readiness("nonce-durable-1", &affected, &readiness_evidence),
+                world.rollback_receipt_projection("nonce-durable-1"),
+            )
+        };
+        let before = observed(&world);
+        world
+            .rollback_to_snapshot(
+                old_snapshot.clone(),
+                old_journal.clone(),
+                "durable-replay-test",
+                None,
+                invalid_approval,
+                verification_time_ms,
+            )
+            .expect_err("invalid exact retry must not return committed success");
+        assert_eq!(observed(&world), before, "committed state mutated");
+    }
     let mut altered = approval;
     altered.intent.reason = "altered-intent".to_string();
     let error = world

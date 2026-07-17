@@ -689,14 +689,20 @@ impl World {
         };
         let supplied_intent_hash = sha256_hex(&canonical_payload);
         if let Some(committed) = self.rollback_nonce_outcomes.get(&approval.intent.nonce) {
-            if committed.canonical_intent_hash == supplied_intent_hash {
-                return Ok(());
+            if committed.canonical_intent_hash != supplied_intent_hash {
+                return Err(WorldError::RollbackNonceConflict {
+                    nonce: approval.intent.nonce.clone(),
+                    committed_intent_hash: committed.canonical_intent_hash.clone(),
+                    supplied_intent_hash,
+                });
             }
-            return Err(WorldError::RollbackNonceConflict {
-                nonce: approval.intent.nonce.clone(),
-                committed_intent_hash: committed.canonical_intent_hash.clone(),
-                supplied_intent_hash,
-            });
+            self.verify_rollback_authorization_envelope(
+                &approval,
+                canonical_payload.as_slice(),
+                now_ms,
+                true,
+            )?;
+            return Ok(());
         }
         let verified = self.verify_rollback_authorization(
             &snapshot,
@@ -936,6 +942,44 @@ impl World {
                 "rollback authorization does not match the exact operation".to_string(),
             ));
         }
+        self.verify_rollback_authorization_envelope(envelope, canonical_payload, now_ms, false)
+    }
+
+    pub(crate) fn authenticate_committed_rollback_retry(
+        &self,
+        envelope: &RollbackAuthorizationEnvelope,
+        canonical_payload: &[u8],
+        now_ms: u64,
+    ) -> Result<bool, WorldError> {
+        let Some(committed) = self.rollback_nonce_outcomes.get(&envelope.intent.nonce) else {
+            return Ok(false);
+        };
+        let supplied_intent_hash = sha256_hex(canonical_payload);
+        if committed.canonical_intent_hash != supplied_intent_hash {
+            return Err(WorldError::RollbackNonceConflict {
+                nonce: envelope.intent.nonce.clone(),
+                committed_intent_hash: committed.canonical_intent_hash.clone(),
+                supplied_intent_hash,
+            });
+        }
+        self.verify_rollback_authorization_envelope(envelope, canonical_payload, now_ms, true)?;
+        Ok(true)
+    }
+
+    fn verify_rollback_authorization_envelope(
+        &self,
+        envelope: &RollbackAuthorizationEnvelope,
+        canonical_payload: &[u8],
+        now_ms: u64,
+        allow_consumed_nonce: bool,
+    ) -> Result<(String, String), WorldError> {
+        let reject = |reason: String| WorldError::DistributedValidationFailed { reason };
+        if self.rollback_authority_registry.is_empty() {
+            return Err(reject(
+                "rollback authority registry is not configured".to_string(),
+            ));
+        }
+        let intent = &envelope.intent;
         if intent.issued_at_ms > now_ms
             || intent.expires_at_ms < now_ms
             || intent.expires_at_ms <= intent.issued_at_ms
@@ -944,7 +988,7 @@ impl World {
                 "rollback authorization is not currently valid".to_string(),
             ));
         }
-        if self.consumed_rollback_nonces.contains(&intent.nonce) {
+        if !allow_consumed_nonce && self.consumed_rollback_nonces.contains(&intent.nonce) {
             return Err(reject(
                 "rollback authorization nonce was already consumed".to_string(),
             ));

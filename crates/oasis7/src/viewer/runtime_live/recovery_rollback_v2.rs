@@ -1,6 +1,5 @@
 use super::recovery_receipt::recovery_error;
 use super::*;
-use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn rollback_v2_to_replay_target(
@@ -26,18 +25,55 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        let canonical_intent_hash = hex::encode(Sha256::digest(&canonical_v2_payload));
-        if let Some(outcome) = self.world.rollback_nonce_outcome(&intent.nonce) {
-            if outcome.canonical_intent_hash == canonical_intent_hash {
-                return self.get_rollback_receipt(intent.nonce);
-            }
-            return Err(recovery_error(
-                "rollback_nonce_conflict",
-                "authorization nonce is already bound to a different rollback intent",
-                Some(intent.replay_target.batch_id),
-                None,
-                None,
-            ));
+        let retry_approval = crate::runtime::RollbackAuthorizationEnvelope {
+            intent: crate::runtime::RollbackIntent {
+                schema_version: intent.schema_version,
+                rollback_ticket: intent.rollback_ticket.clone(),
+                snapshot_hash: intent.rollback_checkpoint.snapshot_hash.clone(),
+                snapshot_journal_len: intent.rollback_checkpoint.snapshot_journal_len,
+                target_journal_len: intent.replay_target.target_journal_len,
+                target_journal_commitment: Some(intent.replay_target.journal_commitment.clone()),
+                expected_target_state_root: intent.replay_target.expected_target_state_root.clone(),
+                target_batch_id: Some(intent.replay_target.batch_id.clone()),
+                reason: intent.reason.clone(),
+                issued_at_ms: intent.issued_at_ms,
+                expires_at_ms: intent.expires_at_ms,
+                nonce: intent.nonce.clone(),
+            },
+            signatures: request
+                .approval
+                .signatures
+                .iter()
+                .map(|signature| crate::runtime::RollbackApprovalSignature {
+                    authority_id: signature.authority_id.clone(),
+                    role: match signature.role {
+                        crate::viewer::protocol::RollbackAuthorityRole::OnCall => {
+                            crate::runtime::RollbackAuthorityRole::OnCall
+                        }
+                        crate::viewer::protocol::RollbackAuthorityRole::Governance => {
+                            crate::runtime::RollbackAuthorityRole::Governance
+                        }
+                    },
+                    signature_scheme: signature.signature_scheme.clone(),
+                    signature_hex: signature.signature_hex.clone(),
+                })
+                .collect(),
+        };
+        if self
+            .world
+            .authenticate_committed_rollback_retry(
+                &retry_approval,
+                &canonical_v2_payload,
+                super::recovery_receipt::current_unix_time_ms(),
+            )
+            .map_err(|err| {
+                super::recovery_receipt::rollback_runtime_error(
+                    err,
+                    intent.replay_target.batch_id.clone(),
+                )
+            })?
+        {
+            return self.get_rollback_receipt(intent.nonce);
         }
         if intent.expected_reorg_epoch != self.reorg_epoch {
             return Err(recovery_error(
