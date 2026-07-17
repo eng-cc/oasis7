@@ -649,8 +649,15 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
     }
     #[cfg(not(unix))]
     {
-        fs::write(&temp_path, raw)
-            .and_then(|_| fs::rename(&temp_path, path))
+        let mut file = fs::File::create(&temp_path).map_err(|err| {
+            format!(
+                "failed to create hosted account store temp file `{}`: {err}",
+                temp_path.display()
+            )
+        })?;
+        file.write_all(raw.as_bytes())
+            .and_then(|_| file.sync_all())
+            .and_then(|_| platform_atomic_replace(&temp_path, path))
             .map_err(|err| {
                 format!(
                     "failed to write hosted account store `{}`: {err}",
@@ -658,6 +665,41 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
                 )
             })
     }
+}
+
+#[cfg(windows)]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
 }
 
 fn build_hosted_account_id(sequence: u64) -> String {

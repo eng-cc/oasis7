@@ -801,11 +801,55 @@ fn atomic_write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String>
     temp_file
         .sync_all()
         .map_err(|err| format!("sync hosted session ledger temp file failed: {err}"))?;
-    fs::rename(&temp_path, path)
+    platform_atomic_replace(&temp_path, path)
         .map_err(|err| format!("replace hosted session ledger failed: {err}"))?;
-    fs::File::open(parent)
-        .and_then(|directory| directory.sync_all())
+    sync_parent_directory(parent)
         .map_err(|err| format!("sync hosted session ledger directory failed: {err}"))
+}
+
+#[cfg(windows)]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+
+    let source = source
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let replaced = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if replaced == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn platform_atomic_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: &Path) -> std::io::Result<()> {
+    fs::File::open(parent).and_then(|directory| directory.sync_all())
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_parent: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn build_player_id(issued_at_unix_ms: u64, sequence: u64) -> String {

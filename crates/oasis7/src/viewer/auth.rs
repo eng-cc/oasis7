@@ -37,6 +37,7 @@ pub struct VerifiedPlayerAuth {
     pub player_id: String,
     pub public_key: String,
     pub nonce: u64,
+    pub hosted_registration_nonce: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -287,6 +288,7 @@ pub fn verify_prompt_control_apply_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -373,6 +375,7 @@ pub fn verify_prompt_control_rollback_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -558,6 +561,7 @@ pub fn verify_agent_chat_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -644,6 +648,7 @@ pub fn verify_gameplay_action_auth_proof(
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce: None,
     })
 }
 
@@ -728,27 +733,30 @@ pub fn verify_session_register_auth_proof(
         proof.signature.as_str(),
         signing_payload.as_slice(),
     )?;
-    if request_player_id.starts_with("hosted-player-account-") {
-        verify_and_consume_hosted_registration_grant(
+    let hosted_registration_nonce = if request_player_id.starts_with("hosted-player-account-") {
+        Some(verify_hosted_registration_grant(
             request.registration_grant.as_deref().ok_or_else(|| {
                 "hosted session registration requires a registration grant".to_string()
             })?,
             request_player_id.as_str(),
             request_public_key.as_str(),
-        )?;
-    }
+        )?)
+    } else {
+        None
+    };
     Ok(VerifiedPlayerAuth {
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
+        hosted_registration_nonce,
     })
 }
 
-fn verify_and_consume_hosted_registration_grant(
+fn verify_hosted_registration_grant(
     grant: &str,
     player_id: &str,
     public_key: &str,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let mut parts = grant.split('.');
     if parts.next() != Some("v1") {
         return Err("registration grant version is unsupported".to_string());
@@ -788,31 +796,50 @@ fn verify_and_consume_hosted_registration_grant(
     verifying_key
         .verify(payload_bytes.as_slice(), &signature)
         .map_err(|err| format!("verify registration grant signature failed: {err}"))?;
-    consume_registration_grant_nonce(payload.nonce.as_str())
+    ensure_registration_grant_nonce_unused(payload.nonce.as_str())?;
+    Ok(payload.nonce)
 }
 
-fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String> {
-    let path = std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-registration-replay.json"));
+fn ensure_registration_grant_nonce_unused(nonce: &str) -> Result<(), String> {
+    let path = registration_replay_ledger_path();
     let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
-    let mut consumed: BTreeSet<String> = match fs::read(&path) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
-            .map_err(|err| format!("decode registration grant replay ledger failed: {err}"))?,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
-        Err(err) => {
-            return Err(format!(
-                "read registration grant replay ledger failed: {err}"
-            ));
-        }
-    };
+    if read_consumed_registration_nonces(path.as_path())?.contains(nonce) {
+        return Err("registration grant replay detected".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String> {
+    let path = registration_replay_ledger_path();
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let mut consumed = read_consumed_registration_nonces(path.as_path())?;
     if !consumed.insert(nonce.to_string()) {
         return Err("registration grant replay detected".to_string());
     }
     atomic_write_replay_ledger(path.as_path(), &consumed)
+}
+
+fn registration_replay_ledger_path() -> PathBuf {
+    std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-registration-replay.json"))
+}
+
+fn read_consumed_registration_nonces(path: &Path) -> Result<BTreeSet<String>, String> {
+    match fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|err| format!("decode registration grant replay ledger failed: {err}")),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeSet::new()),
+        Err(err) => Err(format!(
+            "read registration grant replay ledger failed: {err}"
+        )),
+    }
 }
 
 fn atomic_write_replay_ledger(path: &Path, consumed: &BTreeSet<String>) -> Result<(), String> {
@@ -830,12 +857,15 @@ fn atomic_write_replay_ledger(path: &Path, consumed: &BTreeSet<String>) -> Resul
     temp_file
         .sync_all()
         .map_err(|err| format!("sync registration replay ledger failed: {err}"))?;
-    fs::rename(temp, path)
+    platform_atomic_replace(&temp, path)
         .map_err(|err| format!("replace registration replay ledger failed: {err}"))?;
-    fs::File::open(parent)
-        .and_then(|directory| directory.sync_all())
+    sync_parent_directory(parent)
         .map_err(|err| format!("sync registration replay ledger directory failed: {err}"))
 }
+
+#[path = "auth_atomic_file.rs"]
+mod atomic_file;
+use atomic_file::{platform_atomic_replace, sync_parent_directory};
 
 fn now_unix_ms() -> u64 {
     SystemTime::now()

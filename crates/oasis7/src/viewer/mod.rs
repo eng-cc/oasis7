@@ -12,12 +12,14 @@ mod server;
 #[cfg(not(target_arch = "wasm32"))]
 mod web_bridge;
 
+pub(crate) use auth::consume_registration_grant_nonce;
+
 pub use auth::{
     HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV, HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
-    PromptControlAuthIntent, VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX,
-    VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX, VerifiedPlayerAuth,
-    derive_hosted_registration_issuer_public_key, issue_hosted_registration_grant,
-    sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
+    HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, PromptControlAuthIntent,
+    VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX, VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX,
+    VerifiedPlayerAuth, derive_hosted_registration_issuer_public_key,
+    issue_hosted_registration_grant, sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
     sign_hosted_prompt_control_strong_auth_grant, sign_prompt_control_apply_auth_proof,
     sign_prompt_control_rollback_auth_proof, sign_session_register_auth_proof,
     verify_agent_chat_auth_proof, verify_gameplay_action_auth_proof,

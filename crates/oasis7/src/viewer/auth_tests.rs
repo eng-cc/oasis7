@@ -393,7 +393,15 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
         .expect_err("expired grant rejected");
     assert!(expired.contains("expired"), "unexpected error: {expired}");
 
-    verify_session_register_auth_proof(&request, &proof).expect("first use accepted");
+    let verified =
+        verify_session_register_auth_proof(&request, &proof).expect("first use accepted");
+    consume_registration_grant_nonce(
+        verified
+            .hosted_registration_nonce
+            .as_deref()
+            .expect("hosted nonce"),
+    )
+    .expect("consume grant after registration commit");
     let replay = verify_session_register_auth_proof(&request, &proof).expect_err("replay rejected");
     assert!(replay.contains("replay"), "unexpected error: {replay}");
     let _ = std::fs::remove_file(ledger_path);

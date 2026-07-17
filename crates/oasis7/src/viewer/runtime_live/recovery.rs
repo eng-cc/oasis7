@@ -1,6 +1,7 @@
 use super::authoritative::compute_runtime_snapshot_hash;
 use super::session_policy::RuntimeRecoveryCursor;
 use super::*;
+use crate::viewer::consume_registration_grant_nonce;
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn handle_authoritative_recovery(
@@ -212,6 +213,18 @@ impl ViewerRuntimeLiveServer {
                 .bound_agent_for_player(verified.player_id.as_str())
                 .map(ToOwned::to_owned),
         };
+
+        if let Some(registration_nonce) = verified.hosted_registration_nonce.as_deref() {
+            consume_registration_grant_nonce(registration_nonce).map_err(|message| {
+                recovery_error(
+                    control_plane::map_auth_verify_error_code(message.as_str()),
+                    message,
+                    None,
+                    Some(verified.player_id.clone()),
+                    Some(verified.public_key.clone()),
+                )
+            })?;
+        }
 
         let cursor = self.current_recovery_cursor().map_err(|err| {
             recovery_error(

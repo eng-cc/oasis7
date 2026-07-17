@@ -965,6 +965,111 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
 }
 
 #[test]
+fn hosted_registration_grant_survives_bind_rejection_until_force_rebind_succeeds() {
+    let _guard = lock_test_llm_env();
+    let replay_dir = runtime_live_temp_dir("hosted-grant-force-rebind");
+    let replay_ledger = replay_dir.join("registration-replay.json");
+    let issuer_private_key = hex::encode([91_u8; 32]);
+    let issuer_public_key =
+        crate::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())
+            .expect("derive issuer public key");
+    unsafe {
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+            issuer_public_key,
+        );
+        oasis7::env_mut::set_var(
+            crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV,
+            replay_ledger.as_os_str(),
+        );
+    }
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (old_public_key, old_private_key) = test_signer(92);
+    register_runtime_session(
+        &mut server,
+        "player-old",
+        Some(agent_id.as_str()),
+        1,
+        old_public_key.as_str(),
+        old_private_key.as_str(),
+    );
+
+    let hosted_player_id = "hosted-player-account-force-rebind";
+    let (hosted_public_key, hosted_private_key) = test_signer(93);
+    let registration_grant = crate::viewer::issue_hosted_registration_grant(
+        hosted_player_id,
+        hosted_public_key.as_str(),
+        "device-force-rebind",
+        "nonce-force-rebind",
+        test_now_unix_ms(),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue registration grant");
+
+    let request = |force_rebind, nonce| {
+        signed_session_register_request(
+            crate::viewer::AuthoritativeSessionRegisterRequest {
+                player_id: hosted_player_id.to_string(),
+                public_key: None,
+                registration_grant: Some(registration_grant.clone()),
+                auth: None,
+                requested_agent_id: Some(agent_id.clone()),
+                force_rebind,
+            },
+            nonce,
+            hosted_public_key.as_str(),
+            hosted_private_key.as_str(),
+        )
+    };
+
+    let first_error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(false, 2),
+        })
+        .expect_err("initial bind must require explicit rebind");
+    assert_eq!(first_error.code, "player_bind_failed");
+    assert!(
+        !replay_ledger.exists(),
+        "failed bind must not consume grant"
+    );
+
+    let (ack, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(true, 3),
+        })
+        .expect("force rebind should reuse still-valid grant");
+    assert_eq!(ack.status, AuthoritativeRecoveryStatus::SessionRegistered);
+    assert_eq!(ack.player_id.as_deref(), Some(hosted_player_id));
+
+    let replay_error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RegisterSession {
+            request: request(true, 4),
+        })
+        .expect_err("successful registration must consume grant");
+    assert_eq!(replay_error.code, "auth_invalid");
+    assert!(replay_error.message.contains("registration grant replay"));
+
+    unsafe {
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
+        oasis7::env_mut::remove_var(crate::viewer::HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
+    }
+    let _ = std::fs::remove_dir_all(replay_dir);
+}
+
+#[test]
 fn runtime_session_register_allows_different_player_rebind_with_force_rebind() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(
