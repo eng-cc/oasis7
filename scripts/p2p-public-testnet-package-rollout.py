@@ -1929,6 +1929,7 @@ DMG_PATH="${{1:?usage: $0 /path/to/oasis7-macos-arm64.dmg}}"
 NODE_ROOT={q(node_root)}
 RUNTIME_PATH={q(runtime_path)}
 GOVERNED_BUNDLE_PATH={q(governed_bundle_path)}
+CANONICAL_GOVERNED_BUNDLE_PATH={q(f"{node_root}/doc/testing/evidence/public-testnet-governed-bootstrap-bundle-2026-06-06.json")}
 LAUNCHD_PLIST={q(launchd_plist)}
 LAUNCHD_TARGET={q(launchd_target)}
 LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
@@ -1948,7 +1949,16 @@ MOUNT_ATTACHED=0
 ATTEMPT_ROOT=""
 MUTATED=0
 
-die() {{ echo "error: $*" >&2; exit 1; }}
+die() {{
+  local message="$*"
+  echo "error: $message" >&2
+  if [[ "$MUTATED" -eq 1 ]]; then
+    if ! rollback "fatal_error"; then
+      echo "rollback_failed=true fatal_error=$message" >&2
+    fi
+  fi
+  exit 1
+}}
 cleanup() {{
   if [[ "$MOUNT_ATTACHED" -eq 1 ]]; then
     hdiutil detach "$MOUNT_POINT" -quiet || true
@@ -1998,13 +2008,93 @@ verify_governed_bundle_runtime_metadata() {{
   [[ "$actual" == "$expected_size" ]] || return 1
 }}
 
+verify_full_governed_bundle_schema() {{
+  local bundle_path="$1"
+  local field
+  [[ "$(plutil -extract schema_version raw -expect string "$bundle_path")" == "oasis7.release_candidate_bundle.v1" ]] || return 1
+  for field in runtime_build world_snapshot generated_world_sidecar world_generation_provenance governance_manifest; do
+    plutil -extract "$field" json -expect dictionary "$bundle_path" >/dev/null || return 1
+  done
+}}
+
+validate_legacy_flat_runtime_metadata() {{
+  local field value
+  for field in path ref resolved_path sha256 size_bytes; do
+    value="$(plutil -extract "$field" raw "$GOVERNED_BUNDLE_PATH")" || return 1
+    [[ -n "$value" ]] || return 1
+  done
+}}
+
+node_local_bundle_artifact_relative_path() {{
+  case "$1" in
+    world_snapshot) printf '%s\n' 'world' ;;
+    generated_world_sidecar) printf '%s\n' 'generated-world/generated-scenario-world' ;;
+    world_generation_provenance) printf '%s\n' 'generated-world/world-generation-provenance.json' ;;
+    governance_manifest) printf '%s\n' 'doc/testing/evidence/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json' ;;
+    *) return 1 ;;
+  esac
+}}
+
+localize_bundle_artifact() {{
+  local source="$1" key="$2" relative_path local_path
+  relative_path="$(node_local_bundle_artifact_relative_path "$key")" || return 1
+  local_path="$NODE_ROOT/$relative_path"
+  [[ -e "$local_path" ]] || return 1
+  plutil -replace "$key.ref" -string "$relative_path" "$source" || return 1
+  plutil -replace "$key.path" -string "$local_path" "$source" || return 1
+  plutil -replace "$key.resolved_path" -string "$local_path" "$source" || return 1
+}}
+
+localize_canonical_governed_bundle() {{
+  local source="$1"
+  localize_bundle_artifact "$source" world_snapshot || return 1
+  localize_bundle_artifact "$source" generated_world_sidecar || return 1
+  localize_bundle_artifact "$source" world_generation_provenance || return 1
+  localize_bundle_artifact "$source" governance_manifest || return 1
+  plutil -replace repo_root -string "$NODE_ROOT" "$source" || return 1
+}}
+
+verify_required_node_local_bundle_artifacts() {{
+  local source="$1" key kind local_path
+  for key in world_snapshot generated_world_sidecar world_generation_provenance governance_manifest; do
+    kind="$(plutil -extract "$key.kind" raw -expect string "$source")" || return 1
+    case "$key:$kind" in
+      world_snapshot:directory|generated_world_sidecar:directory|world_generation_provenance:file|governance_manifest:file) ;;
+      *) return 1 ;;
+    esac
+    local_path="$NODE_ROOT/$(node_local_bundle_artifact_relative_path "$key")" || return 1
+    [[ -e "$local_path" ]] || return 1
+    if [[ "$kind" == directory ]]; then
+      [[ -f "$local_path/snapshot.json" && -f "$local_path/journal.json" ]] || return 1
+      plutil -extract "$key.sha256_tree" raw -expect string "$source" >/dev/null || return 1
+    else
+      plutil -extract "$key.sha256" raw -expect string "$source" >/dev/null || return 1
+    fi
+  done
+}}
+
+preflight_governed_bundle_schema() {{
+  [[ -f "$CANONICAL_GOVERNED_BUNDLE_PATH" ]] || {{ echo "canonical governed bundle missing" >&2; return 1; }}
+  verify_full_governed_bundle_schema "$CANONICAL_GOVERNED_BUNDLE_PATH" || {{ echo "canonical governed bundle schema invalid" >&2; return 1; }}
+  if ! plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null 2>&1; then
+    validate_legacy_flat_runtime_metadata || {{ echo "legacy governed runtime metadata invalid" >&2; return 1; }}
+  fi
+  verify_required_node_local_bundle_artifacts "$CANONICAL_GOVERNED_BUNDLE_PATH" || {{ echo "canonical governed bundle required node-local artifacts invalid" >&2; return 1; }}
+}}
+
 promote_governed_bundle_runtime_metadata() {{
-  local expected_sha256="$1" expected_size="$2" source temporary
-  plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || return 1
+  local expected_sha256="$1" expected_size="$2" source temporary source_bundle
   source="$GOVERNED_BUNDLE_PATH.rollout-$$.source.tmp"
   temporary="$GOVERNED_BUNDLE_PATH.rollout-$$.tmp"
   rm -f "$source" "$temporary"
-  cp -p "$GOVERNED_BUNDLE_PATH" "$source" || return 1
+  if plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null 2>&1; then
+    source_bundle="$GOVERNED_BUNDLE_PATH"
+  else
+    source_bundle="$CANONICAL_GOVERNED_BUNDLE_PATH"
+  fi
+  cp -p "$source_bundle" "$source" || return 1
+  verify_full_governed_bundle_schema "$source" || return 1
+  localize_canonical_governed_bundle "$source" || return 1
   plutil -replace runtime_build.path -string "$RUNTIME_PATH" "$source" || return 1
   plutil -replace runtime_build.ref -string "$RUNTIME_ARTIFACT_REF" "$source" || return 1
   plutil -replace runtime_build.resolved_path -string "$RUNTIME_PATH" "$source" || return 1
@@ -2192,7 +2282,7 @@ assert_launchd_plist_label || die "launchd plist Label preflight failed"
 assert_launchd_target_loaded || die "launchd target preflight failed"
 [[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
 [[ -f "$GOVERNED_BUNDLE_PATH" ]] || die "active governed bundle missing: $GOVERNED_BUNDLE_PATH"
-plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || die "active governed bundle runtime_build preflight failed"
+preflight_governed_bundle_schema || die "active governed bundle schema preflight failed"
 [[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
 for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
 for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done
