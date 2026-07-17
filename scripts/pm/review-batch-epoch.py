@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -47,8 +48,14 @@ def parse_slices(values: list[str]) -> list[dict[str, str]]:
         if "=" not in value:
             raise ContractError(f"--slice must be ROLE=SLICE_ID: {value}")
         role, slice_id = value.split("=", 1)
-        if not SLICE_RE.fullmatch(role) or not SLICE_RE.fullmatch(slice_id):
-            raise ContractError(f"invalid role or slice id: {value}")
+        if not SLICE_RE.fullmatch(role):
+            raise ContractError(f"invalid role: {role}")
+        try:
+            parsed_slice_id = uuid.UUID(slice_id)
+        except ValueError as exc:
+            raise ContractError(f"slice id must be a canonical UUID: {slice_id}") from exc
+        if str(parsed_slice_id) != slice_id.lower():
+            raise ContractError(f"slice id must be a canonical UUID: {slice_id}")
         if role in roles:
             raise ContractError(f"duplicate expected role: {role}")
         if slice_id in ids:
@@ -107,6 +114,41 @@ def validate_batch(batch: object) -> dict[str, object]:
     if sha256_bytes(canonical_bytes(epoch_input)) != batch.get("epoch"):
         raise ContractError("batch epoch does not match immutable batch contents")
     return batch
+
+
+def preflight(args: argparse.Namespace) -> dict[str, object]:
+    """Create collector-valid incomplete return skeletons without passing collection."""
+    batch_path = Path(args.batch).resolve()
+    batch = validate_batch(load_json(batch_path))
+    out_dir = Path(args.out_dir).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ledger_path = out_dir / "slice-ledger.jsonl"
+    rows: list[dict[str, object]] = []
+    for expected in batch["expected_slices"]:  # type: ignore[index]
+        role = expected["role"]
+        slice_id = expected["slice_id"]
+        artifact_path = out_dir / f"{slice_id}.json"
+        artifact = {
+            "role": role, "slice_id": slice_id, "task_uid": batch["task_uid"],
+            "head": batch["frozen_head"], "epoch": batch["epoch"],
+            "status": "incomplete", "disposition": "incomplete",
+            "findings": [], "residual_risk": "pending review return",
+        }
+        write_new(artifact_path, artifact)
+        rows.append({
+            "role": role, "slice_id": slice_id, "task_uid": batch["task_uid"],
+            "head": batch["frozen_head"], "epoch": batch["epoch"],
+            "status": "incomplete", "artifact_digest": sha256_bytes(artifact_path.read_bytes()),
+            "artifacts": [str(artifact_path)],
+        })
+    try:
+        with ledger_path.open("x", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except FileExistsError as exc:
+        raise ContractError(f"refusing to replace immutable artifact: {ledger_path}") from exc
+    return {"status": "incomplete", "epoch": batch["epoch"], "ledger_path": str(ledger_path),
+            "artifact_paths": [row["artifacts"][0] for row in rows]}
 
 
 def read_ledger(path: Path) -> tuple[list[dict[str, object]], str]:
@@ -242,13 +284,16 @@ def parser() -> argparse.ArgumentParser:
     collect_parser = sub.add_parser("collect")
     collect_parser.add_argument("--batch", required=True)
     collect_parser.add_argument("--ledger", required=True)
+    preflight_parser = sub.add_parser("preflight")
+    preflight_parser.add_argument("--batch", required=True)
+    preflight_parser.add_argument("--out-dir", required=True)
     return result
 
 
 def main() -> int:
     args = parser().parse_args()
     try:
-        result = create(args) if args.command == "create" else validate(args)
+        result = create(args) if args.command == "create" else preflight(args) if args.command == "preflight" else validate(args)
     except ContractError as exc:
         print(f"review-batch-epoch: {exc}", file=sys.stderr)
         return 2

@@ -42,6 +42,11 @@ Options:
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
+  --review-change-class <class> Explicit doc-only risk class: mechanical-doc,
+                         workflow-doc, domain-semantic-doc, external-messaging,
+                         unknown, or mixed
+  --review-domain-role <role> Domain role for domain-semantic-doc
+  --review-verification-affected Add QA for semantic/external doc verification changes
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
 
@@ -95,6 +100,9 @@ PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
 BODY_FILE=""
+REVIEW_CHANGE_CLASS=""
+REVIEW_DOMAIN_ROLE=""
+REVIEW_VERIFICATION_AFFECTED=0
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -125,6 +133,9 @@ while [[ $# -gt 0 ]]; do
       BODY_FILE="${2:-}"
       shift 2
       ;;
+    --review-change-class) REVIEW_CHANGE_CLASS="${2:-}"; shift 2 ;;
+    --review-domain-role) REVIEW_DOMAIN_ROLE="${2:-}"; shift 2 ;;
+    --review-verification-affected) REVIEW_VERIFICATION_AFFECTED=1; shift ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -1140,6 +1151,14 @@ PY
   BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
 fi
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
+if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
+  ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
+  [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
+  [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
+  REVIEW_ROLE_SELECTION_JSON="$(python3 "$ROOT_DIR/scripts/pm/review-role-selector.py" "${ROLE_SELECTOR_ARGS[@]}")" \
+    || die "manual review role selection is required for change class: $REVIEW_CHANGE_CLASS"
+  REQUIRED_REVIEW_ROLES="$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["roles"]))' "$REVIEW_ROLE_SELECTION_JSON")"
+fi
 MISSING_REQUIRED_REVIEW_ROLES="$(missing_required_review_roles "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_ROLES")"
 MISSING_SEMANTIC_REVIEW_EVIDENCE="$(semantic_review_evidence_missing "$REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE")"
 

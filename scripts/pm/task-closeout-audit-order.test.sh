@@ -49,7 +49,7 @@ run_case() {
     --to-status "$status" --claim-type "$([[ "$status" == ready ]] && echo ready_for_pr || echo task_complete)" \
     --verification-profile fixture_repository_state "${args[@]}" --json >/dev/null 2>"$T/err")
   local rc=$?; set -e
-  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\n') "$T/events"
+  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$T/events"
   else [[ $rc != 0 ]]; diff -u <(printf 'claim\n') "$T/events"; fi
 }
 run_case ready ""; run_case done ""

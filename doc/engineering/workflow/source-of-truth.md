@@ -503,6 +503,13 @@ executor is limited by the [unattended invariants](#appendix-a-target-supervisor
 - Every slice contract must record one explicit runtime outcome: the requested model/reasoning and its reason when selection is requested; the observed actual model/reasoning when the surface reports it; or `actual model: inherited/unverified` plus the capability reason when selection or observation is unavailable. A requested value must never be presented as the observed actual runtime without evidence.
 - Context delivery defaults to a minimal, HEAD-bound task packet for bounded professional slices. Generate and validate immutable packets with `./scripts/pm/subagent-task-packet.py create|validate`; the helper writes under ignored `.pm/scratch/<TASK-UID>/slice-packets/` and fails closed on task/worktree/branch/HEAD drift. On surfaces that expose history controls, use no inherited history or the smallest recent-turn window that carries the packet; do not copy the full parent conversation by default. The packet must identify its task UID, canonical worktree, base ref, frozen/current HEAD, assigned role, context-delivery mode, packet producer/time, and the mandatory checklist below; it may link to exact GitHub evidence comments and repo paths instead of embedding long documents or command output. Full-thread/full-history delivery is an explicit escalation only when the bounded packet is insufficient for a named ambiguity, cross-turn user decision, safety/authority conflict, or evidence reconstruction. The slice contract must record the escalation reason and why targeted paths/comments cannot resolve it. A packet is invalid after HEAD, task truth, user intent, scope, or collaboration boundaries change; TPM must regenerate it rather than append an unbounded transcript.
 - For one frozen HEAD and relevant-evidence digest, TPM records one expected role/slice batch before dispatch and performs one canonical collection after the batch returns. A repo-owned batch validator must reject missing, duplicate, stale-HEAD, wrong-epoch, or artifact-digest-mismatched returns. The same HEAD/evidence epoch must not be redispatched after a complete valid collection; transport failure may retry the same immutable slice identity and packet, while any HEAD or relevant-evidence change creates a new epoch and invalidates the old collection. The scratch ledger is audit evidence only; GitHub task issue comments remain canonical. This contract audits repository evidence and does not claim to control Codex host concurrency, `spawn_agent` timing, or mailbox cadence.
+- Every expected slice identity is a canonical UUID allocated when the batch is created. Before dispatch, run the batch preflight to materialize an incomplete collector-valid artifact skeleton and ledger for every expected role. Preflight never writes a passed collection receipt; only `collect` may do so after all immutable role returns are completed.
+- Documentation review uses an explicit risk class rather than broad path fan-out: `mechanical-doc` and `workflow-doc` require repository health plus QA; `domain-semantic-doc` requires repository health plus the affected domain role, adding QA only when verification behavior or coverage changes; `external-messaging` requires repository health plus LiveOps/community, adding QA only when verification changes. Unknown or mixed scope fails closed for manual role selection. Path inference remains the safety floor for non-document and unclassified changes.
+- `prepare-task-pr.sh --review-change-class <class>` consumes that policy only
+  when every changed path is documentation (`doc/**`, Markdown, or repository
+  README surfaces). Non-document scope rejects the override and retains path
+  inference. Domain-semantic classification also requires `--review-domain-role`;
+  `--review-verification-affected` adds QA where the matrix specifies it.
 - The mandatory context checklist must include:
   - identity and authority: assigned role, role card path, owner role, and TPM integration owner
   - workflow governance: `AGENTS.md`, `doc/engineering/workflow/source-of-truth.md`, and the selected workflow skills
@@ -561,11 +568,20 @@ helpers.
   A later relevant change starts a new evidence epoch.
 - Use `claim-ready.sh` for fresh claim evidence. Multi-surface claims use one
   repository-owned composite verification command.
+- A stale CI receipt whose repository, task, PR, base/head, check app/run,
+  conclusion, and trusted planner all still match live authority may be refreshed
+  explicitly once during closeout. The refresh changes only `observed_at`, writes
+  a caller-owned temporary receipt, and never mutates the original. Any identity,
+  planner, or conclusion drift fails closed and starts a new evidence epoch.
 - After the [Pre-PR review packet](#pre-pr-review-packet) passes, run
   `task-closeout.sh --role <owner-role> --task-uid <TASK-UID> --comparison-ref <ref> --verification-profile <profile>`. Profiles are repo-owned;
   caller-authored commands cannot authorize a transition.
 - On partial remote mutation, run `refresh-task-cache.sh`, audit the selected
   task, then retry. Never edit generated cache JSON.
+- Closeout uses two bounded selected-task audits: one immediately before the
+  transition and one postcondition readback immediately after it. The latter
+  must show the expected PM status and workflow phase before success. Neither
+  audit performs a broad Project traversal.
 - The done transition resolves the recorded PR and requires a fresh
   repository-generated merge receipt. An explicitly classified non-PR task uses
   its repository-owned completion profile.
@@ -644,6 +660,13 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
 
 All six steps require successful readback; never reorder them or substitute caller-authored receipts.
+The finalizer closes its lock descriptor on every exit path but keeps the
+task-scoped singleton lock file persistent and ignored. Reusing one stable
+flock inode prevents waiting and newly arriving finalizers from overlapping.
+Cleanup
+diagnostics distinguish an absent path, a path that is not a Git worktree, a
+worktree not registered by the canonical repository, and a Git common-dir
+mismatch so operators can repair the correct boundary without guessing.
 
 ### 5.5 PR and review chain
 Select every involved reviewer through the

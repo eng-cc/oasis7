@@ -13,6 +13,8 @@ SCRIPT = Path(__file__).with_name("review-batch-epoch.py")
 TASK = "task_" + "1" * 32
 HEAD = "a" * 40
 EVIDENCE = "b" * 64
+QA_SLICE = "11111111-1111-4111-8111-111111111111"
+HEALTH_SLICE = "22222222-2222-4222-8222-222222222222"
 
 
 class ReviewBatchEpochTests(unittest.TestCase):
@@ -37,8 +39,8 @@ class ReviewBatchEpochTests(unittest.TestCase):
     def create(self) -> dict[str, object]:
         result = self.run_script(
             "create", "--task-uid", TASK, "--head", HEAD,
-            "--evidence-digest", EVIDENCE, "--slice", "qa_engineer=slice-qa",
-            "--slice", "repository_health_engineer=slice-health", "--out", str(self.batch),
+            "--evidence-digest", EVIDENCE, "--slice", f"qa_engineer={QA_SLICE}",
+            "--slice", f"repository_health_engineer={HEALTH_SLICE}", "--out", str(self.batch),
         )
         return json.loads(result.stdout)
 
@@ -47,9 +49,9 @@ class ReviewBatchEpochTests(unittest.TestCase):
                invalid_return: bool = False) -> Path:
         ledger = self.root / "slice-ledger.jsonl"
         rows = []
-        roles = [("qa_engineer", "slice-qa")]
+        roles = [("qa_engineer", QA_SLICE)]
         if not omit_health:
-            roles.append(("repository_health_engineer", "slice-health"))
+            roles.append(("repository_health_engineer", HEALTH_SLICE))
         for role, slice_id in roles:
             artifact = self.root / f"{slice_id}.json"
             returned = {
@@ -79,8 +81,8 @@ class ReviewBatchEpochTests(unittest.TestCase):
         self.assertEqual(first["epoch"], json.loads(self.batch.read_text())["epoch"])
         failure = self.run_script(
             "create", "--task-uid", TASK, "--head", HEAD,
-            "--evidence-digest", EVIDENCE, "--slice", "qa_engineer=slice-qa",
-            "--slice", "repository_health_engineer=slice-health", "--out", str(self.batch), ok=False,
+            "--evidence-digest", EVIDENCE, "--slice", f"qa_engineer={QA_SLICE}",
+            "--slice", f"repository_health_engineer={HEALTH_SLICE}", "--out", str(self.batch), ok=False,
         )
         self.assertIn("immutable", failure.stderr)
 
@@ -96,7 +98,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
         self.assertIn("different complete collection", failure.stderr)
         recreate = self.run_script(
             "create", "--task-uid", TASK, "--head", HEAD, "--evidence-digest", EVIDENCE,
-            "--slice", "qa_engineer=slice-qa", "--slice", "repository_health_engineer=slice-health",
+            "--slice", f"qa_engineer={QA_SLICE}", "--slice", f"repository_health_engineer={HEALTH_SLICE}",
             "--out", str(self.batch), ok=False,
         )
         self.assertIn("complete collection", recreate.stderr)
@@ -121,14 +123,43 @@ class ReviewBatchEpochTests(unittest.TestCase):
 
     def test_rejects_duplicate_expected_role_or_slice_id(self) -> None:
         for slices in [
-            ["qa_engineer=one", "qa_engineer=two"],
-            ["qa_engineer=one", "repository_health_engineer=one"],
+            [f"qa_engineer={QA_SLICE}", f"qa_engineer={HEALTH_SLICE}"],
+            [f"qa_engineer={QA_SLICE}", f"repository_health_engineer={QA_SLICE}"],
         ]:
             args = ["create", "--task-uid", TASK, "--head", HEAD, "--evidence-digest", EVIDENCE]
             for value in slices:
                 args += ["--slice", value]
             result = self.run_script(*args, "--out", str(self.root / f"{len(slices)}-{slices[1]}.json"), ok=False)
             self.assertIn("duplicate expected", result.stderr)
+
+    def test_create_rejects_non_uuid_slice_identity(self) -> None:
+        result = self.run_script(
+            "create", "--task-uid", TASK, "--head", HEAD,
+            "--evidence-digest", EVIDENCE, "--slice", "qa_engineer=slice-qa",
+            "--out", str(self.root / "invalid.json"), ok=False,
+        )
+        self.assertIn("UUID", result.stderr)
+
+    def test_preflight_emits_incomplete_collector_valid_skeletons_without_pass_receipt(self) -> None:
+        created = self.create()
+        out_dir = self.root / "preflight"
+        result = json.loads(self.run_script(
+            "preflight", "--batch", str(self.batch), "--out-dir", str(out_dir)
+        ).stdout)
+        self.assertEqual("incomplete", result["status"])
+        self.assertFalse(self.batch.with_name(f"{self.batch.stem}.collection.json").exists())
+        ledger = Path(result["ledger_path"])
+        failure = self.run_script("collect", "--batch", str(self.batch), "--ledger", str(ledger), ok=False)
+        self.assertIn("not completed", failure.stderr)
+        for expected in created["expected_slices"]:
+            artifact = out_dir / f'{expected["slice_id"]}.json'
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            self.assertEqual("incomplete", payload["status"])
+            self.assertEqual(created["epoch"], payload["epoch"])
+            self.assertEqual(expected["role"], payload["role"])
+            self.assertEqual(expected["slice_id"], payload["slice_id"])
+            self.assertEqual([], payload["findings"])
+            self.assertNotEqual("passed", payload.get("disposition"))
 
 
 if __name__ == "__main__":

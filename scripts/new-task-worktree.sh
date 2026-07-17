@@ -281,6 +281,10 @@ PY
 MODULE_SLUG="$(slugify "$MODULE_INPUT")"
 TASK_SLUG="$(slugify "$TASK_INPUT")"
 [[ -n "$MODULE_SLUG" ]] || { echo "error: <module> becomes empty after slug normalization" >&2; exit 2; }
+if [[ "$MODULE_SLUG" == "docs" ]]; then
+  echo "error: unsupported PM module: docs; use engineering for documentation and workflow-governance tasks" >&2
+  exit 2
+fi
 [[ -n "$TASK_SLUG" ]] || { echo "error: <task> becomes empty after slug normalization" >&2; exit 2; }
 if [[ "$PM_BOOTSTRAP" == "1" ]]; then
   PM_STORE_PATH="$ROOT_DIR/scripts/pm/pm_store.py"

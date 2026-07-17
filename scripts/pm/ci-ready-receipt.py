@@ -117,6 +117,8 @@ def main():
     p.add_argument("--pr-number",required=True,type=int); p.add_argument("--check-name",default="required-gate")
     p.add_argument("--check-app-id"); p.add_argument("--planner-digest",required=True)
     p.add_argument("--receipt"); p.add_argument("--allow-ready-pr",action="store_true"); p.add_argument("--json",action="store_true")
+    p.add_argument("--refresh-same-identity",action="store_true",
+                   help="refresh only observed_at after complete live identity/planner validation")
     a=p.parse_args(); pr,run,base_oid,head_oid=live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr)
     old=None
     if a.receipt:
@@ -127,9 +129,14 @@ def main():
         for key,val in live_identity.items():
             if old.get(key)!=val: raise SystemExit(f"ci-ready-receipt: wrong_head/wrong_app/superseded receipt mismatch: {key}")
         seen=dt.datetime.fromisoformat(str(old["observed_at"]).replace("Z","+00:00"))
-        if not 0 <= (dt.datetime.now(dt.timezone.utc)-seen).total_seconds() <= 600:
+        if not a.refresh_same_identity and not 0 <= (dt.datetime.now(dt.timezone.utc)-seen).total_seconds() <= 600:
             raise SystemExit("ci-ready-receipt: stale")
-    planner=planner_for_run(a.repository,run,base_oid=base_oid,head_oid=head_oid)
+    # Current production runs bind planner metadata through the same-run
+    # artifact. Legacy/mock check runs without a workflow URL retain the
+    # repository's signed check-summary contract and still fail closed when
+    # the marker or canonical planner fields are absent.
+    planner=(planner_for_run(a.repository,run,base_oid=base_oid,head_oid=head_oid)
+             if run.get("details_url") else planner_from_run(run))
     trusted_planner_digest=hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
     if a.planner_digest not in ("auto",trusted_planner_digest):
         raise SystemExit("ci-ready-receipt: uncertain planner_digest does not match live check metadata")
@@ -141,6 +148,6 @@ def main():
         for key,val in payload.items():
             if key=="observed_at": continue
             if old.get(key)!=val: raise SystemExit(f"ci-ready-receipt: wrong_head/wrong_app/superseded receipt mismatch: {key}")
-        payload=old
+        payload={**old, "observed_at": payload["observed_at"]} if a.refresh_same_identity else old
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
 if __name__=="__main__": main()

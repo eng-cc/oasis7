@@ -111,11 +111,17 @@ if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   ACTUAL_BRANCH="$RECORDED_BRANCH"
   BRANCH_TIP="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("head_oid") or "")' "$PR_RECEIPT")"
 else
-  git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null || die "task worktree is unavailable and no matching cleanup intent proves removal"
+  [[ -e "$WORKTREE" ]] || die "worktree path is absent and no matching cleanup intent proves removal"
+  git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "worktree path is not a git worktree"
+  git -C "$REPO_ROOT" worktree list --porcelain | grep -Fx "worktree $WORKTREE" >/dev/null || die "task worktree is not registered under repo root"
+  WORKTREE_COMMON_DIR="$(cd "$WORKTREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
+    || die "task worktree common-dir cannot be resolved"
+  REPO_COMMON_DIR="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
+    || die "canonical repository common-dir cannot be resolved"
+  [[ "$WORKTREE_COMMON_DIR" == "$REPO_COMMON_DIR" ]] || die "task worktree common-dir mismatch against canonical repository"
   [[ -z "$(git -C "$WORKTREE" status --porcelain --untracked-files=all)" ]] || die "task worktree is dirty"
   ACTUAL_BRANCH="$(git -C "$WORKTREE" symbolic-ref --quiet --short HEAD)" || die "task worktree must be on a named branch"
   [[ "$BRANCH" == "$ACTUAL_BRANCH" ]] || die "caller branch disagrees with canonical task worktree branch"
-  git -C "$REPO_ROOT" worktree list --porcelain | grep -Fx "worktree $WORKTREE" >/dev/null || die "task worktree is not registered under repo root"
   BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse "refs/heads/$ACTUAL_BRANCH")"
 fi
 [[ "$ACTUAL_BRANCH" == "$RECORDED_BRANCH" ]] || die "branch identity disagrees with canonical task truth"
