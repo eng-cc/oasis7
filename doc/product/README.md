@@ -12,4 +12,3 @@
 | 玩家入口与发行 | [`README.md`](../../README.md) | 统一玩家如何了解、进入、安装和验证当前可用产品体验及其公开边界。 |
 
 产品层只定义产品承诺、组合关系和跨域验收。工程实现、专题契约与任务状态继续由对应模块 PRD、design、project 和 GitHub task issue evidence 承载。
-
