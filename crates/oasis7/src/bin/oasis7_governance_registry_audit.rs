@@ -293,7 +293,9 @@ fn build_audit_report(options: &CliOptions) -> Result<GovernanceRegistryAuditRep
                 .all(|row| row.manifest_match.unwrap_or(false))
             && rollback_match
     });
-    let overall_status = if !threshold_expectation_pass {
+    let overall_status = if !rollback_blockers.is_empty() {
+        "rollback_authority_blocked".to_string()
+    } else if !threshold_expectation_pass {
         "threshold_mismatch".to_string()
     } else if overall_single_failure_tolerance_pass && manifest_match_pass.unwrap_or(true) {
         "ready_for_ops_drill".to_string()
@@ -341,6 +343,12 @@ fn validate_audit_report(
             "governance registry audit failed: world-state registry does not exactly match the provided public manifest"
                 .to_string(),
         );
+    }
+    if !report.rollback_blockers.is_empty() {
+        errors.push(format!(
+            "governance registry audit failed: rollback authority blockers: {}",
+            report.rollback_blockers.join(",")
+        ));
     }
     errors
 }
@@ -1126,7 +1134,7 @@ mod tests {
     #[test]
     fn strict_manifest_audit_rejects_manifest_and_world_missing_both_rollback_slots() {
         let (world_dir, manifest_path) = write_world_and_manifest();
-        let options = CliOptions {
+        let mut options = CliOptions {
             world_dir,
             public_manifest: Some(manifest_path),
             finality_slot_id: "governance.finality.v1".to_string(),
@@ -1142,6 +1150,15 @@ mod tests {
                 .iter()
                 .any(|error| error.contains("does not exactly match")),
             "strict audit must fail closed when both fixed rollback authority slots are absent"
+        );
+        options.public_manifest = None;
+        options.strict_manifest_match = false;
+        let report = build_audit_report(&options).expect("build non-manifest audit report");
+        assert_ne!(report.overall_status, "ready_for_ops_drill");
+        assert!(
+            validate_audit_report(&options, &report)
+                .iter()
+                .any(|error| error.contains("rollback authority"))
         );
     }
 

@@ -19,7 +19,7 @@
 6. 回滚与 replay：通过 Viewer 提交完整 `RollbackV2` 请求。Viewer 解析 C→T 的 finalized journal suffix，先校验 epoch、事件数/序列化字节上限和 runtime canonical journal commitment，再调用 direct runtime `rollback_to_snapshot_with_reconciliation(snapshot_C, journal_through_T, reason, target_batch_id_T, approval, now_ms)`。runtime 继续作为 registry、签名、有效期、nonce、journal commitment、target root 与 reconciliation 的最终判定方；只有 receipt 可序列化且所有校验成功后才能提交 Viewer 的 world、batch、challenge、checkpoint 与 reorg epoch 候选状态。
 7. 恢复对账：再次执行 `first_tick_consensus_drift()` 与 `verify_tick_consensus_chain()`，必须均为“无漂移”；实际 target state root 与 journal commitment 必须与签名 intent/持久化 outcome 一致，committed reorg epoch 必须与 receipt/outcome 一致。
 8. 幂等回执与审计：成功 outcome 按 nonce 与 canonical intent digest 持久化。相同 nonce + 相同 canonical intent 的重试不得再次 mutation 或增加 reorg epoch，必须返回同一逻辑 receipt；相同 nonce + 不同 intent 返回 `rollback_nonce_conflict`。断线重连或 operator 查询使用 `authoritative_recovery.get_rollback_receipt`，不得通过再次执行 rollback 猜测结果。确认 `RollbackApplied`、ticket、两个 authority id、nonce、target commitment/root 与 receipt evidence 均已归档。
-9. 玩家动作处置：对受 C→T/fork 影响的每个动作记录 `preserved_at_target`、`replayed`、`rejected_fork` 或 `compensation_required`。`compensation_required` 必须关联 owner、ticket 与状态；缺失或无法归类的动作视为未完成恢复。
+9. 玩家动作处置：对受 C→T/fork 影响的每个动作记录 `preserved_at_target`、`replayed`、`rejected_fork` 或 `compensation_required`。生产路径中，被 fork 拒绝且可归属玩家的动作必须创建 `compensation_required`，关联公开安全的 owner/ticket 别名与状态；缺失玩家归属必须留下 `player_attribution_incomplete` blocker，缺失或无法归类的动作视为未完成恢复。
 
 ## 3. 演练命令（required-tier）
 ```bash
@@ -57,7 +57,7 @@ Viewer API 与 direct runtime API 不可混用：operator/客户端只调用已�
 - 玩家更新：`<world/功能> 恢复工作处于 <audit|rollback|replay|verify> 阶段，当前影响=<已知/评估中>，暂无需玩家操作；下次更新=<time>。`
 - All-clear：`<world> 已完成授权注册表 strict audit、回放至授权 target root、无 drift 复核与 consensus chain 验证；<功能> 已恢复。受影响动作/回执处置=<摘要>，后续跟进=<ticket/status page>。`
 
-All-clear 必须同时满足：strict audit 成功；receipt 可通过 `GetRollbackReceipt` 重取；receipt、持久化 outcome 与签名 intent 联合核对后 nonce/digest、C/T、journal commitment、target root 与 reorg epoch 一致；候选状态精确匹配 T 的 `state_root`；`first_tick_consensus_drift() == None`；`verify_tick_consensus_chain()` 通过；所有受影响动作均已有上述四类 disposition，且所有 `compensation_required` 均有关联 owner/ticket/status。任一项未满足只能发进展更新，不得发 all-clear。
+All-clear 必须同时满足：strict audit 成功且无 rollback authority blocker；receipt 可通过 `GetRollbackReceipt` 重取；receipt、持久化 outcome 与签名 intent 联合核对后 nonce/digest、C/T、journal commitment、target root 与 reorg epoch 一致；候选状态精确匹配 T 的 `state_root`；`first_tick_consensus_drift() == None`；`verify_tick_consensus_chain()` 通过；所有受影响动作均已有上述四类 disposition，所有 `compensation_required` 均有关联公开安全的 owner/ticket/status，且不存在 `player_attribution_incomplete`。任一项未满足只能发进展更新，不得发 all-clear。
 
 访问与脱敏：incident/change ticket 、完整 nonce、manifest 全文、strict audit/import 原始产物及 custody/HSM 记录仅向 IC、授权 operator、governance/security 和必要工程 owner 开放，按最小权限存入受控 incident sink。玩家/社区渠道只发布影响摘要、阶段和下次更新时间；对 ticket 使用公开状态页引用或脱敏别名，对 nonce 仅显示缩短摘要，manifest/audit 仅公布结论与非敏感 digest，不公布 signer id、公钥组合、文件路径、签名或 custody 细节。
 

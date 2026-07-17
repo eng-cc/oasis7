@@ -58,6 +58,7 @@ mod gameplay_snapshot_lane;
 mod mapping;
 mod player_gameplay;
 mod recovery;
+mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
 mod recovery_session;

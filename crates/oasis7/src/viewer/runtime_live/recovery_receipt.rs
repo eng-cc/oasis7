@@ -28,10 +28,24 @@ pub(super) struct RuntimePersistedSessionRevokeMetadata {
     pub(super) metadata: RuntimeSessionRevokeMetadata,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct RuntimeRollbackReadinessRecord {
     pub(super) canonical_intent_digest: String,
     pub(super) affected_census_digest: String,
+    #[serde(default)]
+    pub(super) rollback_ticket: String,
+    #[serde(default)]
+    pub(super) receipt_id: String,
+    #[serde(default)]
+    pub(super) recovery_snapshot_hash: String,
+    #[serde(default)]
+    pub(super) reorg_epoch: u64,
+    #[serde(default)]
+    pub(super) candidate_state_root: String,
+    #[serde(default)]
+    pub(super) strict_audit_evidence_digest: String,
+    #[serde(default)]
+    pub(super) strict_audit_observed_at_ms: u64,
     pub(super) ready: bool,
     pub(super) blockers: Vec<String>,
     pub(super) evaluated_at_tick: u64,
@@ -81,9 +95,9 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         ack: &AuthoritativeRecoveryAck<u64>,
     ) -> Result<(), AuthoritativeRecoveryError> {
-        let Some(recovery_dir) = self.authoritative_recovery_dir() else {
+        if self.authoritative_recovery_dir().is_none() {
             return Ok(());
-        };
+        }
         let metadata = serde_json::to_vec(&RuntimeAuthoritativeRecoveryGeneration {
             schema_version: 2,
             ack: ack.clone(),
@@ -117,14 +131,9 @@ impl ViewerRuntimeLiveServer {
                 ack.session_pubkey.clone(),
             )
         })?;
-        match self
-            .world
-            .commit_authoritative_recovery_generation(&recovery_dir, &metadata)
-        {
-            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(committed)) => {
-                self.world = committed.world;
-                Ok(())
-            }
+        let candidate_world = self.world.clone();
+        match self.commit_authoritative_recovery_envelope(&candidate_world, &metadata) {
+            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(_)) => Ok(()),
             Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::NotCommitted {
                 current_generation_id,
             }) => Err(recovery_error(
@@ -180,6 +189,12 @@ impl ViewerRuntimeLiveServer {
             .filter(|record| {
                 record.canonical_intent_digest == outcome.canonical_intent_hash
                     && record.affected_census_digest == outcome.affected_census_digest
+                    && record.rollback_ticket == outcome.rollback_ticket
+                    && record.receipt_id == receipt.receipt_id
+                    && record.recovery_snapshot_hash == receipt.snapshot_hash
+                    && record.reorg_epoch == outcome.committed_reorg_epoch
+                    && record.candidate_state_root == outcome.target_state_root
+                    && !record.strict_audit_evidence_digest.is_empty()
             });
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
@@ -253,8 +268,9 @@ impl ViewerRuntimeLiveServer {
     pub(super) fn reevaluate_rollback_readiness(
         &mut self,
         authorization_nonce: String,
+        audit_evidence: Option<crate::viewer::protocol::RollbackStrictAuditEvidence>,
     ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
-        let recovery_dir = self.authoritative_recovery_dir().ok_or_else(|| {
+        self.authoritative_recovery_dir().ok_or_else(|| {
             recovery_error(
                 "rollback_durable_sink_required",
                 "readiness reevaluation requires a durable authoritative recovery sink",
@@ -292,8 +308,17 @@ impl ViewerRuntimeLiveServer {
                 source_event_id: entry.source_event_id,
             })
             .collect::<Vec<_>>();
+        let current_state_root = self.world.current_state_root_hash().map_err(|err| {
+            recovery_error(
+                "rollback_candidate_state_root_unavailable",
+                format!("{err:?}"),
+                Some(outcome.target_batch_id.clone()),
+                None,
+                None,
+            )
+        })?;
         let evidence = crate::runtime::RollbackReadinessEvidence {
-            target_root_matches: receipt.replay_target_state_root == outcome.target_state_root,
+            target_root_matches: current_state_root == outcome.target_state_root,
             epoch_matches: self.reorg_epoch == outcome.committed_reorg_epoch,
             drift_free: self.world.first_tick_consensus_drift().is_none(),
             consensus_chain_valid: self.world.verify_tick_consensus_chain().is_ok(),
@@ -314,11 +339,52 @@ impl ViewerRuntimeLiveServer {
         }) {
             blockers.push("compensation_cases_unresolved".to_string());
         }
+        if receipt
+            .readiness_blockers
+            .iter()
+            .any(|blocker| blocker == "player_attribution_incomplete")
+        {
+            blockers.push("player_attribution_incomplete".to_string());
+        }
+        let now_ms = current_unix_time_ms();
+        const STRICT_AUDIT_MAX_AGE_MS: u64 = 5 * 60 * 1_000;
+        const STRICT_AUDIT_FUTURE_SKEW_MS: u64 = 30 * 1_000;
+        let valid_audit = audit_evidence.as_ref().is_some_and(|audit| {
+            audit.strict_registry_audit_passed
+                && audit.strict_manifest_audit_passed
+                && !audit.evidence_digest.trim().is_empty()
+                && audit.rollback_ticket == outcome.rollback_ticket
+                && audit.receipt_id == receipt.receipt_id
+                && audit.canonical_intent_digest == outcome.canonical_intent_hash
+                && audit.recovery_snapshot_hash == receipt.snapshot_hash
+                && audit.reorg_epoch == outcome.committed_reorg_epoch
+                && audit.candidate_state_root == current_state_root
+                && audit.candidate_state_root == outcome.target_state_root
+                && audit.observed_at_ms <= now_ms.saturating_add(STRICT_AUDIT_FUTURE_SKEW_MS)
+                && now_ms.saturating_sub(audit.observed_at_ms) <= STRICT_AUDIT_MAX_AGE_MS
+        });
+        if !valid_audit {
+            blockers.push("fresh_strict_audit_evidence_required".to_string());
+        }
         blockers.sort();
         blockers.dedup();
         let record = RuntimeRollbackReadinessRecord {
             canonical_intent_digest: outcome.canonical_intent_hash.clone(),
             affected_census_digest: outcome.affected_census_digest.clone(),
+            rollback_ticket: outcome.rollback_ticket.clone(),
+            receipt_id: receipt.receipt_id.clone(),
+            recovery_snapshot_hash: receipt.snapshot_hash.clone(),
+            reorg_epoch: outcome.committed_reorg_epoch,
+            candidate_state_root: current_state_root,
+            strict_audit_evidence_digest: audit_evidence
+                .as_ref()
+                .filter(|_| valid_audit)
+                .map(|audit| audit.evidence_digest.clone())
+                .unwrap_or_default(),
+            strict_audit_observed_at_ms: audit_evidence
+                .as_ref()
+                .filter(|_| valid_audit)
+                .map_or(0, |audit| audit.observed_at_ms),
             ready: blockers.is_empty(),
             blockers: blockers.clone(),
             evaluated_at_tick: self.world.state().time,
@@ -363,15 +429,9 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        match self
-            .world
-            .commit_authoritative_recovery_generation(&recovery_dir, &metadata)
-        {
-            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(committed)) => {
-                self.world = committed.world;
-                self.rollback_readiness = candidate_readiness;
-                Ok(ack)
-            }
+        let candidate_world = self.world.clone();
+        match self.commit_authoritative_recovery_envelope(&candidate_world, &metadata) {
+            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(_)) => Ok(ack),
             Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::NotCommitted {
                 current_generation_id,
             }) => Err(recovery_error(

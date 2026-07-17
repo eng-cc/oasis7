@@ -11,6 +11,78 @@ fn install_viewer_recovery_precommit_failure(dir: &std::path::Path) {
 }
 
 #[test]
+fn session_metadata_status_unknown_installs_write_fence() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-unknown-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("agent");
+    let (old_public, old_private) = test_signer(94);
+    register_runtime_session(
+        &mut server,
+        "player-unknown",
+        Some(agent_id.as_str()),
+        1,
+        old_public.as_str(),
+        old_private.as_str(),
+    );
+    let root = recovery_dir.join(".distfs-state/sidecar-generations");
+    std::fs::write(root.join(".test-fail-before-index-commit"), b"fail").expect("failpoint");
+    std::fs::write(root.join("index.json"), b"not-json").expect("corrupt index");
+    let (new_public, _) = test_signer(95);
+
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RotateSession {
+            request: AuthoritativeSessionRotateRequest {
+                player_id: "player-unknown".to_string(),
+                old_session_pubkey: old_public.clone(),
+                new_session_pubkey: new_public.clone(),
+                rotate_reason: "unknown".to_string(),
+                rotated_by: Some("security".to_string()),
+            },
+        })
+        .expect_err("status unknown");
+
+    assert_eq!(error.code, "recovery_persistence_status_unknown");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "indeterminate session metadata commit must fence writes"
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-unknown", old_public.as_str())
+            .is_ok()
+    );
+    assert!(
+        server
+            .session_policy
+            .validate_known_session_key("player-unknown", new_public.as_str())
+            .is_err()
+    );
+    server
+        .resolve_authoritative_recovery_write_fence()
+        .expect("resolve attempt");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "unknown readback must remain fenced"
+    );
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
 fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
     let register_dir = std::env::temp_dir().join(format!(
         "oasis7-session-register-atomic-{}-{}",
@@ -93,6 +165,24 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
         old_public.as_str(),
         old_private.as_str(),
     );
+    let cached_ack = crate::viewer::AgentChatAck {
+        agent_id: agent_id.clone(),
+        accepted_at_tick: server.world.state().time,
+        message_len: "persist me".len(),
+        player_id: Some("player-mutation-atomic".to_string()),
+        intent_tick: Some(server.world.state().time),
+        intent_seq: Some(44),
+        idempotent_replay: false,
+    };
+    server.llm_sidecar.record_chat_intent_ack(
+        "player-mutation-atomic",
+        agent_id.as_str(),
+        44,
+        Some(server.world.state().time),
+        "persist me",
+        Some(old_public.as_str()),
+        &cached_ack,
+    );
     install_viewer_recovery_precommit_failure(&mutation_dir);
     let (new_public, _) = test_signer(93);
     server
@@ -111,6 +201,21 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
             .session_policy
             .validate_known_session_key("player-mutation-atomic", old_public.as_str())
             .is_ok()
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "player-mutation-atomic",
+                agent_id.as_str(),
+                44,
+                Some(server.world.state().time),
+                "persist me",
+                Some(old_public.as_str()),
+            )
+            .expect("lookup cached acknowledgement")
+            .is_some(),
+        "failed rotation must restore chat acknowledgement idempotency state"
     );
     assert!(
         server
@@ -150,6 +255,21 @@ fn session_mutations_roll_back_in_memory_when_recovery_persistence_fails() {
             .session_policy
             .validate_known_session_key("player-mutation-atomic", old_public.as_str())
             .is_ok()
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "player-mutation-atomic",
+                agent_id.as_str(),
+                44,
+                Some(server.world.state().time),
+                "persist me",
+                Some(old_public.as_str()),
+            )
+            .expect("lookup cached acknowledgement after revoke failure")
+            .is_some(),
+        "failed revoke must restore chat acknowledgement idempotency state"
     );
     assert_eq!(
         server

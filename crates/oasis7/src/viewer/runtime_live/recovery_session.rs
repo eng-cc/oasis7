@@ -9,6 +9,8 @@ pub(super) struct RuntimeSessionMutationSnapshot {
     player_agent_bindings: BTreeMap<String, String>,
     agent_public_key_bindings: BTreeMap<String, String>,
     player_auth_last_nonce: BTreeMap<String, u64>,
+    player_chat_intent_acks:
+        BTreeMap<(String, String, u64), super::control_plane::RuntimeChatIntentAckRecord>,
     pending_virtual_events: VecDeque<WorldEvent>,
 }
 
@@ -21,6 +23,7 @@ impl ViewerRuntimeLiveServer {
             player_agent_bindings: self.llm_sidecar.player_agent_bindings.clone(),
             agent_public_key_bindings: self.llm_sidecar.agent_public_key_bindings.clone(),
             player_auth_last_nonce: self.llm_sidecar.player_auth_last_nonce.clone(),
+            player_chat_intent_acks: self.llm_sidecar.player_chat_intent_acks.clone(),
             pending_virtual_events: self.pending_virtual_events.clone(),
         }
     }
@@ -35,6 +38,7 @@ impl ViewerRuntimeLiveServer {
         self.llm_sidecar.player_agent_bindings = snapshot.player_agent_bindings;
         self.llm_sidecar.agent_public_key_bindings = snapshot.agent_public_key_bindings;
         self.llm_sidecar.player_auth_last_nonce = snapshot.player_auth_last_nonce;
+        self.llm_sidecar.player_chat_intent_acks = snapshot.player_chat_intent_acks;
         self.pending_virtual_events = snapshot.pending_virtual_events;
     }
 

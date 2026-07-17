@@ -4,83 +4,9 @@ use super::*;
 use sha2::{Digest, Sha256};
 
 #[cfg(test)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum RuntimeRecoveryFaultInjection {
-    ReconciliationDrift,
-    CursorCompute,
-    AckEncode,
-}
+pub(super) use super::recovery_persistence::RuntimeRecoveryFaultInjection;
 
 impl ViewerRuntimeLiveServer {
-    pub(super) fn resolve_authoritative_recovery_write_fence(
-        &mut self,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        let Some(expected_hash) = self.authoritative_recovery_write_fence.clone() else {
-            return Ok(());
-        };
-        let Some(recovery_dir) = self.authoritative_recovery_dir() else {
-            return Err(ViewerRuntimeLiveServerError::Init(
-                "authoritative recovery write fence has no durable recovery directory".to_string(),
-            ));
-        };
-        match crate::runtime::World::readback_authoritative_recovery_generation(
-            &recovery_dir,
-            expected_hash.as_str(),
-        ) {
-            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(committed)) => {
-                let generation: super::recovery_receipt::RuntimeAuthoritativeRecoveryGeneration =
-                    serde_json::from_slice(&committed.recovery_metadata)
-                        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
-                if generation.ack.reorg_epoch != generation.reorg_epoch {
-                    return Err(ViewerRuntimeLiveServerError::Init(
-                        "authoritative recovery fenced generation epoch mismatch".to_string(),
-                    ));
-                }
-                self.world = committed.world;
-                self.authoritative_batches = generation.authoritative_batches;
-                self.next_authoritative_batch_id = generation.next_authoritative_batch_id;
-                self.authoritative_challenges = generation.authoritative_challenges;
-                self.next_authoritative_challenge_id = generation.next_authoritative_challenge_id;
-                self.stable_checkpoints = generation.stable_checkpoints;
-                self.reorg_epoch = generation.reorg_epoch;
-                self.rebuild_settlement_ranking_gate();
-                self.authoritative_recovery_write_fence = None;
-            }
-            Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::NotCommitted { .. }) => {
-                self.authoritative_recovery_write_fence = None;
-            }
-            Err(crate::runtime::AuthoritativeRecoveryCommitError::StatusUnknown { .. }) => {}
-        }
-        Ok(())
-    }
-
-    #[cfg(test)]
-    pub(super) fn set_recovery_fault_injection(
-        &mut self,
-        fault: Option<RuntimeRecoveryFaultInjection>,
-    ) {
-        self.recovery_fault_injection = fault;
-    }
-
-    #[cfg(test)]
-    pub(super) fn set_authoritative_recovery_dir_override(
-        &mut self,
-        dir: Option<std::path::PathBuf>,
-    ) {
-        self.authoritative_recovery_dir_override = dir;
-    }
-
-    pub(super) fn authoritative_recovery_dir(&self) -> Option<std::path::PathBuf> {
-        #[cfg(test)]
-        if let Some(dir) = self.authoritative_recovery_dir_override.as_ref() {
-            return Some(dir.clone());
-        }
-        self.config
-            .generated_world_dir
-            .as_deref()
-            .map(|dir| dir.join("runtime-live-authoritative-recovery"))
-    }
-
     pub(super) fn handle_authoritative_recovery_for_protocol(
         &mut self,
         command: AuthoritativeRecoveryCommand,
@@ -135,8 +61,9 @@ impl ViewerRuntimeLiveServer {
                 .map(|ack| (ack, false)),
             AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
                 authorization_nonce,
+                audit_evidence,
             } => self
-                .reevaluate_rollback_readiness(authorization_nonce)
+                .reevaluate_rollback_readiness(authorization_nonce, audit_evidence)
                 .map(|ack| (ack, false)),
             AuthoritativeRecoveryCommand::ReconnectSync { request } => {
                 self.handle_reconnect_sync(request).map(|ack| (ack, false))
@@ -340,6 +267,7 @@ impl ViewerRuntimeLiveServer {
         }
         let mut seen_actions = std::collections::BTreeSet::new();
         let mut dispositions = Vec::new();
+        let mut missing_player_attribution = false;
         for (index, batch) in self
             .authoritative_batches
             .iter()
@@ -359,12 +287,27 @@ impl ViewerRuntimeLiveServer {
                 };
                 let Some(player_id) = self.runtime_action_players.get(&action_id).cloned() else {
                     // Runtime-authored automation remains covered by the journal commitment as
-                    // separate system-event evidence; never fabricate it into a player action.
+                    // separate system-event evidence. Because the action provenance cannot prove
+                    // that this is automation rather than a player action, retain an explicit
+                    // fail-closed census blocker instead of silently declaring coverage complete.
+                    missing_player_attribution = true;
                     continue;
                 };
                 if !seen_actions.insert(action_id) {
                     continue;
                 }
+                let rejected_fork = index > batch_index;
+                let compensation = rejected_fork.then(|| {
+                    let public_case_digest = hex::encode(Sha256::digest(format!(
+                        "oasis7:rollback-compensation-public:v1:{}:{}:{}",
+                        batch.batch_id, event.id, action_id
+                    )));
+                    crate::runtime::RollbackCompensationCaseRef {
+                        owner_id: "player_support".to_string(),
+                        ticket_id: format!("rollback-case-{}", &public_case_digest[..16]),
+                        state: crate::runtime::RollbackCompensationState::PendingAuthorization,
+                    }
+                });
                 dispositions.push(crate::runtime::RollbackEventDisposition {
                     source_batch_id: batch.batch_id.clone(),
                     source_event_id: event.id,
@@ -373,9 +316,9 @@ impl ViewerRuntimeLiveServer {
                     } else if index <= batch_index {
                         crate::runtime::RollbackDispositionStatus::Replayed
                     } else {
-                        crate::runtime::RollbackDispositionStatus::RejectedFork
+                        crate::runtime::RollbackDispositionStatus::CompensationRequired
                     },
-                    compensation: None,
+                    compensation,
                     player_id: Some(player_id),
                     action_id: Some(action_id.to_string()),
                 });
@@ -388,6 +331,14 @@ impl ViewerRuntimeLiveServer {
                 source_event_id: entry.source_event_id,
             })
             .collect::<Vec<_>>();
+        let initial_readiness_blockers = if missing_player_attribution {
+            vec![
+                "readiness_evaluation_required".to_string(),
+                "player_attribution_incomplete".to_string(),
+            ]
+        } else {
+            vec!["readiness_evaluation_required".to_string()]
+        };
         let invalidated_batch_ids = self
             .authoritative_batches
             .iter()
@@ -630,7 +581,7 @@ impl ViewerRuntimeLiveServer {
                         .clone(),
                     affected_census_digest,
                     affected_census_count: affected_events.len(),
-                    readiness_blockers: vec!["readiness_evaluation_required".to_string()],
+                    readiness_blockers: initial_readiness_blockers.clone(),
                     snapshot_height,
                     snapshot_hash: snapshot_hash.clone(),
                     log_cursor,
@@ -683,7 +634,7 @@ impl ViewerRuntimeLiveServer {
                     dispositions.as_slice(),
                 ),
                 ready_for_all_clear: false,
-                readiness_blockers: vec!["readiness_evaluation_required".to_string()],
+                readiness_blockers: initial_readiness_blockers,
             }),
             acknowledged_at_tick: snapshot_height,
         };
@@ -732,14 +683,11 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        let recovery_metadata_hash = hex::encode(Sha256::digest(&recovery_metadata));
-
-        if let Some(recovery_dir) = self.authoritative_recovery_dir() {
-            match candidate_world
-                .commit_authoritative_recovery_generation(&recovery_dir, &recovery_metadata)
+        if self.authoritative_recovery_dir().is_some() {
+            match self.commit_authoritative_recovery_envelope(&candidate_world, &recovery_metadata)
             {
-                Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(committed)) => {
-                    candidate_world = committed.world;
+                Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::Committed(_)) => {
+                    return Ok(ack);
                 }
                 Ok(crate::runtime::AuthoritativeRecoveryCommitStatus::NotCommitted {
                     current_generation_id,
@@ -755,7 +703,6 @@ impl ViewerRuntimeLiveServer {
                     ));
                 }
                 Err(crate::runtime::AuthoritativeRecoveryCommitError::StatusUnknown { reason }) => {
-                    self.authoritative_recovery_write_fence = Some(recovery_metadata_hash);
                     return Err(recovery_error(
                         "rollback_persistence_status_unknown",
                         reason,

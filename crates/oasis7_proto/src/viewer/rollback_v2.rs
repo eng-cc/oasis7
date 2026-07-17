@@ -122,6 +122,20 @@ pub struct PlayerCompensationStatus {
     pub state: PlayerCompensationState,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RollbackStrictAuditEvidence {
+    pub rollback_ticket: String,
+    pub receipt_id: String,
+    pub canonical_intent_digest: String,
+    pub recovery_snapshot_hash: String,
+    pub reorg_epoch: u64,
+    pub candidate_state_root: String,
+    pub strict_registry_audit_passed: bool,
+    pub strict_manifest_audit_passed: bool,
+    pub evidence_digest: String,
+    pub observed_at_ms: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayerCompensationState {

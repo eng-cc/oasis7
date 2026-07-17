@@ -47,6 +47,71 @@ fn rollback_receipt_freezes_full_signed_identity_and_evidence() {
 }
 
 #[test]
+fn readiness_metadata_status_unknown_installs_write_fence() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-readiness-unknown-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize");
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "readiness-unknown",
+        "nonce-readiness-unknown",
+        &on_call,
+        &governance,
+    );
+    server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "readiness-unknown".to_string(),
+                requested_by: None,
+                approval: Some(approval),
+            },
+        })
+        .expect("rollback");
+    let readiness_before = server.rollback_readiness.clone();
+    let root = recovery_dir.join(".distfs-state/sidecar-generations");
+    std::fs::write(root.join(".test-fail-before-index-commit"), b"fail").expect("failpoint");
+    std::fs::write(root.join("index.json"), b"not-json").expect("corrupt index");
+
+    let error = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
+            authorization_nonce: "nonce-readiness-unknown".to_string(),
+            audit_evidence: None,
+        })
+        .expect_err("status unknown");
+
+    assert_eq!(error.code, "rollback_persistence_status_unknown");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "indeterminate readiness metadata commit must fence writes"
+    );
+    assert_eq!(
+        server.rollback_readiness, readiness_before,
+        "unknown result retains pre-mutation projection"
+    );
+    server
+        .resolve_authoritative_recovery_write_fence()
+        .expect("resolve attempt");
+    assert!(
+        server.authoritative_recovery_write_fence.is_some(),
+        "unknown readback must remain fenced"
+    );
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
 fn rollback_player_action_census_deduplicates_multi_event_actions() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
@@ -242,7 +307,7 @@ fn recovery_generation_round_trip_preserves_revoked_session_policy_and_metadata(
 }
 
 #[test]
-fn readiness_reevaluation_persists_evidence_bound_ready_transition() {
+fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
     let recovery_dir = std::env::temp_dir().join(format!(
         "oasis7-viewer-readiness-recovery-{}-{}",
         std::process::id(),
@@ -275,21 +340,23 @@ fn readiness_reevaluation_persists_evidence_bound_ready_transition() {
             },
         })
         .expect("rollback");
-    assert!(
-        !blocked
-            .rollback_receipt
-            .expect("receipt")
-            .ready_for_all_clear
-    );
+    let blocked_receipt = blocked.rollback_receipt.expect("receipt");
+    assert!(!blocked_receipt.ready_for_all_clear);
 
-    let (ready, _) = server
+    let (reevaluated, _) = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),
+            audit_evidence: None,
         })
         .expect("reevaluate readiness");
-    let ready_receipt = ready.rollback_receipt.expect("ready receipt");
-    assert!(ready_receipt.ready_for_all_clear);
-    assert!(ready_receipt.readiness_blockers.is_empty());
+    let receipt = reevaluated.rollback_receipt.expect("reevaluated receipt");
+    assert!(!receipt.ready_for_all_clear);
+    assert!(
+        receipt
+            .readiness_blockers
+            .iter()
+            .any(|blocker| blocker == "fresh_strict_audit_evidence_required")
+    );
 
     let metadata = RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
         .expect("load metadata")
@@ -300,9 +367,79 @@ fn readiness_reevaluation_persists_evidence_bound_ready_transition() {
         .rollback_readiness
         .get("nonce-readiness-transition")
         .expect("persisted readiness evidence");
-    assert!(evidence.ready);
+    assert!(!evidence.ready);
     assert!(!evidence.canonical_intent_digest.is_empty());
     assert!(!evidence.affected_census_digest.is_empty());
+
+    let mut audit_evidence = crate::viewer::protocol::RollbackStrictAuditEvidence {
+        rollback_ticket: blocked_receipt.rollback_ticket.clone(),
+        receipt_id: blocked_receipt.receipt_id.clone(),
+        canonical_intent_digest: blocked_receipt.canonical_intent_digest.clone(),
+        recovery_snapshot_hash: blocked_receipt.snapshot_hash.clone(),
+        reorg_epoch: blocked_receipt.committed_reorg_epoch,
+        candidate_state_root: server
+            .world
+            .current_state_root_hash()
+            .expect("current root"),
+        strict_registry_audit_passed: true,
+        strict_manifest_audit_passed: true,
+        evidence_digest: "strict-audit-digest".to_string(),
+        observed_at_ms: crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms(),
+    };
+    let mut mismatched_audit = audit_evidence.clone();
+    mismatched_audit.candidate_state_root = "not-the-current-candidate-root".to_string();
+    let (root_mismatch, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
+            authorization_nonce: "nonce-readiness-transition".to_string(),
+            audit_evidence: Some(mismatched_audit),
+        })
+        .expect("audit root mismatch returns blocked readiness");
+    assert!(
+        root_mismatch
+            .rollback_receipt
+            .expect("root mismatch receipt")
+            .readiness_blockers
+            .iter()
+            .any(|blocker| blocker == "fresh_strict_audit_evidence_required"),
+        "strict audit evidence must bind the observed candidate world root"
+    );
+    audit_evidence.candidate_state_root = server
+        .world
+        .current_state_root_hash()
+        .expect("restored root");
+    audit_evidence.observed_at_ms =
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms();
+    let (ready, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
+            authorization_nonce: "nonce-readiness-transition".to_string(),
+            audit_evidence: Some(audit_evidence),
+        })
+        .expect("reevaluate with fresh strict audit evidence");
+    assert!(
+        ready
+            .rollback_receipt
+            .expect("ready receipt")
+            .ready_for_all_clear
+    );
+
+    let metadata = RuntimeWorld::load_authoritative_recovery_metadata(&recovery_dir)
+        .expect("reload metadata")
+        .expect("committed metadata");
+    let restarted: RuntimeAuthoritativeRecoveryGeneration =
+        serde_json::from_slice(&metadata).expect("decode restarted generation");
+    let restarted_readiness = restarted
+        .rollback_readiness
+        .get("nonce-readiness-transition")
+        .expect("restart preserves readiness evidence");
+    assert!(restarted_readiness.ready);
+    assert_eq!(
+        restarted_readiness.strict_audit_evidence_digest,
+        "strict-audit-digest"
+    );
+    assert_eq!(
+        restarted_readiness.candidate_state_root, blocked_receipt.target_state_root,
+        "persisted all-clear evidence records the observed candidate root"
+    );
     let _ = std::fs::remove_dir_all(recovery_dir);
 }
 
@@ -371,5 +508,113 @@ fn compensation_projection_exposes_safe_owner_ticket_and_state() {
     assert_eq!(
         serde_json::to_value(compensation.state).expect("serialize compensation state"),
         serde_json::json!("in_progress")
+    );
+}
+
+#[test]
+fn rejected_attributed_actions_create_accountable_public_compensation_cases() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize");
+    let _fork = commit_single_authoritative_batch(&mut server);
+    for action_id in server
+        .authoritative_batches
+        .iter()
+        .skip(1)
+        .flat_map(|batch| batch.events.iter())
+        .filter_map(|event| event.runtime_event.as_ref())
+        .filter_map(|event| match event.caused_by.as_ref() {
+            Some(crate::runtime::CausedBy::Action(action_id)) => Some(*action_id),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+    {
+        server
+            .runtime_action_players
+            .insert(action_id, "player-private-42".to_string());
+    }
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "accountable-compensation",
+        "nonce-accountable-compensation",
+        &on_call,
+        &governance,
+    );
+    let (ack, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "accountable-compensation".to_string(),
+                requested_by: None,
+                approval: Some(approval),
+            },
+        })
+        .expect("rollback");
+    let dispositions = ack.rollback_receipt.expect("receipt").player_dispositions;
+    assert!(
+        !dispositions.is_empty(),
+        "attributed fork actions are censused"
+    );
+    for disposition in dispositions {
+        assert_eq!(
+            disposition.disposition,
+            crate::viewer::protocol::PlayerActionDisposition::CompensationRequired
+        );
+        let compensation = disposition.compensation.expect("accountable case");
+        assert!(!compensation.responsible_party.trim().is_empty());
+        assert!(!compensation.ticket_reference.trim().is_empty());
+        assert!(!compensation.responsible_party.contains("private"));
+        assert!(
+            !compensation
+                .ticket_reference
+                .contains("nonce-accountable-compensation")
+        );
+        assert!(!compensation.ticket_reference.contains("player-private-42"));
+    }
+}
+
+#[test]
+fn missing_action_attribution_is_explicit_fail_closed_census_evidence() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let first = commit_single_authoritative_batch(&mut server);
+    server
+        .advance_authoritative_batch_finality(first.final_height)
+        .expect("finalize");
+    let _fork = commit_single_authoritative_batch(&mut server);
+    let (on_call, governance) = configure_rollback_authorities(&mut server);
+    let approval = signed_rollback_envelope(
+        &server,
+        &first.batch_id,
+        "missing-attribution",
+        "nonce-missing-attribution",
+        &on_call,
+        &governance,
+    );
+    let (ack, _) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::Rollback {
+            request: AuthoritativeRollbackRequest {
+                target_batch_id: Some(first.batch_id),
+                reason: "missing-attribution".to_string(),
+                requested_by: None,
+                approval: Some(approval),
+            },
+        })
+        .expect("rollback");
+    let receipt = ack.rollback_receipt.expect("receipt");
+    assert!(!receipt.ready_for_all_clear);
+    assert!(
+        receipt
+            .readiness_blockers
+            .iter()
+            .any(|blocker| blocker == "player_attribution_incomplete"),
+        "missing attribution must be explicit persisted blocker evidence"
     );
 }

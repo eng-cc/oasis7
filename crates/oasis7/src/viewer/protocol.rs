@@ -21,8 +21,8 @@ pub use proto::{
     PromptControlCommand, PromptControlError, PromptControlOperation, PromptControlRollbackRequest,
     RollbackApprovalSignature, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
     RollbackCheckpointRef, RollbackIntent, RollbackReplayTarget, RollbackSourceEventRef,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
-    ViewerStream,
+    RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

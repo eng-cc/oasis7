@@ -244,6 +244,8 @@ pub enum AuthoritativeRecoveryCommand {
     },
     ReevaluateRollbackReadiness {
         authorization_nonce: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audit_evidence: Option<RollbackStrictAuditEvidence>,
     },
     ReconnectSync {
         request: AuthoritativeReconnectSyncRequest,
