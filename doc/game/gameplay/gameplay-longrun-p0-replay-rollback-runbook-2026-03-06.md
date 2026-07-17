@@ -38,6 +38,8 @@ public manifest 只携带公钥。两把 Ed25519 私钥必须分别由 on-call �
 
 Viewer API 与 direct runtime API 不可混用：operator/客户端只调用已协商 capability 的 `RollbackV2` 与 `GetRollbackReceipt`；capability negotiation 仅表示功能发现，不构成授权。完整 `GetRollbackReceipt` 请求必须由当前 active governance rollback authority 对绑定 rollback nonce、签发/过期时间和一次性 access nonce 的 canonical request 签名；过期、篡改、玩家签名、重放或未知/停用 authority 均须拒绝，成功 access nonce 必须随 recovery generation 持久化并在重启后继续拒绝重放。direct runtime API 是 Viewer 内部的执行边界，不提供 protocol negotiation、C/T 解析、玩家 disposition 汇总或对外 receipt 查询。排障时可比对两层证据，但不得绕过 Viewer 直接构造 partial intent 作为标准处置。
 
+readiness reevaluation 必须区分 supplied evidence 错误与有意记录 holding：传入 `Some(audit_evidence)` 时，任何签名、digest、report、manifest、当前 registry 或 receipt/root/epoch 绑定失败都返回 `strict_audit_evidence_invalid`，并且不得改写 readiness、消费 audit nonce、改变 receipt 或提交 recovery generation。operator 必须保留失败请求及验证输出到受控 incident evidence、升级 runtime/viewer 与 governance owner，并继续依据 `GetRollbackReceipt` 对当前 root/epoch、drift、consensus chain、compensation、attribution、evidence 与 registry 的动态检查保持 holding；不得把该错误解释为 blocker snapshot 已持久化。只有 operator 明确需要在没有 fresh audit evidence 时持久化当前 blocker snapshot，才提交 `audit_evidence=None` 的 reevaluation；成功后 receipt 必须包含 `fresh_strict_audit_evidence_required`，且此操作不消费 strict-audit nonce。不得用 `None` 掩盖本应调查的 invalid evidence，也不得因旧 readiness 记录仍存在而发布 all-clear。
+
 ### Authority rotation / revocation
 
 1. 一旦私钥疑似泄露、人员离岗或 authority 需要轮换，立即停止所有 rollback，撤销旧 custody 权限并生成新的角色专属密钥；不得用另一角色的 signer id 或公钥临时顶替。
