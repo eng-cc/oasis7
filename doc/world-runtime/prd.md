@@ -1,5 +1,7 @@
 # world-runtime PRD
 
+> 产品 authority：本文件拥有世界执行、确定性、WASM、事件、receipt 与 replay 的专业域契约；它向 `doc/product/world-infrastructure/prd.md` 提供执行层证据，但不是并列的“大世界基础设施”产品入口。
+
 审计轮次: 7
 
 ## 目标

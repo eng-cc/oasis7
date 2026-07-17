@@ -7,12 +7,13 @@
 2. 读根 `README.md`，先确认当前公开状态、技术预览边界与公开说明准备态。
 3. 读 `site/index.html`，确认公开站点当前入口、预览验证路径与下载区口径。
 4. 读 `doc/core/prd.md`，获取项目全局设计总览（模块地图、关键链路、关键分册）。
-5. 进入目标模块 `doc/<module>/prd.md`，确认问题定义、方案、验收标准与技术边界。
-6. 若目标模块已补齐 `design.md`，继续读模块设计总览，确认模块总体设计、分层和主链路。
-7. 继续读 `doc/<module>/project.md`，确认任务拆解、PRD-ID 映射、依赖与状态。
-8. 按需下钻模块子文档（`doc/<module>/**/*.md`）。
-9. 对照系统测试策略：`testing-manual.md` 与 `doc/testing/prd.md`。
-10. 若已知 `task_uid`，读取对应 GitHub task issue evidence comments；未知具体任务时，先看模块 `project.md`。
+5. 若从产品视角阅读，先进入 `doc/product/README.md`，从固定四大产品模块选择唯一入口。
+6. 进入目标工程模块 `doc/<module>/prd.md`，确认问题定义、方案、验收标准与技术边界。
+7. 若目标模块已补齐 `design.md`，继续读模块设计总览，确认模块总体设计、分层和主链路。
+8. 继续读 `doc/<module>/project.md`，确认任务拆解、PRD-ID 映射、依赖与状态。
+9. 按需下钻模块子文档（`doc/<module>/**/*.md`）。
+10. 对照系统测试策略：`testing-manual.md` 与 `doc/testing/prd.md`。
+11. 若已知 `task_uid`，读取对应 GitHub task issue evidence comments；未知具体任务时，先看模块 `project.md`。
 
 ## 按目标进入
 | 你的目标 | 第一入口 | 第二入口 | 说明 |
@@ -24,7 +25,11 @@
 | 想调试 Viewer / Web 链路 | `doc/world-simulator/viewer/viewer-manual.manual.md` | `doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md` | 前者是专项操作手册，后者是 Web 闭环步骤 |
 | 想补过程上下文或追溯具体任务决策 | `doc/<module>/project.md` | GitHub task issue evidence comments | 先靠正式追踪定位任务，再看 task-scoped evidence |
 
-## 模块入口矩阵
+## 产品模块入口
+
+产品层只从 `doc/product/README.md` 进入，固定为四个产品模块；其中“大世界基础设施”只有一个产品 PRD。下方矩阵是工程与治理模块导航，两者不可混写。
+
+## 工程模块入口矩阵
 | 模块 | PRD 主文档 | 设计主文档 | 项目管理文档 | 设计关注点 |
 | --- | --- | --- | --- | --- |
 | core | `doc/core/prd.md` | `doc/core/design.md` | `doc/core/project.md` | 项目全局总览与跨模块治理基线 |

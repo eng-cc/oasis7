@@ -52,6 +52,7 @@ doc/playability_test_result/playability_test_card.md
 doc/playability_test_result/prd.index.md
 doc/playability_test_result/prd.md
 doc/playability_test_result/project.md
+doc/product/README.md
 doc/readme/README.md
 doc/readme/design.md
 doc/readme/prd.index.md
