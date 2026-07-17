@@ -175,6 +175,16 @@ fn node_runtime_execution_driver_startup_rejects_malformed_checkpoint_install_ma
     );
 }
 
+#[test]
+fn node_runtime_execution_driver_startup_rejects_directory_checkpoint_install_marker_without_mutation()
+ {
+    assert_checkpoint_install_marker_startup_failure_preserves_publication(
+        "execution-driver-directory-checkpoint-install-marker",
+        "checkpoint install transaction marker is not a regular file",
+        |marker| fs::create_dir(marker).expect("create directory marker"),
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn node_runtime_execution_driver_startup_rejects_checkpoint_install_marker_symlinks_without_mutation()
