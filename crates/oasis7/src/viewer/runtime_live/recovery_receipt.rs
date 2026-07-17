@@ -451,6 +451,30 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
+        if let Some(audit) = audit_evidence.as_ref() {
+            let valid = super::recovery_audit::verify_strict_audit_evidence(
+                &self.world,
+                audit,
+                current_unix_time_ms(),
+            )
+            .is_ok()
+                && audit.rollback_ticket == outcome.rollback_ticket
+                && audit.receipt_id == receipt.receipt_id
+                && audit.canonical_intent_digest == outcome.canonical_intent_hash
+                && audit.recovery_snapshot_hash == receipt.snapshot_hash
+                && audit.reorg_epoch == outcome.committed_reorg_epoch
+                && audit.candidate_state_root == current_state_root
+                && audit.candidate_state_root == outcome.target_state_root;
+            if !valid {
+                return Err(recovery_error(
+                    "strict_audit_evidence_invalid",
+                    "supplied strict audit evidence failed signature, artifact, registry, or receipt binding validation",
+                    Some(outcome.target_batch_id.clone()),
+                    None,
+                    None,
+                ));
+            }
+        }
         let evidence = crate::runtime::RollbackReadinessEvidence {
             target_root_matches: current_state_root == outcome.target_state_root,
             epoch_matches: self.reorg_epoch == outcome.committed_reorg_epoch,
@@ -482,17 +506,7 @@ impl ViewerRuntimeLiveServer {
         }) {
             blockers.push("player_attribution_incomplete".to_string());
         }
-        let now_ms = current_unix_time_ms();
-        let valid_audit = audit_evidence.as_ref().is_some_and(|audit| {
-            super::recovery_audit::verify_strict_audit_evidence(&self.world, audit, now_ms).is_ok()
-                && audit.rollback_ticket == outcome.rollback_ticket
-                && audit.receipt_id == receipt.receipt_id
-                && audit.canonical_intent_digest == outcome.canonical_intent_hash
-                && audit.recovery_snapshot_hash == receipt.snapshot_hash
-                && audit.reorg_epoch == outcome.committed_reorg_epoch
-                && audit.candidate_state_root == current_state_root
-                && audit.candidate_state_root == outcome.target_state_root
-        });
+        let valid_audit = audit_evidence.is_some();
         if !valid_audit {
             blockers.push("fresh_strict_audit_evidence_required".to_string());
         }

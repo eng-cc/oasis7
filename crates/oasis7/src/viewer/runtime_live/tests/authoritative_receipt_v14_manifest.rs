@@ -68,15 +68,61 @@ fn push_rogue_manifest_entry(entries: &mut Vec<serde_json::Value>) {
     }));
 }
 
+fn push_realistic_governance_entries(entries: &mut Vec<serde_json::Value>) {
+    entries.extend([
+        serde_json::json!({
+            "slot_id": "governance.finality.v1",
+            "node_id": "validator-a",
+            "scheme": "ed25519",
+            "public_key_hex": "11".repeat(32),
+            "stake": 70
+        }),
+        serde_json::json!({
+            "slot_id": "msig.genesis.v1",
+            "signer_id": "signer01",
+            "scheme": "ed25519",
+            "public_key_hex": "22".repeat(32),
+            "threshold": 1
+        }),
+    ]);
+}
+
 pub(super) fn assert_rogue_manifest_rejected_before_restart_readiness_mutation(
     server: &ViewerRuntimeLiveServer,
     audit_evidence: &crate::viewer::protocol::RollbackStrictAuditEvidence,
     governance: &ed25519_dalek::SigningKey,
 ) {
-    let mut evidence = audit_evidence.clone();
+    let mut full_evidence = audit_evidence.clone();
+    full_evidence.nonce = "audit-restarted-full-governance-manifest".to_string();
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&full_evidence.manifest_bytes).expect("manifest document");
+    push_realistic_governance_entries(
+        manifest["entries"]
+            .as_array_mut()
+            .expect("manifest entries"),
+    );
+    full_evidence.manifest_bytes = serde_json::to_vec(&manifest).expect("full manifest");
+    let mut report: serde_json::Value =
+        serde_json::from_slice(&full_evidence.audit_report_bytes).expect("audit report");
+    report["audited_manifest_digest"] = serde_json::Value::String(
+        crate::viewer::strict_audit_manifest_digest(&full_evidence.manifest_bytes),
+    );
+    full_evidence.audit_report_bytes = serde_json::to_vec(&report).expect("full report");
+    sign_mutated_evidence(&mut full_evidence, governance);
+    assert!(
+        crate::viewer::runtime_live::recovery_audit::verify_strict_audit_evidence(
+            &server.world,
+            &full_evidence,
+            crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms(),
+        )
+        .is_ok(),
+        "restarted verifier must accept an importable full governance manifest"
+    );
+
+    let mut evidence = full_evidence;
     evidence.nonce = "audit-restarted-rogue-extra-manifest-entry".to_string();
     let mut manifest: serde_json::Value =
-        serde_json::from_slice(&evidence.manifest_bytes).expect("manifest document");
+        serde_json::from_slice(&evidence.manifest_bytes).expect("full manifest document");
     push_rogue_manifest_entry(
         manifest["entries"]
             .as_array_mut()
@@ -119,19 +165,15 @@ fn sign_mutated_evidence(
 fn assert_blocked(
     server: &mut ViewerRuntimeLiveServer,
     evidence: crate::viewer::protocol::RollbackStrictAuditEvidence,
-    receipt_label: &str,
+    _receipt_label: &str,
 ) {
-    let (ack, _) = server
+    let error = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),
             audit_evidence: Some(evidence),
         })
-        .expect("manifest mismatch remains blocked");
-    assert!(
-        !ack.rollback_receipt
-            .expect(receipt_label)
-            .ready_for_all_clear
-    );
+        .expect_err("manifest mismatch is rejected before readiness mutation");
+    assert_eq!(error.code, "strict_audit_evidence_invalid");
 }
 
 pub(super) fn assert_missing_and_malformed_digest_stay_blocked(
@@ -172,19 +214,14 @@ pub(super) fn assert_missing_and_malformed_digest_stay_blocked(
                 )
                 .to_bytes(),
         );
-        let (receipt, _) = server
+        let error = server
             .handle_authoritative_recovery(
                 AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
                     authorization_nonce: "nonce-readiness-transition".to_string(),
                     audit_evidence: Some(evidence),
                 },
             )
-            .expect("invalid manifest digest remains blocked");
-        assert!(
-            !receipt
-                .rollback_receipt
-                .expect("invalid digest receipt")
-                .ready_for_all_clear
-        );
+            .expect_err("invalid manifest digest is rejected before readiness mutation");
+        assert_eq!(error.code, "strict_audit_evidence_invalid");
     }
 }

@@ -177,21 +177,13 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
     );
     let mut mismatched_audit = audit_evidence.clone();
     mismatched_audit.candidate_state_root = "not-the-current-candidate-root".to_string();
-    let (root_mismatch, _) = server
+    let root_mismatch = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),
             audit_evidence: Some(mismatched_audit),
         })
-        .expect("audit root mismatch returns blocked readiness");
-    assert!(
-        root_mismatch
-            .rollback_receipt
-            .expect("root mismatch receipt")
-            .readiness_blockers
-            .iter()
-            .any(|blocker| blocker == "fresh_strict_audit_evidence_required"),
-        "strict audit evidence must bind the observed candidate world root"
-    );
+        .expect_err("audit root mismatch is rejected before readiness mutation");
+    assert_eq!(root_mismatch.code, "strict_audit_evidence_invalid");
     let mut expired_audit = audit_evidence.clone();
     expired_audit.nonce = "audit-expired".to_string();
     expired_audit.issued_at_ms = now_ms.saturating_sub(120_000);
@@ -205,18 +197,13 @@ fn readiness_reevaluation_stays_blocked_without_fresh_strict_audit_evidence() {
             )
             .to_bytes(),
     );
-    let (expired, _) = server
+    let expired = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-readiness-transition".to_string(),
             audit_evidence: Some(expired_audit),
         })
-        .expect("expired audit returns blocked readiness");
-    assert!(
-        !expired
-            .rollback_receipt
-            .expect("receipt")
-            .ready_for_all_clear
-    );
+        .expect_err("expired audit is rejected before readiness mutation");
+    assert_eq!(expired.code, "strict_audit_evidence_invalid");
     manifest_binding_tests::assert_manifest_identity_mismatches_stay_blocked(
         &mut server,
         &audit_evidence,
@@ -351,13 +338,13 @@ fn forged_unsigned_strict_audit_evidence_cannot_authorize_all_clear() {
         now_ms.saturating_add(60_000),
     );
     forged.signature_hex = "00".repeat(64);
-    let (ack, _) = server
+    let error = server
         .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
             authorization_nonce: "nonce-forged-audit".to_string(),
             audit_evidence: Some(forged),
         })
-        .expect("forged evidence is a blocked reevaluation");
-    assert!(!ack.rollback_receipt.expect("receipt").ready_for_all_clear);
+        .expect_err("forged evidence is rejected before readiness mutation");
+    assert_eq!(error.code, "strict_audit_evidence_invalid");
     let _ = std::fs::remove_dir_all(recovery_dir);
 }
 

@@ -12,7 +12,10 @@ pub(super) fn strict_audit_evidence_digest(report: &[u8], manifest: &[u8]) -> St
 #[derive(Deserialize)]
 struct StrictAuditManifestEntry {
     slot_id: String,
-    signer_id: String,
+    #[serde(default)]
+    signer_id: Option<String>,
+    #[serde(default, rename = "node_id")]
+    _node_id: Option<String>,
     scheme: String,
     public_key_hex: String,
     #[serde(default)]
@@ -49,7 +52,14 @@ fn verify_manifest_matches_active_registry(
             crate::runtime::RollbackAuthorityRole::Governance,
         ),
     ];
-    if entries.len() != expected.len() {
+    let rollback_entries = entries
+        .iter()
+        .filter(|entry| {
+            entry.slot_id.starts_with("ops.rollback.")
+                || entry.slot_id.starts_with("governance.rollback.")
+        })
+        .collect::<Vec<_>>();
+    if rollback_entries.len() != expected.len() {
         return Err(
             "strict audit manifest must exactly match rollback authority slots".to_string(),
         );
@@ -59,7 +69,7 @@ fn verify_manifest_matches_active_registry(
         return Err("strict audit manifest does not match active rollback registry".to_string());
     }
     for (slot_id, role) in expected {
-        let matching = entries
+        let matching = rollback_entries
             .iter()
             .filter(|entry| entry.slot_id == slot_id)
             .collect::<Vec<_>>();
@@ -69,9 +79,9 @@ fn verify_manifest_matches_active_registry(
                     .to_string(),
             );
         }
-        let entry = matching[0];
+        let entry = *matching[0];
         let record = registry
-            .get(entry.signer_id.as_str())
+            .get(entry.signer_id.as_deref().unwrap_or_default())
             .filter(|record| record.active && record.role == role)
             .ok_or_else(|| {
                 "strict audit manifest signer is not active in rollback registry".to_string()
