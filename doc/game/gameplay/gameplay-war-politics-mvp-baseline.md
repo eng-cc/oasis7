@@ -93,7 +93,8 @@
 - `target_alliance_id`
 - `action_kind`: `declare_war` / `change_intensity` / `defer` / `negotiate_first`
 - `intensity`
-- `minimum_winning_intensity: u32 | null`：使用当前成员、聚合声望、模块疲劳与平分规则推导的最低胜利强度，并标识 core fallback 或具体模块路径；无可达强度时返回 `null`，并由 `recommended_war_action` 返回“补强/谈判/等待”
+- `settlement_path`: `core_fallback` / `m5_gameplay_war_core`
+- `minimum_winning_intensity: u32 | null`：按 `settlement_path` 对应的当前成员、聚合声望、模块疲劳与平分规则推导的最低胜利强度；无可达强度时返回 `null`，并由 `recommended_war_action` 返回“补强/谈判/等待”
 - `war_duration_ticks`
 - `aggressor_score_estimate`
 - `defender_score_estimate`
@@ -107,7 +108,7 @@
 - `recommended_war_action`
 - `why_this_war_is_worth_or_risky`
 
-Edge case: 当玩家准备 `DeclareWar` 或调整强度，但看不到预计胜负、持续时间、冲突占用、结算风险、推荐强度或替代行动理由时，标记为 `war_declaration_quote_missing`。
+Edge case: 当玩家准备 `DeclareWar` 或调整强度，但看不到激活结算路径、预计胜负、持续时间、冲突占用、结算风险、最低胜利强度或替代行动理由时，标记为 `war_declaration_quote_missing`。
 
 Acceptance: 玩家宣战前至少能看懂“为什么现在打、打谁、用多大强度、会持续多久、大概能不能赢、输了/赢了会发生什么、是否应该先谈判或补强”。
 
