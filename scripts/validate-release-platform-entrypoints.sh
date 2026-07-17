@@ -12,7 +12,7 @@ Usage: ./scripts/validate-release-platform-entrypoints.sh [options]
 Validate that a prepared release bundle exposes platform-native launch entrypoints.
 
 Options:
-  --platform <id>      required: linux-x64 | macos-x64 | windows-x64
+  --platform <id>      required: linux-x64 | macos-x64 | macos-arm64 | windows-x64
   --bundle-dir <path>  required: prepared bundle directory
   -h, --help           show this help
 USAGE
@@ -86,9 +86,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$PLATFORM" in
-  linux-x64|macos-x64|windows-x64) ;;
+  linux-x64|macos-x64|macos-arm64|windows-x64) ;;
   *)
-    echo "error: --platform must be one of linux-x64|macos-x64|windows-x64" >&2
+    echo "error: --platform must be one of linux-x64|macos-x64|macos-arm64|windows-x64" >&2
     exit 1
     ;;
 esac
@@ -133,7 +133,7 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_import" executable
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     ;;
-  macos-x64)
+  macos-x64|macos-arm64)
     require_path "$BUNDLE_DIR/run-client.sh" executable
     require_path "$BUNDLE_DIR/run-web-launcher.sh" executable
     require_path "$BUNDLE_DIR/run-game.sh" executable
@@ -148,6 +148,13 @@ case "$PLATFORM" in
     require_path "$BUNDLE_DIR/bin/oasis7_governance_registry_audit" executable
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/Info.plist" file
     require_path "$BUNDLE_DIR/oasis7 Client Launcher.app/Contents/MacOS/oasis7-client-launcher" executable
+    if [[ "$PLATFORM" == "macos-arm64" ]]; then
+      runtime_architecture="$(file "$BUNDLE_DIR/bin/oasis7_chain_runtime")"
+      if [[ "$runtime_architecture" != *"Mach-O"* || "$runtime_architecture" != *"arm64"* ]]; then
+        echo "error: macos-arm64 runtime is not Mach-O arm64: $runtime_architecture" >&2
+        exit 1
+      fi
+    fi
     ;;
   windows-x64)
     require_path "$BUNDLE_DIR/bin/oasis7_client_launcher.exe" file

@@ -16,7 +16,7 @@ Usage: ./scripts/release-prepare-bundle.sh [options]
 Prepare deterministic launcher bundle directory for CI release packaging.
 
 Options:
-  --platform <id>        required: linux-x64 | macos-x64 | windows-x64
+  --platform <id>        required: linux-x64 | macos-x64 | macos-arm64 | windows-x64
   --target-triple <id>   optional rust target triple (default: native)
   --web-dist <path>      required: prebuilt viewer web dist directory
   --web-launcher-dist <path>
@@ -66,9 +66,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${PLATFORM}" in
-  linux-x64|macos-x64|windows-x64) ;;
+  linux-x64|macos-x64|macos-arm64|windows-x64) ;;
   *)
-    echo "error: --platform must be one of linux-x64|macos-x64|windows-x64" >&2
+    echo "error: --platform must be one of linux-x64|macos-x64|macos-arm64|windows-x64" >&2
     exit 1
     ;;
 esac

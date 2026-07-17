@@ -5,4 +5,4 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 }
 
 #[path = "execution_bridge/mod.rs"]
-mod real_execution_bridge;
+pub(crate) mod real_execution_bridge;

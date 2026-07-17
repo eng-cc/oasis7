@@ -275,23 +275,35 @@ $EDITOR doc/testing/evidence/public-testnet-governed-bootstrap-bootstrap-peers-2
 
 ### CI package scope selection
 1. 只升级 ECS Linux validators 和 Linux LAN observer 时，可使用 `Testnet Packages` 的 Linux artifact。
-2. 同时升级 macOS local observer 时，使用包含 Linux/macOS 的 package run，并分别校验 Linux 与 macOS runtime hash。
+2. 同时升级 macOS local observer 时，使用包含 `macos-arm64` 的 package run，并分别校验 Linux 与 macOS runtime hash/DMG native identity；当前 arm64 observer 不得由 `macos-x64` artifact 覆盖。
 3. 需要升级 Windows observer 时，必须使用包含 Windows artifact 的 CI scope；如果先前 run 只有 Linux/macOS，不得把 Linux artifact 复制到 Windows。
-4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。例如 Windows 可能来自后续 `all_existing` run，而 Linux/macOS 来自前一个 Linux/macOS run；验收以 runtime hash、commit lineage、status health 和高度对齐为准。
+4. 最终 fleet 允许存在 package version 后缀差异，但必须说明原因。当前 workflow 中 `all_existing` 仍只生成 `linux-x64`、`macos-x64`、`windows-x64`；完整 managed-fleet packaging 必须对同一 requested ref/commit 协调执行 `all_existing` plus `linux_macos_arm64` runs，并记录两组 run ID、BUILDINFO 与 SHA256SUMS。验收以 runtime hash、commit lineage、status health 和高度对齐为准。
 
 ### Safe update order
 1. 记录五节点 `CURRENT_VERSION`、runtime hash、service manager、status endpoint。
 2. 先升级两个 validators，并确认 validator pair `ready`、高度推进、互相有 fresh peer head。
-3. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
-4. 如果 observer 从空状态或旧高度启动后报告 `replication no connected providers`、`consensus_peer_head_unavailable`、`execution driver peer mismatch` 或长期不追高，使用 Phase E/F 的 recovery seed 路径。
-5. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
-6. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state` 或先走 `scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote` / `reset-state` 的受控恢复路径。
-7. 如果 observer 本地 `committed_height` 高于 clean-rebuilt validator pair 的 fresh head，视为旧链状态接入新链；不要用重启作为修复结论，先修正部署/状态合同，再从 clean state 或受信 checkpoint 重建 observer。
+3. **Observer checkpoint gate（硬门）**：在任何 Linux、Windows 或 macOS observer 的 mutation command 前，两个 canonical provider 必须从其 manifest `status_url` 同时返回 `chain_proof.latest_execution_checkpoint`。每个对象必须有 `schema_version >= 2`、非空 `checkpoint_id`、64 位 hex `manifest_hash` 和正 `height`；两端 `checkpoint_id`、`manifest_hash` 必须相同，且 `abs(sequencer.height-storage.height) <= 1`。`null`、v1、malformed identity、仅一个 provider、identity mismatch 或 height 不兼容都 fail closed。`p2p-public-testnet-package-rollout.py` 生成的 observer wrapper/PowerShell/macOS script 内置此 gate；不得绕开 wrapper 直接调用 Linux primitive、Windows installer 或 macOS promotion script。
+4. gate 失败时，停止 observer rollout；先修复 provider package/config/deployment truth 或等待 pointer+manifest validation 后的 checkpoint 发布，再重新生成并执行 observer plan。不得用 restart、旧 seed 或 validator-to-validator 手工 copy 作为 gate 的替代。
+5. 再升级 observers；每个 observer 升级后单独验证，不要把上一个 observer 的 ready 当作整个 fleet ready。
+6. 如果 observer 从空状态或旧高度启动后报告 `replication no connected providers`、`consensus_peer_head_unavailable`、`execution driver peer mismatch` 或长期不追高，使用 Phase E/F 的 recovery seed 路径。
+7. 如果 validator pair 自身出现 `execution driver peer mismatch`，不要继续 reseed observers；先恢复 validator pair，再用恢复后的 storage/sequencer fresh state 重新 reseed observers。
+8. validator clean rebuild 后，本地 observer 不能只升级 runtime/package 并隐式保留旧 `world` / `world-simulator-mirror` / `execution-records` / `replication-root` / `runtime-root` / `store`。`scripts/p2p-public-testnet-local-node-install.sh` 遇到既有状态默认 fail-closed；同链普通升级必须显式 `--preserve-state`，clean rebuild/redeploy 必须显式 `--reset-state` 或先走 `scripts/p2p-public-testnet-local-observer-sync.sh seed-from-remote` / `reset-state` 的受控恢复路径。
+9. 如果 observer 本地 `committed_height` 高于 clean-rebuilt validator pair 的 fresh head，视为旧链状态接入新链；不要用重启作为修复结论，先修正部署/状态合同，再从 clean state 或受信 checkpoint 重建 observer。
 
 ### Platform-specific update entrypoints
 1. Linux nodes use `scripts/p2p-public-testnet-package-node-upgrade.sh` with the node root and Linux bundle.
-2. macOS local observer uses the local observer install/upgrade path and launchd label `oasis7.testnet.fourth`; do not verify it with the Linux runtime hash.
+2. macOS local arm64 observer uses the generated `macos-arm64` operator script and an explicit `system/oasis7.testnet.fourth` or `gui/<numeric-uid>/oasis7.testnet.fourth` target; do not verify it with the Linux runtime hash or a verification-only DMG check.
 3. Windows observer uses the Windows installer artifact, updates `C:\oasis7-deploy\CURRENT_VERSION` and deploy metadata, and restarts scheduled task `Oasis7Observer`.
+
+### macOS arm64 observer fail-closed contract
+
+The package rollout helper generates a plan-only macOS script for the managed observer. It accepts only a concrete `system/<label>` or `gui/<numeric-uid>/<label>` target, derives the matching bootstrap domain (`system` or `gui/<uid>`), and rejects generic `user`, non-numeric GUI identities, or incomplete targets. Before bootout it executes the fail-closed canonical-provider checkpoint gate through native `curl` and `plutil`; this macOS contract does not require Python. It then re-verifies the exact planning-time DMG SHA-256, mounts the DMG at an explicit temporary mountpoint, requires Darwin/arm64 host capability and native arm64 payload identity, and creates a verified attempt-local preflight backup of the active runtime, every declared config, `CURRENT_VERSION`, and `DEPLOYED_BUILDINFO`—but not persistent state while the observer is running. Declared state roots must be normalized, unique, non-nested descendants of the node root and may not equal the node root or overlap/contain the runtime, config, `CURRENT_VERSION`, `DEPLOYED_BUILDINFO`, or launchd plist. The generated shell rejects symlink state roots again before backup, failed-state capture, and restore, before any rollback `rm -rf`.
+
+Next it boots out the original target. If bootout fails, it ensures the untouched original service is loaded and verifies `/healthz` contains `ok=true` and `/v1/chain/status` contains `running=true`; requiring `running=true` from healthz is invalid. After successful bootout—and while the observer is stopped—it copies and verifies every declared persistent-state path. A stopped-state backup failure follows the same original-service restart/health path. Runtime or provenance promotion begins only after this state closure passes, then the script bootstraps the derived domain and checks the same endpoint-specific fields while continuing to inspect the status payload for authority failures.
+
+Any post-promotion failure first preserves the failed active state under the attempt root for evidence. Rollback then replaces every active state path with its stopped pre-upgrade snapshot, restores runtime/config/`CURRENT_VERSION`/`DEPLOYED_BUILDINFO`, bootstraps the original domain, and verifies health. Rollback is idempotent and the attempt root is retained; EXIT cleanup only detaches and removes the explicit DMG mountpoint. An authority failure (`authority_failure`, state-sync fallback, unavailable consensus peer head, or execution-driver peer mismatch) always emits `state_sync_escalation_required=true`, even when failed-state capture or rollback itself cannot complete. It is not permission to restart repeatedly or to use validator data copying as recovery.
+
+The script validates package identity but does not add a signing/notarization requirement; release policy remains the authority if it already supplies one.
 
 ## 9. Phase C - Clean Rebuild Validators
 ### Goal
@@ -575,6 +587,7 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
 
 ```bash
 ./scripts/p2p-public-testnet-fleet-health.py \
+  --managed-five-node \
   --sequencer sequencer \
   --node sequencer=http://39.104.204.172:6631/v1/chain/status \
   --node storage=http://39.104.205.67:6632/v1/chain/status \
@@ -584,6 +597,8 @@ Use each node's actual `STATUS_BIND` from its env/deploy metadata when it differ
   --max-capture-span-seconds 30 \
   --output .tmp/public-testnet-fleet-health.json
 ```
+
+`--managed-five-node` is mandatory for this deployment closure. It fail-closes unless the supplied identities are exactly `sequencer` (ECS 204 provider), `storage` (ECS 205 provider), `linux-lan-observer`, `windows-observer`, and `macos-observer`, once each. The collector without that flag remains only for explicitly non-closure diagnostics and cannot be used for a `Fleet healthy` or recovery conclusion.
 
 ### Verdict rules
 1. **Fleet live**

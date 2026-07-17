@@ -23,12 +23,15 @@ out_dir="$TMP_DIR/out"
 package_version="0.0.0+testnet.89.419e119bc897"
 commit="419e119bc897efaa34750bee04c63470d1156699"
 run_id="27605906795"
+macos_package_version="0.0.0+testnet.90.419e119bc897"
+macos_run_id="27605906796"
 
-mkdir -p "$package_dir/windows" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
+mkdir -p "$package_dir/windows" "$package_dir/macos" "$bundle_src/bin" "$node_root/releases/old/bin" "$node_root/config/doc/testing/evidence"
 printf 'runtime-v2\n' >"$bundle_src/bin/oasis7_chain_runtime"
 chmod +x "$bundle_src/bin/oasis7_chain_runtime"
 tar -czf "$package_dir/oasis7-linux-x64-bundle.tar.gz" -C "$TMP_DIR/bundle" oasis7-linux-x64
 printf 'fake windows installer\n' >"$package_dir/windows/oasis7-windows-x64.exe"
+printf 'fake macos arm64 dmg\n' >"$package_dir/macos/oasis7-macos-arm64.dmg"
 
 windows_bundle="$package_dir/windows/public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"
 windows_genesis="$package_dir/windows/public-testnet-governed-bootstrap-genesis-2026-06-06.windows.json"
@@ -236,6 +239,21 @@ package_version=$package_version
 published=false
 EOF
 
+cat >"$package_dir/macos/macos-arm64-BUILDINFO" <<EOF
+workflow=Testnet Packages
+run_id=$macos_run_id
+run_number=90
+repository=eng-cc/oasis7
+requested_ref=$commit
+commit=$commit
+build_profile=release
+package_scope=linux_macos_arm64
+platform=macos-arm64
+target_triple=aarch64-apple-darwin
+package_version=$macos_package_version
+published=false
+EOF
+
 (
   cd "$package_dir"
   shasum -a 256 oasis7-linux-x64-bundle.tar.gz linux-x64-BUILDINFO >linux-x64-SHA256SUMS
@@ -259,6 +277,8 @@ EOF
     doc/testing/evidence/genesis-validator-registry.json \
     doc/testing/evidence/governed-bootstrap-topology.md \
     >windows-x64-SHA256SUMS
+  cd "$package_dir/macos"
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
 )
 
 # Windows-only: package fixture setup above is shared with the POSIX harness, but
@@ -488,17 +508,95 @@ public static void Main() {
 }
 }
 '@
+$providerStatusSource = @'
+using System;
+using System.Net;
+using System.Text;
+public static class FixtureProviderStatus {
+public static void Main(string[] args) {
+  int port = Int32.Parse(args[1]);
+  var listener = new HttpListener();
+  listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+  listener.Start();
+  while (true) {
+    var context = listener.GetContext();
+    byte[] payload = Encoding.UTF8.GetBytes("{\"chain_proof\":{\"latest_execution_checkpoint\":{\"schema_version\":2,\"checkpoint_id\":\"fixture-checkpoint-v2\",\"height\":4242,\"manifest_hash\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}}}");
+    context.Response.ContentType = "application/json";
+    context.Response.OutputStream.Write(payload, 0, payload.Length);
+    context.Response.Close();
+  }
+}
+}
+'@
 $runtime = Join-Path $Directory 'oasis7_chain_runtime.exe'
 $knownGoodRuntime = Join-Path $Directory 'known-good-oasis7_chain_runtime.exe'
 $installer = Join-Path $Directory 'fixture-installer.exe'
+$providerStatus = Join-Path $Directory 'fixture-provider-status.exe'
 Add-Type -TypeDefinition $runtimeSource -OutputAssembly $runtime -OutputType ConsoleApplication
 $knownGoodRuntimeSource = $runtimeSource.Replace('FixtureRuntime', 'FixtureKnownGoodRuntime').Replace('{\"running\":true,\"fixture\":\"candidate\"}', '{\"running\":true,\"fixture\":\"known-good\"}')
 Add-Type -TypeDefinition $knownGoodRuntimeSource -OutputAssembly $knownGoodRuntime -OutputType ConsoleApplication
 Add-Type -TypeDefinition $installerSource -OutputAssembly $installer -OutputType ConsoleApplication
-return @{ Runtime = $runtime; KnownGoodRuntime = $knownGoodRuntime; Installer = $installer }
+Add-Type -TypeDefinition $providerStatusSource -OutputAssembly $providerStatus -OutputType ConsoleApplication
+return @{ Runtime = $runtime; KnownGoodRuntime = $knownGoodRuntime; Installer = $installer; ProviderStatus = $providerStatus }
 }
 
 $executables = Write-FixtureExecutables -Directory $fixtureRoot
+$fixtureProviderCheckpointId = 'fixture-checkpoint-v2'
+$fixtureProviderCheckpointHeight = 4242
+$fixtureProviderManifestHash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+$fixtureProviderProcesses = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
+
+function Start-FixtureProviderStatusServer([string] $Name) {
+for ($attempt = 1; $attempt -le 10; $attempt++) {
+  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+  $listener.Start()
+  $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+  $listener.Stop()
+  $process = Start-Process -FilePath $executables.ProviderStatus -ArgumentList '--port', "$port" -PassThru
+  $url = "http://127.0.0.1:$port/v1/chain/status"
+  for ($probe = 1; $probe -le 20; $probe++) {
+    Start-Sleep -Milliseconds 100
+    try {
+      $status = Invoke-RestMethod -UseBasicParsing -Uri $url -TimeoutSec 1
+      $checkpoint = $status.chain_proof.latest_execution_checkpoint
+      if ($checkpoint.schema_version -ne 2 -or
+          $checkpoint.checkpoint_id -ne $fixtureProviderCheckpointId -or
+          $checkpoint.height -ne $fixtureProviderCheckpointHeight -or
+          $checkpoint.manifest_hash -ne $fixtureProviderManifestHash) {
+        throw "fixture provider returned unexpected checkpoint evidence: name=$Name payload=$($status | ConvertTo-Json -Compress)"
+      }
+      $fixtureProviderProcesses.Add($process)
+      return $url
+    } catch {
+      if ($probe -eq 20) {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        throw "fixture provider did not become ready: name=$Name url=$url error=$($_.Exception.Message)"
+      }
+    }
+  }
+}
+throw "fixture provider failed to reserve a listener port: name=$Name"
+}
+
+function Assert-FixtureProviderStatus([string] $Name, [string] $Url) {
+try {
+  $status = Invoke-RestMethod -UseBasicParsing -Uri $Url -TimeoutSec 2
+  $checkpoint = $status.chain_proof.latest_execution_checkpoint
+  if ($checkpoint.schema_version -ne 2 -or
+      $checkpoint.checkpoint_id -ne $fixtureProviderCheckpointId -or
+      $checkpoint.height -ne $fixtureProviderCheckpointHeight -or
+      $checkpoint.manifest_hash -ne $fixtureProviderManifestHash) {
+    throw "unexpected checkpoint evidence: $($status | ConvertTo-Json -Compress)"
+  }
+} catch {
+  throw "fixture canonical provider unavailable or invalid: name=$Name url=$Url error=$($_.Exception.Message)"
+}
+}
+
+$fixtureProviderEndpoints = @{
+  Sequencer = Start-FixtureProviderStatusServer 'sequencer'
+  Storage = Start-FixtureProviderStatusServer 'storage'
+}
 
 function New-RolloutFixture {
 param([string] $Name, [switch] $ActiveConfigJunction, [switch] $RollbackRootJunction)
@@ -562,7 +660,16 @@ $action = New-ScheduledTaskAction -Execute (Join-Path $installRoot 'bin/oasis7_c
 Register-ScheduledTask -TaskName $taskName -Action $action -Force | Out-Null
 $fixtureTasks.Add($taskName)
 $manifest = @{
-  nodes = @(@{
+  nodes = @(
+  @{
+    name = 'sequencer'; platform = 'linux-x64'; node_root = (Join-Path $root 'sequencer-node'); restart = $false
+    status_url = $fixtureProviderEndpoints.Sequencer
+  },
+  @{
+    name = 'storage'; platform = 'linux-x64'; node_root = (Join-Path $root 'storage-node'); restart = $false
+    status_url = $fixtureProviderEndpoints.Storage
+  },
+  @{
     name = 'windows-fixture'; platform = 'windows-x64'; deploy_root = $deploy; install_root = $installRoot
     remote_installer = (Join-Path $deploy 'placeholder/oasis7-windows-x64.exe'); scheduled_task = $taskName
     status_url = "http://127.0.0.1:$port/v1/chain/status"; rollback_backup_root = $rollbackRoot; rollback_unlock_timeout_secs = 5
@@ -578,6 +685,8 @@ $outDir = Join-Path $root 'out'
 )
 Assert-Utf8NoBom $backupManifestPath
 Assert-Utf8NoBom $manifestPath
+Assert-FixtureProviderStatus 'sequencer' $fixtureProviderEndpoints.Sequencer
+Assert-FixtureProviderStatus 'storage' $fixtureProviderEndpoints.Storage
 & python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath --package-dir $env:OASIS7_FIXTURE_PACKAGE_DIR --out-dir $outDir --json | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "fixture rollout generation failed: $Name" }
 $rollout = Join-Path $outDir 'windows-fixture-windows-upgrade.ps1'
@@ -958,6 +1067,7 @@ try {
 )
 } finally {
 foreach ($taskName in $fixtureTasks) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue }
+foreach ($providerProcess in $fixtureProviderProcesses) { Stop-Process -Id $providerProcess.Id -Force -ErrorAction SilentlyContinue }
 Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 PS
@@ -1055,6 +1165,24 @@ assert "positive fixture rollout emitted rollback-required output" in fixture
 assert "positive rollout provenance hash diverged" in fixture
 assert "positive rollout RPC did not come from promoted candidate runtime" in fixture
 assert "positive fixture attempt diagnostics contain rollback-required state" in fixture
+assert "public static class FixtureProviderStatus" in fixture
+assert '"schema_version\\":2' in fixture
+assert "$fixtureProviderCheckpointId = 'fixture-checkpoint-v2'" in fixture
+assert "$fixtureProviderCheckpointHeight = 4242" in fixture
+assert "function Start-FixtureProviderStatusServer" in fixture
+assert "function Assert-FixtureProviderStatus" in fixture
+assert "name = 'sequencer'; platform = 'linux-x64'" in fixture
+assert "name = 'storage'; platform = 'linux-x64'" in fixture
+assert "status_url = $fixtureProviderEndpoints.Sequencer" in fixture
+assert "status_url = $fixtureProviderEndpoints.Storage" in fixture
+assert fixture.count("Assert-FixtureProviderStatus 'sequencer'") == 1
+assert fixture.count("Assert-FixtureProviderStatus 'storage'") == 1
+assert "foreach ($providerProcess in $fixtureProviderProcesses) { Stop-Process" in fixture
+provider_validation = fixture.index("Assert-FixtureProviderStatus 'sequencer' $fixtureProviderEndpoints.Sequencer")
+fixture_generation = fixture.index("& python $env:OASIS7_FIXTURE_ROLLOUT_PY --manifest $manifestPath")
+assert provider_validation < fixture_generation, (
+    "canonical provider checkpoint evidence must be available before every fixture rollout generation"
+)
 safe_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureDriveRoot\n")
 fixture_root_check = fixture.index("Assert-FixtureNoReparseAncestor $fixtureRoot\n")
 intentional_junction = fixture.index("New-Item -ItemType Junction")
@@ -1156,14 +1284,14 @@ cat >"$TMP_DIR/manifest.json" <<EOF
 {
   "nodes": [
     {
-      "name": "local-linux",
+      "name": "sequencer",
       "platform": "linux-x64",
       "node_root": "$node_root",
       "restart": false,
       "status_url": "http://127.0.0.1:6632/v1/chain/status"
     },
     {
-      "name": "remote-linux",
+      "name": "storage",
       "platform": "linux-x64",
       "host": "198.51.100.44",
       "user": "root",
@@ -1186,6 +1314,19 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "status_url": "http://127.0.0.1:5121/v1/chain/status",
       "rollback_backup_root": "C:\\\\oasis7-deploy\\\\backups\\\\task-2269-fixture",
       "rollback_unlock_timeout_secs": 30
+    },
+    {
+      "name": "macos-observer",
+      "platform": "macos-arm64",
+      "host": "192.0.2.34",
+      "node_root": "/Applications/oasis7",
+      "launchd_target": "system/oasis7.testnet.fourth",
+      "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
+      "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+      "config_paths": ["/Applications/oasis7/config/node.env"],
+      "persistent_state_paths": ["/Applications/oasis7/data", "/Applications/oasis7/store"],
+      "healthz_url": "http://127.0.0.1:19083/healthz",
+      "status_url": "http://127.0.0.1:19083/v1/chain/status"
     }
   ]
 }
@@ -1241,6 +1382,8 @@ text = module.windows_script(
     injected,
     {injected: "a" * 64},
     "rpc-running",
+    "http://127.0.0.1:6631/v1/chain/status",
+    "http://127.0.0.1:6632/v1/chain/status",
 )
 output_path.write_text(text, encoding="utf-8")
 assignments = (
@@ -1283,13 +1426,85 @@ node_root_abs=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).
 plan_current_target=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(readlink "$node_root/current")")
 test "$plan_current_target" = "$node_root_abs/releases/old"
 jq -e '
-  (.nodes[] | select(.name == "local-linux") | .applied == false)
-  and (.nodes[] | select(.name == "remote-linux") | .commands[0] | startswith("scp "))
-  and (.nodes[] | select(.name == "remote-linux") | .commands[1] | startswith("ssh root@198.51.100.44 "))
-  and (.nodes[] | select(.name == "remote-linux") | .commands[1] | contains("--bundle-tar /tmp/oasis7-linux-x64-bundle.tar.gz"))
+  (.nodes[] | select(.name == "sequencer") | .applied == false)
+  and (.nodes[] | select(.name == "storage") | .commands[0] | startswith("scp "))
+  and (.nodes[] | select(.name == "storage") | .commands[1] | startswith("ssh root@198.51.100.44 "))
   and (.nodes[] | select(.name == "windows-observer") | any(.commands[]; contains("staging_parent_ready=")))
-  and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))' \
+  and (.nodes[] | select(.name == "windows-observer") | .governed_bundle_path | endswith("public-testnet-governed-bootstrap-bundle-2026-06-06.windows.json"))
+  and (.nodes[] | select(.name == "windows-observer") | .package_provenance.package_version == "0.0.0+testnet.89.419e119bc897")
+  and (.nodes[] | select(.name == "windows-observer") | .package_provenance.run_id == "27605906795")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.package_version == "0.0.0+testnet.90.419e119bc897")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.run_id == "27605906796")
+  and (.nodes[] | select(.name == "macos-observer") | .package_provenance.sha256sums_sha256 | length == 64)' \
   "$TMP_DIR/plan-only.json" >/dev/null
+
+observer_gate_manifest="$TMP_DIR/linux-observer-gate-manifest.json"
+jq '{nodes: [
+  (.nodes[] | select(.name == "sequencer")),
+  (.nodes[] | select(.name == "storage")),
+  {
+    name: "linux-lan-observer",
+    platform: "linux-x64",
+    host: "192.0.2.44",
+    user: "root",
+    node_root: "/opt/oasis7/p2p-testnet-local",
+    remote_bundle: "/tmp/oasis7-linux-x64-bundle.tar.gz",
+    remote_script: "/opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh",
+    status_url: "http://127.0.0.1:6633/v1/chain/status",
+    restart: false
+  }
+]}' "$TMP_DIR/manifest.json" >"$observer_gate_manifest"
+"$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$observer_gate_manifest" \
+  --package-dir "$package_dir" \
+  --out-dir "$TMP_DIR/linux-observer-gate-out" \
+  --json >"$TMP_DIR/linux-observer-gate-plan.json"
+python3 - "$TMP_DIR/linux-observer-gate-plan.json" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+observer = next(node for node in plan["nodes"] if node["name"] == "linux-lan-observer")
+assert len(observer["commands"]) == 3
+assert observer["commands"][0].startswith("scp ")
+assert observer["commands"][1].startswith("scp ")
+assert observer["commands"][2].startswith("ssh root@192.0.2.44 ")
+wrapper = Path(observer["observer_checkpoint_gate_script"])
+text = wrapper.read_text(encoding="utf-8")
+assert "provider_checkpoint_gate=passed" in text
+assert "latest_execution_checkpoint" in text
+assert "exec /opt/oasis7/oasis7/scripts/p2p-public-testnet-package-node-upgrade.sh" in text
+PY
+
+cross_commit_package="$TMP_DIR/cross-commit-package"
+cp -R "$package_dir" "$cross_commit_package"
+python3 - "$cross_commit_package/macos/macos-arm64-BUILDINFO" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+path.write_text(
+    path.read_text(encoding="utf-8").replace(
+        "commit=419e119bc897efaa34750bee04c63470d1156699",
+        "commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ),
+    encoding="utf-8",
+)
+PY
+(
+  cd "$cross_commit_package/macos"
+  shasum -a 256 oasis7-macos-arm64.dmg macos-arm64-BUILDINFO >macos-arm64-SHA256SUMS
+)
+if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
+  --manifest "$TMP_DIR/manifest.json" \
+  --package-dir "$cross_commit_package" \
+  --out-dir "$TMP_DIR/cross-commit-out" \
+  >"$TMP_DIR/cross-commit.stdout" 2>"$TMP_DIR/cross-commit.stderr"; then
+  echo "expected cross-commit package mix to fail planning" >&2
+  exit 1
+fi
+grep -q 'BUILDINFO commit=' "$TMP_DIR/cross-commit.stderr"
 
 missing_remote_rollback_manifest="$TMP_DIR/missing-remote-rollback-backup-root.json"
 jq '(.nodes[] | select(.name == "windows-observer")) |= del(.rollback_backup_root)' \
@@ -1307,6 +1522,317 @@ grep -q "windows-observer" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 grep -q "rollback_backup_root" "$TMP_DIR/missing-remote-rollback-backup-root.stderr"
 
 package_contract_failed=0
+if ! python3 - \
+  "$TMP_DIR/plan-only.json" \
+  "$TMP_DIR/plan-only-out/macos-observer-macos-arm64-upgrade.sh" \
+  "$package_dir/macos/oasis7-macos-arm64.dmg" \
+  "$ROOT_DIR/doc/testing/evidence/public-testnet-five-node-inventory-2026-06-23.md" \
+  "$ROOT_DIR/doc/p2p/blockchain/p2p-public-testnet-governed-bootstrap-2026-06-06.runbook.md" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" <<'PY'
+from pathlib import Path
+import contextlib
+import hashlib
+import importlib.util
+import io
+import json
+import re
+import subprocess
+import sys
+
+plan = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+script_path = Path(sys.argv[2])
+dmg_path = Path(sys.argv[3])
+inventory_text = Path(sys.argv[4]).read_text(encoding="utf-8")
+runbook_text = Path(sys.argv[5]).read_text(encoding="utf-8")
+module_path = Path(sys.argv[6])
+macos = next(node for node in plan["nodes"] if node["name"] == "macos-observer")
+assert Path(macos["macos_script"]).resolve() == script_path.resolve(), (
+    "macOS arm64 observer must have a generated operator script, not a verification-only note"
+)
+assert macos["native_identity"] == "aarch64-apple-darwin"
+assert macos["state_sync_escalation"] == "explicit_on_authority_failure"
+expected_dmg_sha256 = hashlib.sha256(dmg_path.read_bytes()).hexdigest()
+assert macos["expected_dmg_sha256"] == expected_dmg_sha256
+text = script_path.read_text(encoding="utf-8")
+subprocess.run(["bash", "-n", str(script_path)], check=True)
+for token in (
+    f"EXPECTED_DMG_SHA256={expected_dmg_sha256}",
+    'shasum -a 256 "$DMG_PATH"',
+    "dmg_sha256_verified=true",
+    'ATTEMPT_ROOT="$(mktemp -d',
+    "preflight_backup_closure_complete=true",
+    "state_backup_closure_complete=true",
+    "STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot",
+    'backup_path "$RUNTIME_PATH"',
+    'backup_path "$NODE_ROOT/CURRENT_VERSION"',
+    'backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO"',
+    'backup_path "${CONFIG_TARGETS[$index]}"',
+    'backup_path "${STATE_PATHS[$index]}"',
+    "LAUNCHD_TARGET=system/oasis7.testnet.fourth",
+    "LAUNCHD_BOOTSTRAP_DOMAIN=system",
+    'launchctl bootout "$LAUNCHD_TARGET"',
+    'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"',
+    'MOUNT_POINT="$(mktemp -d',
+    '-mountpoint "$MOUNT_POINT"',
+    "trap cleanup EXIT",
+    "lipo -archs",
+    "arm64",
+    "rollback_closure_complete=true",
+    "/healthz",
+    "/v1/chain/status",
+    "rollback_begin=true",
+    "preserve_failed_state",
+    "failed_state_evidence_complete=true",
+    "restore_pre_upgrade_state",
+    "original_service_recovery_verified=true",
+    "state_backup_failed_before_promotion=true",
+    'MUTATED=0',
+    'trap - ERR',
+    'restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION"',
+    'restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO"',
+    "rollback_service_health_verified=true",
+    "state_sync_escalation_required=true",
+    "provider_checkpoint_gate=passed",
+    "latest_execution_checkpoint",
+    "provider_checkpoint_gate_macos",
+    "plutil -extract",
+    "authority_failure",
+    'grep -Eq \'"ok"[[:space:]]*:[[:space:]]*true\' <<<"$health"',
+    'grep -Eq \'"running"[[:space:]]*:[[:space:]]*true\' <<<"$status"',
+    "assert_state_roots_safe",
+    "assert_no_symlink_components",
+    "resolve_existing_physical_directory",
+    "persistent state root escapes physical node root",
+    '[[ -e "$state_path" && ! -d "$state_path" ]]',
+):
+    assert token in text, f"macOS generated rollout contract missing: {token}"
+checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
+mount_index = text.index("hdiutil attach")
+preflight_backup_index = text.index("preflight_backup_closure_complete=true")
+active_stop = text.index('launchctl bootout "$LAUNCHD_TARGET"', preflight_backup_index)
+checkpoint_gate_index = text.index("provider_checkpoint_gate_macos")
+state_backup_call_index = text.index("if ! backup_persistent_state", active_stop)
+state_backup_index = text.index("rollback_closure_complete=true", state_backup_call_index)
+promotion_index = text.index("promotion_begin=true", state_backup_index)
+assert checksum_index < mount_index < preflight_backup_index < active_stop < state_backup_index < promotion_index, (
+    "required order is checksum/mount, preflight backup, bootout, stopped-state backup, promotion"
+)
+assert state_backup_call_index > active_stop
+assert checkpoint_gate_index < active_stop, (
+    "macOS provider checkpoint gate must fail closed before launchd mutation"
+)
+assert "python3" not in text, (
+    "macOS operator script must not depend on an undeclared Python runtime"
+)
+assert 'IFS=$\'\\t\' read -r name url <<<"$provider"' in text
+assert '"sequencer\t' in text and '"storage\t' in text, (
+    "macOS provider checkpoint gate must delimit native provider records with tabs"
+)
+gate_match = re.search(
+    r"(?ms)^(provider_checkpoint_gate_macos\(\) \{.*?^\})\n\nprovider_checkpoint_gate_macos$",
+    text,
+)
+assert gate_match, "macOS rollout must invoke the generated native checkpoint gate before mutation"
+gate_function = gate_match.group(1)
+native_mock_dir = script_path.parent / "native-checkpoint-whitespace-mocks"
+native_mock_dir.mkdir()
+(native_mock_dir / "curl").write_text(
+    """#!/usr/bin/env bash
+set -euo pipefail
+while (($#)); do
+  if [[ "$1" == "-o" ]]; then
+    printf '{}\\n' >"$2"
+    exit 0
+  fi
+  shift
+done
+exit 2
+""",
+    encoding="utf-8",
+)
+(native_mock_dir / "plutil").write_text(
+    """#!/usr/bin/env bash
+set -euo pipefail
+case "$2" in
+  chain_proof.latest_execution_checkpoint.schema_version) printf '2\\n' ;;
+  chain_proof.latest_execution_checkpoint.checkpoint_id) printf '   \\n' ;;
+  chain_proof.latest_execution_checkpoint.height) printf '4242\\n' ;;
+  chain_proof.latest_execution_checkpoint.manifest_hash) printf '%064d\\n' 0 ;;
+  *) exit 2 ;;
+esac
+""",
+    encoding="utf-8",
+)
+for native_mock in native_mock_dir.iterdir():
+    native_mock.chmod(0o755)
+whitespace_gate = script_path.parent / "native-checkpoint-whitespace-gate.sh"
+whitespace_gate.write_text(
+    "#!/usr/bin/env bash\nset -euo pipefail\n" + gate_function + "\nprovider_checkpoint_gate_macos\n",
+    encoding="utf-8",
+)
+whitespace_result = subprocess.run(
+    ["bash", str(whitespace_gate)],
+    env={**__import__("os").environ, "PATH": f"{native_mock_dir}:{__import__('os').environ['PATH']}"},
+    text=True,
+    capture_output=True,
+)
+assert whitespace_result.returncode != 0, (
+    "macOS checkpoint gate accepted identical whitespace-only checkpoint IDs: "
+    f"stdout={whitespace_result.stdout!r} stderr={whitespace_result.stderr!r}"
+)
+assert "invalid_checkpoint_identity" in whitespace_result.stderr, (
+    "macOS checkpoint gate must reject whitespace-only checkpoint IDs before mutation: "
+    f"stderr={whitespace_result.stderr!r}"
+)
+main_before_stop = text[preflight_backup_index:active_stop]
+assert "backup_persistent_state" not in main_before_stop
+assert "restart_original_service" in text[active_stop:promotion_index]
+rollback = text[text.index("rollback() {"):text.index("on_error() {")]
+assert rollback.index("MUTATED=0") < rollback.index("launchctl bootout"), (
+    "rollback must clear its mutation guard before any fallible rollback action"
+)
+assert "ROLLBACK_ROOT" not in text, "macOS rollback must use the attempt-local active-state backup"
+assert re.search(r"cleanup\(\).*hdiutil detach.*rm -rf", text, re.DOTALL)
+authority_path = text[text.index('if [[ "$authority_failure" -eq 1 ]]'):]
+assert authority_path.index("rollback") < authority_path.index("state_sync_escalation_required=true")
+assert "state_sync_escalation_required=true" in authority_path
+assert re.search(r"rollback.*\|\|.*rollback_status", authority_path, re.DOTALL), (
+    "authority path must emit state-sync escalation even if rollback returns nonzero"
+)
+health_function = text[text.index("wait_for_service_health() {"):text.index("restart_original_service() {")]
+assert '"ok"[[:space:]]*:[[:space:]]*true' in health_function
+assert '"running"[[:space:]]*:[[:space:]]*true' in health_function
+assert re.search(r"ok.*<<<\"\$health\"", health_function, re.DOTALL)
+assert re.search(r"running.*<<<\"\$status\"", health_function, re.DOTALL)
+assert not re.search(r"running.*<<<\"\$health\"", health_function, re.DOTALL)
+assert "authority_failure|state_sync_fallback_required" in health_function
+promotion_success_path = text[
+    text.index("authority_failure=0"):text.index('if [[ "$authority_failure" -eq 1 ]]')
+]
+assert re.search(r"ok.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must require healthz ok=true"
+)
+assert re.search(r"running.*<<<\"\$status\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must require status running=true"
+)
+assert not re.search(r"running.*<<<\"\$health\"", promotion_success_path, re.DOTALL), (
+    "post-promotion health verification must not require running=true from healthz"
+)
+backup_state_function = text[text.index("backup_persistent_state() {"):text.index("preserve_failed_state() {")]
+restore_state_function = text[text.index("restore_pre_upgrade_state() {"):text.index("rollback() {")]
+assert backup_state_function.index("assert_state_roots_safe") < backup_state_function.index("backup_path")
+assert restore_state_function.index("assert_state_roots_safe") < restore_state_function.index("rm -rf")
+
+spec = importlib.util.spec_from_file_location("package_rollout_launchd_contract", module_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+base_node = {
+    "name": "launchd-contract",
+    "node_root": "/Applications/oasis7",
+    "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
+    "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+    "healthz_url": "http://127.0.0.1:19083/healthz",
+    "status_url": "http://127.0.0.1:19083/v1/chain/status",
+    "config_paths": ["/Applications/oasis7/config/node.env"],
+    "persistent_state_paths": ["/Applications/oasis7/data"],
+}
+for target, domain in (
+    ("system/oasis7.testnet.fourth", "system"),
+    ("gui/501/oasis7.testnet.fourth", "gui/501"),
+):
+    generated = module.macos_script(
+        {**base_node, "launchd_target": target}, "version", "commit", "run", "a" * 64,
+        "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+    )
+    assert f"LAUNCHD_TARGET={target}" in generated
+    assert f"LAUNCHD_BOOTSTRAP_DOMAIN={domain}" in generated
+    assert "LAUNCHD_LABEL=" in generated
+    assert "assert_launchd_plist_label" in generated
+    assert "assert_launchd_target_loaded" in generated
+    assert 'launchctl bootout "$LAUNCHD_TARGET"' in generated
+    assert 'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"' in generated
+    bootstrap_positions = [
+        match.start()
+        for match in re.finditer('launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"', generated)
+    ]
+    assert all(
+        "assert_launchd_target_loaded" in generated[position : position + 180]
+        for position in bootstrap_positions
+    ), "every launchd bootstrap path must re-assert the exact target before health acceptance"
+for invalid_target in (
+    "user/oasis7.testnet.fourth",
+    "gui/not-a-uid/oasis7.testnet.fourth",
+    "gui/501",
+    "system/",
+):
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            module.macos_script(
+                {**base_node, "launchd_target": invalid_target},
+                "version", "commit", "run", "a" * 64,
+                "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError(f"invalid launchd target accepted: {invalid_target}")
+invalid_state_sets = (
+    ["/Applications/oasis7/data", "/Applications/oasis7/data"],
+    ["/Applications/oasis7/data", "/Applications/oasis7/data/checkpoints"],
+    ["/Applications/oasis7"],
+    ["/Applications/oasis7/current"],
+    ["/Applications/oasis7/config"],
+    ["/Applications/oasis7/CURRENT_VERSION"],
+    ["/Applications/oasis7/DEPLOYED_BUILDINFO"],
+)
+for invalid_states in invalid_state_sets:
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            module.macos_script(
+                {
+                    **base_node,
+                    "launchd_target": "gui/501/oasis7.testnet.fourth",
+                    "persistent_state_paths": invalid_states,
+                },
+                "version", "commit", "run", "a" * 64,
+                "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError(f"unsafe persistent state topology accepted: {invalid_states}")
+launchd_overlap_node = {
+    **base_node,
+    "launchd_target": "gui/501/oasis7.testnet.fourth",
+    "launchd_plist": "/Applications/oasis7/launchd/oasis7.testnet.fourth.plist",
+    "persistent_state_paths": ["/Applications/oasis7/launchd"],
+}
+try:
+    with contextlib.redirect_stderr(io.StringIO()):
+        module.macos_script(
+            launchd_overlap_node, "version", "commit", "run", "a" * 64,
+            "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+        )
+except SystemExit:
+    pass
+else:
+    raise AssertionError("persistent state path containing launchd plist was accepted")
+assert "assert_no_symlink_components" in generated
+assert "resolve_existing_physical_directory" in generated
+assert "physical_node_root" in generated
+assert "persistent state root escapes physical node root" in generated
+assert "persistent state root has symlink component" in generated
+assert "physical_state_path" in generated
+scope_contract = "all_existing` plus `linux_macos_arm64"
+assert scope_contract in inventory_text and scope_contract in runbook_text
+assert "all_existing` | every package platform represented by the managed fleet" not in inventory_text
+windows_script = Path(next(node for node in plan["nodes"] if node["name"] == "windows-observer")["windows_script"])
+assert "provider_checkpoint_gate=passed" in windows_script.read_text(encoding="utf-8")
+PY
+then
+  package_contract_failed=1
+fi
 if ! python3 - "$TMP_DIR/plan-only.json" <<'PY'
 from pathlib import Path, PurePosixPath
 import base64
@@ -2054,9 +2580,9 @@ jq -e \
   --arg commit "$commit" \
   --arg version "$package_version" \
   '.commit == $commit
-    and .package_version == $version
+    and .platform_provenance["linux-x64"].package_version == $version
     and .readiness_policy == "rpc-running"
-    and (.nodes[] | select(.name == "local-linux") | .applied == true)
+    and (.nodes[] | select(.name == "sequencer") | .applied == true)
     and (.nodes[] | select(.name == "windows-observer") | .windows_script | endswith("windows-observer-windows-upgrade.ps1"))' \
   "$TMP_DIR/plan.json" >/dev/null
 
@@ -3004,6 +3530,16 @@ manifest = json.loads(Path(sys.argv[1]).read_text())
 manifest["nodes"][0]["node_root"] = sys.argv[2]
 manifest["nodes"][0]["restart"] = True
 manifest["nodes"][0]["systemd_service"] = "oasis7-testnet-storage.service"
+manifest["nodes"].append(
+    {
+        "name": "strict-linux-observer",
+        "platform": "linux-x64",
+        "node_root": sys.argv[2],
+        "restart": True,
+        "systemd_service": "oasis7-testnet-storage.service",
+        "status_url": "http://127.0.0.1:6634/v1/chain/status",
+    }
+)
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
 "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
@@ -3014,7 +3550,7 @@ PY
   --json >"$TMP_DIR/strict-plan.json"
 jq -e '
   .readiness_policy == "strict-ready"
-  and (.nodes[] | select(.name == "local-linux") | .commands[0] | contains("--post-restart-status-url"))' \
+  and (.nodes[] | select(.name == "sequencer") | .commands[0] | contains("--post-restart-status-url"))' \
   "$TMP_DIR/strict-plan.json" >/dev/null
 
 python3 - "$TMP_DIR/manifest.json" <<'PY'
@@ -3023,7 +3559,9 @@ import json
 import sys
 
 manifest = json.loads(Path(sys.argv[1]).read_text())
-manifest["nodes"][0].pop("status_url", None)
+next(node for node in manifest["nodes"] if node["name"] == "strict-linux-observer").pop(
+    "status_url", None
+)
 Path(sys.argv[1]).write_text(json.dumps(manifest, indent=2) + "\n")
 PY
 if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
@@ -3037,4 +3575,4 @@ if "$ROOT_DIR/scripts/p2p-public-testnet-package-rollout.py" \
 fi
 grep -q "uses strict-ready but has no status_url" "$TMP_DIR/strict-missing-status.err"
 
-echo "ok: package rollout helper validates artifacts and standardizes linux/windows replacement plans"
+echo "ok: package rollout helper validates artifacts and standardizes linux/windows/macos replacement plans"

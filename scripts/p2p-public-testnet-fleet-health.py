@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -13,6 +14,21 @@ from pathlib import Path
 from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+
+MANAGED_FIVE_NODE_NAMES = frozenset(
+    {
+        "sequencer",
+        "storage",
+        "linux-lan-observer",
+        "windows-observer",
+        "macos-observer",
+    }
+)
+MANAGED_FIVE_NODE_SEQUENCER = "sequencer"
+MANAGED_FIVE_NODE_STORAGE = "storage"
+MIN_CHECKPOINT_SCHEMA_VERSION = 2
+MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA = 1
 
 
 def utc_now() -> str:
@@ -64,10 +80,67 @@ def node_gates(status: dict[str, Any], sequencer_consensus: dict[str, Any]) -> l
     return gates
 
 
+def provider_checkpoint(status: dict[str, Any]) -> tuple[int, str, int, str] | None:
+    chain_proof = status.get("chain_proof")
+    if not isinstance(chain_proof, dict):
+        return None
+    checkpoint = chain_proof.get("latest_execution_checkpoint")
+    if not isinstance(checkpoint, dict):
+        return None
+    schema_version = checkpoint.get("schema_version")
+    checkpoint_id = checkpoint.get("checkpoint_id")
+    height = checkpoint.get("height")
+    manifest_hash = checkpoint.get("manifest_hash")
+    if (
+        isinstance(schema_version, bool)
+        or not isinstance(schema_version, int)
+        or isinstance(height, bool)
+        or not isinstance(height, int)
+        or not isinstance(checkpoint_id, str)
+        or not isinstance(manifest_hash, str)
+    ):
+        return None
+    return schema_version, checkpoint_id, height, manifest_hash
+
+
+def provider_checkpoint_gates(captured: dict[str, dict[str, Any]]) -> list[str]:
+    checkpoints: dict[str, tuple[int, str, int, str]] = {}
+    gates: list[str] = []
+    for name in (MANAGED_FIVE_NODE_SEQUENCER, MANAGED_FIVE_NODE_STORAGE):
+        checkpoint = provider_checkpoint(captured[name])
+        if checkpoint is None:
+            gates.append("provider_checkpoint_missing")
+            continue
+        schema_version, checkpoint_id, height, manifest_hash = checkpoint
+        if schema_version < MIN_CHECKPOINT_SCHEMA_VERSION:
+            gates.append("provider_checkpoint_schema_invalid")
+        if not checkpoint_id.strip() or not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_hash):
+            gates.append("provider_checkpoint_identity_invalid")
+        if height <= 0:
+            gates.append("provider_checkpoint_height_invalid")
+        checkpoints[name] = checkpoint
+    if len(checkpoints) == 2:
+        _, sequencer_id, sequencer_height, sequencer_hash = checkpoints[MANAGED_FIVE_NODE_SEQUENCER]
+        _, storage_id, storage_height, storage_hash = checkpoints[MANAGED_FIVE_NODE_STORAGE]
+        if sequencer_id != storage_id or sequencer_hash.lower() != storage_hash.lower():
+            gates.append("provider_checkpoint_identity_mismatch")
+        if abs(sequencer_height - storage_height) > MAX_PROVIDER_CHECKPOINT_HEIGHT_DELTA:
+            gates.append("provider_checkpoint_height_incompatible")
+    return gates
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Collect bounded public-testnet fleet-health evidence.")
     parser.add_argument("--node", action="append", required=True, type=parse_node, metavar="NAME=URL")
     parser.add_argument("--sequencer", required=True, help="Name of the sequencer node supplied by --node.")
+    parser.add_argument(
+        "--managed-five-node",
+        action="store_true",
+        help=(
+            "Require exactly the current managed public-testnet fleet: sequencer, storage, "
+            "linux-lan-observer, windows-observer, and macos-observer."
+        ),
+    )
     parser.add_argument("--max-capture-span-seconds", required=True, type=float)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
@@ -76,9 +149,27 @@ def main() -> int:
         parser.error("--max-capture-span-seconds must be finite and non-negative")
     nodes = dict(args.node)
     if len(nodes) != len(args.node):
+        if args.managed_five_node:
+            parser.error("managed five-node closure requires each canonical node exactly once; duplicate --node name")
         parser.error("--node names must be unique")
     if args.sequencer not in nodes:
         parser.error("--sequencer must name one supplied --node")
+    if args.managed_five_node:
+        supplied_names = frozenset(nodes)
+        if supplied_names != MANAGED_FIVE_NODE_NAMES:
+            missing = sorted(MANAGED_FIVE_NODE_NAMES - supplied_names)
+            unknown = sorted(supplied_names - MANAGED_FIVE_NODE_NAMES)
+            details = []
+            if missing:
+                details.append("missing=" + ",".join(missing))
+            if unknown:
+                details.append("unknown=" + ",".join(unknown))
+            parser.error(
+                "managed five-node closure requires exactly the canonical node identities "
+                "(" + "; ".join(details) + ")"
+            )
+        if args.sequencer != MANAGED_FIVE_NODE_SEQUENCER:
+            parser.error("managed five-node closure requires --sequencer sequencer")
 
     started_at = utc_now()
     started_monotonic = time.monotonic()
@@ -106,6 +197,8 @@ def main() -> int:
             failed_gates.extend(node_gates(node_evidence, sequencer_consensus))
         elif name == args.sequencer:
             failed_gates.extend(["head_mismatch", "network_head_not_ready"])
+    if args.managed_five_node:
+        failed_gates.extend(provider_checkpoint_gates(captured))
 
     unique_gates = sorted(set(failed_gates))
     evidence = {
@@ -116,6 +209,7 @@ def main() -> int:
         "max_capture_span_seconds": args.max_capture_span_seconds,
         "nodes": captured,
         "sequencer": args.sequencer,
+        "scope": "managed_five_node" if args.managed_five_node else "generic",
         "verdict": "ready" if not unique_gates else "blocked",
     }
     write_evidence(args.output, evidence)

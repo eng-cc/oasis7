@@ -105,6 +105,7 @@ use reward_runtime_worker::{
     RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics, init_shared_metrics, poll_worker_error,
     snapshot_metrics, start_reward_runtime_worker, stop_reward_runtime_worker,
 };
+#[cfg(test)]
 use status_payload::build_chain_status_payload;
 #[cfg(test)]
 use status_server_support::ChainPeerHealthStatus;
@@ -164,6 +165,14 @@ mod execution_bridge {
         reset_execution_bridge_commit_timing_for_tests, snapshot_execution_bridge_commit_timing,
         snapshot_execution_bridge_module_tick_routing_metrics,
     };
+
+    pub(crate) fn load_latest_execution_checkpoint_status_evidence(
+        execution_records_dir: &Path,
+    ) -> Result<Option<(u32, String, u64, String)>, String> {
+        super::execution_bridge_real_tests::real_execution_bridge::load_latest_execution_checkpoint_status_evidence(
+            execution_records_dir,
+        )
+    }
 
     #[derive(Debug)]
     pub(super) struct NodeRuntimeExecutionDriver;
@@ -564,6 +573,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         options.world_id.clone(),
         paths.execution_world_dir.clone(),
         paths.execution_records_dir.clone(),
+        paths.storage_root.clone(),
         options.loaded_network_tier_manifest.clone(),
         release_security_policy,
         effective_p2p_policy,
@@ -1140,6 +1150,9 @@ mod observability_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_observability_transport_tests.rs"]
 mod observability_transport_tests;
+#[cfg(test)]
+#[path = "oasis7_chain_runtime/oasis7_chain_runtime_status_payload_chain_proof_tests.rs"]
+mod status_payload_chain_proof_tests;
 #[cfg(test)]
 #[path = "oasis7_chain_runtime/oasis7_chain_runtime_status_payload_observer_tests.rs"]
 mod status_payload_observer_tests;
