@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -58,6 +58,8 @@ mod gameplay_snapshot_lane;
 mod mapping;
 mod player_gameplay;
 mod recovery;
+mod recovery_audit;
+mod recovery_compensation;
 mod recovery_persistence;
 mod recovery_receipt;
 mod recovery_rollback_v2;
@@ -136,6 +138,7 @@ pub struct ViewerRuntimeLiveServer {
     latest_player_gameplay_feedback: Option<PlayerGameplayRecentFeedback>,
     latest_player_gameplay_causality: Option<PlayerGameplayCausalitySignal>,
     runtime_action_players: BTreeMap<u64, String>,
+    consumed_rollback_operator_nonces: BTreeSet<String>,
     authoritative_recovery_write_fence: Option<String>,
     #[cfg(test)]
     recovery_fault_injection: Option<recovery::RuntimeRecoveryFaultInjection>,
@@ -224,6 +227,8 @@ impl ViewerRuntimeLiveServer {
                                 session_revoke_metadata: Vec::new(),
                                 rollback_readiness: BTreeMap::new(),
                                 runtime_action_players: BTreeMap::new(),
+                                consumed_rollback_operator_nonces: BTreeSet::new(),
+                                session_side_effects: Default::default(),
                             },
                         )
                         .map_err(|_| generation_error)
@@ -253,12 +258,18 @@ impl ViewerRuntimeLiveServer {
             }
         }
         let initial_world_time = world.state().time;
-        let llm_sidecar = match seed_model.as_ref() {
+        let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
                 RuntimeLlmSidecar::new(config.decision_mode).with_runtime_seed_model(model)
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        if let Some(generation) = recovered_generation.as_ref() {
+            Self::restore_persisted_session_side_effects(
+                &mut llm_sidecar,
+                &generation.session_side_effects,
+            );
+        }
         let next_virtual_event_id = latest_runtime_event_seq(&world).saturating_add(1).max(1);
         let mut server = Self {
             config,
@@ -272,7 +283,15 @@ impl ViewerRuntimeLiveServer {
             seed_model,
             script: RuntimeLiveScript::default(),
             llm_sidecar,
-            pending_virtual_events: VecDeque::new(),
+            pending_virtual_events: recovered_generation
+                .as_ref()
+                .map(|generation| {
+                    generation
+                        .session_side_effects
+                        .pending_virtual_events
+                        .clone()
+                })
+                .unwrap_or_default(),
             next_virtual_event_id,
             authoritative_batches: recovered_generation
                 .as_ref()
@@ -330,6 +349,10 @@ impl ViewerRuntimeLiveServer {
             runtime_action_players: recovered_generation
                 .as_ref()
                 .map(|generation| generation.runtime_action_players.clone())
+                .unwrap_or_default(),
+            consumed_rollback_operator_nonces: recovered_generation
+                .as_ref()
+                .map(|generation| generation.consumed_rollback_operator_nonces.clone())
                 .unwrap_or_default(),
             authoritative_recovery_write_fence: None,
             #[cfg(test)]

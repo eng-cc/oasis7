@@ -1,4 +1,5 @@
 use super::*;
+use sha2::{Digest, Sha256};
 
 fn install_viewer_recovery_precommit_failure(dir: &std::path::Path) {
     let generation_root = dir.join(".distfs-state/sidecar-generations");
@@ -8,6 +9,147 @@ fn install_viewer_recovery_precommit_failure(dir: &std::path::Path) {
         b"fail",
     )
     .expect("install precommit failpoint");
+}
+
+fn persist_session_side_effect_projection(
+    recovery_dir: &std::path::Path,
+) -> (ViewerRuntimeLiveServer, String, String, Vec<u8>) {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("server");
+    server.set_authoritative_recovery_dir_override(Some(recovery_dir.to_path_buf()));
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("agent");
+    let player_id = "player-session-projection".to_string();
+    let cached_ack = crate::viewer::AgentChatAck {
+        agent_id: agent_id.clone(),
+        accepted_at_tick: server.world.state().time,
+        message_len: "persisted chat".len(),
+        player_id: Some("cached-player".to_string()),
+        intent_tick: Some(server.world.state().time),
+        intent_seq: Some(77),
+        idempotent_replay: false,
+    };
+    server.llm_sidecar.record_chat_intent_ack(
+        "cached-player",
+        agent_id.as_str(),
+        77,
+        Some(server.world.state().time),
+        "persisted chat",
+        None,
+        &cached_ack,
+    );
+    let (public_key, private_key) = test_signer(96);
+    register_runtime_session(
+        &mut server,
+        player_id.as_str(),
+        Some(agent_id.as_str()),
+        9,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let metadata = RuntimeWorld::load_authoritative_recovery_metadata(recovery_dir)
+        .expect("load recovery metadata")
+        .expect("committed recovery metadata");
+    (server, agent_id, player_id, metadata)
+}
+
+fn assert_session_side_effect_projection(
+    server: &ViewerRuntimeLiveServer,
+    agent_id: &str,
+    player_id: &str,
+) {
+    assert_eq!(
+        server.llm_sidecar.agent_player_bindings.get(agent_id),
+        Some(&player_id.to_string())
+    );
+    assert_eq!(
+        server.llm_sidecar.player_agent_bindings.get(player_id),
+        Some(&agent_id.to_string())
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .agent_public_key_bindings
+            .contains_key(agent_id)
+    );
+    assert_eq!(
+        server.llm_sidecar.player_auth_last_nonce.get(player_id),
+        Some(&9)
+    );
+    assert!(
+        server
+            .llm_sidecar
+            .find_chat_intent_replay(
+                "cached-player",
+                agent_id,
+                77,
+                Some(server.world.state().time),
+                "persisted chat",
+                None,
+            )
+            .expect("lookup cached chat acknowledgement")
+            .is_some()
+    );
+    assert!(!server.pending_virtual_events.is_empty());
+}
+
+#[test]
+fn committed_fence_readback_restores_complete_session_side_effect_projection() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-projection-readback-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let (mut server, agent_id, player_id, metadata) =
+        persist_session_side_effect_projection(&recovery_dir);
+    let encoded: serde_json::Value =
+        serde_json::from_slice(&metadata).expect("decode recovery envelope");
+    assert!(encoded.get("session_side_effects").is_some());
+
+    server.llm_sidecar.agent_player_bindings.clear();
+    server.llm_sidecar.player_agent_bindings.clear();
+    server.llm_sidecar.agent_public_key_bindings.clear();
+    server.llm_sidecar.player_auth_last_nonce.clear();
+    server.llm_sidecar.player_chat_intent_acks.clear();
+    server.pending_virtual_events.clear();
+    server.authoritative_recovery_write_fence =
+        Some(hex::encode(Sha256::digest(metadata.as_slice())));
+    server
+        .resolve_authoritative_recovery_write_fence()
+        .expect("resolve committed generation");
+
+    assert_session_side_effect_projection(&server, agent_id.as_str(), player_id.as_str());
+    let _ = std::fs::remove_dir_all(recovery_dir);
+}
+
+#[test]
+fn recovery_restart_restores_complete_session_side_effect_projection() {
+    let recovery_dir = std::env::temp_dir().join(format!(
+        "oasis7-session-projection-restart-{}-{}",
+        std::process::id(),
+        crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms()
+    ));
+    let (_source, agent_id, player_id, metadata) =
+        persist_session_side_effect_projection(&recovery_dir);
+    let mut restarted =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("restarted server");
+    restarted.set_authoritative_recovery_dir_override(Some(recovery_dir.clone()));
+    restarted.authoritative_recovery_write_fence =
+        Some(hex::encode(Sha256::digest(metadata.as_slice())));
+    restarted
+        .resolve_authoritative_recovery_write_fence()
+        .expect("restore committed generation after restart");
+
+    assert_session_side_effect_projection(&restarted, agent_id.as_str(), player_id.as_str());
+    let _ = std::fs::remove_dir_all(recovery_dir);
 }
 
 #[test]

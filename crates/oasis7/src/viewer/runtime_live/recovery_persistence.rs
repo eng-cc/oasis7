@@ -45,6 +45,27 @@ impl ViewerRuntimeLiveServer {
             .collect();
         self.rollback_readiness = generation.rollback_readiness;
         self.runtime_action_players = generation.runtime_action_players;
+        self.consumed_rollback_operator_nonces = generation.consumed_rollback_operator_nonces;
+        self.llm_sidecar.agent_player_bindings =
+            generation.session_side_effects.agent_player_bindings;
+        self.llm_sidecar.player_agent_bindings =
+            generation.session_side_effects.player_agent_bindings;
+        self.llm_sidecar.agent_public_key_bindings =
+            generation.session_side_effects.agent_public_key_bindings;
+        self.llm_sidecar.player_auth_last_nonce =
+            generation.session_side_effects.player_auth_last_nonce;
+        self.llm_sidecar.player_chat_intent_acks = generation
+            .session_side_effects
+            .player_chat_intent_acks
+            .into_iter()
+            .map(|entry| {
+                (
+                    (entry.player_id, entry.agent_id, entry.intent_seq),
+                    entry.record,
+                )
+            })
+            .collect();
+        self.pending_virtual_events = generation.session_side_effects.pending_virtual_events;
         self.rebuild_settlement_ranking_gate();
         Ok(())
     }

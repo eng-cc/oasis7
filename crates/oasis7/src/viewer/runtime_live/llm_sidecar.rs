@@ -124,7 +124,7 @@ enum RuntimeDecisionRunner {
     ProviderBacked(AgentRunner<ProviderBackedAgentBehavior<ProviderLoopbackAdapter>>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(in crate::viewer::runtime_live) struct RuntimeChatIntentAckRecord {
     ack: AgentChatAck,
     message_hash: String,

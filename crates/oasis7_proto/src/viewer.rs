@@ -247,6 +247,12 @@ pub enum AuthoritativeRecoveryCommand {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         audit_evidence: Option<RollbackStrictAuditEvidence>,
     },
+    TransitionRollbackCompensation {
+        request: RollbackCompensationTransitionRequest,
+    },
+    ResolveRollbackAttribution {
+        request: RollbackAttributionResolutionRequest,
+    },
     ReconnectSync {
         request: AuthoritativeReconnectSyncRequest,
     },

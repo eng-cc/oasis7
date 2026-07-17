@@ -19,6 +19,28 @@ pub(super) struct RuntimeAuthoritativeRecoveryGeneration {
     pub(super) rollback_readiness: BTreeMap<String, RuntimeRollbackReadinessRecord>,
     #[serde(default)]
     pub(super) runtime_action_players: BTreeMap<u64, String>,
+    #[serde(default)]
+    pub(super) consumed_rollback_operator_nonces: BTreeSet<String>,
+    #[serde(default)]
+    pub(super) session_side_effects: RuntimePersistedSessionSideEffects,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub(super) struct RuntimePersistedSessionSideEffects {
+    pub(super) agent_player_bindings: BTreeMap<String, String>,
+    pub(super) player_agent_bindings: BTreeMap<String, String>,
+    pub(super) agent_public_key_bindings: BTreeMap<String, String>,
+    pub(super) player_auth_last_nonce: BTreeMap<String, u64>,
+    pub(super) player_chat_intent_acks: Vec<RuntimePersistedChatIntentAck>,
+    pub(super) pending_virtual_events: VecDeque<WorldEvent>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub(super) struct RuntimePersistedChatIntentAck {
+    pub(super) player_id: String,
+    pub(super) agent_id: String,
+    pub(super) intent_seq: u64,
+    pub(super) record: super::control_plane::RuntimeChatIntentAckRecord,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -46,6 +68,8 @@ pub(super) struct RuntimeRollbackReadinessRecord {
     pub(super) strict_audit_evidence_digest: String,
     #[serde(default)]
     pub(super) strict_audit_observed_at_ms: u64,
+    #[serde(default)]
+    pub(super) strict_audit_evidence: Option<crate::viewer::protocol::RollbackStrictAuditEvidence>,
     pub(super) ready: bool,
     pub(super) blockers: Vec<String>,
     pub(super) evaluated_at_tick: u64,
@@ -121,6 +145,8 @@ impl ViewerRuntimeLiveServer {
                 .collect(),
             rollback_readiness: self.rollback_readiness.clone(),
             runtime_action_players: self.runtime_action_players.clone(),
+            consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
+            session_side_effects: self.persisted_session_side_effects(),
         })
         .map_err(|err| {
             recovery_error(
@@ -183,6 +209,8 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
+        let now_ms = current_unix_time_ms();
+        let current_state_root = self.world.current_state_root_hash().ok();
         let readiness = self
             .rollback_readiness
             .get(&authorization_nonce)
@@ -195,6 +223,23 @@ impl ViewerRuntimeLiveServer {
                     && record.reorg_epoch == outcome.committed_reorg_epoch
                     && record.candidate_state_root == outcome.target_state_root
                     && !record.strict_audit_evidence_digest.is_empty()
+                    && current_state_root.as_deref() == Some(outcome.target_state_root.as_str())
+                    && self.reorg_epoch == outcome.committed_reorg_epoch
+                    && self.world.first_tick_consensus_drift().is_none()
+                    && self.world.verify_tick_consensus_chain().is_ok()
+                    && outcome.dispositions.iter().all(|entry| {
+                        entry.compensation.as_ref().is_none_or(|case| {
+                            case.state == crate::runtime::RollbackCompensationState::Completed
+                        })
+                    })
+                    && record.strict_audit_evidence.as_ref().is_some_and(|audit| {
+                        super::recovery_audit::verify_strict_audit_evidence(
+                            &self.world,
+                            audit,
+                            now_ms,
+                        )
+                        .is_ok()
+                    })
             });
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::RolledBack,
@@ -300,6 +345,22 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
+        if audit_evidence.as_ref().is_some_and(|audit| {
+            self.rollback_readiness.values().any(|record| {
+                record
+                    .strict_audit_evidence
+                    .as_ref()
+                    .is_some_and(|used| used.nonce == audit.nonce)
+            })
+        }) {
+            return Err(recovery_error(
+                "strict_audit_evidence_replay",
+                "strict audit evidence nonce has already been consumed",
+                Some(outcome.target_batch_id.clone()),
+                None,
+                None,
+            ));
+        }
         let affected_events = outcome
             .dispositions
             .iter()
@@ -334,25 +395,25 @@ impl ViewerRuntimeLiveServer {
         };
         if outcome.dispositions.iter().any(|entry| {
             entry.compensation.as_ref().is_some_and(|case| {
-                case.state != crate::runtime::RollbackCompensationState::Completed
+                !matches!(
+                    case.state,
+                    crate::runtime::RollbackCompensationState::Completed
+                        | crate::runtime::RollbackCompensationState::Rejected
+                )
             })
         }) {
             blockers.push("compensation_cases_unresolved".to_string());
         }
-        if receipt
-            .readiness_blockers
+        if outcome
+            .dispositions
             .iter()
-            .any(|blocker| blocker == "player_attribution_incomplete")
+            .any(|entry| entry.action_id.is_some() && entry.player_id.is_none())
         {
             blockers.push("player_attribution_incomplete".to_string());
         }
         let now_ms = current_unix_time_ms();
-        const STRICT_AUDIT_MAX_AGE_MS: u64 = 5 * 60 * 1_000;
-        const STRICT_AUDIT_FUTURE_SKEW_MS: u64 = 30 * 1_000;
         let valid_audit = audit_evidence.as_ref().is_some_and(|audit| {
-            audit.strict_registry_audit_passed
-                && audit.strict_manifest_audit_passed
-                && !audit.evidence_digest.trim().is_empty()
+            super::recovery_audit::verify_strict_audit_evidence(&self.world, audit, now_ms).is_ok()
                 && audit.rollback_ticket == outcome.rollback_ticket
                 && audit.receipt_id == receipt.receipt_id
                 && audit.canonical_intent_digest == outcome.canonical_intent_hash
@@ -360,8 +421,6 @@ impl ViewerRuntimeLiveServer {
                 && audit.reorg_epoch == outcome.committed_reorg_epoch
                 && audit.candidate_state_root == current_state_root
                 && audit.candidate_state_root == outcome.target_state_root
-                && audit.observed_at_ms <= now_ms.saturating_add(STRICT_AUDIT_FUTURE_SKEW_MS)
-                && now_ms.saturating_sub(audit.observed_at_ms) <= STRICT_AUDIT_MAX_AGE_MS
         });
         if !valid_audit {
             blockers.push("fresh_strict_audit_evidence_required".to_string());
@@ -384,7 +443,8 @@ impl ViewerRuntimeLiveServer {
             strict_audit_observed_at_ms: audit_evidence
                 .as_ref()
                 .filter(|_| valid_audit)
-                .map_or(0, |audit| audit.observed_at_ms),
+                .map_or(0, |audit| audit.issued_at_ms),
+            strict_audit_evidence: audit_evidence.filter(|_| valid_audit),
             ready: blockers.is_empty(),
             blockers: blockers.clone(),
             evaluated_at_tick: self.world.state().time,
@@ -419,6 +479,8 @@ impl ViewerRuntimeLiveServer {
                 .collect(),
             rollback_readiness: candidate_readiness.clone(),
             runtime_action_players: self.runtime_action_players.clone(),
+            consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
+            session_side_effects: self.persisted_session_side_effects(),
         })
         .map_err(|err| {
             recovery_error(
@@ -553,8 +615,8 @@ pub(super) fn viewer_dispositions(
             let compensation = entry.compensation.as_ref().zip(compensation_case_id.as_ref()).map(
                 |(case, case_id)| crate::viewer::protocol::PlayerCompensationStatus {
                     case_id: case_id.clone(),
-                    responsible_party: case.owner_id.clone(),
-                    ticket_reference: case.ticket_id.clone(),
+                    responsible_party: "player_support".to_string(),
+                    ticket_reference: format!("rollback-case-{}", &case_id[..16]),
                     state: match case.state {
                         crate::runtime::RollbackCompensationState::PendingAuthorization => crate::viewer::protocol::PlayerCompensationState::PendingAuthorization,
                         crate::runtime::RollbackCompensationState::Authorized => crate::viewer::protocol::PlayerCompensationState::Authorized,

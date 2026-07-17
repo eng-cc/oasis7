@@ -15,6 +15,55 @@ pub(super) struct RuntimeSessionMutationSnapshot {
 }
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn restore_persisted_session_side_effects(
+        llm_sidecar: &mut RuntimeLlmSidecar,
+        persisted: &super::recovery_receipt::RuntimePersistedSessionSideEffects,
+    ) {
+        llm_sidecar.agent_player_bindings = persisted.agent_player_bindings.clone();
+        llm_sidecar.player_agent_bindings = persisted.player_agent_bindings.clone();
+        llm_sidecar.agent_public_key_bindings = persisted.agent_public_key_bindings.clone();
+        llm_sidecar.player_auth_last_nonce = persisted.player_auth_last_nonce.clone();
+        llm_sidecar.player_chat_intent_acks = persisted
+            .player_chat_intent_acks
+            .iter()
+            .map(|entry| {
+                (
+                    (
+                        entry.player_id.clone(),
+                        entry.agent_id.clone(),
+                        entry.intent_seq,
+                    ),
+                    entry.record.clone(),
+                )
+            })
+            .collect();
+    }
+
+    pub(super) fn persisted_session_side_effects(
+        &self,
+    ) -> super::recovery_receipt::RuntimePersistedSessionSideEffects {
+        super::recovery_receipt::RuntimePersistedSessionSideEffects {
+            agent_player_bindings: self.llm_sidecar.agent_player_bindings.clone(),
+            player_agent_bindings: self.llm_sidecar.player_agent_bindings.clone(),
+            agent_public_key_bindings: self.llm_sidecar.agent_public_key_bindings.clone(),
+            player_auth_last_nonce: self.llm_sidecar.player_auth_last_nonce.clone(),
+            player_chat_intent_acks: self
+                .llm_sidecar
+                .player_chat_intent_acks
+                .iter()
+                .map(|((player_id, agent_id, intent_seq), record)| {
+                    super::recovery_receipt::RuntimePersistedChatIntentAck {
+                        player_id: player_id.clone(),
+                        agent_id: agent_id.clone(),
+                        intent_seq: *intent_seq,
+                        record: record.clone(),
+                    }
+                })
+                .collect(),
+            pending_virtual_events: self.pending_virtual_events.clone(),
+        }
+    }
+
     pub(super) fn session_mutation_snapshot(&self) -> RuntimeSessionMutationSnapshot {
         RuntimeSessionMutationSnapshot {
             session_policy: self.session_policy.clone(),

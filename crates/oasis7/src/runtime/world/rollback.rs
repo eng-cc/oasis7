@@ -288,6 +288,53 @@ impl World {
         Ok(())
     }
 
+    pub fn resolve_rollback_action_attribution(
+        &mut self,
+        nonce: &str,
+        source: &RollbackSourceEventIdentity,
+        player_id: String,
+        compensation: super::super::RollbackCompensationCaseRef,
+    ) -> Result<(), WorldError> {
+        if player_id.trim().is_empty() {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback attribution requires a player id".to_string(),
+            });
+        }
+        let outcome = self.rollback_nonce_outcomes.get_mut(nonce).ok_or_else(|| {
+            WorldError::DistributedValidationFailed {
+                reason: format!("rollback outcome for nonce {nonce} is not committed"),
+            }
+        })?;
+        let disposition = outcome
+            .dispositions
+            .iter_mut()
+            .find(|entry| {
+                entry.source_batch_id == source.source_batch_id
+                    && entry.source_event_id == source.source_event_id
+            })
+            .ok_or_else(|| WorldError::DistributedValidationFailed {
+                reason: "rollback attribution source is not in the affected census".to_string(),
+            })?;
+        if disposition
+            .player_id
+            .as_deref()
+            .is_some_and(|value| value != player_id)
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "rollback action attribution is immutable once resolved".to_string(),
+            });
+        }
+        if disposition.status != super::super::RollbackDispositionStatus::RejectedFork {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: "only rejected fork actions require attribution remediation".to_string(),
+            });
+        }
+        disposition.player_id = Some(player_id);
+        disposition.status = super::super::RollbackDispositionStatus::CompensationRequired;
+        disposition.compensation = Some(compensation);
+        Ok(())
+    }
+
     pub fn validate_rollback_receipt_projection(
         &self,
         nonce: &str,

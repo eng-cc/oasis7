@@ -18,6 +18,8 @@ impl ViewerRuntimeLiveServer {
                 | AuthoritativeRecoveryCommand::RollbackV2 { .. }
                 | AuthoritativeRecoveryCommand::GetRollbackReceipt { .. }
                 | AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness { .. }
+                | AuthoritativeRecoveryCommand::TransitionRollbackCompensation { .. }
+                | AuthoritativeRecoveryCommand::ResolveRollbackAttribution { .. }
         ) && !negotiated.supports_signed_rollback()
         {
             return Err(recovery_error(
@@ -64,6 +66,12 @@ impl ViewerRuntimeLiveServer {
                 audit_evidence,
             } => self
                 .reevaluate_rollback_readiness(authorization_nonce, audit_evidence)
+                .map(|ack| (ack, false)),
+            AuthoritativeRecoveryCommand::TransitionRollbackCompensation { request } => self
+                .transition_rollback_compensation(request)
+                .map(|ack| (ack, false)),
+            AuthoritativeRecoveryCommand::ResolveRollbackAttribution { request } => self
+                .resolve_rollback_attribution(request)
                 .map(|ack| (ack, false)),
             AuthoritativeRecoveryCommand::ReconnectSync { request } => {
                 self.handle_reconnect_sync(request).map(|ack| (ack, false))
@@ -291,6 +299,20 @@ impl ViewerRuntimeLiveServer {
                     // that this is automation rather than a player action, retain an explicit
                     // fail-closed census blocker instead of silently declaring coverage complete.
                     missing_player_attribution = true;
+                    if seen_actions.insert(action_id) {
+                        dispositions.push(crate::runtime::RollbackEventDisposition {
+                            source_batch_id: batch.batch_id.clone(),
+                            source_event_id: event.id,
+                            status: if index <= batch_index {
+                                crate::runtime::RollbackDispositionStatus::Replayed
+                            } else {
+                                crate::runtime::RollbackDispositionStatus::RejectedFork
+                            },
+                            compensation: None,
+                            player_id: None,
+                            action_id: Some(action_id.to_string()),
+                        });
+                    }
                     continue;
                 };
                 if !seen_actions.insert(action_id) {
@@ -672,6 +694,8 @@ impl ViewerRuntimeLiveServer {
                     .collect(),
                 rollback_readiness: self.rollback_readiness.clone(),
                 runtime_action_players: self.runtime_action_players.clone(),
+                consumed_rollback_operator_nonces: self.consumed_rollback_operator_nonces.clone(),
+                session_side_effects: self.persisted_session_side_effects(),
             },
         )
         .map_err(|err| {
