@@ -60,7 +60,7 @@
 
 ### 1.1 战争推荐操作区间（用于评审）
 
-当前评分和平分规则下，`recommended_intensity` 表示“在当前预览快照与激活结算路径中，达到目标胜负结果的最低强度”，而不是通用强度带。
+当前评分和平分规则下，`minimum_winning_intensity` 表示“在当前预览快照与激活结算路径中，达到目标胜负结果的最低强度”，而不是通用强度带。
 
 预览必须先计算不含进攻强度的双方基础评分：
 
@@ -93,7 +93,7 @@
 - `target_alliance_id`
 - `action_kind`: `declare_war` / `change_intensity` / `defer` / `negotiate_first`
 - `intensity`
-- `recommended_intensity_band`：使用当前成员、聚合声望、模块疲劳与平分规则推导的最低胜利强度，并标识 core fallback 或具体模块路径；无可达强度时必须返回“补强/谈判/等待”而不是虚构推荐带
+- `minimum_winning_intensity: u32 | null`：使用当前成员、聚合声望、模块疲劳与平分规则推导的最低胜利强度，并标识 core fallback 或具体模块路径；无可达强度时返回 `null`，并由 `recommended_war_action` 返回“补强/谈判/等待”
 - `war_duration_ticks`
 - `aggressor_score_estimate`
 - `defender_score_estimate`
