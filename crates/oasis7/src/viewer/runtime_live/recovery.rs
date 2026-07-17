@@ -59,10 +59,8 @@ impl ViewerRuntimeLiveServer {
             AuthoritativeRecoveryCommand::RollbackV2 { request } => self
                 .rollback_v2_to_replay_target(request)
                 .map(|ack| (ack, true)),
-            AuthoritativeRecoveryCommand::GetRollbackReceipt {
-                authorization_nonce,
-            } => self
-                .get_rollback_receipt(authorization_nonce)
+            AuthoritativeRecoveryCommand::GetRollbackReceipt { request } => self
+                .get_authenticated_rollback_receipt(request)
                 .map(|ack| (ack, false)),
             AuthoritativeRecoveryCommand::ReevaluateRollbackReadiness {
                 authorization_nonce,

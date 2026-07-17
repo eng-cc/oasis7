@@ -4,7 +4,7 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
-    fn verify_compensation_operator(
+    pub(super) fn verify_compensation_operator(
         &self,
         authority: &crate::viewer::protocol::RollbackOperatorAuthorization,
         payload: &[u8],

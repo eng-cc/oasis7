@@ -5,6 +5,7 @@ mod gameplay_actions;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
 mod protocol;
+mod rollback_audit_evidence;
 #[cfg(not(target_arch = "wasm32"))]
 mod runtime_live;
 #[cfg(not(target_arch = "wasm32"))]
@@ -64,6 +65,10 @@ pub use protocol::{
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
     PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
     ViewerRequest, ViewerResponse, ViewerStream,
+};
+pub use rollback_audit_evidence::{
+    RollbackStrictAuditEvidenceInput, build_unsigned_strict_audit_evidence,
+    strict_audit_artifact_digest,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use runtime_live::{

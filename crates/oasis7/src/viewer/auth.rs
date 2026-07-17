@@ -816,6 +816,8 @@ mod atomic_file;
 
 #[path = "auth_registration_replay.rs"]
 mod registration_replay;
+#[path = "auth_registration_replay_lock.rs"]
+mod registration_replay_lock;
 use registration_replay::ensure_registration_grant_nonce_unused;
 pub use registration_replay::{
     HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, preflight_hosted_registration_replay_ledger,

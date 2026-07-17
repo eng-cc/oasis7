@@ -240,7 +240,7 @@ pub enum AuthoritativeRecoveryCommand {
         request: AuthoritativeRollbackV2Request,
     },
     GetRollbackReceipt {
-        authorization_nonce: String,
+        request: RollbackReceiptAccessRequest,
     },
     ReevaluateRollbackReadiness {
         authorization_nonce: String,

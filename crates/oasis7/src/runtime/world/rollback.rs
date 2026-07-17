@@ -315,6 +315,12 @@ impl World {
             .ok_or_else(|| WorldError::DistributedValidationFailed {
                 reason: "rollback attribution source is not in the affected census".to_string(),
             })?;
+        if disposition.system_authored {
+            return Err(WorldError::RollbackAttributionResolutionConflict {
+                source_batch_id: source.source_batch_id.clone(),
+                source_event_id: source.source_event_id,
+            });
+        }
         if disposition
             .player_id
             .as_deref()
@@ -356,10 +362,13 @@ impl World {
             .ok_or_else(|| WorldError::DistributedValidationFailed {
                 reason: "rollback system-action source is not in the affected census".to_string(),
             })?;
-        if disposition.player_id.is_some()
-            || disposition.action_id.is_none()
-            || disposition.compensation.is_some()
-        {
+        if disposition.player_id.is_some() || disposition.compensation.is_some() {
+            return Err(WorldError::RollbackAttributionResolutionConflict {
+                source_batch_id: source.source_batch_id.clone(),
+                source_event_id: source.source_event_id,
+            });
+        }
+        if disposition.action_id.is_none() {
             return Err(WorldError::DistributedValidationFailed {
                 reason: "only unresolved non-player action evidence may be system-authored"
                     .to_string(),

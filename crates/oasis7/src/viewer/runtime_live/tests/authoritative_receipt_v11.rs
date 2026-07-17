@@ -51,32 +51,25 @@ fn signed_strict_audit_evidence(
 ) -> crate::viewer::protocol::RollbackStrictAuditEvidence {
     let audit_report_bytes = canonical_clean_governance_audit_report_bytes();
     let manifest_bytes = br#"{"rollback_authorities":"exact-test-manifest"}"#.to_vec();
-    let mut evidence = crate::viewer::protocol::RollbackStrictAuditEvidence {
-        schema_version: 1,
-        authority_id: "governance-bob".to_string(),
-        rollback_ticket: receipt.rollback_ticket.clone(),
-        receipt_id: receipt.receipt_id.clone(),
-        canonical_intent_digest: receipt.canonical_intent_digest.clone(),
-        recovery_snapshot_hash: receipt.snapshot_hash.clone(),
-        reorg_epoch: receipt.committed_reorg_epoch,
-        candidate_state_root: server
-            .world
-            .current_state_root_hash()
-            .expect("current root"),
-        strict_registry_audit_passed: true,
-        strict_manifest_audit_passed: true,
-        evidence_digest: crate::viewer::runtime_live::recovery_audit::strict_audit_evidence_digest(
-            &audit_report_bytes,
-            &manifest_bytes,
-        ),
-        audit_report_bytes,
-        manifest_bytes,
-        issued_at_ms,
-        expires_at_ms,
-        nonce: nonce.to_string(),
-        signature_scheme: "ed25519".to_string(),
-        signature_hex: String::new(),
-    };
+    let mut evidence = crate::viewer::build_unsigned_strict_audit_evidence(
+        crate::viewer::RollbackStrictAuditEvidenceInput {
+            authority_id: "governance-bob".to_string(),
+            rollback_ticket: receipt.rollback_ticket.clone(),
+            receipt_id: receipt.receipt_id.clone(),
+            canonical_intent_digest: receipt.canonical_intent_digest.clone(),
+            recovery_snapshot_hash: receipt.snapshot_hash.clone(),
+            reorg_epoch: receipt.committed_reorg_epoch,
+            candidate_state_root: server
+                .world
+                .current_state_root_hash()
+                .expect("current root"),
+            audit_report_bytes,
+            manifest_bytes,
+            issued_at_ms,
+            expires_at_ms,
+            nonce: nonce.to_string(),
+        },
+    );
     evidence.signature_hex = hex::encode(
         governance
             .sign(&evidence.canonical_signing_payload().expect("audit payload"))
@@ -537,6 +530,50 @@ fn durable_receipt_does_not_fabricate_player_compensation_for_system_events() {
     assert!(restored.system_authored);
     assert!(restored.player_id.is_none());
     assert!(restored.compensation.is_none());
+    let mut restarted =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("restart server");
+    restarted.world = restored_generation.world;
+    restarted.consumed_rollback_operator_nonces = generation.consumed_rollback_operator_nonces;
+
+    let mut conflicting_player = crate::viewer::protocol::RollbackAttributionResolutionRequest {
+        authorization_nonce: "nonce-compensation-status".to_string(),
+        source_batch_id: missing.source_batch_id.clone(),
+        source_event_id: missing.source_event_id,
+        resolution: crate::viewer::protocol::RollbackAttributionResolution::Player {
+            player_id: "player-late-claim".to_string(),
+        },
+        authorization: crate::viewer::protocol::RollbackOperatorAuthorization {
+            authority_id: "governance-bob".to_string(),
+            issued_at_ms: now_ms,
+            expires_at_ms: now_ms.saturating_add(60_000),
+            nonce: "operator-conflicting-player-attribution".to_string(),
+            signature_scheme: "ed25519".to_string(),
+            signature_hex: String::new(),
+        },
+    };
+    conflicting_player.authorization.signature_hex = hex::encode(
+        governance
+            .sign(
+                &conflicting_player
+                    .canonical_signing_payload()
+                    .expect("payload"),
+            )
+            .to_bytes(),
+    );
+    let world_before_conflict = restarted.world.snapshot();
+    let nonces_before_conflict = restarted.consumed_rollback_operator_nonces.clone();
+    let error = restarted
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ResolveRollbackAttribution {
+            request: conflicting_player,
+        })
+        .expect_err("persisted system-authored attribution is terminal");
+    assert_eq!(error.code, "rollback_attribution_resolution_conflict");
+    assert_eq!(restarted.world.snapshot(), world_before_conflict);
+    assert_eq!(
+        restarted.consumed_rollback_operator_nonces, nonces_before_conflict,
+        "rejected conflicting resolution must not consume its operator nonce"
+    );
     let _ = std::fs::remove_dir_all(recovery_dir);
 }
 

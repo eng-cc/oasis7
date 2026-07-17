@@ -7,9 +7,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use super::atomic_file::{platform_atomic_replace, sync_parent_directory};
+use super::registration_replay_lock::RegistrationReplayProcessLock;
 
 pub const HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV: &str =
     "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH";
+#[cfg(test)]
+pub(crate) const HOSTED_REGISTRATION_REPLAY_CLAIM_BARRIER_DIR_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_REPLAY_CLAIM_BARRIER_DIR";
 static HOSTED_REGISTRATION_REPLAY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub(super) fn ensure_registration_grant_nonce_unused(nonce: &str) -> Result<(), String> {
@@ -18,6 +22,7 @@ pub(super) fn ensure_registration_grant_nonce_unused(nonce: &str) -> Result<(), 
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let _process_lock = RegistrationReplayProcessLock::acquire(path.as_path())?;
     if read_registration_replay_ledger(path.as_path())?
         .claims
         .contains_key(nonce)
@@ -33,6 +38,7 @@ pub(crate) fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let _process_lock = RegistrationReplayProcessLock::acquire(path.as_path())?;
     let mut ledger = read_registration_replay_ledger(path.as_path())?;
     if ledger
         .claims
@@ -50,10 +56,13 @@ pub(crate) fn claim_registration_grant_nonce_for_recovery(
 ) -> Result<(), String> {
     let path = registration_replay_ledger_path();
     let owner = recovery_claim_owner(recovery_dir)?;
+    #[cfg(test)]
+    wait_at_registration_replay_claim_barrier(owner.as_str())?;
     let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let _process_lock = RegistrationReplayProcessLock::acquire(path.as_path())?;
     let mut ledger = read_registration_replay_ledger(path.as_path())?;
     match ledger.claims.get(nonce) {
         Some(RegistrationGrantClaim::Recovery { owner: existing }) if existing == &owner => {
@@ -69,12 +78,37 @@ pub(crate) fn claim_registration_grant_nonce_for_recovery(
     atomic_write_replay_ledger(path.as_path(), &ledger)
 }
 
+#[cfg(test)]
+fn wait_at_registration_replay_claim_barrier(owner: &str) -> Result<(), String> {
+    use std::time::{Duration, Instant};
+
+    let Some(barrier_dir) =
+        std::env::var_os(HOSTED_REGISTRATION_REPLAY_CLAIM_BARRIER_DIR_ENV).map(PathBuf::from)
+    else {
+        return Ok(());
+    };
+    fs::create_dir_all(&barrier_dir)
+        .map_err(|err| format!("create registration replay test barrier failed: {err}"))?;
+    fs::write(barrier_dir.join(format!("{owner}.ready")), b"ready")
+        .map_err(|err| format!("signal registration replay test barrier failed: {err}"))?;
+    let release = barrier_dir.join("release");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !release.exists() {
+        if Instant::now() >= deadline {
+            return Err("registration replay test barrier timed out".to_string());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    Ok(())
+}
+
 pub fn preflight_hosted_registration_replay_ledger() -> Result<(), String> {
     let path = registration_replay_ledger_path();
     let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let _process_lock = RegistrationReplayProcessLock::acquire(path.as_path())?;
     let ledger = read_registration_replay_ledger(path.as_path())?;
     atomic_write_replay_ledger(path.as_path(), &ledger)
 }

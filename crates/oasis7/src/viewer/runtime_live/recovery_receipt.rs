@@ -101,6 +101,9 @@ pub(super) fn rollback_runtime_error(
         crate::runtime::WorldError::RollbackReconciliationFailed { .. } => {
             "rollback_reconciliation_drift"
         }
+        crate::runtime::WorldError::RollbackAttributionResolutionConflict { .. } => {
+            "rollback_attribution_resolution_conflict"
+        }
         crate::runtime::WorldError::DistributedValidationFailed { reason }
             if reason.contains("reconciliation drift") =>
         {
@@ -115,6 +118,52 @@ pub(super) fn rollback_runtime_error(
 }
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn get_authenticated_rollback_receipt(
+        &mut self,
+        request: crate::viewer::protocol::RollbackReceiptAccessRequest,
+    ) -> Result<AuthoritativeRecoveryAck<u64>, AuthoritativeRecoveryError> {
+        let payload = request.canonical_signing_payload().map_err(|err| {
+            recovery_error(
+                "rollback_receipt_authorization_invalid",
+                err.to_string(),
+                None,
+                None,
+                None,
+            )
+        })?;
+        self.verify_compensation_operator(&request.authorization, payload.as_slice())
+            .map_err(|error| {
+                if error.code == "rollback_operator_authorization_replayed"
+                    || error.code == "rollback_operator_authorization_expired"
+                {
+                    error
+                } else {
+                    recovery_error(
+                        "rollback_receipt_authorization_invalid",
+                        "active governance signature required for complete rollback receipt",
+                        None,
+                        None,
+                        None,
+                    )
+                }
+            })?;
+        let previous_nonces = self.consumed_rollback_operator_nonces.clone();
+        self.consumed_rollback_operator_nonces
+            .insert(request.authorization.nonce);
+        let ack = match self.get_rollback_receipt(request.authorization_nonce) {
+            Ok(ack) => ack,
+            Err(error) => {
+                self.consumed_rollback_operator_nonces = previous_nonces;
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.persist_current_recovery_generation(&ack) {
+            self.consumed_rollback_operator_nonces = previous_nonces;
+            return Err(error);
+        }
+        Ok(ack)
+    }
+
     pub(super) fn persist_current_recovery_generation(
         &mut self,
         ack: &AuthoritativeRecoveryAck<u64>,

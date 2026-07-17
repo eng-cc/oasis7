@@ -18,6 +18,9 @@ mod receipt_tests;
 #[path = "authoritative_receipt_v11.rs"]
 mod receipt_v11_tests;
 
+#[path = "authoritative_receipt_v12.rs"]
+mod receipt_v12_tests;
+
 fn configure_rollback_authorities(
     server: &mut ViewerRuntimeLiveServer,
 ) -> (SigningKey, SigningKey) {
@@ -490,10 +493,29 @@ fn runtime_authoritative_recovery_receipt_is_immutable_after_later_progress() {
         .expect("committed rollback receipt");
 
     server.world.step().expect("later world progress");
+    let now_ms = crate::viewer::runtime_live::recovery_receipt::current_unix_time_ms();
+    let mut request = crate::viewer::protocol::RollbackReceiptAccessRequest {
+        authorization_nonce: nonce.to_string(),
+        authorization: crate::viewer::protocol::RollbackOperatorAuthorization {
+            authority_id: "governance-bob".to_string(),
+            issued_at_ms: now_ms,
+            expires_at_ms: now_ms.saturating_add(60_000),
+            nonce: "immutable-receipt-read-1".to_string(),
+            signature_scheme: "ed25519".to_string(),
+            signature_hex: String::new(),
+        },
+    };
+    request.authorization.signature_hex = hex::encode(
+        governance
+            .sign(
+                &request
+                    .canonical_signing_payload()
+                    .expect("receipt payload"),
+            )
+            .to_bytes(),
+    );
     let (retried, _) = server
-        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::GetRollbackReceipt {
-            authorization_nonce: nonce.to_string(),
-        })
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::GetRollbackReceipt { request })
         .expect("retrieve persisted receipt after progress");
 
     assert_eq!(

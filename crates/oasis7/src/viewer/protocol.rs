@@ -22,9 +22,9 @@ pub use proto::{
     RollbackApprovalSignature, RollbackAttributionResolution, RollbackAttributionResolutionRequest,
     RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackCheckpointRef,
     RollbackCompensationTransitionRequest, RollbackIntent, RollbackOperatorAuthorization,
-    RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
-    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest,
-    ViewerStream,
+    RollbackReceiptAccessRequest, RollbackReplayTarget, RollbackSourceEventRef,
+    RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

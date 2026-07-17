@@ -233,6 +233,23 @@ pub struct RollbackCompensationTransitionRequest {
     pub authorization: RollbackOperatorAuthorization,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RollbackReceiptAccessRequest {
+    pub authorization_nonce: String,
+    pub authorization: RollbackOperatorAuthorization,
+}
+
+impl RollbackReceiptAccessRequest {
+    pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, serde_json::Error> {
+        let mut unsigned = self.clone();
+        unsigned.authorization.signature_hex.clear();
+        let mut payload = b"oasis7:rollback-receipt-access:v1\0".to_vec();
+        payload.extend(serde_json::to_vec(&unsigned)?);
+        Ok(payload)
+    }
+}
+
 impl RollbackCompensationTransitionRequest {
     pub fn canonical_signing_payload(&self) -> Result<Vec<u8>, serde_json::Error> {
         let mut unsigned = self.clone();

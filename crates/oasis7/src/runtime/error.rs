@@ -32,6 +32,10 @@ pub enum WorldError {
         committed_intent_hash: String,
         supplied_intent_hash: String,
     },
+    RollbackAttributionResolutionConflict {
+        source_batch_id: String,
+        source_event_id: u64,
+    },
     RollbackReconciliationFailed {
         tick: u64,
         reason: String,

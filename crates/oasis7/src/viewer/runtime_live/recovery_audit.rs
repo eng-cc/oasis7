@@ -1,18 +1,11 @@
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use sha2::{Digest, Sha256};
 
 use super::*;
 
 pub(super) const STRICT_AUDIT_FUTURE_SKEW_MS: u64 = 30_000;
 
 pub(super) fn strict_audit_evidence_digest(report: &[u8], manifest: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(b"oasis7:rollback-strict-audit-artifacts:v1\0");
-    hasher.update((report.len() as u64).to_be_bytes());
-    hasher.update(report);
-    hasher.update((manifest.len() as u64).to_be_bytes());
-    hasher.update(manifest);
-    hex::encode(hasher.finalize())
+    crate::viewer::strict_audit_artifact_digest(report, manifest)
 }
 
 pub(super) fn verify_strict_audit_evidence(
