@@ -688,25 +688,19 @@ impl World {
             None => approval.intent.canonical_signing_payload()?,
         };
         let supplied_intent_hash = sha256_hex(&canonical_payload);
-        if let Some(committed) = self.rollback_nonce_outcomes.get(&approval.intent.nonce) {
-            if committed.canonical_intent_hash != supplied_intent_hash {
-                return Err(WorldError::RollbackNonceConflict {
-                    nonce: approval.intent.nonce.clone(),
-                    committed_intent_hash: committed.canonical_intent_hash.clone(),
-                    supplied_intent_hash,
-                });
-            }
-            self.verify_rollback_authorization(
-                &snapshot,
-                &reason,
-                target_batch_id,
-                &approval,
-                canonical_payload.as_slice(),
-                now_ms,
-                true,
-            )?;
-            return Ok(());
-        }
+        let committed_retry =
+            if let Some(committed) = self.rollback_nonce_outcomes.get(&approval.intent.nonce) {
+                if committed.canonical_intent_hash != supplied_intent_hash {
+                    return Err(WorldError::RollbackNonceConflict {
+                        nonce: approval.intent.nonce.clone(),
+                        committed_intent_hash: committed.canonical_intent_hash.clone(),
+                        supplied_intent_hash,
+                    });
+                }
+                true
+            } else {
+                false
+            };
         let verified = self.verify_rollback_authorization(
             &snapshot,
             &reason,
@@ -714,7 +708,7 @@ impl World {
             &approval,
             canonical_payload.as_slice(),
             now_ms,
-            false,
+            committed_retry,
         )?;
 
         if approval.intent.target_journal_len < snapshot.journal_len
@@ -760,6 +754,9 @@ impl World {
                 expected: approval.intent.expected_target_state_root.clone(),
                 actual: actual_target_state_root,
             });
+        }
+        if committed_retry {
+            return Ok(());
         }
 
         let snapshot_hash = hash_json(&snapshot)?;

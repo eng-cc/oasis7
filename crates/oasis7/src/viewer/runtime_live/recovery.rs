@@ -170,7 +170,6 @@ impl ViewerRuntimeLiveServer {
                     )
                 })?;
             if checkpoint_ref.snapshot_journal_len != rollback_checkpoint.snapshot.journal_len
-                || checkpoint_ref.snapshot_hash != approval.intent.snapshot_hash
                 || checkpoint_ref.snapshot_journal_len > checkpoint.journal.len()
             {
                 return Err(recovery_error(

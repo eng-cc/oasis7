@@ -105,12 +105,40 @@ fn committed_v2_exact_retry_rejects_mismatched_outer_request_reason_atomically()
         &on_call,
         &governance,
     );
-    let snapshot_before = server.world.snapshot();
-    let journal_before = server.world.journal().clone();
-    let outcome_before = server.world.rollback_nonce_outcome(nonce);
-    let readiness_before = server.rollback_readiness.clone();
+    let committed = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RollbackV2 {
+            request: request.clone(),
+        })
+        .expect("initial valid v2 rollback must commit");
+    assert!(
+        committed.0.rollback_receipt.is_some(),
+        "initial commit returns its receipt"
+    );
+    assert!(
+        server.world.rollback_nonce_outcome(nonce).is_some(),
+        "initial commit freezes the nonce outcome"
+    );
+    let receipt_before = server
+        .get_rollback_receipt(nonce.to_string())
+        .expect("committed receipt exists before retry");
     let generation_before = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
-        .expect("load generation before retry");
+        .expect("load generation before retry")
+        .expect("initial commit persists a generation");
+    let memory_before = serde_json::to_vec(&(
+        server.world.snapshot(),
+        server.world.journal(),
+        server.world.rollback_nonce_outcome(nonce),
+        &server.rollback_readiness,
+        &receipt_before,
+    ))
+    .expect("encode in-memory state before retry");
+    let persisted_before = serde_json::to_vec(&(
+        generation_before.generation_id,
+        &generation_before.recovery_metadata,
+        generation_before.world.snapshot(),
+        generation_before.world.journal(),
+    ))
+    .expect("encode persisted generation before retry");
 
     let mut retry = request;
     retry.reason = "unsigned-outer-reason-mismatch".to_string();
@@ -119,13 +147,34 @@ fn committed_v2_exact_retry_rejects_mismatched_outer_request_reason_atomically()
         .expect_err("v2 request must reject an outer reason outside the signed intent");
     assert_eq!(error.code, "rollback_authorization_invalid");
     assert!(error.message.contains("reason"));
-    assert_eq!(server.world.snapshot(), snapshot_before);
-    assert_eq!(server.world.journal(), &journal_before);
-    assert_eq!(server.world.rollback_nonce_outcome(nonce), outcome_before);
-    assert_eq!(server.rollback_readiness, readiness_before);
-    assert!(server.get_rollback_receipt(nonce.to_string()).is_err());
+    let receipt_after = server
+        .get_rollback_receipt(nonce.to_string())
+        .expect("rejected retry preserves the committed receipt");
+    assert_eq!(
+        serde_json::to_vec(&(
+            server.world.snapshot(),
+            server.world.journal(),
+            server.world.rollback_nonce_outcome(nonce),
+            &server.rollback_readiness,
+            &receipt_after,
+        ))
+        .expect("encode in-memory state after retry"),
+        memory_before,
+        "rejected retry must be byte-equivalent in memory"
+    );
     let generation_after = RuntimeWorld::load_authoritative_recovery_generation(&recovery_dir)
-        .expect("load generation after retry");
-    assert_eq!(generation_after.is_some(), generation_before.is_some());
+        .expect("load generation after retry")
+        .expect("rejected retry preserves persisted generation");
+    assert_eq!(
+        serde_json::to_vec(&(
+            generation_after.generation_id,
+            &generation_after.recovery_metadata,
+            generation_after.world.snapshot(),
+            generation_after.world.journal(),
+        ))
+        .expect("encode persisted generation after retry"),
+        persisted_before,
+        "rejected retry must be byte-equivalent on disk"
+    );
     let _ = std::fs::remove_dir_all(recovery_dir);
 }

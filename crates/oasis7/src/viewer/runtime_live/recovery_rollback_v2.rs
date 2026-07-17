@@ -1,5 +1,7 @@
+use super::authoritative::compute_runtime_snapshot_hash;
 use super::recovery_receipt::recovery_error;
 use super::*;
+use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn rollback_v2_to_replay_target(
@@ -126,7 +128,7 @@ impl ViewerRuntimeLiveServer {
                 None,
             ));
         }
-        let _checkpoint_index = checkpoint_index.ok_or_else(|| {
+        let checkpoint_index = checkpoint_index.ok_or_else(|| {
             recovery_error(
                 "rollback_checkpoint_not_found",
                 "signed rollback checkpoint is not retained",
@@ -135,7 +137,7 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
-        let _target_index = target_index.ok_or_else(|| {
+        let target_index = target_index.ok_or_else(|| {
             recovery_error(
                 "stable_checkpoint_not_found",
                 "signed replay target is not retained as finalized",
@@ -144,15 +146,73 @@ impl ViewerRuntimeLiveServer {
                 None,
             )
         })?;
+        let rollback_checkpoint = &self.stable_checkpoints[checkpoint_index];
+        let replay_target = &self.stable_checkpoints[target_index];
+        let signed_checkpoint_hash = compute_runtime_snapshot_hash(&rollback_checkpoint.snapshot)
+            .map_err(|err| {
+            recovery_error(
+                "rollback_checkpoint_mismatch",
+                format!("compute rollback checkpoint hash failed: {err:?}"),
+                Some(intent.rollback_checkpoint.batch_id.clone()),
+                None,
+                None,
+            )
+        })?;
+        let signed_target_state_root = compute_runtime_snapshot_hash(&replay_target.snapshot)
+            .map_err(|err| {
+                recovery_error(
+                    "rollback_authorization_invalid",
+                    format!("compute replay target state root failed: {err:?}"),
+                    Some(intent.replay_target.batch_id.clone()),
+                    None,
+                    None,
+                )
+            })?;
+        if intent.rollback_checkpoint.snapshot_hash != signed_checkpoint_hash
+            || intent.rollback_checkpoint.snapshot_journal_len
+                != rollback_checkpoint.snapshot.journal_len
+            || intent.replay_target.expected_target_state_root != signed_target_state_root
+            || intent.replay_target.target_journal_len != replay_target.journal.len()
+        {
+            return Err(recovery_error(
+                "rollback_authorization_invalid",
+                "signed rollback checkpoint or replay target does not match retained state",
+                Some(intent.replay_target.batch_id.clone()),
+                None,
+                None,
+            ));
+        }
+        let runtime_snapshot_hash = hex::encode(Sha256::digest(
+            serde_json::to_vec(&rollback_checkpoint.snapshot).map_err(|err| {
+                recovery_error(
+                    "rollback_intent_encode_failed",
+                    format!("encode rollback checkpoint failed: {err}"),
+                    Some(intent.rollback_checkpoint.batch_id.clone()),
+                    None,
+                    None,
+                )
+            })?,
+        ));
+        let runtime_target_state_root = crate::runtime::World::from_snapshot(
+            rollback_checkpoint.snapshot.clone(),
+            replay_target.journal.clone(),
+        )
+        .and_then(|world| world.current_state_root_hash())
+        .map_err(|err| {
+            super::recovery_receipt::rollback_runtime_error(
+                err,
+                intent.replay_target.batch_id.clone(),
+            )
+        })?;
         let signatures = request.approval.signatures;
         let target_batch_id = intent.replay_target.batch_id.clone();
         let legacy = RollbackIntent {
             schema_version: intent.schema_version,
             rollback_ticket: intent.rollback_ticket,
-            snapshot_hash: intent.rollback_checkpoint.snapshot_hash.clone(),
+            snapshot_hash: runtime_snapshot_hash,
             snapshot_journal_len: intent.rollback_checkpoint.snapshot_journal_len,
             target_journal_len: intent.replay_target.target_journal_len,
-            expected_target_state_root: intent.replay_target.expected_target_state_root.clone(),
+            expected_target_state_root: runtime_target_state_root,
             target_batch_id: Some(target_batch_id.clone()),
             reason: intent.reason,
             issued_at_ms: intent.issued_at_ms,

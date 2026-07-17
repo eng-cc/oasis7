@@ -111,21 +111,51 @@ fn committed_exact_retry_rejects_mismatched_supplied_snapshot_reason_and_target_
     };
     let mut mismatched_snapshot = snapshot.clone();
     mismatched_snapshot.state.time = mismatched_snapshot.state.time.saturating_add(1);
+    let mut shorter_journal = journal.clone();
+    shorter_journal
+        .events
+        .pop()
+        .expect("non-empty target journal");
+    let mut tampered_journal = journal.clone();
+    tampered_journal.events[0].time = tampered_journal.events[0].time.saturating_add(1);
     let cases = [
-        (mismatched_snapshot, "signed-reason", "batch-signed-target"),
+        (
+            mismatched_snapshot,
+            journal.clone(),
+            "signed-reason",
+            "batch-signed-target",
+        ),
         (
             snapshot.clone(),
+            journal.clone(),
             "outer-reason-does-not-match",
             "batch-signed-target",
         ),
-        (snapshot.clone(), "signed-reason", "batch-other-target"),
+        (
+            snapshot.clone(),
+            journal.clone(),
+            "signed-reason",
+            "batch-other-target",
+        ),
+        (
+            snapshot.clone(),
+            shorter_journal,
+            "signed-reason",
+            "batch-signed-target",
+        ),
+        (
+            snapshot.clone(),
+            tampered_journal,
+            "signed-reason",
+            "batch-signed-target",
+        ),
     ];
-    for (supplied_snapshot, supplied_reason, supplied_target) in cases {
+    for (supplied_snapshot, supplied_journal, supplied_reason, supplied_target) in cases {
         let before = observe(&world);
         world
             .rollback_to_snapshot(
                 supplied_snapshot,
-                journal.clone(),
+                supplied_journal,
                 supplied_reason,
                 Some(supplied_target),
                 approval.clone(),
