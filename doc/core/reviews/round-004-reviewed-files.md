@@ -294,8 +294,8 @@
 - `doc/scripts/project.md`
 - `doc/scripts/precommit/pre-commit.prd.md`
 - `doc/scripts/precommit/pre-commit.project.md`
-- `doc/scripts/precommit/precommit-remediation-playbook.prd.md`
-- `doc/scripts/precommit/precommit-remediation-playbook.project.md`
+- historical removed precommit remediation playbook PRD
+- historical removed precommit remediation playbook project record
 - `historical removed viewer-tools doc set: capture-viewer-frame.prd`
 - `historical removed viewer-tools doc set: capture-viewer-frame.project`
 - `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd`

@@ -37,7 +37,7 @@
 - 当前阶段：已提交
 - 最近更新：`scripts/pre-commit.sh` 已改为静默成功 no-op，普通 commit 不再运行格式化或验证；frozen-head Pre-PR Ready 与 CI required gate 保持 authoritative（2026-07-14）。更早 commit-tier 演进记录保留在上方历史完成项。
 - 审计备注（2026-03-05 ROUND-002）：本文件仅保留执行记录；required/full 规则定义与命令矩阵以 `ci-tiered-execution`、`ci-testcase-tiering`、`ci-test-coverage` 及 `scripts/ci-tests.sh` 为准。
-- 合并备注（2026-07-16）：原 `precommit-remediation-playbook.project.md` 的完成事项已并入上方任务记录；当前修复流程以 `pre-commit.prd.md` 为准。更早路径只在历史审计记录中作 provenance 保留。
+- 合并备注（2026-07-16）：原 remediation playbook 的完成事项已并入上方任务记录；当前修复流程以 `pre-commit.prd.md` 为准。旧三件套于 2026-07-17 删除；历史审计记录保留审计结论，精确路径 provenance 仅由 Git history 保留。
 - 实现记录：`scripts/fix-precommit.sh` 于 2026-02-06 完成；2026-07-16 将其当前操作契约从 remediation 叶子收口到 `pre-commit.prd.md`。
 
 ### Remediation 完成记录（历史）
