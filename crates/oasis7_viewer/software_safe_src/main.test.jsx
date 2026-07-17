@@ -2545,6 +2545,9 @@ describe("viewer web ui automation baseline", () => {
     expect(within(stagePanel).getByText("Formal Gameplay Summary")).toBeInTheDocument();
     expect(within(stagePanel).getAllByText("Accepted Intent").length).toBeGreaterThan(0);
     expect(within(stagePanel).getAllByText("Next Step").length).toBeGreaterThan(0);
+    const nextStepCard = within(stagePanel).getByTestId("viewer-next-step-card");
+    expect(nextStepCard).toHaveClass("hero-focus-card--next-step");
+    expect(within(nextStepCard).getByText("Next Step")).toBeInTheDocument();
     expect(within(stagePanel).getByText("Actions Not Exposed On This Page")).toBeInTheDocument();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
