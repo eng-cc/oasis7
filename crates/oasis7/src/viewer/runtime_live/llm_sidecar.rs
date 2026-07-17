@@ -202,6 +202,13 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     runtime_seed_model: Option<WorldModel>,
 }
 
+pub(in crate::viewer::runtime_live) struct RuntimePlayerBindingPlan {
+    agent_player_bindings: BTreeMap<String, String>,
+    player_agent_bindings: BTreeMap<String, String>,
+    agent_public_key_bindings: BTreeMap<String, String>,
+    events: Vec<WorldEventKind>,
+}
+
 impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn new(decision_mode: ViewerLiveDecisionMode) -> Self {
         Self {
@@ -575,6 +582,39 @@ impl RuntimeLlmSidecar {
             public_key: target_public_key,
         });
         Ok(events)
+    }
+
+    pub(in crate::viewer::runtime_live) fn plan_agent_player_binding(
+        &mut self,
+        agent_id: &str,
+        player_id: &str,
+        public_key: Option<&str>,
+        allow_player_rebind: bool,
+    ) -> Result<RuntimePlayerBindingPlan, String> {
+        let original_agent_player_bindings = self.agent_player_bindings.clone();
+        let original_player_agent_bindings = self.player_agent_bindings.clone();
+        let original_agent_public_key_bindings = self.agent_public_key_bindings.clone();
+        let result = self.bind_agent_player(agent_id, player_id, public_key, allow_player_rebind);
+        let plan = result.map(|events| RuntimePlayerBindingPlan {
+            agent_player_bindings: self.agent_player_bindings.clone(),
+            player_agent_bindings: self.player_agent_bindings.clone(),
+            agent_public_key_bindings: self.agent_public_key_bindings.clone(),
+            events,
+        });
+        self.agent_player_bindings = original_agent_player_bindings;
+        self.player_agent_bindings = original_player_agent_bindings;
+        self.agent_public_key_bindings = original_agent_public_key_bindings;
+        plan
+    }
+
+    pub(in crate::viewer::runtime_live) fn apply_agent_player_binding_plan(
+        &mut self,
+        plan: RuntimePlayerBindingPlan,
+    ) -> Vec<WorldEventKind> {
+        self.agent_player_bindings = plan.agent_player_bindings;
+        self.player_agent_bindings = plan.player_agent_bindings;
+        self.agent_public_key_bindings = plan.agent_public_key_bindings;
+        plan.events
     }
 
     pub(super) fn upsert_prompt_profile(&mut self, profile: AgentPromptProfile) {

@@ -44,6 +44,10 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
     }
 
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let private_key_env = command
+        .get_envs()
+        .find(|(name, _)| *name == oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
+        .map(|(_, value)| value.map(|value| value.to_os_string()));
     let trusted_public_key = command
         .get_envs()
         .find_map(|(name, value)| {
@@ -56,5 +60,10 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
     unsafe {
         std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
     }
+    assert_eq!(
+        private_key_env,
+        Some(None),
+        "the hosted viewer child must explicitly remove the issuer private key"
+    );
     assert_eq!(trusted_public_key.len(), 64);
 }

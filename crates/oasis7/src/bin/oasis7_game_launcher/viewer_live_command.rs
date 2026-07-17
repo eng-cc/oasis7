@@ -30,6 +30,7 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg(options.chain_link_policy.as_str());
     }
     if options.deployment_mode == "hosted_public_join" {
+        command.env_remove(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
         if let Ok(issuer_private_key) =
             std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
         {

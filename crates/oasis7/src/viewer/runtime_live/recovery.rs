@@ -184,34 +184,47 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
 
-        let bound_agent_id = match request
+        let cursor = self.current_recovery_cursor().map_err(|err| {
+            recovery_error(
+                "cursor_compute_failed",
+                format!("{err:?}"),
+                None,
+                Some(verified.player_id.clone()),
+                Some(verified.public_key.clone()),
+            )
+        })?;
+
+        let (bound_agent_id, binding_plan) = match request
             .requested_agent_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
         {
             Some(agent_id) => {
-                self.bind_player_session_agent(
-                    agent_id,
-                    verified.player_id.as_str(),
-                    Some(verified.public_key.as_str()),
-                    request.force_rebind,
-                )
-                .map_err(|message| {
-                    recovery_error(
-                        "player_bind_failed",
-                        message,
-                        None,
-                        Some(verified.player_id.clone()),
-                        Some(verified.public_key.clone()),
+                let plan = self
+                    .plan_player_session_agent_binding(
+                        agent_id,
+                        verified.player_id.as_str(),
+                        Some(verified.public_key.as_str()),
+                        request.force_rebind,
                     )
-                })?;
-                Some(agent_id.to_string())
+                    .map_err(|message| {
+                        recovery_error(
+                            "player_bind_failed",
+                            message,
+                            None,
+                            Some(verified.player_id.clone()),
+                            Some(verified.public_key.clone()),
+                        )
+                    })?;
+                (Some(agent_id.to_string()), Some(plan))
             }
-            None => self
-                .llm_sidecar
-                .bound_agent_for_player(verified.player_id.as_str())
-                .map(ToOwned::to_owned),
+            None => (
+                self.llm_sidecar
+                    .bound_agent_for_player(verified.player_id.as_str())
+                    .map(ToOwned::to_owned),
+                None,
+            ),
         };
 
         if let Some(registration_nonce) = verified.hosted_registration_nonce.as_deref() {
@@ -226,15 +239,11 @@ impl ViewerRuntimeLiveServer {
             })?;
         }
 
-        let cursor = self.current_recovery_cursor().map_err(|err| {
-            recovery_error(
-                "cursor_compute_failed",
-                format!("{err:?}"),
-                None,
-                Some(verified.player_id.clone()),
-                Some(verified.public_key.clone()),
-            )
-        })?;
+        if let Some(plan) = binding_plan {
+            for event in self.llm_sidecar.apply_agent_player_binding_plan(plan) {
+                self.enqueue_virtual_event(event);
+            }
+        }
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::SessionRegistered,
             reorg_epoch: self.reorg_epoch,
@@ -600,13 +609,13 @@ impl ViewerRuntimeLiveServer {
         )
     }
 
-    fn bind_player_session_agent(
+    fn plan_player_session_agent_binding(
         &mut self,
         agent_id: &str,
         player_id: &str,
         public_key: Option<&str>,
         allow_player_rebind: bool,
-    ) -> Result<(), String> {
+    ) -> Result<RuntimePlayerBindingPlan, String> {
         if allow_player_rebind {
             if !self.world.state().agents.contains_key(agent_id) {
                 return Err(format!("agent not found: {agent_id}"));
@@ -621,15 +630,12 @@ impl ViewerRuntimeLiveServer {
             )
             .map_err(|err| err.message)?;
         }
-        for event in self.llm_sidecar.bind_agent_player(
+        self.llm_sidecar.plan_agent_player_binding(
             agent_id,
             player_id,
             public_key,
             allow_player_rebind,
-        )? {
-            self.enqueue_virtual_event(event);
-        }
-        Ok(())
+        )
     }
 }
 
