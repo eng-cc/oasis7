@@ -26,5 +26,6 @@ This page is the first-read router for `doc/scripts/precommit/`; it does not dup
 - Keep the two-file topic chain addressable in `doc/scripts/prd.index.md`.
 - Update this router in the same change when a new pre-commit topic changes a first-read path or authority boundary.
 - Completed project history stays in `pre-commit.project.md`; current behavior and operator actions stay in `pre-commit.prd.md`.
-- Do not add redirect-only design or compatibility leaves. Git history and the
-  historical review logs retain deleted-path provenance.
+- Do not add redirect-only design or compatibility leaves. Historical review
+  logs retain audit conclusions; exact deleted-path provenance stays in Git
+  history.
