@@ -8,6 +8,12 @@ import re
 import sys
 
 ROLE_RE = re.compile(r"[a-z][a-z0-9_]*")
+DOMAIN_SPECIALIST_ROLES = {
+    "producer_system_designer", "gameplay_designer",
+    "game_visual_interaction_designer", "runtime_engineer",
+    "blockchain_ops_engineer", "wasm_platform_engineer",
+    "agent_engineer", "viewer_engineer",
+}
 
 
 def main() -> int:
@@ -37,8 +43,9 @@ def main() -> int:
     if args.change_class in {"mechanical-doc", "workflow-doc"}:
         roles.append("qa_engineer")
     elif args.change_class == "domain-semantic-doc":
-        if not args.domain_role or not ROLE_RE.fullmatch(args.domain_role):
-            print("review-role-selector: domain-semantic-doc requires --domain-role", file=sys.stderr)
+        if (not args.domain_role or not ROLE_RE.fullmatch(args.domain_role)
+                or args.domain_role not in DOMAIN_SPECIALIST_ROLES):
+            print("review-role-selector: domain role must be one canonical domain specialist", file=sys.stderr)
             return 2
         roles.append(args.domain_role)
         if args.verification_affected:

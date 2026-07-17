@@ -13,7 +13,7 @@ chmod +x "$FIXTURE/scripts/pm/task-closeout.sh"
 cat >"$FIXTURE/scripts/pm/github-project-workflow.sh" <<'EOF'
 #!/usr/bin/env bash
 echo audit >>"${EVENT_LOG:?}"
-printf '{"status":"ok","errors":[],"warnings":[]}'
+printf '{"status":"ok","errors":[],"warnings":[],"selected_task":{"task_uid":"task_11111111111111111111111111111111","target":"done","workflow_phase":"task_done"}}'
 EOF
 cat >"$FIXTURE/scripts/pm/claim-ready.sh" <<'EOF'
 #!/usr/bin/env bash

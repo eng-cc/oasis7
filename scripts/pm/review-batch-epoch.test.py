@@ -161,6 +161,68 @@ class ReviewBatchEpochTests(unittest.TestCase):
             self.assertEqual([], payload["findings"])
             self.assertNotEqual("passed", payload.get("disposition"))
 
+    def test_reconcile_validates_completed_artifacts_rewrites_ledger_and_enables_collect(self) -> None:
+        created = self.create()
+        out_dir = self.root / "preflight-reconcile"
+        preflight = json.loads(self.run_script(
+            "preflight", "--batch", str(self.batch), "--out-dir", str(out_dir)
+        ).stdout)
+        ledger = Path(preflight["ledger_path"])
+        old_ledger = ledger.read_bytes()
+        expected_verdicts = {}
+        for index, expected in enumerate(created["expected_slices"]):
+            artifact = out_dir / f'{expected["slice_id"]}.json'
+            payload = json.loads(artifact.read_text(encoding="utf-8"))
+            scope_verdict = "approved" if index == 0 else "bounded"
+            risk_verdict = "approved" if index == 0 else "accepted_with_residual"
+            payload.update({
+                "status": "completed", "disposition": "no_findings",
+                "findings": [], "residual_risk": "none",
+                "scope_verdict": scope_verdict, "risk_verdict": risk_verdict,
+            })
+            expected_verdicts[expected["role"]] = (scope_verdict, risk_verdict)
+            artifact.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+
+        reconciled = json.loads(self.run_script(
+            "reconcile", "--batch", str(self.batch), "--ledger", str(ledger)
+        ).stdout)
+        self.assertEqual("completed", reconciled["status"])
+        self.assertNotEqual(old_ledger, ledger.read_bytes())
+        for row in ledger.read_text(encoding="utf-8").splitlines():
+            entry = json.loads(row)
+            artifact = Path(entry["artifacts"][0])
+            self.assertEqual(hashlib.sha256(artifact.read_bytes()).hexdigest(), entry["artifact_digest"])
+            self.assertEqual("completed", entry["status"])
+            self.assertEqual(expected_verdicts[entry["role"]],
+                             (entry["scope_verdict"], entry["risk_verdict"]))
+            self.assertEqual("no_findings", entry["findings"])
+        collected = json.loads(self.run_script(
+            "collect", "--batch", str(self.batch), "--ledger", str(ledger)
+        ).stdout)
+        self.assertEqual("passed", collected["status"])
+
+    def test_reconcile_fails_closed_for_incomplete_or_identity_mismatched_artifacts(self) -> None:
+        for case in ("incomplete", "mismatched"):
+            with self.subTest(case=case):
+                self.batch = self.root / f"batch-{case}.json"
+                self.create()
+                out_dir = self.root / f"preflight-{case}"
+                preflight = json.loads(self.run_script(
+                    "preflight", "--batch", str(self.batch), "--out-dir", str(out_dir)
+                ).stdout)
+                ledger = Path(preflight["ledger_path"])
+                if case == "mismatched":
+                    artifact = next(out_dir.glob("*.json"))
+                    payload = json.loads(artifact.read_text(encoding="utf-8"))
+                    payload.update({"status": "completed", "head": "c" * 40,
+                                    "disposition": "no_findings", "residual_risk": "none"})
+                    artifact.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+                result = self.run_script(
+                    "reconcile", "--batch", str(self.batch), "--ledger", str(ledger), ok=False
+                )
+                self.assertRegex(result.stderr.lower(), r"incomplete|mismatch|wrong head|invalid choice")
+                self.assertFalse(self.batch.with_name(f"{self.batch.stem}.collection.json").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

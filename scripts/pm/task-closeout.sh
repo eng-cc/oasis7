@@ -292,17 +292,22 @@ fi
 # task-scoped audit (after the pre-transition audit), never a broad Project read.
 POSTCONDITION_AUDIT_JSON="$(selected_task_audit)" \
   || die "selected-task postcondition readback failed after closeout"
-python3 - "$TASK_UID" "$TARGET_STATUS" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" <<'PY'
+python3 - "$TASK_UID" "$TARGET_STATUS" "$CLOSEOUT_JSON" "$POSTCONDITION_AUDIT_JSON" "$VERIFICATION_PROFILE" <<'PY'
 import json,sys
 task_uid,target=json.loads(json.dumps(sys.argv[1])),sys.argv[2]
 closeout=json.loads(sys.argv[3]); audit=json.loads(sys.argv[4])
+VERIFICATION_PROFILE=sys.argv[5]
 expected_phase={'ready':'pre_pr_ready','done':'task_done','deferred':'blocked'}[target]
 # github-project-workflow audit is itself the selected live task/Project
 # postcondition authority. Its successful exit is required above; older fixture
 # adapters return only {"status":"ok"}, while production returns richer detail.
-if not (audit.get('status') == 'ok' and task_uid not in json.dumps(audit,sort_keys=True)):
- serialized=json.dumps(audit,sort_keys=True)
- if task_uid not in serialized or target not in serialized or expected_phase not in serialized:
+if audit.get('status') == 'ok' and set(audit) == {'status'}:
+ if VERIFICATION_PROFILE != 'fixture_repository_state':
+  raise SystemExit('task-closeout: live selected-task postcondition audit lacks structured task readback')
+else:
+ readback=audit.get('selected_task') if isinstance(audit.get('selected_task'),dict) else audit
+ if (readback.get('task_uid') != task_uid or readback.get('target') != target
+     or readback.get('workflow_phase') != expected_phase):
   raise SystemExit('task-closeout: selected-task postcondition audit lacks expected status/phase')
 PY
 

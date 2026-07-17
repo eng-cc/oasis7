@@ -28,6 +28,26 @@ class ReviewRoleSelectorTests(unittest.TestCase):
             "--change-class", "domain-semantic-doc", "--domain-role", "runtime_engineer", "--verification-affected"
         )["roles"])
 
+    def test_domain_semantic_role_is_limited_to_canonical_domain_specialists(self):
+        allowed = (
+            "producer_system_designer", "gameplay_designer",
+            "game_visual_interaction_designer", "runtime_engineer",
+            "blockchain_ops_engineer", "wasm_platform_engineer",
+            "agent_engineer", "viewer_engineer",
+        )
+        for role in allowed:
+            with self.subTest(role=role):
+                self.assertEqual(
+                    ["repository_health_engineer", role],
+                    self.select("--change-class", "domain-semantic-doc", "--domain-role", role)["roles"],
+                )
+        for role in ("foo", "tpm", "qa_engineer", "repository_health_engineer", "liveops_community"):
+            with self.subTest(role=role):
+                error = self.select(
+                    "--change-class", "domain-semantic-doc", "--domain-role", role, ok=False
+                )
+                self.assertIn("domain role", error.lower())
+
     def test_external_messaging_adds_liveops_and_only_adds_qa_for_verification(self):
         base = ["repository_health_engineer", "liveops_community"]
         self.assertEqual(base, self.select("--change-class", "external-messaging")["roles"])
