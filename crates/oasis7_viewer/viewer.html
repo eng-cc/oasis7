@@ -1933,7 +1933,11 @@
         gap: 12px;
       }
       .hero-focus-grid--compact {
-        grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr) minmax(0, 1fr);
+        grid-template-columns:
+          minmax(0, 0.78fr)
+          minmax(0, 1.08fr)
+          minmax(0, 1.34fr)
+          minmax(0, 1fr);
         gap: 8px;
       }
       .hero-focus-card {
@@ -1947,6 +1951,31 @@
         background:
           linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
           rgba(255, 255, 255, 0.015);
+      }
+      .hero-focus-card--next-step {
+        position: relative;
+        padding-left: 17px;
+        border-color: rgba(141, 199, 170, 0.3);
+        background:
+          linear-gradient(90deg, rgba(141, 199, 170, 0.075), transparent 48%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)),
+          rgba(255, 255, 255, 0.018);
+      }
+      .hero-focus-card--next-step::before {
+        content: "";
+        position: absolute;
+        inset: 10px auto 10px 7px;
+        width: 2px;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+      .hero-focus-card--next-step .hero-focus-card__label {
+        font-weight: 700;
+      }
+      .hero-focus-card--next-step .hero-focus-card__value--body {
+        font-size: 17px;
+        font-weight: 650;
+        line-height: 1.4;
       }
       .hero-focus-card__label {
         color: var(--muted);
@@ -2500,9 +2529,19 @@
           padding: 10px;
           border-radius: 8px;
         }
+        .hero-focus-card--next-step {
+          width: 100%;
+          padding-left: 15px;
+        }
+        .hero-focus-card--next-step::before {
+          left: 6px;
+        }
         .hero-focus-card__value--body {
           font-size: 14px;
           line-height: 1.35;
+        }
+        .hero-focus-card--next-step .hero-focus-card__value--body {
+          font-size: 15px;
         }
         .hero-focus-card__detail {
           line-height: 1.35;

@@ -2131,7 +2131,10 @@ function WorldStageHero() {
           <div class="hero-focus-card__value hero-focus-card__value--body">{acceptedIntentTitle()}</div>
           <div class="hero-focus-card__detail">{acceptedIntentDetail()}</div>
         </div>
-        <div class="hero-focus-card">
+        <div
+          class="hero-focus-card hero-focus-card--next-step"
+          data-testid="viewer-next-step-card"
+        >
           <div class="hero-focus-card__label">{tr(locale(), "下一步", "Next Step")}</div>
           <div class="hero-focus-card__value hero-focus-card__value--body">{nextStepCopy()}</div>
         </div>

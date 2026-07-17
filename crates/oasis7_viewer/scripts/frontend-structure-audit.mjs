@@ -19,9 +19,9 @@ const TEST_SOURCE_LINE_LIMIT = 1600;
 
 const knownLineDebt = new Map(Object.entries({
   "crates/oasis7_viewer/viewer.html": {
-    maxLines: 2803,
+    maxLines: 2842,
     owner: "viewer_engineer",
-    reason: "this bounded auth-diagnostic hierarchy polish adds one scoped style rule while preserving the canonical and compat HTML contract; extracting unrelated shell styles would broaden the task",
+    reason: "task_4b9393c487e244e4bf5f2811eb5ef95c adds one bounded Next Step hierarchy treatment while preserving the canonical and compat HTML contract; extracting unrelated shell styles would broaden the visual-polish task",
     nextTrigger: "the next Viewer inline-style or document-shell behavior change must extract a coherent style/token boundary or record a narrower owner-tagged exemption",
   },
   "crates/oasis7_viewer/software_safe_src/legacy_core.js": {
@@ -37,9 +37,9 @@ const knownLineDebt = new Map(Object.entries({
     nextTrigger: "next main.jsx UI behavior change must extract a named widget/feature component or display-model helper",
   },
   "crates/oasis7_viewer/software_safe_src/main.test.jsx": {
-    maxLines: 3360,
+    maxLines: 3363,
     owner: "viewer_engineer",
-    reason: "this bounded auth-diagnostic hierarchy polish adds one focused semantic assertion to the existing chat-history fixture; moving the fixture would broaden the verified change",
+    reason: "task_4b9393c487e244e4bf5f2811eb5ef95c adds focused Next Step semantic assertions to the existing Viewer baseline; moving the broad fixture would exceed this visual-polish task",
     nextTrigger: "the next broad UI test addition must extract the chat-history fixture/query helpers or place the new behavior in a narrower adjacent test file",
   },
   "crates/oasis7_viewer/software_safe_src/pixel_world_host.jsx": {
