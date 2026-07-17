@@ -1871,6 +1871,12 @@ def macos_script(
     launchd_target, launchd_bootstrap_domain, launchd_label = macos_launchd_contract(node)
     launchd_plist = macos_absolute_path(node, "launchd_plist")
     runtime_path = macos_absolute_path(node, "runtime_path")
+    governed_bundle_path = macos_absolute_path(node, "governed_bundle_path")
+    if PurePosixPath(governed_bundle_path).parent != PurePosixPath(node_root):
+        die(
+            f"macOS node {name} governed_bundle_path must be a root-level file under "
+            f"node_root: {governed_bundle_path}"
+        )
     healthz_url = str(node.get("healthz_url") or "")
     status_url = str(node.get("status_url") or "")
     if not healthz_url or not status_url:
@@ -1900,6 +1906,7 @@ def macos_script(
         *config_paths,
         f"{node_root}/CURRENT_VERSION",
         f"{node_root}/DEPLOYED_BUILDINFO",
+        governed_bundle_path,
         launchd_plist,
     ]
     for path in state_paths:
@@ -1921,6 +1928,7 @@ set -euo pipefail
 DMG_PATH="${{1:?usage: $0 /path/to/oasis7-macos-arm64.dmg}}"
 NODE_ROOT={q(node_root)}
 RUNTIME_PATH={q(runtime_path)}
+GOVERNED_BUNDLE_PATH={q(governed_bundle_path)}
 LAUNCHD_PLIST={q(launchd_plist)}
 LAUNCHD_TARGET={q(launchd_target)}
 LAUNCHD_BOOTSTRAP_DOMAIN={q(launchd_bootstrap_domain)}
@@ -1930,6 +1938,7 @@ STATUS_URL={q(status_url)}
 PACKAGE_VERSION={q(version)}
 PACKAGE_COMMIT={q(commit)}
 PACKAGE_RUN_ID={q(run_id)}
+RUNTIME_ARTIFACT_REF={q(artifact_ref("macos-arm64", version, "oasis7-macos-arm64.dmg", "oasis7_chain_runtime"))}
 EXPECTED_DMG_SHA256={expected_dmg_sha256}
 STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot
 CONFIG_TARGETS=({config_entries})
@@ -1969,6 +1978,43 @@ restore_file() {{
   temporary="$destination.rollout-restore-$$.tmp"
   cp -p "$source" "$temporary" || return 1
   mv -f "$temporary" "$destination" || return 1
+}}
+
+runtime_sha256() {{
+  shasum -a 256 "$1" | awk '{{print $1}}'
+}}
+
+verify_governed_bundle_runtime_metadata() {{
+  local expected_sha256="$1" expected_size="$2" actual
+  actual="$(plutil -extract runtime_build.path raw -expect string "$GOVERNED_BUNDLE_PATH")" || return 1
+  [[ "$actual" == "$RUNTIME_PATH" ]] || return 1
+  actual="$(plutil -extract runtime_build.ref raw -expect string "$GOVERNED_BUNDLE_PATH")" || return 1
+  [[ "$actual" == "$RUNTIME_ARTIFACT_REF" ]] || return 1
+  actual="$(plutil -extract runtime_build.resolved_path raw -expect string "$GOVERNED_BUNDLE_PATH")" || return 1
+  [[ "$actual" == "$RUNTIME_PATH" ]] || return 1
+  actual="$(plutil -extract runtime_build.sha256 raw -expect string "$GOVERNED_BUNDLE_PATH")" || return 1
+  [[ "$actual" == "$expected_sha256" ]] || return 1
+  actual="$(plutil -extract runtime_build.size_bytes raw -expect integer "$GOVERNED_BUNDLE_PATH")" || return 1
+  [[ "$actual" == "$expected_size" ]] || return 1
+}}
+
+promote_governed_bundle_runtime_metadata() {{
+  local expected_sha256="$1" expected_size="$2" source temporary
+  plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || return 1
+  source="$GOVERNED_BUNDLE_PATH.rollout-$$.source.tmp"
+  temporary="$GOVERNED_BUNDLE_PATH.rollout-$$.tmp"
+  rm -f "$source" "$temporary"
+  cp -p "$GOVERNED_BUNDLE_PATH" "$source" || return 1
+  plutil -replace runtime_build.path -string "$RUNTIME_PATH" "$source" || return 1
+  plutil -replace runtime_build.ref -string "$RUNTIME_ARTIFACT_REF" "$source" || return 1
+  plutil -replace runtime_build.resolved_path -string "$RUNTIME_PATH" "$source" || return 1
+  plutil -replace runtime_build.sha256 -string "$expected_sha256" "$source" || return 1
+  plutil -replace runtime_build.size_bytes -integer "$expected_size" "$source" || return 1
+  plutil -convert json -o "$temporary" "$source" || return 1
+  mv -f "$temporary" "$GOVERNED_BUNDLE_PATH" || return 1
+  rm -f "$source"
+  verify_governed_bundle_runtime_metadata "$expected_sha256" "$expected_size" || return 1
+  echo "governed_bundle_runtime_metadata_verified=true sha256=$expected_sha256 size_bytes=$expected_size"
 }}
 
 assert_launchd_plist_label() {{
@@ -2114,6 +2160,9 @@ rollback() {{
   for index in "${{!CONFIG_TARGETS[@]}}"; do
     restore_file "$ATTEMPT_ROOT/config/$index" "${{CONFIG_TARGETS[$index]}}" || return 1
   done
+  restore_file "$ATTEMPT_ROOT/governed-bundle.json" "$GOVERNED_BUNDLE_PATH" || return 1
+  cmp -s "$ATTEMPT_ROOT/governed-bundle.json" "$GOVERNED_BUNDLE_PATH" || return 1
+  echo "rollback_governed_bundle_metadata_verified=true"
   restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION" || return 1
   restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO" || return 1
   launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST" || return 1
@@ -2142,6 +2191,8 @@ trap on_error ERR
 assert_launchd_plist_label || die "launchd plist Label preflight failed"
 assert_launchd_target_loaded || die "launchd target preflight failed"
 [[ -x "$RUNTIME_PATH" ]] || die "active runtime missing: $RUNTIME_PATH"
+[[ -f "$GOVERNED_BUNDLE_PATH" ]] || die "active governed bundle missing: $GOVERNED_BUNDLE_PATH"
+plutil -extract runtime_build json -expect dictionary "$GOVERNED_BUNDLE_PATH" >/dev/null || die "active governed bundle runtime_build preflight failed"
 [[ -f "$NODE_ROOT/CURRENT_VERSION" && -f "$NODE_ROOT/DEPLOYED_BUILDINFO" ]] || die "active deployment provenance missing"
 for state_path in "${{STATE_PATHS[@]}}"; do [[ -e "$state_path" ]] || die "persistent state missing: $state_path"; done
 for index in "${{!CONFIG_TARGETS[@]}}"; do [[ -f "${{CONFIG_TARGETS[$index]}}" ]] || die "active config missing: ${{CONFIG_TARGETS[$index]}}"; done
@@ -2165,6 +2216,7 @@ echo "native_identity_verified=aarch64-apple-darwin"
 
 ATTEMPT_ROOT="$(mktemp -d "$NODE_ROOT/.package-rollout-attempt.XXXXXX")"
 backup_path "$RUNTIME_PATH" "$ATTEMPT_ROOT/runtime/oasis7_chain_runtime" || die "runtime preflight backup failed"
+backup_path "$GOVERNED_BUNDLE_PATH" "$ATTEMPT_ROOT/governed-bundle.json" || die "governed bundle preflight backup failed"
 backup_path "$NODE_ROOT/CURRENT_VERSION" "$ATTEMPT_ROOT/CURRENT_VERSION" || die "CURRENT_VERSION preflight backup failed"
 backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO" "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" || die "DEPLOYED_BUILDINFO preflight backup failed"
 for index in "${{!CONFIG_TARGETS[@]}}"; do
@@ -2188,6 +2240,10 @@ echo "rollback_closure_complete=true root=$ATTEMPT_ROOT"
 MUTATED=1
 echo "promotion_begin=true"
 install -m 755 "$PACKAGE_RUNTIME" "$RUNTIME_PATH"
+PROMOTED_RUNTIME_SHA256="$(runtime_sha256 "$RUNTIME_PATH")"
+PROMOTED_RUNTIME_SIZE_BYTES="$(stat -f %z "$RUNTIME_PATH")"
+[[ "$PROMOTED_RUNTIME_SHA256" == "$(runtime_sha256 "$PACKAGE_RUNTIME")" ]] || die "promoted runtime checksum mismatch"
+promote_governed_bundle_runtime_metadata "$PROMOTED_RUNTIME_SHA256" "$PROMOTED_RUNTIME_SIZE_BYTES" || die "governed bundle runtime metadata promotion failed"
 printf '%s\\n' "$PACKAGE_VERSION" >"$NODE_ROOT/CURRENT_VERSION"
 printf 'workflow=Testnet Packages\\nrun_id=%s\\ncommit=%s\\nplatform=macos-arm64\\n' "$PACKAGE_RUN_ID" "$PACKAGE_COMMIT" >"$NODE_ROOT/DEPLOYED_BUILDINFO"
 launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"

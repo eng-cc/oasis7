@@ -1323,6 +1323,7 @@ cat >"$TMP_DIR/manifest.json" <<EOF
       "launchd_target": "system/oasis7.testnet.fourth",
       "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
       "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+      "governed_bundle_path": "/Applications/oasis7/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
       "config_paths": ["/Applications/oasis7/config/node.env"],
       "persistent_state_paths": ["/Applications/oasis7/data", "/Applications/oasis7/store"],
       "healthz_url": "http://127.0.0.1:19083/healthz",
@@ -1564,6 +1565,7 @@ for token in (
     "state_backup_closure_complete=true",
     "STATE_ROLLBACK_POLICY=restore_pre_upgrade_snapshot",
     'backup_path "$RUNTIME_PATH"',
+    'backup_path "$GOVERNED_BUNDLE_PATH" "$ATTEMPT_ROOT/governed-bundle.json"',
     'backup_path "$NODE_ROOT/CURRENT_VERSION"',
     'backup_path "$NODE_ROOT/DEPLOYED_BUILDINFO"',
     'backup_path "${CONFIG_TARGETS[$index]}"',
@@ -1590,6 +1592,8 @@ for token in (
     'trap - ERR',
     'restore_file "$ATTEMPT_ROOT/CURRENT_VERSION" "$NODE_ROOT/CURRENT_VERSION"',
     'restore_file "$ATTEMPT_ROOT/DEPLOYED_BUILDINFO" "$NODE_ROOT/DEPLOYED_BUILDINFO"',
+    'restore_file "$ATTEMPT_ROOT/governed-bundle.json" "$GOVERNED_BUNDLE_PATH"',
+    "rollback_governed_bundle_metadata_verified=true",
     "rollback_service_health_verified=true",
     "state_sync_escalation_required=true",
     "provider_checkpoint_gate=passed",
@@ -1604,6 +1608,18 @@ for token in (
     "resolve_existing_physical_directory",
     "persistent state root escapes physical node root",
     '[[ -e "$state_path" && ! -d "$state_path" ]]',
+    "GOVERNED_BUNDLE_PATH=/Applications/oasis7/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
+    "testnet-package-macos-arm64-0.0.0+testnet.90.419e119bc897/oasis7-macos-arm64.dmg!/bin/oasis7_chain_runtime",
+    "promote_governed_bundle_runtime_metadata",
+    "verify_governed_bundle_runtime_metadata",
+    "runtime_build.path",
+    "runtime_build.ref",
+    "runtime_build.resolved_path",
+    "runtime_build.sha256",
+    "runtime_build.size_bytes",
+    "plutil -replace",
+    "plutil -convert json",
+    "governed_bundle_runtime_metadata_verified=true",
 ):
     assert token in text, f"macOS generated rollout contract missing: {token}"
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
@@ -1616,6 +1632,23 @@ state_backup_index = text.index("rollback_closure_complete=true", state_backup_c
 promotion_index = text.index("promotion_begin=true", state_backup_index)
 assert checksum_index < mount_index < preflight_backup_index < active_stop < state_backup_index < promotion_index, (
     "required order is checksum/mount, preflight backup, bootout, stopped-state backup, promotion"
+)
+bundle_backup_index = text.index('backup_path "$GOVERNED_BUNDLE_PATH" "$ATTEMPT_ROOT/governed-bundle.json"')
+bundle_promote_index = text.index(
+    'promote_governed_bundle_runtime_metadata "$PROMOTED_RUNTIME_SHA256" "$PROMOTED_RUNTIME_SIZE_BYTES"',
+    promotion_index,
+)
+bootstrap_after_promotion = text.index('launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"', promotion_index)
+assert bundle_backup_index < active_stop < bundle_promote_index < bootstrap_after_promotion, (
+    "governed bundle must join the backup/promotion/verification closure before startup"
+)
+bundle_promotion_function = text[
+    text.index("promote_governed_bundle_runtime_metadata() {"):text.index("assert_launchd_plist_label() {")
+]
+assert bundle_promotion_function.index("plutil -replace") < bundle_promotion_function.index(
+    'mv -f "$temporary" "$GOVERNED_BUNDLE_PATH"'
+) < bundle_promotion_function.index("verify_governed_bundle_runtime_metadata"), (
+    "governed bundle metadata must be updated in a temporary JSON file, atomically promoted, then verified"
 )
 assert state_backup_call_index > active_stop
 assert checkpoint_gate_index < active_stop, (
@@ -1692,6 +1725,9 @@ assert rollback.index("MUTATED=0") < rollback.index("launchctl bootout"), (
     "rollback must clear its mutation guard before any fallible rollback action"
 )
 assert "ROLLBACK_ROOT" not in text, "macOS rollback must use the attempt-local active-state backup"
+assert rollback.index('restore_file "$ATTEMPT_ROOT/governed-bundle.json" "$GOVERNED_BUNDLE_PATH"') < rollback.index(
+    'launchctl bootstrap "$LAUNCHD_BOOTSTRAP_DOMAIN" "$LAUNCHD_PLIST"'
+), "rollback must restore governed bundle metadata before restarting the original service"
 assert re.search(r"cleanup\(\).*hdiutil detach.*rm -rf", text, re.DOTALL)
 authority_path = text[text.index('if [[ "$authority_failure" -eq 1 ]]'):]
 assert authority_path.index("rollback") < authority_path.index("state_sync_escalation_required=true")
@@ -1732,6 +1768,7 @@ base_node = {
     "node_root": "/Applications/oasis7",
     "launchd_plist": "/Library/LaunchDaemons/oasis7.testnet.fourth.plist",
     "runtime_path": "/Applications/oasis7/current/bin/oasis7_chain_runtime",
+    "governed_bundle_path": "/Applications/oasis7/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
     "healthz_url": "http://127.0.0.1:19083/healthz",
     "status_url": "http://127.0.0.1:19083/v1/chain/status",
     "config_paths": ["/Applications/oasis7/config/node.env"],
@@ -1802,6 +1839,22 @@ for invalid_states in invalid_state_sets:
         pass
     else:
         raise AssertionError(f"unsafe persistent state topology accepted: {invalid_states}")
+for invalid_bundle_path in (
+    "/Applications/oasis7/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
+    "/Applications/oasis7/releases/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
+    "/tmp/public-testnet-governed-bootstrap-bundle-2026-06-06.json",
+):
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            module.macos_script(
+                {**base_node, "launchd_target": "system/oasis7.testnet.fourth", "governed_bundle_path": invalid_bundle_path},
+                "version", "commit", "run", "a" * 64,
+                "http://127.0.0.1:6631/v1/chain/status", "http://127.0.0.1:6632/v1/chain/status",
+            )
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError(f"non-root governed bundle path accepted: {invalid_bundle_path}")
 launchd_overlap_node = {
     **base_node,
     "launchd_target": "gui/501/oasis7.testnet.fourth",
