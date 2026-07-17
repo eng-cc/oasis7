@@ -13,7 +13,7 @@ chmod +x "$FIXTURE/scripts/pm/task-closeout.sh"
 cat >"$FIXTURE/scripts/pm/github-project-workflow.sh" <<'EOF'
 #!/usr/bin/env bash
 echo audit >>"${EVENT_LOG:?}"
-printf '{"status":"ok","errors":[],"warnings":[]}'
+printf '{"status":"ok","errors":[],"warnings":[],"selected_task":{"task_uid":"task_11111111111111111111111111111111","target":"done","workflow_phase":"task_done"}}'
 EOF
 cat >"$FIXTURE/scripts/pm/claim-ready.sh" <<'EOF'
 #!/usr/bin/env bash
@@ -61,6 +61,6 @@ EVENT_LOG="$TMPDIR/profile.events" MUTATION_LOG="$TMPDIR/profile.mutation" PM_RO
     --verification-profile codex_subagent_role_fit \
     --json >"$TMPDIR/profile.out"
 test -f "$TMPDIR/profile.mutation"
-diff -u <(printf 'claim\naudit\ntransition\n') "$TMPDIR/profile.events"
+diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$TMPDIR/profile.events"
 
 echo "task-closeout-profile.test: OK"

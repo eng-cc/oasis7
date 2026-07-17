@@ -49,7 +49,7 @@ run_case() {
     --to-status "$status" --claim-type "$([[ "$status" == ready ]] && echo ready_for_pr || echo task_complete)" \
     --verification-profile fixture_repository_state "${args[@]}" --json >/dev/null 2>"$T/err")
   local rc=$?; set -e
-  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\n') "$T/events"
+  if [[ -z "$kind" ]]; then [[ $rc == 0 ]] || { cat "$T/err"; return 1; }; diff -u <(printf 'claim\naudit\ntransition\naudit\n') "$T/events"
   else [[ $rc != 0 ]]; diff -u <(printf 'claim\n') "$T/events"; fi
 }
 run_case ready ""; run_case done ""
@@ -57,4 +57,18 @@ for kind in head mapping packet ledger; do
   run_case ready "$kind"
 done
 run_case done receipt
+
+# Minimal `{status:ok}` compatibility must be explicitly gated to the fixture
+# profile; every live profile must require task_uid, target status, and phase.
+python3 - "$ROOT/scripts/pm/task-closeout.sh" <<'PY'
+import re,sys
+source=open(sys.argv[1],encoding='utf-8').read()
+block=re.search(r"POSTCONDITION_AUDIT_JSON=.*?\npython3 - .*?<<'PY'\n(.*?)\nPY", source, re.S)
+assert block, "missing postcondition validator"
+validator=block.group(1)
+assert "VERIFICATION_PROFILE" in validator and "fixture_repository_state" in validator, \
+    "minimal postcondition audit compatibility must be fixture-profile-only"
+for field in ("task_uid", "target", "workflow_phase"):
+    assert field in validator, f"live postcondition validator must require structured {field}"
+PY
 echo "task-closeout-audit-order.test: OK"

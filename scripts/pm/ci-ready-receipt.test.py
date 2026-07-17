@@ -49,17 +49,34 @@ class ReceiptTest(unittest.TestCase):
     bad=pr(); bad["body"]="Refs #1"
     with self.api(r=bad):
       with self.assertRaisesRegex(SystemExit,"uncertain"): M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
-  def invoke_verify(self, mutate=None):
+  def invoke_verify(self, mutate=None, refresh=False, live_run=None):
     planner=M.planner_from_run(run()); digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
     receipt={"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"eng-cc/oasis7","task_uid":UID,"task_issue_number":1,"pr_number":7,"base_oid":"b"*40,"head_oid":"a"*40,"check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":digest,"planner":planner,"conclusion":"success","observed_at":M.now()}
     if mutate: mutate(receipt)
     with tempfile.NamedTemporaryFile("w",delete=False) as f: json.dump(receipt,f); name=f.name
     argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-name","required-gate","--check-app-id","42","--planner-digest",digest,"--receipt",name]
-    with self.api(),patch.object(sys,"argv",argv),redirect_stdout(io.StringIO()): M.main()
+    if refresh: argv.append("--refresh-same-identity")
+    output=io.StringIO()
+    with self.api(runs=[live_run or run()]),patch.object(sys,"argv",argv),redirect_stdout(output): M.main()
+    return json.loads(output.getvalue())
   def test_wrong_head(self):
     with self.assertRaisesRegex(SystemExit,"wrong_head"): self.invoke_verify(lambda r:r.update(head_oid="c"*40))
   def test_stale(self):
     with self.assertRaisesRegex(SystemExit,"stale"): self.invoke_verify(lambda r:r.update(observed_at="2000-01-01T00:00:00+00:00"))
+  def test_explicit_same_identity_refresh_changes_only_observed_at(self):
+    before={}
+    def stale(r):
+      r.update(observed_at="2000-01-01T00:00:00+00:00"); before.update(r)
+    refreshed=self.invoke_verify(stale,refresh=True)
+    self.assertNotEqual(before["observed_at"],refreshed["observed_at"])
+    self.assertEqual({k:v for k,v in before.items() if k!="observed_at"},
+                     {k:v for k,v in refreshed.items() if k!="observed_at"})
+  def test_refresh_fails_on_check_identity_or_conclusion_drift(self):
+    cases=(run(app=77), {**run(),"id":10}, run("failure"))
+    for changed in cases:
+      with self.subTest(changed=changed):
+        with self.assertRaisesRegex(SystemExit,"wrong_app|mismatch|conclusion"):
+          self.invoke_verify(lambda r:r.update(observed_at="2000-01-01T00:00:00+00:00"),refresh=True,live_run=changed)
   def test_uncertain_missing_planner(self):
     bad=run(); bad["output"]={"summary":"no marker"}
     with self.assertRaisesRegex(SystemExit,"uncertain"): M.planner_from_run(bad)
