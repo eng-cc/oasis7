@@ -51,7 +51,7 @@
 
 | 维度 | 基线值 | 成本/收益/冷却含义 | 实现锚点 |
 |---|---|---|---|
-| 宣战强度 `intensity` | `1..=10` | 强度越高，宣战收益越高，但持续时长也更长 | `crates/oasis7/src/runtime/world/event_processing.rs` |
+| 宣战强度 `intensity` | `1..=10` | 强度仅提高进攻评分，同时延长冲突窗口；战争内核不保证结算收益随强度增长 | `crates/oasis7/src/runtime/world/event_processing.rs` |
 | 战争持续时长 | `6 + 2 * intensity` ticks | 形成显式投入成本（占用冲突窗口） | `crates/oasis7/src/runtime/state.rs`、`crates/oasis7_builtin_wasm_modules/m5_gameplay_war_core/src/lib.rs` |
 | 战争结算评分 | `aggressor_score = members*10 + intensity`；`defender_score = members*10` | 进攻方获得强度加成；防守方依赖组织规模 | `crates/oasis7/src/runtime/world/gameplay_loop.rs` |
 | 胜负判定 | `aggressor_score >= defender_score` 时进攻方胜 | 平分时进攻方胜，鼓励主动冲突但保留成员规模价值 | `crates/oasis7/src/runtime/world/gameplay_loop.rs` |
@@ -59,16 +59,28 @@
 
 ### 1.1 战争推荐操作区间（用于评审）
 
-- 推荐强度带：`2..=6`。
-- 强度 `7..=10` 仅建议在成员差距不利时使用；其代价是更长冲突占用窗口。
-- 若连续 3 天 `conflict_freq_100ticks > 8`，优先下调推荐强度上限（而非直接改常量上限）。
+当前评分和平分规则下，`recommended_intensity` 表示“达到目标胜负结果的最低强度”，而不是通用强度带：
+
+| 进攻方与防守方成员差 | 最低胜利强度 | 推荐动作 |
+|---|---:|---|
+| 进攻方不少于防守方 | `1` | 如果仍值得宣战，使用 `1` |
+| 进攻方少 1 人 | `10` | 只有 `10` 能追平评分并利用平分时进攻方胜出的规则 |
+| 进攻方少 2 人或以上 | 不可达 | 先补强、谈判或等待，不推荐宣战 |
+
+- 高于最低胜利强度只会增加冲突占用时间，除非具体 gameplay 模块同时返回可验证的增量奖励。
+- 若连续 3 天 `conflict_freq_100ticks > 8`，先检查最低胜利强度的重复宣战是否构成刷取路径；本基线不通过调整推荐带代替数值平衡。
 
 ### 1.2 战争收益说明
 
 - 当前实现中的核心收益是状态与叙事收益：`winner_alliance_id`、战报摘要、冲突历史沉淀。
 - 额外经济/元进度收益通过 gameplay 模块 directive 注入，不在战争内核硬编码。
+- 预览中的 `expected_narrative_or_module_reward` 必须区分战争内核保证的胜负/历史结果与可选模块奖励；未获得模块回执时，不得把可选奖励显示为保证收益。
 
-### 1.3 宣战后果预览
+### 1.3 当前平衡边界
+
+当前基线存在“最低必胜强度”的支配策略：同规模进攻方用强度 `1` 即可稳定胜出，而弱两人或以上时没有强度翻盘路径。未来若受控重启战争主线，必须通过独立平衡任务决定是否增加强度递增收益/失败损失，或修改评分与平分规则。本轮仅纠正文档口径，不完成数值重平衡。
+
+### 1.4 宣战后果预览
 
 当玩家准备 `DeclareWar`、调整强度、暂缓或先谈判时，玩家侧必须能读取 `war_declaration_quote` / `conflict_outcome_preview`，用于判断当前宣战是否值得、强度是否合适、冲突窗口会被占用多久，以及结算后果是否优于替代行动。
 
@@ -77,7 +89,7 @@
 - `target_alliance_id`
 - `action_kind`: `declare_war` / `change_intensity` / `defer` / `negotiate_first`
 - `intensity`
-- `recommended_intensity_band`
+- `recommended_intensity_band`：按当前评分与平分规则推导的最低胜利强度；无可达强度时必须返回“补强/谈判/等待”而不是虚构推荐带
 - `war_duration_ticks`
 - `aggressor_score_estimate`
 - `defender_score_estimate`
