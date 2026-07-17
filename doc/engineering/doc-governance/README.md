@@ -15,7 +15,7 @@
 | 根入口或模块 README 过长、重复维护共享规则 | `doc-surface-area-governance-2026-04-10.prd.md` | 处理默认阅读面噪音，避免 landing page 变成第二份规范正文 |
 | 文档总量、热点子目录、devlog backlog 或近限长文件抬高维护成本 | `doc-corpus-maintenance-governance-2026-04-17.prd.md` | 处理入口减重之后的存量维护成本，配合 `scripts/doc-inventory-report.sh` 复算 |
 | `world-simulator` / Viewer 文档路径混叠 | `world-simulator-viewer-path-governance-2026-04-17.prd.md` | 针对 Viewer、launcher、world-simulator 热点路径的专题治理 |
-| `p2p` 节点、链与网络层文档路径混叠 | `p2p-node-path-governance-2026-04-17.prd.md` | 针对 p2p/node/blockchain 子域的路径级治理 |
+| `p2p/node` 首读分流或主题簇维护 | `../../p2p/node/README.md` | 当前 node 子域的 canonical landing page；完整文件检索回到 `../../p2p/prd.index.md` |
 | testing evidence 与手册/门禁文档混叠 | `../../testing/evidence/README.md` | 现行 evidence 子域入口；与 testing 模块入口、文件级索引和 operator 手册分层 |
 | readme 外部口径、渠道 runbook 与入口职责混叠 | `readme-governance-path-governance-2026-04-18.prd.md` | 针对 `doc/readme/` 及对外说明树的路径级治理 |
 

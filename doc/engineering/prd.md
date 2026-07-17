@@ -242,9 +242,7 @@
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md`
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md`
   - `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md`
-  - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.prd.md`
-  - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.design.md`
-  - `doc/engineering/doc-governance/p2p-node-path-governance-2026-04-17.project.md`
+  - historical `p2p-node-path-governance` triplet（后续已删除；当前 `p2p/node` 首读分流、主题簇与维护边界由 `doc/p2p/node/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
   - `doc/testing/evidence/README.md`（当前 testing evidence 子域分流与维护边界；一次性路径落位专题已退役）
   - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md`
   - `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md`
@@ -342,7 +340,7 @@
 | PRD-ENGINEERING-025 | `doc-corpus-maintenance-governance` | `test_tier_required` | 存量维护成本专题三件套、`scripts/doc-inventory-report.sh` 输出当前仓库体量快照、engineering 根入口/主项目/索引与 `doc-surface-area-governance` handoff 回写、`doc-governance-check` 通过 | 文档治理阶段判断、路径级治理优先级、`doc/devlog` backlog 处理与季度治理输入 |
 | PRD-ENGINEERING-026 | `devlog-history-compaction` | historical-only | 一次性专题三件套已退役删除；当前验证入口为 `doc/devlog/README.md` compact archive summary、engineering 根入口/主项目/索引回写与 `doc-governance-check` | `doc/devlog` 历史入口、`PRD-ENGINEERING-025` 第一条 follow-up 收口 |
 | PRD-ENGINEERING-027 | `world-simulator-viewer-path-governance` | `test_tier_required` | `world-simulator-viewer-path-governance` 专题三件套、`doc/world-simulator/viewer/README.md` 首读分流、`doc/world-simulator/README.md` / `doc/world-simulator/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `world-simulator/viewer` 热点子域入口、`PRD-ENGINEERING-025` 第二条 follow-up 收口与后续 `p2p` 路径级治理 |
-| PRD-ENGINEERING-028 | `p2p-node-path-governance` | `test_tier_required` | `p2p-node-path-governance` 专题三件套、`doc/p2p/node/README.md` 首读分流、`doc/p2p/README.md` / `doc/p2p/prd.index.md` / engineering 根入口回写、`doc-governance-check` 通过 | `p2p/node` 热点子域入口、`PRD-ENGINEERING-025` 第三条 follow-up 收口与后续 `testing` 路径级治理 |
+| PRD-ENGINEERING-028 | historical `p2p-node-path-governance`（已退役） | `test_tier_required` | 当前检查 `doc/p2p/node/README.md` 首读分流、维护触发器、`doc/p2p/README.md` / `doc/p2p/prd.index.md` 上游可达性与 `doc-governance-check`；原三件套从 git history 与 GitHub task evidence 追溯 | `p2p/node` 热点子域入口与 `PRD-ENGINEERING-025` 第三条 follow-up 的长期承接 |
 | PRD-ENGINEERING-029 | `testing-evidence-path-governance` | historical-only | 一次性专题三件套已退役删除；当前验证入口为 `doc/testing/evidence/README.md` 首读分流、`doc/testing/README.md` / `doc/testing/prd.index.md` / engineering 根入口回写与 `doc-governance-check` | `testing/evidence` 热点子域入口、`PRD-ENGINEERING-025` 第四条 follow-up 收口 |
 | PRD-ENGINEERING-030 | `readme-governance-path-governance` | `test_tier_required` | `readme-governance-path-governance` 专题三件套、`doc/readme/governance/README.md` 首读分流、`doc/readme/README.md` / `doc/readme/prd.index.md` / `doc/readme/project.md` / engineering 根入口回写、`doc-governance-check` 通过 | `readme/governance` 热点子域入口、`PRD-ENGINEERING-025` 第五条 follow-up 收口与后续季度复核 |
 | PRD-ENGINEERING-033 | `doc-hotspot-path-aftercare` | `test_tier_required` | `doc/world-simulator/launcher/README.md` 与 `doc/game/gameplay/README.md` 首读分流、模块 `README.md` / `prd.index.md` 回写、`bash scripts/doc-inventory-report.sh`、`doc-governance-check` 与 `git diff --check` 通过 | inventory 重新暴露的热点路径 aftercare，避免全仓机械治理并继续压低默认阅读面成本 |
