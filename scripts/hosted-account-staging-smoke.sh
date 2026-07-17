@@ -9,7 +9,10 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/hosted-account-staging-smoke.sh [options]
 
-Run a repo-owned hosted account smoke against `oasis7_game_launcher`.
+Run a repo-owned hosted account-continuity smoke against `oasis7_game_launcher`.
+
+This script does not provide a browser session public key or perform runtime
+session registration. It is not hosted-join readiness evidence.
 
 Default (`--mode local`) behavior:
 1. start a local `hosted_public_join` launcher with the standard SMTP

@@ -825,6 +825,16 @@ pub(crate) fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String
     atomic_write_replay_ledger(path.as_path(), &consumed)
 }
 
+pub fn preflight_hosted_registration_replay_ledger() -> Result<(), String> {
+    let path = registration_replay_ledger_path();
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let consumed = read_consumed_registration_nonces(path.as_path())?;
+    atomic_write_replay_ledger(path.as_path(), &consumed)
+}
+
 fn registration_replay_ledger_path() -> PathBuf {
     std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
         .map(PathBuf::from)

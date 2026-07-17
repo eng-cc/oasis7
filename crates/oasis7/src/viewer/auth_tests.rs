@@ -404,6 +404,14 @@ fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() 
     .expect("consume grant after registration commit");
     let replay = verify_session_register_auth_proof(&request, &proof).expect_err("replay rejected");
     assert!(replay.contains("replay"), "unexpected error: {replay}");
+
+    std::fs::write(&ledger_path, b"not-json").expect("write corrupt replay ledger");
+    let corrupt = preflight_hosted_registration_replay_ledger()
+        .expect_err("corrupt replay ledger must fail preflight");
+    assert!(corrupt.contains("decode"), "unexpected error: {corrupt}");
+    std::fs::remove_file(&ledger_path).expect("remove corrupt replay ledger");
+    preflight_hosted_registration_replay_ledger().expect("writable replay ledger preflight");
+    assert!(ledger_path.is_file());
     let _ = std::fs::remove_file(ledger_path);
     unsafe {
         std::env::remove_var(HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);

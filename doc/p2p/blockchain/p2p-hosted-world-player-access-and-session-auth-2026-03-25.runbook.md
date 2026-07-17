@@ -121,14 +121,20 @@ MVP 最小 smoke：
 5. 对同一邮箱再次完成一次登录。
 6. 两次若返回同一个 `hosted_account_id` 与 `player_id`，即可判定“邮箱登录 + 账户持久化”主链路成立。
 
-推荐自动化入口：
+账户连续性自动化入口（不得作为 hosted join readiness 证据）：
 1. 本地 required smoke：
    - `bash ./scripts/hosted-account-staging-smoke.sh --mode local --otp-fetch-command <cmd>`
 2. staging live smoke：
    - `bash ./scripts/hosted-account-staging-smoke.sh --mode staging --login-handle <test-email> --otp-fetch-command <cmd>`
 3. 说明：
    - 同一脚本会统一验证 `login/start -> login/complete -> player-session/release -> launcher restart -> stable account continuity`，并输出 summary artifact。
+   - 该脚本不提交 browser session `public_key`、不验证 `registration_grant`、不执行 runtime session registration；hosted join readiness 必须另取浏览器/runtime 注册闭环证据。
    - `--otp-fetch-command` 需要打印当前 challenge 对应的 6 位 OTP；脚本会把 `HOSTED_ACCOUNT_LOGIN_HANDLE`、`HOSTED_ACCOUNT_CHALLENGE_ID` 与 `HOSTED_ACCOUNT_LOGIN_ATTEMPT` 透传给该命令。
+
+Replay ledger readiness 与恢复：
+1. `hosted_public_join` 启动时会 decode 当前 replay ledger，并对同一路径执行原子写/fsync preflight；损坏 JSON、不可写父目录或替换失败必须 fail closed，不能对外报告 launcher ready。
+2. 普通回滚不得删除 replay ledger；应连同 session ledger 做权限受控备份。损坏文件需要先隔离留证，再从最近可信备份恢复。
+3. 若明确选择空 ledger 重新初始化，必须记录会丢失已消费 nonce 历史，并等待所有旧 registration grant TTL 过期后再恢复外部流量。
 
 当前已实测通过的 MVP 证据：
 1. 2026-05-20 已在 ECS 上验证 `https://oasis7.cn-huhehaote.vpc.tablestore.aliyuncs.com` 可达。

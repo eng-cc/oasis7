@@ -302,6 +302,8 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
             env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
                 .map_err(|_| "hosted registration issuer private key is required".to_string())?;
         oasis7::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())?;
+        oasis7::viewer::preflight_hosted_registration_replay_ledger()
+            .map_err(|err| format!("hosted registration replay ledger preflight failed: {err}"))?;
     }
 
     let oasis7_viewer_live_bin = resolve_oasis7_viewer_live_binary()?;
