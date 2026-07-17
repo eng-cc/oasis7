@@ -210,28 +210,31 @@ r=json.load(open(sys.argv[1],encoding='utf-8'))
 if r.get('integration_mode')!='patch_equivalence': raise SystemExit('post-merge-cleanup: main-sync receipt did not authorize patch equivalence')
 digest=hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest()
 if r.get('patch_equivalence_receipt_sha256')!=digest: raise SystemExit('post-merge-cleanup: patch-equivalence receipt digest mismatch')
-print(r.get('patch_id') or ''); print(r.get('delta_sha256') or '')
+print(r.get('patch_id') or ''); print(r.get('projected_tree_oid') or ''); print(r.get('main_tree_oid') or '')
 print(r.get('integration_commit') or ''); print(r.get('integration_parent') or '')
 PY
 )" || die "main-sync patch-equivalence binding failed"
   SYNC_PATCH_ID="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '1p')"
-  SYNC_DELTA_SHA="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '2p')"
-  SYNC_INTEGRATION_COMMIT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '3p')"
-  SYNC_INTEGRATION_PARENT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '4p')"
+  SYNC_PROJECTED_TREE="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '2p')"
+  SYNC_MAIN_TREE="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '3p')"
+  SYNC_INTEGRATION_COMMIT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '4p')"
+  SYNC_INTEGRATION_PARENT="$(printf '%s\n' "$SYNC_PATCH_FIELDS" | sed -n '5p')"
   PATCH_FIELDS="$(python3 - "$PATCH_RECEIPT" "$BRANCH_TIP" "$SYNC_INTEGRATION_COMMIT" <<'PY'
 import json,sys
 p=json.load(open(sys.argv[1],encoding='utf-8'))
-if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('issuer')!='oasis7_patch_equivalence_helper' or p.get('branch_tip')!=sys.argv[2] or p.get('main_commit')!=sys.argv[3] or not p.get('patch_id') or not p.get('delta_sha256'):
+if p.get('receipt_type')!='oasis7_patch_equivalence' or p.get('schema_version')!=2 or p.get('issuer')!='oasis7_patch_equivalence_helper' or p.get('branch_tip')!=sys.argv[2] or p.get('main_commit')!=sys.argv[3] or not p.get('patch_id') or not p.get('projected_tree_oid') or not p.get('main_tree_oid'):
  raise SystemExit('post-merge-cleanup: invalid patch-equivalence receipt')
 print(p.get('main_parent',''))
 print(p['patch_id'])
-print(p['delta_sha256'])
+print(p['projected_tree_oid'])
+print(p['main_tree_oid'])
 PY
 )"
   MAIN_PARENT="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '1p')"
   EXPECTED_PATCH="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '2p')"
-  EXPECTED_DELTA_SHA="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
-  [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_ID" && "$EXPECTED_DELTA_SHA" == "$SYNC_DELTA_SHA" ]] || die "main-sync patch proof disagrees with patch-equivalence receipt"
+  EXPECTED_PROJECTED_TREE="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '3p')"
+  EXPECTED_MAIN_TREE="$(printf '%s\n' "$PATCH_FIELDS" | sed -n '4p')"
+  [[ "$EXPECTED_PATCH" == "$SYNC_PATCH_ID" && "$EXPECTED_PROJECTED_TREE" == "$SYNC_PROJECTED_TREE" && "$EXPECTED_MAIN_TREE" == "$SYNC_MAIN_TREE" ]] || die "main-sync patch proof disagrees with patch-equivalence receipt"
   [[ "$MAIN_PARENT" == "$SYNC_INTEGRATION_PARENT" ]] || die "main-sync integration parent disagrees with patch-equivalence receipt"
   git -C "$REPO_ROOT" merge-base --is-ancestor "$SYNC_INTEGRATION_COMMIT" "$MAIN_COMMIT" || die "patch-equivalence integration commit is not contained in synchronized main"
   git -C "$REPO_ROOT" rev-list --first-parent "$SYNC_INTEGRATION_COMMIT" \
@@ -239,11 +242,12 @@ PY
     || die "patch-equivalence receipt main parent is not on the integration first-parent chain"
   BASE="$(git -C "$REPO_ROOT" merge-base "$BRANCH_TIP" "$MAIN_PARENT")"
   BRANCH_PATCH="$(git -C "$REPO_ROOT" diff "$BASE..$BRANCH_TIP" | git patch-id --stable | awk '{print $1}')"
-  MAIN_PATCH="$(git -C "$REPO_ROOT" diff "$MAIN_PARENT..$SYNC_INTEGRATION_COMMIT" | git patch-id --stable | awk '{print $1}')"
-  [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$MAIN_PATCH" && "$BRANCH_PATCH" == "$EXPECTED_PATCH" ]] || die "patch-equivalence receipt failed recomputation"
-  BRANCH_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$BASE..$BRANCH_TIP" | shasum -a 256 | awk '{print $1}')"
-  MAIN_DELTA_SHA="$(git -C "$REPO_ROOT" diff --binary --full-index --no-renames "$MAIN_PARENT..$SYNC_INTEGRATION_COMMIT" | shasum -a 256 | awk '{print $1}')"
-  [[ "$BRANCH_DELTA_SHA" == "$MAIN_DELTA_SHA" && "$BRANCH_DELTA_SHA" == "$EXPECTED_DELTA_SHA" ]] || die "patch-equivalence exact delta failed recomputation"
+  [[ -n "$BRANCH_PATCH" && "$BRANCH_PATCH" == "$EXPECTED_PATCH" ]] || die "patch-equivalence branch identity failed recomputation"
+  RECOMPUTED_PROJECTED_TREE="$(git -C "$REPO_ROOT" merge-tree --write-tree "$MAIN_PARENT" "$BRANCH_TIP")" \
+    || die "patch-equivalence branch projection conflicts"
+  RECOMPUTED_MAIN_TREE="$(git -C "$REPO_ROOT" rev-parse "$SYNC_INTEGRATION_COMMIT^{tree}")"
+  [[ "$RECOMPUTED_PROJECTED_TREE" == "$RECOMPUTED_MAIN_TREE" && "$RECOMPUTED_PROJECTED_TREE" == "$EXPECTED_PROJECTED_TREE" && "$RECOMPUTED_MAIN_TREE" == "$EXPECTED_MAIN_TREE" ]] \
+    || die "patch-equivalence projected tree failed recomputation"
 else
   [[ "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("integration_mode") or "")' "$MAIN_SYNC_RECEIPT")" == "ancestry" ]] || die "ancestry cleanup requires ancestry main-sync receipt"
   [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when main contains the task branch tip"

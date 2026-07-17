@@ -488,7 +488,12 @@ executor is limited by the [unattended invariants](#appendix-a-target-supervisor
   a fresh repository-generated PR receipt proving `MERGED`, task truth proving
   `done`, a clean task worktree, and the task branch tip contained in main. A
   squash/rebase merge may substitute a repository-generated patch-equivalence
-  receipt bound to the exact branch tip and main tree; literal CLI state or
+  receipt bound to the exact branch tip and integration tree; the helper must
+  prove that a conflict-free three-way projection of the branch tip onto the
+  recorded first-parent integration base exactly equals the integration
+  commit tree. The receipt also binds the branch patch identity for exact-tip
+  recomputation, but context-sensitive branch/main patch-ID equality is not
+  authority; literal CLI state or
   mutable cache fields are not proof. The helper uses non-force
   `git worktree remove` and `git branch -d`; it never prints or executes
   `worktree remove --force` / `branch -D` as normal workflow guidance.
@@ -633,7 +638,7 @@ cd <canonical-default-worktree>
   --pr-receipt "$RECEIPT_ROOT/merge-receipt.json" \
   --receipt-output "$RECEIPT_ROOT/main-sync-receipt.json"
 ```
-Squash/rebase retry: run `bash ./scripts/pm/patch-equivalence-receipt.sh --root <canonical-default-worktree> --branch-tip <task-branch-tip> --main-commit <integration-commit-in-main-history> --main-parent <integration-first-parent> > "$RECEIPT_ROOT/patch-equivalence-receipt.json"`, then retry steps 4 and 5 with `--patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json"`. Both helpers recompute the exact binary delta and bind its digest; later main commits are allowed only while the integration commit remains an ancestor, and caller-authored JSON is not authority.
+Squash/rebase retry: run `bash ./scripts/pm/patch-equivalence-receipt.sh --root <canonical-default-worktree> --branch-tip <task-branch-tip> --main-commit <integration-commit-in-main-history> --main-parent <integration-first-parent-base> > "$RECEIPT_ROOT/patch-equivalence-receipt.json"`, then retry steps 4 and 5 with `--patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json"`. Both helpers require the recorded base on the integration commit's first-parent chain, recompute the bound branch patch identity, and require the conflict-free projected tree from merging the branch tip onto that base to equal the integration commit tree exactly; later main commits are allowed only while the integration commit remains an ancestor, and caller-authored JSON is not authority.
 
 5. Safe cleanup — require journal/receipt readback; resume by retrying this command.
 ```bash
