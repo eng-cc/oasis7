@@ -636,7 +636,7 @@ class WorkflowDocumentationContract(unittest.TestCase):
         self.assertIsNotNone(retry)
         self.assertIn("patch-equivalence-receipt.sh", retry.group(0))
         self.assertIn("--patch-equivalence-receipt", retry.group(0))
-        self.assertIn("exact binary delta", retry.group(0))
+        self.assertIn("projected tree", retry.group(0))
         self.assertIn("integration commit remains an ancestor", retry.group(0))
 
     def test_failed_is_escalation_or_new_epoch_not_resume_authority(self) -> None:

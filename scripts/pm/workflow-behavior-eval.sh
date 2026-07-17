@@ -106,6 +106,7 @@ python3 "$ROOT_DIR/scripts/pm/pr-final-trust-red.test.py" >/dev/null
 OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
   "$ROOT_DIR/scripts/pm/bootstrap-immutable-request.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-main-sync.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/patch-equivalence-receipt.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/review-provenance-trust.test.sh" >/dev/null

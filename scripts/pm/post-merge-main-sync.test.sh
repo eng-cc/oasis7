@@ -115,7 +115,8 @@ assert r['integration_mode']=='patch_equivalence',r
 assert r['main_commit']==sys.argv[3],r
 assert r['integration_commit']==sys.argv[4],r
 assert r['integration_parent']==p['main_parent'],r
-assert r['delta_sha256']==p['delta_sha256'],r
+assert r['projected_tree_oid']==p['projected_tree_oid'],r
+assert r['main_tree_oid']==p['main_tree_oid'],r
 assert r['patch_equivalence_receipt_sha256']==hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest(),r
 PY
 
