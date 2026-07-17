@@ -676,6 +676,8 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
         window_capacity: 128,
         recent_commit_count: 4,
+        recent_over_budget_count: 1,
+        recent_over_budget_ratio_ppm: 250_000,
         p50_total_ms: Some(780),
         p95_total_ms: Some(1_250),
         max_total_ms: Some(1_250),
@@ -697,8 +699,8 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_warns_for_slow_commits() {
     assert_eq!(runtime_perf.action_execution.budget_ms, 1_000.0);
     assert_eq!(runtime_perf.action_execution.p50_ms, 780.0);
     assert_eq!(runtime_perf.action_execution.p95_ms, 1_250.0);
-    assert_eq!(runtime_perf.action_execution.over_budget_total, 0);
-    assert_eq!(runtime_perf.action_execution.over_budget_ratio_ppm, 0);
+    assert_eq!(runtime_perf.action_execution.over_budget_total, 1);
+    assert_eq!(runtime_perf.action_execution.over_budget_ratio_ppm, 250_000);
 }
 
 #[test]
@@ -706,6 +708,8 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_comm
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
         window_capacity: 128,
         recent_commit_count: 3,
+        recent_over_budget_count: 1,
+        recent_over_budget_ratio_ppm: 333_333,
         p50_total_ms: Some(544),
         p95_total_ms: Some(3_388),
         max_total_ms: Some(3_388),
@@ -728,14 +732,124 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_low_sample_slow_comm
 }
 
 #[test]
-fn runtime_perf_snapshot_from_execution_bridge_timing_marks_very_slow_commits_critical() {
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_cold_start_outliers_warn() {
     let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
         window_capacity: 128,
-        recent_commit_count: 4,
+        recent_commit_count: 21,
+        recent_over_budget_count: 2,
+        recent_over_budget_ratio_ppm: 95_238,
+        p50_total_ms: Some(544),
+        p95_total_ms: Some(2_890),
+        max_total_ms: Some(4_161),
+        slow_count: 2,
+        last_slow_stage: Some("cas_put".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    assert_eq!(
+        runtime_perf.bottleneck,
+        RuntimePerfBottleneck::ActionExecution
+    );
+    assert_eq!(runtime_perf.action_execution.samples_total, 21);
+    assert_eq!(runtime_perf.action_execution.p95_ms, 2_890.0);
+    assert_eq!(runtime_perf.action_execution.max_ms, 4_161.0);
+
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_31_sustained_slow_commits_warn() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 31,
+        recent_over_budget_count: 31,
+        recent_over_budget_ratio_ppm: 1_000_000,
+        p50_total_ms: Some(2_500),
+        p95_total_ms: Some(2_500),
+        max_total_ms: Some(2_500),
+        slow_count: 31,
+        last_slow_stage: Some("runtime_step".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_two_mature_outliers_warn() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 32,
+        recent_over_budget_count: 2,
+        recent_over_budget_ratio_ppm: 62_500,
+        p50_total_ms: Some(544),
+        p95_total_ms: Some(2_890),
+        max_total_ms: Some(4_161),
+        slow_count: 2,
+        last_slow_stage: Some("cas_put".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_keeps_moderate_sustained_latency_warn() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 32,
+        recent_over_budget_count: 8,
+        recent_over_budget_ratio_ppm: 250_000,
+        p50_total_ms: Some(780),
+        p95_total_ms: Some(1_250),
+        max_total_ms: Some(1_250),
+        slow_count: 8,
+        last_slow_stage: Some("runtime_step".to_string()),
+        stages: BTreeMap::new(),
+    };
+
+    let runtime_perf =
+        super::status_payload::build_runtime_perf_snapshot_from_execution_bridge_timing(&timing)
+            .expect("runtime perf snapshot");
+
+    assert_eq!(runtime_perf.health, RuntimePerfHealth::Warn);
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "warn");
+    assert!(payload.observability.ready);
+}
+
+#[test]
+fn runtime_perf_snapshot_from_execution_bridge_timing_marks_sustained_slow_commits_critical() {
+    let timing = super::execution_bridge::ExecutionBridgeCommitTimingSnapshot {
+        window_capacity: 128,
+        recent_commit_count: 32,
+        recent_over_budget_count: 32,
+        recent_over_budget_ratio_ppm: 1_000_000,
         p50_total_ms: Some(1_500),
         p95_total_ms: Some(2_500),
         max_total_ms: Some(2_500),
-        slow_count: 4,
+        slow_count: 32,
         last_slow_stage: Some("runtime_step".to_string()),
         stages: BTreeMap::new(),
     };
@@ -750,6 +864,9 @@ fn runtime_perf_snapshot_from_execution_bridge_timing_marks_very_slow_commits_cr
         RuntimePerfBottleneck::ActionExecution
     );
     assert_eq!(runtime_perf.action_execution.p95_ms, 2_500.0);
+    let payload = build_minimal_status_payload_with_runtime_perf(runtime_perf);
+    assert_eq!(payload.observability.status, "critical");
+    assert!(!payload.observability.ready);
 }
 
 #[test]

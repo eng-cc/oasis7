@@ -18,7 +18,8 @@ use super::{
 };
 
 const EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS: f64 = 1_000.0;
-const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 4;
+const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES: u64 = 32;
+const EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_OVER_BUDGET_RATIO_PPM: u64 = 200_000;
 
 #[derive(Debug, Serialize)]
 pub(crate) struct ChainP2pPathObservabilityStatus {
@@ -223,8 +224,12 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
     let p95_ms = timing.p95_total_ms.unwrap_or(0) as f64;
     let max_ms = timing.max_total_ms.unwrap_or(0) as f64;
     let samples_total = timing.recent_commit_count as u64;
+    // Nearest-rank p95 selects the second outlier at 32 samples. Block readiness
+    // only when maturity, severe p95 latency, and sustained density all agree.
     let health = if samples_total >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_MIN_SAMPLES
         && p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS * 2.0
+        && timing.recent_over_budget_ratio_ppm
+            >= EXECUTION_BRIDGE_RUNTIME_PERF_CRITICAL_OVER_BUDGET_RATIO_PPM
     {
         RuntimePerfHealth::Critical
     } else if p95_ms >= EXECUTION_BRIDGE_RUNTIME_PERF_BUDGET_MS
@@ -245,8 +250,8 @@ pub(crate) fn build_runtime_perf_snapshot_from_execution_bridge_timing(
         p50_ms,
         p95_ms,
         p99_ms: max_ms,
-        over_budget_total: 0,
-        over_budget_ratio_ppm: 0,
+        over_budget_total: timing.recent_over_budget_count,
+        over_budget_ratio_ppm: timing.recent_over_budget_ratio_ppm,
     };
 
     Some(RuntimePerfSnapshot {
