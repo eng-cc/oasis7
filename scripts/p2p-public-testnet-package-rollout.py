@@ -2230,17 +2230,60 @@ assert_launchd_target_loaded() {{
   }}
 }}
 
+status_rollout_state() {{
+  local status="$1" status_file fallback_required running network_head_available \
+    consensus_progress_error last_error alert_index=0 alert_code
+  [[ -n "$status" ]] || return 1
+  status_file="$(mktemp "${{TMPDIR:-/tmp}}/oasis7-status.XXXXXX")" || return 1
+  printf '%s' "$status" >"$status_file"
+
+  fallback_required="$(plutil -extract consensus.state_sync_fallback_required raw -expect bool -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
+  if [[ "$fallback_required" == true ]]; then
+    rm -f "$status_file"
+    return 2
+  fi
+  plutil -extract observability.alerts json -expect array -o /dev/null "$status_file" >/dev/null 2>&1 || {{ rm -f "$status_file"; return 1; }}
+  while plutil -extract "observability.alerts.$alert_index" json -expect dictionary -o /dev/null "$status_file" >/dev/null 2>&1; do
+    alert_code="$(plutil -extract "observability.alerts.$alert_index.code" raw -expect string -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
+    case "$alert_code" in
+      authority_failure|consensus_peer_head_unavailable|execution_driver_peer_mismatch) rm -f "$status_file"; return 2 ;;
+    esac
+    ((alert_index += 1))
+  done
+  if plutil -extract "observability.alerts.$alert_index" json -o /dev/null "$status_file" >/dev/null 2>&1; then
+    rm -f "$status_file"
+    return 1
+  fi
+  consensus_progress_error="$(plutil -extract consensus_progress_observer_error raw -expect string -o - "$status_file" 2>/dev/null || true)"
+  last_error="$(plutil -extract last_error raw -expect string -o - "$status_file" 2>/dev/null || true)"
+  case "$consensus_progress_error:$last_error" in
+    *'execution driver peer mismatch'*|*'authority_failure'*) rm -f "$status_file"; return 2 ;;
+  esac
+  network_head_available="$(plutil -extract observability.network_head_available raw -expect bool -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
+  if [[ "$network_head_available" == false ]]; then
+    rm -f "$status_file"
+    return 2
+  fi
+  running="$(plutil -extract running raw -expect bool -o - "$status_file" 2>/dev/null)" || {{ rm -f "$status_file"; return 1; }}
+  rm -f "$status_file"
+  [[ "$fallback_required" == false && "$network_head_available" == true && "$running" == true ]]
+}}
+
 wait_for_service_health() {{
   local deadline=$((SECONDS + 120)) health status
   while (( SECONDS < deadline )); do
     health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
     status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
-    if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+    if status_rollout_state "$status"; then
+      :
+    elif [[ "$?" -eq 2 ]]; then
       echo "authority_failure_detected=true" >&2
       return 2
+    else
+      sleep 2
+      continue
     fi
-    if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
-       grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+    if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health"; then
       return 0
     fi
     sleep 2
@@ -2448,12 +2491,16 @@ deadline=$((SECONDS + 120))
 while (( SECONDS < deadline )); do
   health="$(curl -fsS "$HEALTHZ_URL" 2>/dev/null || true)"
   status="$(curl -fsS "$STATUS_URL" 2>/dev/null || true)"
-  if grep -Eq 'authority_failure|state_sync_fallback_required|consensus_peer_head_unavailable|execution driver peer mismatch' <<<"$status"; then
+  if status_rollout_state "$status"; then
+    :
+  elif [[ "$?" -eq 2 ]]; then
     authority_failure=1
     break
+  else
+    sleep 2
+    continue
   fi
-  if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health" && \
-     grep -Eq '"running"[[:space:]]*:[[:space:]]*true' <<<"$status"; then
+  if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' <<<"$health"; then
     echo "startup_verified=true healthz=$HEALTHZ_URL status=$STATUS_URL"
     MUTATED=0
     trap - ERR
