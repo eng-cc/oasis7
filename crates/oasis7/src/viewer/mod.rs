@@ -13,12 +13,15 @@ mod server;
 mod web_bridge;
 
 pub use auth::{
+    HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV, HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
     PromptControlAuthIntent, VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX,
-    VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX, VerifiedPlayerAuth, sign_agent_chat_auth_proof,
-    sign_gameplay_action_auth_proof, sign_hosted_prompt_control_strong_auth_grant,
-    sign_prompt_control_apply_auth_proof, sign_prompt_control_rollback_auth_proof,
-    sign_session_register_auth_proof, verify_agent_chat_auth_proof,
-    verify_gameplay_action_auth_proof, verify_hosted_prompt_control_apply_strong_auth_grant,
+    VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX, VerifiedPlayerAuth,
+    derive_hosted_registration_issuer_public_key, issue_hosted_registration_grant,
+    sign_agent_chat_auth_proof, sign_gameplay_action_auth_proof,
+    sign_hosted_prompt_control_strong_auth_grant, sign_prompt_control_apply_auth_proof,
+    sign_prompt_control_rollback_auth_proof, sign_session_register_auth_proof,
+    verify_agent_chat_auth_proof, verify_gameplay_action_auth_proof,
+    verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
     verify_session_register_auth_proof,

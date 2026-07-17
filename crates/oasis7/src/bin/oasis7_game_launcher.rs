@@ -115,6 +115,7 @@ const VIEWER_PLAYER_ID_ENV: &str = "OASIS7_VIEWER_PLAYER_ID";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_BOOTSTRAP_OBJECT: &str = "__OASIS7_VIEWER_AUTH_ENV";
+const HOSTED_PLAYER_SESSION_LEDGER_PATH_ENV: &str = "OASIS7_HOSTED_PLAYER_SESSION_LEDGER_PATH";
 const NODE_CONFIG_FILE_NAME: &str = "config.toml";
 const NODE_TABLE_KEY: &str = "node";
 const NODE_PRIVATE_KEY_FIELD: &str = "private_key";
@@ -295,6 +296,12 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
             "oasis7 gameplay requires --with-llm; no-LLM launch is no longer a playable entry path"
                 .to_string(),
         );
+    }
+    if options.deployment_mode == "hosted_public_join" {
+        let issuer_private_key =
+            env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
+                .map_err(|_| "hosted registration issuer private key is required".to_string())?;
+        oasis7::viewer::derive_hosted_registration_issuer_public_key(issuer_private_key.as_str())?;
     }
 
     let oasis7_viewer_live_bin = resolve_oasis7_viewer_live_binary()?;
@@ -576,10 +583,29 @@ fn start_static_http_server(
     let root_dir = Arc::new(root_dir.to_path_buf());
     let live_bind = Arc::new(live_bind.to_string());
     let default_viewer_player_id = Arc::new(default_viewer_player_id.map(ToOwned::to_owned));
-    let hosted_session_issuer = Arc::new(Mutex::new(HostedPlayerSessionIssuer::default()));
+    #[cfg(test)]
+    let hosted_session_ledger_path = root_dir.join(".hosted-player-sessions-test.json");
+    #[cfg(not(test))]
+    let hosted_session_ledger_path = env::var_os(HOSTED_PLAYER_SESSION_LEDGER_PATH_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-player-sessions.json"));
+    let hosted_session_issuer = Arc::new(Mutex::new(
+        HostedPlayerSessionIssuer::with_ledger_path(hosted_session_ledger_path).map_err(|err| {
+            format!("initialize durable hosted player-session ledger failed: {err}")
+        })?,
+    ));
     let hosted_account_broker = Arc::new(Mutex::new(
         if deployment_mode == DeploymentMode::HostedPublicJoin {
-            HostedAccountIdentityBroker::from_env()?
+            #[cfg(test)]
+            {
+                HostedAccountIdentityBroker::with_store_path(
+                    root_dir.join(".hosted-account-store-test.json"),
+                )?
+            }
+            #[cfg(not(test))]
+            {
+                HostedAccountIdentityBroker::from_env()?
+            }
         } else {
             HostedAccountIdentityBroker::disabled()
         },

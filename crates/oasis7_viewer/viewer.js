@@ -2284,6 +2284,7 @@ function createViewerHostedAuthStateModule({
           maskedLoginHint: auth.maskedLoginHint || null,
           deviceSessionId: auth.deviceSessionId || auth.releaseToken || null,
           releaseToken: auth.releaseToken || null,
+          registrationGrant: auth.registrationGrant || null,
           issuedAtUnixMs: auth.issuedAtUnixMs ?? null,
           sessionEpoch: auth.sessionEpoch ?? null
         })
@@ -2306,6 +2307,7 @@ function createViewerHostedAuthStateModule({
       const parsed = JSON.parse(raw);
       const hostedAccountId = String(parsed?.hostedAccountId || parsed?.hosted_account_id || "").trim();
       const playerId = String(parsed?.playerId || parsed?.player_id || "").trim();
+      const registrationGrant = String(parsed?.registrationGrant || parsed?.registration_grant || "").trim();
       const loginChannel = String(parsed?.loginChannel || parsed?.login_channel || "").trim();
       const maskedLoginHint = String(parsed?.maskedLoginHint || parsed?.masked_login_hint || "").trim();
       const releaseToken = String(parsed?.releaseToken || parsed?.release_token || "").trim();
@@ -2329,6 +2331,7 @@ function createViewerHostedAuthStateModule({
           maskedLoginHint: maskedLoginHint || null,
           deviceSessionId: deviceSessionId || releaseToken,
           releaseToken,
+          registrationGrant: registrationGrant || null,
           issuedAtUnixMs: normalizedIssuedAtUnixMs,
           sessionEpoch: normalizedSessionEpoch
         })
@@ -2341,6 +2344,7 @@ function createViewerHostedAuthStateModule({
         maskedLoginHint: maskedLoginHint || null,
         deviceSessionId: deviceSessionId || releaseToken,
         releaseToken,
+        registrationGrant: registrationGrant || null,
         source: "hosted_browser_storage",
         registrationStatus: "issued",
         sessionEpoch: normalizedSessionEpoch,
@@ -2377,6 +2381,50 @@ function createViewerHostedAuthStateModule({
     resolveAuthBootstrap: resolveAuthBootstrap2,
     resolveViewerAuthState: resolveViewerAuthState2
   };
+}
+function createViewerHostedSessionRefreshModule({
+  clone: clone2,
+  ensureHostedAuthSigningKey: ensureHostedAuthSigningKey2,
+  fetchImpl,
+  legacyViewerAuthBootstrapSource,
+  persistHostedPlayerSession: persistHostedPlayerSession2,
+  refreshRoute,
+  state: state2
+}) {
+  async function refreshHostedPlayerLease2() {
+    const auth = await ensureHostedAuthSigningKey2(state2.auth);
+    const playerId = String(auth.playerId || "").trim();
+    const releaseToken = String(auth.releaseToken || "").trim();
+    const publicKey = String(auth.publicKey || "").trim();
+    if (!playerId || !releaseToken || !publicKey || auth.source === legacyViewerAuthBootstrapSource) {
+      return null;
+    }
+    try {
+      const response = await fetchImpl(refreshRoute, {
+        method: "POST",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({ player_id: playerId, release_token: releaseToken, public_key: publicKey })
+      });
+      const payload = await response.json();
+      if (payload?.admission) {
+        state2.hostedAdmission = clone2(payload.admission);
+      }
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || payload?.error_code || `hosted player-session refresh failed with HTTP ${response.status}`);
+      }
+      if (payload.registration_grant) {
+        auth.registrationGrant = String(payload.registration_grant).trim() || null;
+        auth.deviceSessionId = String(payload.device_session_id || auth.deviceSessionId || "").trim() || null;
+        persistHostedPlayerSession2(auth);
+      }
+      return payload;
+    } catch (error) {
+      state2.auth.error = String(error);
+      return null;
+    }
+  }
+  return { refreshHostedPlayerLease: refreshHostedPlayerLease2 };
 }
 function createInitialHostedLoginState() {
   return {
@@ -3665,34 +3713,15 @@ async function refreshHostedAdmissionState() {
     return state.hostedAdmission;
   }
 }
-async function refreshHostedPlayerLease() {
-  const playerId = String(state.auth.playerId || "").trim();
-  const releaseToken = String(state.auth.releaseToken || "").trim();
-  if (!playerId || !releaseToken || state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE) {
-    return null;
-  }
-  try {
-    const response = await fetch(
-      `${HOSTED_PLAYER_SESSION_REFRESH_ROUTE}?player_id=${encodeURIComponent(playerId)}&release_token=${encodeURIComponent(releaseToken)}`,
-      {
-        method: "POST",
-        cache: "no-store",
-        headers: { Accept: "application/json" }
-      }
-    );
-    const payload = await response.json();
-    if (payload?.admission) {
-      state.hostedAdmission = clone(payload.admission);
-    }
-    if (!response.ok || !payload?.ok) {
-      throw new Error(payload?.error || payload?.error_code || `hosted player-session refresh failed with HTTP ${response.status}`);
-    }
-    return payload;
-  } catch (error) {
-    state.auth.error = String(error);
-    return null;
-  }
-}
+const { refreshHostedPlayerLease } = createViewerHostedSessionRefreshModule({
+  clone,
+  ensureHostedAuthSigningKey,
+  fetchImpl: fetch,
+  legacyViewerAuthBootstrapSource: LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
+  persistHostedPlayerSession,
+  refreshRoute: HOSTED_PLAYER_SESSION_REFRESH_ROUTE,
+  state
+});
 function stopHostedSessionRefreshLoop() {
   if (hostedSessionRefreshTimer) {
     window.clearInterval(hostedSessionRefreshTimer);
@@ -5048,6 +5077,7 @@ async function completeHostedAccountLogin() {
   state.auth.error = null;
   render();
   try {
+    const keypair = await generateEphemeralEd25519Keypair();
     const response = await fetch(HOSTED_ACCOUNT_LOGIN_COMPLETE_ROUTE, {
       method: "POST",
       cache: "no-store",
@@ -5057,7 +5087,8 @@ async function completeHostedAccountLogin() {
       },
       body: JSON.stringify({
         challenge_id: challengeId,
-        otp_code: otpCode
+        otp_code: otpCode,
+        public_key: keypair.publicKey
       })
     });
     const payload = await response.json();
@@ -5068,7 +5099,6 @@ async function completeHostedAccountLogin() {
       throw new Error(payload?.error || payload?.error_code || `hosted account login complete failed with HTTP ${response.status}`);
     }
     state.hostedAdmission = payload?.admission ? clone(payload.admission) : state.hostedAdmission;
-    const keypair = await generateEphemeralEd25519Keypair();
     state.auth = {
       available: true,
       hostedAccountId: String(payload.account.hosted_account_id || "").trim() || null,
@@ -5079,6 +5109,7 @@ async function completeHostedAccountLogin() {
       publicKey: keypair.publicKey,
       privateKey: keypair.privateKey,
       releaseToken: String(payload.grant.release_token || "").trim() || null,
+      registrationGrant: String(payload.grant.registration_grant || "").trim() || null,
       error: null,
       revokeReason: null,
       revokedBy: null,
@@ -5378,6 +5409,9 @@ async function dispatchSessionRegisterRequest(requestedAgentId, forceRebind) {
     player_id: auth.playerId,
     public_key: auth.publicKey
   };
+  if (auth.registrationGrant) {
+    request.registration_grant = auth.registrationGrant;
+  }
   if (normalizedRequestedAgentId) {
     request.requested_agent_id = normalizedRequestedAgentId;
   }
@@ -6251,6 +6285,9 @@ function adoptHostedRecoveryAck(ack) {
     state.auth.rebindNotice = `Player session switched to ${ack.agent_id || previousRequestedAgentId || "requested agent"}.`;
   }
   state.auth.registrationStatus = ack.status === "session_registered" || ack.status === "catch_up_ready" ? "registered" : ack.status === "session_revoked" ? "guest" : "issued";
+  if (ack.status === "session_registered" || ack.status === "catch_up_ready") {
+    state.auth.registrationGrant = null;
+  }
   state.auth.runtimeStatus = ack.status === "session_revoked" ? "revoked" : nextBoundAgentId ? "registered" : "registered_unbound";
   if (ack.status === "session_revoked") {
     if (usesLegacyPreviewBootstrap) {

@@ -44,7 +44,7 @@ pub(super) fn issue_hosted_strong_auth_grant(
     release_token: &str,
     issuer: &mut HostedPlayerSessionIssuer,
 ) -> HostedStrongAuthGrantResponse {
-    let admission = issuer.refresh(deployment_mode, player_id, release_token);
+    let admission = issuer.refresh(deployment_mode, player_id, release_token, None);
     if !admission.ok {
         return response_from_admission(admission, None);
     }

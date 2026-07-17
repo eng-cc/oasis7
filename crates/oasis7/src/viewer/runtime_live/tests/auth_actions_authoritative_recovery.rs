@@ -268,6 +268,7 @@ fn runtime_authoritative_recovery_rotate_and_revoke_session_enforced_for_agent_c
         crate::viewer::AuthoritativeSessionRegisterRequest {
             player_id: "player-a".to_string(),
             public_key: None,
+            registration_grant: None,
             auth: None,
             requested_agent_id: Some(agent_id.clone()),
             force_rebind: false,

@@ -883,6 +883,7 @@ fn runtime_session_register_rejects_same_player_binding_to_second_agent() {
         crate::viewer::AuthoritativeSessionRegisterRequest {
             player_id: "player-a".to_string(),
             public_key: None,
+            registration_grant: None,
             auth: None,
             requested_agent_id: Some(agent_ids[1].clone()),
             force_rebind: false,

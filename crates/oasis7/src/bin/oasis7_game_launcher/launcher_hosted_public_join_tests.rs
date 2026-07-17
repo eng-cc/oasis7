@@ -31,3 +31,30 @@ fn build_viewer_live_command_keeps_chain_status_bind_for_hosted_public_join() {
     assert!(args.contains(&"--chain-link-policy".to_string()));
     assert!(args.contains(&"enforcing".to_string()));
 }
+
+#[test]
+fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
+    let options = parse_options(["--deployment-mode", "hosted_public_join"].into_iter())
+        .expect("hosted public join should parse");
+    unsafe {
+        std::env::set_var(
+            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
+            hex::encode([81_u8; 32]),
+        );
+    }
+
+    let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
+    let trusted_public_key = command
+        .get_envs()
+        .find_map(|(name, value)| {
+            (name == oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV)
+                .then(|| value.map(|value| value.to_string_lossy().into_owned()))
+                .flatten()
+        })
+        .expect("trusted issuer public key env");
+
+    unsafe {
+        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
+    }
+    assert_eq!(trusted_public_key.len(), 64);
+}

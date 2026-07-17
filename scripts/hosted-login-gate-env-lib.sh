@@ -14,6 +14,9 @@ oasis7_hosted_login_env_default_if_unset() {
 
 oasis7_hosted_login_gate_env_defaults() {
   local store_path="$1"
+  local registration_issuer_private_key=""
+
+  registration_issuer_private_key=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
 
   oasis7_hosted_login_env_default_if_unset \
     "OASIS7_HOSTED_LOGIN_SMTP_FROM_EMAIL" \
@@ -27,4 +30,7 @@ oasis7_hosted_login_gate_env_defaults() {
   oasis7_hosted_login_env_default_if_unset \
     "OASIS7_HOSTED_ACCOUNT_STORE_PATH" \
     "$store_path"
+  oasis7_hosted_login_env_default_if_unset \
+    "OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY" \
+    "$registration_issuer_private_key"
 }

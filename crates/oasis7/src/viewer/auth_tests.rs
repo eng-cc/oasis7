@@ -254,6 +254,7 @@ fn session_register_auth_verify_rejects_tampered_requested_agent_id() {
     let request = AuthoritativeSessionRegisterRequest {
         player_id: "player-a".to_string(),
         public_key: Some(public_key.clone()),
+        registration_grant: None,
         auth: None,
         requested_agent_id: Some("agent-0".to_string()),
         force_rebind: false,
@@ -275,6 +276,7 @@ fn session_register_auth_verify_rejects_tampered_force_rebind() {
     let request = AuthoritativeSessionRegisterRequest {
         player_id: "player-a".to_string(),
         public_key: Some(public_key.clone()),
+        registration_grant: None,
         auth: None,
         requested_agent_id: Some("agent-0".to_string()),
         force_rebind: false,
@@ -288,4 +290,115 @@ fn session_register_auth_verify_rejects_tampered_force_rebind() {
     let err = verify_session_register_auth_proof(&tampered, &proof)
         .expect_err("tampered force_rebind must fail");
     assert!(err.contains("verify auth signature failed"));
+}
+
+#[test]
+fn hosted_session_register_rejects_arbitrary_self_signed_player_claim() {
+    let (attacker_public_key, attacker_private_key) = test_signer_with_seed(41);
+    let request = AuthoritativeSessionRegisterRequest {
+        player_id: "hosted-player-account-00000001".to_string(),
+        public_key: Some(attacker_public_key.clone()),
+        registration_grant: None,
+        auth: None,
+        requested_agent_id: None,
+        force_rebind: false,
+    };
+    let proof = sign_session_register_auth_proof(
+        &request,
+        33,
+        attacker_public_key.as_str(),
+        attacker_private_key.as_str(),
+    )
+    .expect("attacker can self-sign its claim");
+
+    let error = verify_session_register_auth_proof(&request, &proof)
+        .expect_err("hosted player claims require an issuer-authenticated registration grant");
+    assert!(
+        error.contains("registration grant"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn hosted_session_register_grant_is_bound_and_single_use_across_ledger_reload() {
+    let (issuer_public_key, issuer_private_key) = test_signer_with_seed(51);
+    let (public_key, private_key) = test_signer_with_seed(52);
+    let ledger_path = std::env::temp_dir().join(format!(
+        "oasis7-registration-replay-{}-{}.json",
+        std::process::id(),
+        now_unix_ms()
+    ));
+    unsafe {
+        std::env::set_var(
+            HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+            &issuer_public_key,
+        );
+        std::env::set_var(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV, &ledger_path);
+    }
+    let grant = issue_hosted_registration_grant(
+        "hosted-player-account-test",
+        public_key.as_str(),
+        "device-1",
+        "nonce-1",
+        now_unix_ms(),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue registration grant");
+    let request = AuthoritativeSessionRegisterRequest {
+        player_id: "hosted-player-account-test".to_string(),
+        public_key: Some(public_key.clone()),
+        registration_grant: Some(grant),
+        auth: None,
+        requested_agent_id: None,
+        force_rebind: false,
+    };
+    let proof =
+        sign_session_register_auth_proof(&request, 91, public_key.as_str(), private_key.as_str())
+            .expect("sign session request");
+
+    let mut mismatched_request = request.clone();
+    mismatched_request.player_id = "hosted-player-account-other".to_string();
+    let mismatched_proof = sign_session_register_auth_proof(
+        &mismatched_request,
+        92,
+        public_key.as_str(),
+        private_key.as_str(),
+    )
+    .expect("sign mismatched session request");
+    let mismatch = verify_session_register_auth_proof(&mismatched_request, &mismatched_proof)
+        .expect_err("grant binding mismatch rejected");
+    assert!(mismatch.contains("binding"), "unexpected error: {mismatch}");
+
+    let expired_grant = issue_hosted_registration_grant(
+        "hosted-player-account-test",
+        public_key.as_str(),
+        "device-1",
+        "nonce-expired",
+        now_unix_ms()
+            .saturating_sub(HOSTED_REGISTRATION_GRANT_TTL_MS)
+            .saturating_sub(1),
+        issuer_private_key.as_str(),
+    )
+    .expect("issue expired registration grant");
+    let mut expired_request = request.clone();
+    expired_request.registration_grant = Some(expired_grant);
+    let expired_proof = sign_session_register_auth_proof(
+        &expired_request,
+        93,
+        public_key.as_str(),
+        private_key.as_str(),
+    )
+    .expect("sign expired session request");
+    let expired = verify_session_register_auth_proof(&expired_request, &expired_proof)
+        .expect_err("expired grant rejected");
+    assert!(expired.contains("expired"), "unexpected error: {expired}");
+
+    verify_session_register_auth_proof(&request, &proof).expect("first use accepted");
+    let replay = verify_session_register_auth_proof(&request, &proof).expect_err("replay rejected");
+    assert!(replay.contains("replay"), "unexpected error: {replay}");
+    let _ = std::fs::remove_file(ledger_path);
+    unsafe {
+        std::env::remove_var(HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV);
+        std::env::remove_var(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV);
+    }
 }

@@ -94,7 +94,7 @@
 3. 对外公告、群消息、文档里只出现玩家 join URL，不出现 operator 地址。
 
 ## 5A. 邮箱登录 + Tablestore MVP 最小运行法
-当 `hosted_public_join` 已启用中心化 hosted account 邮箱登录时，operator 至少满足下面 7 条：
+当 `hosted_public_join` 已启用中心化 hosted account 邮箱登录时，operator 至少满足下面 8 条：
 
 1. `OASIS7_HOSTED_ACCOUNT_STORE_BACKEND` 推荐显式设为 `tablestore` 或 `auto`。
 2. `OASIS7_HOSTED_ACCOUNT_TABLESTORE_ENDPOINT` 必须指向当前机器真实可达的 endpoint。
@@ -108,10 +108,14 @@
    - SMTP 负责把 OTP 送出去。
    - Tablestore 负责把 `hosted_account_id -> player_id` 稳定落盘。
 7. 不要在对外公告里把这条链路称为 `production custody` 或“稳定大规模可用”。
+8. 配置独立的 32-byte Ed25519 registration issuer seed：
+   - launcher 读取 `OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY`（64 个 hex 字符），只把派生的 public key 传给 runtime；不得把 private key 写入 Viewer、URL、日志或 runtime 配置。
+   - `OASIS7_HOSTED_PLAYER_SESSION_LEDGER_PATH` 与 `OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH` 应指向可持久化、权限受控的本机路径；前者保存 lease/rate/revocation 与 bearer digest，后者保存已消费 registration nonce。
+   - test/prod 必须使用不同 issuer seed 与不同 ledger 路径；轮换 seed 会使尚未消费的旧 registration grant 失效，operator 应预期客户端通过 authenticated refresh 获取新 grant。
 
 MVP 最小 smoke：
 1. 启动 `oasis7_game_launcher --deployment-mode hosted_public_join`。
-2. 对同一邮箱调用一次 `/api/public/hosted-account/login/start` 和 `/api/public/hosted-account/login/complete`。
+2. 浏览器先生成临时 Ed25519 session key，再对同一邮箱调用 `/api/public/hosted-account/login/start`，并在 `/api/public/hosted-account/login/complete` 请求中提交 `public_key`。
 3. 记录返回的 `hosted_account_id` 与 `player_id`。
 4. 重启 launcher。
 5. 对同一邮箱再次完成一次登录。

@@ -1,5 +1,11 @@
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::protocol::{
     AgentChatRequest, AuthoritativeSessionRegisterRequest, GameplayActionRequest,
@@ -8,6 +14,14 @@ use super::protocol::{
 };
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
+pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY";
+pub const HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY";
+pub const HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV: &str =
+    "OASIS7_HOSTED_REGISTRATION_REPLAY_LEDGER_PATH";
+const HOSTED_REGISTRATION_GRANT_TTL_MS: u64 = 30_000;
+static HOSTED_REGISTRATION_REPLAY_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 pub const VIEWER_PLAYER_AUTH_SIGNATURE_V1_PREFIX: &str = "awviewauth:v1:";
 const VIEWER_HOSTED_STRONG_AUTH_GRANT_PAYLOAD_VERSION: u8 = 1;
 pub const VIEWER_HOSTED_STRONG_AUTH_GRANT_SIGNATURE_V1_PREFIX: &str = "awhostedgrant:v1:";
@@ -101,6 +115,59 @@ struct SessionRegisterSigningPayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     requested_agent_id: Option<&'a str>,
     force_rebind: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct HostedRegistrationGrantPayload {
+    player_id: String,
+    public_key: String,
+    device_session_id: String,
+    nonce: String,
+    issued_at_unix_ms: u64,
+    expires_at_unix_ms: u64,
+}
+
+pub fn issue_hosted_registration_grant(
+    player_id: &str,
+    public_key: &str,
+    device_session_id: &str,
+    nonce: &str,
+    issued_at_unix_ms: u64,
+    issuer_private_key_hex: &str,
+) -> Result<String, String> {
+    let payload = HostedRegistrationGrantPayload {
+        player_id: normalize_required_field(player_id, "registration grant player_id")?,
+        public_key: normalize_public_key_field(public_key, "registration grant public_key")?,
+        device_session_id: normalize_required_field(
+            device_session_id,
+            "registration grant device_session_id",
+        )?,
+        nonce: normalize_required_field(nonce, "registration grant nonce")?,
+        issued_at_unix_ms,
+        expires_at_unix_ms: issued_at_unix_ms.saturating_add(HOSTED_REGISTRATION_GRANT_TTL_MS),
+    };
+    let bytes = serde_json::to_vec(&payload)
+        .map_err(|err| format!("encode hosted registration grant failed: {err}"))?;
+    let signing_key = signing_key_from_hex(
+        issuer_private_key_hex,
+        "hosted registration issuer private key",
+    )?;
+    let signature = signing_key.sign(bytes.as_slice());
+    Ok(format!(
+        "v1.{}.{}",
+        hex::encode(bytes),
+        hex::encode(signature.to_bytes())
+    ))
+}
+
+pub fn derive_hosted_registration_issuer_public_key(
+    issuer_private_key_hex: &str,
+) -> Result<String, String> {
+    let signing_key = signing_key_from_hex(
+        issuer_private_key_hex,
+        "hosted registration issuer private key",
+    )?;
+    Ok(hex::encode(signing_key.verifying_key().to_bytes()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -661,11 +728,122 @@ pub fn verify_session_register_auth_proof(
         proof.signature.as_str(),
         signing_payload.as_slice(),
     )?;
+    if request_player_id.starts_with("hosted-player-account-") {
+        verify_and_consume_hosted_registration_grant(
+            request.registration_grant.as_deref().ok_or_else(|| {
+                "hosted session registration requires a registration grant".to_string()
+            })?,
+            request_player_id.as_str(),
+            request_public_key.as_str(),
+        )?;
+    }
     Ok(VerifiedPlayerAuth {
         player_id: proof_player_id,
         public_key: proof_public_key,
         nonce: proof.nonce,
     })
+}
+
+fn verify_and_consume_hosted_registration_grant(
+    grant: &str,
+    player_id: &str,
+    public_key: &str,
+) -> Result<(), String> {
+    let mut parts = grant.split('.');
+    if parts.next() != Some("v1") {
+        return Err("registration grant version is unsupported".to_string());
+    }
+    let payload_hex = parts
+        .next()
+        .ok_or_else(|| "registration grant payload is missing".to_string())?;
+    let signature_hex = parts
+        .next()
+        .ok_or_else(|| "registration grant signature is missing".to_string())?;
+    if parts.next().is_some() {
+        return Err("registration grant format is invalid".to_string());
+    }
+    let payload_bytes = hex::decode(payload_hex)
+        .map_err(|err| format!("decode registration grant payload failed: {err}"))?;
+    let payload: HostedRegistrationGrantPayload = serde_json::from_slice(&payload_bytes)
+        .map_err(|err| format!("decode registration grant failed: {err}"))?;
+    if payload.player_id != player_id || payload.public_key != public_key {
+        return Err("registration grant binding does not match session request".to_string());
+    }
+    if now_unix_ms() > payload.expires_at_unix_ms {
+        return Err("registration grant expired".to_string());
+    }
+    let trusted_key = std::env::var(HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV).map_err(|_| {
+        "trusted hosted registration issuer public key is not configured".to_string()
+    })?;
+    let trusted_key_bytes = decode_hex_array::<32>(
+        trusted_key.as_str(),
+        "hosted registration issuer public key",
+    )?;
+    let verifying_key = VerifyingKey::from_bytes(&trusted_key_bytes)
+        .map_err(|err| format!("parse hosted registration issuer public key failed: {err}"))?;
+    let signature_bytes = hex::decode(signature_hex)
+        .map_err(|err| format!("decode registration grant signature failed: {err}"))?;
+    let signature = Signature::from_slice(&signature_bytes)
+        .map_err(|err| format!("parse registration grant signature failed: {err}"))?;
+    verifying_key
+        .verify(payload_bytes.as_slice(), &signature)
+        .map_err(|err| format!("verify registration grant signature failed: {err}"))?;
+    consume_registration_grant_nonce(payload.nonce.as_str())
+}
+
+fn consume_registration_grant_nonce(nonce: &str) -> Result<(), String> {
+    let path = std::env::var_os(HOSTED_REGISTRATION_REPLAY_LEDGER_PATH_ENV)
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(".oasis7-hosted-registration-replay.json"));
+    let _guard = HOSTED_REGISTRATION_REPLAY_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| "registration grant replay ledger lock poisoned".to_string())?;
+    let mut consumed: BTreeSet<String> = match fs::read(&path) {
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .map_err(|err| format!("decode registration grant replay ledger failed: {err}"))?,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => BTreeSet::new(),
+        Err(err) => {
+            return Err(format!(
+                "read registration grant replay ledger failed: {err}"
+            ));
+        }
+    };
+    if !consumed.insert(nonce.to_string()) {
+        return Err("registration grant replay detected".to_string());
+    }
+    atomic_write_replay_ledger(path.as_path(), &consumed)
+}
+
+fn atomic_write_replay_ledger(path: &Path, consumed: &BTreeSet<String>) -> Result<(), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .map_err(|err| format!("create registration replay directory failed: {err}"))?;
+    let temp = parent.join(format!(".registration-replay-{}.tmp", std::process::id()));
+    let bytes = serde_json::to_vec(consumed)
+        .map_err(|err| format!("encode registration replay ledger failed: {err}"))?;
+    let mut temp_file = fs::File::create(&temp)
+        .map_err(|err| format!("create registration replay ledger failed: {err}"))?;
+    temp_file
+        .write_all(bytes.as_slice())
+        .map_err(|err| format!("write registration replay ledger failed: {err}"))?;
+    temp_file
+        .sync_all()
+        .map_err(|err| format!("sync registration replay ledger failed: {err}"))?;
+    fs::rename(temp, path)
+        .map_err(|err| format!("replace registration replay ledger failed: {err}"))?;
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|err| format!("sync registration replay ledger directory failed: {err}"))
+}
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
 }
 
 fn build_prompt_control_apply_signing_payload(

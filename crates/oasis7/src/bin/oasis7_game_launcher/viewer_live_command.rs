@@ -29,6 +29,22 @@ pub(super) fn build_oasis7_viewer_live_command(
             .arg("--chain-link-policy")
             .arg(options.chain_link_policy.as_str());
     }
+    if options.deployment_mode == "hosted_public_join" {
+        if let Ok(issuer_private_key) =
+            std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
+        {
+            if let Ok(issuer_public_key) =
+                oasis7::viewer::derive_hosted_registration_issuer_public_key(
+                    issuer_private_key.as_str(),
+                )
+            {
+                command.env(
+                    oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+                    issuer_public_key,
+                );
+            }
+        }
+    }
     if options.auto_play {
         command.arg("--auto-play");
     } else {
