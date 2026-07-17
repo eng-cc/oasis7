@@ -1538,6 +1538,7 @@ import importlib.util
 import io
 import json
 import re
+import shlex
 import subprocess
 import sys
 import os
@@ -1798,6 +1799,50 @@ PY2
     assert promoted["evidence_refs"][1]["deployment_status"] == "localized"
     assert promoted["evidence_refs"][1]["resolved_path"] == str(topology)
     assert "/build-host/" not in json.dumps(promoted)
+    if sys.platform == "darwin" and Path("/usr/bin/plutil").is_file():
+        native_active = tmp / "native-active-governed-bundle.json"
+        native_active_json = json.loads(canonical.read_text(encoding="utf-8"))
+        native_active_json["runtime_build"]["path"] = "/build-host/runtime"
+        native_active.write_text(json.dumps(native_active_json), encoding="utf-8")
+        canonical_before = hashlib.sha256(canonical.read_bytes()).hexdigest()
+        active_before = hashlib.sha256(native_active.read_bytes()).hexdigest()
+        read_helpers = text[
+            text.index("runtime_sha256() {"):text.index("promote_governed_bundle_runtime_metadata() {")
+        ]
+        native_preflight = tmp / "native-plutil-readonly-preflight.sh"
+        native_preflight.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "plutil() { /usr/bin/plutil \"$@\"; }\n"
+            f"NODE_ROOT={shlex.quote(str(node_root))}\n"
+            f"CANONICAL_GOVERNED_BUNDLE_PATH={shlex.quote(str(canonical))}\n"
+            f"GOVERNED_BUNDLE_PATH={shlex.quote(str(native_active))}\n"
+            "RUNTIME_PATH=/build-host/runtime\n"
+            "RUNTIME_ARTIFACT_REF=old-runtime\n\n"
+            + read_helpers
+            + "\n\"$@\"\n",
+            encoding="utf-8",
+        )
+        native_preflight.chmod(0o755)
+        for native_helper in (
+            ("preflight_governed_bundle_schema",),
+            ("verify_full_governed_bundle_schema", str(canonical)),
+            ("verify_required_node_local_bundle_artifacts", str(canonical)),
+            ("verify_governed_bundle_runtime_metadata", "0" * 64, "1"),
+        ):
+            native_result = subprocess.run(
+                ["bash", str(native_preflight), *native_helper], text=True, capture_output=True
+            )
+            assert native_result.returncode == 0, (
+                "native macOS plutil readonly helper failed: "
+                f"helper={native_helper[0]} stdout={native_result.stdout!r} stderr={native_result.stderr!r}"
+            )
+            assert hashlib.sha256(canonical.read_bytes()).hexdigest() == canonical_before, (
+                "native macOS plutil helper mutated canonical governed bundle: " + native_helper[0]
+            )
+            assert hashlib.sha256(native_active.read_bytes()).hexdigest() == active_before, (
+                "native macOS plutil helper mutated active governed bundle: " + native_helper[0]
+            )
 for artifact, relative_path in (
     ("world_snapshot", "world"),
     ("generated_world_sidecar", "generated-world/generated-scenario-world"),
@@ -1876,6 +1921,12 @@ for token in (
 ):
     assert token in text, f"macOS generated rollout contract missing: {token}"
 assert "oasis7-provider-checkpoint.XXXXXX.json" not in text
+extract_lines = [line.strip() for line in text.splitlines() if "plutil -extract" in line]
+assert extract_lines, "macOS generated rollout must contain plutil extraction reads"
+for extract_line in extract_lines:
+    assert " -o - " in extract_line, (
+        "macOS plutil extraction read must explicitly write to stdout: " + extract_line
+    )
 checksum_index = text.index('shasum -a 256 "$DMG_PATH"')
 mount_index = text.index("hdiutil attach")
 preflight_backup_index = text.index("preflight_backup_closure_complete=true")
