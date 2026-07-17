@@ -43,13 +43,11 @@
         <span>oasis7</span>
       </a>
       <nav class="nav" data-menu data-section-nav>
-        <a href="#what">Gameplay First</a>
-        <a href="#today">What You Can Do Now</a>
-        <a href="#proof">Proof Chain</a>
+        <a href="#what">How It Plays</a>
+        <a href="#proof">Real Footage</a>
         <a href="#download">Preview Build</a>
-        <a href="#roadmap">Roadmap</a>
-        <a href="../doc/en/index.html">Docs Hub</a>
-        <a href="#contribute">Follow Along</a>
+        <a href="#roadmap">Current Limits</a>
+        <a href="#contribute">Explore More</a>
       </nav>
       <button class="menu-button" type="button" aria-label="Toggle menu" data-menu-toggle>
         ☰
@@ -109,16 +107,16 @@
               </article>
               <article class="metric-box">
                 <strong data-counter-target="1">0</strong>
-                <span>The same world keeps producing, trading, and coordinating after you leave instead of resetting to zero</span>
+                <span>World state and consequences can be saved and observed across sessions; this is not an always-on hosting claim</span>
               </article>
             </div>
           </div>
 
           <aside class="hero-visual">
             <figure class="hero-figure">
-              <span class="visual-kicker">World-state slice</span>
-              <img src="../assets/images/world-constellation.svg" alt="civilization nodes, logistics routes, and cooperation lines inside a fractured asteroid belt" />
-              <figcaption>This is an abstract state diagram for the current gameplay relationships: expansion, supply cuts, and renegotiation. It is not runtime screenshot evidence.</figcaption>
+              <span class="visual-kicker">Controlled Viewer capture</span>
+              <img src="../assets/images/screenshots/asteroid_fragment_bootstrap.webp" alt="oasis7 Viewer world view from the controlled asteroid_fragment_bootstrap scenario" />
+              <figcaption>Repository capture from the controlled `asteroid_fragment_bootstrap` Viewer scenario. It only demonstrates that this scenario can be observed; it is not proof of a public web player, launch readiness, or a live-world state.</figcaption>
             </figure>
             <div class="pulse-panel">
               <p class="panel-title">What you notice first in a live run</p>
@@ -132,28 +130,6 @@
         </div>
       </section>
 
-      <section class="section" data-reveal>
-        <h2>Picture the kind of session that unfolds</h2>
-        <p class="section-intro">
-          What makes this kind of game hard to leave is not the button-clicking. It is the feeling of watching a mess slowly turn into an order that can run on its own. One strained mining belt can shake an entire production chain, one renegotiated cooperation can change the whole board, and every judgment you make keeps rewriting the expansion, risk, and tempo that come next.
-        </p>
-        <div class="grid cards-3">
-          <article class="card card-spotlight">
-            <h3>Resources Tighten First</h3>
-            <p>When one mining line breaks, prices rise, production slips, and neighbors who were tolerable a minute ago start hoarding, rerouting supply, or racing you to the same belt.</p>
-          </article>
-          <article class="card">
-            <h3>Cooperation Negotiates Before It Changes</h3>
-            <p>Groups trade, stall, and cut temporary deals until pressure forces new terms, new responsibilities, or a different allocation.</p>
-          </article>
-          <article class="card">
-            <h3>The World Keeps The Ledger</h3>
-            <p>Governance and supply decisions do not end as one-off messages. Routes get rearranged, prices keep drifting, and policy changes continue to reshape the same world when you come back.</p>
-          </article>
-        </div>
-        <p class="section-footnote" data-homepage-claim="future-platform-boundary">It may later evolve into a broader platform, but it is not a creator-facing mod / modules platform yet.</p>
-      </section>
-
       <section id="what" class="section" data-reveal>
         <h2>oasis7 In 30 Seconds</h2>
         <p class="section-intro">
@@ -163,7 +139,7 @@
         <div class="grid cards-2">
           <article class="card card-spotlight">
             <h3>What It Is</h3>
-            <p>It puts industry, economy, and governance inside one asteroid-belt world that keeps running instead of resetting after a short demo.</p>
+            <p>It puts industry, economy, and governance inside one asteroid-belt world whose state and consequences can be saved and revisited. That does not promise always-on hosting.</p>
           </article>
           <article class="card">
             <h3>Who You Are</h3>
@@ -283,7 +259,7 @@
 
       <section id="proof" class="section" data-reveal>
         <h2>What can already be checked today</h2>
-        <p class="section-intro">This section does not claim public playability. It shows that inputs, agent decisions, and world-side effects already leave a consequence chain you can inspect.</p>
+        <p class="section-intro">This is a limited playable technical preview. The evidence below shows that inputs, agent decisions, and world-side effects leave an inspectable consequence chain; it is not a closed beta, public launch, season, or public web join.</p>
         <div class="proof-switcher" data-proof-switcher>
           <p class="proof-switcher-label">Switch Evidence Scenario</p>
           <div class="proof-switcher-controls" role="group" aria-label="Switch evidence scenario" data-proof-controls>
@@ -509,6 +485,7 @@
       <section id="roadmap" class="section" data-reveal>
         <h2>Why it is not a public launch yet</h2>
         <p class="section-intro">The path is clearer now: first stabilize oasis7 as an open-world sandbox game. Only later does it make sense to talk about broader platformization. That second half is a target state, not a public capability today.</p>
+        <p class="section-footnote" data-homepage-claim="future-platform-boundary">It may later evolve into a broader platform, but it is not a creator-facing mod / modules platform yet.</p>
         <div class="grid cards-2">
           <article class="card">
             <h3>Phase One: open-world sandbox game</h3>
@@ -538,14 +515,14 @@
           </article>
           <article class="timeline-item next">
             <span class="status-tag next">Next</span>
-            <h3>D4 · Playable Release Convergence</h3>
-            <p>Only after that gets steadier does it make sense to move toward a public playable build.</p>
+            <h3>D4 · Public Launch Convergence</h3>
+            <p>The limited playable technical preview still needs tighter validation, access, and trust boundaries before a public player launch.</p>
           </article>
         </div>
       </section>
 
       <section id="architecture" class="section" data-reveal>
-        <h2>Why the world can keep running</h2>
+        <h2>Why world state and consequences can persist</h2>
         <p class="section-intro">If your question is “why is this more than a pile of agent demos,” the short answer is here: gameplay modules, runtime constraints, viewer surfaces, and governance all sit behind explicit boundaries.</p>
         <figure class="architecture-figure">
           <img src="../assets/images/architecture-flow.svg" alt="oasis7 engine architecture flow" loading="lazy" />
