@@ -825,6 +825,7 @@ pub use registration_replay::{
 pub(crate) use registration_replay::{
     claim_registration_grant_nonce_for_recovery, consume_registration_grant_nonce,
 };
+pub use registration_replay_lock::ExclusiveDirectoryProcessLock;
 
 fn now_unix_ms() -> u64 {
     SystemTime::now()

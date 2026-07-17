@@ -82,6 +82,8 @@ mod traffic_status;
 mod transfer_submit_api;
 #[path = "oasis7_chain_runtime/wasm_status.rs"]
 mod wasm_status;
+#[path = "oasis7_chain_runtime/world_writer_lock.rs"]
+mod world_writer_lock;
 #[cfg(test)]
 use self::cli::{DEFAULT_NODE_ID, DEFAULT_STATUS_BIND, DEFAULT_WORLD_ID, parse_validator_spec};
 use balances_api::build_chain_balances_payload;
@@ -366,6 +368,8 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         "starting chain runtime"
     );
     let paths = resolve_runtime_paths(&options);
+    let _world_writer_lock =
+        world_writer_lock::acquire_live_world_writer_lock(paths.execution_world_dir.as_path())?;
     let keypair = node_keypair_config::ensure_node_keypair_in_config(Path::new(
         options.config_path.as_str(),
     ))?;

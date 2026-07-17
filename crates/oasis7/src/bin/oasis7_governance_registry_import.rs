@@ -10,6 +10,7 @@ use oasis7::runtime::{
     ReleaseSecurityPolicy, RollbackAuthorityRecord, RollbackAuthorityRegistry,
     RollbackAuthorityRole, World, WorldState,
 };
+use oasis7::viewer::ExclusiveDirectoryProcessLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -116,6 +117,9 @@ fn main() {
 }
 
 fn run_import(options: CliOptions) -> Result<ImportSummary, String> {
+    let _world_writer_lock =
+        ExclusiveDirectoryProcessLock::try_acquire(options.world_dir.as_path())
+            .map_err(|err| format!("acquire world writer lock failed: {err}"))?;
     let manifest_bytes = std::fs::read(options.public_manifest.as_path()).map_err(|err| {
         format!(
             "read public manifest {} failed: {err}",
@@ -1039,3 +1043,7 @@ mod tests {
 #[cfg(test)]
 #[path = "oasis7_governance_registry_import/rollback_tests.rs"]
 mod rollback_authority_tests;
+
+#[cfg(test)]
+#[path = "oasis7_governance_registry_import/world_writer_lock_tests.rs"]
+mod world_writer_lock_tests;

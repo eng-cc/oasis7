@@ -35,8 +35,24 @@ pub(super) struct RegistrationReplayProcessLock {
     token: String,
 }
 
+/// Cross-process exclusive guard using the repository's `<path>.lock/owner.json` protocol.
+pub struct ExclusiveDirectoryProcessLock {
+    _guard: RegistrationReplayProcessLock,
+}
+
+impl ExclusiveDirectoryProcessLock {
+    pub fn try_acquire(path: &Path) -> Result<Self, String> {
+        RegistrationReplayProcessLock::acquire_with_wait(path, false)
+            .map(|guard| Self { _guard: guard })
+    }
+}
+
 impl RegistrationReplayProcessLock {
     pub(super) fn acquire(ledger_path: &Path) -> Result<Self, String> {
+        Self::acquire_with_wait(ledger_path, true)
+    }
+
+    fn acquire_with_wait(ledger_path: &Path, wait: bool) -> Result<Self, String> {
         let lock_dir = replay_lock_dir(ledger_path);
         let parent = lock_dir.parent().unwrap_or_else(|| Path::new("."));
         fs::create_dir_all(parent).map_err(|err| {
@@ -45,7 +61,7 @@ impl RegistrationReplayProcessLock {
         let deadline = Instant::now() + LOCK_WAIT_TIMEOUT;
         loop {
             if lock_dir.exists() {
-                wait_for_existing_lock(&lock_dir, deadline)?;
+                handle_existing_lock(&lock_dir, deadline, wait)?;
                 continue;
             }
             let token = new_lock_token();
@@ -73,7 +89,7 @@ impl RegistrationReplayProcessLock {
                 }
                 Err(_) if lock_dir.exists() => {
                     let _ = fs::remove_dir_all(&staging_dir);
-                    wait_for_existing_lock(&lock_dir, deadline)?;
+                    handle_existing_lock(&lock_dir, deadline, wait)?;
                 }
                 Err(err) => {
                     let _ = fs::remove_dir_all(&staging_dir);
@@ -84,6 +100,16 @@ impl RegistrationReplayProcessLock {
             }
         }
     }
+}
+
+fn handle_existing_lock(lock_dir: &Path, deadline: Instant, wait: bool) -> Result<(), String> {
+    if !wait && !reclaim_stale_lock(lock_dir)? {
+        return Err("registration replay ledger lock is held by a live process".to_string());
+    }
+    if wait {
+        wait_for_existing_lock(lock_dir, deadline)?;
+    }
+    Ok(())
 }
 
 fn wait_for_existing_lock(lock_dir: &Path, deadline: Instant) -> Result<(), String> {
