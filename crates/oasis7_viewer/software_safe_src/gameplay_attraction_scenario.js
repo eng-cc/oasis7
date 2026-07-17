@@ -818,8 +818,12 @@ function buildSecondRunDesignCard(samples) {
     "rollback_lost_benefit",
   ];
   const rollbackQuotesComplete = gameplays
-    .filter((gameplay) => gameplay.route_tradeoff?.rollback_available === true)
-    .every((gameplay) => rollbackQuoteFields.every((field) => truthyText(gameplay.route_tradeoff?.[field])));
+    .filter((gameplay) => gameplay.route_tradeoff != null)
+    .every((gameplay) =>
+      gameplay.route_tradeoff.rollback_available === false ||
+      (gameplay.route_tradeoff.rollback_available === true &&
+        rollbackQuoteFields.every((field) => truthyText(gameplay.route_tradeoff[field]))),
+    );
   const routeTradeoffPersists = gameplays.some((gameplay) =>
     Array.isArray(gameplay.route_tradeoff?.affected_future_beats) &&
     gameplay.route_tradeoff.affected_future_beats.length >= 2 &&

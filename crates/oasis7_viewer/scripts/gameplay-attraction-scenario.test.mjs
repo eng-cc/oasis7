@@ -196,6 +196,35 @@ for (const field of ROLLBACK_QUOTE_FIELDS) {
   }
 }
 
+for (const mutation of ["delete", "null", "non_boolean"]) {
+  const invalidRollbackAvailabilitySamples = structuredClone(evidence.raw_snapshots);
+  const routeSample = invalidRollbackAvailabilitySamples.find(
+    (snapshot) => snapshot.player_gameplay?.route_tradeoff,
+  );
+  assert.ok(routeSample, `negative fixture for rollback_available/${mutation} requires a real route sample`);
+  if (mutation === "delete") {
+    delete routeSample.player_gameplay.route_tradeoff.rollback_available;
+  } else if (mutation === "null") {
+    routeSample.player_gameplay.route_tradeoff.rollback_available = null;
+  } else {
+    routeSample.player_gameplay.route_tradeoff.rollback_available = "available";
+  }
+  const invalidRollbackAvailabilityEvidence = buildTaskGame076AttractionEvidence({
+    samples: invalidRollbackAvailabilitySamples,
+  });
+  assert.equal(
+    invalidRollbackAvailabilityEvidence.second_run_design_card.status,
+    "second_run_hook_weak",
+    `rollback_available/${mutation} must fail the design gate`,
+  );
+  assert.ok(
+    invalidRollbackAvailabilityEvidence.second_run_design_card.missing.includes(
+      "route_rollback_quote_missing",
+    ),
+    `rollback_available/${mutation} must identify the invalid rollback availability`,
+  );
+}
+
 const weakEvidence = buildTaskGame076AttractionEvidence({
   samples: [
     buildTaskGame076ScenarioSnapshot({ variant: "weak_high_progress" }),
