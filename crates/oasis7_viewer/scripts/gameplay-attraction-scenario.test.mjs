@@ -16,6 +16,25 @@ function assertCardShape(card) {
   assert.ok(card.no_op_or_follow_up_route);
 }
 
+const ROLLBACK_QUOTE_FIELDS = [
+  "rollback_deadline_beat",
+  "rollback_cost_summary",
+  "rollback_kept_benefit",
+  "rollback_lost_benefit",
+];
+
+function assertCompleteRollbackQuote(routeTradeoff, label) {
+  assert.equal(routeTradeoff.rollback_available, true, `${label} must expose an available rollback`);
+  for (const field of ROLLBACK_QUOTE_FIELDS) {
+    assert.equal(
+      typeof routeTradeoff[field],
+      "string",
+      `${label} ${field} must be player-readable text`,
+    );
+    assert.ok(routeTradeoff[field].trim(), `${label} ${field} must not be empty`);
+  }
+}
+
 const evidence = buildTaskGame076AttractionEvidence();
 
 assert.equal(evidence.task, "TASK-GAME-076");
@@ -79,6 +98,14 @@ assert.notEqual(
   evidence.route_branch_regression.accelerate.midrun_visible_metric_delta,
   evidence.route_branch_regression.stabilize.midrun_visible_metric_delta,
 );
+assertCompleteRollbackQuote(
+  evidence.route_branch_regression.accelerate,
+  "accelerate route rollback quote",
+);
+assertCompleteRollbackQuote(
+  evidence.route_branch_regression.stabilize,
+  "stabilize route rollback quote",
+);
 const firstVisibleOutput = evidence.raw_snapshots.find(
   (snapshot) => snapshot.task_game_076_scenario?.variant === "first_visible_output",
 );
@@ -95,6 +122,10 @@ assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.midrun_feedback);
 assert.equal(firstVisibleOutput.player_gameplay.route_tradeoff.midrun_feedback.timing, "before_incident_recovery");
 assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.visible_consequence_text);
 assert.ok(firstVisibleOutput.player_gameplay.route_tradeoff.forecast_delta_text);
+assertCompleteRollbackQuote(
+  firstVisibleOutput.player_gameplay.route_tradeoff,
+  "first-visible route rollback quote",
+);
 const returnPackage = evidence.raw_snapshots.find(
   (snapshot) => snapshot.task_game_076_scenario?.variant === "return_package",
 );
@@ -132,6 +163,33 @@ assert.equal(evidence.weak_sample_regression.status, "pass");
 assert.equal(evidence.weak_sample_regression.detected_verdict, "progression_pass_but_attraction_weak");
 assert.equal(evidence.boredom_negative_regression.status, "pass");
 assert.equal(evidence.boredom_negative_regression.detected_status, "attraction_weak");
+
+for (const field of ROLLBACK_QUOTE_FIELDS) {
+  for (const mutation of ["delete", "blank"]) {
+    const invalidRollbackSamples = structuredClone(evidence.raw_snapshots);
+    const quotedRoute = invalidRollbackSamples.find(
+      (snapshot) => snapshot.player_gameplay?.route_tradeoff?.rollback_available === true,
+    );
+    assert.ok(quotedRoute, `negative fixture for ${field}/${mutation} requires a true rollback offer`);
+    if (mutation === "delete") {
+      delete quotedRoute.player_gameplay.route_tradeoff[field];
+    } else {
+      quotedRoute.player_gameplay.route_tradeoff[field] = "   ";
+    }
+    const invalidRollbackEvidence = buildTaskGame076AttractionEvidence({
+      samples: invalidRollbackSamples,
+    });
+    assert.equal(
+      invalidRollbackEvidence.second_run_design_card.status,
+      "second_run_hook_weak",
+      `${field}/${mutation} must fail the design gate`,
+    );
+    assert.ok(
+      invalidRollbackEvidence.second_run_design_card.missing.includes("rollback_quote"),
+      `${field}/${mutation} must identify the incomplete rollback quote`,
+    );
+  }
+}
 
 const weakEvidence = buildTaskGame076AttractionEvidence({
   samples: [
