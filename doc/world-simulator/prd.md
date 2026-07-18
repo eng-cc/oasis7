@@ -20,6 +20,13 @@
 
 本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 `doc/world-simulator/project.md`；历史证据进入 topic project、GitHub task issue evidence comments 与 archive-only review logs。
 
+### Intent 批次与派生观测边界
+
+- 同 tick intents 必须按稳定冲突键和稳定优先序完成确定性裁决，accepted actions 再按确定顺序应用并产出事件；该过程不是具备整体回滚能力的原子事务批次，不得以“统一提交”掩盖顺序应用与局部拒绝语义。
+- `IntentBatchReport` 用于运行期解释和诊断；恢复真值是权威状态、journal 与事件，而不是进程内最后一份 report。
+- `intel_ttl_ticks` 等观测配置必须跨 snapshot 保持兼容；observation cache/hook 属于进程内派生状态，恢复时重建或清空，不能作为 Agent 长期记忆或权威世界事实。
+- logistics SLA 与 threat heatmap 是由权威运输、战争和危机状态生成的观测/调度数据；heatmap 当前是 alliance/global 聚合而非空间格网，并可能被治理规则消费，因此不能描述成纯 UI 指标或独立玩法承诺。
+
 ## 接口 / 数据
 - PRD 主入口: `doc/world-simulator/prd.md`
 - 文档 landing: `doc/world-simulator/README.md`

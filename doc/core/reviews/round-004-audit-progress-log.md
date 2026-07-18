@@ -272,9 +272,9 @@
 | 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` | issue_open | I4-002 | 验收命令未统一为 。 |
 | 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:55:08 +0800 | codex | `doc/scripts/README.md` | pass | - | scripts 模块入口与子目录说明一致，未见 D4-001~D4-008 问题。 |
-| 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
+| 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure PRD (retired/deleted; historical review record) | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
 | 2026-03-06 11:55:32 +0800 | codex | `doc/scripts/prd.md` | pass | - | 模块主 PRD 的脚本分层与 fallback 约束清晰，未见 D4 即时整改问题。 |
-| 2026-03-06 11:55:48 +0800 | G4-002-Aristotle | doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md | issue_open | I4-009 | 标题声明“含 PRD-ID 映射”但任务列表未给出 PRD-ID 对应，PRD-ID→TASK 追溯链缺失。 |
+| 2026-03-06 11:55:48 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure project (retired/deleted; historical review record) | issue_open | I4-009 | 标题声明“含 PRD-ID 映射”但任务列表未给出 PRD-ID 对应，PRD-ID→TASK 追溯链缺失。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |

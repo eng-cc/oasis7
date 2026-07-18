@@ -66,12 +66,13 @@
 3. Execution Node 拉取所需 WASM 与状态快照，执行 step，生成事件日志与新状态。
 4. Execution Node 写入日志段、快照段与区块元数据到 Storage Node（内容寻址）。
 5. Index 节点更新世界 head 指针，观察节点可回放验证状态根。
-#### Mempool 聚合与去重（草案）
-- **去重键**：以 `action_id` 为唯一键（V1）。
+#### Mempool 聚合与去重
+- **去重键**：始终拒绝重复 `action_id`；非空 `idempotency_key` 还按 `(actor_id, idempotency_key)` 去重，不误伤其他 actor。
 - **来源限制**：同一 `actor_id` 的待处理动作数有上限（防刷/压制）。
 - **容量控制**：mempool 满时按到达顺序驱逐最旧动作。
 - **批次排序**：按 `timestamp_ms` 升序，`action_id` 作为稳定 tie-breaker。
-- **批次 ID**：对动作 ID 列表做 canonical CBOR 后取 `blake3`（V1）。
+- **批次 ID**：按 `action_id` 稳定排序后，将 `action_id + intent_batch_hash + idempotency_key` 做 canonical CBOR 并取 `blake3`。
+- **Zone 分组**：按 `zone_id` 分组选择批次，空值归入 `global`；zone batching 与 scoped lease 目前是独立基础设施，不得据此宣称 lease 已强制约束每次 zone commit。
 - **批次上限**：限制 `max_actions` 与 `max_payload_bytes`，超限动作跳过/剔除。
 #### Gateway API（草案）
 - **提交动作**：网关将 `ActionEnvelope` 以 CBOR 编码发布到 `aw.<world_id>.action`。
@@ -254,9 +255,14 @@ ActionEnvelope {
   payload_hash: String,
   nonce: u64,
   timestamp_ms: i64,
+  intent_batch_hash: String,
+  idempotency_key: String,
+  zone_id: String,
   signature: String
 }
 ```
+
+`intent_batch_hash`、`idempotency_key` 与 `zone_id` 均在 envelope 签名和 committed state-root 覆盖范围内。该合同不等于 simulator `IntentBatchReport.batch_hash` 已自动端到端写入 envelope；没有调用链证据时不得宣称二者绑定。
 ### ActionBatch（排序批次）
 ```
 ActionBatch {

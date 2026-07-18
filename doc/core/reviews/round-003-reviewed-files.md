@@ -454,8 +454,8 @@
 - root world-simulator PRD shell（后续已删除）
 - root world-simulator project shell（后续已删除）
 - `doc/world-simulator/README.md`
-- `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md`
-- `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md`
+- `Intent/distributed/runtime closure PRD (retired/deleted; historical review record)`
+- `Intent/distributed/runtime closure project (retired/deleted; historical review record)`
 - `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md`
 - `doc/world-simulator/kernel/kernel-rule-hook-foundation.project.md`
 - `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.prd.md`

@@ -43,7 +43,7 @@
 
 - `doc/p2p/distfs/distfs-builtin-wasm-api-closure`
 
-- `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27`
+- `Intent/distributed/runtime closure triplet (retired/deleted; historical review record)`
 - `doc/world-simulator/kernel/location-electricity-pool-removal-and-radiation-plant`
 - `doc/world-simulator/viewer/viewer-web-closure-testing-policy`
 - `doc/world-simulator/launcher/game-client-launcher-blockchain-explorer-panel-2026-03-07`
