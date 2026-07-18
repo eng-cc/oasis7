@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, on
 
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
+import { installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 
 export { pixelWorldSelectedBlockerVisualFixture };
@@ -11,7 +12,6 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
-const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const pixelWorldFocusUiSessionState = {
   focusMode: false,
@@ -31,51 +31,6 @@ const FRAGMENT_TERRAIN_PALETTE = {
   thorium_bearing_ore: [244, 114, 182],
   unknown: [148, 163, 184],
 };
-
-function pixelWorldTestApiEnabled() {
-  if (typeof window === "undefined" || !window.location) {
-    return false;
-  }
-  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
-function requestedVisualFixtureName() {
-  if (typeof window === "undefined" || !window.location) {
-    return null;
-  }
-  return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
-}
-
-function installPixelWorldVisualFixtureHook() {
-  if (typeof window === "undefined" || !pixelWorldTestApiEnabled()) {
-    return null;
-  }
-  const fixtures = {
-    selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
-  };
-  window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
-
-  const fixtureName = requestedVisualFixtureName();
-  if (!fixtureName || !fixtures[fixtureName]) {
-    return null;
-  }
-  const fixture = fixtures[fixtureName]();
-  core.injectSnapshot(fixture, { returnState: false });
-  core.state.auth = {
-    ...core.state.auth,
-    available: true,
-    playerId: "player-one",
-    publicKey: "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
-    source: "local_test_api_ephemeral",
-    registrationStatus: "registered",
-    runtimeStatus: "registered",
-    boundAgentId: "agent-0",
-  };
-  core.applySelection({ kind: "agent", id: "agent-0" });
-  return fixtureName;
-}
 
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {

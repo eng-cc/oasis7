@@ -2202,18 +2202,13 @@
         border-color: rgba(141, 199, 170, 0.54);
       }
       .pixel-world-entity[data-selected="true"] {
-        z-index: 6;
         min-width: 42px;
         min-height: 42px;
         border-radius: 999px;
-        outline: 2px solid rgba(237, 241, 230, 0.9);
-        outline-offset: 3px;
       }
       .pixel-world-entity[data-selected="true"],
       .pixel-world-entity:focus-visible {
         z-index: 6;
-      }
-      .pixel-world-entity:focus-visible {
         outline: 2px solid rgba(237, 241, 230, 0.9);
         outline-offset: 3px;
       }
@@ -2593,35 +2588,29 @@
         .pixel-world-focus-hud__cell--mission {
           display: none;
         }
-        .pixel-world-focus-hud__cell--tick {
-          grid-column: 1 / -1;
-          grid-row: 3;
-          min-height: 30px;
-          flex-direction: row;
-          justify-content: flex-start;
-          align-items: center;
-          gap: 8px;
-          padding: 5px 8px;
-        }
-        .pixel-world-focus-hud__cell--blocker {
-          grid-column: 1 / -1;
-          grid-row: 4;
-          min-height: 30px;
-          flex-direction: row;
-          justify-content: flex-start;
-          align-items: center;
-          gap: 8px;
-          padding: 5px 8px 5px 16px;
-        }
+        .pixel-world-focus-hud__cell--tick,
+        .pixel-world-focus-hud__cell--blocker,
         .pixel-world-focus-hud__cell--receipt {
           grid-column: 1 / -1;
-          grid-row: 5;
           min-height: 30px;
           flex-direction: row;
           justify-content: flex-start;
           align-items: center;
           gap: 8px;
+        }
+        .pixel-world-focus-hud__cell--tick {
+          grid-row: 3;
+          padding: 5px 8px;
+        }
+        .pixel-world-focus-hud__cell--blocker,
+        .pixel-world-focus-hud__cell--receipt {
           padding: 5px 8px 5px 16px;
+        }
+        .pixel-world-focus-hud__cell--blocker {
+          grid-row: 4;
+        }
+        .pixel-world-focus-hud__cell--receipt {
+          grid-row: 5;
         }
         .pixel-world-focus-hud__cell--blocker strong,
         .pixel-world-focus-hud__cell--receipt strong,
