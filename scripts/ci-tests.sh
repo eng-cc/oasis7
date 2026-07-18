@@ -208,6 +208,7 @@ run_oasis7_client_launcher_web_build() {
 
 run_required_gate_checks() {
   run ./scripts/doc-governance-check.sh
+  run python3 ./scripts/product-doc-governance-check.test.py
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh

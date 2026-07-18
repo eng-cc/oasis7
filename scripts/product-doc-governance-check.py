@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Validate the closed four-module product documentation overlay."""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+from pathlib import Path
+import re
+import sys
+
+
+@dataclass(frozen=True)
+class ProductModule:
+    slug: str
+    name: str
+    prd_id: str
+    authorities: tuple[str, ...]
+
+    @property
+    def path(self) -> str:
+        return f"doc/product/{self.slug}/prd.md"
+
+
+MODULES = (
+    ProductModule("world-rules-core-gameplay", "世界规则与核心玩法", "PRD-PRODUCT-001", ("doc/game/prd.md",)),
+    ProductModule("world-infrastructure", "大世界基础设施", "PRD-PRODUCT-002", ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/p2p/prd.md")),
+    ProductModule("agents-world-simulation", "智能体与世界模拟", "PRD-PRODUCT-003", ("doc/world-simulator/prd.md",)),
+    ProductModule("player-entry-distribution", "玩家入口与发行", "PRD-PRODUCT-004", ("README.md", "doc/world-simulator/prd.md")),
+)
+LIFECYCLES = {"proposed", "draft", "active", "superseded", "retired"}
+REQUIRED_HEADINGS = (
+    "## 文档身份",
+    "## 1. 产品承诺",
+    "## 2. 范围",
+    "## 3. 权威与冲突处理",
+    "## 4. 路线图",
+    "## 5. Done：成功标准与验收",
+    "### 5.1 验收追踪",
+    "## 6. Non-Goals",
+)
+
+
+def metadata(text: str, label: str) -> str | None:
+    match = re.search(rf"^- {re.escape(label)}：(?:`([^`]+)`|(.+))$", text, re.MULTILINE)
+    if not match:
+        return None
+    return (match.group(1) or match.group(2)).strip()
+
+
+def fail(errors: list[str], code: str, detail: str) -> None:
+    errors.append(f"product-doc-governance: {code}: {detail}")
+
+
+def check(root: Path) -> list[str]:
+    errors: list[str] = []
+    landing_path = root / "doc/product/README.md"
+    if not landing_path.is_file():
+        return ["product-doc-governance: entry-missing: doc/product/README.md"]
+    landing = landing_path.read_text(encoding="utf-8")
+    row_re = re.compile(r"^\|\s*([^|]+?)\s*\|\s*\[[^]]+\]\(([^)]+)\)\s*\|", re.MULTILINE)
+    rows = [(name.strip(), target.strip()) for name, target in row_re.findall(landing)]
+    expected_rows = [(module.name, f"{module.slug}/prd.md") for module in MODULES]
+    if rows != expected_rows:
+        fail(errors, "entry-contract", f"expected exact four-row manifest {expected_rows!r}, got {rows!r}")
+    if len({target for _, target in rows}) != len(rows):
+        fail(errors, "entry-duplicate", "product entry targets must be unique")
+
+    expected_paths = {module.path for module in MODULES}
+    actual_paths = {
+        path.relative_to(root).as_posix()
+        for path in (root / "doc/product").glob("*/prd.md")
+        if path.is_file()
+    }
+    if actual_paths != expected_paths:
+        fail(errors, "inventory-contract", f"expected {sorted(expected_paths)!r}, got {sorted(actual_paths)!r}")
+
+    seen_ids: set[str] = set()
+    for module in MODULES:
+        path = root / module.path
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        expected_metadata = {
+            "产品模块": module.name,
+            "产品模块 slug": module.slug,
+            "产品层唯一 PRD": module.path,
+            "产品模块总入口": "doc/product/README.md",
+            "Product PRD-ID": module.prd_id,
+            "生命周期": "active",
+            "Owner role": "producer_system_designer",
+        }
+        for label, expected in expected_metadata.items():
+            actual = metadata(text, label)
+            if actual != expected:
+                fail(errors, "metadata-contract", f"{module.path}: {label} expected {expected!r}, got {actual!r}")
+        prd_id = metadata(text, "Product PRD-ID")
+        if prd_id:
+            if prd_id in seen_ids:
+                fail(errors, "metadata-duplicate-id", prd_id)
+            seen_ids.add(prd_id)
+            if "xxx" in prd_id.lower() or not re.fullmatch(r"PRD-PRODUCT-\d{3}", prd_id):
+                fail(errors, "metadata-placeholder-id", f"{module.path}: {prd_id}")
+        lifecycle = metadata(text, "生命周期")
+        if lifecycle not in LIFECYCLES:
+            fail(errors, "lifecycle-contract", f"{module.path}: {lifecycle!r}")
+        if lifecycle == "active" and metadata(text, "后继文档") != "无":
+            fail(errors, "lifecycle-successor", f"{module.path}: active PRD must use successor `无`")
+        if not metadata(text, "Last reviewed"):
+            fail(errors, "metadata-last-reviewed", module.path)
+        for heading in REQUIRED_HEADINGS:
+            if heading not in text:
+                fail(errors, "section-contract", f"{module.path}: missing heading prefix {heading!r}")
+        declared_match = re.search(r"^- 下层专业域：(.+)$", text, re.MULTILINE)
+        declared_paths = tuple(re.findall(r"`([^`]+\.md)`", declared_match.group(1) if declared_match else ""))
+        if declared_paths != module.authorities:
+            fail(errors, "authority-contract", f"{module.path}: expected {module.authorities!r}, got {declared_paths!r}")
+        for authority in module.authorities:
+            authority_path = root / authority
+            if not authority_path.is_file():
+                fail(errors, "authority-missing", f"{module.path}: {authority}")
+            elif module.path not in authority_path.read_text(encoding="utf-8"):
+                fail(errors, "authority-backlink", f"{authority} must link {module.path}")
+
+        success_ids = re.findall(r"^- (SC-\d+)：", text, re.MULTILINE)
+        trace_rows = re.findall(r"^\|\s*(SC-\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|$", text, re.MULTILINE)
+        trace_ids = [row[0] for row in trace_rows]
+        if not success_ids or success_ids != trace_ids or len(trace_ids) != len(set(trace_ids)):
+            fail(errors, "traceability-contract", f"{module.path}: success={success_ids!r}, trace={trace_ids!r}")
+        for sc_id, owner, prd_ids, authority_docs, evidence, tier in trace_rows:
+            if not owner.strip() or not re.search(r"PRD-[A-Z0-9_/-]+", prd_ids):
+                fail(errors, "traceability-owner-prd", f"{module.path}: {sc_id}")
+            row_paths = re.findall(r"`([^`]+\.md)`", authority_docs)
+            if not row_paths or any(not (root / row_path).is_file() for row_path in row_paths):
+                fail(errors, "traceability-authority", f"{module.path}: {sc_id}")
+            if not evidence.strip() or tier.strip() not in {"test_tier_required", "test_tier_full"}:
+                fail(errors, "traceability-evidence-tier", f"{module.path}: {sc_id}")
+    if any((root / "doc/product").glob("**/archive")):
+        fail(errors, "lifecycle-archive", "doc/product/**/archive is forbidden")
+    return errors
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    args = parser.parse_args()
+    errors = check(args.repo_root.resolve())
+    if errors:
+        print("\n".join(errors))
+        return 1
+    print("product-doc-governance: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

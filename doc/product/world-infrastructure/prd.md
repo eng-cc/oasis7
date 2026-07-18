@@ -3,20 +3,25 @@
 ## 文档身份
 
 - 产品模块：大世界基础设施
+- 产品模块 slug：`world-infrastructure`
 - 产品层唯一 PRD：`doc/product/world-infrastructure/prd.md`
 - 产品模块总入口：`doc/product/README.md`
-- 追踪主键：`PRD-PRODUCT-WORLD-INFRASTRUCTURE-xxx`
+- Product PRD-ID：`PRD-PRODUCT-002`
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- Last reviewed：`2026-07-18`
+- 后继文档：`无`
 - 下层专业域：`doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/p2p/prd.md`
 
 本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“大世界基础设施”的并列产品总入口。
 
-## 1. Why：产品问题与承诺
+## 1. 产品承诺
 
 oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识与分布式存储等能力，但这些能力分散在多个专业域，读者无法从一个入口回答：玩家能建设什么、设施怎样持续影响区域、世界状态怎样持久且可审计，以及整个底座何时算产品闭环。
 
 大世界基础设施的产品承诺是：玩家可在统一持久大世界中建设有限作用域、成本可解释、结果可审计的区域设施；这些设施由确定性运行时执行，由分布式状态底座保存与同步，并能在不破坏世界一致性和治理边界的前提下持续扩展。
 
-## 2. What：范围与权威
+## 2. 范围与玩家边界
 
 ### 2.1 三层范围
 
@@ -40,7 +45,11 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - auditable：报价、执行、失败、资源扣减和治理动作均有可复核证据。
 - extensible：新增设施复用版本化 schema、module/WASM gate 与迁移规则，不绕过权威运行时。
 
-## 3. 玩家边界与经济约束
+## 3. 权威与冲突处理
+
+产品层拥有区域设施、世界执行与分布式状态组成的端到端承诺；`doc/game/prd.md`、`doc/world-runtime/prd.md` 与 `doc/p2p/prd.md` 分别拥有其玩家规则、执行合同与分布式状态证明。冲突时不得由产品层静默改写专业合同，必须由产品 owner 与相应专业 owner 形成显式跨域决策。
+
+### 3.1 玩家边界与经济约束
 
 玩家可以发现合格地点、比较建设与维护成本、commission 被允许的设施、消费其服务、查看区域影响与 receipt，并在规则允许时升级或回收。
 
@@ -65,6 +74,17 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - SC-6：新增设施必须映射到专业域 PRD-ID、`test_tier_required`，并在涉及多节点、迁移或长期一致性时补 `test_tier_full`。
 
 验收证据由下层专业域提供：设施体验与经济走 `game`；确定性、WASM、receipt 和 replay 走 `world-runtime`；共识、复制、恢复与多节点一致性走 `p2p`。产品层只汇总是否形成端到端闭环，不复制各域测试步骤。
+
+### 5.1 验收追踪
+
+| 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
+| SC-1 | producer_system_designer | PRD-GAME-001 | `doc/game/prd.md` | 产品入口唯一性检查 | test_tier_required |
+| SC-2 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 权威映射与反向链接检查 | test_tier_required |
+| SC-3 | gameplay_designer | PRD-GAME-024 | `doc/game/prd.md` | 设施报价到退役玩法闭环证据 | test_tier_required |
+| SC-4 | runtime_engineer | PRD-WORLD_RUNTIME-001 | `doc/world-runtime/prd.md` | receipt、失败原子性与 replay 回归 | test_tier_required |
+| SC-5 | blockchain_ops_engineer | PRD-P2P-002 | `doc/p2p/prd.md` | snapshot、replication、state-sync 多节点恢复证据 | test_tier_full |
+| SC-6 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到 required/full 证据的发布门禁 | test_tier_required |
 
 ## 6. Non-Goals
 

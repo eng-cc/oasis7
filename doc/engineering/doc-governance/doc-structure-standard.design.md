@@ -94,7 +94,43 @@ doc/<module>/
 
 这些共享规则统一回链到本规范正文，而不是在每个模块 README 中散写一遍。
 
-### 3.4 Legacy Redirect 的职责边界
+### 3.4 产品组合层的薄覆盖例外
+
+`doc/product/` 是按玩家价值组织的产品组合层，不是与 `game`、`world-runtime`、
+`world-simulator`、`p2p` 并列的工程专业域。因此它采用薄产品覆盖层，不适用本章的
+五件套要求，也不为形式对称创建空的 `design.md`、`project.md` 或 `prd.index.md`。
+
+固定结构为：
+
+```text
+doc/product/
+  README.md
+  world-rules-core-gameplay/prd.md
+  world-infrastructure/prd.md
+  agents-world-simulation/prd.md
+  player-entry-distribution/prd.md
+```
+
+职责与权威边界：
+
+- `doc/product/README.md` 是唯一产品总入口，只枚举且必须枚举上述四个产品模块。
+- 产品模块 PRD 拥有产品承诺、范围、跨域组合、非目标和端到端成功标准。
+- 专业域 `prd.md` 拥有该域规则、实现合同、专业 PRD-ID 和测试机制；`design.md` 拥有技术 How。
+- 任务、状态和证据仍由各域 `project.md` 与 GitHub-backed task truth 承载，产品 PRD 不维护实现任务表。
+- 根 `README.md` 拥有公开的当前状态与 claim envelope；“玩家入口与发行”PRD 只组合发现、访问、安装和验证体验。
+
+冲突时，产品 PRD 对用户价值、产品范围和端到端结果拥有裁决权；专业域 PRD 对其拥有的规则与
+技术合同拥有裁决权。若产品承诺与可实现性冲突，必须建立显式跨域决策或 GitHub-backed task，不得在任一文档中
+静默覆盖另一层权威。
+
+每份活跃产品 PRD 必须使用稳定 Product PRD-ID，声明模块 slug/名称、生命周期、owner、复核日期、后继文档、
+产品入口和下层权威。生命周期只允许 `proposed`、`draft`、`active`、`superseded`、`retired`；默认四模块表中只允许
+`active` 文档。`superseded` 必须指向后继者并退出默认入口，`retired` 必须同步公开 claim 与下游权威。
+
+每个产品成功标准必须在追踪表中唯一映射到专业 owner、专业域 PRD-ID、权威文档、验证证据和测试层级。
+产品入口、产品 PRD 与专业域权威文档必须双向可达。
+
+### 3.5 Legacy Redirect 的职责边界
 root-level legacy redirect 只承担兼容跳转职责。
 
 推荐最小结构：
