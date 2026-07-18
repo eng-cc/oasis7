@@ -16,6 +16,10 @@ const mobileFocusOverlayScreenshotPath = join(outDir, "mobile-focus-overlay-visu
 const summaryPath = join(outDir, "summary.json");
 const agentBrowserBin = process.env.AGENT_BROWSER_BIN || "agent-browser";
 const session = `pixel-world-fragment-visual-${process.pid}`;
+const summary = {
+  status: "running",
+  startedAt: new Date().toISOString(),
+};
 
 mkdirSync(outDir, { recursive: true });
 
@@ -687,7 +691,7 @@ function mobileFocusOverlayProbeScript() {
         gaps: {
           hudToMap: map.y - hud.bottom,
           mapToReceipt: receipt.y - map.bottom,
-          controlsToPrompt: prompt.y - controls.bottom,
+          controlsToPrompt: controls.y - prompt.bottom,
           blockerToReceiptCell: receiptCell.y - blocker.bottom,
         },
       });
@@ -710,7 +714,7 @@ try {
   await runAgentBrowserJson(["set", "viewport", "1440", "1000"]);
 
   console.log("probing wasm bridge and rendered visual hierarchy");
-  const summary = await evalJson(visualProbeScript());
+  Object.assign(summary, await evalJson(visualProbeScript()));
 
   assert(summary.ready.runtimeStatus === "ready", "wasm runtime did not become ready", summary.ready);
   assert(summary.ready.runtimeSource === "wasm_bindgen_runtime", "viewer did not use wasm bindgen runtime", summary.ready);
@@ -791,12 +795,35 @@ try {
   summary.actionReceiptScreenshot = actionReceiptScreenshotPath;
   summary.mobileActionReceiptScreenshot = mobileActionReceiptScreenshotPath;
   summary.mobileFocusOverlayScreenshot = mobileFocusOverlayScreenshotPath;
+  summary.status = "passed";
+  summary.completedAt = new Date().toISOString();
   writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
   console.log(`pixel-world fragment visual smoke passed: ${summaryPath}`);
   console.log(`screenshot: ${screenshotPath}`);
   console.log(`action receipt screenshot: ${actionReceiptScreenshotPath}`);
   console.log(`mobile action receipt screenshot: ${mobileActionReceiptScreenshotPath}`);
   console.log(`mobile focus overlay screenshot: ${mobileFocusOverlayScreenshotPath}`);
+} catch (error) {
+  summary.status = "failed";
+  summary.completedAt = new Date().toISOString();
+  summary.failure = {
+    name: error instanceof Error ? error.name : "Error",
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : null,
+  };
+  if (!summary.mobileFocusOverlayScreenshot) {
+    try {
+      await runAgentBrowser(["screenshot", mobileFocusOverlayScreenshotPath], { timeout: 20_000 });
+      summary.mobileFocusOverlayScreenshot = mobileFocusOverlayScreenshotPath;
+    } catch (screenshotError) {
+      summary.mobileFocusOverlayScreenshotError = screenshotError instanceof Error
+        ? screenshotError.message
+        : String(screenshotError);
+    }
+  }
+  writeFileSync(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+  console.error(`pixel-world fragment visual smoke failed: ${summaryPath}`);
+  throw error;
 } finally {
   closeBrowser();
   await new Promise((resolveClose) => server.close(resolveClose));

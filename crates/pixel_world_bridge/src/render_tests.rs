@@ -121,6 +121,30 @@ fn sample_render_state_with_selection(
     render_state
 }
 
+fn sample_render_state_with_beacon_candidates(kind: &str, id: &str) -> RenderState {
+    let mut render_state = sample_render_state_with_selection(12_000.0, kind, id);
+    render_state.locations.push(Location {
+        id: "loc-1".to_string(),
+        label: "Unselected Location".to_string(),
+        pos: sample_position(1_620_000.0, 1_100_000.0),
+        radius_cm: 30_000.0,
+        resource_summary: "-".to_string(),
+        size_hint_px: Some(10.0),
+        marker_role: Some("logic_anchor".to_string()),
+        marker_alpha: Some(0.32),
+    });
+    render_state.agents.push(Agent {
+        id: "agent-1".to_string(),
+        label: "Unselected Agent".to_string(),
+        pos: Some(sample_position(1_640_000.0, 1_115_000.0)),
+        location_id: Some("loc-1".to_string()),
+        resource_summary: "-".to_string(),
+        status_badges: vec![],
+        size_hint_px: Some(16.0),
+    });
+    render_state
+}
+
 fn test_runtime(render_state: RenderState) -> BevyRuntimeState {
     BevyRuntimeState {
         mounted: true,
@@ -573,7 +597,7 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert!(summary.location_pixels > 0);
     assert!(summary.agent_pixels > summary.location_pixels);
     assert!(summary.agent_pixels > summary.fragment_pixels);
-    assert_eq!(summary.raw_rgba_fnv1a64, "9268d7d9fa5a4ff6");
+    assert_eq!(summary.raw_rgba_fnv1a64, "9df32df027359ddd");
     assert_eq!(summary.agent_sample_rgba, [251, 191, 36, 255]);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
@@ -606,6 +630,57 @@ fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection()
         assert_ne!(
             summary.raw_rgba_fnv1a64, "c3c91248ad807f7b",
             "{kind} selection should not rasterize as the all-background frame"
+        );
+    }
+}
+
+#[test]
+fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_beacon() {
+    for (kind, selected_id, unselected_id) in [
+        ("agent", "agent-0", "agent-1"),
+        ("location", "loc-0", "loc-1"),
+    ] {
+        let mut app = render_test_app(sample_render_state_with_beacon_candidates(
+            kind,
+            selected_id,
+        ));
+        let summary = visual_probe_summary(&mut app);
+
+        let (selected, unselected) = match kind {
+            "agent" => (
+                summary
+                    .agents
+                    .iter()
+                    .find(|row| row.id == selected_id)
+                    .unwrap(),
+                summary
+                    .agents
+                    .iter()
+                    .find(|row| row.id == unselected_id)
+                    .unwrap(),
+            ),
+            "location" => (
+                summary
+                    .locations
+                    .iter()
+                    .find(|row| row.id == selected_id)
+                    .unwrap(),
+                summary
+                    .locations
+                    .iter()
+                    .find(|row| row.id == unselected_id)
+                    .unwrap(),
+            ),
+            _ => unreachable!("test cases use known render entity kinds"),
+        };
+
+        assert!(
+            selected.size_px > unselected.size_px,
+            "selected {kind} must have a geometry beacon beyond its color"
+        );
+        assert!(
+            selected.z > unselected.z,
+            "selected {kind} must have a draw-priority beacon beyond its color"
         );
     }
 }

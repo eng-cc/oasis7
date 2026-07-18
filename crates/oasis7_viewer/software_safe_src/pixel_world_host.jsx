@@ -1,7 +1,8 @@
-import { createEffect, createMemo, createSignal, For, Show, onCleanup, onMount } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, Show, onCleanup, onMount } from "solid-js";
 
 import * as core from "./legacy_core.js";
 import { createPixelWorldRuntimeBridge } from "./pixel_world_runtime_loader.js";
+import { installPixelWorldVisualFixtureHook, pixelWorldTestApiEnabled } from "./pixel_world_visual_fixture.js";
 import { pixelWorldSelectedBlockerVisualFixture } from "./pixel_world_visual_fixture_data.js";
 
 export { pixelWorldSelectedBlockerVisualFixture };
@@ -11,7 +12,6 @@ function tr(locale, zh, en) {
 }
 
 const PIXEL_WORLD_RUNTIME_CANVAS_ID = "pixel-world-embedded-runtime-canvas";
-const PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL = "__OASIS7_PIXEL_WORLD_VISUAL_FIXTURES__";
 const DEFER_RENDERER_VALUES = new Set(["0", "false", "no", "off", "defer", "fallback"]);
 const pixelWorldFocusUiSessionState = {
   focusMode: false,
@@ -31,51 +31,6 @@ const FRAGMENT_TERRAIN_PALETTE = {
   thorium_bearing_ore: [244, 114, 182],
   unknown: [148, 163, 184],
 };
-
-function pixelWorldTestApiEnabled() {
-  if (typeof window === "undefined" || !window.location) {
-    return false;
-  }
-  const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
-function requestedVisualFixtureName() {
-  if (typeof window === "undefined" || !window.location) {
-    return null;
-  }
-  return String(new URLSearchParams(window.location.search || "").get("pixel_world_visual_fixture") || "").trim();
-}
-
-function installPixelWorldVisualFixtureHook() {
-  if (typeof window === "undefined" || !pixelWorldTestApiEnabled()) {
-    return null;
-  }
-  const fixtures = {
-    selected_blocker: () => core.clone(pixelWorldSelectedBlockerVisualFixture()),
-  };
-  window[PIXEL_WORLD_VISUAL_FIXTURE_GLOBAL] = fixtures;
-
-  const fixtureName = requestedVisualFixtureName();
-  if (!fixtureName || !fixtures[fixtureName]) {
-    return null;
-  }
-  const fixture = fixtures[fixtureName]();
-  core.injectSnapshot(fixture, { returnState: false });
-  core.state.auth = {
-    ...core.state.auth,
-    available: true,
-    playerId: "player-one",
-    publicKey: "abcdef0123456789abcdef0123456789",
-    privateKey: "private-key-must-stay-hidden",
-    source: "local_test_api_ephemeral",
-    registrationStatus: "registered",
-    runtimeStatus: "registered",
-    boundAgentId: "agent-0",
-  };
-  core.applySelection({ kind: "agent", id: "agent-0" });
-  return fixtureName;
-}
 
 async function waitForRuntimeCanvasAttachment(canvas) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
@@ -285,6 +240,7 @@ function pixelWorldVisualState(renderState) {
 
 function PixelWorldHostVisualLayer(props) {
   const visualState = () => pixelWorldVisualState(props.renderState());
+  const selection = () => props.selection?.() || visualState().selection;
   if (!props.enabled) {
     return <></>;
   }
@@ -339,46 +295,49 @@ function PixelWorldHostVisualLayer(props) {
           </div>
         )}
       </For>
-      <For each={visualState().locations.slice(0, 8)}>
+      <Index each={visualState().locations.slice(0, 8)}>
         {(location, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--location"
-            data-marker-role={location.marker_role}
+            data-pixel-world-location-marker="true"
+            data-location-id={location().id}
+            data-selected={selection()?.kind === "location" && selection()?.id === location().id ? "true" : "false"}
+            data-marker-role={location().marker_role}
             style={{
-              ...toWorldPercentStyle(location.pos, visualState().worldBounds, {
-                left: `${12 + ((index() % 4) * 21)}%`,
-                top: `${18 + (Math.floor(index() / 4) * 26)}%`,
+              ...toWorldPercentStyle(location().pos, visualState().worldBounds, {
+                left: `${12 + ((index % 4) * 21)}%`,
+                top: `${18 + (Math.floor(index / 4) * 26)}%`,
               }),
-              opacity: location.marker_alpha,
+              opacity: location().marker_alpha,
             }}
-            title={location.label}
-            onMouseEnter={() => props.onHover({ kind: "location", id: location.id })}
+            title={location().label}
+            onMouseEnter={() => props.onHover({ kind: "location", id: location().id })}
             onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "location", id: location.id })}
+            onClick={() => props.onSelect({ kind: "location", id: location().id })}
           >
-            <span>{location.label.slice(0, 2).toUpperCase()}</span>
+            <span>{location().label.slice(0, 2).toUpperCase()}</span>
           </button>
         )}
-      </For>
-      <For each={visualState().agents.slice(0, 10)}>
+      </Index>
+      <Index each={visualState().agents.slice(0, 10)}>
         {(agent, index) => (
           <button
             class="pixel-world-entity pixel-world-entity--agent"
             data-pixel-world-agent-marker="true"
-            data-agent-id={agent.id}
-            data-selected={visualState().selection?.kind === "agent" && visualState().selection?.id === agent.id ? "true" : "false"}
-            data-position-source={agent.position_source}
-            aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent.id}`}
-            style={agentMarkerStyle(agent, index(), visualState().worldBounds)}
-            title={agent.label}
-            onMouseEnter={() => props.onHover({ kind: "agent", id: agent.id })}
+            data-agent-id={agent().id}
+            data-selected={selection()?.kind === "agent" && selection()?.id === agent().id ? "true" : "false"}
+            data-position-source={agent().position_source}
+            aria-label={`${tr(props.locale(), "选择 Agent", "Select Agent")} ${agent().id}`}
+            style={agentMarkerStyle(agent(), index, visualState().worldBounds)}
+            title={agent().label}
+            onMouseEnter={() => props.onHover({ kind: "agent", id: agent().id })}
             onMouseLeave={() => props.onHover(null)}
-            onClick={() => props.onSelect({ kind: "agent", id: agent.id })}
+            onClick={() => props.onSelect({ kind: "agent", id: agent().id })}
           >
-            <span>{agent.label.slice(0, 1).toUpperCase()}</span>
+            <span>{agent().label.slice(0, 1).toUpperCase()}</span>
           </button>
         )}
-      </For>
+      </Index>
     </>
   );
 }
@@ -652,6 +611,7 @@ function PixelWorldCanvasRenderer(props) {
           enabled={props.visualOverlayEnabled?.() ?? false}
           locale={props.locale}
           renderState={props.renderState}
+          selection={props.selection}
           onSelect={props.onSelect}
           onHover={props.onHover}
         />
@@ -1242,7 +1202,17 @@ function PixelWorldFocusCommandSurface(props) {
 export function PixelWorldHost(props) {
   const locale = () => props.locale ?? core.state.uiLocale;
   const visualFixtureName = installPixelWorldVisualFixtureHook();
-  const renderInput = createMemo(() => buildPixelWorldRenderInput(locale()));
+  const [coreRevision, setCoreRevision] = createSignal(0);
+  const selectedEntity = () => {
+    coreRevision();
+    return core.state.selectedKind && core.state.selectedId
+      ? { kind: core.state.selectedKind, id: core.state.selectedId }
+      : null;
+  };
+  const renderInput = createMemo(() => {
+    coreRevision();
+    return buildPixelWorldRenderInput(locale());
+  });
   const [rustRenderState, setRustRenderState] = createSignal(null);
   const renderState = () => rustRenderState();
   const visualState = () => pixelWorldVisualState(renderState());
@@ -1312,6 +1282,8 @@ export function PixelWorldHost(props) {
   const adapter = createMemo(() => createPixelWorldHostAdapter({
     onSelectEntity(selection) {
       core.applySelection(selection);
+      setCoreRevision((revision) => revision + 1);
+      applyRendererUpdate();
     },
     onHoverEntity(selection) {
       setHoverSelection(selection);
@@ -1441,6 +1413,14 @@ export function PixelWorldHost(props) {
 
     window.addEventListener("keydown", handleKeyDown);
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown));
+
+    if (pixelWorldTestApiEnabled()) {
+      core.setRenderHook(() => {
+        setCoreRevision((revision) => revision + 1);
+        applyRendererUpdate();
+      });
+      onCleanup(() => core.setRenderHook(null));
+    }
   });
 
   createEffect(() => {
@@ -1533,6 +1513,7 @@ export function PixelWorldHost(props) {
           locale={locale}
           renderInput={renderInput}
           renderState={renderState}
+          selection={selectedEntity}
           visualOverlayEnabled={visualOverlayEnabled}
           onSelect={(selection) => adapter().simulateSelect(selection)}
           onHover={(selection) => adapter().simulateHover(selection)}

@@ -10,6 +10,8 @@ const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
 const LOCATION_LAYER_Z: f32 = 1.0;
 const AGENT_LAYER_Z: f32 = 2.0;
+const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
+const SELECTED_ENTITY_SIZE_SCALE: f64 = 1.35;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GridLayoutKey {
@@ -303,6 +305,19 @@ pub(crate) fn location_visual_style(location: &Location, animation_ms: f64) -> L
     }
 }
 
+fn selected_location_visual_style(
+    location: &Location,
+    is_selected: bool,
+    animation_ms: f64,
+) -> LocationVisualStyle {
+    let mut style = location_visual_style(location, animation_ms);
+    if is_selected {
+        style.size_px *= SELECTED_ENTITY_SIZE_SCALE;
+        style.layer_z += SELECTED_ENTITY_LAYER_Z_OFFSET;
+    }
+    style
+}
+
 pub(crate) fn agent_visual_style(
     agent: &Agent,
     is_selected: bool,
@@ -315,9 +330,19 @@ pub(crate) fn agent_visual_style(
     } else {
         agent.size_hint_px.unwrap_or(12.0)
     };
+    let selected_scale = if is_selected {
+        SELECTED_ENTITY_SIZE_SCALE
+    } else {
+        1.0
+    };
     AgentVisualStyle {
-        size_px: base_size * pulse,
-        layer_z: AGENT_LAYER_Z,
+        size_px: base_size * pulse * selected_scale,
+        layer_z: AGENT_LAYER_Z
+            + if is_selected {
+                SELECTED_ENTITY_LAYER_Z_OFFSET
+            } else {
+                0.0
+            },
     }
 }
 
@@ -498,7 +523,12 @@ fn reconcile_locations(
             continue;
         };
         active_ids.insert(location.id.clone());
-        let style = location_visual_style(location, animation_ms);
+        let is_selected = render_state
+            .selection
+            .as_ref()
+            .map(|selection| selection.kind == "location" && selection.id == location.id)
+            .unwrap_or(false);
+        let style = selected_location_visual_style(location, is_selected, animation_ms);
         let transform = Transform::from_translation(to_bevy_translation(
             canvas_x,
             canvas_y,
