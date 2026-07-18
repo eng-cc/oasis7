@@ -37,7 +37,7 @@
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-power-system.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:58:03 +0800 | cc | M4 P0 shared bottleneck/logistics priority project (retired/deleted; historical review record) | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/llm/indirect-control-tick-lifecycle-long-term-memory.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/viewer/viewer-live-step-control-progress-stability-2026-02-28.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
@@ -168,7 +168,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record) | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/node/node-reward-runtime-production-hardening-phase1.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

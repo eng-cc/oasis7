@@ -303,8 +303,8 @@
 - `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md`
 - `doc/world-simulator/m4/m4-power-system.prd.md`
 - `doc/world-simulator/m4/m4-power-system.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md`
+- M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record)
+- M4 P0 shared bottleneck/logistics priority project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md`
