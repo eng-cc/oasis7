@@ -553,8 +553,8 @@
 - `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md`
 - `doc/world-simulator/llm/llm-prompt-system.prd.md`
 - `doc/world-simulator/llm/llm-prompt-system.project.md`
-- `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md`
-- `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md`
+- M4 builtin-WASM maintainability PRD (retired/deleted; historical review record)
+- M4 builtin-WASM maintainability project (retired/deleted; historical review record)
 - M4 industrial benchmark/current-state PRD (retired/deleted; historical review record)
 - M4 industrial benchmark/current-state project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md`
