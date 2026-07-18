@@ -62,4 +62,86 @@ describe("viewer feedback module", () => {
       }),
     );
   });
+
+  it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          micro_depot_facilities: [{
+            facility_id: "depot-1",
+            owner_claim_id: "claim-1",
+            status: "active",
+            location_id: "base",
+            available_units_by_kind: { data: 8 },
+            module_id: "micro_depot.eval.v2",
+            module_version: "v2",
+            wasm_hash: "wasm-hash",
+            last_receipt_id: "receipt-1",
+            last_proposal_hash: "proposal-1",
+            available_actions: ["service_micro_depot_repair"],
+          }],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([
+      expect.objectContaining({
+        facilityId: "depot-1",
+        availableUnitsByKind: { data: 8 },
+        moduleId: "micro_depot.eval.v2",
+        lastReceiptId: "receipt-1",
+        lastProposalHash: "proposal-1",
+        availableActions: ["service_micro_depot_repair"],
+      }),
+    ]);
+  });
+
+  it("drops malformed micro depot facility entries and normalizes display collections", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: {}, locations: {} },
+        player_gameplay: {
+          micro_depot_facilities: [
+            null,
+            "not-a-facility",
+            {
+              facility_id: "depot-safe",
+              available_units_by_kind: "not-an-inventory-record",
+              supported_resource_kinds: "data",
+              available_actions: [" service_micro_depot_repair ", 7, "", { action: "unsafe" }],
+            },
+          ],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([
+      expect.objectContaining({
+        facilityId: "depot-safe",
+        availableUnitsByKind: {},
+        supportedResourceKinds: [],
+        availableActions: ["service_micro_depot_repair"],
+      }),
+    ]);
+  });
+
+  it("uses an empty facility list when the optional snapshot field is absent or wrong-typed", () => {
+    for (const microDepotFacilities of [undefined, null, {}, "depot-1"]) {
+      const state = {
+        lastGameplayActionFeedback: null,
+        snapshot: {
+          model: { agents: {}, locations: {} },
+          player_gameplay: { micro_depot_facilities: microDepotFacilities },
+        },
+        uiLocale: "en",
+      };
+
+      expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([]);
+    }
+  });
 });

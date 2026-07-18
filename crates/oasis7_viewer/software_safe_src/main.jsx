@@ -3,6 +3,7 @@ import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
+import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -2748,6 +2749,11 @@ function WorldSummaryPanel() {
                   />
                 </div>
               </PanelSection>
+              <MicroDepotFacilitiesPanel
+                facilities={gameplay().microDepotFacilities}
+                locale={locale}
+                tr={tr}
+              />
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
                   locale={locale()}
@@ -4033,6 +4039,28 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
         delta_event_seq: 2,
       },
       agent_claim: null,
+      micro_depot_facilities: [
+        {
+          facility_id: "depot-regional-01",
+          owner_claim_id: "claim-regional-01",
+          status: "active",
+          location_id: "loc-1",
+          service_radius_cm: 250_000,
+          inventory_revision: 7,
+          available_units_by_kind: { data: 5, repair_kit: 2 },
+          throughput_epoch: 11,
+          throughput_remaining_units: 13,
+          throughput_limit_units_per_epoch: 16,
+          supported_resource_kinds: ["data", "repair_kit"],
+          module_id: "regional.micro_depot",
+          module_version: "0.2.0",
+          wasm_hash: "sha256:micro-depot-public-evidence-1234567890",
+          upkeep_paid: true,
+          last_receipt_id: "receipt-micro-depot-public-01",
+          last_proposal_hash: "sha256:proposal-public-01",
+          available_actions: ["service_micro_depot_repair", "reclaim_micro_depot"],
+        },
+      ],
     },
   };
   return {

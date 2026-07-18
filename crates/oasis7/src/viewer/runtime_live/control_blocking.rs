@@ -1,4 +1,5 @@
 use super::*;
+use crate::simulator::WorldKernel;
 
 impl ViewerRuntimeLiveServer {
     pub(super) fn tolerate_background_play_gameplay_block(
@@ -137,6 +138,8 @@ impl ViewerRuntimeLiveServer {
             &self.llm_sidecar,
             self.seed_model.as_ref(),
         );
+        let micro_depot_facilities =
+            WorldKernel::micro_depot_player_facility_snapshots_from_model(&model);
         let mut player_gameplay = build_player_gameplay_snapshot(
             self.world.state(),
             snapshot_bound_agent_id,
@@ -149,6 +152,7 @@ impl ViewerRuntimeLiveServer {
             first_agent_claim_target_available,
             primary_agent_claim,
         );
+        player_gameplay.micro_depot_facilities = micro_depot_facilities;
         if snapshot_player_id.is_some() && snapshot_bound_agent_id.is_none() {
             player_gameplay.available_actions.retain(|action| {
                 action.target_agent_id.is_none()
