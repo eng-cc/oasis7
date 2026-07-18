@@ -1,6 +1,6 @@
 # world-runtime PRD
 
-> 专业域 authority：本文件拥有世界执行、确定性、WASM、事件、receipt 与 replay 契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供执行层证据，但不是并列产品入口。
+> 专业域 authority：本文件拥有世界执行、确定性、WASM、事件、receipt 与 replay 契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供执行层证据，并为 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 的权威行动与审计后果提供专业合同，但不是并列产品入口。
 
 审计轮次: 7
 

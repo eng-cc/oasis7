@@ -11,13 +11,9 @@
 - Owner role：`producer_system_designer`
 - Last reviewed：`2026-07-18`
 - 后继文档：`无`
-- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)
+- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文只定义玩家目标、间接能动性、核心循环、成长与资源压力的产品承诺。玩法规则、数值平衡、专题 PRD-ID 与测试证据由 `game` 专业域拥有。
-
-### 活跃产品专题
-
-- [`世界规范说明书（宪法级草案）`](world-rule.prd.md)：定义跨域世界不变量、玩家边界与产品规则意图；玩法、runtime、Agent、共识和网络的实现合同仍由对应专业域拥有。
 
 ## 1. 产品承诺
 
@@ -35,13 +31,20 @@
 
 本产品层只定义上述玩家承诺和端到端边界；玩法动作粒度由 [`doc/game/prd.md`](../../game/prd.md) 与其核心玩法骨架拥有，物理/执行真值由 `world-runtime`，表现真值由 `world-simulator` 的对应专业域文档拥有。
 
+### 世界宪法级产品不变量
+
+- 玩家通过目标、Agent、地点、设施、配方、关系与治理等受支持动作获得间接战略能动性；资源变化必须来自被授权的 source/sink 因果链，不能凭空生成或绕过成本。
+- 每个权威行动都必须经过规则与权限校验并产生可审计后果；玩家能够读懂 target、action、cost、blocker、result、next decision 与 recovery，不靠隐藏状态猜测世界为何变化。
+- 社会关系、组织、市场与制度可以在权限、治理和 anti-abuse 边界内产生有限涌现，但不会因此获得绕过权威规则的能力。世界保持持久、开放式演化，不要求强制终局。
+- 当前不支持的细粒度请求必须转换为 canonical 可执行替代动作；没有安全替代时明确停止并说明下一次可决策点。具体规则、确定性执行、Agent 行为与网络/治理合同分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护。
+
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业域权威 |
 | --- | --- |
-| 玩家目标、核心循环的产品结果、成长与资源压力体验 | `doc/game/prd.md` 拥有玩法规则、moment-to-moment loop、数值平衡和专题验收 |
+| 玩家目标、核心循环的产品结果、成长、资源压力与跨域世界不变量体验 | `doc/game/prd.md` 拥有玩法规则、moment-to-moment loop、数值平衡和专题验收；`doc/world-runtime/prd.md` 拥有权威验证、确定性状态与审计；`doc/world-simulator/prd.md` 拥有 Agent/LLM 与交互模拟合同；`doc/p2p/prd.md` 拥有网络、共识与治理技术边界 |
 
-产品层不用新细则或数值静默改写 `game` 权威；不可实现时由 `producer_system_designer` 与 `gameplay_designer` 形成显式裁决。
+产品层不用新细则或数值静默改写专业域权威。跨域冲突由 `producer_system_designer` 协调，并按受影响合同邀请对应的 `gameplay_designer`、`runtime_engineer`、`agent_engineer` / `world-simulator` owner 或 `blockchain_ops_engineer` / P2P owner 形成显式裁决；不得只以 gameplay 判断覆盖执行、Agent、网络或治理专业结论。
 
 ## 4. 路线图
 
@@ -55,6 +58,7 @@
 - SC-2：核心循环完整呈现行动接受、推进、阻塞、反馈和结果。
 - SC-3：FirstSessionLoop 之后存在可达的 PostOnboarding 目标、压力与承接。
 - SC-4：世界规则、资源消耗与玩家结果可映射到专业 PRD-ID 和验证证据。
+- SC-5：玩家的间接战略动作具备授权资源因果、权威校验和可审计后果，界面或接口可读 target/action/cost/blocker/result/next/recovery；涌现关系与组织不绕过权限、治理或 anti-abuse，未支持细粒度请求有 canonical 替代或安全停止。
 
 ### 5.1 验收追踪
 
@@ -64,6 +68,7 @@
 | SC-2 | gameplay_designer | PRD-GAME-004 | `doc/game/prd.md` | micro-loop 端到端回归 | test_tier_required |
 | SC-3 | gameplay_designer | PRD-GAME-007 | `doc/game/prd.md` | PostOnboarding 转换与持续游玩证据 | test_tier_required |
 | SC-4 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到发布验收证据的追踪检查 | test_tier_required |
+| SC-5 | producer_system_designer | PRD-GAME-002 / PRD-GAME-004 / PRD-GAME-013 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/p2p/prd.md` | 授权资源因果、权威后果、玩家可读闭环、有限涌现与替代动作跨域审计 | test_tier_required |
 
 ## 6. Non-Goals
 

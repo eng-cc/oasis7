@@ -142,6 +142,19 @@ def main() -> None:
             "`doc/product/agents-world-simulation/prd.md`",
         ),
     )
+    for authority in (
+        "doc/world-runtime/prd.md",
+        "doc/world-simulator/prd.md",
+        "doc/p2p/prd.md",
+    ):
+        scenario(
+            "authority-backlink",
+            lambda root, authority=authority: replace(
+                root / authority,
+                "[`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md)",
+                "`doc/product/world-rules-core-gameplay/prd.md`",
+            ),
+        )
     scenario(
         "authority-contract",
         lambda root: replace(

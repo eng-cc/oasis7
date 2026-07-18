@@ -182,7 +182,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 | 想确认项目现在公开到了什么程度 | [`site/index.html`](./site/index.html) | [`site/doc/cn/index.html`](./site/doc/cn/index.html) |
 | 想先用一份白皮书式总览理解项目 | [`doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`](./doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
 | 想本地验证 Viewer / Web / API 链路 | [`testing-manual.md`](./testing-manual.md) | [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md) |
-| 想理解世界规则、玩法和玩家边界 | [`doc/product/world-rules-core-gameplay/world-rule.prd.md`](./doc/product/world-rules-core-gameplay/world-rule.prd.md) | [`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md) |
+| 想理解世界规则、玩法和玩家边界 | [`doc/product/world-rules-core-gameplay/prd.md`](./doc/product/world-rules-core-gameplay/prd.md) | [`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md) |
 | 想参与开发或继续治理文档/代码 | [`doc/README.md`](./doc/README.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
 
 ### 产品四大模块
@@ -196,7 +196,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 `README` 只负责快速对齐项目定位与入口，不再在这里重复维护世界规则摘要。继续深入时，直接进入对应权威文档：
 
 - 白皮书式项目总览：[`doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`](./doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md)
-- 世界规则与系统边界：[`doc/product/world-rules-core-gameplay/world-rule.prd.md`](./doc/product/world-rules-core-gameplay/world-rule.prd.md)
+- 世界规则与系统边界：[`doc/product/world-rules-core-gameplay/prd.md`](./doc/product/world-rules-core-gameplay/prd.md)
 - 玩家访问模式与技术预览边界：[`doc/product/player-entry-distribution/prd.md`](./doc/product/player-entry-distribution/prd.md)
 - Viewer / Web / 运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - 闭环测试与套件矩阵：[`testing-manual.md`](./testing-manual.md)

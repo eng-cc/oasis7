@@ -23,7 +23,12 @@ class ProductModule:
 
 
 MODULES = (
-    ProductModule("world-rules-core-gameplay", "世界规则与核心玩法", "PRD-PRODUCT-001", ("doc/game/prd.md",)),
+    ProductModule(
+        "world-rules-core-gameplay",
+        "世界规则与核心玩法",
+        "PRD-PRODUCT-001",
+        ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/world-simulator/prd.md", "doc/p2p/prd.md"),
+    ),
     ProductModule("world-infrastructure", "大世界基础设施", "PRD-PRODUCT-002", ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/p2p/prd.md")),
     ProductModule("agents-world-simulation", "智能体与世界模拟", "PRD-PRODUCT-003", ("doc/world-simulator/prd.md",)),
     ProductModule("player-entry-distribution", "玩家入口与发行", "PRD-PRODUCT-004", ("README.md", "doc/world-simulator/prd.md")),
