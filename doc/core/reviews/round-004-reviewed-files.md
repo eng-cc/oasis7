@@ -571,8 +571,8 @@
 - `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.project.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md`
+- M4 resource/product playability base PRD (retired/deleted; historical review record)
+- M4 resource/product playability base project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md`
 - `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md`

@@ -368,8 +368,8 @@
 | 2026-03-06 11:57:27 +0800 | codex | `historical removed viewer-tools doc set: capture-viewer-frame.project` | pass | - | 验证命令与脚本路径明确且可执行，fallback 使用边界清晰。 |
 | 2026-03-06 11:57:38 +0800 | G4-002-Aristotle | doc/world-simulator/scenario/scenario-files.project.md | issue_open | I4-009 | 任务拆解标题声明“含 PRD-ID 映射”但条目未标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:57:51 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd` | pass | - | 脚本入口、参数与输出路径定义完整，未发现不可执行命令口径问题。 |
-| 2026-03-06 11:58:00 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md | pass | - | 设计文档以 Why/What/Done 为主，未发现新增高风险分工或可达性问题。 |
-| 2026-03-06 11:58:18 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md | issue_open | I4-009,I4-010 | 标题声明“含 PRD-ID 映射”但任务未标 PRD-ID，且状态段缺最近更新时间。 |
+| 2026-03-06 11:58:00 +0800 | G4-002-Aristotle | M4 resource/product playability base PRD (retired/deleted; historical review record) | pass | - | 设计文档以 Why/What/Done 为主，未发现新增高风险分工或可达性问题。 |
+| 2026-03-06 11:58:18 +0800 | G4-002-Aristotle | M4 resource/product playability base project (retired/deleted; historical review record) | issue_open | I4-009,I4-010 | 标题声明“含 PRD-ID 映射”但任务未标 PRD-ID，且状态段缺最近更新时间。 |
 | 2026-03-06 11:58:13 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.project` | pass | - | 任务拆解与依赖口径完整，未发现 D4-001~D4-008 新增问题。 |
 | 2026-03-06 11:58:32 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd` | pass | - | 回归命令参数完整且产物路径明确，可直接复现框架验证结果。 |
 | 2026-03-06 11:58:49 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project` | pass | - | 任务拆解与依赖链路清晰，未发现命令可执行性相关异常。 |

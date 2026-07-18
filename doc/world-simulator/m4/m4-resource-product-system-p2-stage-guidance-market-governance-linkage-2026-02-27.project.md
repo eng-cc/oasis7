@@ -12,7 +12,6 @@
 
 ## 依赖
 - doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md`
 - `crates/oasis7/src/runtime/events.rs`
 - `crates/oasis7/src/runtime/state.rs`

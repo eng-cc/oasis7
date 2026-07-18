@@ -21,6 +21,8 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 
 大世界基础设施的产品承诺是：玩家可在统一持久大世界中建设有限作用域、成本可解释、结果可审计的区域设施；这些设施由确定性运行时执行，由分布式状态底座保存与同步，并能在不破坏世界一致性和治理边界的前提下持续扩展。
 
+工业成长中的关键承诺必须让玩家在提交前读懂成本、约束、预期效果以及下一步或恢复动作；执行结果必须确定、可审计，`ProductValidated` 还必须呈现与玩家相关的能力、用途和成长后果。区域专业化应形成可选择的协作与取舍压力，而不是对所有玩家征收同一种必付税。具体字段、平衡、ABI、profile、event 与 receipt schema 继续由 `game`、runtime 和 WASM 专业权威维护。
+
 ## 2. 范围与玩家边界
 
 ### 2.1 三层范围
@@ -76,6 +78,7 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - SC-4：同一确认动作在 replay 后得到一致状态；失败不产生部分扣费、幽灵设施或未审计副作用。
 - SC-5：设施状态可经 snapshot/replication/state sync 恢复，且 transport green 不能替代世界状态闭环证明。
 - SC-6：新增设施必须映射到专业域 PRD-ID、`test_tier_required`，并在涉及多节点、迁移或长期一致性时补 `test_tier_full`。
+- SC-7：工业成长的关键提交点在确认前可读成本、约束、效果与下一步或恢复动作；执行证据确定且可审计，产品校验结果能说明玩家能力、用途与成长后果，区域专业化不退化为普遍税负。
 
 验收证据由下层专业域提供：设施体验与经济走 `game`；确定性、WASM、receipt 和 replay 走 `world-runtime`；共识、复制、恢复与多节点一致性走 `p2p`。产品层只汇总是否形成端到端闭环，不复制各域测试步骤。
 
@@ -89,6 +92,7 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 | SC-4 | runtime_engineer | PRD-WORLD_RUNTIME-001 | `doc/world-runtime/prd.md` | receipt、失败原子性与 replay 回归 | test_tier_required |
 | SC-5 | blockchain_ops_engineer | PRD-P2P-002 | `doc/p2p/prd.md` | snapshot、replication、state-sync 多节点恢复证据 | test_tier_full |
 | SC-6 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到 required/full 证据的发布门禁 | test_tier_required |
+| SC-7 | gameplay_designer | PRD-GAME-002 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md` | 工业提交前可读性、确定性结果、产品校验后果与区域专业化取舍证据 | test_tier_required |
 
 ## 6. Non-Goals
 

@@ -13,7 +13,6 @@
 
 ## 依赖
 - doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`
 - `crates/oasis7/src/runtime/world/bootstrap_economy.rs`
 - `crates/oasis7/src/runtime/world/event_processing/action_to_event_core.rs`
