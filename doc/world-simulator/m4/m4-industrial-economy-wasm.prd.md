@@ -48,6 +48,13 @@
 - 插件优先：新增“配方/制成品/工厂”无需改内核代码，仅新增 WASM 模块。
 - 渐进复杂度：先最小闭环，再扩展质量、维护、自动化、品牌、合同等机制。
 
+### M4 builtin 维护合同
+
+- Recipe、Product、Factory builtin 复用按模块类型划分的实现模板；具体模块以声明式参数为主，公共 action 解析、判定顺序、reject reason 与输出格式不得分叉复制。
+- Bootstrap 安装由 descriptor/catalog 驱动，新增、替换或删除 builtin 时不得回退为调用点手工注册。
+- Descriptor module ID、builtin ID catalog、artifact hash 与 identity manifest 必须保持一致，并由 repo-owned 检查在安装或发布前 fail closed；任一局部列表相等都不能单独证明 canonical artifact 合法。
+- 模板或 bootstrap 重构必须保持既有动作判定顺序、拒绝语义、输出合同与回放结果；通用 canonical build、hash、identity 和 release policy 继续由 `doc/world-runtime/prd.md` 及其 WASM 专题拥有。
+
 ## 机制总览
 
 每个 tick 的经济执行按固定顺序进行：
