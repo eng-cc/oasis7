@@ -316,9 +316,10 @@ oasis7 的世界不是无尺度表格。
 - `1cm` 是世界真值合同，不自动等于“玩家已经拥有 1cm 级直接操作主玩法”。
 - coarse-grained 子系统不是违背尺度设计，而是需要被正式声明和审计。
 - Viewer 的 marker 放大、semantic map、2D 抽象不等于世界尺寸改变。
-- 未来如果要引入 embodied / block-editing 候选能力，必须先证明它强化的是当前间接控制文明模拟主路线，而不是把产品切成第二套游戏。
+- 过细动作只能映射到 canonical 可执行替代动作；没有安全替代时，必须安全停止、解释边界并给出下一次可决策点，不能由 UI 伪造动作或只返回无解释失败。
+- 未来如果要引入 embodied / block-editing 候选能力，必须先证明它强化的是当前间接控制文明模拟主路线，具备对应专业域合同与验证，并经显式跨域决策；不得把产品切成第二套游戏或提前写成当前承诺。
 
-专题口径见 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`。
+产品承诺见 [`doc/product/world-rules-core-gameplay/prd.md`](../../product/world-rules-core-gameplay/prd.md)；本节保留玩法侧四层尺度合同与未来候选 guard。
 
 补充口径：
 - `10-minute trust gate` 负责回答“是否已经值得继续玩”。

@@ -20,7 +20,7 @@
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`
-- 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
+- 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 想先看试玩放行与 beta 边界：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
 - 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
@@ -45,7 +45,7 @@
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
 - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
 - `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力主入口。
-- `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`：物理尺度真值、间接控制动作粒度与表现层夸张边界主入口。
+- `doc/product/world-rules-core-gameplay/prd.md` 与 `doc/game/gameplay/gameplay-top-level-design.prd.md`：分别承载物理尺度/间接控制的产品承诺，以及玩法侧动作粒度与表现层夸张边界。
 - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`：试玩执行边界与继续/暂停决策主入口。
 - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`：closed beta 放行条件与候选级门禁主入口。
 - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`：近期高频经济规则与 token 成本边界主入口。
@@ -71,7 +71,6 @@
 | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.design.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md` |
 | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.design.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md` |
 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.design.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
-| `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.design.md` | `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.project.md` |
 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.design.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.project.md` |
 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md` |
 | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.design.md` | `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.project.md` |
