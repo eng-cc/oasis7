@@ -9,7 +9,7 @@
 - Problem Statement: `README.md`、`doc/README.md` 与各模块 PRD 共同承担对外入口和项目总览角色，但当前 readme 模块缺少一份可执行的“口径一致性巡检清单”。没有统一检查项时，贡献者只能凭经验判断哪些表述要同步、哪些链接要复核，容易留下术语漂移与过期陈述。
 - Proposed Solution: 建立 README 口径一致性巡检清单，覆盖“顶层叙事、状态口径、术语边界、入口链接、同步触发条件”五类检查项，并给出最小巡检方法。
 - Success Criteria:
-  - SC-1: 巡检清单能直接覆盖 `README.md`、`doc/README.md`、`world-rule.md`、`testing-manual.md` 与模块主 PRD 的一致性复核。
+  - SC-1: 巡检清单能直接覆盖 `README.md`、`doc/README.md`、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`testing-manual.md` 与模块主 PRD 的一致性复核。
   - SC-2: 每个检查项都明确“检查对象 / 通过条件 / 失败动作”。
   - SC-3: `doc/readme/project.md` 可以据此关闭 `TASK-README-002`。
   - SC-4: 后续 README 更新都能复用该清单，而不是重新定义检查口径。
@@ -56,7 +56,7 @@
 - Integration Points:
   - `README.md`
   - `doc/README.md`
-  - `world-rule.md`
+  - `doc/product/world-rules-core-gameplay/world-rule.prd.md`
   - `testing-manual.md`
   - `doc/core/prd.md`
   - `doc/site/prd.md`

@@ -1,6 +1,20 @@
 # oasis7 Specification v0.1
 ## 硅基小行星文明 · 世界规范说明书（宪法级草案）
 
+## 文档身份与权威边界
+
+- 所属产品模块：[`世界规则与核心玩法`](prd.md)
+- 文档类型：活跃产品专题 PRD
+- 产品层唯一 PRD：`doc/product/world-rules-core-gameplay/prd.md`
+- 生命周期：`active`
+- Owner role：`producer_system_designer`
+- 下层专业权威：[`game`](../../game/prd.md)、[`world-runtime`](../../world-runtime/prd.md)、[`p2p`](../../p2p/prd.md)、[`world-simulator`](../../world-simulator/prd.md)
+
+本文定义跨域世界不变量、玩家边界与产品规则意图，不直接拥有玩法数值、
+runtime/WASM 合同、Agent/provider 实现、共识/网络协议或代币实现的裁决权。
+正文中的技术表达用于说明产品约束；若与下层专业 PRD 或当前实现冲突，必须由
+产品 owner 与对应专业 owner 形成显式裁决，不能由本文静默覆盖专业域权威。
+
 > 本文档定义 2050 年硅基小行星带文明模拟游戏的基础规则。
 >
 > 本规范属于“世界宪法级”文档，定义不可违反的底层物理规律、资源守恒原则、Agent 行为边界与共识层约束。  
