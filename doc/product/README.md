@@ -11,4 +11,11 @@
 | 智能体与世界模拟 | [`doc/product/agents-world-simulation/prd.md`](agents-world-simulation/prd.md) | 把场景、Agent/LLM 决策、世界状态与可交互模拟体验连接起来。 |
 | 玩家入口与发行 | [`doc/product/player-entry-distribution/prd.md`](player-entry-distribution/prd.md) | 统一玩家如何了解、进入、安装和验证当前有证据支持的技术预览及其公开边界。 |
 
+如果需要从产品承诺继续下钻到规则、实现契约或验证证据，按下表进入专业域权威：
+
+- 世界规则与核心玩法 → [`doc/game/prd.md`](../game/prd.md)
+- 大世界基础设施 → [`doc/game/prd.md`](../game/prd.md)、[`doc/world-runtime/prd.md`](../world-runtime/prd.md)、[`doc/p2p/prd.md`](../p2p/prd.md)
+- 智能体与世界模拟 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
+- 玩家入口与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
+
 产品层只定义产品承诺、组合关系和跨域验收。工程实现、专题契约与任务状态继续由对应模块 PRD、design、project 和 GitHub task issue evidence 承载。

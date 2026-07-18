@@ -1,5 +1,7 @@
 # world-simulator 文档索引
 
+产品层归属：`world-simulator` 为“智能体与世界模拟”提供主专业域权威，并为“玩家入口与发行”提供 Viewer / Launcher 专业域契约，不形成并列产品入口。产品总导航见 `doc/product/README.md`。
+
 审计轮次: 9
 
 ## 从这里开始

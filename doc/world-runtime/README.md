@@ -1,5 +1,7 @@
 # world-runtime 文档索引
 
+产品层归属：`world-runtime` 是“大世界基础设施”的世界执行专业域权威，不形成并列产品入口。产品总导航见 `doc/product/README.md`，组合承诺见 `doc/product/world-infrastructure/prd.md`。
+
 审计轮次: 11
 
 ## 从这里开始
