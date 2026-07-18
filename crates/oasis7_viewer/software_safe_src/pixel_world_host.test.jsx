@@ -722,6 +722,41 @@ describe("pixel world host", () => {
     expect(receipt.textContent).not.toContain("agent=agent-0");
   });
 
+  it("keeps secondary focus controls in a collapsed native mobile disclosure without changing their actions", async () => {
+    useTestRustRenderState();
+    await renderPixelWorldHost(
+      sampleSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_renderer=defer",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Recover sustainable capability")).toBeInTheDocument();
+    });
+
+    const host = document.querySelector(".pixel-world-host");
+    screen.getByRole("button", { name: "Enter World Focus" }).click();
+    await waitFor(() => {
+      expect(host).toHaveAttribute("data-world-focus", "true");
+    });
+
+    const controls = document.querySelector(".pixel-world-focus-controls");
+    const commandButton = screen.getByRole("button", { name: "Command & Target" });
+    const moreControls = screen.getByText("More controls").closest("details");
+    expect(moreControls).toBeTruthy();
+    expect(moreControls).not.toHaveAttribute("open");
+    expect(controls).toContainElement(commandButton);
+    expect(commandButton).toHaveClass("pixel-world-focus-control--primary");
+    expect(moreControls).toContainElement(screen.getByRole("button", { name: "World Status" }));
+    expect(moreControls).toContainElement(screen.getByRole("button", { name: "Maximize" }));
+    expect(moreControls).toContainElement(screen.getByRole("button", { name: "Leave Focus · Esc" }));
+
+    screen.getByRole("button", { name: "World Status" }).click();
+    expect(document.querySelector(".pixel-world-focus-drawer--diagnostics")?.open).toBe(true);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(host).toHaveAttribute("data-world-focus", "false");
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("offers an app-level world focus mode with command and diagnostics drawers", async () => {
     useTestRustRenderState();
     await renderPixelWorldHost(
