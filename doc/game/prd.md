@@ -23,7 +23,7 @@
 - 核心玩法骨架: `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 追踪主键: `PRD-GAME-xxx`
 - 测试与发布参考: `testing-manual.md`
-- 跨模块模式 taxonomy: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 跨模块模式 taxonomy: `doc/product/player-entry-distribution/prd.md`
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块设计 PRD 主体重写与任务改造。

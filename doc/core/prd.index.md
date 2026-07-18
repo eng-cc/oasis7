@@ -13,7 +13,7 @@
 - 想先回答 core 模块在管什么、哪些口径是全局唯一真值：先读 `doc/core/prd.md`
 - 想先回答当前在推进什么、最近完成了什么、下一步是什么：先读 `doc/core/project.md`
 - 想直接进入下一轮跨模块优先级主入口：先读 `doc/core/next-round-priority-slate-2026-03-11.prd.md`
-- 想直接进入玩家访问模式 / execution lane 的产品契约：先读 `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 想直接进入玩家访问模式 / execution lane 的产品契约：先读 `doc/product/player-entry-distribution/prd.md`
 - 想直接进入统一持久大世界默认产品模型与术语契约：先读 `doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
 - 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需读 `doc/core/reviews/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域

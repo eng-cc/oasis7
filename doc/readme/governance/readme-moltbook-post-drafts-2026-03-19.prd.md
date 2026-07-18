@@ -64,7 +64,7 @@
   - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
   - `README.md`
   - `site/index.html`
-  - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+  - `doc/product/player-entry-distribution/prd.md`
 - Edge Cases & Error Handling:
   - 若平台出现新话题或贴型变化：在不越界的前提下可微调 CTA 和 opening hook，但不得改 claim envelope。
   - 若用户直接要求试玩链接：统一回复技术预览口径，不伪造 waitlist 或 playtest 承诺。

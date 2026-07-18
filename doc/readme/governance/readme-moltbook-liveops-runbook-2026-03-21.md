@@ -106,7 +106,7 @@
 ### P2: 机制与设计讨论
 - 典型问题：
   - “为什么要做 `pure_api`？”
-  - “三种 access surface 的边界是什么？”
+  - “当前两个玩家 access surface（`viewer / pure_api`）的边界是什么？`software_safe` 只是 `viewer` compatibility alias。”
 - 动作：
   - 可以直接回答。
   - 尽量用已批准主张和具体证据回答，不讲未落地 roadmap。
@@ -221,7 +221,7 @@
   - 下午 1 次
   - 晚间 1 次
 - 回复目标：
-  - 优先回答 `software_safe / pure_api` 的边界问题
+  - 优先回答当前两个玩家访问面 `viewer / pure_api` 的边界问题，并明确 `software_safe` 只是 `viewer` compatibility alias
   - 把“同一世界，不同 proof boundary”说清楚
 - 记录重点：
   - 哪个 surface 最引发兴趣

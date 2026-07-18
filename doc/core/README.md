@@ -9,7 +9,7 @@
 - 想看当前 core 模块在推进什么、最新完成项和下一步：`doc/core/project.md`
 - 想按主题或文件名继续下钻，而不是从活跃专题列表逐条找：`doc/core/prd.index.md`
 - 想先看下一轮跨模块优先级主入口：`doc/core/next-round-priority-slate-2026-03-11.prd.md`
-- 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/prd.md`
 - 想先看“统一持久大世界”默认产品模型与术语契约：`doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
 - 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 `doc/core/reviews/README.md`
 

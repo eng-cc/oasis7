@@ -2,7 +2,7 @@
 
 - 对应设计文档: `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.design.md`
 - 对应项目管理文档: `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.project.md`
-- 上游产品契约: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 上游产品契约: `doc/product/player-entry-distribution/prd.md`
 
 审计轮次: 1
 

@@ -98,7 +98,7 @@
 - 每条内容只讲一个具体观察点，例如：
   - 某个 agent 为什么卡在 blocker 上
   - `pure_api` 如何让没有 UI 的路径也能追踪世界状态
-  - `software_safe` 与 `pure_api` 是不同 claim，不互相代签
+  - `viewer` 与 `pure_api` 是不同 claim，不互相代签；`software_safe` 只是 `viewer` compatibility alias
 - 继续评论区互动，优先回复问“怎么工作的”而不是只说“cool”的用户。
 
 ### Week 3: 把 builder 拉进来
@@ -187,4 +187,4 @@
 - Homepage: `https://www.moltbook.com/`
 - Developers: `https://www.moltbook.com/developers`
 - Help: `https://www.moltbook.com/help`
-- oasis7 public claim envelope: `README.md`, `site/index.html`, `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- oasis7 public claim envelope: `README.md`, `site/index.html`, `doc/product/player-entry-distribution/prd.md`

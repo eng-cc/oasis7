@@ -311,7 +311,7 @@ Agent 不是为了持续扮演人格而存在，而是为了在世界里行动�
 - 想看项目级总蓝图：`doc/core/prd.md`
 - 想看世界规则真值：`doc/product/world-rules-core-gameplay/world-rule.prd.md`
 - 想看玩法目标态与循环设计：`doc/game/gameplay/gameplay-top-level-design.prd.md`
-- 想看浏览器 / 自动化双模式正式边界：`doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 想看浏览器 / 自动化双模式正式边界：`doc/product/player-entry-distribution/prd.md`
 - 想看工程文档总入口：`doc/README.md`
 - 想看 Viewer / Web / 本地验证：`doc/world-simulator/viewer/viewer-manual.manual.md` 与 `testing-manual.md`
 
