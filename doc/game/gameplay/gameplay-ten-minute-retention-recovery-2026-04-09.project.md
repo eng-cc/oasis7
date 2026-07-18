@@ -154,7 +154,8 @@
 - `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
 - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`
+- `doc/game/gameplay/gameplay-top-level-design.prd.md`
+- `doc/world-runtime/prd.md`
 - `doc/playability_test_result/playability_test_card.md`
 - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
 - `testing-manual.md`

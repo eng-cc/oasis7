@@ -30,7 +30,7 @@
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/kernel/location-electricity-pool-removal-and-radiation-plant.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | M4 P2 stage guidance/market-governance linkage project（已退役/删除；历史审计记录） | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
-| 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
+| 2026-03-06 17:58:03 +0800 | cc | M4 P3 layer/profile chain expansion project (retired/deleted; historical review record) | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | M4 resource/product playability base project (retired/deleted; historical review record) | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | M4 P1 maintenance/scarcity pressure project (retired/deleted; historical review record) | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
 | 2026-03-06 17:58:03 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md` | pass | I5-001 | 补齐状态时效字段并回写 `审计轮次: 5`。 |
@@ -163,7 +163,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/node/node-keypair-config-bootstrap.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | M4 P3 layer/profile chain expansion PRD (retired/deleted; historical review record) | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/node/node-builtin-wasm-fetch-fallback-compile.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

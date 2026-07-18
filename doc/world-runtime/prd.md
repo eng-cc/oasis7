@@ -13,6 +13,14 @@
 - 覆盖 PRD-ID 到 `doc/world-runtime/project.md` 的任务映射。
 - 不覆盖实现代码逐行说明与历史过程记录。
 
+### 工业 Profile 与阶段执行语义
+
+- `MaterialProfileV1`、`ProductProfileV1`、`RecipeProfileV1` 与 `FactoryProfileV1` 是 ABI 类型；对应目录随 `WorldState` 持久化，治理变更通过可回放事件生效。字段结构以 `oasis7_wasm_abi` 为准，不在产品文档复制代码清单。
+- 物流优先级按“动作显式值 > material profile 默认值 > 兼容关键词推断”解析；运输损耗、排产门槛、preferred factory 与瓶颈标签由当前 runtime 规则执行，并把决定结果冻结进事件或 job 状态以维持回放确定性。
+- recipe `stage_gate` 与 product `unlock_stage` 可阻止高于当前 `IndustryStage` 的排产。阶段由当前设施能力重新计算，设施回收或损失后允许回退；不得把阶段描述为只升不降的永久等级。
+- 非空 bottleneck profile 优先于推断值；缺失或空配置走兼容推断。产品战略角色与瓶颈压力共同影响排队优先级，准确映射和 fallback 以 runtime 代码与定向测试为执行真值。
+- 上述执行能力不证明玩家侧 `product_validation_quote` / `validation_unlock_preview` 已实现；玩家用途、能力解锁、阶段后果、下一步与门槛恢复路径由 gameplay 权威定义并保持独立验收。
+
 ## 接口 / 数据
 - PRD 主入口: `doc/world-runtime/prd.md`
 - 项目管理入口: `doc/world-runtime/project.md`

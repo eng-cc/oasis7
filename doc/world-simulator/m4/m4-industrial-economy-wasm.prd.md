@@ -59,6 +59,8 @@
 
 ## 资源与制成品层级
 
+下表是供设计沟通使用的长期分层语义与代表性示例，不是完整可运行目录，也不证明每个条目都已有 recipe/product/module。当前 Profile、bootstrap descriptor、模块 ID、hash 与 identity 清单分别以 ABI/runtime 代码和 canonical manifest 为执行真值。
+
 | 层级 | 类别 | 示例 | 主要来源 | 主要去向 |
 | --- | --- | --- | --- | --- |
 | T0 | 基础资源 | 矿石、冰、硅酸盐、碳质块 | 开采/采集 | T1 初加工 |
