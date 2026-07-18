@@ -1,7 +1,20 @@
 import { For, Show } from "solid-js";
 
+function isRecord(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function displayableStrings(value) {
+  return Array.isArray(value)
+    ? value
+      .filter((entry) => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    : [];
+}
+
 function resourceSummary(resources) {
-  const entries = Object.entries(resources || {});
+  const entries = isRecord(resources) ? Object.entries(resources) : [];
   return entries.length
     ? entries.map(([kind, units]) => `${kind}=${units}`).join(" · ")
     : "-";
@@ -19,7 +32,7 @@ function facilityStatusLabel(facility, locale, tr) {
 }
 
 export function MicroDepotFacilitiesPanel(props) {
-  const facilities = () => props.facilities || [];
+  const facilities = () => (Array.isArray(props.facilities) ? props.facilities : []).filter(isRecord);
   const locale = () => props.locale();
   const tr = props.tr;
   return (
@@ -67,12 +80,12 @@ export function MicroDepotFacilitiesPanel(props) {
                     <div class="feedback-detail">{`proposal=${shortHash(facility.lastProposalHash)}`}</div>
                   </div>
                 </div>
-                <Show when={facility.supportedResourceKinds.length > 0}>
-                  <div class="feedback-detail">{`${tr(locale(), "支持资源", "Supported resources")}: ${facility.supportedResourceKinds.join(", ")}`}</div>
+                <Show when={displayableStrings(facility.supportedResourceKinds).length > 0}>
+                  <div class="feedback-detail">{`${tr(locale(), "支持资源", "Supported resources")}: ${displayableStrings(facility.supportedResourceKinds).join(", ")}`}</div>
                 </Show>
-                <Show when={facility.availableActions.length > 0} fallback={<div class="feedback-detail">{tr(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions.")}</div>}>
+                <Show when={displayableStrings(facility.availableActions).length > 0} fallback={<div class="feedback-detail">{tr(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions.")}</div>}>
                   <div class="badge-row badge-row--spaced" aria-label={tr(locale(), "可用 depot 动作", "Available depot actions")}>
-                    <For each={facility.availableActions}>{(action) => <span class="badge">{action}</span>}</For>
+                    <For each={displayableStrings(facility.availableActions)}>{(action) => <span class="badge">{action}</span>}</For>
                   </div>
                 </Show>
               </div>

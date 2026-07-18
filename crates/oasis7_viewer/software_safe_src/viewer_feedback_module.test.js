@@ -98,4 +98,50 @@ describe("viewer feedback module", () => {
       }),
     ]);
   });
+
+  it("drops malformed micro depot facility entries and normalizes display collections", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: {}, locations: {} },
+        player_gameplay: {
+          micro_depot_facilities: [
+            null,
+            "not-a-facility",
+            {
+              facility_id: "depot-safe",
+              available_units_by_kind: "not-an-inventory-record",
+              supported_resource_kinds: "data",
+              available_actions: [" service_micro_depot_repair ", 7, "", { action: "unsafe" }],
+            },
+          ],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([
+      expect.objectContaining({
+        facilityId: "depot-safe",
+        availableUnitsByKind: {},
+        supportedResourceKinds: [],
+        availableActions: ["service_micro_depot_repair"],
+      }),
+    ]);
+  });
+
+  it("uses an empty facility list when the optional snapshot field is absent or wrong-typed", () => {
+    for (const microDepotFacilities of [undefined, null, {}, "depot-1"]) {
+      const state = {
+        lastGameplayActionFeedback: null,
+        snapshot: {
+          model: { agents: {}, locations: {} },
+          player_gameplay: { micro_depot_facilities: microDepotFacilities },
+        },
+        uiLocale: "en",
+      };
+
+      expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([]);
+    }
+  });
 });

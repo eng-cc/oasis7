@@ -1437,6 +1437,12 @@ function buildGameplayEconomicSurface({
     blockerLabel: blockerLabel || null
   };
 }
+function isRecord$1(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+function displayableStrings$1(value) {
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean) : [];
+}
 function createViewerFeedbackModule({
   clone: clone2,
   feedbackBadgeClass: feedbackBadgeClass2,
@@ -2199,26 +2205,33 @@ function createViewerFeedbackModule({
       riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
       nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null
     }));
-    const microDepotFacilities = (Array.isArray(gameplay.micro_depot_facilities) ? gameplay.micro_depot_facilities : Array.isArray(gameplay.microDepotFacilities) ? gameplay.microDepotFacilities : []).map((facility) => ({
-      facilityId: facility.facility_id || facility.facilityId || null,
-      ownerClaimId: facility.owner_claim_id || facility.ownerClaimId || null,
-      status: facility.status || null,
-      locationId: facility.location_id || facility.locationId || null,
-      serviceRadiusCm: facility.service_radius_cm ?? facility.serviceRadiusCm ?? null,
-      inventoryRevision: facility.inventory_revision ?? facility.inventoryRevision ?? null,
-      availableUnitsByKind: clone2(facility.available_units_by_kind || facility.availableUnitsByKind) || {},
-      throughputEpoch: facility.throughput_epoch ?? facility.throughputEpoch ?? null,
-      throughputRemainingUnits: facility.throughput_remaining_units ?? facility.throughputRemainingUnits ?? null,
-      throughputLimitUnitsPerEpoch: facility.throughput_limit_units_per_epoch ?? facility.throughputLimitUnitsPerEpoch ?? null,
-      supportedResourceKinds: clone2(facility.supported_resource_kinds || facility.supportedResourceKinds) || [],
-      moduleId: facility.module_id || facility.moduleId || null,
-      moduleVersion: facility.module_version || facility.moduleVersion || null,
-      wasmHash: facility.wasm_hash || facility.wasmHash || null,
-      upkeepPaid: facility.upkeep_paid ?? facility.upkeepPaid ?? null,
-      lastReceiptId: facility.last_receipt_id || facility.lastReceiptId || null,
-      lastProposalHash: facility.last_proposal_hash || facility.lastProposalHash || null,
-      availableActions: clone2(facility.available_actions || facility.availableActions) || []
-    }));
+    const rawMicroDepotFacilities = Array.isArray(gameplay.micro_depot_facilities) ? gameplay.micro_depot_facilities : Array.isArray(gameplay.microDepotFacilities) ? gameplay.microDepotFacilities : [];
+    const microDepotFacilities = rawMicroDepotFacilities.filter(isRecord$1).map((facility) => {
+      const rawInventory = facility.available_units_by_kind ?? facility.availableUnitsByKind;
+      const inventory = isRecord$1(rawInventory) ? clone2(rawInventory) : {};
+      return {
+        facilityId: facility.facility_id || facility.facilityId || null,
+        ownerClaimId: facility.owner_claim_id || facility.ownerClaimId || null,
+        status: facility.status || null,
+        locationId: facility.location_id || facility.locationId || null,
+        serviceRadiusCm: facility.service_radius_cm ?? facility.serviceRadiusCm ?? null,
+        inventoryRevision: facility.inventory_revision ?? facility.inventoryRevision ?? null,
+        availableUnitsByKind: isRecord$1(inventory) ? inventory : {},
+        throughputEpoch: facility.throughput_epoch ?? facility.throughputEpoch ?? null,
+        throughputRemainingUnits: facility.throughput_remaining_units ?? facility.throughputRemainingUnits ?? null,
+        throughputLimitUnitsPerEpoch: facility.throughput_limit_units_per_epoch ?? facility.throughputLimitUnitsPerEpoch ?? null,
+        supportedResourceKinds: displayableStrings$1(
+          facility.supported_resource_kinds ?? facility.supportedResourceKinds
+        ),
+        moduleId: facility.module_id || facility.moduleId || null,
+        moduleVersion: facility.module_version || facility.moduleVersion || null,
+        wasmHash: facility.wasm_hash || facility.wasmHash || null,
+        upkeepPaid: facility.upkeep_paid ?? facility.upkeepPaid ?? null,
+        lastReceiptId: facility.last_receipt_id || facility.lastReceiptId || null,
+        lastProposalHash: facility.last_proposal_hash || facility.lastProposalHash || null,
+        availableActions: displayableStrings$1(facility.available_actions ?? facility.availableActions)
+      };
+    });
     return {
       stageId: gameplay.stage_id || null,
       stageStatus: resolvedStageStatus,
@@ -8986,8 +8999,14 @@ function PixelWorldHost(props) {
 }
 delegateEvents(["click", "keydown", "input"]);
 var _tmpl$$1 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class=badge>`);
+function isRecord(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+function displayableStrings(value) {
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean) : [];
+}
 function resourceSummary(resources) {
-  const entries = Object.entries(resources || {});
+  const entries = isRecord(resources) ? Object.entries(resources) : [];
   return entries.length ? entries.map(([kind, units]) => `${kind}=${units}`).join(" · ") : "-";
 }
 function shortHash(value) {
@@ -9000,7 +9019,7 @@ function facilityStatusLabel(facility, locale, tr2) {
   return facility.status;
 }
 function MicroDepotFacilitiesPanel(props) {
-  const facilities = () => props.facilities || [];
+  const facilities = () => (Array.isArray(props.facilities) ? props.facilities : []).filter(isRecord);
   const locale = () => props.locale();
   const tr2 = props.tr;
   return createComponent(Show, {
@@ -9035,17 +9054,17 @@ function MicroDepotFacilitiesPanel(props) {
           insert(_el$27, () => `proposal=${shortHash(facility.lastProposalHash)}`);
           insert(_el$8, createComponent(Show, {
             get when() {
-              return facility.supportedResourceKinds.length > 0;
+              return displayableStrings(facility.supportedResourceKinds).length > 0;
             },
             get children() {
               var _el$28 = _tmpl$2$1();
-              insert(_el$28, () => `${tr2(locale(), "支持资源", "Supported resources")}: ${facility.supportedResourceKinds.join(", ")}`);
+              insert(_el$28, () => `${tr2(locale(), "支持资源", "Supported resources")}: ${displayableStrings(facility.supportedResourceKinds).join(", ")}`);
               return _el$28;
             }
           }), null);
           insert(_el$8, createComponent(Show, {
             get when() {
-              return facility.availableActions.length > 0;
+              return displayableStrings(facility.availableActions).length > 0;
             },
             get fallback() {
               return (() => {
@@ -9058,7 +9077,7 @@ function MicroDepotFacilitiesPanel(props) {
               var _el$29 = _tmpl$3$1();
               insert(_el$29, createComponent(For, {
                 get each() {
-                  return facility.availableActions;
+                  return displayableStrings(facility.availableActions);
                 },
                 children: (action) => (() => {
                   var _el$31 = _tmpl$5$1();

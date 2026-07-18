@@ -1,6 +1,19 @@
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
 
+function isRecord(value) {
+  return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function displayableStrings(value) {
+  return Array.isArray(value)
+    ? value
+      .filter((entry) => typeof entry === "string")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+    : [];
+}
+
 export function createViewerFeedbackModule({
   clone,
   feedbackBadgeClass,
@@ -997,32 +1010,41 @@ export function createViewerFeedbackModule({
       riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
       nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
     }));
-    const microDepotFacilities = (
+    const rawMicroDepotFacilities = (
       Array.isArray(gameplay.micro_depot_facilities)
         ? gameplay.micro_depot_facilities
         : Array.isArray(gameplay.microDepotFacilities)
           ? gameplay.microDepotFacilities
           : []
-    ).map((facility) => ({
-      facilityId: facility.facility_id || facility.facilityId || null,
-      ownerClaimId: facility.owner_claim_id || facility.ownerClaimId || null,
-      status: facility.status || null,
-      locationId: facility.location_id || facility.locationId || null,
-      serviceRadiusCm: facility.service_radius_cm ?? facility.serviceRadiusCm ?? null,
-      inventoryRevision: facility.inventory_revision ?? facility.inventoryRevision ?? null,
-      availableUnitsByKind: clone(facility.available_units_by_kind || facility.availableUnitsByKind) || {},
-      throughputEpoch: facility.throughput_epoch ?? facility.throughputEpoch ?? null,
-      throughputRemainingUnits: facility.throughput_remaining_units ?? facility.throughputRemainingUnits ?? null,
-      throughputLimitUnitsPerEpoch: facility.throughput_limit_units_per_epoch ?? facility.throughputLimitUnitsPerEpoch ?? null,
-      supportedResourceKinds: clone(facility.supported_resource_kinds || facility.supportedResourceKinds) || [],
-      moduleId: facility.module_id || facility.moduleId || null,
-      moduleVersion: facility.module_version || facility.moduleVersion || null,
-      wasmHash: facility.wasm_hash || facility.wasmHash || null,
-      upkeepPaid: facility.upkeep_paid ?? facility.upkeepPaid ?? null,
-      lastReceiptId: facility.last_receipt_id || facility.lastReceiptId || null,
-      lastProposalHash: facility.last_proposal_hash || facility.lastProposalHash || null,
-      availableActions: clone(facility.available_actions || facility.availableActions) || [],
-    }));
+    );
+    const microDepotFacilities = rawMicroDepotFacilities
+      .filter(isRecord)
+      .map((facility) => {
+        const rawInventory = facility.available_units_by_kind ?? facility.availableUnitsByKind;
+        const inventory = isRecord(rawInventory) ? clone(rawInventory) : {};
+        return {
+          facilityId: facility.facility_id || facility.facilityId || null,
+          ownerClaimId: facility.owner_claim_id || facility.ownerClaimId || null,
+          status: facility.status || null,
+          locationId: facility.location_id || facility.locationId || null,
+          serviceRadiusCm: facility.service_radius_cm ?? facility.serviceRadiusCm ?? null,
+          inventoryRevision: facility.inventory_revision ?? facility.inventoryRevision ?? null,
+          availableUnitsByKind: isRecord(inventory) ? inventory : {},
+          throughputEpoch: facility.throughput_epoch ?? facility.throughputEpoch ?? null,
+          throughputRemainingUnits: facility.throughput_remaining_units ?? facility.throughputRemainingUnits ?? null,
+          throughputLimitUnitsPerEpoch: facility.throughput_limit_units_per_epoch ?? facility.throughputLimitUnitsPerEpoch ?? null,
+          supportedResourceKinds: displayableStrings(
+            facility.supported_resource_kinds ?? facility.supportedResourceKinds,
+          ),
+          moduleId: facility.module_id || facility.moduleId || null,
+          moduleVersion: facility.module_version || facility.moduleVersion || null,
+          wasmHash: facility.wasm_hash || facility.wasmHash || null,
+          upkeepPaid: facility.upkeep_paid ?? facility.upkeepPaid ?? null,
+          lastReceiptId: facility.last_receipt_id || facility.lastReceiptId || null,
+          lastProposalHash: facility.last_proposal_hash || facility.lastProposalHash || null,
+          availableActions: displayableStrings(facility.available_actions ?? facility.availableActions),
+        };
+      });
 
     return {
       stageId: gameplay.stage_id || null,

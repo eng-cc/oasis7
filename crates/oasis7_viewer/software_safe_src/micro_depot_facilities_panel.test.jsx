@@ -1,4 +1,4 @@
-import { render, screen, within } from "@solidjs/testing-library";
+import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
@@ -29,5 +29,42 @@ describe("MicroDepotFacilitiesPanel", () => {
     expect(within(depotPanel).getByText("receipt-1")).toBeInTheDocument();
     expect(within(depotPanel).getByText("proposal=proposal-1")).toBeInTheDocument();
     expect(within(depotPanel).getByText("service_micro_depot_repair")).toBeInTheDocument();
+  });
+
+  it("hides absent or empty facility lists", () => {
+    render(() => (
+      <MicroDepotFacilitiesPanel locale={() => "en"} tr={tr} facilities={null} />
+    ));
+    expect(screen.queryByTestId("micro-depot-facilities-panel")).not.toBeInTheDocument();
+
+    cleanup();
+    render(() => (
+      <MicroDepotFacilitiesPanel locale={() => "en"} tr={tr} facilities={[]} />
+    ));
+    expect(screen.queryByTestId("micro-depot-facilities-panel")).not.toBeInTheDocument();
+  });
+
+  it("ignores malformed facility entries and safely degrades wrong-typed display fields", () => {
+    render(() => (
+      <MicroDepotFacilitiesPanel
+        locale={() => "en"}
+        tr={tr}
+        facilities={[
+          null,
+          "not-a-facility",
+          {
+            facilityId: "depot-safe",
+            availableUnitsByKind: "not-an-inventory-record",
+            supportedResourceKinds: "data",
+            availableActions: { action: "unsafe" },
+          },
+        ]}
+      />
+    ));
+
+    const depotPanel = screen.getByTestId("micro-depot-facilities-panel");
+    expect(within(depotPanel).getByTestId("micro-depot-facility-depot-safe")).toHaveTextContent("Inventory-");
+    expect(within(depotPanel).getByText("The current snapshot publishes no available depot actions.")).toBeInTheDocument();
+    expect(within(depotPanel).queryByText("data")).not.toBeInTheDocument();
   });
 });
