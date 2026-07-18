@@ -573,8 +573,8 @@
 - M4 P3 layer/profile chain expansion project (retired/deleted; historical review record)
 - M4 resource/product playability base PRD (retired/deleted; historical review record)
 - M4 resource/product playability base project (retired/deleted; historical review record)
-- `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md`
+- M4 resource-chain playability hardening PRD (retired/deleted; historical review record)
+- M4 resource-chain playability hardening project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md`
 - `doc/world-simulator/m4/material-multi-ledger-logistics.project.md`
 - `doc/world-simulator/prd.index.md`

@@ -212,7 +212,7 @@
 - 工业成长反馈必须优先展示“新能力 / 新选择 / 新修复手段 / 新区域用途”，而不是只展示库存与产量上涨。
 - 首个制成品、首条稳定产线与首个可交易工业品都必须绑定最小经济可读性：玩家应能看懂 `投入了什么 / 产出了什么 / 为什么值得继续 / 下一步可换来什么`。
 - 首局推荐采集目标必须把 `target_frag_id / expected_material_hint / starter_value_reason / first_recipe_relevance` 接到第一工业目标；玩家应知道“为什么先采这个 frag”，而不是只看到最近可采集物。
-- 高负载工厂或维护 sink 影响首条稳定产线时，反馈必须展示 `maintenance_runway_ticks / downtime_threshold_ppm / recommended_maintenance_action`；玩家应知道继续排产还能撑多久、何时会进入 critical / 停机、以及先维护还是继续生产的取舍。
+- 高负载工厂或维护 sink 影响首条稳定产线时，提交前反馈必须展示 `runway_before_ticks / runway_after_ticks / downtime_threshold_ppm / continue_production_risk / recommended_maintenance_action`；玩家应能比较排程前后还能安全生产多久、何时会进入 critical / 停机，以及先维护、降载还是继续生产的取舍。该 quote/runway 合同当前仍未实现，不能用 simulator 的零值占位或历史 hardening 项目结项代替验收。
 - `RefineCompound` / `refine_compound` 若作为首个工厂或首个制成品前置恢复动作，必须在提交前展示 `refine_quote` / `refine_preview`：`compound_mass_g`、`electricity_cost`、`hardware_output`、`electricity_after`、`hardware_shortfall_before`、`hardware_shortfall_after`、`first_goal_relevance`、`recommended_refine_amount`、`refine_value_class`；该合同必须让玩家看见投入与产出、比较目标缺口变化、分类为 `enough_to_advance / partial_progress / poor_power_tradeoff`，并推荐继续精炼、先补电或改走采矿/等待路线。它只约束提交前可读性，不重平衡精炼公式、电力成本、产率，也不扩展为完整加工链。
 - `market_quotes` 若影响排产或材料采购，必须展示 `market_quote_decision_preview`：`recommended_source`、`local_vs_world_cost_delta`、`tax_contribution`、`transit_contribution`、`remaining_shortfall`、`cost_pressure_class`、`recommendation_rationale` 与 `next_cost_reduction_action`；推荐结果可落到本地采购、外部调运、延后、治理调整或拆分来源，玩家不应只看到 `effective_cost_index_ppm`。该合同只补玩家提交前的来源取舍，不扩展订单簿、撮合交易或市场数值重平衡。
 - `TransferMaterial` 若影响首条稳定产线或当前配方阻塞，必须展示 `logistics_transfer_quote` / `transfer_impact_preview`：预计到达量、损耗、到达 tick、优先级理由、吞吐占用、调运前后阻塞变化和推荐调运动作；玩家不应只在 `MaterialTransitCompleted` 后才发现这批材料是否赶上产线。
