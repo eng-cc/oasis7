@@ -230,13 +230,14 @@ pub(super) fn map_runtime_domain_event(
             action_kind,
             actor_id,
             eta_ticks,
-            ..
+            notes,
         } => Some(runtime_structured_event(
             "runtime.action_accepted",
             format!(
-                "action_id={action_id} action_kind={} actor_id={} eta_ticks={eta_ticks}",
+                "action_id={action_id} action_kind={} actor_id={} eta_ticks={eta_ticks} player_feedback={}",
                 fallback_non_empty(action_kind, "unknown_action"),
                 fallback_non_empty(actor_id, "system"),
+                action_accepted_player_feedback(notes),
             ),
         )),
         RuntimeDomainEvent::WarDeclared {
@@ -612,6 +613,14 @@ fn fallback_non_empty<'a>(value: &'a str, fallback: &'a str) -> &'a str {
     }
 }
 
+fn action_accepted_player_feedback(notes: &[String]) -> &'static str {
+    if notes.iter().any(|note| !note.trim().is_empty()) {
+        "Action accepted — processing queued."
+    } else {
+        "Action accepted."
+    }
+}
+
 fn runtime_event_kind_label(body: &RuntimeWorldEventBody) -> (String, Option<String>) {
     let label = match body {
         RuntimeWorldEventBody::Domain(_) => "domain",
@@ -807,7 +816,7 @@ mod tests {
             action_kind: "".to_string(),
             actor_id: "".to_string(),
             eta_ticks: 3,
-            notes: vec!["accepted".to_string()],
+            notes: vec!["raw note must not be exposed".to_string()],
         };
         let mapped =
             map_runtime_domain_event(&event, &WorldConfig::default(), None).expect("mapped event");
@@ -819,8 +828,38 @@ mod tests {
                 assert!(summary.contains("action_kind=unknown_action"));
                 assert!(summary.contains("actor_id=system"));
                 assert!(summary.contains("eta_ticks=3"));
+                assert!(summary.contains("player_feedback=Action accepted — processing queued."));
+                assert!(!summary.contains("raw note must not be exposed"));
             }
             other => panic!("unexpected mapped event: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn map_runtime_domain_event_action_accepted_empty_or_whitespace_notes_use_plain_feedback() {
+        for notes in [vec![], vec![" \t\n ".to_string()]] {
+            let event = RuntimeDomainEvent::ActionAccepted {
+                action_id: 7,
+                action_kind: "act".to_string(),
+                actor_id: "actor".to_string(),
+                eta_ticks: 3,
+                notes,
+            };
+            let mapped = map_runtime_domain_event(&event, &WorldConfig::default(), None)
+                .expect("mapped event");
+            match mapped {
+                WorldEventKind::RuntimeEvent { kind, domain_kind } => {
+                    assert_eq!(kind, "runtime.action_accepted");
+                    assert_eq!(
+                        domain_kind.as_deref(),
+                        Some(
+                            "action_id=7 action_kind=act actor_id=actor eta_ticks=3 \
+                             player_feedback=Action accepted."
+                        ),
+                    );
+                }
+                other => panic!("unexpected mapped event: {other:?}"),
+            }
         }
     }
 
