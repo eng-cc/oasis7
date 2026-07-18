@@ -3,7 +3,7 @@
 更新时间: 2026-07-05
 
 ## 从这里开始
-- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/player-release-distribution-contract-2026-04-14.prd.md`；再读 `../prd.md` 与站点 release-pipeline 专题确认专业实现和 blocker
+- 想确认普通用户下载、安装和升级体验边界：先读 `../../product/player-entry-distribution/prd.md`；再读 `../prd.md` 与站点 release-pipeline 专题确认专业实现和 blocker
 - 想确认本地 launcher/playtest 如何启动、哪些路径是当前 operator 入口：先读 `../README.md` 与 `../project.md`，再按具体问题进入本页专题簇
 - 想确认 hosted login、可试玩本地栈、provider preflight 或 trusted-local 启动口径：先读 `../project.md` 当前状态，再按 GitHub task issue evidence comments 与 `.pm/github-project-sync` mapping/archive 进入最新任务证据
 - 想确认 Web / native control plane、console、settings、feedback、transfer 的兼容边界：先读 `game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md`
@@ -27,7 +27,7 @@
 ## 首读主题簇
 
 ### 1. 发布、分发与整体可用性
-- 首读入口: `../../product/player-entry-distribution/player-release-distribution-contract-2026-04-14.prd.md`（玩家体验）；`../prd.md` 与 `../../site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`（专业实现）
+- 首读入口: `../../product/player-entry-distribution/prd.md`（玩家体验）；`../prd.md` 与 `../../site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`（专业实现）
 - 适合问题:
   - launcher 是否已经能给更广泛用户使用
   - release/distribution 的当前阻断和验收边界是什么

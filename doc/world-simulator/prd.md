@@ -30,7 +30,7 @@
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
 - 跨模块模式 taxonomy: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
-- 普通用户发行体验: `doc/product/player-entry-distribution/player-release-distribution-contract-2026-04-14.prd.md`；专业发行流水线: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
+- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；专业发行流水线: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
 - UI 视觉短期样本池: `doc/ui_review_result/README.md`
 - 常用 active supporting docs:
   - `doc/world-simulator/viewer/README.md`
@@ -57,7 +57,7 @@
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
 | launcher transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/web launcher 共享控制面与前端语义；转账、explorer、链状态、GUI Agent 和 stale execution-world 恢复必须结构化、可诊断、可回归。 |
 | slot-1 onboarding | `PRD-WORLD_SIMULATOR-045` | 新账号玩家读取 canonical quote 并显式确认后直接进入 `ClaimAgent`；dedicated pool 足够时自动补足 restricted starter amount，不生成 operator-review 审批状态。 |
-| release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；`doc/product/player-entry-distribution/player-release-distribution-contract-2026-04-14.prd.md` 只组合玩家体验，普通用户发行的 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker 仍由本专业域和站点流水线处理。 |
+| release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；`doc/product/player-entry-distribution/prd.md` 只组合玩家体验，普通用户发行的 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker 仍由本专业域和站点流水线处理。 |
 
 ## 用户与模式边界
 - 模拟层开发者需要统一场景与运行语义。

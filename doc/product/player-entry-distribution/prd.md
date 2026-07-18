@@ -23,10 +23,15 @@
 
 覆盖产品发现、公开说明、Web 访问、平台安装、Launcher 转移、账号/模式入口和首次验证。玩家可以了解当前阶段并选择受支持入口；不应被未发布功能、内部测试模式、过期下载或历史 go 证据诱导。
 
+### 安装与发行体验边界
+
+每个平台应提供一个推荐下载包和主 CTA；下载前应清楚显示支持边界、版本与 checksum，使玩家无需研究 shell、bundle 内容或多个技术资产的差异即可完成受支持的安装或启动。
+
+当前升级只支持重新下载最新主包并手动覆盖安装/替换；用户须先备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。这不是应用内更新、自动迁移或跨目录状态保留承诺。Windows codesigning trust chain 与 macOS 签名/notarization 未完成前，不得把技术预览资产、单主 CTA 或手动安装路径表述为普通用户广泛发行已就绪。
+
 ### 活跃产品专题
 
 - [`玩家访问模式产品契约`](player-access-mode-contract-2026-03-19.prd.md)：定义 `viewer` / `pure_api` 的产品 taxonomy、claim 边界与证据分类；具体 Viewer、provider、Launcher 和测试合同继续由下层专业域拥有。
-- [`玩家普通用户发行体验产品契约`](player-release-distribution-contract-2026-04-14.prd.md)：定义每个平台一个推荐包/CTA、支持信息与手动升级边界；Windows 签名和 macOS notarization 未完成前，不把技术预览资产表述为普通用户广泛发行已就绪。
 
 ## 3. 权威与冲突处理
 

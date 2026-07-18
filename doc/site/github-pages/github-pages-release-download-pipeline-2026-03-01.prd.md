@@ -85,7 +85,7 @@
 - 风险：`latest` 语义受 prerelease 影响，用户可能下载到非稳定版。
   - 缓解：工作流默认发布正式 release，必要时在文档中要求 prerelease 另行命名与渠道区分。
 - 风险：当前官网单主 CTA 与支持边界虽已前置收口，但 Windows 签名、macOS notarization 以及更完整的普通用户信任链仍未闭环，离“无安全提示的普通用户安装分发”还有差距。
-  - 缓解：玩家体验边界由 `doc/product/player-entry-distribution/player-release-distribution-contract-2026-04-14.prd.md` 汇总；Windows 标准安装器 + 签名、macOS 签名+notarization、Linux AppImage、升级覆盖口径的专业实现继续由本流水线与 `doc/world-simulator/prd.md` 跟踪并分 task 实施。
+  - 缓解：玩家体验边界由 `doc/product/player-entry-distribution/prd.md` 汇总；Windows 标准安装器 + 签名、macOS 签名+notarization、Linux AppImage、升级覆盖口径的专业实现继续由本流水线与 `doc/world-simulator/prd.md` 跟踪并分 task 实施。
 - 风险：如果公开下载面过早把“覆盖安装/替换”写成自动迁移体验，用户会误以为卸载重装或跨目录替换会保留本地状态。
   - 缓解：站点和 bundle README 统一声明当前仅支持手动覆盖/替换，并要求用户在升级前自行备份 `config.toml`、`.oasis7_launcher_ux_state.json` 与 `output/chain-runtime/<node_id>/reward-runtime-execution-world/`。
 
