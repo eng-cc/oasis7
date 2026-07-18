@@ -1,6 +1,6 @@
 # game PRD
 
-> 专业域 authority：本文件拥有玩法规则、数值与专题验收，并向 `doc/product/world-rules-core-gameplay/prd.md` 汇报。`micro_depot` 等设施规则仍由 `game` 管理；跨域产品承诺由 `doc/product/world-infrastructure/prd.md` 汇总。
+> 专业域 authority：本文件拥有玩法规则、数值与专题验收，并向 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 汇报。`micro_depot` 等设施规则仍由 `game` 管理；跨域产品承诺由 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 汇总。
 
 审计轮次: 11
 

@@ -52,6 +52,20 @@ def fail(errors: list[str], code: str, detail: str) -> None:
     errors.append(f"product-doc-governance: {code}: {detail}")
 
 
+def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
+    targets: set[str] = set()
+    for raw_target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
+        target = raw_target.split("#", 1)[0].strip()
+        if not target or "://" in target:
+            continue
+        resolved = (source.parent / target).resolve()
+        try:
+            targets.add(resolved.relative_to(root).as_posix())
+        except ValueError:
+            continue
+    return targets
+
+
 def check(root: Path) -> list[str]:
     errors: list[str] = []
     landing_path = root / "doc/product/README.md"
@@ -69,7 +83,7 @@ def check(root: Path) -> list[str]:
     expected_paths = {module.path for module in MODULES}
     actual_paths = {
         path.relative_to(root).as_posix()
-        for path in (root / "doc/product").glob("*/prd.md")
+        for path in (root / "doc/product").glob("**/prd.md")
         if path.is_file()
     }
     if actual_paths != expected_paths:
@@ -119,7 +133,7 @@ def check(root: Path) -> list[str]:
             authority_path = root / authority
             if not authority_path.is_file():
                 fail(errors, "authority-missing", f"{module.path}: {authority}")
-            elif module.path not in authority_path.read_text(encoding="utf-8"):
+            elif module.path not in markdown_targets(root, authority_path, authority_path.read_text(encoding="utf-8")):
                 fail(errors, "authority-backlink", f"{authority} must link {module.path}")
 
         success_ids = re.findall(r"^- (SC-\d+)：", text, re.MULTILINE)

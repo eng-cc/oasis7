@@ -1,6 +1,6 @@
 # world-simulator PRD
 
-> 专业域 authority：本文件拥有场景、Agent/LLM、Viewer/Launcher 与交互模拟合同，并向 `doc/product/agents-world-simulation/prd.md` 与 `doc/product/player-entry-distribution/prd.md` 汇报；涉及设施或底座时消费 `doc/product/world-infrastructure/prd.md` 的产品边界。
+> 专业域 authority：本文件拥有场景、Agent/LLM、Viewer/Launcher 与交互模拟合同，并向 [`doc/product/agents-world-simulation/prd.md`](../product/agents-world-simulation/prd.md) 与 [`doc/product/player-entry-distribution/prd.md`](../product/player-entry-distribution/prd.md) 汇报；涉及设施或底座时消费 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 的产品边界。
 
 审计轮次: 9
 

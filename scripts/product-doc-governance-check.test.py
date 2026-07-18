@@ -81,6 +81,16 @@ def main() -> None:
         ),
     )
     scenario(
+        "inventory-contract",
+        lambda root: (
+            (root / "doc/product/untracked/nested").mkdir(parents=True),
+            shutil.copy2(
+                root / "doc/product/world-rules-core-gameplay/prd.md",
+                root / "doc/product/untracked/nested/prd.md",
+            ),
+        ),
+    )
+    scenario(
         "entry-contract",
         lambda root: replace(
             root / "doc/product/README.md",
@@ -108,8 +118,16 @@ def main() -> None:
         "authority-backlink",
         lambda root: replace(
             root / "doc/game/prd.md",
-            "doc/product/world-rules-core-gameplay/prd.md",
-            "doc/product/missing/prd.md",
+            "../product/world-rules-core-gameplay/prd.md",
+            "../product/missing/prd.md",
+        ),
+    )
+    scenario(
+        "authority-backlink",
+        lambda root: replace(
+            root / "doc/game/prd.md",
+            "[`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md)",
+            "`doc/product/world-rules-core-gameplay/prd.md`",
         ),
     )
     scenario(
