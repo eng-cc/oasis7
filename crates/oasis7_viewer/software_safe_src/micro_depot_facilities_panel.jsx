@@ -58,7 +58,7 @@ export function MicroDepotFacilitiesPanel(props) {
                 <div class="event-card__meta">
                   {`claim=${facility.ownerClaimId || "-"} · location=${facility.locationId || "-"} · ${tr(locale(), "半径", "radius")}=${facility.serviceRadiusCm ?? "-"}cm`}
                 </div>
-                <div class="summary-grid">
+                <div class="summary-grid micro-depot-facilities__metrics">
                   <div class="metric">
                     <div class="metric__label">{tr(locale(), "库存", "Inventory")}</div>
                     <div class="metric__value">{resourceSummary(facility.availableUnitsByKind)}</div>

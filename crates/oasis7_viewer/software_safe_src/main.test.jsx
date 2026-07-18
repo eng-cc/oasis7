@@ -3321,6 +3321,7 @@ describe("viewer web ui automation baseline", () => {
     });
     expect(within(container.querySelector("#viewer-gameplay-details")).getByText("Formal Gameplay Summary")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-gameplay-details")).getByText("Capability Economics")).toBeInTheDocument();
+    expect(within(container.querySelector("#viewer-gameplay-details")).getByTestId("micro-depot-facility-depot-regional-01")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-diagnostics-panel")).getByText("Execution Lanes")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-diagnostics-panel")).getByText("state sync")).toBeInTheDocument();
     expect(elementPrecedes(

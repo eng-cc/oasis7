@@ -8998,7 +8998,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$$1 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class=summary-grid><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class=badge>`);
+var _tmpl$$1 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class=badge>`);
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -14333,7 +14333,30 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
         delta_logical_time: 1,
         delta_event_seq: 2
       },
-      agent_claim: null
+      agent_claim: null,
+      micro_depot_facilities: [{
+        facility_id: "depot-regional-01",
+        owner_claim_id: "claim-regional-01",
+        status: "active",
+        location_id: "loc-1",
+        service_radius_cm: 25e4,
+        inventory_revision: 7,
+        available_units_by_kind: {
+          data: 5,
+          repair_kit: 2
+        },
+        throughput_epoch: 11,
+        throughput_remaining_units: 13,
+        throughput_limit_units_per_epoch: 16,
+        supported_resource_kinds: ["data", "repair_kit"],
+        module_id: "regional.micro_depot",
+        module_version: "0.2.0",
+        wasm_hash: "sha256:micro-depot-public-evidence-1234567890",
+        upkeep_paid: true,
+        last_receipt_id: "receipt-micro-depot-public-01",
+        last_proposal_hash: "sha256:proposal-public-01",
+        available_actions: ["service_micro_depot_repair", "reclaim_micro_depot"]
+      }]
     }
   };
   return {
