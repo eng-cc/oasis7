@@ -931,6 +931,41 @@ describe("pixel world host", () => {
     expect(document.querySelector(".pixel-world-focus-drawer--command")).toHaveTextContent("agent=agent-0");
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("projects the shared non-color beacon for selected agents and locations only", async () => {
+    useTestRustRenderState();
+    const { core } = await renderPixelWorldHost(
+      emptyWorldSnapshot(),
+      "?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=selected_blocker",
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector("[data-pixel-world-agent-marker='true'][data-agent-id='agent-0']")).not.toBeNull();
+    });
+
+    const selectedAgent = document.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)[data-agent-id='agent-0']");
+    const unselectedAgent = document.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)[data-agent-id='agent-1']");
+    const selectedLocation = document.querySelector("[data-pixel-world-location-marker='true'][data-location-id='loc-0']");
+    const unselectedLocation = document.querySelector("[data-pixel-world-location-marker='true'][data-location-id='loc-1']");
+
+    expect(selectedAgent).toHaveAttribute("data-selected", "true");
+    expect(unselectedAgent).toHaveAttribute("data-selected", "false");
+    expect(selectedLocation).toHaveAttribute("data-selected", "false");
+    expect(unselectedLocation).toHaveAttribute("data-selected", "false");
+
+    core.applySelection({ kind: "location", id: "loc-0" });
+    core.requestRender();
+
+    await waitFor(() => {
+      expect(selectedLocation).toHaveAttribute("data-selected", "true");
+    });
+    expect(selectedAgent).toHaveAttribute("data-selected", "false");
+    expect(unselectedAgent).toHaveAttribute("data-selected", "false");
+    expect(unselectedLocation).toHaveAttribute("data-selected", "false");
+
+    const html = readFileSync("viewer.html", "utf8");
+    expect(html).toMatch(/\.pixel-world-entity\[data-selected="true"\]\s*\{[^}]*min-width:\s*42px;[^}]*min-height:\s*42px;/s);
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("demotes raw focus command feedback and chat history behind diagnostics", async () => {
     useTestRustRenderState();
     const { core } = await renderPixelWorldHost(
