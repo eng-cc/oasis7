@@ -169,7 +169,7 @@ pub use kernel::{
     MICRO_DEPOT_PROPOSAL_EMIT_KIND, MICRO_DEPOT_UPKEEP_DATA_COST, MicroDepotActionContext,
     MicroDepotActionKind, MicroDepotConsumedResourceClass, MicroDepotDecision,
     MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
-    MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
+    MicroDepotInstallQuote, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
     MicroDepotProposal, MicroDepotProposalResourceDebit, MicroDepotQuotePreview,
     MicroDepotRegionContext, MicroDepotResourceDebit, MicroDepotStatus, PowerOrderFill,
     PromptUpdateOperation, RejectReason, WorldEvent, WorldEventKind,

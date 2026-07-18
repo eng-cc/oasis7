@@ -66,7 +66,7 @@ pub use micro_depot::{
     MICRO_DEPOT_PROPOSAL_EMIT_KIND, MICRO_DEPOT_UPKEEP_DATA_COST, MicroDepotActionContext,
     MicroDepotActionKind, MicroDepotConsumedResourceClass, MicroDepotDecision,
     MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
-    MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
+    MicroDepotInstallQuote, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
     MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext, MicroDepotStatus,
     compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
 };
