@@ -26,6 +26,7 @@
 ### 活跃产品专题
 
 - [`玩家访问模式产品契约`](player-access-mode-contract-2026-03-19.prd.md)：定义 `viewer` / `pure_api` 的产品 taxonomy、claim 边界与证据分类；具体 Viewer、provider、Launcher 和测试合同继续由下层专业域拥有。
+- [`玩家普通用户发行体验产品契约`](player-release-distribution-contract-2026-04-14.prd.md)：定义每个平台一个推荐包/CTA、支持信息与手动升级边界；Windows 签名和 macOS notarization 未完成前，不把技术预览资产表述为普通用户广泛发行已就绪。
 
 ## 3. 权威与冲突处理
 
