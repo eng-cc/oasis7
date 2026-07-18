@@ -99,6 +99,14 @@ def main() -> None:
         ),
     )
     scenario(
+        "topic-module-backlink",
+        lambda root: replace(
+            root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md",
+            "- 父模块 PRD: [`玩家入口与发行 PRD`](prd.md)",
+            "- 父模块 PRD: `doc/product/player-entry-distribution/prd.md`",
+        ),
+    )
+    scenario(
         "topic-pair-backlink",
         lambda root: replace(
             root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.design.md",

@@ -201,11 +201,18 @@ def check(root: Path) -> list[str]:
         if not topic_path.is_file():
             continue
         topic_text = topic_path.read_text(encoding="utf-8")
+        module_root = topic_path.parent.joinpath("prd.md").relative_to(root).as_posix()
+        if module_root not in markdown_targets(root, topic_path, topic_text):
+            fail(
+                errors,
+                "topic-module-backlink",
+                f"{topic} must link its owning module PRD {module_root}",
+            )
         for suffix in (".design.md", ".project.md"):
             paired_path = topic_path.with_name(topic_path.name.removesuffix(".prd.md") + suffix)
             if paired_path.is_file() and topic not in paired_path.read_text(encoding="utf-8"):
                 fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must reference {topic}")
-        if metadata(topic_text, "产品层唯一 PRD") not in {None, topic_path.parent.joinpath("prd.md").relative_to(root).as_posix()}:
+        if metadata(topic_text, "产品层唯一 PRD") not in {None, module_root}:
             fail(errors, "topic-module-authority", f"{topic}: 产品层唯一 PRD must name its module root")
 
     paired_files = [
