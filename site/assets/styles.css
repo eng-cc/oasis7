@@ -198,8 +198,8 @@ a:hover {
   display: none;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
   border: 1px solid var(--line-soft);
   border-radius: 10px;
   background: rgba(13, 24, 34, 0.9);
@@ -218,8 +218,8 @@ a:hover {
 }
 
 .lang-icon-button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: rgba(13, 26, 39, 0.64);
@@ -319,7 +319,7 @@ main {
 }
 
 .section-hero {
-  min-height: min(760px, calc(100vh - 6.8rem));
+  min-height: 0;
   padding: 1.28rem;
   border-color: rgba(67, 239, 187, 0.4);
   background:
@@ -448,6 +448,7 @@ h3 {
   max-width: 100%;
   border-radius: 12px;
   border: 1px solid transparent;
+  min-height: 44px;
   padding: 0.62rem 1rem;
   font-weight: 700;
   letter-spacing: 0.01em;
@@ -650,6 +651,43 @@ h3 {
   border: 1px solid rgba(131, 188, 220, 0.24);
   object-fit: cover;
   background: rgba(3, 10, 17, 0.8);
+}
+
+.hero-key-art {
+  padding: 0;
+  background: #03080d;
+  box-shadow:
+    0 28px 64px rgba(0, 0, 0, 0.48),
+    0 0 42px rgba(67, 239, 187, 0.1);
+}
+
+.hero-key-art::before {
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, rgba(2, 7, 12, 0.34), transparent 45%),
+    linear-gradient(0deg, rgba(2, 7, 12, 0.88), transparent 32%);
+}
+
+.hero-key-art img {
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: inherit;
+}
+
+.hero-key-art figcaption {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.68rem;
+  z-index: 2;
+  margin: 0;
+  border: 1px solid rgba(131, 188, 220, 0.24);
+  border-radius: 999px;
+  background: rgba(3, 10, 17, 0.76);
+  color: #bdd0db;
+  padding: 0.24rem 0.52rem;
+  font-size: 0.66rem;
+  backdrop-filter: blur(8px);
 }
 
 .hero-figure figcaption {
@@ -2235,8 +2273,8 @@ code {
   }
 
   .lang-icon-button {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 
   .lang-icon-button img {
