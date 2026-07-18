@@ -170,7 +170,7 @@
 - [x] TASK-CORE-030 (PRD-CORE-008/009) [test_tier_required]: 收口 core 活跃专题标题、Viewer 活跃手册与实际 Viewer 窗口/Web 标题的 `oasis7` 品牌，明确旧 `oasis7*` / `world_*` 仅作 internal compatibility naming。
   - 产物文件:
     - `doc/core/prd.md`
-    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - 历史已删除：`doc/core/release-candidate-*.{prd,design,project}.md`；当前 2026-03 候选追溯从 `doc/core/reviews/release-candidate-*.md` 与 GitHub task issue evidence comments 进入。
     - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
     - 历史已删除：`doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`；当前 docs hub / 公共阅读路径追溯从 `doc/README.md`、`doc/core/project.md` 的 `TASK-CORE-023` / `TASK-CORE-035` 与 doc structure standard 进入。
@@ -239,7 +239,7 @@
 - [x] TASK-CORE-049 (PRD-CORE-009) [test_tier_required]: 按最新产品设定把 `pure_api` 的正式游玩口径收口为“必须启用且可连通 LLM”，同步更新 core 契约、README/testing/manual、game/world-simulator 当前入口与相关启动脚本帮助文本。
 - [x] TASK-CORE-050 (PRD-CORE-009) [test_tier_required]: 将旧单字段 provider mode 术语收口为“`agent_direct_connect` 接入方式 + `provider_loopback_http` provider implementation + execution lane”三层，并同步对齐 core/world-simulator/testing 文档与 launcher/client launcher 用户文案。
   - 产物文件:
-    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/core/project.md`
     - `testing-manual.md`
     - `doc/world-simulator/prd.md`
@@ -259,19 +259,19 @@
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/project.md`
-    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
     - `.pm/tasks/task_26cb41e1a4914a9eac0ec1728afd2079.execution.md`
   - 验收命令 (`test_tier_required`):
-    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md retired legacy viewer doc set: viewer-3d-pause-user-interaction-hold-2026-04-01.prd`
+    - `rg -n "non-3D|玩家访问模式|delivery priority|interaction scope" doc/core/prd.md doc/core/project.md doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md doc/world-simulator/prd.md retired legacy viewer doc set: viewer-3d-pause-user-interaction-hold-2026-04-01.prd`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-052 (PRD-CORE-009) [test_tier_required]: 将 `agent_direct_connect/provider_loopback_http` 从用户主配置模型降为兼容 alias，把 agent provider 正式配置收口为 `agent_decision_source + agent_provider_backend/contract/transport/url/auth/connect_timeout_ms/profile + agent_execution_lane`，并同步回写 core/world-simulator/testing 文档与 launcher/client launcher 透传口径。
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/project.md`
-    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.{prd,project}.md`
@@ -296,7 +296,7 @@
   - 产物文件:
     - `doc/core/prd.md`
     - `doc/core/project.md`
-    - `doc/core/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
+    - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.{prd,design,project}.md`
     - `doc/world-simulator/prd.md`
     - `doc/world-simulator/project.md`
     - `testing-manual.md`
@@ -315,14 +315,14 @@
     - `git diff --check`
 - [x] unified-persistent-world-terminology-upgrade-plan (PRD-CORE-003/009) [test_tier_required]: 建立统一持久大世界术语升级计划，把默认玩家/产品模型收束为“统一持久大世界”，并规划 legacy 环境/网络术语从 active product/player-facing docs 迁出，同时保留历史 evidence 与 runtime/ops 技术兼容边界。 Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
   - 产物文件:
-    - `doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
+    - `doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
     - `doc/core/README.md`
     - `doc/core/prd.index.md`
     - `doc/core/prd.md`
     - `doc/core/project.md`
   - 验收命令 (`test_tier_required`):
-    - `test -f doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
-    - `rg -n "统一持久大世界|unified persistent world|Legacy / Forbidden Product Terms|Upgrade Phases|Acceptance Criteria|Residual Risks" doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md doc/core/README.md doc/core/prd.index.md doc/core/prd.md doc/core/project.md`
+    - `test -f doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
+    - `rg -n "统一持久大世界|unified persistent world|Legacy / Forbidden Product Terms|Upgrade Phases|Acceptance Criteria|Residual Risks" doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md doc/core/README.md doc/core/prd.index.md doc/core/prd.md doc/core/project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] unified-world-code-layer-migration-follow-up (PRD-CORE-003/009) [test_tier_required]: 收口统一持久大世界术语迁移的代码层后续，确认 chain-runtime network-tier test discovery 不再被 status/observability API 漂移阻断，release-gate 长跑入口在 Bash 3.2 下前置声明 Bash 4+ 要求，legacy shared wrapper 只保留兼容转发并新增 active code/template 术语扫描。 Trace: .pm/tasks/task_acb7e3599b4242628a7ac99a62628d55.yaml

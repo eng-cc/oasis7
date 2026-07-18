@@ -66,6 +66,20 @@ def markdown_targets(root: Path, source: Path, text: str) -> set[str]:
     return targets
 
 
+def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
+    """Return topic PRDs declared by the module's dedicated active-topic section."""
+    section = re.search(
+        r"^### 活跃产品专题\s*$([\s\S]*?)(?=^#{1,3}\s|\Z)", text, re.MULTILINE
+    )
+    if not section:
+        return set()
+    return {
+        target
+        for target in markdown_targets(root, module_path, section.group(1))
+        if target.endswith(".prd.md") and target != module_path.relative_to(root).as_posix()
+    }
+
+
 def check(root: Path) -> list[str]:
     errors: list[str] = []
     landing_path = root / "doc/product/README.md"
@@ -81,13 +95,14 @@ def check(root: Path) -> list[str]:
         fail(errors, "entry-duplicate", "product entry targets must be unique")
 
     expected_paths = {module.path for module in MODULES}
+    product_root = root / "doc/product"
     actual_paths = {
         path.relative_to(root).as_posix()
-        for path in (root / "doc/product").glob("**/prd.md")
+        for pattern in ("**/prd.md", "**/*.prd.md")
+        for path in product_root.glob(pattern)
         if path.is_file()
     }
-    if actual_paths != expected_paths:
-        fail(errors, "inventory-contract", f"expected {sorted(expected_paths)!r}, got {sorted(actual_paths)!r}")
+    declared_topics: set[str] = set()
 
     seen_ids: set[str] = set()
     for module in MODULES:
@@ -140,6 +155,13 @@ def check(root: Path) -> list[str]:
             elif module.path not in markdown_targets(root, authority_path, authority_path.read_text(encoding="utf-8")):
                 fail(errors, "authority-backlink", f"{authority} must link {module.path}")
 
+        topics = active_topic_targets(root, path, text)
+        for topic in topics:
+            topic_path = root / topic
+            if topic_path.parent != path.parent:
+                fail(errors, "topic-module-boundary", f"{module.path}: {topic}")
+            declared_topics.add(topic)
+
         success_ids = re.findall(r"^- (SC-\d+)：", text, re.MULTILINE)
         trace_rows = re.findall(r"^\|\s*(SC-\d+)\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|$", text, re.MULTILINE)
         trace_ids = [row[0] for row in trace_rows]
@@ -159,6 +181,46 @@ def check(root: Path) -> list[str]:
                         fail(errors, "traceability-prd-resolution", f"{module.path}: {sc_id} missing {prd_ref} in {row_paths!r}")
             if not evidence.strip() or tier.strip() not in {"test_tier_required", "test_tier_full"}:
                 fail(errors, "traceability-evidence-tier", f"{module.path}: {sc_id}")
+
+    expected_inventory = expected_paths | declared_topics
+    if actual_paths != expected_inventory:
+        fail(
+            errors,
+            "topic-index-contract",
+            f"expected roots plus declared topics {sorted(expected_inventory)!r}, got {sorted(actual_paths)!r}",
+        )
+    if len(declared_topics) != sum(
+        len(active_topic_targets(root, root / module.path, (root / module.path).read_text(encoding="utf-8")))
+        for module in MODULES
+        if (root / module.path).is_file()
+    ):
+        fail(errors, "topic-duplicate-declaration", "an active product topic may have one module owner")
+
+    for topic in declared_topics:
+        topic_path = root / topic
+        if not topic_path.is_file():
+            continue
+        topic_text = topic_path.read_text(encoding="utf-8")
+        for suffix in (".design.md", ".project.md"):
+            paired_path = topic_path.with_name(topic_path.name.removesuffix(".prd.md") + suffix)
+            if paired_path.is_file() and topic not in paired_path.read_text(encoding="utf-8"):
+                fail(errors, "topic-pair-backlink", f"{paired_path.relative_to(root)} must reference {topic}")
+        if metadata(topic_text, "产品层唯一 PRD") not in {None, topic_path.parent.joinpath("prd.md").relative_to(root).as_posix()}:
+            fail(errors, "topic-module-authority", f"{topic}: 产品层唯一 PRD must name its module root")
+
+    paired_files = [
+        path
+        for suffix in ("*.design.md", "*.project.md")
+        for path in (root / "doc/product").glob(f"**/{suffix}")
+        if path.is_file()
+    ]
+    for paired_path in paired_files:
+        topic_path = paired_path.with_name(
+            paired_path.name.removesuffix(".design.md").removesuffix(".project.md") + ".prd.md"
+        )
+        topic = topic_path.relative_to(root).as_posix()
+        if topic not in declared_topics:
+            fail(errors, "topic-pair-orphan", f"{paired_path.relative_to(root)} has no declared {topic}")
     if any((root / "doc/product").glob("**/archive")):
         fail(errors, "lifecycle-archive", "doc/product/**/archive is forbidden")
     return errors

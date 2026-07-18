@@ -5,11 +5,7 @@ doc/core/next-round-priority-slate-2026-03-11.prd.md
 doc/core/next-round-priority-slate-2026-03-11.project.md
 doc/core/prd.index.md
 doc/core/prd.md
-doc/core/player-access-mode-contract-2026-03-19.design.md
-doc/core/player-access-mode-contract-2026-03-19.prd.md
-doc/core/player-access-mode-contract-2026-03-19.project.md
 doc/core/project.md
-doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md
 doc/engineering/README.md
 doc/engineering/design.md
 doc/engineering/prd.index.md

@@ -52,7 +52,7 @@
 ## 3. AI System Requirements (If Applicable)
 - Tool Requirements:
   - 公网信息源：`https://www.moltbook.com/`、`https://www.moltbook.com/developers`、`https://www.moltbook.com/help`
-  - 内部口径源：`README.md`、`site/index.html`、`doc/core/player-access-mode-contract-2026-03-19.prd.md`
+  - 内部口径源：`README.md`、`site/index.html`、`doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
 - Evaluation Strategy:
   - 抽样检查方案是否引用 Moltbook 当前公开定位与机制。
 - 抽样检查所有 CTA 与表述是否落在 `viewer / pure_api` 技术预览边界内。
@@ -66,7 +66,7 @@
   - `https://www.moltbook.com/help`
   - `README.md`
   - `site/index.html`
-  - `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+  - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
 - Edge Cases & Error Handling:
   - Moltbook 平台机制变化快：方案必须标注日期，后续执行前先复核主页 / developers / help 页面。
   - 若无法确认平台是否支持某一内容格式：优先退回“原生短帖 + 评论补充链接”的保守打法。

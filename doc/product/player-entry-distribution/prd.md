@@ -13,7 +13,7 @@
 - 后继文档：`无`
 - 下层专业域：[`README.md`](../../../README.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 
-本文只组合玩家从了解产品到进入、安装、验证受支持技术预览的路径。根 `README.md` 是公开当前状态与 claim envelope 的唯一权威；Viewer、Launcher、发行资产与模式合同由 `world-simulator` 专业域拥有。
+本文只组合玩家从了解产品到进入、安装、验证受支持技术预览的路径。根 `README.md` 是公开当前状态与 claim envelope 的唯一权威；Viewer、Launcher、发行资产与访问模式的实现合同由 `world-simulator` 专业域拥有。
 
 ## 1. 产品承诺
 
@@ -22,6 +22,10 @@
 ## 2. 范围与玩家边界
 
 覆盖产品发现、公开说明、Web 访问、平台安装、Launcher 转移、账号/模式入口和首次验证。玩家可以了解当前阶段并选择受支持入口；不应被未发布功能、内部测试模式、过期下载或历史 go 证据诱导。
+
+### 活跃产品专题
+
+- [`玩家访问模式产品契约`](player-access-mode-contract-2026-03-19.prd.md)：定义 `viewer` / `pure_api` 的产品 taxonomy、claim 边界与证据分类；具体 Viewer、provider、Launcher 和测试合同继续由下层专业域拥有。
 
 ## 3. 权威与冲突处理
 

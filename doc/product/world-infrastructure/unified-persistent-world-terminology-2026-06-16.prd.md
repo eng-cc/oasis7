@@ -1,4 +1,7 @@
-# oasis7 统一持久大世界术语升级计划（2026-06-16）
+# oasis7 统一持久大世界术语产品契约（2026-06-16）
+
+- 父模块 PRD: [`大世界基础设施 PRD`](prd.md)
+- 产品模块总入口: [`doc/product/README.md`](../README.md)
 
 审计轮次: 0
 
@@ -75,7 +78,7 @@
 - `README.md` 已将 oasis7 定义为持久多主体文明模拟游戏，并说明世界状态可落盘恢复、单个玩家离线不影响世界持续运行。
 - `world-rule.md` 已规定离散 tick、不可暂停、全局同步 tick 的目标架构，并声明世界有总空间限制、无内部人为边界。
 - `doc/game/gameplay/gameplay-top-level-design.prd.md` 已将玩家定位为“文明的战略引导者”，并把“与其他玩家较量”列为核心动机。
-- `doc/core/player-access-mode-contract-2026-03-19.prd.md` 已把当前玩家入口收口为 `viewer / pure_api`。
+- `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md` 已把当前玩家入口收口为 `viewer / pure_api`。
 - `doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md` 已将项目环境收束为 `local / test / production`，并要求历史共享开发网络只作为 legacy/rehearsal 资产。
 - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md` 已将网络 tier 与 public/mainnet claims 绑定到 manifest 和 readiness gate。
 
@@ -93,8 +96,8 @@ Owner: `producer_system_designer` with `tpm` integration.
 
 验收：
 
-- `rg -n "统一持久大世界|unified persistent world" doc/core README.md world-rule.md`
-- `rg -n "玩家访问模式|viewer|pure_api|world_id" doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
+- `rg -n "统一持久大世界|unified persistent world" doc/product README.md world-rule.md`
+- `rg -n "玩家访问模式|viewer|pure_api|world_id" doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
 - `./scripts/doc-governance-check.sh`
 
 ### Phase 1: Product-facing 文档迁移

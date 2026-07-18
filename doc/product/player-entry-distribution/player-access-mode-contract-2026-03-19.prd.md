@@ -1,7 +1,9 @@
 # oasis7：玩家访问模式总契约（2026-03-19）
 
-- 对应设计文档: `doc/core/player-access-mode-contract-2026-03-19.design.md`
-- 对应项目管理文档: `doc/core/player-access-mode-contract-2026-03-19.project.md`
+- 父模块 PRD: [`玩家入口与发行 PRD`](prd.md)
+- 产品模块总入口: [`doc/product/README.md`](../README.md)
+- 对应设计文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.design.md`
+- 对应项目管理文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.project.md`
 
 审计轮次: 8
 
@@ -16,9 +18,9 @@
 - 不恢复已删除的旧第二 Viewer 入口，也不重写 provider/runtime 底层实现。
 
 ## 接口 / 数据
-- 主 PRD: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
-- 设计文档: `doc/core/player-access-mode-contract-2026-03-19.design.md`
-- 项目文档: `doc/core/player-access-mode-contract-2026-03-19.project.md`
+- 主 PRD: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 设计文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.design.md`
+- 项目文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.project.md`
 - 下游入口: `testing-manual.md`、`doc/world-simulator/prd.md`、`doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
 - 核心字段: `mode_id`、`claim_scope`、`execution_lane`、`agent_decision_source`、`agent_provider_*`
 

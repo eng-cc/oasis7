@@ -187,4 +187,4 @@
 - Homepage: `https://www.moltbook.com/`
 - Developers: `https://www.moltbook.com/developers`
 - Help: `https://www.moltbook.com/help`
-- oasis7 public claim envelope: `README.md`, `site/index.html`, `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- oasis7 public claim envelope: `README.md`, `site/index.html`, `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
