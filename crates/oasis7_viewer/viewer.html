@@ -2391,13 +2391,8 @@
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .pixel-world-canvas {
         min-height: 260px;
       }
-      #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .summary-grid {
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 8px;
-      }
-      #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .micro-depot-facilities__metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+      #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+      .micro-depot-facilities__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .event-card,
       #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .metric-card {
         border-color: rgba(152, 177, 150, 0.2);
@@ -2482,9 +2477,7 @@
         .list, .event-list { max-height: none; }
         .action-grid { grid-template-columns: 1fr; }
         .summary-grid { grid-template-columns: 1fr; }
-        #app[data-viewer-visual-fixture="gameplay_diagnostics_expanded"] .micro-depot-facilities__metrics {
-          grid-template-columns: 1fr;
-        }
+        .micro-depot-facilities__metrics { grid-template-columns: 1fr !important; }
         .metric--claim-total { grid-column: auto; }
         .diagnostic-surface__summary { align-items: flex-start; flex-direction: column; }
         .stage-hero__topline { flex-direction: column; }
