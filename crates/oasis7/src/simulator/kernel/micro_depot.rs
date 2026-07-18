@@ -1037,7 +1037,7 @@ impl WorldKernel {
     }
 }
 
-fn micro_depot_resource_debits(
+pub(super) fn micro_depot_resource_debits(
     proposal: &MicroDepotProposal,
 ) -> Result<Vec<MicroDepotProposalResourceDebit>, String> {
     if !proposal.resource_debits.is_empty() {
@@ -1069,7 +1069,7 @@ fn micro_depot_resource_kind(value: &str) -> Result<ResourceKind, String> {
     }
 }
 
-fn ensure_micro_depot_supported_resources(
+pub(super) fn ensure_micro_depot_supported_resources(
     supported_resource_kinds: &[String],
     debits: &[MicroDepotProposalResourceDebit],
 ) -> Result<(), String> {
