@@ -1,0 +1,55 @@
+# GitHub Pages Visual Content Refresh (2026-07-18)
+
+- Owner role: `game_visual_interaction_designer`
+- Task: #2438 (`task_adfbfbfea1e64f4eb8904b9779b4c2bb`)
+- Routes: `site/index.html`, `site/en/index.html`
+- Generated asset: `site/assets/images/hero/asteroid-civilization-image2-20260718.webp`
+
+## Decision
+
+Use the recommended **Command the pressure** direction. The first viewport leads
+with one pressure dilemma, two short player-role/consequence sentences, two
+actions, the exact preview status, three compact facts, and one atmospheric
+world illustration. Real Viewer captures remain evidence and must not be
+replaced by the generated illustration in proof-oriented contexts.
+
+## Comparable-site findings
+
+- Strategy and survival game homepages usually lead with one fantasy or
+  responsibility, one genre sentence, one primary action, and a dominant visual.
+- Their deeper systems move below the first viewport instead of competing with
+  the title.
+- oasis7 keeps a stricter public-status boundary than released games: the exact
+  `limited playable technical preview` label remains visible beside the hero.
+
+## Content cuts
+
+- Remove the tertiary overview link, two hero metric cards, and the three-row
+  pulse panel.
+- Reduce the first explainer from four overlapping definition cards to three
+  beats: pressure, autonomous choice, persistent consequence.
+- Keep downloads, detailed preview boundaries, docs, and evidence-chain truth
+  in their existing downstream sections.
+
+## Image2 prompt and boundary
+
+Create a wide, dark sci-fi scene of a fractured asteroid-belt civilization.
+Concentrate five to seven inhabited nodes, weathered industry, teal logistics
+routes, and restrained amber pressure lights on the right; reserve calm dark
+negative space on the left. Avoid text, UI, fake metrics, people, dominant
+spacecraft, combat, explosions, logos, and screenshot framing.
+
+The generated image is atmosphere, not evidence. Both language routes must
+render an adjacent DOM caption stating that it is an illustrative Image2 visual
+and not gameplay capture. Meaningful copy must never be baked into the image.
+
+## Visual acceptance
+
+- At `1440x900`, the title, both CTAs, exact preview state, image boundary label,
+  and start of the next section are readable without overlap.
+- At `390x844` and `360x800`, the header remains operable, CTAs keep 44px touch
+  targets, English labels wrap naturally, and no horizontal overflow appears.
+- Keyboard focus, skip navigation, no-JS navigation, and reduced-motion behavior
+  remain intact.
+- Browser screenshots are implementation evidence; the Image2 asset is only a
+  hierarchy target and does not replace browser or QA verification.

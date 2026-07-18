@@ -3,6 +3,18 @@
 审计轮次: 6
 
 ## 任务拆解（含 PRD-ID 映射）
+- [x] github-pages-visual-content-refresh-20260718 (PRD-SITE-001/004/009/010) [test_tier_required]: 参考同类策略、模拟与生存游戏官网，把中英首页首屏从多层解释面板收敛为“压力抉择 + 玩家角色 + 持续后果 + 双 CTA + 精确预览状态”；使用明确标注为概念图而非 gameplay capture 的 Image2 小行星文明主视觉，并将真实 Viewer 证据继续保留在证据链语境。 Trace: #2438 (task_adfbfbfea1e64f4eb8904b9779b4c2bb)
+  - 产物文件:
+    - `site/index.html`
+    - `site/en/index.html`
+    - `site/assets/styles.css`
+    - `site/assets/images/hero/asteroid-civilization-image2-20260718.webp`
+    - `doc/site/github-pages/github-pages-visual-content-refresh-2026-07-18.design.md`
+  - 验收命令 (`test_tier_required`):
+    - `./scripts/site-link-check.sh && ./scripts/site-homepage-claim-check.sh && ./scripts/site-manual-sync-check.sh && ./scripts/site-download-check.sh`
+    - `./scripts/doc-governance-check.sh`
+    - `git diff --check`
+    - 浏览器核对 `1440x900`、`390x844`、`360x800` 的首屏层级、概念图标注、导航/CTA、焦点与横向溢出
 - [x] github-pages-ui-content-refresh-20260717 (PRD-SITE-001/004/009/010) [test_tier_required]: 按游戏优先路径压缩中英首页叙事，减少重复卡片和首要导航入口，用有来源/边界说明的真实 Viewer 截图强化当前证据，并在不放宽技术预览、下载、正式公告、公开访问面与未来平台 claim 的前提下完成桌面/移动端视觉收口。 Trace: #2367 (task_d235f7877df547a288946ce5e4589df0)
   - 产物文件:
     - `doc/site/prd.md`
