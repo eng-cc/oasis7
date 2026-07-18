@@ -3,6 +3,7 @@ import { render as mount } from "solid-js/web";
 
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
+import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -2748,6 +2749,11 @@ function WorldSummaryPanel() {
                   />
                 </div>
               </PanelSection>
+              <MicroDepotFacilitiesPanel
+                facilities={gameplay().microDepotFacilities}
+                locale={locale}
+                tr={tr}
+              />
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
                   locale={locale()}

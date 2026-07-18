@@ -6,8 +6,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use super::kernel::ChunkRuntimeConfig;
 use super::kernel::WorldEvent;
+use super::kernel::{ChunkRuntimeConfig, MicroDepotPlayerFacilitySnapshot};
 use super::types::{
     ActionEnvelope, ActionId, CHUNK_GENERATION_SCHEMA_VERSION, JOURNAL_VERSION, SNAPSHOT_VERSION,
     WorldEventId, WorldTime,
@@ -276,6 +276,8 @@ pub struct PlayerGameplaySnapshot {
     pub recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_claim: Option<PlayerAgentClaimSnapshot>,
+    #[serde(default)]
+    pub micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub small_player_lane_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -360,6 +362,8 @@ struct PlayerGameplaySnapshotSerde {
     recent_feedback: Option<PlayerGameplayRecentFeedback>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_claim: Option<PlayerAgentClaimSnapshot>,
+    #[serde(default)]
+    micro_depot_facilities: Vec<MicroDepotPlayerFacilitySnapshot>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     small_player_lane_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -450,6 +454,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             available_actions: legacy.available_actions,
             recent_feedback: legacy.recent_feedback,
             agent_claim: legacy.agent_claim,
+            micro_depot_facilities: legacy.micro_depot_facilities,
             small_player_lane_id: legacy
                 .small_player_lane_id
                 .or_else(|| Some("unclassified".to_string())),

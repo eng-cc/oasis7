@@ -1,11 +1,17 @@
+use super::super::world_model::WorldModel;
 use super::WorldKernel;
 use super::micro_depot::MicroDepotPlayerFacilitySnapshot;
 use super::micro_depot_validation::measured_micro_depot_inventory_depleted;
 
 impl WorldKernel {
     pub fn micro_depot_player_facility_snapshots(&self) -> Vec<MicroDepotPlayerFacilitySnapshot> {
-        let mut snapshots: Vec<_> = self
-            .model
+        Self::micro_depot_player_facility_snapshots_from_model(&self.model)
+    }
+
+    pub(crate) fn micro_depot_player_facility_snapshots_from_model(
+        model: &WorldModel,
+    ) -> Vec<MicroDepotPlayerFacilitySnapshot> {
+        let mut snapshots: Vec<_> = model
             .regional_infrastructure
             .values()
             .filter(|facility| facility.kind == "micro_depot")
