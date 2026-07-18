@@ -15,4 +15,33 @@ describe("mobile gameplay action card clearance", () => {
       );
     }
   });
+
+  it("removes nonessential interactive motion when players prefer reduced motion", () => {
+    const viewerHtml = readFileSync("viewer.html", "utf8");
+    const compatibilityHtml = readFileSync("software_safe.html", "utf8");
+
+    for (const html of [viewerHtml, compatibilityHtml]) {
+      const reducedMotionStart = html.lastIndexOf("@media (prefers-reduced-motion: reduce)");
+      const primaryActionTransition = html.indexOf(
+        "transition:",
+        html.indexOf(".pixel-world-command-cell--next {"),
+      );
+      const helpPanelTransition = html.indexOf(
+        "transition:",
+        html.indexOf(".inline-help-tip__panel {"),
+      );
+
+      expect(html).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?button,[\s\S]*?\.pixel-world-command-cell--next,[\s\S]*?\.inline-help-tip__panel\s*\{\s*transition:\s*none;/,
+      );
+      expect(html).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?button:not\(:disabled\):hover,[\s\S]*?\.pixel-world-command-cell--next:active\s*\{\s*transform:\s*none;/,
+      );
+      expect(reducedMotionStart).toBeGreaterThan(-1);
+      expect(primaryActionTransition).toBeGreaterThan(-1);
+      expect(helpPanelTransition).toBeGreaterThan(-1);
+      expect(reducedMotionStart).toBeGreaterThan(primaryActionTransition);
+      expect(reducedMotionStart).toBeGreaterThan(helpPanelTransition);
+    }
+  });
 });

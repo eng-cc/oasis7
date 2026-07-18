@@ -529,13 +529,6 @@
         0% { background-position: 120% 0; }
         100% { background-position: -80% 0; }
       }
-      @media (prefers-reduced-motion: reduce) {
-        .entity-list-pending__spinner,
-        button.is-loading::before,
-        .entity-list-pending__skeleton span {
-          animation: none;
-        }
-      }
       .list-item {
         position: relative;
         width: 100%;
@@ -2827,6 +2820,16 @@
           backdrop-filter: blur(10px);
           overflow: auto;
         }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .entity-list-pending__spinner,
+        button.is-loading::before,
+        .entity-list-pending__skeleton span { animation: none; }
+        button,
+        .pixel-world-command-cell--next,
+        .inline-help-tip__panel { transition: none; }
+        button:not(:disabled):hover,
+        .pixel-world-command-cell--next:active { transform: none; }
       }
     </style>
   </head>
