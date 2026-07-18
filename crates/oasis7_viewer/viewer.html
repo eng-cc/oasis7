@@ -1356,6 +1356,9 @@
       .pixel-world-focus-entry button {
         min-height: 34px;
       }
+      .pixel-world-focus-more-controls { display: contents; }
+      .pixel-world-focus-more-controls summary { display: none; }
+      .pixel-world-focus-more-controls > button { display: inline-flex; }
       .pixel-world-focus-control--primary {
         border-color: rgba(141, 199, 170, 0.55);
         background: rgba(141, 199, 170, 0.18);
@@ -2623,23 +2626,15 @@
           font-size: 11px;
           line-height: 1.2;
         }
-        .pixel-world-focus-controls {
-          grid-column: 2;
-          grid-row: 1;
-          justify-content: flex-start;
-          flex-wrap: wrap;
-          align-self: start;
-          gap: 4px;
-          padding: 4px;
-          width: min(156px, 40vw);
-        }
-        .pixel-world-focus-controls button {
-          flex: 1 1 calc(50% - 4px);
-          min-height: 28px;
-          min-width: 0;
-          padding: 4px 6px;
-          font-size: 11px;
-        }
+        .pixel-world-focus-controls { grid-column: 1 / -1; grid-row: 6; display: grid; grid-template-columns: minmax(0, 1fr); align-self: stretch; gap: 6px; padding: 6px; width: auto; }
+        .pixel-world-focus-controls > button, .pixel-world-focus-more-controls summary, .pixel-world-focus-more-controls > button { box-sizing: border-box; width: 100%; min-height: 44px; padding: 8px 10px; font-size: 12px; }
+        .pixel-world-focus-more-controls { display: block; width: 100%; }
+        .pixel-world-focus-more-controls summary { display: flex; align-items: center; justify-content: space-between; cursor: pointer; list-style: none; border: 1px solid rgba(148, 163, 184, 0.22); border-radius: 6px; background: rgba(148, 163, 184, 0.08); color: var(--muted); font-weight: 700; }
+        .pixel-world-focus-more-controls summary::after { content: "+"; color: var(--text); font-size: 16px; line-height: 1; }
+        .pixel-world-focus-more-controls[open] summary::after { content: "−"; }
+        .pixel-world-focus-more-controls summary::-webkit-details-marker { display: none; }
+        .pixel-world-focus-more-controls > button { display: none; margin-top: 6px; justify-content: center; align-items: center; }
+        .pixel-world-focus-more-controls[open] > button { display: inline-flex; }
         .pixel-world-focus-rail {
           top: auto;
           bottom: 96px;

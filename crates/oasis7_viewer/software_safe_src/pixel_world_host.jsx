@@ -904,17 +904,16 @@ function PixelWorldFocusHud(props) {
           <button type="button" class="pixel-world-focus-control pixel-world-focus-control--primary" onClick={props.onOpenCommand}>
             {tr(props.locale(), "命令与目标", "Command & Target")}
           </button>
-          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>
-            {tr(props.locale(), "世界状态", "World Status")}
-          </button>
-          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onToggleMaximized}>
-            {props.maximized()
-              ? tr(props.locale(), "还原布局", "Restore Layout")
-              : tr(props.locale(), "最大化", "Maximize")}
-          </button>
-          <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>
-            {tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}
-          </button>
+          <details class="pixel-world-focus-more-controls">
+            <summary>{tr(props.locale(), "更多控制", "More controls")}</summary>
+            <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onOpenDiagnostics}>{tr(props.locale(), "世界状态", "World Status")}</button>
+            <button type="button" class="pixel-world-focus-control pixel-world-focus-control--secondary" onClick={props.onToggleMaximized}>
+              {props.maximized()
+                ? tr(props.locale(), "还原布局", "Restore Layout")
+                : tr(props.locale(), "最大化", "Maximize")}
+            </button>
+            <button type="button" class="pixel-world-focus-control pixel-world-focus-control--quiet" onClick={props.onExit}>{tr(props.locale(), "离开沉浸 · Esc", "Leave Focus · Esc")}</button>
+          </details>
         </div>
       </div>
     </Show>
