@@ -19,8 +19,6 @@
 - 追踪主键: `PRD-CORE-xxx`
 - 模块入口总览: `doc/README.md`
 - 测试与发布参考: `testing-manual.md`
-- 活跃 cross-module 专题:
-  - `doc/core/player-access-mode-contract-2026-03-19.prd.md`（PRD-CORE-009）
 
 ## 里程碑
 - M1 (2026-03-03): 完成模块 PRD 体系重构并建立项目级总览入口。
@@ -69,7 +67,6 @@
 - PRD-CORE-006: As a `producer_system_designer`, I want a formal version-candidate go/no-go entry after readiness reaches `ready`, so that release approval, residual risks, and role handoff are explicit and auditable.
 - PRD-CORE-007: As a 新协作者, I want `doc/README.md` to include the current public-preview reading path, so that I start from the right entry points.
 - PRD-CORE-008: As a `producer_system_designer`, I want the global docs hub synced with repo/site posture, so that navigation stays consistent.
-- PRD-CORE-009: As a `producer_system_designer`, I want one cross-module contract for `viewer / pure_api`, so that release, QA, playability, and provider-backed lane terminology stay aligned while `software_safe` remains a compatibility alias.
 - Critical User Flows:
   1. Flow-CORE-001: `读取模块地图 -> 识别改动所属模块 -> 定位上下游依赖 -> 形成影响面清单`
   2. Flow-CORE-002: `读取关键链路 -> 映射到模块 PRD-ID -> 对照测试分层 -> 输出发布风险判断`
@@ -101,7 +98,6 @@
   - AC-9: `P2` 仅包含不阻塞发布的体验 polish 与治理补完，不得与 P0/P1 混淆。
   - AC-10: `PRD-CORE-004` 可映射到 `doc/core/project.md` 中的任务与 `test_tier_required` 验证方法。
   - AC-11: `PRD-CORE-005` 必须明确下一轮第一优先级、对应 owner role、输入/输出与进入条件。
-  - AC-12: `PRD-CORE-009` 必须把 `viewer / pure_api` 与 `execution lane` 的边界写成唯一 taxonomy，并要求证据与 claim 显式绑定 mode；其中 `software_safe` 只能作为 `viewer` 兼容 alias，`pure_api` formal gameplay 必须显式声明 active LLM prerequisite。
   - AC-13: core 活跃专题、Viewer 活跃手册与 Viewer 用户可见标题必须统一使用 `oasis7` 品牌；若为兼容保留旧内部实现名，必须明确标注为 internal compatibility naming。
   - AC-14: `engineering`、`scripts`、`world-runtime` 下仍可读的历史/治理/运行时专题标题必须改为 `oasis7` 品牌；仅实现标识、环境变量、脚本参数与历史证据正文可继续保留旧内部命名。
 - Non-Goals:
@@ -166,7 +162,7 @@
 - WASM 接口与执行: `doc/world-runtime/wasm/wasm-interface.md`, `doc/world-runtime/wasm/wasm-executor.prd.md`
 - 场景矩阵: `doc/world-simulator/scenario/scenario-files.prd.md`
 - Web 闭环测试策略: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- 玩家访问模式总契约: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- 玩家访问模式产品契约: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
 - 分布式路线图: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 - 系统性测试手册: `testing-manual.md`
 

@@ -81,13 +81,37 @@ def main() -> None:
         ),
     )
     scenario(
-        "inventory-contract",
+        "topic-index-contract",
         lambda root: (
             (root / "doc/product/untracked/nested").mkdir(parents=True),
             shutil.copy2(
                 root / "doc/product/world-rules-core-gameplay/prd.md",
-                root / "doc/product/untracked/nested/prd.md",
+                root / "doc/product/untracked/nested/untracked.prd.md",
             ),
+        ),
+    )
+    scenario(
+        "topic-index-contract",
+        lambda root: replace(
+            root / "doc/product/player-entry-distribution/prd.md",
+            "### 活跃产品专题\n\n- [`玩家访问模式产品契约`](player-access-mode-contract-2026-03-19.prd.md)：",
+            "### 活跃产品专题\n\n- 玩家访问模式产品契约：",
+        ),
+    )
+    scenario(
+        "topic-module-backlink",
+        lambda root: replace(
+            root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md",
+            "- 父模块 PRD: [`玩家入口与发行 PRD`](prd.md)",
+            "- 父模块 PRD: `doc/product/player-entry-distribution/prd.md`",
+        ),
+    )
+    scenario(
+        "topic-pair-backlink",
+        lambda root: replace(
+            root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.design.md",
+            "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md",
+            "doc/product/player-entry-distribution/missing.prd.md",
         ),
     )
     scenario(

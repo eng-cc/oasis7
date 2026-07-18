@@ -19,7 +19,7 @@
 - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.prd.md`
 - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.project.md`
 - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
-- `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
 - `README.md`
 - `site/index.html`
 

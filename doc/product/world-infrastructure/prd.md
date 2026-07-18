@@ -45,6 +45,10 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - auditable：报价、执行、失败、资源扣减和治理动作均有可复核证据。
 - extensible：新增设施复用版本化 schema、module/WASM gate 与迁移规则，不绕过权威运行时。
 
+### 活跃产品专题
+
+- [`统一持久大世界术语产品契约`](unified-persistent-world-terminology-2026-06-16.prd.md)：定义玩家默认世界叙事与 readiness claim 边界；`world_id`、network tier、storage、replay 和环境运维语义仍由对应专业域拥有。
+
 ## 3. 权威与冲突处理
 
 产品层拥有区域设施、世界执行与分布式状态组成的端到端承诺；`doc/game/prd.md`、`doc/world-runtime/prd.md` 与 `doc/p2p/prd.md` 分别拥有其玩家规则、执行合同与分布式状态证明。冲突时不得由产品层静默改写专业合同，必须由产品 owner 与相应专业 owner 形成显式跨域决策。

@@ -9,8 +9,8 @@
 - 想看当前 core 模块在推进什么、最新完成项和下一步：`doc/core/project.md`
 - 想按主题或文件名继续下钻，而不是从活跃专题列表逐条找：`doc/core/prd.index.md`
 - 想先看下一轮跨模块优先级主入口：`doc/core/next-round-priority-slate-2026-03-11.prd.md`
-- 想先看三种玩家访问模式与 execution lane 的正式契约：`doc/core/player-access-mode-contract-2026-03-19.prd.md`
-- 想先看“统一持久大世界”默认产品模型与术语迁移计划：`doc/core/unified-persistent-world-terminology-upgrade-plan-2026-06-16.md`
+- 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 想先看“统一持久大世界”默认产品模型与术语契约：`doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
 - 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 `doc/core/reviews/README.md`
 
 ## 入口
@@ -38,7 +38,7 @@
 
 ## 热点子域导航
 - `reviews/`：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；先由 `reviews/README.md` 分流，再按需进入。
-- 根目录保留专题：下一轮优先级、player access mode contract、统一持久大世界术语迁移等正式 cross-module 入口；2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已退役删除，候选证据追溯改从 `reviews/` 审计记录进入，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
+- 根目录保留专题：下一轮优先级等正式 cross-module 入口；玩家访问模式与统一持久大世界术语产品契约从 `doc/product/` 进入。2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已退役删除，候选证据追溯改从 `reviews/` 审计记录进入，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
 - `templates/`：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`：跨模块影响检查清单。
 

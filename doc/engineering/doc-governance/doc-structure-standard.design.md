@@ -100,7 +100,7 @@ doc/<module>/
 `world-simulator`、`p2p` 并列的工程专业域。因此它采用薄产品覆盖层，不适用本章的
 五件套要求，也不为形式对称创建空的 `design.md`、`project.md` 或 `prd.index.md`。
 
-固定结构为：
+固定根入口为：
 
 ```text
 doc/product/
@@ -110,6 +110,31 @@ doc/product/
   agents-world-simulation/prd.md
   player-entry-distribution/prd.md
 ```
+
+这四份 `prd.md` 是唯一的默认产品入口和唯一的产品模块 PRD；
+`doc/product/README.md` 的表格必须精确、且只能列出这四行。它不是全部产品
+专题的平铺清单。模块目录可以包含活跃产品专题，但专题只能是已存在模块的下钻，
+不能成为第五个模块或另一个产品总入口：
+
+```text
+doc/product/<module>/
+  prd.md
+  <topic>.prd.md
+  <topic>.design.md     # 可选；存在时必须与 <topic>.prd.md 同名配对
+  <topic>.project.md    # 可选；存在时必须与 <topic>.prd.md 同名配对
+```
+
+专题准入与索引契约：
+
+- 活跃 `<topic>.prd.md` 必须由其所属模块 `prd.md` 的 `### 活跃产品专题` 小节以
+  Markdown 链接显式列出；未声明的产品专题不得留在 `doc/product/`。
+- 专题只能说明一个产品子主题的承诺、范围、跨域组合和验收边界；它不拥有模块级
+  产品承诺、默认入口、专业规则或技术合同的裁决权。
+- 同名 `*.design.md` / `*.project.md` 是可选配对文件；存在时必须显式回链同名 PRD。
+  它们不能替代 GitHub-backed task truth，也不能把实现计划、测试步骤、运行处置或
+  任务状态复制进产品层。
+- 专题必须回链模块 `prd.md`，并将规则、实现、测试、发布/运维和任务证据链接到
+  对应专业域权威。产品专题只保留产品组合所需的引用和验收摘要。
 
 职责与权威边界：
 
@@ -123,9 +148,10 @@ doc/product/
 技术合同拥有裁决权。若产品承诺与可实现性冲突，必须建立显式跨域决策或 GitHub-backed task，不得在任一文档中
 静默覆盖另一层权威。
 
-每份活跃产品 PRD 必须使用稳定 Product PRD-ID，声明模块 slug/名称、生命周期、owner、复核日期、后继文档、
+每份活跃产品模块 PRD 必须使用稳定 Product PRD-ID，声明模块 slug/名称、生命周期、owner、复核日期、后继文档、
 产品入口和下层权威。生命周期只允许 `proposed`、`draft`、`active`、`superseded`、`retired`；默认四模块表中只允许
-`active` 文档。`superseded` 必须指向后继者并退出默认入口，`retired` 必须同步公开 claim 与下游权威。
+`active` 文档。`superseded` 必须指向后继者并退出默认入口，`retired` 必须同步公开 claim 与下游权威。活跃产品专题
+不分配并列 Product PRD-ID；它以模块入口中的显式索引和同名配对关系取得可达性。
 
 每个产品成功标准必须在追踪表中唯一映射到专业 owner、专业域 PRD-ID、权威文档、验证证据和测试层级。
 产品入口、产品 PRD 与专业域权威文档必须双向可达。

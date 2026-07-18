@@ -1,7 +1,9 @@
 # oasis7：玩家访问模式总契约设计（2026-03-19）
 
-- 对应需求文档: `doc/core/player-access-mode-contract-2026-03-19.prd.md`
-- 对应项目管理文档: `doc/core/player-access-mode-contract-2026-03-19.project.md`
+- 父模块 PRD: [`玩家入口与发行 PRD`](prd.md)
+- 产品模块总入口: [`doc/product/README.md`](../README.md)
+- 对应需求文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 对应项目管理文档: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.project.md`
 
 审计轮次: 8
 

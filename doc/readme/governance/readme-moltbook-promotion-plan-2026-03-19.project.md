@@ -16,7 +16,7 @@
 - `https://www.moltbook.com/help`
 - `README.md`
 - `site/index.html`
-- `doc/core/player-access-mode-contract-2026-03-19.prd.md`
+- `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
 
 ## 状态
 - 更新日期: 2026-03-19
