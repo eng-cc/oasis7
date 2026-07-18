@@ -965,13 +965,13 @@ pub(super) fn build_player_gameplay_snapshot(
                     progress_percent: 100,
                     blocker_kind: None,
                     blocker_detail: None,
-                    next_step_hint: "Keep advancing and either expand production, push governance, or secure a critical node.".to_string(),
+                    next_step_hint: "Keep advancing through a local specialization that strengthens a useful regional service or supply route.".to_string(),
                     status_reason: None,
                     last_world_change: None,
                     causality_kind: None,
                     causality_detail: None,
                     branch_hint: Some(
-                        "Branches unlocked: production expansion / governance influence / conflict security"
+                        "Branches unlocked: local conversion specialist / regional service specialist / regional supply specialization"
                             .to_string(),
                     ),
                     resume_anchor: None,
