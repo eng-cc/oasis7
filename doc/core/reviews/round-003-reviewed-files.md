@@ -532,8 +532,8 @@
 - M4 industrial benchmark/current-state project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md`
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md`
-- `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md`
-- `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md`
+- M4 market/hardware/data/governance closure PRD (retired/deleted; historical review record)
+- M4 market/hardware/data/governance closure project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-power-system.prd.md`
 - `doc/world-simulator/m4/m4-power-system.project.md`
 - M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record)

@@ -56,11 +56,11 @@
 - Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`，原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
-- `intent-distributed-runtime-closure-2026-02-27` 与 `m4-market-hardware-data-governance-closure-2026-02-26` 已完成且不再作为 active world-simulator truth；当前 kernel / M4 阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与相关 M4 project 的依赖/provenance 记录。
+- `intent-distributed-runtime-closure-2026-02-27` 已完成且不再作为 active world-simulator truth；已删除的 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯，当前 M4 阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与长期 M4/runtime/gameplay 权威。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
-删除候选边界：上述 completed closure 三件套先保留为 historical/provenance evidence；后续若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 project provenance，可在独立治理切片中删除文件并保留 Git history / GitHub task evidence 追溯。
+删除候选边界：仍保留的 completed closure 三件套若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 project provenance，可在独立治理切片中删除文件并保留 Git history / GitHub task evidence 追溯。
 
 ## 完整活跃专题清单（按文件名精确检索）
 

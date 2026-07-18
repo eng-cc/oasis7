@@ -577,8 +577,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 industrial benchmark/current-state project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 market/hardware/data/governance closure PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 market/hardware/data/governance closure project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-power-system.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-power-system.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
