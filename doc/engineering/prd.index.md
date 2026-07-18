@@ -14,8 +14,6 @@
 | --- | --- | --- |
 | `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.prd.md` | `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.design.md` | `doc/engineering/doc-governance/doc-surface-area-governance-2026-04-10.project.md` |
 | `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.prd.md` | `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md` | `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md` |
-| `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md` | `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md` | `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md` |
-| `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md` | `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md` |
 | `doc/engineering/doc-governance/doc-structure-standard.prd.md` | `doc/engineering/doc-governance/doc-structure-standard.design.md` | `doc/engineering/doc-governance/doc-structure-standard.project.md` |
 | `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md` | n/a（当前契约已收敛到 PRD） | n/a（执行证据归 GitHub task 与 git history） |
 | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.prd.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.design.md` | `doc/engineering/self-evolution/memory-inspired-self-evolution-reinforcement-2026-03-31.project.md` |
@@ -33,6 +31,8 @@
 ## 历史审计留痕
 - 2026-04 `p2p-node-path-governance` 一次性落位三件套已退役删除；当前 `p2p/node` 的首读分流、主题簇与维护触发器由 `doc/p2p/node/README.md` 承接，历史实施证据保留在 git history 与 GitHub task evidence 中。
 - 2026-04 `testing-evidence-path-governance` 一次性落位三件套已退役删除；当前 `testing/evidence` 的分流与维护边界由 `doc/testing/evidence/README.md` 承接，历史实施证据保留在 git history 与 GitHub task evidence 中。
+- 2026-04 `world-simulator-viewer-path-governance` 一次性落位三件套已退役删除；当前 `world-simulator/viewer` 的首读分流、主题簇与维护触发器由 `doc/world-simulator/viewer/README.md` 承接，历史实施证据保留在 git history 与 GitHub task evidence 中。
+- 2026-04 `readme-governance-path-governance` 一次性落位三件套已退役删除；当前 `readme/governance` 的首读分流、主题簇与维护触发器由 `doc/readme/governance/README.md` 承接，历史实施证据保留在 git history 与 GitHub task evidence 中。
 - 2026-03 legacy 文档迁移 closure / handoff 记录已退役删除；历史迁移证据保留在 `doc/core/reviews/round-*` logs 与 git history，当前迁移规则入口为 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments。
 - 2026-02 documentation-governance-engineering closure 三件套已退役删除；历史审读证据保留在 `doc/core/reviews/round-*` logs 与 git history，当前工程文档治理入口为 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments。
 - 2026-03 engineering governance producer->QA 一次性 handoff 记录已退役删除；当前 governance trend / quarterly review 证据入口为 GitHub task issue evidence comments、pre-PR local role review packet 与 workflow source-of-truth。

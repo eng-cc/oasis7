@@ -530,14 +530,10 @@
 - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.design.md`
 - `doc/engineering/doc-governance/doc-corpus-maintenance-governance-2026-04-17.project.md`
 - historical `devlog-history-compaction` triplet（后续已删除；当前 `doc/devlog` compact archive 入口为 `doc/devlog/README.md`，任务执行证据以 GitHub task issue evidence comments 与 workflow source-of-truth 为准）
-- `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.prd.md`
-- `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.design.md`
-- `doc/engineering/doc-governance/world-simulator-viewer-path-governance-2026-04-17.project.md`
+- historical `world-simulator-viewer-path-governance` triplet（后续已删除；当前 `world-simulator/viewer` 首读分流与维护边界由 `doc/world-simulator/viewer/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
 - historical `p2p-node-path-governance` triplet（后续已删除；当前 `p2p/node` 首读分流、主题簇与维护边界由 `doc/p2p/node/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
 - `doc/testing/evidence/README.md`（当前 testing evidence 子域分流与维护边界；一次性路径落位专题已退役）
-- `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.prd.md`
-- `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.design.md`
-- `doc/engineering/doc-governance/readme-governance-path-governance-2026-04-18.project.md`
+- historical `readme-governance-path-governance` triplet（后续已删除；当前 `readme/governance` 首读分流与维护边界由 `doc/readme/governance/README.md` 承接，实施证据见 git history 与 GitHub task issue evidence comments）
 - `doc/devlog/README.md`
 - `doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
