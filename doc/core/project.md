@@ -315,14 +315,14 @@
     - `git diff --check`
 - [x] unified-persistent-world-terminology-upgrade-plan (PRD-CORE-003/009) [test_tier_required]: 建立统一持久大世界术语升级计划，把默认玩家/产品模型收束为“统一持久大世界”，并规划 legacy 环境/网络术语从 active product/player-facing docs 迁出，同时保留历史 evidence 与 runtime/ops 技术兼容边界。 Trace: .pm/tasks/task_cb987cd0fdfb4ecc98a6ddde7d96204c.yaml
   - 产物文件:
-    - `doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
+    - unified persistent world terminology dated PRD (later folded into the module PRD; retired/deleted historical task evidence)
     - `doc/core/README.md`
     - `doc/core/prd.index.md`
     - `doc/core/prd.md`
     - `doc/core/project.md`
   - 验收命令 (`test_tier_required`):
-    - `test -f doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md`
-    - `rg -n "统一持久大世界|unified persistent world|Legacy / Forbidden Product Terms|Upgrade Phases|Acceptance Criteria|Residual Risks" doc/product/world-infrastructure/unified-persistent-world-terminology-2026-06-16.prd.md doc/core/README.md doc/core/prd.index.md doc/core/prd.md doc/core/project.md`
+    - historical existence check covered the unified persistent world terminology dated PRD, later folded into the module PRD and retired/deleted
+    - historical terminology scan covered the now-retired dated PRD plus `doc/core/README.md`, `doc/core/prd.index.md`, `doc/core/prd.md` and `doc/core/project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] unified-world-code-layer-migration-follow-up (PRD-CORE-003/009) [test_tier_required]: 收口统一持久大世界术语迁移的代码层后续，确认 chain-runtime network-tier test discovery 不再被 status/observability API 漂移阻断，release-gate 长跑入口在 Bash 3.2 下前置声明 Bash 4+ 要求，legacy shared wrapper 只保留兼容转发并新增 active code/template 术语扫描。 Trace: .pm/tasks/task_acb7e3599b4242628a7ac99a62628d55.yaml
