@@ -128,11 +128,17 @@ def check(root: Path) -> list[str]:
         if not success_ids or success_ids != trace_ids or len(trace_ids) != len(set(trace_ids)):
             fail(errors, "traceability-contract", f"{module.path}: success={success_ids!r}, trace={trace_ids!r}")
         for sc_id, owner, prd_ids, authority_docs, evidence, tier in trace_rows:
-            if not owner.strip() or not re.search(r"PRD-[A-Z0-9_/-]+", prd_ids):
+            prd_refs = re.findall(r"PRD-[A-Z][A-Z0-9_]*(?:-[A-Z0-9]+)+(?:/[A-Z0-9]+)*", prd_ids)
+            if not owner.strip() or not prd_refs:
                 fail(errors, "traceability-owner-prd", f"{module.path}: {sc_id}")
             row_paths = re.findall(r"`([^`]+\.md)`", authority_docs)
             if not row_paths or any(not (root / row_path).is_file() for row_path in row_paths):
                 fail(errors, "traceability-authority", f"{module.path}: {sc_id}")
+            else:
+                authority_texts = [(root / row_path).read_text(encoding="utf-8") for row_path in row_paths]
+                for prd_ref in prd_refs:
+                    if not any(prd_ref in authority_text for authority_text in authority_texts):
+                        fail(errors, "traceability-prd-resolution", f"{module.path}: {sc_id} missing {prd_ref} in {row_paths!r}")
             if not evidence.strip() or tier.strip() not in {"test_tier_required", "test_tier_full"}:
                 fail(errors, "traceability-evidence-tier", f"{module.path}: {sc_id}")
     if any((root / "doc/product").glob("**/archive")):

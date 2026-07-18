@@ -81,7 +81,7 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 | --- | --- | --- | --- | --- | --- |
 | SC-1 | producer_system_designer | PRD-GAME-001 | `doc/game/prd.md` | 产品入口唯一性检查 | test_tier_required |
 | SC-2 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 权威映射与反向链接检查 | test_tier_required |
-| SC-3 | gameplay_designer | PRD-GAME-024 | `doc/game/prd.md` | 设施报价到退役玩法闭环证据 | test_tier_required |
+| SC-3 | gameplay_designer | PRD-GAME-016 | `doc/game/prd.md` | 设施报价到退役玩法闭环证据 | test_tier_required |
 | SC-4 | runtime_engineer | PRD-WORLD_RUNTIME-001 | `doc/world-runtime/prd.md` | receipt、失败原子性与 replay 回归 | test_tier_required |
 | SC-5 | blockchain_ops_engineer | PRD-P2P-002 | `doc/p2p/prd.md` | snapshot、replication、state-sync 多节点恢复证据 | test_tier_full |
 | SC-6 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到 required/full 证据的发布门禁 | test_tier_required |

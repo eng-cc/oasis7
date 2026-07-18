@@ -128,6 +128,14 @@ def main() -> None:
             "| SC-9 | qa_engineer |",
         ),
     )
+    scenario(
+        "traceability-prd-resolution",
+        lambda root: replace(
+            root / "doc/product/world-infrastructure/prd.md",
+            "PRD-GAME-016",
+            "PRD-GAME-999",
+        ),
+    )
     print("product-doc-governance-check.test: OK")
 
 
