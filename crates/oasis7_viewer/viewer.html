@@ -535,6 +535,11 @@
         .entity-list-pending__skeleton span {
           animation: none;
         }
+        button,
+        .pixel-world-command-cell--next,
+        .inline-help-tip__panel { transition: none; }
+        button:not(:disabled):hover,
+        .pixel-world-command-cell--next:active { transform: none; }
       }
       .list-item {
         position: relative;

@@ -15,4 +15,18 @@ describe("mobile gameplay action card clearance", () => {
       );
     }
   });
+
+  it("removes nonessential interactive motion when players prefer reduced motion", () => {
+    const viewerHtml = readFileSync("viewer.html", "utf8");
+    const compatibilityHtml = readFileSync("software_safe.html", "utf8");
+
+    for (const html of [viewerHtml, compatibilityHtml]) {
+      expect(html).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?button,[\s\S]*?\.pixel-world-command-cell--next,[\s\S]*?\.inline-help-tip__panel\s*\{\s*transition:\s*none;/,
+      );
+      expect(html).toMatch(
+        /@media \(prefers-reduced-motion: reduce\)[\s\S]*?button:not\(:disabled\):hover,[\s\S]*?\.pixel-world-command-cell--next:active\s*\{\s*transform:\s*none;/,
+      );
+    }
+  });
 });
