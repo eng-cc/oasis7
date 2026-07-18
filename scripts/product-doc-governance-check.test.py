@@ -134,8 +134,8 @@ def main() -> None:
         "authority-contract",
         lambda root: replace(
             root / "doc/product/world-infrastructure/prd.md",
-            "`doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/p2p/prd.md`",
-            "`doc/product/world-rules-core-gameplay/prd.md`",
+            "[`doc/game/prd.md`](../../game/prd.md)",
+            "`doc/game/prd.md`",
         ),
     )
     scenario(

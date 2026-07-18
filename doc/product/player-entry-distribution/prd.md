@@ -11,7 +11,7 @@
 - Owner role：`producer_system_designer`
 - Last reviewed：`2026-07-18`
 - 后继文档：`无`
-- 下层专业域：`README.md`、`doc/world-simulator/prd.md`
+- 下层专业域：[`README.md`](../../../README.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 
 本文只组合玩家从了解产品到进入、安装、验证受支持技术预览的路径。根 `README.md` 是公开当前状态与 claim envelope 的唯一权威；Viewer、Launcher、发行资产与模式合同由 `world-simulator` 专业域拥有。
 

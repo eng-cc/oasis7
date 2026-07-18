@@ -11,7 +11,7 @@
 - Owner role：`producer_system_designer`
 - Last reviewed：`2026-07-18`
 - 后继文档：`无`
-- 下层专业域：`doc/game/prd.md`
+- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)
 
 本文只定义玩家目标、间接能动性、核心循环、成长与资源压力的产品承诺。玩法规则、数值平衡、专题 PRD-ID 与测试证据由 `game` 专业域拥有。
 

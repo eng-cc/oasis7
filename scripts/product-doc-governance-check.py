@@ -126,7 +126,11 @@ def check(root: Path) -> list[str]:
             if heading not in text:
                 fail(errors, "section-contract", f"{module.path}: missing heading prefix {heading!r}")
         declared_match = re.search(r"^- 下层专业域：(.+)$", text, re.MULTILINE)
-        declared_paths = tuple(re.findall(r"`([^`]+\.md)`", declared_match.group(1) if declared_match else ""))
+        declared_paths = tuple(
+            target
+            for target in module.authorities
+            if target in markdown_targets(root, path, declared_match.group(1) if declared_match else "")
+        )
         if declared_paths != module.authorities:
             fail(errors, "authority-contract", f"{module.path}: expected {module.authorities!r}, got {declared_paths!r}")
         for authority in module.authorities:

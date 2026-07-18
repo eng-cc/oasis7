@@ -11,7 +11,7 @@
 - Owner role：`producer_system_designer`
 - Last reviewed：`2026-07-18`
 - 后继文档：`无`
-- 下层专业域：`doc/world-simulator/prd.md`
+- 下层专业域：[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 
 本文只承载场景、Agent/provider 决策、权威世界状态与可交互表达的产品组合。Viewer、Launcher、provider 与模拟合同由 `world-simulator` 专业域拥有。
 

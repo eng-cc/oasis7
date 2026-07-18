@@ -11,7 +11,7 @@
 - Owner role：`producer_system_designer`
 - Last reviewed：`2026-07-18`
 - 后继文档：`无`
-- 下层专业域：`doc/game/prd.md`、`doc/world-runtime/prd.md`、`doc/p2p/prd.md`
+- 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“大世界基础设施”的并列产品总入口。
 
