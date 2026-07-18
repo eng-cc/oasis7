@@ -425,6 +425,21 @@ h3 {
   gap: 0.58rem;
 }
 
+.hero-overview-link {
+  align-self: center;
+  color: #b9cfdd;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: rgba(131, 188, 220, 0.44);
+  text-underline-offset: 0.22em;
+}
+
+.hero-overview-link:hover {
+  color: #e7fff3;
+  text-decoration-color: var(--accent);
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -483,6 +498,63 @@ h3 {
   display: grid;
   gap: 0.58rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hero-facts {
+  margin-top: 0.88rem;
+}
+
+.preview-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  border: 1px solid rgba(255, 184, 107, 0.58);
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgba(55, 35, 19, 0.94), rgba(19, 28, 28, 0.9));
+  box-shadow: 0 10px 18px rgba(255, 184, 107, 0.1);
+  color: #fff2dd;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  padding: 0.34rem 0.72rem;
+}
+
+.preview-badge::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-right: 0.44rem;
+  border-radius: 999px;
+  background: var(--accent-warm);
+  box-shadow: 0 0 0 3px rgba(255, 184, 107, 0.16);
+}
+
+.hero-facts dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.48rem;
+  margin: 0.56rem 0 0;
+}
+
+.hero-facts dl > div {
+  min-width: 0;
+  border-left: 2px solid rgba(67, 239, 187, 0.44);
+  padding: 0.12rem 0 0.12rem 0.52rem;
+}
+
+.hero-facts dt {
+  color: #85b4a9;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.hero-facts dd {
+  margin: 0.12rem 0 0;
+  color: #d8e9f3;
+  font-size: 0.76rem;
+  line-height: 1.38;
 }
 
 .metric-box {
@@ -2250,6 +2322,28 @@ code {
     align-items: stretch;
   }
 
+  .hero-overview-link {
+    align-self: stretch;
+    padding: 0.12rem 0;
+    text-align: center;
+  }
+
+  .hero-facts dl {
+    grid-template-columns: 1fr;
+    gap: 0.34rem;
+  }
+
+  .hero-facts dl > div {
+    display: grid;
+    grid-template-columns: 5.4rem minmax(0, 1fr);
+    gap: 0.42rem;
+    align-items: baseline;
+  }
+
+  .hero-facts dd {
+    margin: 0;
+  }
+
   .hero .proof-strip .proof-chip {
     width: 100%;
   }
@@ -2377,7 +2471,30 @@ code {
     mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.9) 72%, rgba(0, 0, 0, 0.22) 100%);
   }
 
-  .hero-visual,
+  .hero-visual {
+    display: block;
+    margin-top: 0.1rem;
+  }
+
+  .hero-figure {
+    padding: 0.46rem;
+  }
+
+  .hero-figure::before {
+    inset: 0.46rem;
+  }
+
+  .hero-figure img {
+    aspect-ratio: 16 / 9;
+  }
+
+  .hero-figure figcaption {
+    margin-top: 0.32rem;
+    font-size: 0.7rem;
+    line-height: 1.35;
+  }
+
+  .hero-visual .pulse-panel,
   .hero-stats {
     display: none;
   }
