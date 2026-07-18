@@ -562,7 +562,7 @@ function MetricCard(props) {
 
 function EventCard(props) {
   return (
-    <div class={props.class ?? "event-card"}>
+    <div class={props.class ?? "event-card"} data-action-state={props.actionState}>
       <div class="event-card__title">
         <span>{props.title}</span>
         <Show when={props.badge}>
@@ -972,6 +972,11 @@ function gameplayActionKey(action) {
   const actionId = normalizedId(action.actionId || action.action_id || action.protocolAction || action.protocol_action || action.executeKind);
   const targetAgentId = normalizedId(action.targetAgentId || action.target_agent_id || action.actorAgentId || action.actor_agent_id);
   return `${actionId}::${targetAgentId}`;
+}
+
+function gameplayActionBlockedReasonId(action) {
+  const key = gameplayActionKey(action).replace(/[^a-zA-Z0-9_-]+/g, "-");
+  return `gameplay-action-${key || "unknown"}-blocked-reason`;
 }
 
 function gameplayActionFeedbackMatches(action, feedback = core.snapshotSemanticFeedback(core.state.lastGameplayActionFeedback)) {
@@ -2842,35 +2847,52 @@ function WorldSummaryPanel() {
                     fallback={<EmptyState>{tr(locale(), "当前还没有发布规范玩法动作。", "No canonical gameplay actions published yet.")}</EmptyState>}
                   >
                     <For each={visibleGameplayActionsForPanels(gameplay())}>
-                      {(action) => (
+                      {(action) => {
+                        const disabledReason = () => gameplayActionDisabledReason(action, gameplay(), locale());
+                        const actionState = () => (disabledReason() ? "blocked" : "ready");
+                        const blockedReasonId = gameplayActionBlockedReasonId(action);
+                        return (
                         <EventCard
                           class="event-card event-card--action"
+                          actionState={actionState()}
                           title={action.label || action.actionId || "unknown_action"}
                           badge={gameplay().recommendedAction?.actionId === action.actionId
                             ? tr(locale(), "recommended", "recommended")
-                            : action.disabledReason ? "handoff" : "ready"}
+                            : disabledReason() ? tr(locale(), "受阻", "Blocked") : "ready"}
                           badgeClass={gameplay().recommendedAction?.actionId === action.actionId
                             ? "badge badge--accent"
-                            : action.disabledReason ? "badge badge--warn" : "badge badge--good"}
+                            : disabledReason() ? "badge badge--warn" : "badge badge--good"}
                           meta={
                             action.targetAgentId
                               ? tr(locale(), `作用对象 ${action.targetAgentId}`, `Acts on ${action.targetAgentId}`)
                               : tr(locale(), "世界级动作", "World-level action")
                           }
                         >
-                          <div class="feedback-detail">
-                            {gameplayActionDisabledReason(action, gameplay(), locale())
-                              || gameplayActionDetail(action, gameplay(), locale())}
-                          </div>
+                          <Show
+                            when={disabledReason()}
+                            fallback={<div class="feedback-detail">{gameplayActionDetail(action, gameplay(), locale())}</div>}
+                          >
+                            <div class="feedback-detail" id={blockedReasonId}>{disabledReason()}</div>
+                            <Show when={gameplay().nextStepHint}>
+                              <div class="feedback-detail">{gameplay().nextStepHint}</div>
+                            </Show>
+                            <div class="feedback-summary">
+                              <a href="#viewer-details-panel">
+                                {tr(locale(), "重试前先查看下一步或玩法详情。", "Review Next Move or Gameplay Details before retrying.")}
+                              </a>
+                            </div>
+                          </Show>
                           <Show
                             when={action.executeKind === "request_snapshot" || action.executeKind === "step" || action.executeKind === "play" || action.executeKind === "gameplay_action" || action.executeKind === "claim_first_agent" || action.executeKind === "claim_starter_oc"}
                           >
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
+                                aria-label={action.label || action.actionId || undefined}
                                 class={gameplayActionButtonClass(action)}
                                 aria-busy={gameplayActionButtonBusyAttrs(action)}
                                 disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
+                                aria-describedby={disabledReason() ? blockedReasonId : undefined}
                                 onClick={() => renderGameplayAction(action)}
                               >
                                 {gameplayActionDisplayLabel(action, locale())}
@@ -2881,9 +2903,11 @@ function WorldSummaryPanel() {
                             <div class="toolbar">
                               <button
                                 data-testid={gameplayActionTestId(action)}
+                                aria-label={action.label || action.actionId || undefined}
                                 class={gameplayActionButtonClass(action)}
                                 aria-busy={gameplayActionButtonBusyAttrs(action)}
                                 disabled={gameplayActionButtonDisabled(action, gameplay(), locale())}
+                                aria-describedby={disabledReason() ? blockedReasonId : undefined}
                                 onClick={() => renderGameplayAction(action)}
                               >
                                 {gameplayActionDisplayLabel(action, locale())}
@@ -2891,7 +2915,8 @@ function WorldSummaryPanel() {
                             </div>
                           </Show>
                         </EventCard>
-                      )}
+                        );
+                      }}
                     </For>
                   </Show>
                 </div>

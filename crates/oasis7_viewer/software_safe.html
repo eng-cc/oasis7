@@ -622,7 +622,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        min-height: 164px;
+        min-height: 164px; scroll-margin-top: var(--mobile-action-card-clearance, 0);
         background:
           radial-gradient(circle at top left, rgba(208, 168, 91, 0.08), transparent 34%),
           rgba(255,255,255,0.03);
@@ -2457,7 +2457,7 @@
       @media (max-width: 1240px) {
         body {
           padding: 14px;
-          --viewer-side-max-height: none;
+          --viewer-side-max-height: none; --mobile-action-card-clearance: 84px;
         }
         .shell {
           grid-template-columns: 1fr;
