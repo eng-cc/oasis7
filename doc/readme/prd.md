@@ -144,7 +144,7 @@
 - Acceptance Criteria:
   - AC-1: readme PRD 明确入口文档职责边界。
   - AC-2: readme project 文档维护同步任务与状态。
-  - AC-3: README 与 `world-rule.md`、`testing-manual.md`、模块 PRD 的链接链路可用。
+  - AC-3: README 与 `doc/product/world-rules-core-gameplay/world-rule.prd.md`、`testing-manual.md`、模块 PRD 的链接链路可用。
   - AC-4: 口径更新有明确触发条件与同步时限。
   - AC-5: 渠道化推广方案必须显式绑定内部公开口径边界，不得把 generic marketing 文案直接外推到第三方平台。
   - AC-6: `doc/readme/governance/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
@@ -176,9 +176,9 @@
 - AC-32: 若团队继续对 merged GitHub PR 做贡献奖励审批，必须把普通 merged PR 的默认真实发放 ceiling 收紧到 `150 OC`；任何 `>150 OC` 的 row 都必须留下 exceptional case note，`1500 OC` 不得作为常规 MR 档位扩散。
 - AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
-- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `world-rule.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
+- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `doc/product/world-rules-core-gameplay/world-rule.prd.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
 - AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
-- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`world-rule.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
+- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
 - AC-38: 若白皮书式项目总览已经形成正式入口，必须同步更新 `site/index.html`、`site/en/index.html` 与 `site/doc/cn/index.html`、`site/doc/en/index.html`，让站点首页和文档中心至少能表达“两阶段路径”“当前仍是技术预览”的边界，并给出可直接进入该总览的公开入口。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
@@ -195,7 +195,7 @@
 - Architecture Overview: readme 模块属于文档入口层，负责跨模块信息汇总、术语统一和导航稳定性。
 - Integration Points:
   - `README.md`
-  - `world-rule.md`
+  - `doc/product/world-rules-core-gameplay/world-rule.prd.md`
   - `site/index.html`
   - `site/en/index.html`
   - `testing-manual.md`

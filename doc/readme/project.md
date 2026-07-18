@@ -24,7 +24,7 @@
 - 本主项目页只维护当前/最近任务索引；完整素材正文、发布边界、证据和验收命令以 topic docs 与 GitHub task issue evidence comments 为准。
 
 ## 依赖
-- `doc/readme/prd.index.md`、`README.md`、`world-rule.md`、`testing-manual.md`
+- `doc/readme/prd.index.md`、`README.md`、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`testing-manual.md`
 - `doc/readme/gap/`、`doc/readme/production/`、`doc/readme/governance/`
 - `skills/prd/check.md`
 
