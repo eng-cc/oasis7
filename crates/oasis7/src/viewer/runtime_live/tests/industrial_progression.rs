@@ -642,6 +642,39 @@ fn runtime_gameplay_action_promotes_to_generic_midloop_after_governance_ready() 
         PlayerGameplayGoalKind::ChooseMidLoopPath
     );
     assert_eq!(gameplay.progress_percent, 100);
+    assert_eq!(
+        gameplay.small_player_lane_id.as_deref(),
+        Some("regional_specialist")
+    );
+    assert_eq!(
+        gameplay.major_power_dependency_status.as_deref(),
+        Some("independent_path_available")
+    );
+    let next_step_hint = gameplay.next_step_hint.to_lowercase();
+    let branch_hint = gameplay
+        .branch_hint
+        .as_deref()
+        .expect("regional-specialist snapshot must publish a branch hint")
+        .to_lowercase();
+    for (label, hint) in [
+        ("next_step_hint", next_step_hint.as_str()),
+        ("branch_hint", branch_hint.as_str()),
+    ] {
+        assert!(
+            hint.contains("local") || hint.contains("regional"),
+            "{label} must signal a local or regional route: {hint}",
+        );
+        assert!(
+            hint.contains("specialist") || hint.contains("specialization"),
+            "{label} must signal specialization: {hint}",
+        );
+        for prohibited_term in ["governance", "conflict"] {
+            assert!(
+                !hint.contains(prohibited_term),
+                "{label} must not default to {prohibited_term}: {hint}",
+            );
+        }
+    }
     assert!((1..=3).contains(&gameplay.branch_recommendations.len()));
     for recommendation in &gameplay.branch_recommendations {
         let published_claims = format!(
