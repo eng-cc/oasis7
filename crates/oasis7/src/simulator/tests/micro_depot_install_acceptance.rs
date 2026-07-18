@@ -478,26 +478,40 @@ fn micro_depot_install_quote_is_non_mutating_and_makes_the_finite_commission_vis
     let quote = serde_json::to_value(quote).expect("serialize install quote");
 
     assert_eq!(quote["deployable"], true);
-    assert_eq!(quote["install_cost_resources"], serde_json::json!([{
-        "kind": "data",
-        "amount": 10
-    }]));
-    assert_eq!(quote["commissioning_sink_resources"], serde_json::json!([{
-        "kind": "data",
-        "amount": 2
-    }]));
-    assert_eq!(quote["commissioned_inventory_by_kind"], serde_json::json!({"data": 8}));
-    assert_eq!(quote["upkeep_per_epoch_resources"], serde_json::json!([{
-        "kind": "data",
-        "amount": 1
-    }]));
+    assert_eq!(
+        quote["install_cost_resources"],
+        serde_json::json!([{
+            "kind": "data",
+            "amount": 10
+        }])
+    );
+    assert_eq!(
+        quote["commissioning_sink_resources"],
+        serde_json::json!([{
+            "kind": "data",
+            "amount": 2
+        }])
+    );
+    assert_eq!(
+        quote["commissioned_inventory_by_kind"],
+        serde_json::json!({"data": 8})
+    );
+    assert_eq!(
+        quote["upkeep_per_epoch_resources"],
+        serde_json::json!([{
+            "kind": "data",
+            "amount": 1
+        }])
+    );
     assert_eq!(quote["projected_commissioning_service_uses"], 4);
     assert_eq!(quote["break_even_uses"], 5);
     assert_eq!(quote["low_use_warning"], true);
-    assert!(quote["recommendation_reason"]
-        .as_str()
-        .expect("recommendation is player-readable")
-        .contains("break_even"));
+    assert!(
+        quote["recommendation_reason"]
+            .as_str()
+            .expect("recommendation is player-readable")
+            .contains("break_even")
+    );
     assert_eq!(
         quote["expected_blocker_effect"]["blocker_change"],
         "repair_parts_gap_reduced"
@@ -505,7 +519,11 @@ fn micro_depot_install_quote_is_non_mutating_and_makes_the_finite_commission_vis
     assert!(quote["remaining_blockers"].is_array());
     assert!(quote["reasons"].as_array().is_some_and(Vec::is_empty));
 
-    assert_eq!(kernel.model(), &model_before, "quoting must not reserve or debit");
+    assert_eq!(
+        kernel.model(),
+        &model_before,
+        "quoting must not reserve or debit"
+    );
     assert_eq!(
         kernel.journal_snapshot(),
         journal_before,
@@ -542,7 +560,11 @@ fn micro_depot_install_quote_returns_non_mutating_structured_reasons_for_non_dep
             "{case_name} must be player-readable rather than a failed quote call"
         );
         assert_eq!(kernel.model(), &model_before, "{case_name} mutated model");
-        assert_eq!(kernel.journal_snapshot(), journal_before, "{case_name} emitted history");
+        assert_eq!(
+            kernel.journal_snapshot(),
+            journal_before,
+            "{case_name} emitted history"
+        );
     }
 
     let (mut kernel, _) = install_fixture(10);

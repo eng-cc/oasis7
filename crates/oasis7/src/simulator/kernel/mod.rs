@@ -4,6 +4,7 @@ mod actions;
 mod fragment_replenish;
 mod micro_depot;
 mod micro_depot_commissioning;
+mod micro_depot_install_quote;
 mod micro_depot_snapshot;
 mod micro_depot_v1;
 mod micro_depot_validation;
@@ -66,10 +67,11 @@ pub use micro_depot::{
     MICRO_DEPOT_PROPOSAL_EMIT_KIND, MICRO_DEPOT_UPKEEP_DATA_COST, MicroDepotActionContext,
     MicroDepotActionKind, MicroDepotConsumedResourceClass, MicroDepotDecision,
     MicroDepotDeltaClass, MicroDepotEffectPreview, MicroDepotEvalInput, MicroDepotFacilityContext,
-    MicroDepotInstallQuote, MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
+    MicroDepotPlayerContext, MicroDepotPlayerFacilitySnapshot, MicroDepotPressureClass,
     MicroDepotProposal, MicroDepotQuotePreview, MicroDepotRegionContext, MicroDepotStatus,
     compute_micro_depot_proposal_hash, evaluate_micro_depot_quote_with_module,
 };
+pub use micro_depot_install_quote::MicroDepotInstallQuote;
 #[allow(unused_imports)]
 pub use step::{IntentBatchReport, IntentConflictResolution};
 #[allow(unused_imports)]
