@@ -565,8 +565,8 @@
 - `doc/world-simulator/m4/m4-power-system.project.md`
 - M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record)
 - M4 P0 shared bottleneck/logistics priority project (retired/deleted; historical review record)
-- `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md`
+- M4 P1 maintenance/scarcity pressure PRD (retired/deleted; historical review record)
+- M4 P1 maintenance/scarcity pressure project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.project.md`
 - `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`

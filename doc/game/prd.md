@@ -85,7 +85,6 @@
   - `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
   - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
-  - `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md`
   - `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md`
 - Edge Cases & Error Handling:
   - 若根 PRD 与专题 PRD 冲突，优先检查更新时间、topic ownership 与 `.pm` task trace；不得用根 PRD 的旧摘要覆盖专题新真值。
