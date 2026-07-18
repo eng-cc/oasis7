@@ -23,6 +23,7 @@ mod industrial_progression;
 mod prompt_control;
 mod provider_settings;
 mod snapshot_generated_world;
+mod snapshot_micro_depot;
 mod snapshot_progress;
 mod snapshot_progress_empty_world;
 #[path = "tests_support.rs"]

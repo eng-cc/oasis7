@@ -7,34 +7,21 @@ use crate::simulator::persist::{
     PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
     PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
 };
-use crate::viewer::{ControlCompletionAck, ControlCompletionStatus, ViewerControl};
+use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
 use super::branch_commitment::{branch_recommendations, effective_branch_stage_status};
+pub(super) use super::gameplay_snapshot_feedback::player_gameplay_feedback_from_control_ack;
 pub(super) use super::gameplay_snapshot_helpers::apply_runtime_snapshot_empty_entities_blocker;
 use super::gameplay_snapshot_helpers::{
     base_available_actions, blocker_next_step, primary_factory_for_player_gameplay,
 };
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
 use super::player_gameplay::extend_available_actions;
-use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct PlayerGameplayCausalitySignal {
     pub kind: PlayerGameplayCausalityKind,
     pub detail: String,
-}
-
-fn blocked_control_hint(error_code: Option<&str>) -> String {
-    match error_code {
-        Some("llm_mode_required" | "llm_init_failed") => {
-            "enable --llm and configure a reachable LLM provider before retrying gameplay controls"
-                .to_string()
-        }
-        _ => {
-            "inspect the runtime failure, repair the broken world/module state, then retry the control"
-                .to_string()
-        }
-    }
 }
 
 fn first_session_runtime_sync_blocker(
@@ -95,73 +82,6 @@ pub(super) fn player_gameplay_causality_from_runtime_events(
         kind: PlayerGameplayCausalityKind::AgentOverride,
         detail: override_detail.unwrap_or(fallback),
     })
-}
-
-pub(super) fn player_gameplay_feedback_from_control_ack(
-    mode: &ViewerControl,
-    ack: &ControlCompletionAck,
-) -> PlayerGameplayRecentFeedback {
-    let (action, intent_summary) = match mode {
-        ViewerControl::Pause => (
-            "pause".to_string(),
-            "pause live world advancement".to_string(),
-        ),
-        ViewerControl::Play => (
-            "play".to_string(),
-            "continue advancing the live world".to_string(),
-        ),
-        ViewerControl::Step { count } => (
-            "step".to_string(),
-            format!("advance the live world by {count} step(s)"),
-        ),
-        ViewerControl::Seek { tick } => (
-            "seek".to_string(),
-            format!("seek the live world to tick {tick}"),
-        ),
-    };
-    let (stage, reason, hint) = match ack.status {
-        ControlCompletionStatus::Advanced => ("completed_advanced".to_string(), None, None),
-        ControlCompletionStatus::TimeoutNoProgress => (
-            "completed_no_progress".to_string(),
-            Some("latest live control did not create forward progress".to_string()),
-            Some(
-                "inspect blockers or restore energy/material flow before stepping again"
-                    .to_string(),
-            ),
-        ),
-        ControlCompletionStatus::Blocked => (
-            "blocked".to_string(),
-            Some(ack.error_message.clone().unwrap_or_else(|| {
-                "latest live control was blocked before runtime advance".to_string()
-            })),
-            Some(blocked_control_hint(ack.error_code.as_deref())),
-        ),
-    };
-    let effect = match ack.status {
-        ControlCompletionStatus::Advanced => format!(
-            "world advanced: logicalTime +{}, eventSeq +{}",
-            ack.delta_logical_time, ack.delta_event_seq
-        ),
-        ControlCompletionStatus::TimeoutNoProgress => format!(
-            "no visible world delta: logicalTime +{}, eventSeq +{}",
-            ack.delta_logical_time, ack.delta_event_seq
-        ),
-        ControlCompletionStatus::Blocked => format!(
-            "gameplay blocked before requested advance completed: logicalTime +{}, eventSeq +{}",
-            ack.delta_logical_time, ack.delta_event_seq
-        ),
-    };
-    PlayerGameplayRecentFeedback {
-        action,
-        stage,
-        effect,
-        intent_summary: Some(intent_summary),
-        target_agent_id: None,
-        reason,
-        hint,
-        delta_logical_time: ack.delta_logical_time,
-        delta_event_seq: ack.delta_event_seq,
-    }
 }
 
 fn player_gameplay_intent_scope(action: &str) -> Option<&'static str> {

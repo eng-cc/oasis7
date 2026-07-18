@@ -53,6 +53,7 @@ mod control_utils;
 #[path = "runtime_live/decision_trace.rs"]
 mod decision_trace;
 mod gameplay_snapshot;
+mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
 mod gameplay_snapshot_lane;
 mod mapping;
