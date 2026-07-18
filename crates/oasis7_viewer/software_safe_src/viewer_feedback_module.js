@@ -997,6 +997,32 @@ export function createViewerFeedbackModule({
       riskOrLockin: recommendation.risk_or_lockin || recommendation.riskOrLockin || null,
       nextSessionHook: recommendation.next_session_hook || recommendation.nextSessionHook || null,
     }));
+    const microDepotFacilities = (
+      Array.isArray(gameplay.micro_depot_facilities)
+        ? gameplay.micro_depot_facilities
+        : Array.isArray(gameplay.microDepotFacilities)
+          ? gameplay.microDepotFacilities
+          : []
+    ).map((facility) => ({
+      facilityId: facility.facility_id || facility.facilityId || null,
+      ownerClaimId: facility.owner_claim_id || facility.ownerClaimId || null,
+      status: facility.status || null,
+      locationId: facility.location_id || facility.locationId || null,
+      serviceRadiusCm: facility.service_radius_cm ?? facility.serviceRadiusCm ?? null,
+      inventoryRevision: facility.inventory_revision ?? facility.inventoryRevision ?? null,
+      availableUnitsByKind: clone(facility.available_units_by_kind || facility.availableUnitsByKind) || {},
+      throughputEpoch: facility.throughput_epoch ?? facility.throughputEpoch ?? null,
+      throughputRemainingUnits: facility.throughput_remaining_units ?? facility.throughputRemainingUnits ?? null,
+      throughputLimitUnitsPerEpoch: facility.throughput_limit_units_per_epoch ?? facility.throughputLimitUnitsPerEpoch ?? null,
+      supportedResourceKinds: clone(facility.supported_resource_kinds || facility.supportedResourceKinds) || [],
+      moduleId: facility.module_id || facility.moduleId || null,
+      moduleVersion: facility.module_version || facility.moduleVersion || null,
+      wasmHash: facility.wasm_hash || facility.wasmHash || null,
+      upkeepPaid: facility.upkeep_paid ?? facility.upkeepPaid ?? null,
+      lastReceiptId: facility.last_receipt_id || facility.lastReceiptId || null,
+      lastProposalHash: facility.last_proposal_hash || facility.lastProposalHash || null,
+      availableActions: clone(facility.available_actions || facility.availableActions) || [],
+    }));
 
     return {
       stageId: gameplay.stage_id || null,
@@ -1036,6 +1062,7 @@ export function createViewerFeedbackModule({
           : gameplay.next_step_hint || resumeNextStep || null,
       branchHint: gameplay.branch_hint || null,
       branchRecommendations,
+      microDepotFacilities,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

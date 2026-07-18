@@ -520,6 +520,26 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
             delta_event_seq: 0,
         }),
         agent_claim: None,
+        micro_depot_facilities: vec![MicroDepotPlayerFacilitySnapshot {
+            facility_id: "depot-public-snapshot".to_string(),
+            owner_claim_id: "claim-public-snapshot".to_string(),
+            status: "active".to_string(),
+            location_id: "loc-public-snapshot".to_string(),
+            service_radius_cm: 250_000,
+            inventory_revision: 7,
+            available_units_by_kind: [("data".to_string(), 5)].into_iter().collect(),
+            throughput_epoch: 11,
+            throughput_remaining_units: 13,
+            throughput_limit_units_per_epoch: 16,
+            supported_resource_kinds: vec!["data".to_string()],
+            module_id: "regional.micro_depot".to_string(),
+            module_version: "0.2.0".to_string(),
+            wasm_hash: "sha256:micro-depot-public-evidence".to_string(),
+            upkeep_paid: true,
+            last_receipt_id: Some("receipt-micro-depot-public".to_string()),
+            last_proposal_hash: Some("sha256:proposal-public".to_string()),
+            available_actions: vec!["service_micro_depot_repair".to_string()],
+        }],
         small_player_lane_id: None,
         leverage_class: None,
         same_loop_repeat_count: 0,
@@ -574,6 +594,26 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         Some("unverified")
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
+    let facility = gameplay
+        .micro_depot_facilities
+        .first()
+        .expect("canonical player gameplay snapshot exposes the micro-depot facility");
+    assert_eq!(facility.facility_id, "depot-public-snapshot");
+    assert_eq!(facility.available_units_by_kind.get("data"), Some(&5));
+    assert_eq!(facility.module_id, "regional.micro_depot");
+    assert_eq!(facility.module_version, "0.2.0");
+    assert_eq!(
+        facility.wasm_hash, "sha256:micro-depot-public-evidence",
+        "canonical player gameplay snapshot preserves module evidence"
+    );
+    assert_eq!(
+        facility.last_receipt_id.as_deref(),
+        Some("receipt-micro-depot-public")
+    );
+    assert_eq!(
+        facility.last_proposal_hash.as_deref(),
+        Some("sha256:proposal-public")
+    );
 }
 
 #[test]
