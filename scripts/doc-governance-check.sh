@@ -33,6 +33,8 @@ Checks:
       sequential identifiers; they must use `topic-slug (PRD-ID) ... Trace:
       #<issue> (task_<32hex>)` or the equivalent GitHub issue URL on a single
       line.
+  11. The thin product overlay must contain exactly four product-owned PRDs with
+      stable metadata, lifecycle, authority backlinks, and acceptance traceability.
 USAGE
 }
 
@@ -548,6 +550,10 @@ project_task_policy_diff+=$(git diff --unified=0 --no-color --cached -- 'doc/**/
 project_task_policy_diff+=$'\n'
 project_task_policy_diff+=$(git diff --unified=0 --no-color -- 'doc/**/*.project.md' 'doc/*/project.md' 'doc/*.project.md' || true)
 check_added_project_task_row_policy "$project_task_policy_diff"
+
+if ! python3 scripts/product-doc-governance-check.py; then
+  fail "product documentation overlay contract failed"
+fi
 
 if ((failures > 0)); then
   echo "doc-governance-check: failed with ${failures} issue(s)"
