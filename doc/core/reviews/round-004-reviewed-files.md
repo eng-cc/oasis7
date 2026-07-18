@@ -555,8 +555,8 @@
 - `doc/world-simulator/llm/llm-prompt-system.project.md`
 - `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md`
 - `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md`
-- `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md`
+- M4 industrial benchmark/current-state PRD (retired/deleted; historical review record)
+- M4 industrial benchmark/current-state project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md`
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md`
 - `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md`

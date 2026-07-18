@@ -122,7 +122,6 @@
 | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.prd.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.design.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md` |
 | `doc/world-simulator/llm/llm-prompt-system.prd.md` | `doc/world-simulator/llm/llm-prompt-system.design.md` | `doc/world-simulator/llm/llm-prompt-system.project.md` |
 | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.design.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md` |
-| `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.design.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md` |
 | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.design.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` |
 | `doc/world-simulator/m4/m4-power-system.prd.md` | `doc/world-simulator/m4/m4-power-system.design.md` | `doc/world-simulator/m4/m4-power-system.project.md` |
 | `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.design.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.project.md` |
