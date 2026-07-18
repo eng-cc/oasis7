@@ -334,9 +334,9 @@
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | issue_open | I4-002,I4-005 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 缺少 ROUND-002 主从口径主入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
-| 2026-03-06 11:56:44 +0800 | G4-002-Aristotle | doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md | pass | - | PRD 目标态、非目标与验证链条完整，未发现新增 D4 高中风险问题。 |
+| 2026-03-06 11:56:44 +0800 | G4-002-Aristotle | LLM TOML-style unification PRD (retired/deleted; historical review record) | pass | - | PRD 目标态、非目标与验证链条完整，未发现新增 D4 高中风险问题。 |
 | 2026-03-06 11:56:45 +0800 | codex | historical removed precommit remediation playbook PRD | pass | - | 当时提供了可直接执行的修复与复检命令序列；当前契约已收口到 pre-commit 主专题。 |
-| 2026-03-06 11:57:02 +0800 | G4-002-Aristotle | doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md | issue_open | I4-010 | 状态段仅写“已完成”未给最近更新时间，难以判断完成态时效。 |
+| 2026-03-06 11:57:02 +0800 | G4-002-Aristotle | LLM TOML-style unification project (retired/deleted; historical review record) | issue_open | I4-010 | 状态段仅写“已完成”未给最近更新时间，难以判断完成态时效。 |
 | 2026-03-06 11:57:06 +0800 | codex | historical removed precommit remediation playbook project record | pass | - | 当时的校验步骤给出可执行命令 `./scripts/fix-precommit.sh`；完成记录现已并入 pre-commit 主专题。 |
 | 2026-03-06 11:57:21 +0800 | G4-002-Aristotle | doc/world-simulator/scenario/scenario-files.prd.md | issue_open | I4-011 | PRD 内包含大段执行型测试矩阵与脚本建议，混入 project/testing 手册属性信息。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/README.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |

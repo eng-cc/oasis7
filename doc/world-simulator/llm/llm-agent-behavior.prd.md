@@ -56,6 +56,10 @@
 1. 若项目根目录存在 `config.toml`，优先读取该文件。
 2. 若 `config.toml` 不存在，则回退读取进程环境变量。
 3. 在读取 `config.toml` 时，若单个键不存在，允许回退到同名环境变量。
+4. `model` 按 `[llm].model -> selected profile model -> root model -> ENV -> builtin default` 解析；provider 按 `[llm].model_provider -> selected profile provider -> root provider -> sole provider table` 选择。
+5. `base_url` / credential 按 `[llm]` 直接覆盖值优先，再读取 selected provider 的 `base_url` 与 `auth_token`（兼容 provider `api_key`），最后回退 ENV。Agent 目标先读取 `[llm.agent_overrides.<NORMALIZED_AGENT>]`。
+
+现有 `config.toml` 若 TOML 语法错误必须显式失败，不能把“缺键可回退 ENV”误解成“整份坏文件静默回退”。Native launcher Settings 只读写 `[llm].api_key`、`[llm].base_url`、`[llm].model`，保存时必须保留其他表，清空值表示删除对应键；这些直接值会覆盖 profile/provider 的相应解析结果。Web launcher 的 LLM 设置使用浏览器存储，不消费这组文件读写合同。
 
 ### 核心结构
 - `LlmAgentConfig`

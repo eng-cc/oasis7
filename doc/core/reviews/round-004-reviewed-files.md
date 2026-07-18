@@ -535,8 +535,8 @@
 - `doc/world-simulator/llm/llm-async-openai-responses.project.md`
 - `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md`
 - `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md`
-- `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md`
-- `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md`
+- `LLM TOML-style unification PRD (retired/deleted; historical review record)`
+- `LLM TOML-style unification project (retired/deleted; historical review record)`
 - `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md`
 - `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md`
 - `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md`
