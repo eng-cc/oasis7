@@ -6,6 +6,7 @@
 - 当前无未完成主项目任务；后续若继续扩展主站白皮书页内容、站点内中英专题页、奖励台账或渠道运营素材，应新开独立 task 并回写对应 topic project。
 
 ### 最近完成（保留一跳 Trace）
+- [x] release-communication-product-convergence (PRD-README-004/005/006/007) [test_tier_required]: 将发行沟通与公开 claim 生命周期迁入 `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`（产品映射：PRD-PRODUCT-004），把两份操作模板改为无日期稳定入口，并删除四组 2026-03-11 brief/template/draft 三件套；历史任务完成证据由本页、GitHub task evidence 与 Git history 承接。 Trace: #2433 (task_b70c219b25c44926a87fe1e2614293ec)
 - [x] readme-governance-compressed-microtopic-deletion (PRD-ENGINEERING-025/030) [test_tier_required]: 删除已降格为历史压缩且已有当前承接面的 README 顶层链接检查与根 README 状态对齐一次性三件套；当前追溯收敛到 `scripts/readme-link-check.sh`、根 `README.md`、一致性 checklist、季度复核、release communication surfaces、git history 与 GitHub task issue evidence comments。 Trace: #1902 (task_b5077bf887df498dbe67ad61fefa8aeb)
 - [x] readme-governance-legacy-release-surface-convergence (PRD-ENGINEERING-025/030) [test_tier_required]: 收敛 `doc/readme/governance/` 默认阅读面中的 2026-03 release-candidate / announcement draft / closed-beta candidate 旧语义；删除两个一次性 release 输出文件，把对应三件套降级到历史压缩清单，并保留 reward/ledger 当前政策入口。 Trace: #1806 (task_3a96bbd2f3274f639464f879b02d55d4)
 - [x] module-project-log-slimming (PRD-ENGINEERING-030) [test_tier_required]: 压缩 readme 主项目页历史流水为当前/最近任务索引与历史追溯入口，保留模块状态和一跳 task trace。 Trace: .pm/tasks/task_49ef9270afc646d98d4a8386c0888eab.yaml

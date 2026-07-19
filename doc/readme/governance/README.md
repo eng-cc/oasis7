@@ -5,7 +5,7 @@
 ## 从这里开始
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
 - 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
-- 想确认 release communication 的可复用流程或 announcement/changelog 骨架：先读 `readme-release-communication-template-2026-03-11.prd.md` 或 `readme-release-announcement-template-2026-03-11.prd.md`
+- 想确认 release communication 的产品边界：先读 `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`；执行时使用 `readme-release-communication-template.md` 或 `readme-release-announcement-template.md`
 - 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
 - 想确认 limited playable technical preview 的贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
@@ -17,11 +17,8 @@
 - `../README.md` 是 `readme` 模块级 landing page，负责跨 `governance / gap / production` 分流。
 - `../prd.index.md` 是 `readme` 模块完整文件级索引，适合已知主题后按文件名查找。
 
-## 密度快照
-- 快照（2026-07-04）:
-  - `doc/readme/governance/`: 59 份 Markdown
-  - `doc/readme/`: 106 份 Markdown
-  - `site/social/xiaohongshu/`: 128 份文件（小红书内容包、视觉源与导出图）
+## 密度与库存
+- 不在入口冻结容易漂移的文件数；当前库存统一以 `./scripts/doc-inventory-report.sh` 为准。
 - 当前子域属于 `readme` 模块最高密度热点路径；小红书素材包已迁入 `site/social/xiaohongshu/`，本页保留渠道 runbook 与簇级入口。
 
 ## 首读主题簇
@@ -58,8 +55,9 @@
 
 ### 2. Release communication 与 announcement 模板
 - 首读入口:
-  - `readme-release-communication-template-2026-03-11.prd.md`
-  - `readme-release-announcement-template-2026-03-11.prd.md`
+  - `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`（产品承诺与公开 claim 生命周期）
+  - `readme-release-communication-template.md`（内部口径简报操作模板）
+  - `readme-release-announcement-template.md`（公告 / changelog 草稿操作模板）
 - 适合问题:
   - 后续 release brief / announcement / changelog 的可复用结构该从哪里开始
   - 哪些模板定义 release communication 的默认边界
@@ -87,15 +85,14 @@
 
 ### 历史压缩：release-candidate 与 closed-beta candidate
 - 追溯入口:
-  - `readme-release-candidate-communication-brief-2026-03-11.prd.md`
-  - `readme-release-announcement-draft-2026-03-11.prd.md`
+  - Git history 与对应 GitHub task issue evidence comments
 - 适合问题:
   - 2026-03-11 版本候选实例当时如何生成 release brief / announcement draft
   - 旧 closed-beta-candidate 预备 runbook 如何被并入当前 limited preview invite / execution 入口
 - 当前边界:
   - 这些是历史实例或预备 runbook，不再作为默认活跃首读入口。
   - 当前公开状态以根 `../../../README.md` 为准：limited playable technical preview；不是 closed beta、public launch 或正式玩家发布。
-  - release communication 后续复用从模板专题进入；旧 closed-beta runbook 与 playability 模板已退役删除，claim-control 当前从 `readme-limited-preview-invite-pack-2026-03-22.md` 与 `readme-limited-preview-round1-execution-2026-03-27.md` 进入。
+  - release communication 产品边界从产品分册进入，操作复用从两份无日期模板进入；四组 2026-03-11 brief/template/draft 专题三件套已退役删除。旧 closed-beta runbook 与 playability 模板已退役删除，claim-control 当前从 `readme-limited-preview-invite-pack-2026-03-22.md` 与 `readme-limited-preview-round1-execution-2026-03-27.md` 进入。
 
 ### 5. 小红书与外宣激励
 - 首读入口:
