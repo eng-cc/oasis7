@@ -24,11 +24,13 @@ struct VisualProbeRow {
 #[derive(Clone, Debug, Serialize)]
 struct VisualProbeSummary {
     fragments: Vec<VisualProbeRow>,
+    fragment_insets: Vec<VisualProbeRow>,
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
     selected_location_cues: Vec<VisualProbeRow>,
     hit_regions: usize,
     fragment_entity_cache_size: usize,
+    fragment_inset_entity_count: usize,
     location_entity_cache_size: usize,
     agent_entity_cache_size: usize,
 }
@@ -204,6 +206,13 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
 
+    let mut fragment_inset_query =
+        world.query::<(&PixelWorldFragmentInsetVisual, &Sprite, &Transform)>();
+    let fragment_insets = fragment_inset_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     let locations = location_query
         .iter(world)
@@ -226,11 +235,13 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
     let runtime = world.resource::<BevyRuntimeState>();
     VisualProbeSummary {
         fragments,
+        fragment_insets,
         locations,
         agents,
         selected_location_cues,
         hit_regions: runtime.hit_regions.len(),
         fragment_entity_cache_size: runtime.fragment_entities.len(),
+        fragment_inset_entity_count: fragment_inset_query.iter(world).count(),
         location_entity_cache_size: runtime.location_entities.len(),
         agent_entity_cache_size: runtime.agent_entities.len(),
     }
@@ -275,6 +286,14 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         fragment_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment", sprite, transform)),
+    );
+
+    let mut fragment_inset_query =
+        world.query::<(&PixelWorldFragmentInsetVisual, &Sprite, &Transform)>();
+    layers.extend(
+        fragment_inset_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("fragment_inset", sprite, transform)),
     );
 
     let mut selected_location_cue_query =
@@ -331,6 +350,7 @@ fn layer_kind_id(kind: &str) -> u8 {
     match kind {
         "grid" => 1,
         "fragment" => 2,
+        "fragment_inset" => 6,
         "location" => 3,
         "selected_location_cue" => 4,
         "agent" => 5,
@@ -607,16 +627,67 @@ fn bevy_ecs_removes_hidden_fragment_visuals_and_stale_cache_entries() {
 }
 
 #[test]
+fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
+    let mut app = render_test_app(sample_render_state(20_000.0));
+    let detail = visual_probe_summary(&mut app);
+
+    assert_eq!(detail.fragments.len(), 1);
+    assert_eq!(detail.fragment_insets.len(), 1);
+    assert_eq!(detail.fragment_inset_entity_count, 1);
+    let base = &detail.fragments[0];
+    let inset = &detail.fragment_insets[0];
+    assert_eq!(inset.id, base.id);
+    assert!(inset.size_px >= base.size_px * 0.35);
+    assert!(inset.size_px <= base.size_px * 0.37);
+    assert!(inset.z > base.z);
+    assert!(inset.z < detail.locations[0].z);
+    assert!((inset.x - base.x).abs() + (inset.y - base.y).abs() < base.size_px);
+
+    app.update();
+    assert_eq!(
+        visual_probe_summary(&mut app).fragment_inset_entity_count,
+        1,
+        "a consecutive Detail reconcile must reuse its inset entity"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state(12_000.0));
+        runtime.render_version += 1;
+    }
+    app.update();
+    let background = visual_probe_summary(&mut app);
+    assert_eq!(background.fragments.len(), 1);
+    assert!(background.fragment_insets.is_empty());
+    assert_eq!(background.fragment_inset_entity_count, 0);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state(100.0));
+        runtime.render_version += 1;
+    }
+    app.update();
+    let hidden = visual_probe_summary(&mut app);
+    assert!(hidden.fragments.is_empty());
+    assert!(hidden.fragment_insets.is_empty());
+    assert_eq!(hidden.fragment_inset_entity_count, 0);
+}
+
+#[test]
 fn bevy_render_probe_contract_captures_visual_hierarchy() {
-    let mut app = render_test_app(sample_render_state(12_000.0));
+    let mut app = render_test_app(sample_render_state(20_000.0));
     let summary = visual_probe_summary(&mut app);
 
     assert_eq!(summary.fragment_entity_cache_size, 1);
+    assert_eq!(summary.fragment_inset_entity_count, 1);
     assert_eq!(summary.location_entity_cache_size, 1);
     assert_eq!(summary.agent_entity_cache_size, 1);
     assert!(summary.fragments[0].size_px > 0.0);
     assert!(summary.agents[0].size_px >= 15.0);
     assert!(summary.fragments[0].z < summary.agents[0].z);
+    assert_eq!(summary.fragment_insets.len(), 1);
+    assert!(summary.fragment_insets[0].z > summary.fragments[0].z);
+    assert!(summary.fragment_insets[0].z < summary.locations[0].z);
 
     write_probe_summary_if_requested(&summary);
 }
