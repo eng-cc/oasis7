@@ -8,6 +8,9 @@ const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
 const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
+const FRAGMENT_INSET_LAYER_Z: f32 = 0.36;
+const FRAGMENT_INSET_SIZE_SCALE: f32 = 0.36;
+const FRAGMENT_INSET_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
@@ -59,6 +62,13 @@ pub(crate) struct AgentVisualStyle {
 
 #[derive(Component)]
 pub(crate) struct PixelWorldFragmentVisual {
+    id: String,
+}
+
+/// A Detail-only mineral grain. It is intentionally a separate visual so the
+/// base terrain patch remains the sole owner of the DTO-derived terrain color.
+#[derive(Component)]
+struct PixelWorldFragmentInsetVisual {
     id: String,
 }
 
@@ -416,6 +426,16 @@ fn fragment_color(fragment: &FragmentTerrainPatch, lod: FragmentTerrainLod) -> C
     )
 }
 
+fn fragment_inset_color(fragment: &FragmentTerrainPatch) -> Color {
+    let alpha = fragment_alpha(fragment, FragmentTerrainLod::Detail);
+    Color::srgba_u8(
+        fragment.color[0].saturating_mul(3) / 5,
+        fragment.color[1].saturating_mul(3) / 5,
+        fragment.color[2].saturating_mul(3) / 5,
+        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
 fn reconcile_grid(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -488,11 +508,15 @@ fn despawn_stale_entities(
 fn reconcile_fragments(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
+    existing_insets: &Query<(Entity, &PixelWorldFragmentInsetVisual)>,
     width: f64,
     height: f64,
 ) {
     let Some(render_state) = runtime.render_state.as_ref() else {
         for (_, entity) in runtime.fragment_entities.drain() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in existing_insets.iter() {
             commands.entity(entity).despawn();
         }
         return;
@@ -501,10 +525,18 @@ fn reconcile_fragments(
         for (_, entity) in runtime.fragment_entities.drain() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in existing_insets.iter() {
+            commands.entity(entity).despawn();
+        }
         return;
     };
 
     let mut active_ids = HashSet::new();
+    let mut active_inset_ids = HashSet::new();
+    let existing_insets_by_id = existing_insets
+        .iter()
+        .map(|(entity, inset)| (inset.id.clone(), entity))
+        .collect::<HashMap<_, _>>();
     for fragment in &render_state.fragment_terrain {
         let Some(style) =
             fragment_visual_style(fragment, world_bounds, width, height, &runtime.camera)
@@ -542,9 +574,40 @@ fn reconcile_fragments(
                 .fragment_entities
                 .insert(fragment.id.clone(), entity);
         }
+
+        if style.lod == FragmentTerrainLod::Detail {
+            active_inset_ids.insert(fragment.id.clone());
+            let inset_size = (style.size_px as f32 * FRAGMENT_INSET_SIZE_SCALE).max(1.0);
+            let inset_offset = style.size_px as f32 * FRAGMENT_INSET_OFFSET_SCALE;
+            let mut inset_transform = transform;
+            inset_transform.translation += Vec3::new(
+                inset_offset,
+                inset_offset,
+                FRAGMENT_INSET_LAYER_Z - style.layer_z,
+            );
+            let inset_sprite = sprite_for_square(fragment_inset_color(fragment), inset_size);
+            if let Some(entity) = existing_insets_by_id.get(&fragment.id) {
+                commands
+                    .entity(*entity)
+                    .insert((inset_sprite, inset_transform));
+            } else {
+                commands.spawn((
+                    inset_sprite,
+                    inset_transform,
+                    PixelWorldFragmentInsetVisual {
+                        id: fragment.id.clone(),
+                    },
+                ));
+            }
+        }
     }
 
     despawn_stale_entities(commands, &mut runtime.fragment_entities, &active_ids);
+    for (id, entity) in existing_insets_by_id {
+        if !active_inset_ids.contains(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 fn reconcile_locations(
@@ -943,6 +1006,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
+    fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
@@ -959,6 +1023,9 @@ pub(crate) fn render_scene(
     if !runtime.mounted {
         clear_runtime_visuals(&mut commands, &mut runtime);
         for (entity, _) in queries.selected_location_cues.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.fragment_insets.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -1006,6 +1073,9 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.selected_location_cues.iter() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in queries.fragment_insets.iter() {
+            commands.entity(entity).despawn();
+        }
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -1033,7 +1103,13 @@ pub(crate) fn render_scene(
         width,
         height,
     );
-    reconcile_fragments(&mut commands, &mut runtime, width, height);
+    reconcile_fragments(
+        &mut commands,
+        &mut runtime,
+        &queries.fragment_insets,
+        width,
+        height,
+    );
     reconcile_links(&mut commands, &mut runtime, width, height);
     reconcile_locations(
         &mut commands,
