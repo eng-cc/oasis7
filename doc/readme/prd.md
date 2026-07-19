@@ -59,8 +59,8 @@
 - PRD-README-007: As a `liveops_community`, I want a reusable announcement/changelog template, so that future external drafts follow the same sections, source links, and review states.
 - PRD-README-008: As a 仓库访客, I want the root README to reflect the current preview posture, so that I do not mistake the repo for a live release landing page.
 - PRD-README-009: As a `producer_system_designer`, I want repo-home copy aligned with site and communication docs, so that public promises stay consistent.
-- PRD-README-010: As a `liveops_community`, I want platform-specific promotion plans anchored to third-party channel mechanics and internal claim envelopes, so that outbound seeding can fit channel culture without over-promising.
-- PRD-README-011: As a `liveops_community`, I want a first-wave Moltbook post pack derived from the approved platform plan, so that we can publish native posts and replies without improvising unsafe copy.
+- PRD-README-010: As a `liveops_community`, I want a stable channel runbook anchored to freshly verified platform mechanics and the current product claim envelope, so that outbound seeding can fit channel culture without over-promising or reusing stale platform assumptions.
+- PRD-README-011: As a `liveops_community`, I want a reusable Moltbook post pack governed by the stable runbook, so that native posts and replies can be reviewed, published, withdrawn and traced without improvising unsafe copy.
 - PRD-README-012: As a `liveops_community`, I want Moltbook outreach to point builders back to GitHub issues and PRs after they inspect the preview, so that external interest can turn into actionable feedback and contributions.
 - PRD-README-013: As a `liveops_community`, I want shorter feed-native Moltbook variants of the approved post pack, so that final publish copy reads like native posts instead of internal drafts.
 - PRD-README-014: As a 仓库访客, I want the repo root and public entry docs to use the canonical `oasis7` brand while still explaining legacy internal identifiers, so that I do not confuse project branding with crate/bin compatibility names.
@@ -252,8 +252,8 @@
 | PRD-README-007 | TASK-README-009 | `test_tier_required` | 公告模板、source links 与 review status 抽样复核 | 公告底稿模板复用性 |
 | PRD-README-008 | TASK-README-010 | `test_tier_required` | 根 README 状态段含 `limited playable technical preview` / 非 closed beta / 非 public launch / 公告准备态 | 仓库首页状态理解 |
 | PRD-README-009 | TASK-README-010 | `test_tier_required` | README 与 site / brief 口径一致 | 公开口径一致性 |
-| PRD-README-010 | TASK-README-014 | `test_tier_required` | Moltbook 推广方案含平台现状、内容支柱、节奏、禁宣称项与回流机制 | 第三方渠道推广口径一致性 |
-| PRD-README-011 | TASK-README-015 | `test_tier_required` | Moltbook 帖文包含首批主贴、评论模板、CTA 与禁宣称抽样复核 | 首批渠道文案执行安全性 |
+| PRD-README-010 | TASK-README-014 | `test_tier_required` | stable Moltbook runbook 含平台复验/fail-closed、内容支柱、禁宣称项与信号回流机制 | 第三方渠道推广口径一致性 |
+| PRD-README-011 | TASK-README-015 | `test_tier_required` | stable Moltbook post pack 含主贴、回复模板、CTA、状态与 publication evidence 抽样复核 | 渠道文案执行安全性 |
 | PRD-README-012 | TASK-README-016 | `test_tier_required` | Moltbook 方案与帖文明确 GitHub issue / PR CTA，且不与技术预览边界冲突 | 外部反馈回流与贡献转化 |
 | PRD-README-013 | TASK-README-017 | `test_tier_required` | Moltbook 帖文主贴已压缩为更短的 feed-native 版本，且保留技术预览与 GitHub CTA 边界 | 最终发布文案可用性 |
 | PRD-README-014 | TASK-README-018/019/020 | `test_tier_required` | 根 README、公开入口文档与 `doc/readme/governance/**` 的历史标题/当前公开口径统一为 `oasis7`，并显式区分内部兼容命名 | 仓库首页认知、公开品牌一致性 |

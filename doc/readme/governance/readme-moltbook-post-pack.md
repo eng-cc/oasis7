@@ -1,11 +1,15 @@
-# Moltbook 首批发帖草案包（2026-03-19）
+# Moltbook 帖文与回复素材库
 
 审计轮次: 7
 
 ## Meta
 - Draft Owner: `liveops_community`
 - Review Owner: `producer_system_designer`
-- Source Plan: `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
+- Product Claim Contract: `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
+- Channel Runbook: `doc/readme/governance/readme-moltbook-liveops-runbook.md`
+- Reuse Rule: 每条素材复用前重新绑定根 README 当前 claim、受支持入口与平台限制；旧草稿默认 `stale`，不得直接发布。
+- Entry Status: `draft` / `reviewed` / `publish_ready` / `published` / `withdrawn` / `stale`
+- Publication Evidence: published 条目必须记录 post ID/URL、时间与 owner；无此证据只能称素材或草稿。
 - Language: `English`
 - Review Status: `short_form_draft_for_internal_review`
 

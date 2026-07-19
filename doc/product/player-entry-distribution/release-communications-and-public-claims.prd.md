@@ -21,6 +21,8 @@
 - 内部 readiness、go/no-go、QA 结论和产品决策只是公开沟通的输入，不会自动生成公开 claim。
 - 对外内容按“已证实事实 → 适用范围与已知限制 → 未承诺内容与残余风险 → 下一步或恢复动作”组织；亮点不能覆盖限制。
 - 根 `README.md` 是当前公开状态与 claim envelope 的唯一权威。站点、公告、changelog、帖子和回复不得独立升级阶段或扩大承诺。
+- 第三方账号存在、平台认证、原生 profile、帖子或回复都不证明产品集成、身份互通、合作关系、受支持入口或发行可用性；这些结论需要独立的当前产品决策、专业证据与根 README claim。
+- 点赞、关注、回复、creator/builder 兴趣和合作线索只是待分流信号，不是 roadmap 承诺、readiness evidence 或批准。渠道回复不得承诺日期、范围、集成或恢复结果。
 
 ## 3. 沟通生命周期
 
@@ -53,6 +55,8 @@
 - RC-6：沟通可追踪 LiveOps 起草、producer 承诺审核、QA 证据复核和实际发布记录。
 - RC-7：事故或 rollback 不沿用旧 go 结论，不把 messaging rollback 冒充软件恢复。
 - RC-8：公开内容遵循最小披露，不泄露敏感配置、内部证据或个人信息。
+- RC-9：抽样 channel profile、帖子和回复能区分渠道 presence 与产品集成/访问；CTA 只指向当前受支持公开入口或正式反馈/贡献路径。
+- RC-10：产品、缺陷与合作信号都有 owner 和下一步，互动指标不会升级 claim、readiness 或 roadmap。
 
 ### 6.1 验收追踪
 
@@ -62,6 +66,7 @@
 | RC-2 / RC-6 | liveops_community / producer_system_designer | `README.md`; `doc/readme/prd.md` | 审核记录及 channel/time/URL/message ID/owner 发布 trace | test_tier_required |
 | RC-4 / RC-5 | producer_system_designer / liveops_community / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | active surface claim 对账与 stale/withdrawn 纠正记录 | test_tier_required |
 | RC-7 / RC-8 | liveops_community / qa_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer | `doc/readme/prd.md`; `doc/testing/prd.md` | incident/rollback 抽样与最小披露审计 | test_tier_required |
+| RC-9 / RC-10 | liveops_community / producer_system_designer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | 渠道 presence/integration 负例、CTA 与信号 owner/next-action 审计 | test_tier_required |
 
 ## 7. Non-Goals
 

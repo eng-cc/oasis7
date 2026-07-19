@@ -6,7 +6,7 @@
 - 想先用一份长说明快速看懂“项目是什么、为什么要做、当前做到哪一步”：先读 `readme-project-overview-whitepaper-2026-04-25.md`
 - 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
 - 想确认 release communication 的产品边界：先读 `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`；执行时使用 `readme-release-communication-template.md` 或 `readme-release-announcement-template.md`
-- 想确认 Moltbook 推广方案、持续运营或 repair follow-up：先读 `readme-moltbook-promotion-plan-2026-03-19.prd.md`、`readme-moltbook-liveops-runbook-2026-03-21.prd.md` 或 `readme-moltbook-post-drafts-2026-03-19.prd.md`
+- 想确认 Moltbook 渠道边界与公开 claim：先读发行沟通产品分册；持续运营使用 `readme-moltbook-liveops-runbook.md`，帖文与回复素材使用 `readme-moltbook-post-pack.md`
 - 想确认 limited playable technical preview 的贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 想确认资源模型分层、世界规则入口收口或公开定位相关口径：先读 `readme-resource-model-layering.prd.md` 或 `readme-world-rules-consolidation.prd.md`
@@ -66,13 +66,14 @@
 
 ### 3. Moltbook 运营与 follow-up
 - 首读入口:
-  - `readme-moltbook-promotion-plan-2026-03-19.prd.md`
-  - `readme-moltbook-liveops-runbook-2026-03-21.prd.md`
-  - `readme-moltbook-post-drafts-2026-03-19.prd.md`
+  - `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`
+  - `readme-moltbook-liveops-runbook.md`
+  - `readme-moltbook-post-pack.md`
 - 适合问题:
   - Moltbook 渠道推广和持续运营该看哪里
   - 已批准主贴、首评、reply boundary 与 follow-up 素材在哪
   - 当前信任修复 / repair certification 讨论链从哪里进入
+  - 2026-03 promotion plan 与三组专题包装已退役；历史平台观察、排期和草稿从 Git history 与 GitHub task evidence 追溯
 
 ### 4. Limited playable technical preview 贡献奖励与台账执行
 - 首读入口:
