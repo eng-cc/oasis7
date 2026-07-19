@@ -26,6 +26,7 @@ struct VisualProbeSummary {
     fragments: Vec<VisualProbeRow>,
     fragment_shadows: Vec<VisualProbeRow>,
     fragment_insets: Vec<VisualProbeRow>,
+    fragment_flecks: Vec<VisualProbeRow>,
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
     selected_location_cues: Vec<VisualProbeRow>,
@@ -33,6 +34,7 @@ struct VisualProbeSummary {
     fragment_entity_cache_size: usize,
     fragment_shadow_entity_count: usize,
     fragment_inset_entity_count: usize,
+    fragment_fleck_entity_count: usize,
     location_entity_cache_size: usize,
     agent_entity_cache_size: usize,
 }
@@ -54,11 +56,13 @@ struct PixelRegressionSummary {
     raw_rgba_fnv1a64: String,
     non_background_pixels: usize,
     fragment_pixels: usize,
+    fragment_fleck_pixels: usize,
     grid_pixels: usize,
     location_pixels: usize,
     selected_location_cue_pixels: usize,
     agent_pixels: usize,
     fragment_sample_rgba: [u8; 4],
+    fragment_fleck_sample_rgba: [u8; 4],
     location_sample_rgba: [u8; 4],
     agent_sample_rgba: [u8; 4],
 }
@@ -125,6 +129,14 @@ fn sample_render_state_with_selection(
         kind: kind.to_string(),
         id: id.to_string(),
     });
+    render_state
+}
+
+fn sample_render_state_with_unoccluded_detail_fleck() -> RenderState {
+    let mut render_state = sample_render_state(20_000.0);
+    render_state.selection = None;
+    render_state.locations[0].pos = sample_position(1_200_000.0, 700_000.0);
+    render_state.agents[0].pos = Some(sample_position(1_250_000.0, 750_000.0));
     render_state
 }
 
@@ -222,6 +234,13 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
 
+    let mut fragment_fleck_query =
+        world.query::<(&PixelWorldFragmentFleckVisual, &Sprite, &Transform)>();
+    let fragment_flecks = fragment_fleck_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
     let locations = location_query
         .iter(world)
@@ -246,6 +265,7 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         fragments,
         fragment_shadows,
         fragment_insets,
+        fragment_flecks,
         locations,
         agents,
         selected_location_cues,
@@ -253,6 +273,7 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         fragment_entity_cache_size: runtime.fragment_entities.len(),
         fragment_shadow_entity_count: fragment_shadow_query.iter(world).count(),
         fragment_inset_entity_count: fragment_inset_query.iter(world).count(),
+        fragment_fleck_entity_count: fragment_fleck_query.iter(world).count(),
         location_entity_cache_size: runtime.location_entities.len(),
         agent_entity_cache_size: runtime.agent_entities.len(),
     }
@@ -315,6 +336,14 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .map(|(_, sprite, transform)| pixel_layer("fragment_inset", sprite, transform)),
     );
 
+    let mut fragment_fleck_query =
+        world.query::<(&PixelWorldFragmentFleckVisual, &Sprite, &Transform)>();
+    layers.extend(
+        fragment_fleck_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("fragment_fleck", sprite, transform)),
+    );
+
     let mut selected_location_cue_query =
         world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
     layers.extend(
@@ -371,6 +400,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "fragment" => 2,
         "fragment_shadow" => 7,
         "fragment_inset" => 6,
+        "fragment_fleck" => 8,
         "location" => 3,
         "selected_location_cue" => 4,
         "agent" => 5,
@@ -428,6 +458,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .count();
     let grid_pixels = kind_buffer.iter().filter(|kind| **kind == 1).count();
     let fragment_pixels = kind_buffer.iter().filter(|kind| **kind == 2).count();
+    let fragment_fleck_pixels = kind_buffer.iter().filter(|kind| **kind == 8).count();
     let location_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
@@ -440,6 +471,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .iter()
         .find(|layer| layer.kind == "location")
         .expect("pixel regression location layer");
+    let fragment_fleck_layer = layers.iter().find(|layer| layer.kind == "fragment_fleck");
     let agent_layer = layers
         .iter()
         .find(|layer| layer.kind == "agent")
@@ -452,10 +484,14 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         non_background_pixels,
         grid_pixels,
         fragment_pixels,
+        fragment_fleck_pixels,
         location_pixels,
         selected_location_cue_pixels,
         agent_pixels,
         fragment_sample_rgba: sample_pixel(&image, fragment_layer),
+        fragment_fleck_sample_rgba: fragment_fleck_layer
+            .map(|layer| sample_pixel(&image, layer))
+            .unwrap_or(PIXEL_BACKGROUND),
         location_sample_rgba: sample_pixel(&image, location_layer),
         agent_sample_rgba: sample_pixel(&image, agent_layer),
     };
@@ -490,9 +526,28 @@ fn write_pixel_probe_if_requested(image: &RgbaImage, summary: &PixelRegressionSu
     zoom_non_background_pixels(image, 12)
         .save(out_dir.join("pixel-regression-crop.png"))
         .expect("write bevy pixel probe crop png");
+    if summary.fragment_fleck_pixels > 0 {
+        zoom_pixels_matching(image, summary.fragment_fleck_sample_rgba, 48)
+            .expect("find visible fragment fleck pixels")
+            .save(out_dir.join("pixel-regression-fleck-crop.png"))
+            .expect("write bevy pixel fleck crop png");
+    }
 }
 
 fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
+    zoom_matching_pixels(image, |pixel| pixel != PIXEL_BACKGROUND, scale)
+        .expect("find non-background pixels")
+}
+
+fn zoom_pixels_matching(image: &RgbaImage, target: [u8; 4], scale: u32) -> Option<RgbaImage> {
+    zoom_matching_pixels(image, |pixel| pixel == target, scale)
+}
+
+fn zoom_matching_pixels(
+    image: &RgbaImage,
+    matches: impl Fn([u8; 4]) -> bool,
+    scale: u32,
+) -> Option<RgbaImage> {
     let mut min_x = VIEWPORT_WIDTH;
     let mut min_y = VIEWPORT_HEIGHT;
     let mut max_x = 0u32;
@@ -500,7 +555,7 @@ fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
     let mut found = false;
 
     for (x, y, pixel) in image.enumerate_pixels() {
-        if pixel.0 == PIXEL_BACKGROUND {
+        if !matches(pixel.0) {
             continue;
         }
         min_x = min_x.min(x);
@@ -511,7 +566,7 @@ fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
     }
 
     if !found {
-        return image.clone();
+        return None;
     }
 
     let padding = 12u32;
@@ -539,7 +594,7 @@ fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
             }
         }
     }
-    zoomed
+    Some(zoomed)
 }
 
 #[test]
@@ -773,12 +828,105 @@ fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
 }
 
 #[test]
+fn bevy_ecs_reconciles_detail_only_light_flecks_and_cleans_them_up() {
+    let mut app = render_test_app(sample_render_state(20_000.0));
+    let detail = visual_probe_summary(&mut app);
+
+    assert_eq!(detail.fragments.len(), 1);
+    assert_eq!(detail.fragment_flecks.len(), 1);
+    assert_eq!(detail.fragment_fleck_entity_count, 1);
+    let base = &detail.fragments[0];
+    let fleck = &detail.fragment_flecks[0];
+    assert_eq!(fleck.id, base.id);
+    assert!(fleck.size_px >= base.size_px * 0.14);
+    assert!(fleck.size_px <= base.size_px * 0.18);
+    assert_eq!(fleck.z, FRAGMENT_FLECK_LAYER_Z);
+    assert!(fleck.z > detail.fragment_insets[0].z);
+    assert!(fleck.z < detail.locations[0].z);
+    assert!(
+        fleck.x < base.x,
+        "fleck must remain upper-left of its terrain"
+    );
+    assert!(
+        fleck.y > base.y,
+        "fleck must remain upper-left of its terrain"
+    );
+    assert_eq!(detail.hit_regions, 2, "flecks must not add hit regions");
+
+    let world = app.world_mut();
+    let mut base_query = world.query::<(&PixelWorldFragmentVisual, &Sprite)>();
+    let base_color = base_query
+        .iter(world)
+        .find(|(visual, _)| visual.id == fleck.id)
+        .expect("base fragment sprite")
+        .1
+        .color
+        .to_srgba();
+    let mut fleck_query = world.query::<(&PixelWorldFragmentFleckVisual, &Sprite)>();
+    let fleck_color = fleck_query
+        .iter(world)
+        .find(|(visual, _)| visual.id == fleck.id)
+        .expect("fragment fleck sprite")
+        .1
+        .color
+        .to_srgba();
+    assert!(fleck_color.red > base_color.red);
+    assert!(fleck_color.green > base_color.green);
+    assert!(fleck_color.blue > base_color.blue);
+
+    app.update();
+    assert_eq!(
+        visual_probe_summary(&mut app).fragment_fleck_entity_count,
+        1,
+        "a consecutive Detail reconcile must reuse its fleck entity"
+    );
+
+    for next_state in [sample_render_state(12_000.0), sample_render_state(100.0), {
+        let mut removed = sample_render_state(20_000.0);
+        removed.fragment_terrain.clear();
+        removed
+    }] {
+        {
+            let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+            runtime.render_state = Some(next_state);
+            runtime.render_version += 1;
+        }
+        app.update();
+        let summary = visual_probe_summary(&mut app);
+        assert!(summary.fragment_flecks.is_empty());
+        assert_eq!(summary.fragment_fleck_entity_count, 0);
+    }
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state(20_000.0));
+        runtime.render_version += 1;
+    }
+    app.update();
+    assert_eq!(
+        visual_probe_summary(&mut app).fragment_fleck_entity_count,
+        1
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = None;
+        runtime.render_version += 1;
+    }
+    app.update();
+    let no_state = visual_probe_summary(&mut app);
+    assert!(no_state.fragment_flecks.is_empty());
+    assert_eq!(no_state.fragment_fleck_entity_count, 0);
+}
+
+#[test]
 fn bevy_render_probe_contract_captures_visual_hierarchy() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let summary = visual_probe_summary(&mut app);
 
     assert_eq!(summary.fragment_entity_cache_size, 1);
     assert_eq!(summary.fragment_inset_entity_count, 1);
+    assert_eq!(summary.fragment_fleck_entity_count, 1);
     assert_eq!(summary.location_entity_cache_size, 1);
     assert_eq!(summary.agent_entity_cache_size, 1);
     assert!(summary.fragments[0].size_px > 0.0);
@@ -787,6 +935,9 @@ fn bevy_render_probe_contract_captures_visual_hierarchy() {
     assert_eq!(summary.fragment_insets.len(), 1);
     assert!(summary.fragment_insets[0].z > summary.fragments[0].z);
     assert!(summary.fragment_insets[0].z < summary.locations[0].z);
+    assert_eq!(summary.fragment_flecks.len(), 1);
+    assert!(summary.fragment_flecks[0].z > summary.fragment_insets[0].z);
+    assert!(summary.fragment_flecks[0].z < summary.locations[0].z);
 
     write_probe_summary_if_requested(&summary);
 }
@@ -882,6 +1033,23 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert_eq!(summary.agent_sample_rgba, [251, 191, 36, 255]);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
+
+    write_pixel_probe_if_requested(&image, &summary);
+}
+
+#[test]
+fn bevy_pixel_regression_exports_unoccluded_detail_fleck() {
+    let mut app = render_test_app(sample_render_state_with_unoccluded_detail_fleck());
+    let (image, summary) = rasterize_pixel_regression(&mut app);
+
+    assert!(summary.fragment_fleck_pixels > 0);
+    assert_ne!(summary.fragment_fleck_sample_rgba, PIXEL_BACKGROUND);
+    assert!(
+        image
+            .pixels()
+            .any(|pixel| pixel.0 == summary.fragment_fleck_sample_rgba),
+        "the unoccluded Detail fleck must contribute visible raster pixels"
+    );
 
     write_pixel_probe_if_requested(&image, &summary);
 }

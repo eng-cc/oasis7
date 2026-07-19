@@ -20,6 +20,17 @@ pub(super) fn fragment_inset_color(fragment: &FragmentTerrainPatch) -> Color {
     )
 }
 
+pub(super) fn fragment_fleck_color(fragment: &FragmentTerrainPatch) -> Color {
+    let alpha = fragment_alpha(fragment, FragmentTerrainLod::Detail);
+    let lighten = |channel: u8| channel.saturating_add((u8::MAX - channel) * 2 / 5);
+    Color::srgba_u8(
+        lighten(fragment.color[0]),
+        lighten(fragment.color[1]),
+        lighten(fragment.color[2]),
+        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
 pub(super) fn fragment_shadow_color(
     fragment: &FragmentTerrainPatch,
     lod: FragmentTerrainLod,
