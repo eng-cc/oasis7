@@ -26,6 +26,14 @@
 - 当前可执行动作与主要 blocker 必须进入玩家入口；内部 snapshot 存在字段不能替代玩家可用证据。
 - Viewer 与 pure API 消费同一权威事实，但需要分别证明该闭环在各自入口可用。
 
+### 2.1 目标清晰度与首屏优先级
+
+- 首局主目标必须同时说明玩家要采取的动作、怎样算完成，以及玩家可理解的时间或阶段预期；不能只展示描述性主题、内部状态名或没有完成边界的方向。
+- 玩家入口优先呈现一个当前主目标。次要目标可以折叠或延后，但必须能被找回，且不能与主目标争夺首屏注意力或给出冲突指令。
+- 当前目标的剩余条件、主要 blocker 与恢复动作必须随权威进度更新；世界仍在运行不能替代“玩家知道自己是否推进”的证据。
+- 当系统推荐首个采集、探索或工业目标时，玩家需要在行动前读懂推荐对象的预期价值、可达性或进入成本，以及它与首次持续能力的关系；不能只以“最近”或隐藏排序作为理由。
+- 首局完成时，体验应回顾已经形成的能力或世界后果，并把主 CTA 交给后引导阶段；一次性庆祝、静态总结或继续观察不能代替下一阶段承接。
+
 ## 3. 首局后的阶段承接
 
 首次行动闭环完成后，玩家必须进入正式的后引导阶段，而不是只看到一次性总结或回到无目标观察态。
@@ -62,6 +70,7 @@
 - FS-4：首次持续能力样例能证明投入、产出、用途、维护或恢复与后续价值，而不是只证明一次动作成功。
 - FS-5：阶段成果后的方向选择至少说明收益、体验变化、风险或约束和继续游玩的 hook。
 - FS-6：Viewer 与 pure API 分别提供自身入口证据，且二者对权威事实、动作能力和主要因果保持一致。
+- FS-7：首局入口样例能证明主目标包含动作、完成条件和时间或阶段预期，次要目标不干扰当前决策；推荐首个目标时可解释其价值、可达性与首次持续能力关联，结束后能进入后引导主目标。
 
 ### 6.1 验收追踪
 
@@ -73,6 +82,7 @@
 | FS-4 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首次持续能力的投入、产出、用途、维护/恢复和后续价值组合证据 | test_tier_required |
 | FS-5 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 分支收益、体验变化、风险/约束和继续游玩 hook 的 S6 证据 | test_tier_required |
 | FS-6 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-008 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Viewer 与 pure API 各自入口证据及权威事实、动作能力、主要因果 parity 对账 | test_tier_full |
+| FS-7 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首局主目标结构、首屏优先级、推荐理由、阻塞恢复与 PostOnboarding 交接的 S6 入口证据 | test_tier_required |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
 

@@ -147,7 +147,7 @@
 
 
 | 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-egui-right-panel` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `viewer-first-session-goal-clarity-hardening-2026-02-27` | `backfill` | pass | I8-001/I8-002 | 历史设计补齐已完成；现行产品语义已迁入 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` |
 | 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `doc/world-simulator/viewer/viewer-frag-default-rendering` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/world-simulator/viewer/viewer-frag-default-rendering.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 07:35:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 97 个专题、剩余 268 个缺口 |

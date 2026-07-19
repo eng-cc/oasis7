@@ -62,6 +62,7 @@
 | 场景与世界契约 | `PRD-WORLD_SIMULATOR-001/002/003` | 场景初始化、资源变化、关键交互和发布证据必须可复现，并通过统一验收清单映射到测试证据。 |
 | runtime live / LLM / provider authority | `PRD-WORLD_SIMULATOR-016-019`, `036-040` | runtime live 是主驱动方向；provider 决策层保持 provider advisory / runtime authoritative；LLM 失败按硬失败或显式阻断处理，不回退启发式。 |
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
+| first-session goal presentation | `PRD-WORLD_SIMULATOR-001/039/041/046` | Viewer 首局面向玩家呈现一个主目标及可收起、可找回且不冲突的次目标；主目标消费权威进度并展示动作、完成条件、阶段预期、剩余条件、blocker 与玩家可选择的恢复动作。首个采集、探索或工业推荐还需解释价值、可达性与首次持续能力关联；首局完成后交接到可达的后引导目标。具体字段、阈值、布局与测试锚点由当前 Viewer 实现和验证证据维护，不进入产品层。 |
 | launcher transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/web launcher 共享控制面与前端语义；转账、explorer、链状态、GUI Agent 和 stale execution-world 恢复必须结构化、可诊断、可回归。 |
 | slot-1 onboarding | `PRD-WORLD_SIMULATOR-045` | 新账号玩家读取 canonical quote 并显式确认后直接进入 `ClaimAgent`；dedicated pool 足够时自动补足 restricted starter amount，不生成 operator-review 审批状态。 |
 | release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；`doc/product/player-entry-distribution/prd.md` 只组合玩家体验，普通用户发行的 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker 仍由本专业域和站点流水线处理。 |
