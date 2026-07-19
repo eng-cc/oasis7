@@ -11,7 +11,7 @@ mkdir -p "$out_dir"
 
 PIXEL_WORLD_BEVY_PIXEL_PROBE_OUT_DIR="$out_dir" \
   env -u RUSTC_WRAPPER cargo test -p pixel_world_bridge \
-    bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy \
+    bevy_pixel_regression_exports_selected_location_ring_with_world_layers \
     --lib -- --nocapture
 
 test -s "$out_dir/pixel-summary.json"
