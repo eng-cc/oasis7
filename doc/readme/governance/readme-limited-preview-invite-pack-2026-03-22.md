@@ -7,7 +7,7 @@
 - Review Role: `producer_system_designer`
 - Round ID: `LTP-20260322-R1`
 - Channel Focus: `GitHub issue`（primary for round-1） + `GitHub Builder Channels`
-- Candidate Reference: `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
+- Candidate Reference: `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前公开状态以根 `README.md` 为准
 - Claim Envelope: `limited playable technical preview`
 
 ## 1. Round Goal

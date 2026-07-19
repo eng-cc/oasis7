@@ -373,7 +373,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 3. 如果 UI 能告诉玩家“我现在在哪个阶段、为什么被卡住、下一步该做什么”，那么 API 也必须能告诉玩家。
 4. 如果 UI 能继续玩到中循环，API 也必须能继续玩到中循环，而不是停留在首局或探针模式。
 
-专题口径见 `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`。
+产品模式、证据隔离与发行组合验收见 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；本节继续拥有 pure API 持续玩法等价的专业规则。
 
 ---
 

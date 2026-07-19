@@ -14,7 +14,7 @@
 
 ## 依赖
 
-- `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
+- `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
 - `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
 - `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md`

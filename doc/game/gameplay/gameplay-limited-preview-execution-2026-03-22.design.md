@@ -15,7 +15,7 @@
 - Producer Review: 继续维持、收紧节奏或触发下一轮阶段评审。
 
 ## 3. 关键接口 / 入口
-- `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`
+- `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
 - `doc/testing/evidence/closed-beta-candidate-release-gate-2026-03-22.md`
 - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
 - `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`
