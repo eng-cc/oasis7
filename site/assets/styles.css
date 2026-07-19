@@ -2620,6 +2620,135 @@ code {
   }
 }
 
+/* Homepage refresh: atmosphere first, then one readable consequence chain. */
+.section-hero {
+  min-height: min(760px, calc(100vh - 2rem));
+  display: grid;
+  align-items: center;
+  padding: clamp(1.35rem, 4vw, 3.5rem);
+  background: #030912;
+}
+
+.section-hero .hero-grid {
+  grid-template-columns: minmax(380px, 0.95fr) minmax(500px, 1.25fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 4.5rem);
+}
+
+.section-hero h1 {
+  max-width: 14ch;
+  font-size: clamp(2.8rem, 4.1vw, 3.8rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.section-hero .subtitle {
+  max-width: 34rem;
+  font-size: clamp(1rem, 1.35vw, 1.18rem);
+}
+
+.hero-status {
+  margin-top: 1.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.hero-status dl {
+  display: none;
+}
+
+.hero-key-art {
+  min-height: 460px;
+  border: 0;
+  border-radius: 32px;
+  box-shadow: 0 42px 100px rgba(0, 0, 0, 0.58);
+}
+
+.hero-key-art img {
+  width: 100%;
+  height: 100%;
+  min-height: 460px;
+  object-fit: cover;
+  object-position: 63% center;
+}
+
+#what {
+  padding: clamp(1.6rem, 4vw, 3rem);
+}
+
+#what .cards-3 {
+  gap: 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+#what .card {
+  border: 0;
+  border-right: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 1.5rem clamp(1rem, 2.5vw, 2.2rem);
+}
+
+#what .card:last-child {
+  border-right: 0;
+}
+
+.beat-number {
+  display: block;
+  margin-bottom: 1.4rem;
+  color: var(--accent);
+  font: 600 0.72rem/1 "JetBrains Mono", monospace;
+  letter-spacing: 0.18em;
+}
+
+#proof {
+  background:
+    radial-gradient(700px 420px at 85% 20%, rgba(67, 239, 187, 0.13), transparent 68%),
+    linear-gradient(145deg, rgba(7, 18, 28, 0.98), rgba(4, 11, 18, 0.96));
+}
+
+@media (max-width: 1040px) {
+  .section-hero {
+    min-height: auto;
+    padding: 1.25rem;
+  }
+
+  .section-hero .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-hero h1 {
+    font-size: clamp(2.25rem, 10vw, 3.5rem);
+  }
+
+  .hero-visual {
+    order: -1;
+  }
+
+  .hero-key-art,
+  .hero-key-art img {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 640px) {
+  #what .cards-3 {
+    display: block;
+  }
+
+  #what .card {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+    padding-inline: 0;
+  }
+
+  #what .card:last-child {
+    border-bottom: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

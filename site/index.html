@@ -44,10 +44,9 @@
       </a>
       <nav class="nav" data-menu data-section-nav>
         <a href="#what">怎么玩</a>
-        <a href="#proof">真实画面</a>
-        <a href="#download">预览构建</a>
-        <a href="#roadmap">当前边界</a>
-        <a href="#contribute">继续探索</a>
+        <a href="#proof">一局后果</a>
+        <a href="#download">获取预览</a>
+        <a href="#contribute">了解更多</a>
       </nav>
       <button class="menu-button" type="button" aria-label="切换菜单" data-menu-toggle>
         ☰
@@ -78,14 +77,12 @@
           <div>
             <p class="eyebrow">AI Agent 文明模拟游戏</p>
             <h1>资源一紧，文明就得选边：保电、抢矿，还是重谈协作？</h1>
-            <p class="subtitle">
-              你从文明外定方向、划边界。Agent 在资源与制度压力下行动，后果会留在同一个世界里。
-            </p>
+            <p class="subtitle">你定方向，Agent 做选择。价格、关系与制度会记住每一次后果。</p>
             <div class="cta-row">
               <a class="button primary" href="#what">30 秒看懂玩法</a>
               <a class="button secondary" href="#proof">看一局事件链</a>
             </div>
-            <div class="hero-facts" aria-label="首页核心事实">
+            <div class="hero-facts hero-status" aria-label="当前预览状态">
               <span class="preview-badge" data-homepage-claim="preview-status">状态：limited playable technical preview</span>
               <dl>
                 <div>
@@ -106,8 +103,8 @@
 
           <aside class="hero-visual">
             <figure class="hero-figure hero-key-art">
-              <img src="assets/images/hero/asteroid-civilization-image2-20260718.webp" alt="破碎小行星带中的多个文明节点通过物流与协作线路相连的概念图" width="1672" height="941" />
-              <figcaption>世界概念图 · Image2 视觉稿，非真实游戏画面</figcaption>
+              <img src="assets/images/hero/asteroid-civilization-crisis-image2-20260719.webp" alt="资源危机中的小行星文明节点正沿发光物流线路重新组织协作" width="1672" height="941" />
+              <figcaption>世界氛围概念图 · Image2 视觉稿，非真实游戏画面</figcaption>
             </figure>
           </aside>
         </div>
@@ -115,24 +112,27 @@
 
       <section id="what" class="section" data-reveal>
         <h2>30 秒看懂 oasis7</h2>
-        <p class="section-intro">给文明一个方向，然后看压力、选择与后果怎样彼此推动。</p>
+        <p class="section-intro">一局的核心很简单：压力出现，Agent 回应，世界把结果留下。</p>
         <div class="grid cards-3">
           <article class="card card-spotlight">
+            <span class="beat-number">01</span>
             <h3>压力先出现</h3>
-            <p>电力、矿物、时间和制度一起收紧，文明不可能把所有问题同时解决。</p>
+            <p>电力、矿物与制度同时收紧。</p>
           </article>
           <article class="card">
+            <span class="beat-number">02</span>
             <h3>Agent 自己选择</h3>
-            <p>你定目标与边界，它们决定生产、交易、协作和治理的具体行动。</p>
+            <p>你定目标，它们决定如何生产与协作。</p>
           </article>
           <article class="card">
+            <span class="beat-number">03</span>
             <h3>世界记住后果</h3>
-            <p>价格、关系、物流与政策不会重置；每次决定都把文明推向新的平衡。</p>
+            <p>价格、关系与政策不会悄悄重置。</p>
           </article>
         </div>
       </section>
 
-      <section id="role" class="section" data-reveal>
+      <section id="role" class="section" data-reveal hidden>
         <h2>你决定文明方向，但不接管每个单位</h2>
         <p class="section-intro">
           你的乐趣在于塑造条件，而不是替每个单位下命令：定战略、设限制，然后看 Agent 如何回应压力，并读懂留下的后果。
@@ -179,7 +179,7 @@
         </div>
       </section>
 
-      <section id="today" class="section" data-reveal>
+      <section id="today" class="section" data-reveal hidden>
         <h2>现在你能做什么</h2>
         <p class="section-intro">
           先判断三件事：这是不是你想继续关注的文明，它已经留下了哪些可看的后果，以及你是否愿意亲手验证预览构建。
@@ -256,7 +256,7 @@
               <li>世界把价格、协作与治理的变化写成事件和后果</li>
               <li>你可以通过 replay、live runtime 和审计轨迹回看这条链</li>
             </ol>
-            <a class="button secondary" href="#today">回到当前公开入口</a>
+            <a class="button secondary" href="#download">获取开发预览</a>
           </article>
 
           <article class="proof-card">
@@ -458,7 +458,7 @@
         </div>
       </section>
 
-      <section id="roadmap" class="section" data-reveal>
+      <section id="roadmap" class="section" data-reveal hidden>
         <h2>离公开发售还差什么</h2>
         <p class="section-intro">路线很清楚：第一阶段先把 `oasis7` 做成开放世界沙盒游戏；底座稳住后，才会往平台化走。后半句是目标，不是当前已经开放的能力。</p>
         <p class="section-footnote" data-homepage-claim="future-platform-boundary">后续会往开放世界游戏平台演进，但当前还不是 creator-facing 的 mod / 模块平台。</p>
@@ -497,7 +497,7 @@
         </div>
       </section>
 
-      <section id="architecture" class="section" data-reveal>
+      <section id="architecture" class="section" data-reveal hidden>
         <h2>为什么世界状态与后果能够延续</h2>
         <p class="section-intro">想知道它为什么不只是“又一个 Agent demo”？关键在这里：玩法层、运行时、viewer 和治理层各有边界。世界变化既要按统一规则落地，也要留下证据。</p>
         <figure class="architecture-figure">
