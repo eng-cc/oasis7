@@ -234,7 +234,7 @@
 4. `10-minute trust gate` 只证明玩家已经信任“控制是可靠的、目标是可读的、继续玩是值得的”；`first capability gate` 再证明首个持续能力在后续 `15~45` 分钟或 `1~3` 次会话内闭环，不得把两层 verdict 混写成一个。
 5. `PostOnboarding` 默认不允许把玩家丢回“自由漂浮观察态”；如果当前主目标暂不可达，系统必须切到恢复、保全或替代胜利，而不是只保留世界状态观察。
 
-专题口径见 `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`。
+产品承诺与组合验收见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；本节继续拥有阶段选择、阻塞分类与玩法承接的专业规则。
 
 ## 2.7 当前两周收口重点（2026-04-09）
 

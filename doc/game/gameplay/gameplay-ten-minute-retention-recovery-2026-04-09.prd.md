@@ -94,7 +94,7 @@
   - `doc/game/project.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/game/gameplay/gameplay-top-level-design.project.md`
-  - `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
+  - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
   - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
   - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
   - `doc/playability_test_result/playability_test_card.md`

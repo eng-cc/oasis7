@@ -65,8 +65,8 @@
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md`
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md`
-- `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md`
-- `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.project.md`
+- `gameplay-micro-loop-feedback-visibility-2026-03-05` PRD（历史审读对象，正文已退役）
+- `gameplay-micro-loop-feedback-visibility-2026-03-05` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md`
 - `doc/game/gameplay/gameplay-module-driven-production-closure.project.md`
 - `gameplay-release-gap-closure-2026-02-21` PRD（历史审读对象，正文已退役）

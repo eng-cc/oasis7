@@ -37,8 +37,8 @@
 ### 2. 当前体验窗口与留存修复
 - 首读入口:
   - `gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
-  - `gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md`
-  - `gameplay-post-onboarding-stage-2026-03-18.prd.md`
+  - `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
+  - `gameplay-top-level-design.prd.md`
 - 适合问题:
   - 进入游戏后的前 10 分钟为什么会掉线
   - micro-loop、反馈可见性和 post-onboarding 阶段如何衔接

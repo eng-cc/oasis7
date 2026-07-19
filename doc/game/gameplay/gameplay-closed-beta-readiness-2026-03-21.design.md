@@ -37,7 +37,7 @@
   - 升级为 `closed_beta_candidate`
 
 ## 关键依赖
-- `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
+- `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
 - `doc/testing/evidence/testing-quality-trend-baseline-2026-03-11.md`

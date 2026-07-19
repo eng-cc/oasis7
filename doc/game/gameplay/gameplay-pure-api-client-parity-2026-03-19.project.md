@@ -16,7 +16,7 @@
 ## 依赖
 
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
-- `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
+- `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
 - `testing-manual.md`
 - `crates/oasis7_proto/src/viewer.rs`
 - `crates/oasis7/src/viewer/runtime_live.rs`

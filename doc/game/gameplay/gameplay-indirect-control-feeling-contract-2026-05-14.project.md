@@ -93,8 +93,8 @@
 - `doc/game/project.md`
 - `doc/game/prd.index.md`
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
-- `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md`
-- `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
+- `doc/game/gameplay/gameplay-top-level-design.prd.md`
+- `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
 - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - `testing-manual.md`

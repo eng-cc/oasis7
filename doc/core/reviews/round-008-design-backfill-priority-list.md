@@ -137,7 +137,7 @@
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure` — context:closure; content:design-signals; lines:115
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure` — path:governance; context:closure; content:design-signals; lines:123
 - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06` — path:hardening; content:design-signals; lines:243
-- `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05` — context:feedback,visibility; content:design-signals; lines:316
+- gameplay micro-loop feedback visibility (retired/deleted) — context:feedback,visibility; content:design-signals; historical lines:316
 - `doc/game/gameplay/gameplay-module-driven-production-closure` — path:module; context:closure; content:design-signals; lines:130
 - gameplay release-gap closure (retired/deleted) — context:closure,gap,release; content:design-signals; historical lines:308
 - `doc/game/gameplay/gameplay-release-production-closure` — context:closure,release; content:design-signals; lines:133

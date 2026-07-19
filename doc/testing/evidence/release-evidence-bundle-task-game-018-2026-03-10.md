@@ -36,7 +36,7 @@
 | --- | --- | --- | --- |
 | `S9` | `N/A` | `N/A` | `not_applicable` |
 | `S10` | `N/A` | `N/A` | `not_applicable` |
-| `ROUND-008 runtime_live` | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.project.md` | `output/playwright/playability/manual-20260307-round008/` | `PASS` |
+| `ROUND-008 runtime_live` | PRD-GAME-004 historical project（正文已退役；当前权威为 `doc/game/gameplay/gameplay-top-level-design.prd.md`） | `output/playwright/playability/manual-20260307-round008/` | `PASS` |
 
 ## 风险与例外
 | 风险 ID | 描述 | 当前影响 | 缓解措施 | 是否阻断 | 负责人 |
