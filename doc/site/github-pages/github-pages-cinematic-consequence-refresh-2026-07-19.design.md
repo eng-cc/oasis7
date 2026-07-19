@@ -69,4 +69,3 @@ preview rather than a released game.
   reduced-motion checks remain valid.
 - Real browser screenshots remain implementation evidence; the Image2 target
   does not replace them.
-
