@@ -26,6 +26,7 @@ struct VisualProbeSummary {
     fragments: Vec<VisualProbeRow>,
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
+    selected_location_cues: Vec<VisualProbeRow>,
     hit_regions: usize,
     fragment_entity_cache_size: usize,
     location_entity_cache_size: usize,
@@ -37,7 +38,7 @@ struct PixelLayer {
     kind: &'static str,
     center_x: f32,
     center_y: f32,
-    size_px: f32,
+    size: Vec2,
     z: f32,
     rgba: [f32; 4],
 }
@@ -49,7 +50,9 @@ struct PixelRegressionSummary {
     raw_rgba_fnv1a64: String,
     non_background_pixels: usize,
     fragment_pixels: usize,
+    grid_pixels: usize,
     location_pixels: usize,
+    selected_location_cue_pixels: usize,
     agent_pixels: usize,
     fragment_sample_rgba: [u8; 4],
     location_sample_rgba: [u8; 4],
@@ -213,11 +216,19 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
 
+    let mut selected_location_cue_query =
+        world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
+    let selected_location_cues = selected_location_cue_query
+        .iter(world)
+        .map(|(cue, sprite, transform)| row(&cue.location_id, sprite, transform))
+        .collect();
+
     let runtime = world.resource::<BevyRuntimeState>();
     VisualProbeSummary {
         fragments,
         locations,
         agents,
+        selected_location_cues,
         hit_regions: runtime.hit_regions.len(),
         fragment_entity_cache_size: runtime.fragment_entities.len(),
         location_entity_cache_size: runtime.location_entities.len(),
@@ -242,7 +253,7 @@ fn pixel_layer(kind: &'static str, sprite: &Sprite, transform: &Transform) -> Pi
         kind,
         center_x: (VIEWPORT_WIDTH as f32 / 2.0) + transform.translation.x,
         center_y: (VIEWPORT_HEIGHT as f32 / 2.0) - transform.translation.y,
-        size_px,
+        size: sprite.custom_size.unwrap_or(Vec2::splat(size_px)),
         z: transform.translation.z,
         rgba: [color.red, color.green, color.blue, color.alpha],
     }
@@ -252,11 +263,26 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
     let world = app.world_mut();
     let mut layers = Vec::new();
 
+    let mut grid_query = world.query::<(&PixelWorldGridVisual, &Sprite, &Transform)>();
+    layers.extend(
+        grid_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("grid", sprite, transform)),
+    );
+
     let mut fragment_query = world.query::<(&PixelWorldFragmentVisual, &Sprite, &Transform)>();
     layers.extend(
         fragment_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("fragment", sprite, transform)),
+    );
+
+    let mut selected_location_cue_query =
+        world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
+    layers.extend(
+        selected_location_cue_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("selected_location_cue", sprite, transform)),
     );
 
     let mut location_query = world.query::<(&PixelWorldLocationVisual, &Sprite, &Transform)>();
@@ -303,9 +329,11 @@ fn blend_src_over(src_rgba: [f32; 4], dst: [u8; 4]) -> [u8; 4] {
 
 fn layer_kind_id(kind: &str) -> u8 {
     match kind {
-        "fragment" => 1,
-        "location" => 2,
-        "agent" => 3,
+        "grid" => 1,
+        "fragment" => 2,
+        "location" => 3,
+        "selected_location_cue" => 4,
+        "agent" => 5,
         _ => 0,
     }
 }
@@ -337,11 +365,12 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let mut kind_buffer = vec![0u8; (VIEWPORT_WIDTH * VIEWPORT_HEIGHT) as usize];
 
     for layer in &layers {
-        let size = layer.size_px.round().max(1.0) as i32;
-        let left = layer.center_x.round() as i32 - (size / 2);
-        let top = layer.center_y.round() as i32 - (size / 2);
-        let right = left + size;
-        let bottom = top + size;
+        let width = layer.size.x.round().max(1.0) as i32;
+        let height = layer.size.y.round().max(1.0) as i32;
+        let left = layer.center_x.round() as i32 - (width / 2);
+        let top = layer.center_y.round() as i32 - (height / 2);
+        let right = left + width;
+        let bottom = top + height;
         for y in top.max(0)..bottom.min(VIEWPORT_HEIGHT as i32) {
             for x in left.max(0)..right.min(VIEWPORT_WIDTH as i32) {
                 let pixel = image.get_pixel_mut(x as u32, y as u32);
@@ -357,9 +386,11 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .pixels()
         .filter(|pixel| pixel.0 != PIXEL_BACKGROUND)
         .count();
-    let fragment_pixels = kind_buffer.iter().filter(|kind| **kind == 1).count();
-    let location_pixels = kind_buffer.iter().filter(|kind| **kind == 2).count();
-    let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
+    let grid_pixels = kind_buffer.iter().filter(|kind| **kind == 1).count();
+    let fragment_pixels = kind_buffer.iter().filter(|kind| **kind == 2).count();
+    let location_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
+    let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
+    let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
 
     let fragment_layer = layers
         .iter()
@@ -379,8 +410,10 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         height: VIEWPORT_HEIGHT,
         raw_rgba_fnv1a64: fnv1a64(image.as_raw()),
         non_background_pixels,
+        grid_pixels,
         fragment_pixels,
         location_pixels,
+        selected_location_cue_pixels,
         agent_pixels,
         fragment_sample_rgba: sample_pixel(&image, fragment_layer),
         location_sample_rgba: sample_pixel(&image, location_layer),
@@ -449,6 +482,7 @@ fn zoom_non_background_pixels(image: &RgbaImage, scale: u32) -> RgbaImage {
 
     let crop_width = max_x - min_x + 1;
     let crop_height = max_y - min_y + 1;
+    let scale = scale.min((2048 / crop_width.max(crop_height)).max(1));
     let mut zoomed = RgbaImage::from_pixel(
         crop_width * scale,
         crop_height * scale,
@@ -588,6 +622,83 @@ fn bevy_render_probe_contract_captures_visual_hierarchy() {
 }
 
 #[test]
+fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_agents() {
+    let mut app = render_test_app(sample_render_state_with_selection(
+        12_000.0, "location", "loc-0",
+    ));
+    let summary = visual_probe_summary(&mut app);
+    let selected_location = summary
+        .locations
+        .iter()
+        .find(|location| location.id == "loc-0")
+        .expect("selected location visual");
+
+    assert_eq!(summary.selected_location_cues.len(), 4);
+    for cue in &summary.selected_location_cues {
+        assert_eq!(cue.id, "loc-0");
+        assert_eq!(cue.alpha, 1.0);
+        assert_eq!(cue.z, SELECTED_LOCATION_CUE_LAYER_Z);
+        assert!(cue.size_px >= SELECTED_LOCATION_CUE_THICKNESS_PX);
+        assert!(cue.z > selected_location.z);
+        assert!(cue.z < summary.agents[0].z);
+    }
+
+    let world = app.world_mut();
+    let mut cue_query = world.query::<(&Sprite, &PixelWorldSelectedLocationCue)>();
+    for (sprite, _) in cue_query.iter(world) {
+        let color = sprite.color.to_srgba();
+        assert_eq!(
+            [color.red, color.green, color.blue],
+            [251.0 / 255.0, 191.0 / 255.0, 36.0 / 255.0]
+        );
+        assert_eq!(color.alpha, 1.0);
+        assert!(
+            sprite.custom_size.unwrap().x == SELECTED_LOCATION_CUE_THICKNESS_PX
+                || sprite.custom_size.unwrap().y == SELECTED_LOCATION_CUE_THICKNESS_PX
+        );
+    }
+}
+
+#[test]
+fn selected_location_ring_tracks_selection_and_leaves_no_stale_entities() {
+    let mut app = render_test_app(sample_render_state_with_selection(
+        12_000.0, "location", "loc-0",
+    ));
+    assert_eq!(
+        visual_probe_summary(&mut app).selected_location_cues.len(),
+        4
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state_with_selection(
+            12_000.0, "agent", "agent-0",
+        ));
+        runtime.render_version += 1;
+    }
+    app.update();
+    assert!(
+        visual_probe_summary(&mut app)
+            .selected_location_cues
+            .is_empty()
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut render_state = sample_render_state(12_000.0);
+        render_state.selection = None;
+        runtime.render_state = Some(render_state);
+        runtime.render_version += 1;
+    }
+    app.update();
+    assert!(
+        visual_probe_summary(&mut app)
+            .selected_location_cues
+            .is_empty()
+    );
+}
+
+#[test]
 fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     let mut app = render_test_app(sample_render_state(12_000.0));
     let (image, summary) = rasterize_pixel_regression(&mut app);
@@ -597,10 +708,31 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert!(summary.location_pixels > 0);
     assert!(summary.agent_pixels > summary.location_pixels);
     assert!(summary.agent_pixels > summary.fragment_pixels);
-    assert_eq!(summary.raw_rgba_fnv1a64, "9df32df027359ddd");
+    assert_eq!(summary.raw_rgba_fnv1a64, "f2c7f7e9757b32de");
     assert_eq!(summary.agent_sample_rgba, [251, 191, 36, 255]);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
+
+    write_pixel_probe_if_requested(&image, &summary);
+}
+
+#[test]
+fn bevy_pixel_regression_exports_selected_location_ring_with_world_layers() {
+    let mut app = render_test_app(sample_render_state_with_beacon_candidates(
+        "location", "loc-0",
+    ));
+    let (image, summary) = rasterize_pixel_regression(&mut app);
+
+    assert!(summary.grid_pixels > 0);
+    assert!(summary.fragment_pixels > 0);
+    assert!(summary.location_pixels > 0);
+    assert!(summary.selected_location_cue_pixels > 0);
+    assert!(summary.agent_pixels > 0);
+    assert!(summary.agent_pixels > summary.selected_location_cue_pixels);
+    assert!(
+        image.pixels().any(|pixel| pixel.0 == [251, 191, 36, 255]),
+        "selected location ring must contribute opaque amber pixels"
+    );
 
     write_pixel_probe_if_requested(&image, &summary);
 }

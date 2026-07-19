@@ -9,9 +9,13 @@ const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
 const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
 const LOCATION_LAYER_Z: f32 = 1.0;
-const AGENT_LAYER_Z: f32 = 2.0;
+const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
+const AGENT_LAYER_Z: f32 = 3.0;
 const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
 const SELECTED_ENTITY_SIZE_SCALE: f64 = 1.35;
+const SELECTED_LOCATION_CUE_THICKNESS_PX: f32 = 2.0;
+const SELECTED_LOCATION_CUE_PADDING_PX: f32 = 2.0;
+const SELECTED_LOCATION_CUE_COLOR: Color = Color::srgb_u8(251, 191, 36);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GridLayoutKey {
@@ -61,6 +65,20 @@ pub(crate) struct PixelWorldFragmentVisual {
 #[derive(Component)]
 pub(crate) struct PixelWorldLocationVisual {
     id: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum SelectedLocationCueEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+#[derive(Component)]
+struct PixelWorldSelectedLocationCue {
+    location_id: String,
+    edge: SelectedLocationCueEdge,
 }
 
 #[derive(Component)]
@@ -318,6 +336,38 @@ fn selected_location_visual_style(
     style
 }
 
+fn selected_location_cue_visuals(
+    location: &Location,
+    animation_ms: f64,
+) -> [(SelectedLocationCueEdge, Vec2, Vec2); 4] {
+    let location_style = selected_location_visual_style(location, true, animation_ms);
+    let outer_size = location_style.size_px as f32
+        + (SELECTED_LOCATION_CUE_PADDING_PX + SELECTED_LOCATION_CUE_THICKNESS_PX) * 2.0;
+    let edge_offset = (outer_size - SELECTED_LOCATION_CUE_THICKNESS_PX) / 2.0;
+    [
+        (
+            SelectedLocationCueEdge::Top,
+            Vec2::new(0.0, edge_offset),
+            Vec2::new(outer_size, SELECTED_LOCATION_CUE_THICKNESS_PX),
+        ),
+        (
+            SelectedLocationCueEdge::Bottom,
+            Vec2::new(0.0, -edge_offset),
+            Vec2::new(outer_size, SELECTED_LOCATION_CUE_THICKNESS_PX),
+        ),
+        (
+            SelectedLocationCueEdge::Left,
+            Vec2::new(-edge_offset, 0.0),
+            Vec2::new(SELECTED_LOCATION_CUE_THICKNESS_PX, outer_size),
+        ),
+        (
+            SelectedLocationCueEdge::Right,
+            Vec2::new(edge_offset, 0.0),
+            Vec2::new(SELECTED_LOCATION_CUE_THICKNESS_PX, outer_size),
+        ),
+    ]
+}
+
 pub(crate) fn agent_visual_style(
     agent: &Agent,
     is_selected: bool,
@@ -573,6 +623,96 @@ fn reconcile_locations(
     despawn_stale_entities(commands, &mut runtime.location_entities, &active_ids);
 }
 
+fn reconcile_selected_location_cues(
+    commands: &mut Commands,
+    runtime: &BevyRuntimeState,
+    existing_cues: &Query<(Entity, &PixelWorldSelectedLocationCue)>,
+    width: f64,
+    height: f64,
+    animation_ms: f64,
+) {
+    let mut existing_by_key = HashMap::new();
+    for (entity, cue) in existing_cues.iter() {
+        existing_by_key.insert((cue.location_id.clone(), cue.edge), entity);
+    }
+
+    let mut active_keys = HashSet::new();
+    let Some(render_state) = runtime.render_state.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let Some(selection) = render_state.selection.as_ref() else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    if selection.kind != "location" {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
+    let Some(location) = render_state
+        .locations
+        .iter()
+        .find(|location| location.id == selection.id)
+    else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+    let Some((canvas_x, canvas_y)) =
+        to_canvas_point(&location.pos, world_bounds, width, height, &runtime.camera)
+    else {
+        for entity in existing_by_key.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    for (edge, offset, size) in selected_location_cue_visuals(location, animation_ms) {
+        let key = (location.id.clone(), edge);
+        active_keys.insert(key.clone());
+        let sprite = sprite_for_rect(SELECTED_LOCATION_CUE_COLOR, size.x, size.y);
+        let transform = Transform::from_translation(to_bevy_translation(
+            canvas_x + f64::from(offset.x),
+            canvas_y + f64::from(offset.y),
+            width,
+            height,
+            SELECTED_LOCATION_CUE_LAYER_Z,
+        ));
+        if let Some(entity) = existing_by_key.get(&key).copied() {
+            commands.entity(entity).insert((sprite, transform));
+        } else {
+            commands.spawn((
+                sprite,
+                transform,
+                PixelWorldSelectedLocationCue {
+                    location_id: location.id.clone(),
+                    edge,
+                },
+            ));
+        }
+    }
+
+    for (key, entity) in existing_by_key {
+        if !active_keys.contains(&key) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 fn reconcile_agents(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -804,6 +944,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
+    selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
@@ -817,6 +958,9 @@ pub(crate) fn render_scene(
 ) {
     if !runtime.mounted {
         clear_runtime_visuals(&mut commands, &mut runtime);
+        for (entity, _) in queries.selected_location_cues.iter() {
+            commands.entity(entity).despawn();
+        }
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -859,6 +1003,9 @@ pub(crate) fn render_scene(
     };
     let Some(_) = runtime.render_state.as_ref() else {
         clear_runtime_visuals(&mut commands, &mut runtime);
+        for (entity, _) in queries.selected_location_cues.iter() {
+            commands.entity(entity).despawn();
+        }
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -895,6 +1042,14 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    reconcile_selected_location_cues(
+        &mut commands,
+        &runtime,
+        &queries.selected_location_cues,
+        width,
+        height,
+        animation_ms,
     );
     reconcile_agents(
         &mut commands,
