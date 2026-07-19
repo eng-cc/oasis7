@@ -48,6 +48,21 @@
 - 插件优先：新增“配方/制成品/工厂”无需改内核代码，仅新增 WASM 模块。
 - 渐进复杂度：先最小闭环，再扩展质量、维护、自动化、品牌、合同等机制。
 
+### M4 builtin 维护合同
+
+- Recipe、Product、Factory builtin 复用按模块类型划分的实现模板；具体模块以声明式参数为主，公共 action 解析、判定顺序、reject reason 与输出格式不得分叉复制。
+- Bootstrap 安装由 descriptor/catalog 驱动，新增、替换或删除 builtin 时不得回退为调用点手工注册。
+- Descriptor module ID、builtin ID catalog、artifact hash 与 identity manifest 必须保持一致，并由 repo-owned 检查在安装或发布前 fail closed；任一局部列表相等都不能单独证明 canonical artifact 合法。
+- 模板或 bootstrap 重构必须保持既有动作判定顺序、拒绝语义、输出合同与回放结果；通用 canonical build、hash、identity 和 release policy 继续由 `doc/world-runtime/prd.md` 及其 WASM 专题拥有。
+
+### 市场、硬件、数据与治理不变量
+
+- 工厂能力必须承担可审计的磨损、维护和回收闭环；持续高负载可以放大折旧压力，但具体速率、阈值和返还比例属于可调平衡参数，不在本 PRD 冻结。
+- 数据采集必须支付电力等明确成本；跨 Agent 数据转移或数据合约结算必须先取得 owner 授权。拒绝时保持账本不变，并向上层提供可解释、可恢复的权限结果。
+- 合约与声誉奖励必须限制同一参与方重复刷取和窗口内无界增发；冷却、窗口、上限等数值由当前 runtime/config 拥有，产品层只冻结“奖励有界且可审计”的不变量。
+- 禁区、配额、税费和电费等治理政策可以拒绝行动或改变结算，但必须经过授权治理路径、接受边界校验并产生可回放事件；不得以局部收益绕过治理约束。
+- 电力交易继续采用 `m4-power-system.prd.md` 的纯供需定价，不引入峰谷时段因子；价格公式与 clamp 边界以该长期权威为准。
+
 ## 机制总览
 
 每个 tick 的经济执行按固定顺序进行：
@@ -58,6 +73,8 @@
 5. 账本提交：原料扣减、产物入库、副产物处理、事件落盘。
 
 ## 资源与制成品层级
+
+下表是供设计沟通使用的长期分层语义与代表性示例，不是完整可运行目录，也不证明每个条目都已有 recipe/product/module。当前 Profile、bootstrap descriptor、模块 ID、hash 与 identity 清单分别以 ABI/runtime 代码和 canonical manifest 为执行真值。
 
 | 层级 | 类别 | 示例 | 主要来源 | 主要去向 |
 | --- | --- | --- | --- | --- |

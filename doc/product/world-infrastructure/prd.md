@@ -9,17 +9,23 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-07-18`
+- Last reviewed：`2026-07-19`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 
 本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“大世界基础设施”的并列产品总入口。
+
+### 活跃产品专题
+
+- [`世界连续性、治理与恢复`](world-continuity-governance-and-recovery.prd.md)：权威世界不分叉、恢复后玩家结果连续、治理不可旁路、紧急处置可申诉与长期世界放行。
 
 ## 1. 产品承诺
 
 oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识与分布式存储等能力，但这些能力分散在多个专业域，读者无法从一个入口回答：玩家能建设什么、设施怎样持续影响区域、世界状态怎样持久且可审计，以及整个底座何时算产品闭环。
 
 大世界基础设施的产品承诺是：玩家可在统一持久大世界中建设有限作用域、成本可解释、结果可审计的区域设施；这些设施由确定性运行时执行，由分布式状态底座保存与同步，并能在不破坏世界一致性和治理边界的前提下持续扩展。
+
+工业成长中的关键承诺必须让玩家在提交前读懂成本、约束、预期效果以及下一步或恢复动作；执行结果必须确定、可审计，`ProductValidated` 还必须呈现与玩家相关的能力、用途和成长后果。区域专业化应形成可选择的协作与取舍压力，而不是对所有玩家征收同一种必付税。具体字段、平衡、ABI、profile、event 与 receipt schema 继续由 `game`、runtime 和 WASM 专业权威维护。
 
 ## 2. 范围与玩家边界
 
@@ -45,9 +51,11 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - auditable：报价、执行、失败、资源扣减和治理动作均有可复核证据。
 - extensible：新增设施复用版本化 schema、module/WASM gate 与迁移规则，不绕过权威运行时。
 
-### 活跃产品专题
+### 2.4 统一世界模型与术语边界
 
-- [`统一持久大世界术语产品契约`](unified-persistent-world-terminology-2026-06-16.prd.md)：定义玩家默认世界叙事与 readiness claim 边界；`world_id`、network tier、storage、replay 和环境运维语义仍由对应专业域拥有。
+oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组织、工业与治理都发生在同一持久、可审计的世界叙事中。`viewer` / `pure_api` 是进入同一世界的玩家入口，不是不同世界类型；local / test / production environment 只说明运行阶段，也不是不同玩家世界；`world_id` 与 network tier 是专业技术分区，不是玩家可选择的世界品牌。
+
+统一世界模型本身不证明特定拓扑、容量、可用性、public launch、mainnet 或其他 readiness。当前公开状态与 claim envelope 仍由根 [`README.md`](../../../README.md) 拥有；玩家规则、权威执行和分布式状态证明分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护，测试只作为这些 claim 的验证机制，不产生新的产品世界。
 
 ## 3. 权威与冲突处理
 
@@ -76,6 +84,10 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 - SC-4：同一确认动作在 replay 后得到一致状态；失败不产生部分扣费、幽灵设施或未审计副作用。
 - SC-5：设施状态可经 snapshot/replication/state sync 恢复，且 transport green 不能替代世界状态闭环证明。
 - SC-6：新增设施必须映射到专业域 PRD-ID、`test_tier_required`，并在涉及多节点、迁移或长期一致性时补 `test_tier_full`。
+- SC-7：工业成长的关键提交点在确认前可读成本、约束、效果与下一步或恢复动作；执行证据确定且可审计，产品校验结果能说明玩家能力、用途与成长后果，区域专业化不退化为普遍税负。
+- SC-8：玩家可读说明将统一持久世界模型与入口、运行环境、`world_id`、network tier 和 readiness 分层表达，不把技术分区或环境包装成不同玩家世界，也不由产品术语推导未经证据支持的公开 claim。
+- SC-9：至少一个区域设施样例以同一 facility/action/receipt identity 贯通玩家报价与确认、权威执行、持久化/replay、复制或 state sync、重连后的玩家可见结果与失败恢复；game、runtime 或 P2P 的孤立通过不得替代该端到端组合证据。
+- SC-10：至少一条可达工业生命周期贯通资源获取或 sourcing、转化或生产、能力或区域服务用途，以及维护、恢复或退役；不得依赖未解释的预置收益，且全过程保持资源守恒、权限校验、回放一致和可读的下一决策。具体 ledger、运输、排程与产品校验动作顺序由专业域拥有。
 
 验收证据由下层专业域提供：设施体验与经济走 `game`；确定性、WASM、receipt 和 replay 走 `world-runtime`；共识、复制、恢复与多节点一致性走 `p2p`。产品层只汇总是否形成端到端闭环，不复制各域测试步骤。
 
@@ -89,6 +101,10 @@ oasis7 已具备可编程区域设施、世界运行时、WASM、网络、共识
 | SC-4 | runtime_engineer | PRD-WORLD_RUNTIME-001 | `doc/world-runtime/prd.md` | receipt、失败原子性与 replay 回归 | test_tier_required |
 | SC-5 | blockchain_ops_engineer | PRD-P2P-002 | `doc/p2p/prd.md` | snapshot、replication、state-sync 多节点恢复证据 | test_tier_full |
 | SC-6 | qa_engineer | PRD-GAME-003 | `doc/game/prd.md` | PRD-ID 到 required/full 证据的发布门禁 | test_tier_required |
+| SC-7 | gameplay_designer | PRD-GAME-002 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md` | 工业提交前可读性、确定性结果、产品校验后果与区域专业化取舍证据 | test_tier_required |
+| SC-8 | producer_system_designer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 | `README.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 世界模型、技术分区、运行环境与公开 claim 分层审计 | test_tier_required |
+| SC-9 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-P2P-002 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md` | 同一设施身份跨 quote、执行、receipt、replay、sync、重连与恢复的组合证据，包含适用的 S9/S10 长跑与恢复演练 | test_tier_full |
+| SC-10 | gameplay_designer / runtime_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md` | 资源获取到工业用途及维护/退役的守恒、权限、回放和玩家下一步证据 | test_tier_required |
 
 ## 6. Non-Goals
 

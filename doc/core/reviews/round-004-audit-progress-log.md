@@ -272,9 +272,9 @@
 | 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` | issue_open | I4-002 | 验收命令未统一为 。 |
 | 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:55:08 +0800 | codex | `doc/scripts/README.md` | pass | - | scripts 模块入口与子目录说明一致，未见 D4-001~D4-008 问题。 |
-| 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
+| 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure PRD (retired/deleted; historical review record) | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
 | 2026-03-06 11:55:32 +0800 | codex | `doc/scripts/prd.md` | pass | - | 模块主 PRD 的脚本分层与 fallback 约束清晰，未见 D4 即时整改问题。 |
-| 2026-03-06 11:55:48 +0800 | G4-002-Aristotle | doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md | issue_open | I4-009 | 标题声明“含 PRD-ID 映射”但任务列表未给出 PRD-ID 对应，PRD-ID→TASK 追溯链缺失。 |
+| 2026-03-06 11:55:48 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure project (retired/deleted; historical review record) | issue_open | I4-009 | 标题声明“含 PRD-ID 映射”但任务列表未给出 PRD-ID 对应，PRD-ID→TASK 追溯链缺失。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
@@ -334,27 +334,27 @@
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | issue_open | I4-002,I4-005 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 缺少 ROUND-002 主从口径主入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
-| 2026-03-06 11:56:44 +0800 | G4-002-Aristotle | doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md | pass | - | PRD 目标态、非目标与验证链条完整，未发现新增 D4 高中风险问题。 |
+| 2026-03-06 11:56:44 +0800 | G4-002-Aristotle | LLM TOML-style unification PRD (retired/deleted; historical review record) | pass | - | PRD 目标态、非目标与验证链条完整，未发现新增 D4 高中风险问题。 |
 | 2026-03-06 11:56:45 +0800 | codex | historical removed precommit remediation playbook PRD | pass | - | 当时提供了可直接执行的修复与复检命令序列；当前契约已收口到 pre-commit 主专题。 |
-| 2026-03-06 11:57:02 +0800 | G4-002-Aristotle | doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md | issue_open | I4-010 | 状态段仅写“已完成”未给最近更新时间，难以判断完成态时效。 |
+| 2026-03-06 11:57:02 +0800 | G4-002-Aristotle | LLM TOML-style unification project (retired/deleted; historical review record) | issue_open | I4-010 | 状态段仅写“已完成”未给最近更新时间，难以判断完成态时效。 |
 | 2026-03-06 11:57:06 +0800 | codex | historical removed precommit remediation playbook project record | pass | - | 当时的校验步骤给出可执行命令 `./scripts/fix-precommit.sh`；完成记录现已并入 pre-commit 主专题。 |
 | 2026-03-06 11:57:21 +0800 | G4-002-Aristotle | doc/world-simulator/scenario/scenario-files.prd.md | issue_open | I4-011 | PRD 内包含大段执行型测试矩阵与脚本建议，混入 project/testing 手册属性信息。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/README.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-beta-balance-hardening-2026-02-22` PRD（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-beta-balance-hardening-2026-02-22` project（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-engineering-architecture.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md` | issue_open | I4-002,I4-003 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 - 审计轮次: 2。 状态为进行中或active，需补充与当前审计轮次一致的时效说明。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-micro-loop-feedback-visibility-2026-03-05` PRD（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-micro-loop-feedback-visibility-2026-03-05` project（正文已退役） | issue_open | I4-003,I4-006 | 存在重复审计字段 - 审计轮次: 2。 状态为进行中或active，需补充与当前审计轮次一致的时效说明。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` PRD（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` project（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-production-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
@@ -368,8 +368,8 @@
 | 2026-03-06 11:57:27 +0800 | codex | `historical removed viewer-tools doc set: capture-viewer-frame.project` | pass | - | 验证命令与脚本路径明确且可执行，fallback 使用边界清晰。 |
 | 2026-03-06 11:57:38 +0800 | G4-002-Aristotle | doc/world-simulator/scenario/scenario-files.project.md | issue_open | I4-009 | 任务拆解标题声明“含 PRD-ID 映射”但条目未标注 PRD-ID，追溯链不完整。 |
 | 2026-03-06 11:57:51 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.prd` | pass | - | 脚本入口、参数与输出路径定义完整，未发现不可执行命令口径问题。 |
-| 2026-03-06 11:58:00 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md | pass | - | 设计文档以 Why/What/Done 为主，未发现新增高风险分工或可达性问题。 |
-| 2026-03-06 11:58:18 +0800 | G4-002-Aristotle | doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md | issue_open | I4-009,I4-010 | 标题声明“含 PRD-ID 映射”但任务未标 PRD-ID，且状态段缺最近更新时间。 |
+| 2026-03-06 11:58:00 +0800 | G4-002-Aristotle | M4 resource/product playability base PRD (retired/deleted; historical review record) | pass | - | 设计文档以 Why/What/Done 为主，未发现新增高风险分工或可达性问题。 |
+| 2026-03-06 11:58:18 +0800 | G4-002-Aristotle | M4 resource/product playability base project (retired/deleted; historical review record) | issue_open | I4-009,I4-010 | 标题声明“含 PRD-ID 映射”但任务未标 PRD-ID，且状态段缺最近更新时间。 |
 | 2026-03-06 11:58:13 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-art-capture-2026-02-28.project` | pass | - | 任务拆解与依赖口径完整，未发现 D4-001~D4-008 新增问题。 |
 | 2026-03-06 11:58:32 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.prd` | pass | - | 回归命令参数完整且产物路径明确，可直接复现框架验证结果。 |
 | 2026-03-06 11:58:49 +0800 | codex | `historical removed viewer-tools doc set: viewer-texture-inspector-framework-rationalization-2026-02-28.project` | pass | - | 任务拆解与依赖链路清晰，未发现命令可执行性相关异常。 |
@@ -571,26 +571,26 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/llm/llm-prompt-system.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/llm/llm-prompt-system.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 builtin-WASM maintainability PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 builtin-WASM maintainability project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 industrial benchmark/current-state PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 industrial benchmark/current-state project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 market/hardware/data/governance closure PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 market/hardware/data/governance closure project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-power-system.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-power-system.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P0 shared bottleneck/logistics priority project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P1 maintenance/scarcity pressure PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P1 maintenance/scarcity pressure project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P2 stage guidance/market-governance linkage PRD（已退役/删除；历史审计记录） | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P2 stage guidance/market-governance linkage project（已退役/删除；历史审计记录） | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P3 layer/profile chain expansion PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 P3 layer/profile chain expansion project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 resource-chain playability hardening PRD (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | M4 resource-chain playability hardening project (retired/deleted; historical review record) | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/m4/material-multi-ledger-logistics.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/prd/acceptance/unified-checklist.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |

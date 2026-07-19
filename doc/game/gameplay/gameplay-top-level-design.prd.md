@@ -212,11 +212,12 @@
 - 工业成长反馈必须优先展示“新能力 / 新选择 / 新修复手段 / 新区域用途”，而不是只展示库存与产量上涨。
 - 首个制成品、首条稳定产线与首个可交易工业品都必须绑定最小经济可读性：玩家应能看懂 `投入了什么 / 产出了什么 / 为什么值得继续 / 下一步可换来什么`。
 - 首局推荐采集目标必须把 `target_frag_id / expected_material_hint / starter_value_reason / first_recipe_relevance` 接到第一工业目标；玩家应知道“为什么先采这个 frag”，而不是只看到最近可采集物。
-- 高负载工厂或维护 sink 影响首条稳定产线时，反馈必须展示 `maintenance_runway_ticks / downtime_threshold_ppm / recommended_maintenance_action`；玩家应知道继续排产还能撑多久、何时会进入 critical / 停机、以及先维护还是继续生产的取舍。
+- 高负载工厂或维护 sink 影响首条稳定产线时，提交前反馈必须展示 `runway_before_ticks / runway_after_ticks / downtime_threshold_ppm / continue_production_risk / recommended_maintenance_action`；玩家应能比较排程前后还能安全生产多久、何时会进入 critical / 停机，以及先维护、降载还是继续生产的取舍。该 quote/runway 合同当前仍未实现，不能用 simulator 的零值占位或历史 hardening 项目结项代替验收。
 - `RefineCompound` / `refine_compound` 若作为首个工厂或首个制成品前置恢复动作，必须在提交前展示 `refine_quote` / `refine_preview`：`compound_mass_g`、`electricity_cost`、`hardware_output`、`electricity_after`、`hardware_shortfall_before`、`hardware_shortfall_after`、`first_goal_relevance`、`recommended_refine_amount`、`refine_value_class`；该合同必须让玩家看见投入与产出、比较目标缺口变化、分类为 `enough_to_advance / partial_progress / poor_power_tradeoff`，并推荐继续精炼、先补电或改走采矿/等待路线。它只约束提交前可读性，不重平衡精炼公式、电力成本、产率，也不扩展为完整加工链。
-- `market_quotes` 若影响排产或材料采购，必须展示 `market_quote_decision_preview`：推荐本地采购、外部调运、延后、治理调整或拆分来源的理由，税费/运输/本地缺口各自贡献，以及下一步降本动作；玩家不应只看到 `effective_cost_index_ppm`。
+- `market_quotes` 若影响排产或材料采购，必须展示 `market_quote_decision_preview`：`recommended_source`、`local_vs_world_cost_delta`、`tax_contribution`、`transit_contribution`、`remaining_shortfall`、`cost_pressure_class`、`recommendation_rationale` 与 `next_cost_reduction_action`；推荐结果可落到本地采购、外部调运、延后、治理调整或拆分来源，玩家不应只看到 `effective_cost_index_ppm`。该合同只补玩家提交前的来源取舍，不扩展订单簿、撮合交易或市场数值重平衡。
 - `TransferMaterial` 若影响首条稳定产线或当前配方阻塞，必须展示 `logistics_transfer_quote` / `transfer_impact_preview`：预计到达量、损耗、到达 tick、优先级理由、吞吐占用、调运前后阻塞变化和推荐调运动作；玩家不应只在 `MaterialTransitCompleted` 后才发现这批材料是否赶上产线。
-- `ValidateProductWithModule` / `ProductValidated` 若确认首个制成品或高阶产品有效，必须展示 `product_validation_quote` / `validation_unlock_preview`：产品用途标签、可交易性、验证前后阶段、解锁能力、下一步用途和推荐行动；玩家不应只看到校验成功日志。
+- 数据采集、跨 Agent 数据转移或数据合约若受电力成本或访问许可约束，提交前必须说明预计电力成本、数据 owner、recipient/use、许可状态与拒绝后的授权或替代路径；玩家不应只看到 access denied，也不得为提升可读性绕过 owner consent。
+- `ValidateProductWithModule` / `ProductValidated` 若确认首个制成品或高阶产品有效，必须展示 `product_validation_quote` / `validation_unlock_preview`：`product_id`、用途/战略角色、可交易性、验证前后阶段、解锁的能力或选择、阶段推进结果、下一步用途、推荐行动和价值分类；玩家不应只看到校验成功日志。阶段门槛拒绝还必须说明缺失前置与可达的推进/恢复路径。该合同当前仍是待实现缺口，不把 profile 字段存在或历史 P3 任务结项误报为玩家预览已经可用。
 - `BuyPower` / `harvest_radiation` / 等待发电若用于恢复低电、临界电力或停机风险，必须展示 `power_survival_quote` / `energy_recovery_preview`：补电量、成本、恢复后状态、可行动 runway、下一步动作可负担性、防停机原因和推荐补电动作；玩家不应只看到缺电拒绝或补电事件。
 - `SellPower` 若用于短期变现或缓解现金流，必须展示 `power_sale_quote` / `energy_liquidity_preview`：售电量、预期收入、售电后状态、剩余 runway、下一动作可负担性、产线中断风险和推荐售电动作；玩家不应只看到卖电收入而不知道是否牺牲能源稳定。
 - `FragmentsReplenished` / 运行期 frag 补种若影响缺料恢复或第一工业目标，必须展示 `resource_replenishment_quote` / `fragment_refill_preview`：当前 frag/chunk 剩余量、下一次补种 tick、预计补种量、等待成本、第一工业目标关联和推荐资源行动；玩家不应只在后台补种事件后才知道该不该等、换目标或改路线。
@@ -233,7 +234,7 @@
 4. `10-minute trust gate` 只证明玩家已经信任“控制是可靠的、目标是可读的、继续玩是值得的”；`first capability gate` 再证明首个持续能力在后续 `15~45` 分钟或 `1~3` 次会话内闭环，不得把两层 verdict 混写成一个。
 5. `PostOnboarding` 默认不允许把玩家丢回“自由漂浮观察态”；如果当前主目标暂不可达，系统必须切到恢复、保全或替代胜利，而不是只保留世界状态观察。
 
-专题口径见 `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`。
+产品承诺与组合验收见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；本节继续拥有阶段选择、阻塞分类与玩法承接的专业规则。
 
 ## 2.7 当前两周收口重点（2026-04-09）
 
@@ -316,9 +317,10 @@ oasis7 的世界不是无尺度表格。
 - `1cm` 是世界真值合同，不自动等于“玩家已经拥有 1cm 级直接操作主玩法”。
 - coarse-grained 子系统不是违背尺度设计，而是需要被正式声明和审计。
 - Viewer 的 marker 放大、semantic map、2D 抽象不等于世界尺寸改变。
-- 未来如果要引入 embodied / block-editing 候选能力，必须先证明它强化的是当前间接控制文明模拟主路线，而不是把产品切成第二套游戏。
+- 过细动作只能映射到 canonical 可执行替代动作；没有安全替代时，必须安全停止、解释边界并给出下一次可决策点，不能由 UI 伪造动作或只返回无解释失败。
+- 未来如果要引入 embodied / block-editing 候选能力，必须先证明它强化的是当前间接控制文明模拟主路线，具备对应专业域合同与验证，并经显式跨域决策；不得把产品切成第二套游戏或提前写成当前承诺。
 
-专题口径见 `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`。
+产品承诺见 [`doc/product/world-rules-core-gameplay/prd.md`](../../product/world-rules-core-gameplay/prd.md)；本节保留玩法侧四层尺度合同与未来候选 guard。
 
 补充口径：
 - `10-minute trust gate` 负责回答“是否已经值得继续玩”。
@@ -371,7 +373,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 3. 如果 UI 能告诉玩家“我现在在哪个阶段、为什么被卡住、下一步该做什么”，那么 API 也必须能告诉玩家。
 4. 如果 UI 能继续玩到中循环，API 也必须能继续玩到中循环，而不是停留在首局或探针模式。
 
-专题口径见 `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`。
+产品模式、证据隔离与发行组合验收见 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；本节继续拥有 pure API 持续玩法等价的专业规则。
 
 ---
 
@@ -467,6 +469,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - 承诺需要资源或信誉成本
 - 违约、失约和延期必须留下事件证据
 - 治理门槛和冷却窗口限制频繁改约
+- 投票影响、策略更新和声誉收益必须经过授权并受反滥用、反刷取和反通胀边界约束；具体权重、阈值与奖励公式由当前 runtime / balance 真值维护，不在产品或玩法总览中冻结历史数值。
 - 危机响应优先保护可恢复性，而不是放大不可逆惩罚
 
 ---

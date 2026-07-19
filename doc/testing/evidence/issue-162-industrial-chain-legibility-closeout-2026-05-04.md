@@ -20,7 +20,7 @@
 | --- | --- | --- | --- |
 | 玩家无需阅读 raw logs，也能判断产线为什么没推进 | 顶层玩法 PRD 已冻结“状态 + 停机原因 + 修复动作”口径；Viewer 主卡与玩家反馈已消费这些语义 | `doc/game/gameplay/gameplay-top-level-design.prd.md`；`crates/oasis7_viewer/src/egui_right_panel_player_guide/post_onboarding.rs`；`crates/oasis7_viewer/src/egui_right_panel_player_experience.rs` | `pass` |
 | 至少 1 个 canonical player surface 能视觉验证首个工业里程碑 | 前期工业 required-tier 卡组已把“首个制成品 / 停机恢复 / 首座工厂单元”固定为正式人工复核最小集 | `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md` | `pass` |
-| 停机原因必须是人类可用分类，而不是 freeform debug text | `PostOnboarding` 与顶层玩法口径都已冻结最小 blocker taxonomy，并在 Viewer 侧落为玩家文案 | `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`；`doc/game/gameplay/gameplay-top-level-design.prd.md`；`crates/oasis7_viewer/src/egui_right_panel_player_guide/mod.rs` | `pass` |
+| 停机原因必须是人类可用分类，而不是 freeform debug text | `PostOnboarding` 与顶层玩法口径都已冻结最小 blocker taxonomy，并在 Viewer 侧落为玩家文案 | `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；`doc/game/gameplay/gameplay-top-level-design.prd.md`；`crates/oasis7_viewer/src/egui_right_panel_player_guide/mod.rs` | `pass` |
 
 ## 当前 contract
 

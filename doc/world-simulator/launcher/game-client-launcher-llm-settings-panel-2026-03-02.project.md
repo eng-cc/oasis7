@@ -16,7 +16,8 @@
 - `crates/oasis7_client_launcher/src/main.rs`
 - `crates/oasis7_client_launcher/src/main_tests.rs`
 - `config.toml` 小写 TOML 结构约定（`[llm]`）
-- `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md`
+- `doc/world-simulator/llm/llm-agent-behavior.prd.md`
+- `config.example.toml`
 
 ## 状态
 - 最近更新：2026-03-06（ROUND-005 I5-001 字段补齐）

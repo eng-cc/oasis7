@@ -162,7 +162,7 @@
 - WASM 接口与执行: `doc/world-runtime/wasm/wasm-interface.md`, `doc/world-runtime/wasm/wasm-executor.prd.md`
 - 场景矩阵: `doc/world-simulator/scenario/scenario-files.prd.md`
 - Web 闭环测试策略: `doc/world-simulator/viewer/viewer-web-software-safe-mode-2026-03-16.prd.md`
-- 玩家访问模式产品契约: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 玩家访问模式产品契约: `doc/product/player-entry-distribution/prd.md`
 - 分布式路线图: `doc/p2p/blockchain/production-grade-blockchain-p2pfs-roadmap.prd.md`
 - 系统性测试手册: `testing-manual.md`
 
@@ -216,8 +216,8 @@
   - v1.1: 建立跨模块变更影响检查清单模板。
   - v2.0: 建立 PRD-ID 到测试证据的自动化追踪报表。
   - v2.1 (2026-03-06): 启动 ROUND-005，专项收敛文档状态时效字段、完成态字段、命名一致性与索引覆盖规则。
-  - v2.2 (当前阶段): 建立阶段收口优先级、跨角色交付矩阵与发布前 P0 必备闭环。
-  - v2.3 (下一阶段): 建立下一轮优先级清单，并把第一优先级固定到正式专题入口。
+  - v2.2 (historical, completed): 已建立阶段收口优先级、跨角色交付矩阵与发布前 P0 必备闭环。
+  - v2.3 (historical, completed): 已完成下一轮优先级排序及其首个 release-readiness 专题承接；当前不再维护独立 dated priority slate。
   - v2.4 (historical, 2026-03): 版本级 readiness 与 go/no-go 裁决已落为 `doc/core/reviews/*` 审计留痕；不再保留根目录 release-candidate 三件套作为当前首读入口。
 - Technical Risks:
   - 风险-1: 模块新增能力未及时回填全局链路。
@@ -225,7 +225,7 @@
   - 风险-3: 若局部修订直接上调 `审计轮次` 而未建立正式 ROUND 台账，字段会失去可比性，并破坏 reviewed-files / progress-log 对账。
   - 风险-4: 若继续把 launcher / explorer 体验扩展排在玩法与发布治理前，项目会强化“能展示”而非“能稳定发布”的错配。
   - 风险-5: 若 runtime / testing / playability 的证据标准不同步，发布评审会退化为口头判断。
-  - 风险-6: 若本轮收口后没有正式优先级入口，团队会重新回到平均发力与隐式尾注推进。
+  - 风险-6: 若当前排序与下一步未同步到 `doc/core/project.md` 和 GitHub task truth，团队会重新回到平均发力与隐式尾注推进。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:

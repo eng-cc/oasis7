@@ -88,7 +88,7 @@
 
 - 运行时与模块治理基线：`doc/world-runtime/prd.md`
 - 测试流程与分层矩阵：`testing-manual.md`
-- 世界规则与边界约束：`doc/product/world-rules-core-gameplay/world-rule.prd.md`
+- 世界规则与边界约束：`doc/product/world-rules-core-gameplay/prd.md`
 - 战争与政治数值基线：`doc/game/gameplay/gameplay-war-politics-mvp-baseline.md`
 
 ## Gameplay 模块测试矩阵引用

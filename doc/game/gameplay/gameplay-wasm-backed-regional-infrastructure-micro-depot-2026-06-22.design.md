@@ -5,7 +5,7 @@
 - 对应任务证据: GitHub issue / task `task_3c55fc4c17ea44aa850adf7a6a4463f4`；退役前 `.pm/tasks/*` execution log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯
 - 关联玩法真值:
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`
-  - `doc/game/gameplay/gameplay-physical-scale-indirect-control-2026-05-07.prd.md`
+  - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
   - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
   - `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md`

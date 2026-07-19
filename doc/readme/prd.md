@@ -59,8 +59,8 @@
 - PRD-README-007: As a `liveops_community`, I want a reusable announcement/changelog template, so that future external drafts follow the same sections, source links, and review states.
 - PRD-README-008: As a 仓库访客, I want the root README to reflect the current preview posture, so that I do not mistake the repo for a live release landing page.
 - PRD-README-009: As a `producer_system_designer`, I want repo-home copy aligned with site and communication docs, so that public promises stay consistent.
-- PRD-README-010: As a `liveops_community`, I want platform-specific promotion plans anchored to third-party channel mechanics and internal claim envelopes, so that outbound seeding can fit channel culture without over-promising.
-- PRD-README-011: As a `liveops_community`, I want a first-wave Moltbook post pack derived from the approved platform plan, so that we can publish native posts and replies without improvising unsafe copy.
+- PRD-README-010: As a `liveops_community`, I want a stable channel runbook anchored to freshly verified platform mechanics and the current product claim envelope, so that outbound seeding can fit channel culture without over-promising or reusing stale platform assumptions.
+- PRD-README-011: As a `liveops_community`, I want a reusable Moltbook post pack governed by the stable runbook, so that native posts and replies can be reviewed, published, withdrawn and traced without improvising unsafe copy.
 - PRD-README-012: As a `liveops_community`, I want Moltbook outreach to point builders back to GitHub issues and PRs after they inspect the preview, so that external interest can turn into actionable feedback and contributions.
 - PRD-README-013: As a `liveops_community`, I want shorter feed-native Moltbook variants of the approved post pack, so that final publish copy reads like native posts instead of internal drafts.
 - PRD-README-014: As a 仓库访客, I want the repo root and public entry docs to use the canonical `oasis7` brand while still explaining legacy internal identifiers, so that I do not confuse project branding with crate/bin compatibility names.
@@ -144,7 +144,7 @@
 - Acceptance Criteria:
   - AC-1: readme PRD 明确入口文档职责边界。
   - AC-2: readme project 文档维护同步任务与状态。
-  - AC-3: README 与 `doc/product/world-rules-core-gameplay/world-rule.prd.md`、`testing-manual.md`、模块 PRD 的链接链路可用。
+  - AC-3: README 与 `doc/product/world-rules-core-gameplay/prd.md`、`testing-manual.md`、模块 PRD 的链接链路可用。
   - AC-4: 口径更新有明确触发条件与同步时限。
   - AC-5: 渠道化推广方案必须显式绑定内部公开口径边界，不得把 generic marketing 文案直接外推到第三方平台。
   - AC-6: `doc/readme/governance/**` 仍可读历史专题的首行标题必须统一使用 `oasis7` 品牌；旧 `oasis7*` 标题仅允许保留在正文历史上下文与证据原文中。
@@ -176,9 +176,9 @@
 - AC-32: 若团队继续对 merged GitHub PR 做贡献奖励审批，必须把普通 merged PR 的默认真实发放 ceiling 收紧到 `150 OC`；任何 `>150 OC` 的 row 都必须留下 exceptional case note，`1500 OC` 不得作为常规 MR 档位扩散。
 - AC-33: 若 contributor reward row 已进入 planned grant 或 pending distribution，producer 在执行前仍必须按实际增量价值复核；若文档里的原计划金额偏高，必须先下调档位或金额并留下审计说明，而不是按原值直接发放。
 - AC-34: 若小红书内容链路进入第十三篇，必须补齐“谁该拥有游戏的所有权 / 谁该成为受益者”素材包，明确标题、正文、互动问题、关键词与“真正推动游戏往前走的人应逐步进入所有权和受益者讨论，但这不是当前已开放的法律股权、链上投票权事实或自动奖励承诺”的表达边界，并保持人类开发者第一人称、非上线宣称、非金融化口径与非空泛共同体口号。
-- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `doc/product/world-rules-core-gameplay/world-rule.prd.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
+- AC-35: 若根 README 的公开主定位从“文明模拟系统/引擎”收口为“文明模拟游戏”，必须同步更新 `doc/product/world-rules-core-gameplay/prd.md`、`site/index.html` 与 `site/en/index.html` 的首屏/元信息口径，并保持 `limited playable technical preview` 边界不变：不是 closed beta、public launch 或赛季上线。
 - AC-36: 若小红书内容链路进入第十四篇，必须补齐“项目累计 token 用量”素材包，明确标题、正文、短版 caption、评论区引导、关键词、封面 HTML/PNG 与事实基线，并把讨论收口到“真实项目里最烧 token 的往往是需求反复、文档补齐、返工验证和上下文切换”，而不是滑向炫账单、融资暗示、模型排行榜吹捧或“AI 已经能全自动取代团队”的夸张宣称。
-- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
+- AC-37: 若仓库需要一份“白皮书式项目总览”，必须新增 Explanation 类型文档，明确项目目标、世界模型、玩家/Agent 边界、玩法骨架、系统架构、当前双模式访问面（`software_safe / pure_api`）与 `limited playable technical preview` 现状，同时显式声明该文档不替代 `README.md`、`doc/product/world-rules-core-gameplay/prd.md`、`doc/core/prd.md`、`doc/game/**` 与模块 PRD / project 真值。
 - AC-38: 若白皮书式项目总览已经形成正式入口，必须同步更新 `site/index.html`、`site/en/index.html` 与 `site/doc/cn/index.html`、`site/doc/en/index.html`，让站点首页和文档中心至少能表达“两阶段路径”“当前仍是技术预览”的边界，并给出可直接进入该总览的公开入口。
 - AC-26: 若 Moltbook 内容链路继续沿 `trust repair / shared truth / inspectable residue` 下钻，必须补齐下一条 `repair certification` follow-up，明确推荐标题、主贴、首评、CTA 与禁语边界，并保持 `general` / text-first / builder question 的已验证组织方式，不把讨论滑回泛道德论战或未宣布集成。
 - AC-15: 若小红书进入“开始解释游戏是什么”的第三帖阶段，必须补齐独立素材包，明确标题、正文、轮播结构、互动问题与“不能写成完整设定说明书/不能暗示已上线”的边界。
@@ -195,7 +195,7 @@
 - Architecture Overview: readme 模块属于文档入口层，负责跨模块信息汇总、术语统一和导航稳定性。
 - Integration Points:
   - `README.md`
-  - `doc/product/world-rules-core-gameplay/world-rule.prd.md`
+  - `doc/product/world-rules-core-gameplay/prd.md`
   - `site/index.html`
   - `site/en/index.html`
   - `testing-manual.md`
@@ -252,8 +252,8 @@
 | PRD-README-007 | TASK-README-009 | `test_tier_required` | 公告模板、source links 与 review status 抽样复核 | 公告底稿模板复用性 |
 | PRD-README-008 | TASK-README-010 | `test_tier_required` | 根 README 状态段含 `limited playable technical preview` / 非 closed beta / 非 public launch / 公告准备态 | 仓库首页状态理解 |
 | PRD-README-009 | TASK-README-010 | `test_tier_required` | README 与 site / brief 口径一致 | 公开口径一致性 |
-| PRD-README-010 | TASK-README-014 | `test_tier_required` | Moltbook 推广方案含平台现状、内容支柱、节奏、禁宣称项与回流机制 | 第三方渠道推广口径一致性 |
-| PRD-README-011 | TASK-README-015 | `test_tier_required` | Moltbook 帖文包含首批主贴、评论模板、CTA 与禁宣称抽样复核 | 首批渠道文案执行安全性 |
+| PRD-README-010 | TASK-README-014 | `test_tier_required` | stable Moltbook runbook 含平台复验/fail-closed、内容支柱、禁宣称项与信号回流机制 | 第三方渠道推广口径一致性 |
+| PRD-README-011 | TASK-README-015 | `test_tier_required` | stable Moltbook post pack 含主贴、回复模板、CTA、状态与 publication evidence 抽样复核 | 渠道文案执行安全性 |
 | PRD-README-012 | TASK-README-016 | `test_tier_required` | Moltbook 方案与帖文明确 GitHub issue / PR CTA，且不与技术预览边界冲突 | 外部反馈回流与贡献转化 |
 | PRD-README-013 | TASK-README-017 | `test_tier_required` | Moltbook 帖文主贴已压缩为更短的 feed-native 版本，且保留技术预览与 GitHub CTA 边界 | 最终发布文案可用性 |
 | PRD-README-014 | TASK-README-018/019/020 | `test_tier_required` | 根 README、公开入口文档与 `doc/readme/governance/**` 的历史标题/当前公开口径统一为 `oasis7`，并显式区分内部兼容命名 | 仓库首页认知、公开品牌一致性 |

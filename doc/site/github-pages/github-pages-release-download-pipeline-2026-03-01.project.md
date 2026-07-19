@@ -2,6 +2,7 @@
 
 - 对应设计文档: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.design.md`
 - 对应需求文档: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
+- 产品体验边界: `doc/product/player-entry-distribution/prd.md`；本文件继续承载发行流水线、资产校验与执行记录。
 
 审计轮次: 6
 

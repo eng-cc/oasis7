@@ -15,7 +15,7 @@
 - `doc/README.md`
 - `doc/core/prd.md`
 - `doc/site/prd.md`
-- `doc/product/world-rules-core-gameplay/world-rule.prd.md`
+- `doc/product/world-rules-core-gameplay/prd.md`
 - `testing-manual.md`
 - `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.md`
 

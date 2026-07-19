@@ -1,6 +1,6 @@
 # p2p PRD
 
-> 专业域 authority：本文件拥有网络、共识、DistFS、复制、同步、恢复与节点可观测性契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供分布式状态层证据，但不是并列产品入口。
+> 专业域 authority：本文件拥有网络、共识、DistFS、复制、同步、恢复与节点可观测性契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供分布式状态层证据，并为 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 的权限与治理边界提供专业合同，但不是并列产品入口。
 
 审计轮次: 14
 
@@ -245,7 +245,7 @@
   - `doc/p2p/token/mainchain-token-ideal-transaction-upgrade-2026-06-08.prd.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
-  - `doc/product/world-rules-core-gameplay/world-rule.prd.md`
+  - `doc/product/world-rules-core-gameplay/prd.md`
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-chain-runtime-decouple-2026-02-28.prd.md`
   - `oasis7_viewer_live.release.example.toml`

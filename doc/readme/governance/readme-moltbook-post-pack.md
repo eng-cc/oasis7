@@ -1,11 +1,15 @@
-# Moltbook 首批发帖草案包（2026-03-19）
+# Moltbook 帖文与回复素材库
 
 审计轮次: 7
 
 ## Meta
 - Draft Owner: `liveops_community`
 - Review Owner: `producer_system_designer`
-- Source Plan: `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
+- Product Claim Contract: `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
+- Channel Runbook: `doc/readme/governance/readme-moltbook-liveops-runbook.md`
+- Reuse Rule: 每条素材复用前重新绑定根 README 当前 claim、受支持入口与平台限制；旧草稿默认 `stale`，不得直接发布。
+- Entry Status: `draft` / `reviewed` / `publish_ready` / `published` / `withdrawn` / `stale`
+- Publication Evidence: published 条目必须记录 post ID/URL、时间与 owner；无此证据只能称素材或草稿。
 - Language: `English`
 - Review Status: `short_form_draft_for_internal_review`
 
@@ -32,7 +36,7 @@ oasis7 is a persistent world built for agents.
 
 Still a limited playable technical preview.
 
-You can already inspect it through `software_safe` and `pure_api`.
+You can already inspect it through `viewer` and `pure_api`; `software_safe` is a compatibility alias for `viewer`.
 
 If you try the preview and spot a gap, file a GitHub issue or PR.
 
@@ -43,7 +47,7 @@ What would you inspect first?
 Still keeping the boundary explicit: limited playable technical preview.
 
 What is already useful to inspect:
-- `software_safe` for the current web preview path
+- `viewer` for the current web preview path (`software_safe` is its compatibility alias)
 - `pure_api` for no-UI world inspection and progression
 
 If useful, I can break down each surface separately.
@@ -58,7 +62,7 @@ If useful, I can break down each surface separately.
 ```text
 Two access surfaces. Two proof boundaries.
 
-`software_safe` = current web preview path
+`viewer` = current web preview path (`software_safe` is its compatibility alias)
 `pure_api` = no-UI canonical world access
 
 Same world. Different ways to inspect it.
@@ -70,12 +74,12 @@ If one path feels rough, send it back as a GitHub issue or PR.
 - First Comment:
 ```text
 Important boundary:
-`software_safe` does not “prove” no-UI long-run automation.
+`viewer` evidence, including its `software_safe` compatibility alias, does not “prove” no-UI long-run automation.
 `pure_api` does not “prove” browser interaction parity.
 
 We’d rather keep the claims narrow than pretend every path proves everything.
 ```
-- Asset Note: simple three-column visual or text card
+- Asset Note: simple two-column visual or text card
 - CTA: invite replies on which surface is most useful, then route concrete feedback to GitHub
 - Do Not Say: `all paths are equivalent`, `fully shipped cross-platform`
 
@@ -362,7 +366,7 @@ or restored coordination rights?
 ```text
 Not as a broad public release. oasis7 is currently a limited playable technical preview.
 
-What we can show today is how the world behaves through `software_safe` and `pure_api` rather than a public player launch.
+What we can show today is how the world behaves through `viewer` and `pure_api` rather than a public player launch; `software_safe` is a compatibility alias for `viewer`.
 ```
 
 ### Reply Template 2: “Is this already integrated with Moltbook?”
@@ -372,10 +376,10 @@ No formal integration is being announced here.
 This is a platform-native promotion pass because Moltbook’s agent-first context is a strong fit for the project. If that changes later, we’d announce it explicitly.
 ```
 
-### Reply Template 3: “What’s the difference between the three surfaces?”
+### Reply Template 3: “What’s the difference between the two access surfaces?”
 ```text
 Short version:
-`software_safe` is the current web preview path,
+`viewer` is the current web preview path (`software_safe` is its compatibility alias),
 and `pure_api` is the no-UI world access path.
 
 They expose the same world from different proof boundaries.

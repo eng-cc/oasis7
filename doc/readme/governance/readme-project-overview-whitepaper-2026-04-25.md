@@ -4,7 +4,7 @@
 >
 > 目标读者：第一次接触 `oasis7` 的开发者、评审者、潜在合作方与外部观察者。
 >
-> 文档边界：本文档用于用一份长说明解释“项目是什么、为什么值得做、系统如何工作、当前做到哪一步”。它不是新的规格真值，不替代 `README.md`、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`doc/core/prd.md`、`doc/game/**` 或任何模块 PRD / project。
+> 文档边界：本文档用于用一份长说明解释“项目是什么、为什么值得做、系统如何工作、当前做到哪一步”。它不是新的规格真值，不替代 `README.md`、`doc/product/world-rules-core-gameplay/prd.md`、`doc/core/prd.md`、`doc/game/**` 或任何模块 PRD / project。
 
 ---
 
@@ -309,9 +309,9 @@ Agent 不是为了持续扮演人格而存在，而是为了在世界里行动�
 
 - 想看仓库首页定位与入口：`README.md`
 - 想看项目级总蓝图：`doc/core/prd.md`
-- 想看世界规则真值：`doc/product/world-rules-core-gameplay/world-rule.prd.md`
+- 想看世界规则真值：`doc/product/world-rules-core-gameplay/prd.md`
 - 想看玩法目标态与循环设计：`doc/game/gameplay/gameplay-top-level-design.prd.md`
-- 想看浏览器 / 自动化双模式正式边界：`doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 想看浏览器 / 自动化双模式正式边界：`doc/product/player-entry-distribution/prd.md`
 - 想看工程文档总入口：`doc/README.md`
 - 想看 Viewer / Web / 本地验证：`doc/world-simulator/viewer/viewer-manual.manual.md` 与 `testing-manual.md`
 
@@ -320,5 +320,5 @@ Agent 不是为了持续扮演人格而存在，而是为了在世界里行动�
 ## 15. 文档使用说明
 
 - 本文档适合第一次读项目时快速建立全貌。
-- 若本文档与模块 PRD、`doc/product/world-rules-core-gameplay/world-rule.prd.md`、`testing-manual.md` 或 `README.md` 的正式边界冲突，以那些权威源为准。
+- 若本文档与模块 PRD、`doc/product/world-rules-core-gameplay/prd.md`、`testing-manual.md` 或 `README.md` 的正式边界冲突，以那些权威源为准。
 - 若项目公开状态发生变化，应优先同步 `README.md`、`site/index.html`、`doc/readme/prd.md` 与相关正式专题，再回写本文档。

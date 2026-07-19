@@ -9,8 +9,8 @@
 ## 文件列表
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md`
-- `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md`
-- `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md`
+- `gameplay-beta-balance-hardening-2026-02-22` PRD（历史审读对象，正文已退役）
+- `gameplay-beta-balance-hardening-2026-02-22` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/game/gameplay/gameplay-top-level-design.project.md`
 - `doc/game/prd.index.md`

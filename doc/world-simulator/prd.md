@@ -1,6 +1,6 @@
 # world-simulator PRD
 
-> 专业域 authority：本文件拥有场景、Agent/LLM、Viewer/Launcher 与交互模拟合同，并向 [`doc/product/agents-world-simulation/prd.md`](../product/agents-world-simulation/prd.md) 与 [`doc/product/player-entry-distribution/prd.md`](../product/player-entry-distribution/prd.md) 汇报；涉及设施或底座时消费 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 的产品边界。
+> 专业域 authority：本文件拥有场景、Agent/LLM、Viewer/Launcher 与交互模拟合同，并向 [`doc/product/agents-world-simulation/prd.md`](../product/agents-world-simulation/prd.md)、[`doc/product/player-entry-distribution/prd.md`](../product/player-entry-distribution/prd.md) 与 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 汇报；涉及设施或底座时消费 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 的产品边界。
 
 审计轮次: 9
 
@@ -20,6 +20,13 @@
 
 本文件不承载完整专题目录、历史 milestone 流水、逐任务执行证据或 round review logs。完整专题配对关系进入 `doc/world-simulator/prd.index.md`；当前执行状态进入 `doc/world-simulator/project.md`；历史证据进入 topic project、GitHub task issue evidence comments 与 archive-only review logs。
 
+### Intent 批次与派生观测边界
+
+- 同 tick intents 必须按稳定冲突键和稳定优先序完成确定性裁决，accepted actions 再按确定顺序应用并产出事件；该过程不是具备整体回滚能力的原子事务批次，不得以“统一提交”掩盖顺序应用与局部拒绝语义。
+- `IntentBatchReport` 用于运行期解释和诊断；恢复真值是权威状态、journal 与事件，而不是进程内最后一份 report。
+- `intel_ttl_ticks` 等观测配置必须跨 snapshot 保持兼容；observation cache/hook 属于进程内派生状态，恢复时重建或清空，不能作为 Agent 长期记忆或权威世界事实。
+- logistics SLA 与 threat heatmap 是由权威运输、战争和危机状态生成的观测/调度数据；heatmap 当前是 alliance/global 聚合而非空间格网，并可能被治理规则消费，因此不能描述成纯 UI 指标或独立玩法承诺。
+
 ## 接口 / 数据
 - PRD 主入口: `doc/world-simulator/prd.md`
 - 文档 landing: `doc/world-simulator/README.md`
@@ -29,7 +36,8 @@
 - 根级旧跳转入口: root world-simulator PRD/project legacy redirect shells 已删除
 - 追踪主键: `PRD-WORLD_SIMULATOR-xxx`
 - 测试与发布参考: `testing-manual.md`
-- 跨模块模式 taxonomy: `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+- 跨模块模式 taxonomy: `doc/product/player-entry-distribution/prd.md`
+- 普通用户发行体验: `doc/product/player-entry-distribution/prd.md`；专业发行流水线: `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
 - UI 视觉短期样本池: `doc/ui_review_result/README.md`
 - 常用 active supporting docs:
   - `doc/world-simulator/viewer/README.md`
@@ -56,7 +64,7 @@
 | primary Web viewer | `PRD-WORLD_SIMULATOR-039/041/046` | `viewer` 是低保真但正式可玩的主要 Web 入口；`software_safe` 仅作为兼容 alias；退役第二 Viewer surface 已退出 active delivery。 |
 | launcher transfer / explorer / control plane | `PRD-WORLD_SIMULATOR-020-031`, `033/034/044` | native/web launcher 共享控制面与前端语义；转账、explorer、链状态、GUI Agent 和 stale execution-world 恢复必须结构化、可诊断、可回归。 |
 | slot-1 onboarding | `PRD-WORLD_SIMULATOR-045` | 新账号玩家读取 canonical quote 并显式确认后直接进入 `ClaimAgent`；dedicated pool 足够时自动补足 restricted starter amount，不生成 operator-review 审批状态。 |
-| release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；普通用户发行仍包含 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker。 |
+| release asset entrypoints | `PRD-WORLD_SIMULATOR-042/043` | 三平台公开资产必须提供平台原生安装或启动入口，并通过 bundle/installer 入口验证；`doc/product/player-entry-distribution/prd.md` 只组合玩家体验，普通用户发行的 Windows codesigning trust chain 与 macOS notarized `.app + .dmg` blocker 仍由本专业域和站点流水线处理。 |
 
 ## 用户与模式边界
 - 模拟层开发者需要统一场景与运行语义。

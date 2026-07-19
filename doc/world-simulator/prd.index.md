@@ -56,11 +56,11 @@
 - Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`，原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
-- `intent-distributed-runtime-closure-2026-02-27` 与 `m4-market-hardware-data-governance-closure-2026-02-26` 已完成且不再作为 active world-simulator truth；当前 kernel / M4 阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与相关 M4 project 的依赖/provenance 记录。
+- 已删除的 intent/distributed/runtime closure 与 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯；当前阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与长期 world-simulator、P2P、runtime、gameplay 权威。
 
 若需要判断当前需求、执行状态或专题配对关系，仍以 `doc/world-simulator/prd.md`、`doc/world-simulator/project.md` 与本索引的活跃专题清单为准。
 
-删除候选边界：上述 completed closure 三件套先保留为 historical/provenance evidence；后续若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 project provenance，可在独立治理切片中删除文件并保留 Git history / GitHub task evidence 追溯。
+删除候选边界：仍保留的 completed closure 三件套若 focused `rg` 证明只剩自引用、历史证据入口和可替代的 project provenance，可在独立治理切片中删除文件并保留 Git history / GitHub task evidence 追溯。
 
 ## 完整活跃专题清单（按文件名精确检索）
 
@@ -108,7 +108,6 @@
 | `doc/world-simulator/llm/llm-agent-behavior.prd.md` | `doc/world-simulator/llm/llm-agent-behavior.design.md` | `doc/world-simulator/llm/llm-agent-behavior.project.md` |
 | `doc/world-simulator/llm/llm-async-openai-responses.prd.md` | `doc/world-simulator/llm/llm-async-openai-responses.design.md` | `doc/world-simulator/llm/llm-async-openai-responses.project.md` |
 | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.design.md` | `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md` |
-| `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md` | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.design.md` | `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md` |
 | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.design.md` | `doc/world-simulator/llm/llm-decision-provider-standard-loopback-provider-feasibility-2026-03-12.project.md` |
 | `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.design.md` | `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md` |
 | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.design.md` | `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.project.md` |
@@ -121,16 +120,8 @@
 | `doc/world-simulator/llm/llm-prompt-effect-receipt.prd.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.design.md` | `doc/world-simulator/llm/llm-prompt-effect-receipt.project.md` |
 | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.prd.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.design.md` | `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md` |
 | `doc/world-simulator/llm/llm-prompt-system.prd.md` | `doc/world-simulator/llm/llm-prompt-system.design.md` | `doc/world-simulator/llm/llm-prompt-system.project.md` |
-| `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.design.md` | `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md` |
-| `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.design.md` | `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md` |
 | `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.design.md` | `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md` |
 | `doc/world-simulator/m4/m4-power-system.prd.md` | `doc/world-simulator/m4/m4-power-system.design.md` | `doc/world-simulator/m4/m4-power-system.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.design.md` | `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md` |
-| `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md` | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.design.md` | `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md` |
 | `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.design.md` | `doc/world-simulator/m4/material-multi-ledger-logistics.project.md` |
 | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.prd.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.design.md` | `doc/world-simulator/scenario/agent-frag-initial-spawn-position.project.md` |
 | `doc/world-simulator/scenario/asteroid-fragment-renaming.prd.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.design.md` | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` |

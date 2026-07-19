@@ -221,8 +221,8 @@
 - `doc/site/prd.md`
 - `doc/site/project.md`
 - `doc/world-simulator/README.md`
-- `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.prd.md`
-- `doc/world-simulator/kernel/intent-distributed-runtime-closure-2026-02-27.project.md`
+- `Intent/distributed/runtime closure PRD (retired/deleted; historical review record)`
+- `Intent/distributed/runtime closure project (retired/deleted; historical review record)`
 - `doc/world-simulator/kernel/kernel-rule-hook-foundation.prd.md`
 - `doc/world-simulator/kernel/kernel-rule-hook-foundation.project.md`
 - `doc/world-simulator/kernel/kernel-rule-wasm-executor-foundation.prd.md`
@@ -275,8 +275,8 @@
 - `doc/world-simulator/llm/llm-async-openai-responses.project.md`
 - `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.prd.md`
 - `doc/world-simulator/llm/llm-chat-user-message-tool-visualization.project.md`
-- `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.prd.md`
-- `doc/world-simulator/llm/llm-config-toml-style-unification-2026-03-02.project.md`
+- `LLM TOML-style unification PRD (retired/deleted; historical review record)`
+- `LLM TOML-style unification project (retired/deleted; historical review record)`
 - `doc/world-simulator/llm/llm-dialogue-chat-loop.prd.md`
 - `doc/world-simulator/llm/llm-dialogue-chat-loop.project.md`
 - `doc/world-simulator/llm/llm-factory-strategy-optimization.prd.md`
@@ -293,28 +293,28 @@
 - `doc/world-simulator/llm/llm-prompt-multi-step-orchestration.project.md`
 - `doc/world-simulator/llm/llm-prompt-system.prd.md`
 - `doc/world-simulator/llm/llm-prompt-system.project.md`
-- `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.prd.md`
-- `doc/world-simulator/m4/m4-builtin-wasm-maintainability-2026-02-26.project.md`
-- `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-industrial-benchmark-current-state-2026-02-27.project.md`
+- M4 builtin-WASM maintainability PRD (retired/deleted; historical review record)
+- M4 builtin-WASM maintainability project (retired/deleted; historical review record)
+- M4 industrial benchmark/current-state PRD (retired/deleted; historical review record)
+- M4 industrial benchmark/current-state project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md`
 - `doc/world-simulator/m4/m4-industrial-economy-wasm.project.md`
-- `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.prd.md`
-- `doc/world-simulator/m4/m4-market-hardware-data-governance-closure-2026-02-26.project.md`
+- M4 market/hardware/data/governance closure PRD (retired/deleted; historical review record)
+- M4 market/hardware/data/governance closure project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/m4-power-system.prd.md`
 - `doc/world-simulator/m4/m4-power-system.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p0-shared-bottleneck-logistics-priority-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p1-maintenance-scarcity-pressure-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p2-stage-guidance-market-governance-linkage-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-2026-02-27.project.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.prd.md`
-- `doc/world-simulator/m4/m4-resource-product-system-playability-priority-hardening-2026-02-28.project.md`
+- M4 P0 shared bottleneck/logistics priority PRD (retired/deleted; historical review record)
+- M4 P0 shared bottleneck/logistics priority project (retired/deleted; historical review record)
+- M4 P1 maintenance/scarcity pressure PRD (retired/deleted; historical review record)
+- M4 P1 maintenance/scarcity pressure project (retired/deleted; historical review record)
+- M4 P2 stage guidance/market-governance linkage PRD（已退役/删除；历史审计记录）
+- M4 P2 stage guidance/market-governance linkage project（已退役/删除；历史审计记录）
+- M4 P3 layer/profile chain expansion PRD (retired/deleted; historical review record)
+- M4 P3 layer/profile chain expansion project (retired/deleted; historical review record)
+- M4 resource/product playability base PRD (retired/deleted; historical review record)
+- M4 resource/product playability base project (retired/deleted; historical review record)
+- M4 resource-chain playability hardening PRD (retired/deleted; historical review record)
+- M4 resource-chain playability hardening project (retired/deleted; historical review record)
 - `doc/world-simulator/m4/material-multi-ledger-logistics.prd.md`
 - `doc/world-simulator/m4/material-multi-ledger-logistics.project.md`
 - `doc/world-simulator/prd.index.md`

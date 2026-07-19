@@ -44,7 +44,8 @@
 - `crates/oasis7_viewer/src/egui_right_panel.rs`
 - `crates/oasis7_viewer/src/ui_locale_text.rs`
 - `crates/oasis7/src/simulator/kernel/types.rs`
-- `doc/world-simulator/m4/m4-resource-product-system-p3-layer-profile-chain-expansion-2026-02-27.prd.md`
+- `doc/world-runtime/prd.md`
+- `doc/world-simulator/m4/m4-industrial-economy-wasm.prd.md`
 
 ## 状态
 - 当前阶段：已完成（T0~T6 全部收口）

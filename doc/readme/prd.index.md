@@ -20,20 +20,15 @@
 - 想追溯 production 收口证据或判断 dated production 素材是否仍可删除：先读 `doc/readme/production/README.md`
 - 想继续按子域或文件名下钻：使用下方热点子域导航，再跳到对应清单区域
 
-## 密度快照（2026-07-04）
-- `doc/readme/`：105 份 Markdown 文件
-- `doc/readme/governance/`：56 份 Markdown 文件
-- `doc/readme/gap/`：28 份文件（含本地入口）
-- `doc/readme/production/`：16 份文件
-- `site/social/xiaohongshu/`：128 份文件（小红书内容包、源 HTML、导出 PNG 与 package manifest）
-- 正式专题三件套：28 组
-- 当前默认活跃专题三件套：24 组
-- 历史压缩专题三件套：4 组
+## 密度与库存
+
+- 不在索引中冻结容易漂移的文件数与专题组数；当前库存统一以 `./scripts/doc-inventory-report.sh` 为准。
+- release communication 的产品承诺进入 `doc/product/player-entry-distribution/`，readme/governance 只保留两份无日期操作模板。
 
 ## 热点子域导航
 | 子域 | 文件数 | 适合回答的问题 |
 | --- | --- | --- |
-| `governance/` | 56 | release communication 模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口；旧根 README 对齐和顶层链接检查一次性专题已删除 |
+| `governance/` | 动态 | release communication 操作模板、Moltbook/Xiaohongshu runbook、贡献奖励治理、material/execution 入口；产品承诺从 `doc/product/` 进入 |
 | `gap/` | 28 | README 与实现/流程之间还有哪些正式缺口、哪些差距仍待收口；先从 `gap/README.md` 区分主收口、增量与历史追溯 |
 | `production/` | 16 | 生产收口、阶段边界、readiness 与受台账约束的素材；先由 `production/README.md` 分流 |
 
@@ -42,7 +37,8 @@
 - `doc/readme/gap/README.md`：`gap/` 子域 landing page，先定位跨 Gap 1–5 的主收口，再按具体增量或历史追溯下钻；不复制 leaf 规格或项目证据。
 - `doc/readme/production/README.md`：production 子域 landing page，按当前可检索专题、历史压缩三件套及仍受项目台账约束的素材分流；不会把历史收口证据误作当前执行入口。
 - `doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`：面向第一次接触仓库读者的白皮书式项目总览，适合先理解“项目是什么、为什么存在、当前做到哪一步”，再下钻正式真值源。
-- `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md`：Moltbook 持续运营 canonical runbook，适合直接判断日常运营动作与边界。
+- `doc/readme/governance/readme-moltbook-liveops-runbook.md`：Moltbook 持续运营 canonical runbook；产品 claim 由发行沟通产品分册拥有。
+- `doc/readme/governance/readme-moltbook-post-pack.md`：可复用帖文与回复素材库；每次发布前必须重新绑定当前 claim 与 publication evidence。
 - `doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`：小红书持续运营 SOP，不并入下方模块 PRD 三件套长表。
 - `site/social/xiaohongshu/README.md`：小红书内容包目录规范，适合查找每篇内容的文案、视觉源文件、导出图与 package manifest。
 - `site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`：小红书第十四篇素材包入口，已收口为“项目累计 token 用量不是炫账单，而是研发流程参与成本”版本，适合直接判断标题、正文、短版 caption、评论区引导、事实基线与禁滑坡边界。
@@ -84,11 +80,6 @@
 | `doc/readme/governance/readme-resource-model-layering.prd.md` | `doc/readme/governance/readme-resource-model-layering.design.md` | `doc/readme/governance/readme-resource-model-layering.project.md` |
 | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.prd.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.design.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.project.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.design.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.project.md` |
-| `doc/readme/governance/readme-release-communication-template-2026-03-11.prd.md` | `doc/readme/governance/readme-release-communication-template-2026-03-11.design.md` | `doc/readme/governance/readme-release-communication-template-2026-03-11.project.md` |
-| `doc/readme/governance/readme-release-announcement-template-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-template-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-template-2026-03-11.project.md` |
-| `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.prd.md` | `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.design.md` | `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.project.md` |
-| `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.prd.md` | `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.design.md` | `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.project.md` |
-| `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.prd.md` | `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.design.md` | `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
@@ -99,8 +90,6 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 | 压缩理由 |
 | --- | --- | --- | --- |
 | `doc/readme/gap/readme-gap3-install-target-infrastructure.prd.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.design.md` | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` | 已完成 README gap3 模块安装目标语义增量专题；当前 gap 主入口由 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.prd.md`、`doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md` 与 `doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.project.md` 承接，本文只保留历史追溯 |
-| `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.prd.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.design.md` | `doc/readme/governance/readme-release-candidate-communication-brief-2026-03-11.project.md` | 2026-03-11 版本候选实例已不是当前 product-authorized release lane；一次性 brief 输出文件已删除，后续 release communication 从 template 专题与根 `README.md` 当前状态进入 |
-| `doc/readme/governance/readme-release-announcement-draft-2026-03-11.prd.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.design.md` | `doc/readme/governance/readme-release-announcement-draft-2026-03-11.project.md` | 2026-03-11 announcement draft 是一次性候选底稿，不代表当前正式公告；一次性 draft 输出文件已删除，后续 announcement/changelog 从 template 专题进入 |
 | `doc/readme/production/readme-llm-p1p2-production-closure.prd.md` | `doc/readme/production/readme-llm-p1p2-production-closure.design.md` | `doc/readme/production/readme-llm-p1p2-production-closure.project.md` | 已完成 README LLM P1/P2 production closure 增量专题；project 标记无下一步，当前 README production 入口以 `doc/readme/prd.md`、`doc/readme/project.md`、根 `README.md` 与仍在活跃清单的后续 production/gap 专题为准，本文只保留历史追溯 |
 | `doc/readme/production/readme-p0-p1-closure.prd.md` | `doc/readme/production/readme-p0-p1-closure.design.md` | `doc/readme/production/readme-p0-p1-closure.project.md` | 已完成 README P0/P1 closure 增量专题；project 标记无下一步，当前 README production 入口以 `doc/readme/prd.md`、`doc/readme/project.md`、根 `README.md` 与仍在活跃清单的后续 production/gap 专题为准，本文只保留历史追溯 |
 | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.prd.md` | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.design.md` | `doc/readme/production/readme-prod-closure-llm-distfs-consensus.project.md` | 已完成 README production LLM/DistFS/consensus closure 增量专题；project 标记无下一步，当前 README production 入口以 `doc/readme/prd.md`、`doc/readme/project.md`、根 `README.md` 与仍在活跃清单的后续 production/gap 专题为准，本文只保留历史追溯 |
@@ -108,6 +97,8 @@
 ## 已退役删除专题
 | 专题 | 当前承接 | 删除理由 |
 | --- | --- | --- |
+| 2026-03-11 release communication / announcement 四组 dated triplet | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-release-communication-template.md`；`doc/readme/governance/readme-release-announcement-template.md` | 长期产品合同已进入产品树，操作模板去日期稳定化；历史 candidate brief / draft、模板设计过程和任务状态只从 Git history 与 GitHub evidence 追溯 |
+| 2026-03 Moltbook promotion/post/runbook 三组 dated triplet 与 promotion plan | `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`；`doc/readme/governance/readme-moltbook-liveops-runbook.md`；`doc/readme/governance/readme-moltbook-post-pack.md` | 渠道产品边界进入产品树，稳定策略合并到无日期 runbook，素材库去日期；历史平台快照、固定排期和任务包装只从 Git history 与 GitHub evidence 追溯 |
 | 2026-03-22 closed-beta candidate runbook triplet | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 与 `doc/readme/governance/readme-limited-preview-round1-execution-2026-03-27.md` | closed-beta-candidate 不是当前公开状态；旧 runbook 仍暴露活跃操作面语义，已收敛为 limited preview invite / execution 入口 |
 | 2026-03-22 closed-beta candidate feedback / incident templates | `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` 的 signal bucket、claim drift、producer summary 字段 | 旧模板命名继续暗示 closed beta candidate 当前可操作；保留历史 evidence，不保留当前 template surface |
 

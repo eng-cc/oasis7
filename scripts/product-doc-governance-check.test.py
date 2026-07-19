@@ -15,8 +15,10 @@ COPY_PATHS = (
     "README.md",
     "doc/product",
     "doc/game/prd.md",
+    "doc/game/gameplay/gameplay-top-level-design.prd.md",
     "doc/world-runtime/prd.md",
     "doc/p2p/prd.md",
+    "doc/testing/prd.md",
     "doc/world-simulator/prd.md",
 )
 
@@ -65,10 +67,20 @@ def scenario(expected: str, mutation) -> None:
         shutil.rmtree(root)
 
 
+def assert_access_mode_consolidated(root: Path) -> None:
+    module = root / "doc/product/player-entry-distribution"
+    dated_basename = "player-access-mode-contract-2026-03-19"
+    assert not list(module.glob(f"{dated_basename}.*.md")), "dated access-mode companion set must remain absent"
+    assert dated_basename not in (module / "prd.md").read_text(encoding="utf-8"), (
+        "module PRD must not restore a dated active-topic link"
+    )
+
+
 def main() -> None:
     root = make_fixture()
     try:
         run(root)
+        assert_access_mode_consolidated(root)
     finally:
         shutil.rmtree(root)
 
@@ -88,30 +100,6 @@ def main() -> None:
                 root / "doc/product/world-rules-core-gameplay/prd.md",
                 root / "doc/product/untracked/nested/untracked.prd.md",
             ),
-        ),
-    )
-    scenario(
-        "topic-index-contract",
-        lambda root: replace(
-            root / "doc/product/player-entry-distribution/prd.md",
-            "### 活跃产品专题\n\n- [`玩家访问模式产品契约`](player-access-mode-contract-2026-03-19.prd.md)：",
-            "### 活跃产品专题\n\n- 玩家访问模式产品契约：",
-        ),
-    )
-    scenario(
-        "topic-module-backlink",
-        lambda root: replace(
-            root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md",
-            "- 父模块 PRD: [`玩家入口与发行 PRD`](prd.md)",
-            "- 父模块 PRD: `doc/product/player-entry-distribution/prd.md`",
-        ),
-    )
-    scenario(
-        "topic-pair-backlink",
-        lambda root: replace(
-            root / "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.design.md",
-            "doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md",
-            "doc/product/player-entry-distribution/missing.prd.md",
         ),
     )
     scenario(
@@ -141,19 +129,32 @@ def main() -> None:
     scenario(
         "authority-backlink",
         lambda root: replace(
-            root / "doc/game/prd.md",
-            "../product/world-rules-core-gameplay/prd.md",
+            root / "doc/world-simulator/prd.md",
+            "../product/agents-world-simulation/prd.md",
             "../product/missing/prd.md",
         ),
     )
     scenario(
         "authority-backlink",
         lambda root: replace(
-            root / "doc/game/prd.md",
-            "[`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md)",
-            "`doc/product/world-rules-core-gameplay/prd.md`",
+            root / "doc/world-simulator/prd.md",
+            "[`doc/product/agents-world-simulation/prd.md`](../product/agents-world-simulation/prd.md)",
+            "`doc/product/agents-world-simulation/prd.md`",
         ),
     )
+    for authority in (
+        "doc/world-runtime/prd.md",
+        "doc/world-simulator/prd.md",
+        "doc/p2p/prd.md",
+    ):
+        scenario(
+            "authority-backlink",
+            lambda root, authority=authority: replace(
+                root / authority,
+                "[`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md)",
+                "`doc/product/world-rules-core-gameplay/prd.md`",
+            ),
+        )
     scenario(
         "authority-contract",
         lambda root: replace(

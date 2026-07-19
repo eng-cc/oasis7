@@ -28,7 +28,7 @@
 - 线上事故摘要、用户影响评估、沟通建议
 - 对产品、规则、体验的优先级输入
 - 面向社区的口径整理与 follow-up 列表
-- 渠道运营 runbook 与执行记录（如 `doc/readme/governance/readme-moltbook-liveops-runbook-2026-03-21.md`、`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`）
+- 渠道运营 runbook 与执行记录（如 `doc/readme/governance/readme-moltbook-liveops-runbook.md`、`doc/readme/governance/readme-xiaohongshu-liveops-runbook-2026-03-23.md`）
 
 ## Decisions
 - 可独立决定社区整理方式、反馈聚类方式和运营建议结构

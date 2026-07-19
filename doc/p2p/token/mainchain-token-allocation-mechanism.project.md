@@ -17,7 +17,7 @@
 
 ## 依赖
 - doc/p2p/token/mainchain-token-allocation-mechanism.prd.md
-- `doc/product/world-rules-core-gameplay/world-rule.prd.md`
+- `doc/p2p/prd.md`
 - `doc/p2p/node/node-redeemable-power-asset.prd.md`
 - `doc/p2p/node/node-reward-settlement-native-transaction.prd.md`
 - `crates/oasis7/src/runtime/reward_asset.rs`

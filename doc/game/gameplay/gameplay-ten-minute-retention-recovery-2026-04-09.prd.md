@@ -50,7 +50,7 @@
 | 邻近机会取舍 | `opportunity_scan.direction`、`hooks[]`、`immediate_action_id`、`recommended_next_action_reason`、`discarded_hook_reason`、`hook_value_summary`、`hook_readiness_state`、`defer_reason`、`unlock_precondition`、`revisit_timing_hint`、`value_vs_immediate_action` | 玩家扫描 market / facility / companion 等方向后，看到一个可立即推进的 hook，同时看懂另一个 hook 为什么被推迟或丢弃 | `hidden_options -> scanned -> immediate_or_deferred` | `Opportunity Scan` 至少解释一个未推荐 hook 的价值、未就绪原因、解锁前提和回访时机；不得只给单一推荐动作 | `gameplay_designer` owner，`viewer_engineer` / `qa_engineer` 复核 |
 | 首屏噪音治理 | `primary_goal_visible`、`noise_competes_with_goal`、`player_identity_clarity` | 默认首屏仅突出主目标与下一步 | `toolish -> noisy_playable -> player_focused` | 当前目标相关信息优先于历史噪音、operator/debug 信息 | `viewer_engineer` owner |
 | 后果可见化 | `accepted`、`executing`、`produced_or_resumed`、`cost_or_blocker` | 主 HUD / toast / chatter 反馈 | `implicit -> readable -> motivating` | 先解释关键代价与结果，再展示次要日志 | `viewer_engineer` owner，`agent_engineer` 配合语义 |
-| 生产排程报价 | `schedule_quote`、`base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class`、`recommended_pre_step` | 玩家确认 `ScheduleRecipe` 前展示预计耗时、维护消耗、折旧压力和可缓解动作 | `hidden_cost -> quoted -> confirmed_or_prepared` | 只要会触发非零维护 sink 或本地稀缺额外 tick，就先给 quote；执行后 receipt 不能替代提交前判断 | `gameplay_designer` owner，`runtime_engineer` / `viewer_engineer` 落地 |
+| 生产排程报价 | `schedule_quote`、`base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class`、`runway_before_ticks`、`runway_after_ticks`、`downtime_threshold_ppm`、`continue_production_risk`、`recommended_pre_step` | 玩家确认 `ScheduleRecipe` 前展示预计耗时、维护消耗、折旧压力、排程前后安全生产 runway、停机临界点和可缓解动作 | `hidden_cost -> quoted -> confirmed_or_prepared` | 只要会触发非零维护 sink、本地稀缺额外 tick 或高负载折旧，就先给 quote；执行后 receipt 不能替代提交前判断 | `gameplay_designer` owner，`runtime_engineer` / `viewer_engineer` 落地 |
 | 前 10/30 分钟吸引力 | `hook_score`、`replay_intent`、`meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`biggest_boredom_point`、`effective_play_minutes`、`player_operation_count` | 对 deterministic-provider-backed、fresh active-LLM 或 headed UI 样本打 attraction / motivation / content-volume card，并记录 `progression_pass_but_attraction_weak` 或 `content_volume_weak` | `untested -> attraction_watch -> content_volume_weak / attraction_pass / attraction_weak` | 不复判 `trustGateResult=pass`；target coverage 和 motivation density 通过后，仍需 `content_volume_card` 达标才能声称前 30 分钟内容量足够 | `gameplay_designer` owner，`qa_engineer` 协作样本卡 |
 
 - Acceptance Criteria:
@@ -94,8 +94,8 @@
   - `doc/game/project.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/game/gameplay/gameplay-top-level-design.project.md`
-  - `doc/game/gameplay/gameplay-post-onboarding-stage-2026-03-18.prd.md`
-  - `doc/game/gameplay/gameplay-pure-api-client-parity-2026-03-19.prd.md`
+  - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
+  - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
   - `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md`
   - `doc/playability_test_result/playability_test_card.md`
   - `doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md`
@@ -126,7 +126,7 @@
   - P1/P2 不塞进 10-minute trust gate 作为新判定项；它们作为 trust gate 之后的制作人可读延展，检查玩家是否拥有打断/重排/纠偏、首胜 leverage、anti-grind 与 mature-world repair/rebuild/pivot 继续路径。
   - `viewer` 可以在现有 `player_gameplay` 字段存在时展示 `Agency Moves`、`First Win & Anti-Grind`、`Mature-World Continuation` 与 `Share Replay`，用于让制作人快速判断“首局控制证明”之后是否形成可继续玩的中循环承接；`software_safe` 仅作为 compat alias 复核。
 - 2026-07-09 production scheduling quote follow-up:
-  - `ScheduleRecipe` 若会触发 `maintenance_sink` 扣减、本地稀缺 `+1/+2 ticks` 或高负载折旧压力，玩家确认前需要看到 `schedule_quote`，至少包含 `base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class` 和 `recommended_pre_step`。
+  - `ScheduleRecipe` 若会触发 `maintenance_sink` 扣减、本地稀缺额外 tick 或高负载折旧压力，玩家确认前需要看到 `schedule_quote`，至少包含 `base_duration_ticks`、`local_shortage_delay_ticks`、`maintenance_sink_preview`、`depreciation_pressure_class`、`runway_before_ticks`、`runway_after_ticks`、`downtime_threshold_ppm`、`continue_production_risk` 和 `recommended_pre_step`。
   - 若代价只在提交后 receipt/log 中出现，样本应标记 `schedule_quote_missing`；该问题归入后果可见化和 first capability chain readability，不改变 M4 runtime 参数。
 - 2026-07-09 route rollback quote follow-up:
   - `route_tradeoff` 若声明 `rollback_available=true`，玩家确认路线前需要看到 `rollback_deadline_beat`、`rollback_cost_summary`、`rollback_kept_benefit` 和 `rollback_lost_benefit`。

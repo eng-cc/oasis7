@@ -1,4 +1,4 @@
-# Moltbook 运营 Runbook（2026-03-21）
+# Moltbook 运营 Runbook
 
 审计轮次: 6
 
@@ -6,21 +6,28 @@
 - Owner Role: `liveops_community`
 - Review Role: `producer_system_designer`
 - Channel: `Moltbook`
+- Last Platform Verified: `unverified in current environment`
+- Verification Failure Policy: `fail_closed`；平台机制或发布可见性无法确认时，只允许人工检查、记录 blocker 或暂停，不自动发帖
 - Scope: `发帖前复核 + 发帖后巡检 + 评论分级 + GitHub 回流 + GitHub task issue evidence 回写`
 - Source Docs:
-  - `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
-  - `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+  - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
+  - `doc/readme/governance/readme-moltbook-post-pack.md`
 
 ## 1. 适用范围
 - 这份文档用于 `oasis7` 在 Moltbook 进入“持续发帖与持续看反馈”阶段后的日常运营。
-- 它不替代推广方案，也不替代首批帖文草案；它只定义怎么执行、怎么回复、怎么升级、怎么回写。
-- 任何真实外发内容仍必须遵守 `limited playable technical preview / no formal Moltbook integration announced` 的边界。
+- 它不替代产品公开口径或帖文素材库；它只定义怎么执行、怎么回复、怎么升级、怎么回写。
+- 任何真实外发内容都必须重新绑定根 README 当前 claim；渠道 presence 不代表 Moltbook identity/provider/on-chain 产品集成、合作或正式发布。
 
-## 1.1 本地执行环境
-- `Moltbook bot API key` 默认存放在 `~/.config/moltbook/token`。
-- 若本机已启动 `127.0.0.1:7897` proxy，可优先经该 proxy 发帖、回帖或回查帖子状态。
-- 若 `7897` proxy 不可用或不稳定，优先退回浏览器上下文链路执行，不把“站点可达”误判为“shell 侧 API/proxy 也已恢复”。
-- 执行前先做一次最小探测：至少确认首页可达，必要时再额外验证目标帖子读取或单条评论发布链路。
+### 1.1 稳定渠道策略
+
+- 主要受众按 agent builder / creator / observer 区分；内容采用 proof-first、build-in-public 与“一帖一个 CTA”，避免泛 AI/Web3 愿景堆叠。
+- 稳定内容支柱为 World Proof、Agent Behavior、Builder Question、Co-Creation；每次使用都必须重新绑定当前公开 claim、受支持入口与证据。
+- 产品、缺陷与合作信号分别回流正式 owner；互动量、关注或回复不能升级 roadmap、readiness 或公开承诺。
+
+## 1.2 执行环境与平台预检
+- 凭据只存在于受控 secret store；文档、日志、截图和命令输出不得记录 token、cookie 或本地 secret 路径。
+- 执行前记录绝对时间与官方验证来源，分别确认浏览器、API 和网络/proxy 链路；任一路径成功不能代签另一条路径。
+- 若平台机制、endpoint 或发布可见性无法复验，停止自动发布；仅执行人工检查、记录 blocker 或等待 owner 恢复权限。
 
 ## 2. 发帖前检查
 每次发帖前，按下面顺序做一次 2-5 分钟复核：
@@ -106,7 +113,7 @@
 ### P2: 机制与设计讨论
 - 典型问题：
   - “为什么要做 `pure_api`？”
-  - “三种 access surface 的边界是什么？”
+  - “当前两个玩家 access surface（`viewer / pure_api`）的边界是什么？`software_safe` 只是 `viewer` compatibility alias。”
 - 动作：
   - 可以直接回答。
   - 尽量用已批准主张和具体证据回答，不讲未落地 roadmap。
@@ -221,7 +228,7 @@
   - 下午 1 次
   - 晚间 1 次
 - 回复目标：
-  - 优先回答 `software_safe / pure_api` 的边界问题
+  - 优先回答当前两个玩家访问面 `viewer / pure_api` 的边界问题，并明确 `software_safe` 只是 `viewer` compatibility alias
   - 把“同一世界，不同 proof boundary”说清楚
 - 记录重点：
   - 哪个 surface 最引发兴趣
@@ -311,11 +318,11 @@
 - `https://www.moltbook.com/api/v1/notifications`
 - `https://www.moltbook.com/api/v1/posts/:id`
 - `https://www.moltbook.com/api/v1/posts/:id/comments`
-- `doc/readme/governance/readme-moltbook-promotion-plan-2026-03-19.md`
-- `doc/readme/governance/readme-moltbook-post-drafts-2026-03-19.md`
+- `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
+- `doc/readme/governance/readme-moltbook-post-pack.md`
 
-## 13. 实战复盘（2026-03-22）
-下面这些结论来自 `oasis7` 在 Moltbook 的前两条真实帖子执行，不是理论建议。
+## 13. 历史实战观察（观察于 2026-03-22，复用前必须重验）
+下面这些结论来自当时的真实帖子执行，不是当前平台事实或自动发布许可。
 
 ### 13.1 有效内容设计模式
 - `identity + boundary` 仍然是第一帖必需动作，但第一帖更适合做定位，不适合承载太多解释。

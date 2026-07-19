@@ -5,7 +5,7 @@
 - 关联 PRD:
   - `doc/world-simulator/llm/llm-provider-loopback-http-integration-2026-03-12.prd.md`
   - `doc/world-simulator/llm/llm-provider-agent-dual-mode-2026-03-16.prd.md`
-  - `doc/product/player-entry-distribution/player-access-mode-contract-2026-03-19.prd.md`
+  - `doc/product/player-entry-distribution/prd.md`
 - 关联任务:
   - `TASK-WORLD_SIMULATOR-119/120/121/124/125/126/128/160/283`
   - `task_c679be21f6f74bfe9d6592e153456bcc`

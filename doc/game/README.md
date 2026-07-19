@@ -13,7 +13,7 @@
 - 想直接看“接下来两周只做什么”：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
 - 想确认“间接控制为什么仍然应该感觉像我在控制，而不是旁观 AI”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`。
 - 想确认“成熟世界里小玩家/新玩家靠什么继续有独立价值，而不是只能投靠大组织”：先读 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`。
-- 想确认当前试玩放行、limited preview 与 closed beta 口径：先读 `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` 与 `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md`。
+- 想确认当前试玩放行与发行口径：先读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态看 `doc/game/project.md` 与 round execution record，公开状态只看根 `README.md`。
 - 想跟进最近最活跃的经济/运营规则变化：先读 `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需进入对应 design / project / runbook。
 
 ## 入口
@@ -28,7 +28,7 @@
 - `project.md` 是执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进到哪一步。
 - `prd.index.md` 是精确检索索引，适合已经知道专题名或需要完整文件清单时使用，不适合作为第一次进入模块时的首读入口。
 - `gameplay/README.md` 是 `gameplay/` 热点子域 landing page，负责把玩法骨架、留存、agency、preview/beta gate 与 economy/claim 按问题分流。
-- 高频专题文档继续承担专题真值：`gameplay-top-level-design` 管核心玩法骨架，`gameplay-ten-minute-retention-recovery-2026-04-09` 管当前冲刺窗口，`gameplay-indirect-control-feeling-contract-2026-05-14` 管间接控制下的 agency 合同，`gameplay-limited-preview-execution-2026-03-22` / `gameplay-closed-beta-readiness-2026-03-21` 管试玩与放行边界，`gameplay-agent-claim-token-cost-2026-03-27` 管近期高频经济规则。
+- 高频专题文档继续承担专业域真值：`gameplay-top-level-design` 管核心玩法骨架，`gameplay-ten-minute-retention-recovery-2026-04-09` 管当前冲刺窗口，`gameplay-indirect-control-feeling-contract-2026-05-14` 管间接控制下的 agency 合同，`gameplay-agent-claim-token-cost-2026-03-27` 管近期高频经济规则；访问模式与受控 preview / 放行组合承诺统一由产品专题承载，当前执行由 game project 与对应证据承载。
 - `gameplay-small-player-progression-lane-2026-05-17` 管 mature-world 小玩家承接：首个持续能力之后，如何通过受保护 first win、专业化与局部影响力继续形成独立价值。
 
 ## 活跃阅读面边界

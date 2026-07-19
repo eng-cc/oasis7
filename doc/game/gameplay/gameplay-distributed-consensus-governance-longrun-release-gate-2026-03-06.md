@@ -2,7 +2,8 @@
 
 审计轮次: 3
 
-- 对应 PRD: `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md`
+- 产品边界：`doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
+- 专业权威：`doc/world-runtime/prd.md`、`doc/p2p/prd.md`、`doc/testing/prd.md`
 - 对应任务: `TASK-GAME-DCG-010`
 - 结论时间: 2026-03-06
 

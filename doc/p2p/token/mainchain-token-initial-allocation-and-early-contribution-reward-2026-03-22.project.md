@@ -119,7 +119,7 @@
 - `doc/p2p/token/mainchain-token-genesis-parameter-freeze-sheet-2026-03-22.md`
 - `doc/p2p/prd.md`
 - `doc/game/prd.md`
-- `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md`
+- `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
 - `crates/oasis7/src/runtime/main_token.rs`
 - `testing-manual.md`
 
