@@ -679,8 +679,7 @@
 - `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md`
 - `doc/world-simulator/viewer/viewer-egui-right-panel.project.md`
 - `viewer-first-session-goal-clarity-hardening-2026-02-27`（历史审计对象；现行产品语义见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`）
-- `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md`
-- `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.project.md`
+- `viewer-first-session-goal-control-feedback-2026-02-27`（历史审计对象；现行产品语义见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，Viewer/API 合同见 `doc/world-simulator/prd.md`）
 - `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md`
 - `doc/world-simulator/viewer/viewer-frag-default-rendering.project.md`
 - `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.prd.md`
