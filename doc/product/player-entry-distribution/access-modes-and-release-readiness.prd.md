@@ -50,13 +50,27 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 
 ## 6. 组合验收
 
+### 6.1 受控 Limited Preview
+
+- Limited preview 是面向候选版本的受控、可纠偏、可撤回体验，不等于 public launch、广泛可用或阶段自动升级。
+- 每轮 preview 必须绑定同一候选版本、primary mode、受支持入口、claim envelope 与正式反馈入口；入口不可达或被迫 fallback 时必须如实标记 blocked，不能改写为成功。
+- 反馈按 `Blocking / Opportunity / Idea` 分类，并记录 owner、处置结论与下一步。可复现的 blocking 信号必须让同一候选重新进入受影响专业域与 QA gate，旧 gate pass 不能代签。
+- claim drift 必须在同轮纠正并留下记录；单次 callout、互动数量或无阻塞反馈都不能单独证明发行就绪。
+- QA 可以建议 pause、conditional 或 downgrade；producer 基于反馈与 QA 结论决定 continue / hold / reassess。渠道切换不改变阶段，公开状态仍只由根 `README.md` 拥有。
+- 收集反馈时只索取复现和分流所需的最小信息；不得把账号、私密渠道内容或其他不必要的个人信息写入公开证据。
+
 - AR-1：所有入口和证据都能归一到 `viewer` 或 `pure_api`，不存在由 alias、provider、deployment 或 session context 派生的第三种模式。
 - AR-2：同一候选版本分别证明 `viewer` 与 `pure_api` 的阶段、目标、阻塞、下一步、核心动作、主要因果与重连恢复；两种模式证据不互相代签。
 - AR-3：blocked/observer 样例能说明真实原因和恢复路径，且不会继续保留错误的 playable/parity 结论。
 - AR-4：统一候选门禁把入口、权威运行与恢复、发行资产、QA 和公开 claim 绑定到同一版本；局部或历史 green 无法代签。
 - AR-5：公开口径变更可追踪到产品决策、专业验证、QA 结论、LiveOps 同步和根 README；gate pass 不自动等于阶段升级。
+- LP-1：每轮 preview 都能追踪同一候选、primary mode、受支持入口、claim envelope 与反馈入口，且不会被表述为公开发布或自动升阶。
+- LP-2：声明入口能进入对应 primary mode；blocked、observer 或 fallback 不会被计作成功，并由 Viewer S6 及适用的 S9/S10、发行资产证据验证。
+- LP-3：每条有效信号都有分类、owner、复现或处置结论和下一步；自动化 green 不能替代真实反馈 trace。
+- LP-4：可复现 blocker 会使对应 lane 失效并触发受影响专业域和当前候选 gate 重验，而不是继续复用旧 verdict。
+- LP-5：continue / hold / reassess 决策能追踪 QA、LiveOps、producer 与根 README；渠道故障或切换不会静默改变阶段。
 
-### 6.1 验收追踪
+### 6.2 验收追踪
 
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
@@ -65,6 +79,11 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 | AR-3 | viewer_engineer / agent_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 前置失败、blocked/observer 分类及可执行恢复路径证据 | test_tier_required |
 | AR-4 | runtime_engineer / viewer_engineer / qa_engineer / liveops_community | PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_SIMULATOR-045 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同候选版本完整 release gate；适用时包含 S6、S9/S10 与真实发行资产 | test_tier_full |
 | AR-5 | producer_system_designer / qa_engineer / liveops_community | PRD-WORLD_SIMULATOR-042 / PRD-WORLD_SIMULATOR-043 / PRD-TESTING-003 | `README.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 产品决策、QA 结论、LiveOps 同步与根 README claim 变更追踪 | test_tier_required |
+| LP-1 | producer_system_designer / viewer_engineer / liveops_community / qa_engineer | PRD-GAME-010 / PRD-WORLD_SIMULATOR-042 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 候选、模式、入口、claim 与反馈入口的同轮绑定审计 | test_tier_required |
+| LP-2 | viewer_engineer / qa_engineer | PRD-GAME-010 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Viewer S6 与适用的 S9/S10、真实发行资产；blocked/fallback 负例 | test_tier_full |
+| LP-3 | liveops_community / qa_engineer | PRD-GAME-010 / PRD-WORLD_SIMULATOR-043 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | LiveOps / GitHub 信号分类、owner、处置与下一步 trace | test_tier_required |
+| LP-4 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer / producer_system_designer | PRD-GAME-010 / PRD-WORLD_SIMULATOR-042 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | blocker 对应专业回归与当前候选 gate 重验 | test_tier_full |
+| LP-5 | producer_system_designer / qa_engineer / liveops_community | PRD-GAME-010 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_SIMULATOR-043 / PRD-TESTING-003 | `README.md`; `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | continue / hold / reassess 决策及公开 claim 同步追踪 | test_tier_required |
 
 ## 7. Non-Goals
 

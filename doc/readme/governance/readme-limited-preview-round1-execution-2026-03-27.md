@@ -14,7 +14,8 @@
 - Published Thread: `https://github.com/eng-cc/oasis7/issues/48`
 - Source Docs:
   - `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md`
-  - `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md`
+  - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
+  - `doc/game/project.md`
 
 ## Approved Callout
 - Main copy: reuse `doc/readme/governance/readme-limited-preview-invite-pack-2026-03-22.md` section `Controlled Builder-Facing Callout / Main Copy` without widening claim envelope.
