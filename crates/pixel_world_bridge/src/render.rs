@@ -8,7 +8,10 @@ const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
 const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
+const FRAGMENT_SHADOW_LAYER_Z: f32 = 0.34;
 const FRAGMENT_INSET_LAYER_Z: f32 = 0.36;
+const FRAGMENT_SHADOW_OFFSET_CAP: f32 = 0.12;
+const FRAGMENT_SHADOW_ALPHA_CAP: f32 = 0.45;
 const FRAGMENT_INSET_SIZE_SCALE: f32 = 0.36;
 const FRAGMENT_INSET_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
@@ -62,6 +65,12 @@ pub(crate) struct AgentVisualStyle {
 
 #[derive(Component)]
 pub(crate) struct PixelWorldFragmentVisual {
+    id: String,
+}
+
+/// A non-interactive, lower-right depth treatment for visible terrain patches.
+#[derive(Component)]
+struct PixelWorldFragmentShadowVisual {
     id: String,
 }
 
@@ -436,6 +445,16 @@ fn fragment_inset_color(fragment: &FragmentTerrainPatch) -> Color {
     )
 }
 
+fn fragment_shadow_color(fragment: &FragmentTerrainPatch, lod: FragmentTerrainLod) -> Color {
+    let alpha = fragment_alpha(fragment, lod) * f64::from(FRAGMENT_SHADOW_ALPHA_CAP);
+    Color::srgba_u8(
+        fragment.color[0].saturating_mul(2) / 5,
+        fragment.color[1].saturating_mul(2) / 5,
+        fragment.color[2].saturating_mul(2) / 5,
+        (alpha.clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
 fn reconcile_grid(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -508,12 +527,16 @@ fn despawn_stale_entities(
 fn reconcile_fragments(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
+    existing_shadows: &Query<(Entity, &PixelWorldFragmentShadowVisual)>,
     existing_insets: &Query<(Entity, &PixelWorldFragmentInsetVisual)>,
     width: f64,
     height: f64,
 ) {
     let Some(render_state) = runtime.render_state.as_ref() else {
         for (_, entity) in runtime.fragment_entities.drain() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in existing_shadows.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in existing_insets.iter() {
@@ -525,6 +548,9 @@ fn reconcile_fragments(
         for (_, entity) in runtime.fragment_entities.drain() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in existing_shadows.iter() {
+            commands.entity(entity).despawn();
+        }
         for (entity, _) in existing_insets.iter() {
             commands.entity(entity).despawn();
         }
@@ -532,7 +558,12 @@ fn reconcile_fragments(
     };
 
     let mut active_ids = HashSet::new();
+    let mut active_shadow_ids = HashSet::new();
     let mut active_inset_ids = HashSet::new();
+    let existing_shadows_by_id = existing_shadows
+        .iter()
+        .map(|(entity, shadow)| (shadow.id.clone(), entity))
+        .collect::<HashMap<_, _>>();
     let existing_insets_by_id = existing_insets
         .iter()
         .map(|(entity, inset)| (inset.id.clone(), entity))
@@ -557,6 +588,32 @@ fn reconcile_fragments(
             height,
             style.layer_z,
         ));
+
+        active_shadow_ids.insert(fragment.id.clone());
+        let shadow_offset = (style.size_px as f32 * FRAGMENT_SHADOW_OFFSET_CAP).min(1.0);
+        let mut shadow_transform = transform;
+        shadow_transform.translation += Vec3::new(
+            shadow_offset,
+            shadow_offset,
+            FRAGMENT_SHADOW_LAYER_Z - style.layer_z,
+        );
+        let shadow_sprite = sprite_for_square(
+            fragment_shadow_color(fragment, style.lod),
+            style.size_px as f32,
+        );
+        if let Some(entity) = existing_shadows_by_id.get(&fragment.id) {
+            commands
+                .entity(*entity)
+                .insert((shadow_sprite, shadow_transform));
+        } else {
+            commands.spawn((
+                shadow_sprite,
+                shadow_transform,
+                PixelWorldFragmentShadowVisual {
+                    id: fragment.id.clone(),
+                },
+            ));
+        }
 
         if let Some(entity) = runtime.fragment_entities.get(&fragment.id).copied() {
             commands.entity(entity).insert((sprite, transform));
@@ -603,6 +660,11 @@ fn reconcile_fragments(
     }
 
     despawn_stale_entities(commands, &mut runtime.fragment_entities, &active_ids);
+    for (id, entity) in existing_shadows_by_id {
+        if !active_shadow_ids.contains(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
     for (id, entity) in existing_insets_by_id {
         if !active_inset_ids.contains(&id) {
             commands.entity(entity).despawn();
@@ -1006,6 +1068,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     windows: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     current_grid: Query<'w, 's, Entity, With<PixelWorldGridVisual>>,
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
+    fragment_shadows: Query<'w, 's, (Entity, &'static PixelWorldFragmentShadowVisual)>,
     fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
@@ -1026,6 +1089,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_insets.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -1076,6 +1142,9 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.fragment_insets.iter() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in queries.fragment_shadows.iter() {
+            commands.entity(entity).despawn();
+        }
         for entity in queries.current_grid.iter() {
             commands.entity(entity).despawn();
         }
@@ -1106,6 +1175,7 @@ pub(crate) fn render_scene(
     reconcile_fragments(
         &mut commands,
         &mut runtime,
+        &queries.fragment_shadows,
         &queries.fragment_insets,
         width,
         height,
