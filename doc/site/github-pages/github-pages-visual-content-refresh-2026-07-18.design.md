@@ -3,7 +3,7 @@
 - Owner role: `game_visual_interaction_designer`
 - Task: #2438 (`task_adfbfbfea1e64f4eb8904b9779b4c2bb`)
 - Routes: `site/index.html`, `site/en/index.html`
-- Generated asset: `site/assets/images/hero/asteroid-civilization-image2-20260718.webp`
+- Generated asset: `site/assets/images/hero/asteroid-civilization-crisis-image2-20260719.webp`
 
 ## Decision
 
