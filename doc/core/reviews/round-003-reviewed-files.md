@@ -44,8 +44,8 @@
 - `doc/game/README.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md`
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md`
-- `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md`
-- `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md`
+- `gameplay-beta-balance-hardening-2026-02-22` PRD（历史审读对象，正文已退役）
+- `gameplay-beta-balance-hardening-2026-02-22` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-engineering-architecture.md`
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md`
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md`
@@ -53,8 +53,8 @@
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md`
 - `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md`
 - `doc/game/gameplay/gameplay-module-driven-production-closure.project.md`
-- `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.prd.md`
-- `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.project.md`
+- `gameplay-release-gap-closure-2026-02-21` PRD（历史审读对象，正文已退役）
+- `gameplay-release-gap-closure-2026-02-21` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-release-production-closure.prd.md`
 - `doc/game/gameplay/gameplay-release-production-closure.project.md`
 - `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md`

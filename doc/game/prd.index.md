@@ -68,7 +68,6 @@
 | --- | --- | --- |
 | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md` |
 | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.design.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` |
-| `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.design.md` | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md` |
 | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.prd.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.design.md` | `doc/game/gameplay/gameplay-closed-beta-readiness-2026-03-21.project.md` |
 | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.prd.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.design.md` | `doc/game/gameplay/gameplay-limited-preview-execution-2026-03-22.project.md` |
 | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.prd.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.design.md` | `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06.project.md` |
@@ -86,9 +85,10 @@
 | 历史 closure 专题 | 当前追溯入口 |
 | --- | --- |
 | `gameplay-layer-lifecycle-rules-closure`、`gameplay-layer-war-governance-crisis-meta-closure`、`gameplay-module-driven-production-closure` | 生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包` 与 `doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`；历史审读见 `doc/core/reviews/round-004-reviewed-files.md` 与 `doc/core/reviews/round-008-reviewed-files.md`。 |
-| `gameplay-release-gap-closure-2026-02-21`、`gameplay-release-production-closure`、`gameplay-runtime-governance-closure` | 作为 release / production / runtime closure provenance 保留可检索性；当前首读和执行入口继续走 `doc/game/gameplay/gameplay-top-level-design.prd.md`、`doc/game/gameplay/gameplay-top-level-design.project.md`、相关专题 project、core review logs 与 GitHub task issue evidence comments。 |
+| `gameplay-release-gap-closure-2026-02-21` | 正文已退役；历史内容从 Git history、core review logs 与 GitHub task issue evidence comments 追溯。 |
+| `gameplay-release-production-closure`、`gameplay-runtime-governance-closure` | 当前仍作为非首读 provenance 保留；当前判断不得以这两份旧 closure 替代 gameplay 主入口、现行专业域验证或 GitHub task evidence。 |
 
-删除候选边界：上述 closure 三件套不再作为 active gameplay truth；后续若确认内容已被主入口、topic project、core review logs 与 GitHub task evidence 完整覆盖，可在独立治理切片中删除文件并保留本节或 git history 追溯。
+上述 closure 均不作为 active gameplay truth；已完成语义收敛的正文直接退役，不保留 redirect 或占位文件，尚未完成逐文件迁移审计的旧 closure 仅保留为非首读 provenance。
 
 ## 运行 / 证据 / 交接补充入口
 | 文档路径 | 类型 | 用途 |

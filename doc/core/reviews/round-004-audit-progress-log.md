@@ -342,8 +342,8 @@
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/README.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.prd.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-beta-balance-hardening-2026-02-22.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-beta-balance-hardening-2026-02-22` PRD（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-beta-balance-hardening-2026-02-22` project（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-engineering-architecture.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md` | issue_open | I4-002,I4-003 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 存在重复审计字段 - 审计轮次: 2。 |
@@ -353,8 +353,8 @@
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-micro-loop-feedback-visibility-2026-03-05.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 - 审计轮次: 2。 状态为进行中或active，需补充与当前审计轮次一致的时效说明。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-gap-closure-2026-02-21.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` PRD（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` project（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-production-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-runtime-governance-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
