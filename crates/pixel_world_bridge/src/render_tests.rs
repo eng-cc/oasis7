@@ -24,12 +24,14 @@ struct VisualProbeRow {
 #[derive(Clone, Debug, Serialize)]
 struct VisualProbeSummary {
     fragments: Vec<VisualProbeRow>,
+    fragment_shadows: Vec<VisualProbeRow>,
     fragment_insets: Vec<VisualProbeRow>,
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
     selected_location_cues: Vec<VisualProbeRow>,
     hit_regions: usize,
     fragment_entity_cache_size: usize,
+    fragment_shadow_entity_count: usize,
     fragment_inset_entity_count: usize,
     location_entity_cache_size: usize,
     agent_entity_cache_size: usize,
@@ -206,6 +208,13 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
 
+    let mut fragment_shadow_query =
+        world.query::<(&PixelWorldFragmentShadowVisual, &Sprite, &Transform)>();
+    let fragment_shadows = fragment_shadow_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
     let mut fragment_inset_query =
         world.query::<(&PixelWorldFragmentInsetVisual, &Sprite, &Transform)>();
     let fragment_insets = fragment_inset_query
@@ -235,12 +244,14 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
     let runtime = world.resource::<BevyRuntimeState>();
     VisualProbeSummary {
         fragments,
+        fragment_shadows,
         fragment_insets,
         locations,
         agents,
         selected_location_cues,
         hit_regions: runtime.hit_regions.len(),
         fragment_entity_cache_size: runtime.fragment_entities.len(),
+        fragment_shadow_entity_count: fragment_shadow_query.iter(world).count(),
         fragment_inset_entity_count: fragment_inset_query.iter(world).count(),
         location_entity_cache_size: runtime.location_entities.len(),
         agent_entity_cache_size: runtime.agent_entities.len(),
@@ -279,6 +290,14 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
         grid_query
             .iter(world)
             .map(|(_, sprite, transform)| pixel_layer("grid", sprite, transform)),
+    );
+
+    let mut fragment_shadow_query =
+        world.query::<(&PixelWorldFragmentShadowVisual, &Sprite, &Transform)>();
+    layers.extend(
+        fragment_shadow_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("fragment_shadow", sprite, transform)),
     );
 
     let mut fragment_query = world.query::<(&PixelWorldFragmentVisual, &Sprite, &Transform)>();
@@ -350,6 +369,7 @@ fn layer_kind_id(kind: &str) -> u8 {
     match kind {
         "grid" => 1,
         "fragment" => 2,
+        "fragment_shadow" => 7,
         "fragment_inset" => 6,
         "location" => 3,
         "selected_location_cue" => 4,
@@ -627,6 +647,85 @@ fn bevy_ecs_removes_hidden_fragment_visuals_and_stale_cache_entries() {
 }
 
 #[test]
+fn bevy_ecs_reconciles_low_alpha_fragment_shadows_at_visible_lods_and_cleans_them_up() {
+    let mut app = render_test_app(sample_render_state(20_000.0));
+    let detail = visual_probe_summary(&mut app);
+    let base = &detail.fragments[0];
+    let shadow = &detail.fragment_shadows[0];
+
+    assert_eq!(detail.fragment_shadows.len(), 1);
+    assert_eq!(detail.fragment_shadow_entity_count, 1);
+    assert_eq!(shadow.id, base.id);
+    assert_eq!(shadow.size_px, base.size_px);
+    assert_eq!(shadow.z, FRAGMENT_SHADOW_LAYER_Z);
+    assert!(shadow.z < base.z);
+    assert!((shadow.x - base.x).abs() >= 1.0);
+    assert!((shadow.y - base.y).abs() >= 1.0);
+    assert!((shadow.x - base.x).abs() <= base.size_px * FRAGMENT_SHADOW_OFFSET_CAP);
+    assert!((shadow.y - base.y).abs() <= base.size_px * FRAGMENT_SHADOW_OFFSET_CAP);
+    assert!(shadow.alpha <= base.alpha * FRAGMENT_SHADOW_ALPHA_CAP);
+    let world = app.world_mut();
+    let mut base_query = world.query::<(&PixelWorldFragmentVisual, &Sprite)>();
+    let base_color = base_query
+        .iter(world)
+        .find(|(visual, _)| visual.id == shadow.id)
+        .expect("base fragment sprite")
+        .1
+        .color
+        .to_srgba();
+    let mut shadow_query = world.query::<(&PixelWorldFragmentShadowVisual, &Sprite)>();
+    let shadow_color = shadow_query
+        .iter(world)
+        .find(|(visual, _)| visual.id == shadow.id)
+        .expect("fragment shadow sprite")
+        .1
+        .color
+        .to_srgba();
+    assert!(shadow_color.red < base_color.red);
+    assert!(shadow_color.green < base_color.green);
+    assert!(shadow_color.blue < base_color.blue);
+
+    app.update();
+    assert_eq!(
+        visual_probe_summary(&mut app).fragment_shadow_entity_count,
+        1,
+        "a consecutive visible reconcile must reuse its shadow entity"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state(12_000.0));
+        runtime.render_version += 1;
+    }
+    app.update();
+    let background = visual_probe_summary(&mut app);
+    assert_eq!(background.fragment_shadows.len(), 1);
+    assert_eq!(background.fragment_shadow_entity_count, 1);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = Some(sample_render_state(100.0));
+        runtime.render_version += 1;
+    }
+    app.update();
+    let hidden = visual_probe_summary(&mut app);
+    assert!(hidden.fragment_shadows.is_empty());
+    assert_eq!(hidden.fragment_shadow_entity_count, 0);
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut removed = sample_render_state(12_000.0);
+        removed.fragment_terrain.clear();
+        runtime.render_state = Some(removed);
+        runtime.render_version += 1;
+    }
+    app.update();
+    let removed = visual_probe_summary(&mut app);
+    assert!(removed.fragment_shadows.is_empty());
+    assert_eq!(removed.fragment_shadow_entity_count, 0);
+}
+
+#[test]
 fn bevy_ecs_reconciles_detail_only_mineral_inset_and_cleans_it_up() {
     let mut app = render_test_app(sample_render_state(20_000.0));
     let detail = visual_probe_summary(&mut app);
@@ -779,7 +878,7 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert!(summary.location_pixels > 0);
     assert!(summary.agent_pixels > summary.location_pixels);
     assert!(summary.agent_pixels > summary.fragment_pixels);
-    assert_eq!(summary.raw_rgba_fnv1a64, "f2c7f7e9757b32de");
+    assert_eq!(summary.raw_rgba_fnv1a64, "66ccca5292b8bbbd");
     assert_eq!(summary.agent_sample_rgba, [251, 191, 36, 255]);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
