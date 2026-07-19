@@ -68,6 +68,8 @@
 - SC-25: 首个 agent `slot-1` claim 必须补齐“canonical quote -> 若专用池足够则自动补足 restricted starter amount -> 直接 `ClaimAgent`”的链上闭环；`/v1/chain/agent-claim/**` 需要让玩家在不经过运营审批的前提下直连 claim，并由 runtime 真值暴露自动资助额度与 claim 结果。
 - SC-26: builtin wasm 模块边界中的 `GeoPos` 与一切 `*_cm` 坐标字段必须维持整数厘米合同；持久化状态允许兼容读取旧的“整值浮点”厘米表示，但动作/事件/观测入口不得接受 fractional cm，也不得再输出 `0.0` 这类浮点厘米表象。
 - SC-27: 正式发布默认入口不得再把 `llm_bootstrap` 或其他调试场景当作初始世界；`oasis7_viewer_live`、`oasis7_game_launcher`、`oasis7_web_launcher`、`oasis7_client_launcher` 与 `oasis7_chain_runtime` 首次启动必须共享同一份固定 genesis / 固定 unified-world bootstrap `world_id`，并避免默认注入 5 个预置 agent。
+- SC-28: 只有配置的权威来源可提交最终执行状态；传播或非权威来源的冲突写入必须原子拒绝并留下审计原因，不得进入 committed history 或玩家可见结果。
+- SC-29: replay 漂移必须能定位首个不一致边界，并按最小影响范围执行 rollback、canonical replay 与 reconciliation；只有最终 state root 和已确认结果重新一致后，恢复状态才能重新对外暴露。
 
 ## 2. User Experience & Functionality
 - User Personas:

@@ -2,7 +2,8 @@
 
 审计轮次: 7
 
-- 关联 PRD：`doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
+- 产品边界：`doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
+- 专业权威：`doc/world-runtime/prd.md`、`doc/p2p/prd.md`
 - 覆盖任务：`TASK-GAME-014`（`PRD-GAME-006-02`）
 
 ## 1. 触发条件

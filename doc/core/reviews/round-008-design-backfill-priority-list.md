@@ -133,10 +133,10 @@
 ## 首批待补齐（must_backfill 样本）
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split` — path:runtime,wasm; content:design-signals; lines:101
 - gameplay beta-balance hardening (retired/deleted) — path:hardening; content:design-signals; historical lines:108
-- `doc/game/gameplay/gameplay-distributed-consensus-governance-longrun-2026-03-06` — path:consensus,governance; content:design-signals; lines:332
+- gameplay distributed-consensus governance longrun (retired/deleted) — path:consensus,governance; content:design-signals; historical lines:332
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure` — context:closure; content:design-signals; lines:115
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure` — path:governance; context:closure; content:design-signals; lines:123
-- `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06` — path:hardening; content:design-signals; lines:243
+- gameplay longrun P0 production hardening (retired/deleted) — path:hardening; content:design-signals; historical lines:243
 - gameplay micro-loop feedback visibility (retired/deleted) — context:feedback,visibility; content:design-signals; historical lines:316
 - `doc/game/gameplay/gameplay-module-driven-production-closure` — path:module; context:closure; content:design-signals; lines:130
 - gameplay release-gap closure (retired/deleted) — context:closure,gap,release; content:design-signals; historical lines:308

@@ -138,7 +138,7 @@
   - `doc/game/prd.md`
   - `doc/game/project.md`
   - `doc/game/gameplay/gameplay-engineering-architecture.md`
-  - `doc/game/gameplay/gameplay-longrun-p0-production-hardening-2026-03-06.prd.md`
+  - `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
   - `testing-manual.md`
