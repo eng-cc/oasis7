@@ -53,7 +53,7 @@
 - `doc/core/reviews/round-005-audit-progress-log.md`
 - `doc/core/reviews/round-005-reviewed-files.md`
 - `doc/core/reviews/round-008-reviewed-files.md`
-- Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈入口改读 `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` 与 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`，原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
+- Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈的产品结果读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，Viewer/API 合同读 `doc/world-simulator/prd.md`，间接控制玩法规则读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`；原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
 - Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 `doc/core/reviews/round-008-reviewed-files.md` 与 `doc/core/reviews/round-008-audit-progress-log.md` 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
 - 已删除的 intent/distributed/runtime closure 与 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯；当前阅读入口继续走下方活跃专题、`doc/world-simulator/project.md` 与长期 world-simulator、P2P、runtime、gameplay 权威。
@@ -152,7 +152,6 @@
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback-2026-02-27.project.md` |
 | `doc/world-simulator/viewer/viewer-copyable-text.prd.md` | `doc/world-simulator/viewer/viewer-copyable-text.design.md` | `doc/world-simulator/viewer/viewer-copyable-text.project.md` |
 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` |
-| `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.design.md` | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.project.md` |
 | `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md` | `doc/world-simulator/viewer/viewer-frag-default-rendering.design.md` | `doc/world-simulator/viewer/viewer-frag-default-rendering.project.md` |
 | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.prd.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.design.md` | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.project.md` |
 | `doc/world-simulator/viewer/viewer-fragment-element-rendering.prd.md` | `doc/world-simulator/viewer/viewer-fragment-element-rendering.design.md` | `doc/world-simulator/viewer/viewer-fragment-element-rendering.project.md` |

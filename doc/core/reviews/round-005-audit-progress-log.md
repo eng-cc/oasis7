@@ -296,7 +296,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-3d-polish-performance.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-hard-split-phase7.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `viewer-first-session-goal-control-feedback-2026-02-27`（历史审计对象；现行权威见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 与 `doc/world-simulator/prd.md`） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-hard-split-phase7.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distributed/distributed-pos-consensus.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
@@ -387,7 +387,7 @@
 | 2026-03-06 18:04:31 +0800 | cc | `retired viewer release immersion phase5 prd doc (see git history and issue 2083)` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/p2p/blockchain/production-grade-blockchain-p2pfs-phasec-distfs-proof-network.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | `viewer-first-session-goal-control-feedback-2026-02-27`（历史审计对象；现行权威见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 与 `doc/world-simulator/prd.md`） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `historical removed standard_3d viewer doc set: viewer-agent-module-rendering.project` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `retired viewer release immersion phase7 project doc (see git history and issue 2083)` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/viewer/viewer-live-runtime-world-migration-phase2-2026-03-05.prd (retired; see git history and issue 2046)` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

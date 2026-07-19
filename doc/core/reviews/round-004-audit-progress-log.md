@@ -688,8 +688,7 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-egui-right-panel.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `viewer-first-session-goal-clarity-hardening-2026-02-27`（历史审计对象；现行产品语义见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`） | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `viewer-first-session-goal-control-feedback-2026-02-27`（历史审计对象；现行权威见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 与 `doc/world-simulator/prd.md`） | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-frag-default-rendering.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/viewer/viewer-frag-scale-selection-stability.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
