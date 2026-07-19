@@ -5,7 +5,7 @@ use bevy::ecs::system::SystemParam;
 
 #[path = "render_fragment_visuals.rs"]
 mod fragment_visuals;
-use fragment_visuals::{fragment_color, fragment_inset_color, fragment_shadow_color};
+use fragment_visuals::reconcile_fragments;
 
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
@@ -14,10 +14,13 @@ const FRAGMENT_DETAIL_THRESHOLD_PX: f64 = 10.0;
 const FRAGMENT_LAYER_Z: f32 = 0.35;
 const FRAGMENT_SHADOW_LAYER_Z: f32 = 0.34;
 const FRAGMENT_INSET_LAYER_Z: f32 = 0.36;
+const FRAGMENT_FLECK_LAYER_Z: f32 = 0.37;
 const FRAGMENT_SHADOW_OFFSET_CAP: f32 = 0.12;
 const FRAGMENT_SHADOW_ALPHA_CAP: f32 = 0.45;
 const FRAGMENT_INSET_SIZE_SCALE: f32 = 0.36;
 const FRAGMENT_INSET_OFFSET_SCALE: f32 = 0.22;
+const FRAGMENT_FLECK_SIZE_SCALE: f32 = 0.16;
+const FRAGMENT_FLECK_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
@@ -82,6 +85,12 @@ struct PixelWorldFragmentShadowVisual {
 /// base terrain patch remains the sole owner of the DTO-derived terrain color.
 #[derive(Component)]
 struct PixelWorldFragmentInsetVisual {
+    id: String,
+}
+
+/// A Detail-only upper-left light chip that makes terrain read as mineral-bearing.
+#[derive(Component)]
+struct PixelWorldFragmentFleckVisual {
     id: String,
 }
 
@@ -498,154 +507,6 @@ fn despawn_stale_entities(
     });
 }
 
-fn reconcile_fragments(
-    commands: &mut Commands,
-    runtime: &mut BevyRuntimeState,
-    existing_shadows: &Query<(Entity, &PixelWorldFragmentShadowVisual)>,
-    existing_insets: &Query<(Entity, &PixelWorldFragmentInsetVisual)>,
-    width: f64,
-    height: f64,
-) {
-    let Some(render_state) = runtime.render_state.as_ref() else {
-        for (_, entity) in runtime.fragment_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        for (entity, _) in existing_shadows.iter() {
-            commands.entity(entity).despawn();
-        }
-        for (entity, _) in existing_insets.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-    let Some(world_bounds) = render_state.world_bounds.as_ref() else {
-        for (_, entity) in runtime.fragment_entities.drain() {
-            commands.entity(entity).despawn();
-        }
-        for (entity, _) in existing_shadows.iter() {
-            commands.entity(entity).despawn();
-        }
-        for (entity, _) in existing_insets.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    };
-
-    let mut active_ids = HashSet::new();
-    let mut active_shadow_ids = HashSet::new();
-    let mut active_inset_ids = HashSet::new();
-    let existing_shadows_by_id = existing_shadows
-        .iter()
-        .map(|(entity, shadow)| (shadow.id.clone(), entity))
-        .collect::<HashMap<_, _>>();
-    let existing_insets_by_id = existing_insets
-        .iter()
-        .map(|(entity, inset)| (inset.id.clone(), entity))
-        .collect::<HashMap<_, _>>();
-    for fragment in &render_state.fragment_terrain {
-        let Some(style) =
-            fragment_visual_style(fragment, world_bounds, width, height, &runtime.camera)
-        else {
-            continue;
-        };
-        let Some((canvas_x, canvas_y)) =
-            to_canvas_point(&fragment.pos, world_bounds, width, height, &runtime.camera)
-        else {
-            continue;
-        };
-        active_ids.insert(fragment.id.clone());
-        let sprite = sprite_for_square(fragment_color(fragment, style.lod), style.size_px as f32);
-        let transform = Transform::from_translation(to_bevy_translation(
-            canvas_x,
-            canvas_y,
-            width,
-            height,
-            style.layer_z,
-        ));
-
-        active_shadow_ids.insert(fragment.id.clone());
-        let shadow_offset = (style.size_px as f32 * FRAGMENT_SHADOW_OFFSET_CAP).min(1.0);
-        let mut shadow_transform = transform;
-        shadow_transform.translation += Vec3::new(
-            shadow_offset,
-            shadow_offset,
-            FRAGMENT_SHADOW_LAYER_Z - style.layer_z,
-        );
-        let shadow_sprite = sprite_for_square(
-            fragment_shadow_color(fragment, style.lod),
-            style.size_px as f32,
-        );
-        if let Some(entity) = existing_shadows_by_id.get(&fragment.id) {
-            commands
-                .entity(*entity)
-                .insert((shadow_sprite, shadow_transform));
-        } else {
-            commands.spawn((
-                shadow_sprite,
-                shadow_transform,
-                PixelWorldFragmentShadowVisual {
-                    id: fragment.id.clone(),
-                },
-            ));
-        }
-
-        if let Some(entity) = runtime.fragment_entities.get(&fragment.id).copied() {
-            commands.entity(entity).insert((sprite, transform));
-        } else {
-            let entity = commands
-                .spawn((
-                    sprite,
-                    transform,
-                    PixelWorldFragmentVisual {
-                        id: fragment.id.clone(),
-                    },
-                ))
-                .id();
-            runtime
-                .fragment_entities
-                .insert(fragment.id.clone(), entity);
-        }
-
-        if style.lod == FragmentTerrainLod::Detail {
-            active_inset_ids.insert(fragment.id.clone());
-            let inset_size = (style.size_px as f32 * FRAGMENT_INSET_SIZE_SCALE).max(1.0);
-            let inset_offset = style.size_px as f32 * FRAGMENT_INSET_OFFSET_SCALE;
-            let mut inset_transform = transform;
-            inset_transform.translation += Vec3::new(
-                inset_offset,
-                inset_offset,
-                FRAGMENT_INSET_LAYER_Z - style.layer_z,
-            );
-            let inset_sprite = sprite_for_square(fragment_inset_color(fragment), inset_size);
-            if let Some(entity) = existing_insets_by_id.get(&fragment.id) {
-                commands
-                    .entity(*entity)
-                    .insert((inset_sprite, inset_transform));
-            } else {
-                commands.spawn((
-                    inset_sprite,
-                    inset_transform,
-                    PixelWorldFragmentInsetVisual {
-                        id: fragment.id.clone(),
-                    },
-                ));
-            }
-        }
-    }
-
-    despawn_stale_entities(commands, &mut runtime.fragment_entities, &active_ids);
-    for (id, entity) in existing_shadows_by_id {
-        if !active_shadow_ids.contains(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
-    for (id, entity) in existing_insets_by_id {
-        if !active_inset_ids.contains(&id) {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
 fn reconcile_locations(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -1044,6 +905,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     fragment_visuals: Query<'w, 's, (Entity, &'static PixelWorldFragmentVisual)>,
     fragment_shadows: Query<'w, 's, (Entity, &'static PixelWorldFragmentShadowVisual)>,
     fragment_insets: Query<'w, 's, (Entity, &'static PixelWorldFragmentInsetVisual)>,
+    fragment_flecks: Query<'w, 's, (Entity, &'static PixelWorldFragmentFleckVisual)>,
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
@@ -1063,6 +925,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_insets.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.fragment_flecks.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_shadows.iter() {
@@ -1116,6 +981,9 @@ pub(crate) fn render_scene(
         for (entity, _) in queries.fragment_insets.iter() {
             commands.entity(entity).despawn();
         }
+        for (entity, _) in queries.fragment_flecks.iter() {
+            commands.entity(entity).despawn();
+        }
         for (entity, _) in queries.fragment_shadows.iter() {
             commands.entity(entity).despawn();
         }
@@ -1151,6 +1019,7 @@ pub(crate) fn render_scene(
         &mut runtime,
         &queries.fragment_shadows,
         &queries.fragment_insets,
+        &queries.fragment_flecks,
         width,
         height,
     );
