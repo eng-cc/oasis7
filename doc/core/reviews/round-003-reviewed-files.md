@@ -621,8 +621,7 @@
 - historical removed standard_3d viewer doc set: dual-view 2D/3D topics
 - `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md`
 - `doc/world-simulator/viewer/viewer-egui-right-panel.project.md`
-- `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.prd.md`
-- `doc/world-simulator/viewer/viewer-first-session-goal-clarity-hardening-2026-02-27.project.md`
+- `viewer-first-session-goal-clarity-hardening-2026-02-27`（历史审计对象；现行产品语义见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`）
 - `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.prd.md`
 - `doc/world-simulator/viewer/viewer-first-session-goal-control-feedback-2026-02-27.project.md`
 - `doc/world-simulator/viewer/viewer-frag-default-rendering.prd.md`
