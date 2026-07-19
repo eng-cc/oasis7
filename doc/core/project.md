@@ -172,7 +172,7 @@
     - `doc/core/prd.md`
     - player access mode dated companion set (retired/deleted; historical task evidence)
     - 历史已删除：`doc/core/release-candidate-*.{prd,design,project}.md`；当前 2026-03 候选追溯从 `doc/core/reviews/release-candidate-*.md` 与 GitHub task issue evidence comments 进入。
-    - `doc/core/next-round-priority-slate-2026-03-11.{prd,design,project}.md`
+    - 历史已删除：2026-03-11 next-round priority slate 三件套；通用排序规则由 `doc/core/prd.md` 承载，产品发行就绪排序边界由 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 承载，完成证据由本任务记录与 Git history 追溯。
     - 历史已删除：`doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`；当前 docs hub / 公共阅读路径追溯从 `doc/README.md`、`doc/core/project.md` 的 `TASK-CORE-023` / `TASK-CORE-035` 与 doc structure standard 进入。
     - `doc/world-simulator/viewer/viewer-manual.manual.md`
     - `crates/oasis7_viewer/software_safe.html`

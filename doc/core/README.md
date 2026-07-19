@@ -8,7 +8,7 @@
 - 想先理解项目级总览、跨模块边界与当前唯一全局口径：`doc/core/prd.md`
 - 想看当前 core 模块在推进什么、最新完成项和下一步：`doc/core/project.md`
 - 想按主题或文件名继续下钻，而不是从活跃专题列表逐条找：`doc/core/prd.index.md`
-- 想先看下一轮跨模块优先级主入口：`doc/core/next-round-priority-slate-2026-03-11.prd.md`
+- 想确认跨模块优先级规则：读 `doc/core/prd.md`；想确认当前执行任务与下一步：读 `doc/core/project.md`
 - 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/prd.md`
 - 想先看“统一持久大世界”默认产品模型与术语契约：`doc/product/world-infrastructure/prd.md`
 - 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 `doc/core/reviews/README.md`
@@ -34,11 +34,11 @@
 ## 模块职责
 - 提供项目级设计总览、模块地图、关键链路与术语口径。
 - 维护跨模块治理基线、候选级 readiness / go-no-go 审计留痕与文档总入口同步。
-- 维护项目级设计阅读顺序、下一轮优先级与 ROUND 台账入口。
+- 维护项目级设计阅读顺序、跨模块优先级规则与 ROUND 台账入口；当前任务排序和下一步只在 core project 与 GitHub task truth 更新。
 
 ## 热点子域导航
 - `reviews/`：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；先由 `reviews/README.md` 分流，再按需进入。
-- 根目录保留专题：下一轮优先级等正式 cross-module 入口；玩家访问模式与统一持久大世界术语产品契约从 `doc/product/` 对应模块 PRD 进入。2026-03 release-candidate 根目录三件套、一次性 docs hub 同步专题与 core handoff 文件已退役删除，候选证据追溯改从 `reviews/` 审计记录进入，当前 docs hub 语义从 `doc/README.md`、`doc/core/project.md` 与 doc structure standard 进入。
+- 根目录只保留 core 模块入口、设计总览、主 PRD、project 与文件级索引，不再保留 dated cross-module 专题三件套；产品契约从 `doc/product/` 对应模块 PRD 进入，历史候选与任务证据从 `reviews/`、core project、GitHub task evidence 和 Git history 追溯。
 - `templates/`：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`：跨模块影响检查清单。
 
@@ -48,4 +48,4 @@
 
 ## 共享约定
 - 模块根入口、专题落位与 README/legacy redirect 的共享规则统一以 `doc/engineering/doc-governance/doc-structure-standard.design.md` 为准。
-- 跨模块边界、候选级入口、下一轮优先级或主链路变化时，优先更新 `doc/core/prd.md` 与 `doc/core/project.md`；新增专题后，再同步回写 `doc/core/prd.index.md` 与本目录索引。
+- 跨模块边界、候选级入口、优先级规则或主链路变化时，更新 `doc/core/prd.md`；当前排序、任务和下一步更新 `doc/core/project.md` 与 GitHub task truth。产品承诺变化则更新 `doc/product/` 对应稳定分册。
