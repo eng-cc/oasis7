@@ -1,7 +1,8 @@
 # GitHub Pages Visual Content Refresh (2026-07-18)
 
 - Owner role: `game_visual_interaction_designer`
-- Task: #2438 (`task_adfbfbfea1e64f4eb8904b9779b4c2bb`)
+- Original task: #2438 (`task_adfbfbfea1e64f4eb8904b9779b4c2bb`)
+- Amendment: #2459 (`task_0f22c947c970496db3523537e0be7022`)
 - Routes: `site/index.html`, `site/en/index.html`
 - Generated asset: `site/assets/images/hero/asteroid-civilization-crisis-image2-20260719.webp`
 
@@ -43,6 +44,8 @@ The generated image is atmosphere, not evidence. Its repository-only provenance
 remains recorded here and in the generated-asset path above; both language routes
 present it as part of the world narrative, without an adjacent Image2 or
 non-gameplay DOM caption. Meaningful copy must never be baked into the image.
+The #2459 amendment removes player-facing production-process labels while
+retaining this repository provenance and the exact public preview status.
 
 ## Visual acceptance
 
