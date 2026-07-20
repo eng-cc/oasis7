@@ -463,57 +463,6 @@ describe("viewer web ui automation baseline", () => {
     expect(screen.getByTestId("pixel-world-host")).toHaveTextContent("pixel-world-host:en");
   }, 60000);
 
-  it("renders published recovery options as scannable labeled cards while keeping the fallback separate", async () => {
-    const { container } = await renderViewerApp({
-      snapshot: sampleSnapshot({
-        player_gameplay: {
-          ...sampleSnapshot().player_gameplay,
-          recovery_options: [
-            {
-              kind: "repair",
-              estimated_time_class: "short",
-              estimated_resource_class: "focused_local_input",
-              risk_class: "low",
-              retained_benefit: "<existing throughput>",
-              recommendation_reason: "Restore the current line first.",
-            },
-            {
-              kind: "pivot",
-              estimated_time_class: "medium",
-              estimated_resource_class: "redirected_local_commitment",
-              risk_class: "tradeoff",
-              retained_benefit: "independent progress",
-              recommendation_reason: "Redirect around the pressure.",
-            },
-          ],
-        },
-      }),
-    });
-
-    const stagePanel = container.querySelector("#viewer-stage-panel");
-    const optionList = within(stagePanel).getByTestId("viewer-recovery-options");
-    const repair = optionList.querySelector('[data-recovery-kind="repair"]');
-    const pivot = optionList.querySelector('[data-recovery-kind="pivot"]');
-    const repairCard = repair?.closest(".recovery-option-card");
-    const pivotCard = pivot?.closest(".recovery-option-card");
-
-    expect(optionList.querySelectorAll('[data-testid="viewer-recovery-option"]')).toHaveLength(2);
-    expect(repairCard).toHaveTextContent("repair");
-    expect(within(repair).getByText("Time")).toBeInTheDocument();
-    expect(within(repair).getByText("short")).toBeInTheDocument();
-    expect(within(repair).getByText("Resources")).toBeInTheDocument();
-    expect(within(repair).getByText("focused_local_input")).toBeInTheDocument();
-    expect(within(repair).getByText("Risk")).toBeInTheDocument();
-    expect(within(repair).getByText("low")).toBeInTheDocument();
-    expect(within(repair).getByText("Retains")).toBeInTheDocument();
-    expect(within(repair).getByText("<existing throughput>")).toBeInTheDocument();
-    expect(within(repair).getByText("Why")).toBeInTheDocument();
-    expect(within(repair).getByText("Restore the current line first.")).toBeInTheDocument();
-    expect(pivotCard).toHaveTextContent("pivot");
-    expect(within(stagePanel).queryByText(/repair: time=short/i)).not.toBeInTheDocument();
-    expect(within(stagePanel).queryByText("Recovery Options")).not.toBeInTheDocument();
-  });
-
   it("shows target list loading affordances before the first snapshot arrives", async () => {
     const { container } = await renderViewerApp({ snapshot: null });
 
@@ -3321,10 +3270,6 @@ describe("viewer web ui automation baseline", () => {
     expect(within(agentButton).getByText("Selected")).toBeInTheDocument();
     expect(within(targetsPanel).getByText("Assembly Nexus")).toBeInTheDocument();
     expect(within(container.querySelector("#viewer-details-panel")).getByText("Agent Chat")).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-testid="viewer-recovery-option"]')).toHaveLength(3);
-    expect(container.querySelector('[data-recovery-kind="repair"]')).toBeTruthy();
-    expect(container.querySelector('[data-recovery-kind="rebuild"]')).toBeTruthy();
-    expect(container.querySelector('[data-recovery-kind="pivot"]')).toBeTruthy();
     fireEvent.click(locationButton);
     await waitFor(() => {
       expect(locationButton).toHaveAttribute("data-selected", "true");

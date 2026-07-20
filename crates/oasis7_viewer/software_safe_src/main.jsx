@@ -4,6 +4,7 @@ import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
+import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
@@ -11,6 +12,7 @@ import {
   LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
+import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
@@ -2629,36 +2631,11 @@ function WorldSummaryPanel() {
                     detail={gameplay().shareReplay?.summary}
                   />
                 </div>
-                <Show
-                  when={gameplay().matureWorldContinuation?.recoveryOptionComparisons?.length > 0}
-                  fallback={
-                    <MetricCard
-                      label={tr(locale(), "恢复选项", "Recovery Options")}
-                      value={gameplay().matureWorldContinuation?.recoveryOptions || tr(locale(), "待发布", "not published")}
-                    />
-                  }
-                >
-                  <div class="event-list" data-testid="viewer-recovery-options">
-                    <For each={gameplay().matureWorldContinuation?.recoveryOptionComparisons || []}>
-                      {(option) => (
-                        <EventCard
-                          class="event-card recovery-option-card"
-                          title={option.kind}
-                        >
-                          <div data-testid="viewer-recovery-option" data-recovery-kind={option.kind}>
-                            <div class="summary-grid">
-                              <MetricCard label={tr(locale(), "时间", "Time")} value={option.timeClass} />
-                              <MetricCard label={tr(locale(), "资源", "Resources")} value={option.resourceClass} />
-                              <MetricCard label={tr(locale(), "风险", "Risk")} value={option.riskClass} />
-                              <MetricCard label={tr(locale(), "保留收益", "Retains")} value={option.retainedBenefit} />
-                              <MetricCard label={tr(locale(), "推荐原因", "Why")} value={option.recommendationReason} />
-                            </div>
-                          </div>
-                        </EventCard>
-                      )}
-                    </For>
-                  </div>
-                </Show>
+                <RecoveryOptionComparisonPanel
+                  continuation={gameplay().matureWorldContinuation}
+                  locale={locale()}
+                  tr={tr}
+                />
               </PanelSection>
               <EventCard
                 title={tr(locale(), "已接受意图", "Accepted Intent")}
@@ -4050,32 +4027,7 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
       repair_available: true,
       rebuild_available: true,
       pivot_available: true,
-      recovery_options: [
-        {
-          kind: "repair",
-          estimated_time_class: "short",
-          estimated_resource_class: "focused_local_input",
-          risk_class: "low",
-          retained_benefit: "Retains the current local line and operating context.",
-          recommendation_reason: "Use repair when the blocker is localized.",
-        },
-        {
-          kind: "rebuild",
-          estimated_time_class: "medium",
-          estimated_resource_class: "broader_local_reinvestment",
-          risk_class: "moderate",
-          retained_benefit: "Retains local ownership while replacing the fragile arrangement.",
-          recommendation_reason: "Use rebuild when the line cannot absorb the blocker.",
-        },
-        {
-          kind: "pivot",
-          estimated_time_class: "medium",
-          estimated_resource_class: "redirected_local_commitment",
-          risk_class: "tradeoff",
-          retained_benefit: "Retains independent progress through a new specialization.",
-          recommendation_reason: "Use pivot when a different local path avoids the pressure.",
-        },
-      ],
+      recovery_options: recoveryOptionVisualFixture(),
       available_actions: [
         {
           action_id: "build_factory_smelter_mk1",
