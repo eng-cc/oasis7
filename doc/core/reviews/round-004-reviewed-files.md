@@ -275,8 +275,8 @@
 - `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md`
 - retired resource-model-layering PRD（Git history）
 - retired resource-model-layering project record（Git history）
-- `doc/readme/governance/readme-world-rules-consolidation.prd.md`
-- `doc/readme/governance/readme-world-rules-consolidation.project.md`
+- retired world-rules-consolidation PRD（Git history）
+- retired world-rules-consolidation project record（Git history）
 - `doc/readme/prd.index.md`
 - `doc/readme/prd.md`
 - `doc/readme/project.md`

@@ -134,8 +134,8 @@
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | retired resource-model-layering project record（Git history） | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | retired resource-model-layering PRD（Git history） | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/governance/readme-world-rules-consolidation.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/governance/readme-world-rules-consolidation.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 22:48:00 +0800 | `producer_system_designer` | retired world-rules-consolidation project record（Git history） | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 22:48:00 +0800 | `producer_system_designer` | retired world-rules-consolidation PRD（Git history） | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/production/readme-llm-p1p2-production-closure.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/production/readme-llm-p1p2-production-closure.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 22:48:00 +0800 | `producer_system_designer` | `doc/readme/production/readme-p0-p1-closure.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
