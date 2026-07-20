@@ -517,10 +517,13 @@ fn collect_data_submit_derives_bound_collector_and_commits_exact_action() {
     };
     assert_eq!(
         action,
-        Action::CollectData {
+        Action::CollectDataAuthenticated {
             collector_agent_id: "collector-authoritative".to_string(),
             electricity_cost: 7,
             data_amount: 11,
+            player_id: "player-collect".to_string(),
+            public_key: public_key.clone(),
+            nonce: 41,
         }
     );
     drop(calls);
