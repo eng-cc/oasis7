@@ -11,6 +11,10 @@ use fragment_visuals::reconcile_fragments;
 mod agent_silhouette;
 use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
 
+#[path = "render_hotspot_core.rs"]
+mod hotspot_core;
+use hotspot_core::{PixelWorldHotspotCoreVisual, reconcile_hotspot_cores};
+
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
@@ -1005,6 +1009,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
+    hotspot_cores: Query<'w, 's, (Entity, &'static PixelWorldHotspotCoreVisual)>,
 }
 
 pub(crate) fn render_scene(
@@ -1028,6 +1033,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.hotspot_cores.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_silhouettes.iter() {
@@ -1088,6 +1096,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.hotspot_cores.iter() {
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_silhouettes.iter() {
@@ -1171,6 +1182,14 @@ pub(crate) fn render_scene(
         animation_ms,
     );
     reconcile_hotspots(&mut commands, &mut runtime, width, height, animation_ms);
+    reconcile_hotspot_cores(
+        &mut commands,
+        &runtime,
+        &queries.hotspot_cores,
+        width,
+        height,
+        animation_ms,
+    );
 }
 
 #[cfg(test)]

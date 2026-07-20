@@ -7,6 +7,14 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
+#[path = "render_test_fixtures.rs"]
+mod fixtures;
+use fixtures::{
+    sample_render_state_with_beacon_candidates, sample_render_state_with_hotspot_candidates,
+    sample_render_state_with_selection, sample_render_state_with_unoccluded_detail_fleck,
+    test_runtime,
+};
+
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 540;
 const PIXEL_BACKGROUND: [u8; 4] = [8, 12, 20, 255];
@@ -30,6 +38,8 @@ struct VisualProbeSummary {
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
     agent_cores: Vec<VisualProbeRow>,
+    hotspots: Vec<VisualProbeRow>,
+    hotspot_cores: Vec<VisualProbeRow>,
     selected_location_cues: Vec<VisualProbeRow>,
     hit_regions: usize,
     fragment_entity_cache_size: usize,
@@ -39,6 +49,8 @@ struct VisualProbeSummary {
     location_entity_cache_size: usize,
     agent_entity_cache_size: usize,
     agent_core_entity_count: usize,
+    hotspot_entity_cache_size: usize,
+    hotspot_core_entity_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -64,11 +76,14 @@ struct PixelRegressionSummary {
     selected_location_cue_pixels: usize,
     agent_pixels: usize,
     agent_core_pixels: usize,
+    hotspot_pixels: usize,
+    hotspot_core_pixels: usize,
     fragment_sample_rgba: [u8; 4],
     fragment_fleck_sample_rgba: [u8; 4],
     location_sample_rgba: [u8; 4],
     agent_sample_rgba: [u8; 4],
     agent_core_sample_rgba: [u8; 4],
+    hotspot_core_sample_rgba: [u8; 4],
 }
 
 fn sample_position(x_cm: f64, y_cm: f64) -> Position {
@@ -120,67 +135,6 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             kind: "agent".to_string(),
             id: "agent-0".to_string(),
         }),
-    }
-}
-
-fn sample_render_state_with_selection(
-    fragment_footprint_cm: f64,
-    kind: &str,
-    id: &str,
-) -> RenderState {
-    let mut render_state = sample_render_state(fragment_footprint_cm);
-    render_state.selection = Some(Selection {
-        kind: kind.to_string(),
-        id: id.to_string(),
-    });
-    render_state
-}
-
-fn sample_render_state_with_unoccluded_detail_fleck() -> RenderState {
-    let mut render_state = sample_render_state(20_000.0);
-    render_state.selection = None;
-    render_state.locations[0].pos = sample_position(1_200_000.0, 700_000.0);
-    render_state.agents[0].pos = Some(sample_position(1_250_000.0, 750_000.0));
-    render_state
-}
-
-fn sample_render_state_with_beacon_candidates(kind: &str, id: &str) -> RenderState {
-    let mut render_state = sample_render_state_with_selection(12_000.0, kind, id);
-    render_state.locations.push(Location {
-        id: "loc-1".to_string(),
-        label: "Unselected Location".to_string(),
-        pos: sample_position(1_620_000.0, 1_100_000.0),
-        radius_cm: 30_000.0,
-        resource_summary: "-".to_string(),
-        size_hint_px: Some(10.0),
-        marker_role: Some("logic_anchor".to_string()),
-        marker_alpha: Some(0.32),
-    });
-    render_state.agents.push(Agent {
-        id: "agent-1".to_string(),
-        label: "Unselected Agent".to_string(),
-        pos: Some(sample_position(1_640_000.0, 1_115_000.0)),
-        location_id: Some("loc-1".to_string()),
-        resource_summary: "-".to_string(),
-        status_badges: vec![],
-        size_hint_px: Some(16.0),
-    });
-    render_state
-}
-
-fn test_runtime(render_state: RenderState) -> BevyRuntimeState {
-    BevyRuntimeState {
-        mounted: true,
-        render_state: Some(render_state),
-        render_version: 1,
-        camera: CameraState {
-            zoom: 3.0,
-            pan_x_px: 0.0,
-            pan_y_px: 0.0,
-        },
-        camera_fit_version: 1,
-        camera_user_override: true,
-        ..Default::default()
     }
 }
 
@@ -263,6 +217,19 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect::<Vec<_>>();
 
+    let mut hotspot_query = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
+    let hotspots = hotspot_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
+    let mut hotspot_core_query =
+        world.query::<(&PixelWorldHotspotCoreVisual, &Sprite, &Transform)>();
+    let hotspot_cores = hotspot_core_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
     let mut selected_location_cue_query =
         world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
     let selected_location_cues = selected_location_cue_query
@@ -279,6 +246,8 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         locations,
         agents,
         agent_cores,
+        hotspots,
+        hotspot_cores,
         selected_location_cues,
         hit_regions: runtime.hit_regions.len(),
         fragment_entity_cache_size: runtime.fragment_entities.len(),
@@ -288,6 +257,8 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         location_entity_cache_size: runtime.location_entities.len(),
         agent_entity_cache_size: runtime.agent_entities.len(),
         agent_core_entity_count: agent_core_query.iter(world).count(),
+        hotspot_entity_cache_size: runtime.hotspot_entities.len(),
+        hotspot_core_entity_count: hotspot_core_query.iter(world).count(),
     }
 }
 
@@ -385,6 +356,21 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .map(|(_, sprite, transform)| pixel_layer("agent_core", sprite, transform)),
     );
 
+    let mut hotspot_query = world.query::<(&PixelWorldHotspotVisual, &Sprite, &Transform)>();
+    layers.extend(
+        hotspot_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("hotspot", sprite, transform)),
+    );
+
+    let mut hotspot_core_query =
+        world.query::<(&PixelWorldHotspotCoreVisual, &Sprite, &Transform)>();
+    layers.extend(
+        hotspot_core_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("hotspot_core", sprite, transform)),
+    );
+
     layers.sort_by(|left, right| {
         left.z
             .partial_cmp(&right.z)
@@ -424,6 +410,8 @@ fn layer_kind_id(kind: &str) -> u8 {
         "selected_location_cue" => 4,
         "agent" => 5,
         "agent_core" => 9,
+        "hotspot" => 10,
+        "hotspot_core" => 11,
         _ => 0,
     }
 }
@@ -483,6 +471,8 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
     let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
+    let hotspot_pixels = kind_buffer.iter().filter(|kind| **kind == 10).count();
+    let hotspot_core_pixels = kind_buffer.iter().filter(|kind| **kind == 11).count();
 
     let fragment_layer = layers
         .iter()
@@ -501,6 +491,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .iter()
         .find(|layer| layer.kind == "agent_core")
         .expect("pixel regression agent core layer");
+    let hotspot_core_layer = layers.iter().find(|layer| layer.kind == "hotspot_core");
 
     let summary = PixelRegressionSummary {
         width: VIEWPORT_WIDTH,
@@ -514,6 +505,8 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         selected_location_cue_pixels,
         agent_pixels,
         agent_core_pixels,
+        hotspot_pixels,
+        hotspot_core_pixels,
         fragment_sample_rgba: sample_pixel(&image, fragment_layer),
         fragment_fleck_sample_rgba: fragment_fleck_layer
             .map(|layer| sample_pixel(&image, layer))
@@ -521,6 +514,9 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         location_sample_rgba: sample_pixel(&image, location_layer),
         agent_sample_rgba: sample_pixel(&image, agent_layer),
         agent_core_sample_rgba: sample_pixel(&image, agent_core_layer),
+        hotspot_core_sample_rgba: hotspot_core_layer
+            .map(|layer| sample_pixel(&image, layer))
+            .unwrap_or(PIXEL_BACKGROUND),
     };
 
     (image, summary)
@@ -1198,3 +1194,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
         );
     }
 }
+
+#[path = "render_hotspot_core_tests.rs"]
+mod hotspot_core_tests;
