@@ -82,7 +82,6 @@
 | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-ledger-2026-03-22.project.md` |
 | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.prd.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.design.md` | `site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.project.md` |
-| `doc/readme/governance/readme-world-rules-consolidation.prd.md` | `doc/readme/governance/readme-world-rules-consolidation.design.md` | `doc/readme/governance/readme-world-rules-consolidation.project.md` |
 | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.prd.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.design.md` | `doc/readme/production/readme-prod-gap1245-wasm-repl-topology-player.project.md` |
 
 ## 历史压缩专题清单（保留原址与互链）
