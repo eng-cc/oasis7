@@ -641,7 +641,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - Gameplay 生产落地证据：
   - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md`
   - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`（历史 runtime 原语/兼容证据；当前玩家-facing 口径不再把战争作为主线）
-  - `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md`
+  - 模块驱动生产切片的完成状态由本专题 T3、下方测试矩阵、当前代码与回归测试共同承接；原增量 closure 三件套已退役，历史实现过程从 Git history 与 GitHub task evidence 追溯。
 - 测试入口与执行规范：`testing-manual.md`（S1/S2/S3/S6/S7）。
 
 ---

@@ -351,8 +351,8 @@
 | 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:27 +0800 | codex | `gameplay-micro-loop-feedback-visibility-2026-03-05` PRD（正文已退役） | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:57:27 +0800 | codex | `gameplay-micro-loop-feedback-visibility-2026-03-05` project（正文已退役） | issue_open | I4-003,I4-006 | 存在重复审计字段 - 审计轮次: 2。 状态为进行中或active，需补充与当前审计轮次一致的时效说明。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
-| 2026-03-06 11:57:27 +0800 | codex | `doc/game/gameplay/gameplay-module-driven-production-closure.project.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-module-driven-production-closure` PRD（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
+| 2026-03-06 11:57:27 +0800 | codex | `gameplay-module-driven-production-closure` project（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` PRD（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `gameplay-release-gap-closure-2026-02-21` project（正文已退役） | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |
 | 2026-03-06 11:57:28 +0800 | codex | `doc/game/gameplay/gameplay-release-production-closure.prd.md` | issue_open | I4-003 | 存在重复审计字段 - 审计轮次: 2。 |

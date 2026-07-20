@@ -51,8 +51,8 @@
 - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md`
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`
 - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md`
-- `doc/game/gameplay/gameplay-module-driven-production-closure.prd.md`
-- `doc/game/gameplay/gameplay-module-driven-production-closure.project.md`
+- `gameplay-module-driven-production-closure` PRD（历史审读对象，正文已退役）
+- `gameplay-module-driven-production-closure` project（历史审读对象，正文已退役）
 - `gameplay-release-gap-closure-2026-02-21` PRD（历史审读对象，正文已退役）
 - `gameplay-release-gap-closure-2026-02-21` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-release-production-closure.prd.md`
