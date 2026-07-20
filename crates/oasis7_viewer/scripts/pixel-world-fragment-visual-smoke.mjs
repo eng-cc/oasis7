@@ -179,6 +179,13 @@ function visualProbeScript() {
               kind: "surveyor",
               resources: { energy: { amount: 72, unit: "%" } },
             },
+            "agent-1": {
+              id: "agent-1",
+              name: "Relay Agent",
+              location_id: "loc-1",
+              kind: "surveyor",
+              resources: { energy: { amount: 72, unit: "%" } },
+            },
           },
           locations: {
             "loc-0": {
@@ -210,6 +217,13 @@ function visualProbeScript() {
                   ],
                 },
               },
+              resources: { ore: { amount: 28, unit: "t" } },
+            },
+            "loc-1": {
+              id: "loc-1",
+              name: "Survey Relay Anchor",
+              pos: { x_cm: 2100000, y_cm: 1300000, z_cm: 0 },
+              profile: { radius_cm: 30000, radiation_emission_per_tick: 0, material: "silicate" },
               resources: { ore: { amount: 28, unit: "t" } },
             },
           },
@@ -310,8 +324,10 @@ function visualProbeScript() {
         }));
       });
       snapshot.model.agent_player_bindings["agent-0"] = authSession.playerId;
+      snapshot.model.agent_player_bindings["agent-1"] = authSession.playerId;
       if (authSession.publicKey) {
         snapshot.model.agent_player_public_key_bindings["agent-0"] = authSession.publicKey;
+        snapshot.model.agent_player_public_key_bindings["agent-1"] = authSession.publicKey;
       }
       window.__PIXEL_WORLD_VISUAL_BASE_SNAPSHOT__ = snapshot;
       window.__AW_TEST__.injectSnapshot(snapshot);
@@ -343,12 +359,12 @@ function visualProbeScript() {
 
       await waitFor(() => document.querySelectorAll(".pixel-world-fragment-terrain").length === 3);
       await waitFor(() => {
-        const marker = document.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
-        if (marker) {
-          return marker;
+        const markers = document.querySelectorAll(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
+        if (markers.length === 2) {
+          return markers;
         }
-        throw new Error("agent visual marker not rendered: " + JSON.stringify({
-          agentMarkers: document.querySelectorAll(".pixel-world-entity--agent").length,
+        throw new Error("two agent visual markers not rendered: " + JSON.stringify({
+          agentMarkers: markers.length,
           hitTargets: document.querySelectorAll(".pixel-world-entity--agent.pixel-world-entity--canvas-hit-target").length,
           fragments: document.querySelectorAll(".pixel-world-fragment-terrain").length,
           badges: badges(),
@@ -358,10 +374,13 @@ function visualProbeScript() {
       const stage = document.querySelector(".pixel-world-canvas");
       const fragments = Array.from(stage.querySelectorAll(".pixel-world-fragment-terrain"));
       const location = stage.querySelector(".pixel-world-entity--location");
-      const agent = stage.querySelector(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)");
+      const agents = Array.from(stage.querySelectorAll(".pixel-world-entity--agent:not(.pixel-world-entity--canvas-hit-target)"));
+      const agent = agents.find((marker) => marker.dataset.agentId === "agent-0");
+      const unselectedAgent = agents.find((marker) => marker.dataset.agentId === "agent-1");
       const fragmentRects = fragments.map(rectOf);
       const maxFragmentWidth = Math.max(...fragmentRects.map((rect) => rect.width));
       const agentRect = rectOf(agent);
+      const unselectedAgentRect = rectOf(unselectedAgent);
       const locationOpacity = Number.parseFloat(location.style.opacity || getComputedStyle(location).opacity);
       const layerOrder = {
         fragmentZ: zIndexOf(fragments[0]),
@@ -395,7 +414,11 @@ function visualProbeScript() {
           fragmentCount: fragments.length,
           fragmentRects,
           maxFragmentWidth,
+          agentCount: agents.length,
           agentRect,
+          unselectedAgentRect,
+          selectedAgentSelected: agent?.dataset.selected || null,
+          unselectedAgentSelected: unselectedAgent?.dataset.selected || null,
           agentPositionSource: agent?.dataset.positionSource || null,
           locationMarkerRole: location?.dataset.markerRole || null,
           locationOpacity,
@@ -723,6 +746,16 @@ try {
   assert(summary.ready.wheelCanceled === true, "canvas did not capture wheel interaction", summary.ready);
   assert(summary.rendered.runtimeStatus === "ready", "rendered bridge surface was not ready for visual DOM assertions", summary.rendered);
   assert(summary.rendered.fragmentCount === 3, "expected exactly three fragment background markers", summary.rendered);
+  assert(summary.rendered.agentCount === 2, "expected exactly two readable agent markers", summary.rendered);
+  assert(summary.rendered.selectedAgentSelected === "true", "agent-0 must remain the selected authenticated agent", summary.rendered);
+  assert(summary.rendered.unselectedAgentSelected === "false", "agent-1 must remain an unselected visual-only fixture agent", summary.rendered);
+  assert(summary.rendered.unselectedAgentRect?.width > 0, "second agent marker has no measurable visual footprint", summary.rendered);
+  assert(
+    summary.rendered.agentRect.x !== summary.rendered.unselectedAgentRect.x
+      || summary.rendered.agentRect.y !== summary.rendered.unselectedAgentRect.y,
+    "two-agent fixture did not produce distinct readable marker positions",
+    summary.rendered,
+  );
   assert(summary.rendered.locationMarkerRole === "logic_anchor", "location marker was not demoted to logic anchor", summary.rendered);
   assert(summary.rendered.locationOpacity < 0.5, "location marker remains too visually dominant", summary.rendered);
   assert(summary.rendered.agentPositionSource === "location_derived", "agent position was not derived from its location", summary.rendered);
