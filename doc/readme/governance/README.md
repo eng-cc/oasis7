@@ -9,7 +9,7 @@
 - 想确认 Moltbook 渠道边界与公开 claim：先读发行沟通产品分册；持续运营使用 `readme-moltbook-liveops-runbook.md`，帖文与回复素材使用 `readme-moltbook-post-pack.md`
 - 想确认 limited playable technical preview 的贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
-- 想确认资源模型分层、世界规则入口收口或公开定位相关口径：先读 `readme-resource-model-layering.prd.md` 或 `readme-world-rules-consolidation.prd.md`
+- 想确认当前通用资源与领域/模块记录的边界：先读根 `../../../README.md` 与大世界基础设施产品 PRD 的[资源模型分册](../../product/world-infrastructure/prd.md#25-资源模型与模块扩展边界)；世界规则入口收口继续读 `readme-world-rules-consolidation.prd.md`
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
 
 ## 入口分工
@@ -111,12 +111,17 @@
 - 首读入口:
   - `../../../README.md`
   - `readme-project-overview-whitepaper-2026-04-25.md`
-  - `readme-resource-model-layering.prd.md`
+  - `../../product/world-infrastructure/prd.md#25-资源模型与模块扩展边界`
   - `readme-world-rules-consolidation.prd.md`
 - 适合问题:
   - README 对外定位与世界规则入口的关系怎么理解
   - 资源模型、世界规则与公开主定位怎样互相约束
   - 哪些专题更适合作为“公开口径主控层”的首读入口
+
+### 已删除资源模型口径修订专题
+- 已删除：`readme-resource-model-layering.{prd,design,project}.md`
+- 当前承接：根 `../../../README.md` 维护当前公开技术摘要，大世界基础设施产品 PRD 维护长期资源模型与模块扩展边界；gameplay、runtime 与 WASM 专业合同维护具体规则和证据。
+- 追溯边界：该三件套只记录一次已完成的 README 口径修订与 2026-03-03 命名迁移，当前无测试、runbook 或代码依赖；历史任务从 Git history 与 GitHub task evidence 追溯。
 
 ## 定向检索边界
 - 如果你已经知道准确文件名，直接回 `../prd.index.md`，不要指望本页替代完整索引。

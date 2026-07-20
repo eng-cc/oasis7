@@ -57,6 +57,12 @@ oasis7 向玩家表达一个统一持久大世界；玩家行动、Agent、组�
 
 统一世界模型本身不证明特定拓扑、容量、可用性、public launch、mainnet 或其他 readiness。当前公开状态与 claim envelope 仍由根 [`README.md`](../../../README.md) 拥有；玩家规则、权威执行和分布式状态证明分别由 [`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md) 与 [`doc/p2p/prd.md`](../../p2p/prd.md) 维护，测试只作为这些 claim 的验证机制，不产生新的产品世界。
 
+### 2.5 资源模型与模块扩展边界
+
+当前已验证的通用资源类型为 `Electricity` 与 `Data`。世界中的材料、产物和记录可由具体 runtime 领域模型或经治理的模块表达；它们不会因此扩展通用资源类型，也不会自动获得统一的结算、转移、所有权或公开可用性承诺。
+
+所有资源与领域记录仍须遵守权威校验、权限、审计、metering 和治理边界。具体成本、经济数值、数据结构、ABI、manifest、capability 与玩家可读规则继续由对应 gameplay、runtime 和 WASM 专业合同及证据定义，本产品层不把实现现状冻结为永久资源目录。
+
 ## 3. 权威与冲突处理
 
 产品层拥有区域设施、世界执行与分布式状态组成的端到端承诺；`doc/game/prd.md`、`doc/world-runtime/prd.md` 与 `doc/p2p/prd.md` 分别拥有其玩家规则、执行合同与分布式状态证明。冲突时不得由产品层静默改写专业合同，必须由产品 owner 与相应专业 owner 形成显式跨域决策。

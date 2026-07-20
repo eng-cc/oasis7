@@ -257,8 +257,8 @@
 - `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md`
 - `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md`
 - `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md`
-- `doc/readme/governance/readme-resource-model-layering.prd.md`
-- `doc/readme/governance/readme-resource-model-layering.project.md`
+- retired resource-model-layering PRD（Git history）
+- retired resource-model-layering project record（Git history）
 - `doc/readme/governance/readme-world-rules-consolidation.prd.md`
 - `doc/readme/governance/readme-world-rules-consolidation.project.md`
 - `doc/readme/prd.index.md`

@@ -77,7 +77,6 @@
 | `doc/readme/gap/readme-gap123-runtime-consensus-metering.prd.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.design.md` | `doc/readme/gap/readme-gap123-runtime-consensus-metering.project.md` |
 | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.prd.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.design.md` | `doc/readme/gap/readme-gap2-llm-wasm-lifecycle.project.md` |
 | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.design.md` | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md` |
-| `doc/readme/governance/readme-resource-model-layering.prd.md` | `doc/readme/governance/readme-resource-model-layering.design.md` | `doc/readme/governance/readme-resource-model-layering.project.md` |
 | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.prd.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.design.md` | `doc/readme/governance/readme-consistency-audit-checklist-2026-03-11.project.md` |
 | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.design.md` | `doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.project.md` |
 | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md` | `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md` |
