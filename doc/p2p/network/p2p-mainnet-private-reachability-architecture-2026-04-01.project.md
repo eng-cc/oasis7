@@ -256,7 +256,7 @@
 - `doc/p2p/project.md`
 - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
-- `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+- `doc/p2p/prd.md` 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
 - `doc/p2p/network/readme-p1-network-production-hardening.prd.md`
 - `doc/p2p/node/node-net-stack-unification-readme.prd.md`
 - `testing-manual.md`

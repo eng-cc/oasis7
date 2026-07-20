@@ -11,7 +11,7 @@
 - Scope: 项目级 `test/prod` 环境分层、hosted-login 云上清单、testnet/mainnet 口径边界、上线与回归流程的双环境要求
 - Last Verified: 2026-07-06 Asia/Shanghai
 - Related Runtime Evidence:
-  - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+  - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
   - `doc/testing/evidence/public-testnet-current-required-lanes-2026-07-03.tsv`
   - `doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md`
