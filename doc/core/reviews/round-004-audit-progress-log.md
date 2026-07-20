@@ -319,8 +319,8 @@
 | 2026-03-06 11:56:41 +0800 | codex | `doc/readme/gap/readme-gap3-install-target-infrastructure.project.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
 | 2026-03-06 11:56:41 +0800 | codex | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.prd.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/gap/readme-gap34-lifecycle-orderbook-closure.project.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
-| 2026-03-06 11:56:42 +0800 | codex | `doc/readme/governance/readme-resource-model-layering.prd.md` | issue_open | I4-005 | 缺少 ROUND-002 主从口径主入口声明。 |
-| 2026-03-06 11:56:42 +0800 | codex | `doc/readme/governance/readme-resource-model-layering.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
+| 2026-03-06 11:56:42 +0800 | codex | retired resource-model-layering PRD（Git history） | issue_open | I4-005 | 缺少 ROUND-002 主从口径主入口声明。 |
+| 2026-03-06 11:56:42 +0800 | codex | retired resource-model-layering project record（Git history） | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/governance/readme-world-rules-consolidation.prd.md` | issue_open | I4-005 | 缺少 ROUND-002 主从口径主入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/governance/readme-world-rules-consolidation.project.md` | issue_open | I4-005 | 缺少 ROUND-002 主项目入口声明。 |
 | 2026-03-06 11:56:42 +0800 | codex | `doc/readme/prd.index.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |

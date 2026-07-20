@@ -74,7 +74,7 @@ rg -n "审计轮次:[[:space:]]*[1-9][0-9]*" doc/*/prd*.md doc/*/**/*.prd*.md
   - `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md`
   - `retired testing launcher launcher-lifecycle-hardening-2026-03-01 prd`
   - `doc/playability_test_result/game-test.prd.md`
-  - `doc/readme/governance/readme-resource-model-layering.prd.md`
+  - retired resource-model-layering PRD（Git history）
   - `doc/game/gameplay/gameplay-engineering-architecture.md`
 - 抽样时间：2026-03-04 21:25 ~ 21:56 CST（并行分片）
 

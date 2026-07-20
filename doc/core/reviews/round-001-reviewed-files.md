@@ -36,7 +36,7 @@
 - `doc/playability_test_result/game-test.project.md`
 - `doc/playability_test_result/prd.md`
 - `doc/playability_test_result/project.md`
-- `doc/readme/governance/readme-resource-model-layering.prd.md`
+- retired resource-model-layering PRD（Git history）
 - `doc/readme/prd.md`
 - `doc/readme/project.md`
 - `doc/scripts/precommit/pre-commit.prd.md`
