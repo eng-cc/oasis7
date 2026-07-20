@@ -15,7 +15,7 @@
   - `silent wait without fallback` 现在有 canonical `response_window_class`、`stalled_reason`、`escalation_hint` 与 `fallback_action_*`，QA 不再需要靠 UI 猜“accepted 之后到底是在等、在卡、还是该修”。
   - `world_activity_only` 已继续被现有 `player leverage` rubric 与 playability card 明确阻断，不能再用“世界很活跃”冒充“玩家仍有 meaningful participation”。
 - 后两类 mature-world 风险当前被正式提升为 `watch`，而不是假装已经完全通过：
-  - `grind_only` 的设计判据和 viewer value surface 已经就位，但 runtime 还没有把 `same_loop_repeat_count` / `grind_only_flag` 下沉成 canonical state。
+  - `grind_only` 的设计判据、viewer value surface 与 `same_loop_repeat_count` / `grind_only_flag` runtime truth 已经就位；当前仍缺使用这些字段的 fresh mature-world sample 来给出现行 verdict。
   - `forced_major_power_dependency` 的 contract 已冻结为 blocker，runtime truth 已有历史落地；当前仍缺 fresh mature-world sample 去给出“被迫依附 major power”与“可独立 repair/rebuild/pivot”之间的现行 verdict。
 - 因此，本矩阵证明的是“高风险 blocker 已有正式 QA 判据与样本锚点”，不等于 `PRD-GAME-012` trust gate、`PRD-GAME-015` mature-world lane 或 broader playability 已整体 `pass`。
 
@@ -34,9 +34,9 @@
 - 对 `world_activity_only`：
   - 所有 future trust/capability/mature-world 样本继续沿用 `player leverage` rubric；不能因为 viewer 更好看就放弃这个硬门槛。
 - 对 `grind_only`：
-  - 下一步应优先由 `runtime-small-player-lane-state-contract` 或等价 runtime slice 把 `same_loop_repeat_count`、`leverage_class`、`grind_only_flag` 下沉为 canonical truth，而不是只停留在 viewer 文案层。
+  - 下一步应由 `qa-mature-world-small-player-fresh-sample` 使用已落地的 `same_loop_repeat_count`、`leverage_class`、`grind_only_flag` runtime truth 复采样；不能用字段存在或 viewer 文案直接升级 verdict。
 - 对 `forced_major_power_dependency`：
-  - 下一步应优先在 small-player lane runtime/sample truth 中补 `major_power_dependency_status` 与 `repair/rebuild/pivot` 样本，否则 mature-world `pass` 仍然会被这一项卡住。
+  - 下一步应在 fresh mature-world sample 中消费已落地的 `major_power_dependency_status` 与 `repair/rebuild/pivot` truth；没有代表性样本时 mature-world `pass` 仍然会被这一项卡住。
 
 ## 2026-06-22 runtime truth implementation trace
 - 任务: `.pm/tasks/task_96b6823495f44ef39c80f3c8b1a74421.yaml`
