@@ -24,7 +24,7 @@
 ### Gameplay 生命周期协议边界
 
 - Gameplay 生命周期沿用 `validated Action -> DomainEvent -> WorldState` 的 runtime 权威链；动作校验与路由以 `crates/oasis7/src/runtime/world/event_processing.rs` 为准，事件与持久状态以 `crates/oasis7/src/runtime/events.rs` 及 state apply 路径为准。
-- 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；激活 Gameplay 模块时先校验模块 directive，未激活或未接管的路径使用 native fallback。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。
+- 周期性治理、危机、战争与元进度推进由 `crates/oasis7/src/runtime/world/gameplay_loop.rs` 在 tick 中确定性执行；存在激活的 Gameplay tick module 时先校验并应用其 directive，只有没有激活 Gameplay tick module 时才整体使用 native fallback，激活模块后不会因某类 directive 缺失而逐项回退。具体动作名单、阈值、评分和玩家可读后果不在本 runtime 入口复制。
 - 内建 Gameplay 模块的注册、`ModuleRole::Gameplay` 绑定与 readiness 由 `crates/oasis7/src/runtime/world/bootstrap_gameplay.rs` 和当前回归测试承接。模块存在或 readiness 通过不替代 gameplay 专业域的可玩性与后果可读性验收。
 - 生命周期事件与状态仍受本 PRD 的确定性、receipt、replay、恢复与 ABI 兼容合同约束；持久化保留和恢复细则见 `doc/world-runtime/runtime/runtime-storage-footprint-governance-2026-03-08.prd.md`。历史 closure 的实现过程从 Git history 与 GitHub task evidence 追溯，不再作为长期 runtime 权威入口。
 
