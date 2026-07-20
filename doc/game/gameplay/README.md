@@ -6,7 +6,7 @@
 - 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
 - 想确认当前冲刺窗口、10 分钟留存修复和下一步体验目标：先读 `gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
-- 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `gameplay-small-player-progression-lane-2026-05-17.prd.md`
+- 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `../../product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的玩法合同
 - 想确认访问模式、limited preview 或 release readiness：先读 `../../product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前 preview 执行状态看 `../project.md` 与对应 round execution record
 - 想确认 agent claim token cost、claim bond、upkeep、reclaim、restricted grant、starter OC 或 first chat gate：先读 `gameplay-agent-claim-token-cost-2026-03-27.prd.md`，再按需读 `gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`
@@ -49,7 +49,7 @@
 - 首读入口:
   - `gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
   - `../../product/world-rules-core-gameplay/prd.md`（产品承诺）与 `gameplay-top-level-design.prd.md`（玩法合同）
-  - `gameplay-small-player-progression-lane-2026-05-17.prd.md`
+  - `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感

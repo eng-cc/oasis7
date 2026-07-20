@@ -125,7 +125,7 @@
   - Viewer and pure API render canonical DTOs only; they do not inspect WASM or infer benefit from events.
 - Integration Points:
   - `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md`
-  - `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`
+  - `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`
   - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
   - `doc/product/world-rules-core-gameplay/prd.md`（产品承诺）与 `doc/game/gameplay/gameplay-top-level-design.prd.md`（玩法合同）
   - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`

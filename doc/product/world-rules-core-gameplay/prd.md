@@ -18,6 +18,7 @@
 ### 活跃产品专题
 
 - [`首局与持续游玩`](first-session-and-continuation.prd.md)：首局微循环、后引导承接、首次持续能力、中循环展开与失败恢复。
+- [`成熟世界成长与区域参与`](mature-world-progression.prd.md)：首次持续能力之后的独立成长、区域专业化、有限影响与 anti-grind / 恢复边界。
 
 ## 1. 产品承诺
 
@@ -63,6 +64,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 1. 首局可读：目标、动作、阻塞、反馈和下一步可见。
 2. 后引导承接：首局进入可持续的阶段目标与成长压力。
 3. 世界参与：个人行动、Agent 和区域系统在一致规则下产生长期影响。
+4. 成熟世界成长：小规模玩家通过可恢复的区域贡献形成独立 leverage，而不是被迫依附强组织或重复 grind。
 
 ## 5. Done：成功标准与验收
 
@@ -74,6 +76,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 - SC-6：代表性间接控制流程证明玩家意图进入 Agent/策略决策，经权威规则与资源校验产生世界后果，并返回可解释结果与可执行的打断、纠正、下一步或恢复动作；任一专业域的局部 green 不能替代组合闭环。
 - SC-7：同一物理行动在 gameplay、runtime、Agent 与 Viewer 的粗粒度/表现映射中保持距离、顺序、成本和持久化结果一致，不产生第二条时间线或表现层真值；权威时间线在没有直接玩家输入时仍按当前世界规则继续推进，不冻结具体 tick 时长。
 - SC-8：Data 的获取和一次授权使用路径可端到端验证；未经授权的使用原子失败且不产生旁路收益，并向玩家提供可理解的原因和恢复或替代路径。具体许可状态机、结算规则与副作用矩阵由专业域拥有。
+- SC-9：成熟世界样例证明小规模玩家在不立即依附 major power 的前提下，通过可归因贡献获得新选择、恢复弹性、议价位置或区域用途；失败保留 repair / rebuild / pivot，区域影响不越界为全局治理权。
 
 ### 5.1 验收追踪
 
@@ -87,6 +90,7 @@ Data 是有归属、有获取成本且受授权边界约束的世界资源。未
 | SC-6 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer | PRD-GAME-014 / PRD-WORLD_SIMULATOR-001 / PRD-WORLD_RUNTIME-001 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md` | 玩家意图、Agent 决策、权威后果与打断/纠正/恢复组合证据，含正式玩家 surface 的 S6 交互闭环 | test_tier_required |
 | SC-7 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | 无玩家直接输入时的持续时间线，以及物理真值与粗粒度/表现映射一致性审计，含 S6 表现层核对 | test_tier_required |
 | SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md` | Data 获取、授权使用、未经授权原子失败与玩家恢复路径证据，含 S6 拒绝/恢复可读性 | test_tier_required |
+| SC-9 | producer_system_designer / gameplay_designer / qa_engineer | PRD-GAME-015 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/testing/prd.md` | mature-world player leverage、anti-grind、恢复与有限区域影响 fresh sample；产品合同见本模块的 mature-world 专题分册 | test_tier_full |
 
 ## 6. Non-Goals
 
