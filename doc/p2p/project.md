@@ -73,7 +73,7 @@
 - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
 - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy rehearsal provenance only）
-- `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+- `TASK-P2P-041` hosted player access/session auth 已完成并收敛：长期专业合同见 `doc/p2p/prd.md`，operator procedure 见 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`，玩家承诺见 `doc/product/player-entry-distribution/prd.md`；原日期型专题从 GitHub task evidence 与 Git history 追溯。
 
 ## 状态
 - 当前状态: active（ROUND-027）

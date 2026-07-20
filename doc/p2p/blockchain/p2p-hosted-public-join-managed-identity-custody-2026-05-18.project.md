@@ -68,7 +68,7 @@
     - 正式回写:
       - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
       - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
-      - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+      - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
       - `doc/p2p/project.md`
     - 只读依赖:
       - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_account_identity.rs`
@@ -79,13 +79,13 @@
        - 验证命令: `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md`
        - 预期结果: PRD 明确分层，不再只描述 SMTP/Tablestore 可用性。
     2. 将 operator runbook 收口为分环境最小配置、禁止 shortcut 和 promotion gate。
-       - 验证命令: `rg -n "5B\. 分环境执行清单|dev 环境|staging 环境|production 环境|promotion gate" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+       - 验证命令: `rg -n "入口与信任面|Session revoke|Freeze 与恢复分享|Incident 流程" doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
        - 预期结果: runbook 能回答“测试环境和正式环境怎么分、不能混什么、升生产前要验什么”。
     3. 同步模块 project 与 task trace / current evidence sink，保留 fresh verification 入口。
        - 验证命令: `rg -n "hosted-account-env-tiering|task_ad5cbac95aa54e26a9fa7d7558380750|GitHub task issue evidence comments|task_uid" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md | rg -v "验证命令:"`
        - 预期结果: 模块追踪、`task_uid` trace 与当前 evidence sink 口径可回溯。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering|5B\. 分环境执行清单|promotion gate" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/project.md && rg -n "GitHub task issue evidence comments|task_uid" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md | rg -v "验证命令:"`
+    - `rg -n "SC-8|Environment Tiering Contract|NFR-P2P-029-7|PRD-P2P-029-G|hosted-account-env-tiering" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.prd.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/project.md && rg -n "入口与信任面|Freeze 与恢复分享|Incident 流程" doc/p2p/blockchain/hosted-player-access-operator-runbook.md && rg -n "GitHub task issue evidence comments|task_uid" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md | rg -v "验证命令:"`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] hosted-account-staging-automation (PRD-P2P-029-G) [test_tier_required]: 新增 repo-owned `scripts/hosted-account-staging-smoke.sh`，把 hosted account 的本地 required smoke 与 staging `smtp + store continuity` live smoke 收成同一条自动化入口，并把命令统一回写到 operator runbook 与模块 project。 Trace: .pm/tasks/task_f445927d10234bada7bb7058a1d2f5d0.yaml
@@ -94,7 +94,7 @@
       - `scripts/hosted-account-staging-smoke.sh`
       - `scripts/ci-tests.sh`
       - `doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md`
-      - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md`
+      - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`
       - `doc/p2p/project.md`
     - 只读依赖:
       - `crates/oasis7/src/bin/oasis7_game_launcher/static_http.rs`
@@ -109,7 +109,7 @@
        - 验证命令: `bash -n scripts/hosted-account-staging-smoke.sh && rg -n "hosted account local smoke|OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE" scripts/ci-tests.sh`
        - 预期结果: `./scripts/ci-tests.sh required` 拥有稳定的本地 hosted account e2e smoke，而 staging 继续复用同一脚本。
     3. 回写 operator runbook 和 hosted account project，明确 staging 自动化链路与证据边界。
-       - 验证命令: `rg -n "hosted-account-staging-smoke.sh|staging 自动化链路|ci-tests.sh required" doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.runbook.md doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/project.md`
+       - 验证命令: `rg -n "hosted-account-staging-smoke.sh|staging 自动化链路|ci-tests.sh required" doc/p2p/blockchain/p2p-hosted-public-join-managed-identity-custody-2026-05-18.project.md doc/p2p/project.md`
        - 预期结果: 文档能够直接回答“repo-owned 自动化链路怎么跑”。
   - 验收命令 (`test_tier_required`):
     - `bash -n scripts/hosted-account-staging-smoke.sh`
@@ -133,7 +133,7 @@
 - 输入:
   - `crates/oasis7/src/bin/oasis7_game_launcher/hosted_player_session.rs`
   - `crates/oasis7_viewer/software_safe.js`
-  - `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+  - `doc/p2p/prd.md`
 - 输出:
   - hosted account contract
   - 邮箱登录入口
@@ -215,7 +215,7 @@
 - `doc/p2p/prd.md`
 - `doc/p2p/project.md`
 - `doc/p2p/prd.index.md`
-- `doc/p2p/blockchain/p2p-hosted-world-player-access-and-session-auth-2026-03-25.prd.md`
+- `doc/p2p/prd.md`
 - `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`
 - `doc/p2p/token/mainchain-token-signed-transaction-authorization-2026-03-23.prd.md`
 - `doc/p2p/token/mainchain-token-newapi-quota-bridge-2026-05-06.prd.md`
