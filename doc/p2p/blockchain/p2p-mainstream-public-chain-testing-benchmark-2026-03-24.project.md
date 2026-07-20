@@ -32,7 +32,8 @@
 - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
 - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
-- `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+- `README.md`
+- `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
 
 ## 验收命令（本轮）
 - `rg -n "network rehearsal|release train|fuzz/property|governance drill|mainstream public-chain|legacy shared_devnet" doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.project.md doc/p2p/prd.md doc/p2p/project.md testing-manual.md`

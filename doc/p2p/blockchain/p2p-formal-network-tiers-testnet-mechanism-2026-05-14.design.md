@@ -68,9 +68,9 @@ Network tier 是统一持久大世界的运行/验证载体分层，不是玩家
 - `p2p-mainnet-grade-readiness-hardening-2026-03-23`：
   - 负责 `MAINNET-1~4` 的安全/治理/创世 readiness gates。
   - 现在被定义为 `mainnet manifest` 的 required gates 来源。
-- `p2p-mainnet-public-claims-policy-2026-03-23`：
-  - 继续负责 overall public claims deny/allowlist。
-  - 本专题只把 tier 级 claims boundary 接到 manifest schema。
+- 根 `README.md` 与产品层公开口径分册：
+  - 根 README 负责当前公开状态，`doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md` 负责长期沟通生命周期。
+  - 本专题只把 tier 级 claims boundary 接到 manifest schema，不把历史 allowlist/denylist 或 gate 结果升级为当前公开状态。
 
 ## Repo-Owned Skeleton
 - `scripts/network-tier-manifest.sh`

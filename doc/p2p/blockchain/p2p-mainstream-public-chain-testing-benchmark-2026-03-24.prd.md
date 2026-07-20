@@ -70,7 +70,8 @@
   - `doc/p2p/blockchain/p2p-mainnet-crypto-security-baseline-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+  - `README.md`
+  - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/p2p/project.md`
 - Edge Cases & Error Handling:
   - 若引用“主流公链多客户端一致性测试”，必须同时说明 oasis7 当前是单实现栈，因此等价要求应落在 `独立 replay/verifier`、`跨 world/节点副本一致性` 与 `共享网络升级演练`，而不是伪造不存在的第二客户端。
@@ -81,7 +82,7 @@
   - NFR-P2P-BENCH-1: 所有“已有/缺失”判断都必须能回链到仓库命令、手册或正式专题文档。
   - NFR-P2P-BENCH-2: benchmark 必须同时给出 `mainstream expectation` 与 `oasis7 equivalent`，避免机械照搬其他链结构。
   - NFR-P2P-BENCH-3: benchmark 的下一步必须按 producer 视角排序，明确什么是当前最高杠杆验证工作。
-  - NFR-P2P-BENCH-4: benchmark 结论必须与当前 public claims policy 一致，不得制造第二套安全成熟度口径。
+  - NFR-P2P-BENCH-4: benchmark 结论必须与根 `README.md` 的当前公开状态和产品层公开口径规则一致，不得制造第二套安全成熟度口径。
 - Security & Privacy: 本专题只记录测试层与验证缺口，不记录任何私钥、助记词、离线签名材料或 operator 敏感信息。
 
 ## 5. Risks & Roadmap

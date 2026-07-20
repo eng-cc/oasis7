@@ -78,7 +78,8 @@
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.design.md`
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+  - `README.md`
+  - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`（仅定义长期公开口径；本专题仍是 legacy rehearsal evidence）
   - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
   - `doc/p2p/project.md`

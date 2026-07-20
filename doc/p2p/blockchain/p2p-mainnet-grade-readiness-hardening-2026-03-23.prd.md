@@ -1,5 +1,7 @@
 # oasis7 主链 mainnet-grade readiness 硬化路线（2026-03-23）
 
+> 历史状态说明：本文保存 2026-03-23 的 MAINNET-4 / preview 评估，不是当前公开状态权威。当前状态以根 `README.md` 为准，现行网络层级与测试结论以对应专业文档和证据为准。
+
 - 对应设计文档: `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.design.md`
 - 对应项目管理文档: `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.project.md`
 
