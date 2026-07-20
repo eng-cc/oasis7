@@ -6,8 +6,7 @@
 审计轮次: 5
 
 ## ROUND-002 主从口径
-- 本文件为 manual 项目主入口文档。
-- `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` 为增量计划文档。
+- 本文件为 manual 项目主入口文档；已完成的 Viewer 手册搬迁计划由本文件的任务结果、canonical Viewer 手册及 Git history 承接，不再保留独立日期型增量计划。
 
 ## 任务拆解
 

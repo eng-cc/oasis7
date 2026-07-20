@@ -6,8 +6,7 @@
 审计轮次: 5
 
 ## ROUND-002 主从口径
-- 本文件为 manual 主文档。
-- `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` 为增量子文档。
+- 本文件为 manual 主文档；已完成的 Viewer 手册搬迁增量已回填到产品模式、canonical Viewer 手册和本专题镜像治理中，不再保留独立日期型子文档。
 
 - 对应标准执行入口: `doc/site/manual/site-manual-static-docs.project.md`
 
