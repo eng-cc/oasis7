@@ -18,10 +18,58 @@ use super::control_plane::{
     map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{IndustryStage, MaterialLedgerId, WorldState};
-use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback};
+use crate::simulator::{
+    PlayerDataCollectionPreflight, PlayerGameplayAction, PlayerGameplayRecentFeedback,
+};
 use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
+
+/// Quotes the exact cost and yield parameters a caller plans to submit via `CollectData`.
+///
+/// `CollectData` deliberately has no global default cost or yield. Callers must supply the
+/// exact action parameters so this preflight remains aligned with runtime enforcement.
+pub fn data_collection_preflight(
+    available_electricity: i64,
+    electricity_cost: i64,
+    data_amount: i64,
+) -> PlayerDataCollectionPreflight {
+    let invalid_reason = if electricity_cost <= 0 {
+        Some("collection electricity cost must be positive".to_string())
+    } else if data_amount <= 0 {
+        Some("collection data amount must be positive".to_string())
+    } else {
+        None
+    };
+    let insufficient_electricity =
+        invalid_reason.is_none() && available_electricity < electricity_cost;
+    let can_execute = invalid_reason.is_none() && !insufficient_electricity;
+    let blocked_reason = invalid_reason.or_else(|| {
+        insufficient_electricity.then(|| {
+            format!(
+                "insufficient electricity: need {electricity_cost}, have {available_electricity}"
+            )
+        })
+    });
+
+    PlayerDataCollectionPreflight {
+        electricity_cost,
+        data_amount,
+        available_electricity,
+        electricity_after: if can_execute {
+            available_electricity - electricity_cost
+        } else {
+            available_electricity
+        },
+        can_execute,
+        recovery_guidance: insufficient_electricity.then(|| {
+            "replenish electricity before collecting data, or defer collection until electricity is available"
+                .to_string()
+        }),
+        blocked_reason,
+    }
+}
+
 pub(super) fn supports_runtime_gameplay_actions() -> bool {
     true
 }
@@ -652,5 +700,58 @@ fn industry_stage_label(stage: IndustryStage) -> &'static str {
         IndustryStage::Bootstrap => "bootstrap",
         IndustryStage::ScaleOut => "scale_out",
         IndustryStage::Governance => "governance",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn data_collection_preflight_reports_the_exact_executable_collection() {
+        let quote = data_collection_preflight(20, 7, 11);
+
+        assert_eq!(quote.electricity_cost, 7);
+        assert_eq!(quote.data_amount, 11);
+        assert_eq!(quote.available_electricity, 20);
+        assert_eq!(quote.electricity_after, 13);
+        assert!(quote.can_execute);
+        assert_eq!(quote.blocked_reason, None);
+        assert_eq!(quote.recovery_guidance, None);
+    }
+
+    #[test]
+    fn data_collection_preflight_preserves_balance_and_guides_recovery_when_power_is_insufficient()
+    {
+        let quote = data_collection_preflight(3, 5, 8);
+
+        assert_eq!(quote.electricity_cost, 5);
+        assert_eq!(quote.data_amount, 8);
+        assert_eq!(quote.available_electricity, 3);
+        assert_eq!(quote.electricity_after, 3);
+        assert!(!quote.can_execute);
+        assert_eq!(
+            quote.blocked_reason.as_deref(),
+            Some("insufficient electricity: need 5, have 3")
+        );
+        assert_eq!(
+            quote.recovery_guidance.as_deref(),
+            Some(
+                "replenish electricity before collecting data, or defer collection until electricity is available"
+            )
+        );
+    }
+
+    #[test]
+    fn data_collection_preflight_matches_runtime_rejection_for_nonpositive_parameters() {
+        let quote = data_collection_preflight(20, 0, 8);
+
+        assert!(!quote.can_execute);
+        assert_eq!(quote.electricity_after, 20);
+        assert_eq!(
+            quote.blocked_reason.as_deref(),
+            Some("collection electricity cost must be positive")
+        );
+        assert_eq!(quote.recovery_guidance, None);
     }
 }

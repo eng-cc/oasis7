@@ -102,6 +102,23 @@ pub struct PlayerGameplayAction {
     pub disabled_reason: Option<String>,
 }
 
+/// Pre-submit evidence for the exact `CollectData` parameters a caller intends to submit.
+///
+/// This is intentionally not a default snapshot value: `CollectData` has caller-provided
+/// cost and yield, so a quote is only truthful when the planned action is known.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerDataCollectionPreflight {
+    pub electricity_cost: i64,
+    pub data_amount: i64,
+    pub available_electricity: i64,
+    pub electricity_after: i64,
+    pub can_execute: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recovery_guidance: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerGameplayBranchCommitment {
     pub action_id: String,
