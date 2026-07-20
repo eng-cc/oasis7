@@ -134,8 +134,8 @@
 - `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split` — path:runtime,wasm; content:design-signals; lines:101
 - gameplay beta-balance hardening (retired/deleted) — path:hardening; content:design-signals; historical lines:108
 - gameplay distributed-consensus governance longrun (retired/deleted) — path:consensus,governance; content:design-signals; historical lines:332
-- `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure` — context:closure; content:design-signals; lines:115
-- `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure` — path:governance; context:closure; content:design-signals; lines:123
+- gameplay layer lifecycle-rules closure（正文已退役）— context:closure; content:design-signals; historical lines:115
+- gameplay layer war/governance/crisis/meta closure（正文已退役）— path:governance; context:closure; content:design-signals; historical lines:123
 - gameplay longrun P0 production hardening (retired/deleted) — path:hardening; content:design-signals; historical lines:243
 - gameplay micro-loop feedback visibility (retired/deleted) — context:feedback,visibility; content:design-signals; historical lines:316
 - `doc/game/gameplay/gameplay-module-driven-production-closure` — path:module; context:closure; content:design-signals; lines:130

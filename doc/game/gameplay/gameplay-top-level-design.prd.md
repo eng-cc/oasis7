@@ -639,8 +639,8 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 
 - 玩法与目标基线：`doc/game/gameplay/gameplay-top-level-design.prd.md`、`doc/game/gameplay/gameplay-engineering-architecture.md`。
 - Gameplay 生产落地证据：
-  - `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md`
-  - `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`（历史 runtime 原语/兼容证据；当前玩家-facing 口径不再把战争作为主线）
+  - 玩家侧治理、战争、危机与元进度合同由本文对应章节、`doc/game/gameplay/gameplay-war-politics-mvp-baseline.md` 和当前测试矩阵承接；战争仍不是当前玩家-facing 主线。
+  - 生命周期协议、tick 推进、模块 bootstrap/readiness 与 replay/恢复边界由 `doc/world-runtime/prd.md#gameplay-生命周期协议边界` 承接；历史 layer closure 实现过程从 Git history 与 GitHub task evidence 追溯。
   - 模块驱动生产切片的完成状态由本专题 T3、下方测试矩阵、当前代码与回归测试共同承接；原增量 closure 三件套已退役，历史实现过程从 Git history 与 GitHub task evidence 追溯。
 - 测试入口与执行规范：`testing-manual.md`（S1/S2/S3/S6/S7）。
 

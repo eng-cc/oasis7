@@ -61,10 +61,10 @@
 - `gameplay-beta-balance-hardening-2026-02-22` PRD（历史审读对象，正文已退役）
 - `gameplay-beta-balance-hardening-2026-02-22` project（历史审读对象，正文已退役）
 - `doc/game/gameplay/gameplay-engineering-architecture.md`
-- `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md`
-- `doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.project.md`
-- `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`
-- `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.project.md`
+- gameplay layer lifecycle-rules closure PRD（历史审读对象，正文已退役）
+- gameplay layer lifecycle-rules closure project（历史审读对象，正文已退役）
+- gameplay layer war/governance/crisis/meta closure PRD（历史审读对象，正文已退役）
+- gameplay layer war/governance/crisis/meta closure project（历史审读对象，正文已退役）
 - `gameplay-micro-loop-feedback-visibility-2026-03-05` PRD（历史审读对象，正文已退役）
 - `gameplay-micro-loop-feedback-visibility-2026-03-05` project（历史审读对象，正文已退役）
 - `gameplay-module-driven-production-closure` PRD（历史审读对象，正文已退役）
