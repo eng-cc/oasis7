@@ -18,7 +18,7 @@
 - [ ] `MAINNET-1` ready
 - [ ] `MAINNET-2` ready
 - [ ] `MAINNET-3` ready
-- [ ] `MAINNET-4` ready
+- [ ] 当前 mainnet gating 已由对应专业权威和同一证据窗口复核，并重新对照根 `README.md`；不得用历史任务完成状态或本模板勾选升级公开口径
 - [ ] frozen genesis candidate identified
 - [ ] no-reset commitment drafted
 

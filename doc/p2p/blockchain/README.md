@@ -20,7 +20,7 @@
 
 - `p2p-shared-network-release-train-minimum-2026-03-24.*` 是旧 `shared_devnet -> staging -> canary` rehearsal 的背景与证据链；它不能证明 `public_testnet`、`mainnet` 或公开大世界 readiness。当前 network-tier 真值以 `p2p-formal-network-tiers-testnet-mechanism-2026-05-14.*` 为准。
 - 历史 rehearsal、P2PFS phase 和已完成安全专题仍保留为审计/追溯材料。本轮未发现同时具备明确 successor 与零活跃调用的可删除文件。
-- `p2p-mainnet-public-claims-policy-2026-03-23.*`、network-tier PRD 与各 runbook 的 claim boundary 必须保持一致；本入口不重新定义 release 或安全 verdict。
+- 根 [`README.md`](../../../README.md) 是当前公开状态权威，[产品层公开口径分册](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md) 定义长期沟通生命周期；network-tier PRD 与 runbook 只提供专业边界和证据，不单独升级公开状态。
 
 ## 维护规则
 

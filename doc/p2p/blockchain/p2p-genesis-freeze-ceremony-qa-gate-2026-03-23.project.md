@@ -1,5 +1,7 @@
 # oasis7 创世 freeze / ceremony / QA gate（项目管理文档）
 
+> 历史状态说明：勾选项记录 2026-03-23 的 genesis / MAINNET-4 任务状态，不证明当前创世、mint readiness 或公开口径。当前状态以根 `README.md` 为准，现行结论以对应专业文档和同窗测试证据为准。
+
 - 对应设计文档: `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.design.md`
 - 对应需求文档: `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
 

@@ -192,7 +192,7 @@
   - AC-23: `p2p-production-signer-custody-keystore-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-035`，明确 `config.toml` 明文 key、HTML 私钥注入与 env 私钥 bootstrap 只属于 preview-only signer path，不得作为 production custody 完成态。
   - AC-24: `p2p-governance-signer-externalization-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-036`，明确 governance registry 优先、deterministic local seed / `NodeConfig` local fallback 只属于 preview/local truth，不得作为 production governance truth，并冻结 validator / finality signer 的治理准入目标流程。
   - AC-25: `p2p-genesis-freeze-ceremony-qa-gate-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-037`，明确 `logic_frozen_address_binding_pending`、`TBD_BEFORE_MINT`、`pending_binding` 与 `ready_pending_address_binding` 都属于 mint-ready blocker。
-  - AC-26: `p2p-mainnet-public-claims-policy-2026-03-23` 专题文档落盘并映射任务链 `TASK-P2P-038`，明确 `MAINNET-1~3` 当前仅完成 spec gate、整体 verdict 仍为 `not_mainnet_grade`，并冻结 allowlist/denylist 与 future upgrade conditions。
+  - AC-26: `TASK-P2P-038` 是 2026-03-23 的历史公开口径审查，记录当时 `MAINNET-1~3` 仅完成 spec gate、整体 verdict 为 `not_mainnet_grade`；它不再充当当前公开状态权威。当前状态以根 `README.md` 为准，长期公开口径规则由 `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md` 承接，网络与测试文档提供专业证据。
   - AC-27: `p2p-mainstream-public-chain-testing-benchmark-2026-03-24` 专题文档落盘并映射任务链 `TASK-P2P-039`，明确主流公链测试分层模型、oasis7 当前映射、`fuzz/property` 与 `network rehearsal/release train` 缺口，以及真实 governance drill 证据的当前优先级。
   - AC-28: `p2p-shared-network-release-train-minimum-2026-03-24` legacy 专题文档落盘并映射历史任务链 `TASK-P2P-040`，明确 rehearsal `public_testnet_rehearsal/staging/canary` 三层最小轨道、`release_candidate_bundle` 真值、promotion/freeze/rollback 规则、liveops runbook 入口与当前 legacy evidence 边界；当前不作为目标环境或玩家世界模型。
   - AC-29: hosted player access 的长期合同由本 PRD 与 `doc/p2p/blockchain/hosted-player-access-operator-runbook.md` 承接，明确 `public player plane / private control plane / identity plane / custody or signer plane`、`guest/player/strong-auth` 会话梯度、player-safe / operator-only action split、public join admission control，以及“无需 invite-only 也不能把长期 signer 暴露给浏览器”的边界；历史 `TASK-P2P-041` 从模块 project、GitHub task evidence 与 Git history 追溯。
@@ -235,7 +235,8 @@
   - `doc/p2p/blockchain/p2p-production-signer-custody-keystore-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-governance-signer-externalization-2026-03-23.prd.md`
   - `doc/p2p/blockchain/p2p-genesis-freeze-ceremony-qa-gate-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+  - `README.md`
+  - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`（legacy topic label; current generated artifacts use network rehearsal / public-testnet rehearsal terminology）
   - `doc/p2p/blockchain/hosted-player-access-operator-runbook.md`

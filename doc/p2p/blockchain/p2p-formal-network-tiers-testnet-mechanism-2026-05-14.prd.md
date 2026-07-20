@@ -69,7 +69,8 @@
   - `doc/p2p/blockchain/p2p-mainstream-public-chain-testing-benchmark-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.prd.md`
   - `doc/p2p/blockchain/p2p-mainnet-grade-readiness-hardening-2026-03-23.prd.md`
-  - `doc/p2p/blockchain/p2p-mainnet-public-claims-policy-2026-03-23.prd.md`
+  - `README.md`
+  - `doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md`
   - `doc/p2p/network/p2p-mainnet-private-reachability-architecture-2026-04-01.prd.md`
   - `doc/p2p/blockchain/p2p-formal-network-tiers-testnet-mechanism-2026-05-14.runbook.md`
   - `testing-manual.md`
