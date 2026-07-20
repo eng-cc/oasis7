@@ -82,7 +82,7 @@
 
 ### T11 小玩家成长线与成熟世界承接（2026-05-17）
 - [x] small-player-progression-contract-freeze (PRD-GAME-015) [test_tier_required]: `producer_system_designer` 已新增 `PRD-GAME-015` 专题 PRD / design / project，并完成根入口、`gameplay` 主文档、索引与 execution log 挂载；正式冻结 mature-world 小玩家默认主线 `local operator -> regional specialist -> limited-scope regional influence`，明确 `protected first industrial win` 指低爆炸半径、可恢复和 leverage 可见，而不是新手无敌豁免。 Trace: .pm/tasks/task_d97dfa29208444a9b6a652f2a12fb65d.yaml
-- 后续待建任务统一收口在 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md`，避免在 gameplay 主入口重复展开未绑定 Trace 的计划行。
+- 产品承诺已收敛到 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，专业玩法合同保留在 `gameplay-top-level-design.prd.md`。runtime truth、viewer surface 与 Agent 文档合同已有历史任务证据；当前剩余验证是 `qa-mature-world-small-player-fresh-sample`，只有 fresh sample 能把 `grind_only` / `forced_major_power_dependency` 从 watch 升级为当前 verdict。
 
 ## 依赖
 

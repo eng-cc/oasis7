@@ -19,7 +19,7 @@
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看当前冲刺窗口与留存修复：先读 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
 - 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
-- 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`
+- 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 gameplay 顶层合同
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态看 `doc/game/project.md` 与对应 round execution record
@@ -44,7 +44,7 @@
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`：核心玩法骨架主入口。
 - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`：当前冲刺窗口、跨角色优先级与 10 分钟留存修复主入口。
 - `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`：间接控制下的 accepted intent、主因果、打断重排与续玩恢复合同主入口。
-- `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力主入口。
+- `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`：mature-world 小玩家承接、受保护 first win、专业化与局部影响力的产品主入口。
 - `doc/product/world-rules-core-gameplay/prd.md` 与 `doc/game/gameplay/gameplay-top-level-design.prd.md`：分别承载物理尺度/间接控制的产品承诺，以及玩法侧动作粒度与表现层夸张边界。
 - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`：访问模式、统一候选门禁与公开 claim 升阶入口。
 - `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md`：近期高频经济规则与 token 成本边界主入口。
@@ -68,7 +68,6 @@
 | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.design.md` | `doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.project.md` |
 | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.prd.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.design.md` | `doc/game/gameplay/gameplay-base-runtime-wasm-layer-split.project.md` |
 | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.prd.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.design.md` | `doc/game/gameplay/gameplay-indirect-control-feeling-contract-2026-05-14.project.md` |
-| `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.prd.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.design.md` | `doc/game/gameplay/gameplay-small-player-progression-lane-2026-05-17.project.md` |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` | `doc/game/gameplay/gameplay-top-level-design.project.md` |
 | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.design.md` | `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.project.md` |
 | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.design.md` | `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.project.md` |
