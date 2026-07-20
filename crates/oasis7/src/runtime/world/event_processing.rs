@@ -210,6 +210,7 @@ impl World {
             }
             Action::EmitResourceTransfer { .. }
             | Action::CollectData { .. }
+            | Action::CollectDataAuthenticated { .. }
             | Action::GrantDataAccess { .. }
             | Action::RevokeDataAccess { .. }
             | Action::BuildFactory { .. }

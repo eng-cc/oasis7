@@ -479,6 +479,94 @@ impl WorldState {
                 collector.state.resources = next_resources;
                 collector.last_active = now;
             }
+            DomainEvent::DataCollectedAuthenticated {
+                collector_agent_id,
+                electricity_cost,
+                data_amount,
+                player_id,
+                public_key,
+                nonce,
+                signature,
+            } => {
+                if *electricity_cost <= 0 || *data_amount <= 0 || *nonce == 0 {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason:
+                            "authenticated data collection event contains invalid amount or nonce"
+                                .to_string(),
+                    });
+                }
+                let last_nonce = self
+                    .authenticated_collect_data_last_nonces
+                    .get(player_id)
+                    .and_then(|by_key| by_key.get(public_key))
+                    .copied()
+                    .unwrap_or(0);
+                if *nonce <= last_nonce {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "authenticated data collection nonce must advance: last={last_nonce} next={nonce}"
+                        ),
+                    });
+                }
+                crate::collect_data_auth::verify_authorization(
+                    crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+                    *electricity_cost,
+                    *data_amount,
+                    player_id,
+                    public_key,
+                    *nonce,
+                    signature,
+                )
+                .map_err(|error| WorldError::ResourceBalanceInvalid {
+                    reason: format!("authenticated data collection signature invalid: {error}"),
+                })?;
+                let matching_claims = self
+                    .starter_oc_claims
+                    .values()
+                    .filter(|claim| {
+                        claim.player_id == *player_id
+                            && claim.public_key.as_deref() == Some(public_key.as_str())
+                    })
+                    .collect::<Vec<_>>();
+                if matching_claims.len() != 1 || matching_claims[0].agent_id != *collector_agent_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "authenticated data collection requires exactly one starter OC player/key binding for collector {collector_agent_id}; found {}",
+                            matching_claims.len()
+                        ),
+                    });
+                }
+                let next_resources = {
+                    let collector = self.agents.get(collector_agent_id).ok_or_else(|| {
+                        WorldError::AgentNotFound {
+                            agent_id: collector_agent_id.clone(),
+                        }
+                    })?;
+                    let mut next = collector.state.resources.clone();
+                    next.remove(ResourceKind::Electricity, *electricity_cost)
+                        .map_err(|err| WorldError::ResourceBalanceInvalid {
+                            reason: format!("data collection electricity debit failed: {err:?}"),
+                        })?;
+                    next.add(ResourceKind::Data, *data_amount).map_err(|err| {
+                        WorldError::ResourceBalanceInvalid {
+                            reason: format!("data collection data credit failed: {err:?}"),
+                        }
+                    })?;
+                    next
+                };
+                let collector = self.agents.get_mut(collector_agent_id).ok_or_else(|| {
+                    WorldError::AgentNotFound {
+                        agent_id: collector_agent_id.clone(),
+                    }
+                })?;
+                collector.state.resources = next_resources;
+                collector.last_active = now;
+                self.authenticated_collect_data_last_nonces
+                    .entry(player_id.clone())
+                    .or_default()
+                    .insert(public_key.clone(), *nonce);
+            }
             DomainEvent::DataAccessGranted {
                 owner_agent_id,
                 grantee_agent_id,

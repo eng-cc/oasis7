@@ -140,6 +140,25 @@ impl World {
                     data_amount: *data_amount,
                 }))
             }
+            Action::CollectDataAuthenticated {
+                collector_agent_id,
+                electricity_cost,
+                data_amount,
+                player_id,
+                public_key,
+                nonce,
+                signature,
+            } => action_to_event_economy_support::authenticated_collect_data_to_event(
+                self,
+                action_id,
+                collector_agent_id,
+                *electricity_cost,
+                *data_amount,
+                player_id,
+                public_key,
+                *nonce,
+                signature,
+            ),
             Action::GrantDataAccess {
                 owner_agent_id,
                 grantee_agent_id,

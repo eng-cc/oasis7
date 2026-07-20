@@ -1,3 +1,4 @@
+use super::super::protocol::{CollectDataCommand, CollectDataRequest};
 use super::*;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -248,6 +249,54 @@ fn gameplay_action_auth_verify_rejects_tampered_action_id() {
     tampered.action_id = "schedule_recipe_smelter_iron_ingot".to_string();
     let err = verify_gameplay_action_auth_proof(&tampered, &proof).expect_err("tamper must fail");
     assert!(err.contains("verify auth signature failed"));
+}
+
+#[test]
+fn collect_data_auth_binds_mode_cost_and_yield() {
+    let (public_key, private_key) = test_signer();
+    let command = CollectDataCommand::Preflight {
+        request: CollectDataRequest {
+            electricity_cost: 7,
+            data_amount: 11,
+            player_id: "player-a".to_string(),
+            public_key: Some(public_key.clone()),
+            auth: None,
+        },
+    };
+    let proof =
+        sign_collect_data_auth_proof(&command, 23, public_key.as_str(), private_key.as_str())
+            .expect("sign proof");
+    assert_eq!(
+        verify_collect_data_auth_proof(&command, &proof)
+            .expect("verify preflight proof")
+            .nonce,
+        23
+    );
+
+    let tampered_cost = CollectDataCommand::Preflight {
+        request: CollectDataRequest {
+            electricity_cost: 8,
+            ..match command.clone() {
+                CollectDataCommand::Preflight { request } => request,
+                CollectDataCommand::Submit { .. } => unreachable!(),
+            }
+        },
+    };
+    assert!(
+        verify_collect_data_auth_proof(&tampered_cost, &proof)
+            .expect_err("cost tampering must fail")
+            .contains("verify auth signature failed")
+    );
+
+    let submit = match command.clone() {
+        CollectDataCommand::Preflight { request } => CollectDataCommand::Submit { request },
+        CollectDataCommand::Submit { .. } => unreachable!(),
+    };
+    assert!(
+        verify_collect_data_auth_proof(&submit, &proof)
+            .expect_err("preflight proof must not authorize submit")
+            .contains("verify auth signature failed")
+    );
 }
 
 #[test]

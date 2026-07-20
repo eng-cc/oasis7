@@ -809,6 +809,9 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             },
+            ViewerRequest::CollectData { command } => {
+                self.handle_collect_data_protocol_request(command, session, writer)?;
+            }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {

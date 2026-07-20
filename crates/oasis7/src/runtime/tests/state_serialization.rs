@@ -24,3 +24,15 @@ fn legacy_world_state_json_defaults_empty_starter_oc_claims() {
 
     assert!(decoded.starter_oc_claims.is_empty());
 }
+
+#[test]
+fn authenticated_collect_data_nonces_are_backward_compatible_and_omitted_when_empty() {
+    let state = WorldState::default();
+    let mut value = serde_json::to_value(&state).expect("serialize world state");
+    let object = value.as_object_mut().expect("world state object");
+    assert!(!object.contains_key("authenticated_collect_data_last_nonces"));
+
+    object.remove("authenticated_collect_data_last_nonces");
+    let decoded: WorldState = serde_json::from_value(value).expect("decode legacy world state");
+    assert!(decoded.authenticated_collect_data_last_nonces.is_empty());
+}

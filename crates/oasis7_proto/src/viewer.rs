@@ -6,6 +6,9 @@ pub use rollback_v2::*;
 mod negotiation;
 pub use negotiation::*;
 
+mod collect_data;
+pub use collect_data::*;
+
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +91,9 @@ pub enum ViewerRequest {
     },
     GameplayAction {
         request: GameplayActionRequest,
+    },
+    CollectData {
+        command: CollectDataCommand,
     },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
@@ -620,6 +626,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     GameplayActionError {
         error: GameplayActionError,
     },
+    CollectDataPreflight {
+        quote: CollectDataPreflight,
+    },
     Error {
         message: String,
     },
@@ -771,17 +780,6 @@ impl TryFrom<ViewerControl> for LiveControl {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn viewer_request_round_trip() {
-        let request = ViewerRequest::Control {
-            mode: ViewerControl::Step { count: 2 },
-            request_id: Some(7),
-        };
-        let json = serde_json::to_string(&request).expect("serialize request");
-        let parsed: ViewerRequest = serde_json::from_str(&json).expect("deserialize request");
-        assert_eq!(parsed, request);
-    }
 
     #[test]
     fn viewer_playback_control_request_round_trip() {
@@ -1188,3 +1186,11 @@ mod tests {
 #[cfg(test)]
 #[path = "viewer/protocol_v2_tests.rs"]
 mod protocol_v2_tests;
+
+#[cfg(test)]
+#[path = "viewer/collect_data_tests.rs"]
+mod collect_data_tests;
+
+#[cfg(test)]
+#[path = "viewer/control_roundtrip_tests.rs"]
+mod control_roundtrip_tests;

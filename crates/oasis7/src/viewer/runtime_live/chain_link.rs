@@ -1,7 +1,7 @@
 use super::authoritative::compute_runtime_snapshot_hash;
 use super::*;
 
-use super::super::protocol::{GameplayActionError, GameplayActionRequest};
+use super::super::protocol::{CollectDataCommand, GameplayActionError, GameplayActionRequest};
 use crate::runtime::{
     MainTokenConfig, MainTokenSupplyState, production_hardened_main_token_config,
 };
@@ -304,6 +304,38 @@ pub(super) fn submit_chain_linked_gameplay_action(
     Ok(response)
 }
 
+pub(super) fn submit_chain_linked_collect_data(
+    chain_submit_bind: &str,
+    command: &CollectDataCommand,
+) -> Result<ChainGameplaySubmitResponse, GameplayActionError> {
+    let response = post_chain_linked_submit_payload(chain_submit_bind, command).map_err(|err| {
+        collect_data_chain_submit_error(
+            "chain_submit_unavailable",
+            format!("chain collect_data submit transport failed: {err:?}"),
+        )
+    })?;
+    if !response.ok {
+        return Err(collect_data_chain_submit_error(
+            response
+                .error_code
+                .clone()
+                .unwrap_or_else(|| "chain_submit_failed".to_string()),
+            response
+                .error
+                .clone()
+                .unwrap_or_else(|| "chain collect_data submit was rejected".to_string()),
+        ));
+    }
+    if response.action_id.is_none() {
+        return Err(collect_data_chain_submit_error(
+            "chain_submit_failed",
+            "chain collect_data submit succeeded without consensus action id",
+        ));
+    }
+    let _ = response.submitted_at_unix_ms;
+    Ok(response)
+}
+
 fn prepare_chain_linked_runtime_update(
     chain_status_bind: &str,
 ) -> Result<PreparedChainLinkedRuntimeUpdate, ViewerRuntimeLiveServerError> {
@@ -366,11 +398,18 @@ fn post_chain_linked_gameplay_action(
     chain_submit_bind: &str,
     request: &GameplayActionRequest,
 ) -> Result<ChainGameplaySubmitResponse, ViewerRuntimeLiveServerError> {
+    post_chain_linked_submit_payload(chain_submit_bind, request)
+}
+
+fn post_chain_linked_submit_payload(
+    chain_submit_bind: &str,
+    payload: &impl serde::Serialize,
+) -> Result<ChainGameplaySubmitResponse, ViewerRuntimeLiveServerError> {
     let mut stream = connect_chain_status_stream(
         chain_submit_bind,
         Duration::from_millis(CHAIN_LINK_TIMEOUT_MS),
     )?;
-    let payload = serde_json::to_vec(request)
+    let payload = serde_json::to_vec(payload)
         .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
     let request_head = format!(
         "POST {CHAIN_GAMEPLAY_SUBMIT_PATH} HTTP/1.1\r\nHost: {chain_submit_bind}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -545,6 +584,18 @@ fn gameplay_chain_submit_error(
         message: message.into(),
         action_id: Some(request.action_id.clone()),
         target_agent_id: Some(request.target_agent_id.clone()),
+    }
+}
+
+fn collect_data_chain_submit_error(
+    code: impl Into<String>,
+    message: impl Into<String>,
+) -> GameplayActionError {
+    GameplayActionError {
+        code: code.into(),
+        message: message.into(),
+        action_id: Some("collect_data".to_string()),
+        target_agent_id: None,
     }
 }
 
