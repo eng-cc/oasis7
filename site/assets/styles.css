@@ -2788,8 +2788,9 @@ code {
 .hero-key-art {
   min-height: 460px;
   border: 0;
-  border-radius: 32px;
-  box-shadow: 0 42px 100px rgba(0, 0, 0, 0.58);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .hero-key-art img {
@@ -2798,6 +2799,28 @@ code {
   min-height: 460px;
   object-fit: cover;
   object-position: 63% center;
+  border-radius: 0;
+}
+
+.section-hero .hero-visual::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 8% -8% 6% 14%;
+  background: radial-gradient(ellipse at 60% 46%, rgba(67, 239, 187, 0.14), transparent 66%);
+  filter: blur(18px);
+  pointer-events: none;
+}
+
+@media (min-width: 1121px) and (max-height: 900px) {
+  html[lang="en"] .section-hero {
+    min-height: 540px;
+    padding-block: 1.5rem;
+  }
+
+  html[lang="en"] .section-hero h1 {
+    font-size: 3rem;
+  }
 }
 
 #what {
@@ -2858,9 +2881,17 @@ code {
   .hero-key-art img {
     min-height: 260px;
   }
+
+  .section-hero .hero-visual::before {
+    inset: 10% -4% 4%;
+  }
 }
 
 @media (max-width: 640px) {
+  .hero-key-art {
+    padding: 0;
+  }
+
   #what .cards-3 {
     display: block;
   }
