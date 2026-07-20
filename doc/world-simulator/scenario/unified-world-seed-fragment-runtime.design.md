@@ -10,7 +10,7 @@
 已有能力：
 - `chunk_seed(world_seed, coord)` 已提供稳定 chunk 随机根。
 - `generate_chunk_fragments` 已把 chunk 生成落到 `WorldModel.locations`、`fragment_profile`、`fragment_budget` 与 `chunk_resource_budgets`。
-- `frag-resource-balance-onboarding` 已定义 starter core、min fragments、material distribution 与 replenish 语义。
+- `chunked-fragment-generation` 统一定义 starter core、min fragments、material distribution 与 replenish 语义。
 
 缺口：
 - runtime live 的 formal release path 仍用固定 material/electricity bootstrap。

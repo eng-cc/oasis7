@@ -329,8 +329,8 @@
 - `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md`
 - `doc/world-simulator/scenario/chunked-fragment-generation.prd.md`
 - `doc/world-simulator/scenario/chunked-fragment-generation.project.md`
-- `doc/world-simulator/scenario/frag-resource-balance-onboarding.prd.md`
-- `doc/world-simulator/scenario/frag-resource-balance-onboarding.project.md`
+- retired frag-resource-balance-onboarding PRD（后续已删除；语义已并入稳定产品与 scenario 权威）
+- retired frag-resource-balance-onboarding project（后续已删除；历史完成态由 Git history 与 task evidence 追溯）
 - `doc/world-simulator/scenario/fragment-spacing.prd.md`
 - `doc/world-simulator/scenario/fragment-spacing.project.md`
 - `doc/world-simulator/scenario/scenario-asteroid-fragment-overrides.prd.md`

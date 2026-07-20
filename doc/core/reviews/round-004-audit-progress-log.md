@@ -603,8 +603,8 @@
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/asteroid-fragment-renaming.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/chunked-fragment-generation.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/chunked-fragment-generation.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/frag-resource-balance-onboarding.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
-| 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/frag-resource-balance-onboarding.project.md` | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired frag-resource-balance-onboarding PRD（后续已删除） | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
+| 2026-03-06 14:56:32 +0800 | codex-F4-002 | retired frag-resource-balance-onboarding project（后续已删除） | issue_open | I4-006 | F4-002 补审覆盖：登记问题并进入整改阶段。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/fragment-spacing.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/fragment-spacing.project.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
 | 2026-03-06 14:56:32 +0800 | codex-F4-002 | `doc/world-simulator/scenario/scenario-asteroid-fragment-overrides.prd.md` | pass | - | F4-002 补审覆盖：结构与口径未发现新增高/中风险。 |
