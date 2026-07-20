@@ -2817,6 +2817,10 @@ code {
     min-height: 540px;
     padding-block: 1.5rem;
   }
+
+  html[lang="en"] .section-hero h1 {
+    font-size: 3rem;
+  }
 }
 
 #what {
