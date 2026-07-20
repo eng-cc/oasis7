@@ -1,16 +1,6 @@
 use super::*;
 use crate::viewer::protocol::{CollectDataCommand, CollectDataRequest};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct CollectDataSigningPayload<'a> {
-    operation: &'static str,
-    electricity_cost: i64,
-    data_amount: i64,
-    player_id: &'a str,
-    public_key: &'a str,
-    nonce: u64,
-}
-
 pub fn sign_collect_data_auth_proof(
     command: &CollectDataCommand,
     nonce: u64,
@@ -79,17 +69,14 @@ pub fn verify_collect_data_auth_proof(
     if proof.nonce == 0 {
         return Err("auth nonce must be greater than zero".to_string());
     }
-    let signing_payload = build_collect_data_signing_payload(
+    crate::collect_data_auth::verify_authorization(
         operation,
-        request,
+        request.electricity_cost,
+        request.data_amount,
         proof_player_id.as_str(),
         proof_public_key.as_str(),
         proof.nonce,
-    )?;
-    verify_player_auth_signature(
-        proof_public_key.as_str(),
         proof.signature.as_str(),
-        signing_payload.as_slice(),
     )?;
     Ok(VerifiedPlayerAuth {
         player_id: proof_player_id,
@@ -113,12 +100,12 @@ fn build_collect_data_signing_payload(
     public_key: &str,
     nonce: u64,
 ) -> Result<Vec<u8>, String> {
-    encode_signing_payload(CollectDataSigningPayload {
+    crate::collect_data_auth::encode_authorization_payload(
         operation,
-        electricity_cost: request.electricity_cost,
-        data_amount: request.data_amount,
+        request.electricity_cost,
+        request.data_amount,
         player_id,
         public_key,
         nonce,
-    })
+    )
 }

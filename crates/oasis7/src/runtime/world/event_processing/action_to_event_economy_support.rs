@@ -1,5 +1,120 @@
 use super::*;
 
+pub(super) fn authenticated_collect_data_to_event(
+    world: &World,
+    action_id: ActionId,
+    collector_agent_id: &str,
+    electricity_cost: i64,
+    data_amount: i64,
+    player_id: &str,
+    public_key: &str,
+    nonce: u64,
+    signature: &str,
+) -> Result<WorldEventBody, WorldError> {
+    if let Err(error) = crate::collect_data_auth::verify_authorization(
+        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+        electricity_cost,
+        data_amount,
+        player_id,
+        public_key,
+        nonce,
+        signature,
+    ) {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "authenticated collect_data signature invalid: {error}"
+                )],
+            },
+        }));
+    }
+    let matching_claims = world
+        .state
+        .starter_oc_claims
+        .values()
+        .filter(|claim| {
+            claim.player_id == player_id && claim.public_key.as_deref() == Some(public_key)
+        })
+        .collect::<Vec<_>>();
+    if matching_claims.len() != 1 || matching_claims[0].agent_id != collector_agent_id {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "authenticated collect_data requires exactly one starter OC player/key binding for collector {collector_agent_id}; found {}",
+                    matching_claims.len()
+                )],
+            },
+        }));
+    }
+    let last_nonce = world
+        .state
+        .authenticated_collect_data_last_nonces
+        .get(player_id)
+        .and_then(|by_key| by_key.get(public_key))
+        .copied()
+        .unwrap_or(0);
+    if nonce == 0 || nonce <= last_nonce {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::RuleDenied {
+                notes: vec![format!(
+                    "authenticated collect_data nonce replay: expected nonce > {last_nonce}, received {nonce}"
+                )],
+            },
+        }));
+    }
+    if !world.state.agents.contains_key(collector_agent_id) {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::AgentNotFound {
+                agent_id: collector_agent_id.to_string(),
+            },
+        }));
+    }
+    if electricity_cost <= 0 || data_amount <= 0 {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::InvalidAmount {
+                amount: if electricity_cost <= 0 {
+                    electricity_cost
+                } else {
+                    data_amount
+                },
+            },
+        }));
+    }
+    let available = world
+        .state
+        .agents
+        .get(collector_agent_id)
+        .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+        .unwrap_or(0);
+    if available < electricity_cost {
+        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+            action_id,
+            reason: RejectReason::InsufficientResource {
+                agent_id: collector_agent_id.to_string(),
+                kind: ResourceKind::Electricity,
+                requested: electricity_cost,
+                available,
+            },
+        }));
+    }
+    Ok(WorldEventBody::Domain(
+        DomainEvent::DataCollectedAuthenticated {
+            collector_agent_id: collector_agent_id.to_string(),
+            electricity_cost,
+            data_amount,
+            player_id: player_id.to_string(),
+            public_key: public_key.to_string(),
+            nonce,
+            signature: signature.to_string(),
+        },
+    ))
+}
+
 pub(crate) fn ensure_profile_field_whitelist<T: serde::Serialize>(
     profile: &T,
     allowed_fields: &[&str],

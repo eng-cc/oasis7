@@ -3,6 +3,7 @@ use crate::runtime::{
     Action, DomainEvent, EconomicContractStatus, RejectReason, World, WorldEventBody,
 };
 use crate::simulator::ResourceKind;
+use ed25519_dalek::SigningKey;
 
 fn register_agent(world: &mut World, agent_id: &str) {
     world.submit_action(Action::RegisterAgent {
@@ -13,8 +14,20 @@ fn register_agent(world: &mut World, agent_id: &str) {
 }
 
 fn assert_latest_rule_denied_contains(world: &World, needle: &str) {
-    let event = world.journal().events.last().expect("latest event");
-    match &event.body {
+    let body = world
+        .journal()
+        .events
+        .iter()
+        .rev()
+        .map(|event| &event.body)
+        .find(|body| {
+            matches!(
+                body,
+                WorldEventBody::Domain(DomainEvent::ActionRejected { .. })
+            )
+        })
+        .expect("latest rejected action");
+    match body {
         WorldEventBody::Domain(DomainEvent::ActionRejected {
             reason: RejectReason::RuleDenied { notes },
             ..
@@ -70,6 +83,22 @@ fn collect_data_consumes_electricity_and_adds_data() {
 
 #[test]
 fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
+    let private_key = [41_u8; 32];
+    let public_key = hex::encode(
+        SigningKey::from_bytes(&private_key)
+            .verifying_key()
+            .to_bytes(),
+    );
+    let signature = crate::collect_data_auth::sign_authorization(
+        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+        7,
+        11,
+        "player-auth",
+        public_key.as_str(),
+        9,
+        hex::encode(private_key).as_str(),
+    )
+    .expect("sign authenticated collection");
     let mut world = World::new();
     register_agent(&mut world, "collector-auth");
     world
@@ -78,7 +107,7 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
     world.submit_action(Action::ClaimStarterOc {
         agent_id: "collector-auth".to_string(),
         player_id: "player-auth".to_string(),
-        public_key: Some("public-auth".to_string()),
+        public_key: Some(public_key.clone()),
     });
     world.step().expect("claim collector");
 
@@ -87,13 +116,14 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
         electricity_cost: 7,
         data_amount: 11,
         player_id: "player-auth".to_string(),
-        public_key: "public-auth".to_string(),
+        public_key: public_key.clone(),
         nonce: 9,
+        signature: signature.clone(),
     };
     world.submit_action(action.clone());
     world.step().expect("authenticated collection");
     assert_eq!(
-        world.state().authenticated_collect_data_last_nonces["player-auth"]["public-auth"],
+        world.state().authenticated_collect_data_last_nonces["player-auth"][public_key.as_str()],
         9
     );
     assert_eq!(
@@ -113,18 +143,102 @@ fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
         23
     );
 
+    let lower_signature = crate::collect_data_auth::sign_authorization(
+        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+        7,
+        11,
+        "player-auth",
+        public_key.as_str(),
+        8,
+        hex::encode(private_key).as_str(),
+    )
+    .expect("sign lower nonce collection");
     world.submit_action(Action::CollectDataAuthenticated {
         collector_agent_id: "collector-auth".to_string(),
         electricity_cost: 7,
         data_amount: 11,
         player_id: "player-auth".to_string(),
-        public_key: "public-auth".to_string(),
+        public_key: public_key.clone(),
         nonce: 8,
+        signature: lower_signature,
     });
     world
         .step()
         .expect("lower nonce deterministically rejected");
     assert_latest_rule_denied_contains(&world, "authenticated collect_data nonce replay");
+
+    let signature_10 = crate::collect_data_auth::sign_authorization(
+        crate::collect_data_auth::COLLECT_DATA_SUBMIT_OPERATION,
+        7,
+        11,
+        "player-auth",
+        public_key.as_str(),
+        10,
+        hex::encode(private_key).as_str(),
+    )
+    .expect("sign tamper baseline");
+    let baseline = Action::CollectDataAuthenticated {
+        collector_agent_id: "collector-auth".to_string(),
+        electricity_cost: 7,
+        data_amount: 11,
+        player_id: "player-auth".to_string(),
+        public_key: public_key.clone(),
+        nonce: 10,
+        signature: signature_10,
+    };
+    let mut tampered = Vec::new();
+    for field in [
+        "collector",
+        "cost",
+        "yield",
+        "player",
+        "key",
+        "nonce",
+        "signature",
+    ] {
+        let mut action = baseline.clone();
+        let Action::CollectDataAuthenticated {
+            collector_agent_id,
+            electricity_cost,
+            data_amount,
+            player_id,
+            public_key,
+            nonce,
+            signature,
+        } = &mut action
+        else {
+            unreachable!()
+        };
+        match field {
+            "collector" => *collector_agent_id = "other-agent".to_string(),
+            "cost" => *electricity_cost = 8,
+            "yield" => *data_amount = 12,
+            "player" => *player_id = "other-player".to_string(),
+            "key" => *public_key = hex::encode([42_u8; 32]),
+            "nonce" => *nonce = 11,
+            "signature" => signature.push('0'),
+            _ => unreachable!(),
+        }
+        tampered.push(action);
+    }
+    for action in tampered {
+        world.submit_action(action);
+        world
+            .step()
+            .expect("tampered action deterministically rejected");
+        assert_latest_rule_denied_contains(&world, "authenticated collect_data");
+        assert_eq!(
+            world
+                .agent_resource_balance("collector-auth", ResourceKind::Electricity)
+                .expect("collector electricity"),
+            23
+        );
+        assert_eq!(
+            world.state().authenticated_collect_data_last_nonces["player-auth"]
+                [public_key.as_str()],
+            9
+        );
+    }
 }
 
 #[test]

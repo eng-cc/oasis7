@@ -246,6 +246,7 @@ pub enum DomainEvent {
         player_id: String,
         public_key: String,
         nonce: u64,
+        signature: String,
     },
     DataAccessGranted {
         owner_agent_id: String,

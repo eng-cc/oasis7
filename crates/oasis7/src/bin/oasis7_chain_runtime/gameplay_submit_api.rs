@@ -284,6 +284,7 @@ fn authorize_chain_gameplay_submit(
                     player_id: verified.player_id.clone(),
                     public_key: verified.public_key.clone(),
                     nonce: verified.nonce,
+                    signature: auth.signature.clone(),
                 },
                 legacy_auth: None,
             })

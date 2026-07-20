@@ -2,6 +2,7 @@ extern crate self as oasis7;
 
 pub mod chain_pos_defaults;
 pub mod chain_resource_schema;
+pub mod collect_data_auth;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod consensus_action_payload;
 pub mod env_mut;

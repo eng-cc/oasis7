@@ -331,6 +331,7 @@ pub enum Action {
         player_id: String,
         public_key: String,
         nonce: u64,
+        signature: String,
     },
     GrantDataAccess {
         owner_agent_id: String,

@@ -490,6 +490,15 @@ fn collect_data_submit_derives_bound_collector_and_commits_exact_action() {
         public_key.as_str(),
         private_key.as_str(),
     );
+    let expected_signature = match &command {
+        CollectDataCommand::Submit { request } => request
+            .auth
+            .as_ref()
+            .expect("signed collect data proof")
+            .signature
+            .clone(),
+        CollectDataCommand::Preflight { .. } => unreachable!(),
+    };
 
     let (status, response) = submit_json(
         &runtime,
@@ -524,6 +533,7 @@ fn collect_data_submit_derives_bound_collector_and_commits_exact_action() {
             player_id: "player-collect".to_string(),
             public_key: public_key.clone(),
             nonce: 41,
+            signature: expected_signature,
         }
     );
     drop(calls);
