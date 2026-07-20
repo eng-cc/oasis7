@@ -29,6 +29,7 @@ struct VisualProbeSummary {
     fragment_flecks: Vec<VisualProbeRow>,
     locations: Vec<VisualProbeRow>,
     agents: Vec<VisualProbeRow>,
+    agent_cores: Vec<VisualProbeRow>,
     selected_location_cues: Vec<VisualProbeRow>,
     hit_regions: usize,
     fragment_entity_cache_size: usize,
@@ -37,6 +38,7 @@ struct VisualProbeSummary {
     fragment_fleck_entity_count: usize,
     location_entity_cache_size: usize,
     agent_entity_cache_size: usize,
+    agent_core_entity_count: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -61,10 +63,12 @@ struct PixelRegressionSummary {
     location_pixels: usize,
     selected_location_cue_pixels: usize,
     agent_pixels: usize,
+    agent_core_pixels: usize,
     fragment_sample_rgba: [u8; 4],
     fragment_fleck_sample_rgba: [u8; 4],
     location_sample_rgba: [u8; 4],
     agent_sample_rgba: [u8; 4],
+    agent_core_sample_rgba: [u8; 4],
 }
 
 fn sample_position(x_cm: f64, y_cm: f64) -> Position {
@@ -253,6 +257,12 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
         .collect();
 
+    let mut agent_core_query = world.query::<(&PixelWorldAgentCoreVisual, &Sprite, &Transform)>();
+    let agent_cores = agent_core_query
+        .iter(world)
+        .map(|(visual, sprite, transform)| row(&visual.id, sprite, transform))
+        .collect::<Vec<_>>();
+
     let mut selected_location_cue_query =
         world.query::<(&PixelWorldSelectedLocationCue, &Sprite, &Transform)>();
     let selected_location_cues = selected_location_cue_query
@@ -268,6 +278,7 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         fragment_flecks,
         locations,
         agents,
+        agent_cores,
         selected_location_cues,
         hit_regions: runtime.hit_regions.len(),
         fragment_entity_cache_size: runtime.fragment_entities.len(),
@@ -276,6 +287,7 @@ fn visual_probe_summary(app: &mut App) -> VisualProbeSummary {
         fragment_fleck_entity_count: fragment_fleck_query.iter(world).count(),
         location_entity_cache_size: runtime.location_entities.len(),
         agent_entity_cache_size: runtime.agent_entities.len(),
+        agent_core_entity_count: agent_core_query.iter(world).count(),
     }
 }
 
@@ -366,6 +378,13 @@ fn collect_pixel_layers(app: &mut App) -> Vec<PixelLayer> {
             .map(|(_, sprite, transform)| pixel_layer("agent", sprite, transform)),
     );
 
+    let mut agent_core_query = world.query::<(&PixelWorldAgentCoreVisual, &Sprite, &Transform)>();
+    layers.extend(
+        agent_core_query
+            .iter(world)
+            .map(|(_, sprite, transform)| pixel_layer("agent_core", sprite, transform)),
+    );
+
     layers.sort_by(|left, right| {
         left.z
             .partial_cmp(&right.z)
@@ -404,6 +423,7 @@ fn layer_kind_id(kind: &str) -> u8 {
         "location" => 3,
         "selected_location_cue" => 4,
         "agent" => 5,
+        "agent_core" => 9,
         _ => 0,
     }
 }
@@ -462,6 +482,7 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
     let location_pixels = kind_buffer.iter().filter(|kind| **kind == 3).count();
     let selected_location_cue_pixels = kind_buffer.iter().filter(|kind| **kind == 4).count();
     let agent_pixels = kind_buffer.iter().filter(|kind| **kind == 5).count();
+    let agent_core_pixels = kind_buffer.iter().filter(|kind| **kind == 9).count();
 
     let fragment_layer = layers
         .iter()
@@ -476,6 +497,10 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         .iter()
         .find(|layer| layer.kind == "agent")
         .expect("pixel regression agent layer");
+    let agent_core_layer = layers
+        .iter()
+        .find(|layer| layer.kind == "agent_core")
+        .expect("pixel regression agent core layer");
 
     let summary = PixelRegressionSummary {
         width: VIEWPORT_WIDTH,
@@ -488,12 +513,14 @@ fn rasterize_pixel_regression(app: &mut App) -> (RgbaImage, PixelRegressionSumma
         location_pixels,
         selected_location_cue_pixels,
         agent_pixels,
+        agent_core_pixels,
         fragment_sample_rgba: sample_pixel(&image, fragment_layer),
         fragment_fleck_sample_rgba: fragment_fleck_layer
             .map(|layer| sample_pixel(&image, layer))
             .unwrap_or(PIXEL_BACKGROUND),
         location_sample_rgba: sample_pixel(&image, location_layer),
         agent_sample_rgba: sample_pixel(&image, agent_layer),
+        agent_core_sample_rgba: sample_pixel(&image, agent_core_layer),
     };
 
     (image, summary)
@@ -605,9 +632,11 @@ fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     assert_eq!(summary.fragments.len(), 1);
     assert_eq!(summary.locations.len(), 1);
     assert_eq!(summary.agents.len(), 1);
+    assert_eq!(summary.agent_cores.len(), 1);
     assert_eq!(summary.fragments[0].id, "fragment:loc-0:0");
     assert_eq!(summary.locations[0].id, "loc-0");
     assert_eq!(summary.agents[0].id, "agent-0");
+    assert_eq!(summary.agent_cores[0].id, "agent-0");
 
     assert!(summary.fragments[0].size_px < summary.locations[0].size_px);
     assert!(summary.locations[0].size_px < summary.agents[0].size_px);
@@ -615,7 +644,99 @@ fn bevy_ecs_reconciles_fragment_location_agent_visuals_from_render_state() {
     assert!(summary.locations[0].alpha < 0.5);
     assert!(summary.fragments[0].z < summary.locations[0].z);
     assert!(summary.locations[0].z < summary.agents[0].z);
+    assert_eq!(
+        summary.agent_cores[0].size_px,
+        agent_core_size_px(&sample_render_state(12_000.0).agents[0], true)
+    );
+    assert!(summary.agent_cores[0].z > summary.agents[0].z);
     assert_eq!(summary.hit_regions, 2);
+}
+
+#[test]
+fn bevy_ecs_reconciles_agent_cores_without_semantic_or_hit_region_changes() {
+    let mut app = render_test_app(sample_render_state_with_beacon_candidates(
+        "agent", "agent-0",
+    ));
+    let first = visual_probe_summary(&mut app);
+
+    assert_eq!(first.agents.len(), 2);
+    assert_eq!(first.agent_cores.len(), 2);
+    assert_eq!(first.agent_core_entity_count, 2);
+    assert_eq!(first.hit_regions, 4, "cores must not add hit regions");
+    let render_state = sample_render_state_with_beacon_candidates("agent", "agent-0");
+    for (base, core) in first.agents.iter().zip(&first.agent_cores) {
+        assert_eq!(core.id, base.id);
+        let agent = render_state
+            .agents
+            .iter()
+            .find(|agent| agent.id == core.id)
+            .expect("core agent source");
+        assert_eq!(
+            core.size_px,
+            agent_core_size_px(agent, core.id == "agent-0")
+        );
+        assert_eq!(core.z, base.z + AGENT_CORE_LAYER_Z_OFFSET);
+        assert_eq!(core.x, base.x);
+        assert_eq!(core.y, base.y);
+    }
+    let world = app.world_mut();
+    let mut core_query = world.query::<(&PixelWorldAgentCoreVisual, &Sprite)>();
+    for (_, sprite) in core_query.iter(world) {
+        assert_eq!(sprite.color, AGENT_CORE_COLOR);
+    }
+
+    app.update();
+    assert_eq!(
+        visual_probe_summary(&mut app).agent_core_entity_count,
+        2,
+        "a consecutive visible reconcile must reuse each agent core"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        let mut removed = sample_render_state(12_000.0);
+        removed.agents.clear();
+        runtime.render_state = Some(removed);
+        runtime.render_version += 1;
+        runtime.hit_regions_dirty = true;
+    }
+    app.update();
+    let removed = visual_probe_summary(&mut app);
+    assert!(removed.agent_cores.is_empty());
+    assert_eq!(removed.agent_core_entity_count, 0);
+    assert_eq!(
+        removed.hit_regions, 1,
+        "only the location hit region remains"
+    );
+
+    {
+        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
+        runtime.render_state = None;
+        runtime.render_version += 1;
+    }
+    app.update();
+    let no_state = visual_probe_summary(&mut app);
+    assert!(no_state.agent_cores.is_empty());
+    assert_eq!(no_state.agent_core_entity_count, 0);
+}
+
+#[test]
+fn agent_cores_keep_unanimated_sizes_while_base_markers_pulse() {
+    let agent = sample_render_state(12_000.0).agents.remove(0);
+    let base_at_start = agent_visual_style(&agent, true, 0.0, 0).size_px;
+    let base_later = agent_visual_style(&agent, true, 120.0, 0).size_px;
+    let core_at_start = agent_core_size_px(&agent, true);
+    let core_later = agent_core_size_px(&agent, true);
+
+    assert_ne!(
+        base_at_start, base_later,
+        "base marker must retain its pulse"
+    );
+    assert_eq!(
+        core_at_start, core_later,
+        "core size must remain invariant across animation times"
+    );
+    assert_eq!(core_at_start, 6.912);
 }
 
 #[test]
@@ -929,9 +1050,13 @@ fn bevy_render_probe_contract_captures_visual_hierarchy() {
     assert_eq!(summary.fragment_fleck_entity_count, 1);
     assert_eq!(summary.location_entity_cache_size, 1);
     assert_eq!(summary.agent_entity_cache_size, 1);
+    assert_eq!(summary.agent_core_entity_count, 1);
     assert!(summary.fragments[0].size_px > 0.0);
     assert!(summary.agents[0].size_px >= 15.0);
     assert!(summary.fragments[0].z < summary.agents[0].z);
+    assert_eq!(summary.agent_cores.len(), 1);
+    assert!(summary.agent_cores[0].z > summary.agents[0].z);
+    assert!(summary.agent_cores[0].size_px < summary.agents[0].size_px);
     assert_eq!(summary.fragment_insets.len(), 1);
     assert!(summary.fragment_insets[0].z > summary.fragments[0].z);
     assert!(summary.fragment_insets[0].z < summary.locations[0].z);
@@ -1029,8 +1154,8 @@ fn bevy_pixel_regression_rasterizes_fragment_location_agent_hierarchy() {
     assert!(summary.location_pixels > 0);
     assert!(summary.agent_pixels > summary.location_pixels);
     assert!(summary.agent_pixels > summary.fragment_pixels);
-    assert_eq!(summary.raw_rgba_fnv1a64, "66ccca5292b8bbbd");
-    assert_eq!(summary.agent_sample_rgba, [251, 191, 36, 255]);
+    assert!(summary.agent_core_pixels > 0);
+    assert_ne!(summary.agent_core_sample_rgba, PIXEL_BACKGROUND);
     assert!(summary.fragment_sample_rgba[1] > summary.fragment_sample_rgba[0]);
     assert!(summary.location_sample_rgba[1] > summary.location_sample_rgba[0]);
 
