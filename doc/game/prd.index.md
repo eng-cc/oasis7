@@ -76,7 +76,7 @@
 ## 历史 closure / provenance 入口
 | 历史 closure 专题 | 当前追溯入口 |
 | --- | --- |
-| `gameplay-layer-lifecycle-rules-closure`、`gameplay-layer-war-governance-crisis-meta-closure`、`gameplay-module-driven-production-closure` | 生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包` 与 `doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`；历史审读见 `doc/core/reviews/round-004-reviewed-files.md` 与 `doc/core/reviews/round-008-reviewed-files.md`。 |
+| lifecycle rules、war/governance/crisis/meta、module-driven production 历史 closure（正文已退役） | 玩家合同与生产落地证据已收敛到 `doc/game/gameplay/gameplay-top-level-design.prd.md#82-评审输入包`、`doc/game/gameplay/gameplay-top-level-design.project.md#t3-工程落地拆解下阶段`、战争/政治数值基线及 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`；历史审读见 `doc/core/reviews/round-004-reviewed-files.md` 与 `doc/core/reviews/round-008-reviewed-files.md`。 |
 | `gameplay-release-gap-closure-2026-02-21` | 正文已退役；历史内容从 Git history、core review logs 与 GitHub task issue evidence comments 追溯。 |
 | `gameplay-release-production-closure`、`gameplay-runtime-governance-closure` | 当前仍作为非首读 provenance 保留；当前判断不得以这两份旧 closure 替代 gameplay 主入口、现行专业域验证或 GitHub task evidence。 |
 

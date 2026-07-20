@@ -25,8 +25,8 @@
 
 ### T3 工程落地拆解（下阶段）
 - [x] 落地 Gameplay Runtime 治理闭环首个生产切片（`doc/game/gameplay/gameplay-runtime-governance-closure.prd.md`）：ABI gameplay 元数据、Runtime 校验、mode+kind 槽位冲突检测、就绪度报告与测试
-- [x] 拆解 WASM Gameplay Kernel API 的实现任务（读取/提案/事件总线），并落地生命周期规则切片（`doc/game/gameplay/gameplay-layer-lifecycle-rules-closure.prd.md`）
-- 历史完成：War/Governance/Crisis/Economic/Meta 模块 MVP 已完成协议与模块生产实现；长期协议入口为 `doc/game/gameplay/gameplay-layer-war-governance-crisis-meta-closure.prd.md`，已退役的模块驱动生产增量专题从 Git history 与 GitHub task evidence 追溯。
+- 历史完成：WASM Gameplay Kernel API 与生命周期规则切片（读取、提案、事件总线和 tick 推进）已落地；当前 runtime 协议边界见 `doc/world-runtime/prd.md#gameplay-生命周期协议边界`，实现过程从 Git history 与 GitHub task evidence 追溯。
+- 历史完成：War/Governance/Crisis/Economic/Meta 模块 MVP 已完成协议与模块生产实现；玩家侧长期合同由 gameplay 顶层设计与战争/政治数值基线承接，已退役的 layer/module closure 增量专题从 Git history 与 GitHub task evidence 追溯。
 - [x] 为每个模块定义 `test_tier_required` 与 `test_tier_full` 测试矩阵（见下文“Gameplay 模块测试矩阵引用”）
 
 ### T4 前期工业引导闭环（2026-03-15）
