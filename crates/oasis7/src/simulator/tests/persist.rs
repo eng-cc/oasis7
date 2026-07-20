@@ -482,6 +482,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         intent_summary: Some("advance the live world by 1 step(s)".to_string()),
         intent_scope: Some("world_control".to_string()),
         intent_target: None,
+        can_reprioritize: false,
         goal_id: "post_onboarding.recover_capability".to_string(),
         goal_kind: PlayerGameplayGoalKind::RecoverCapability,
         goal_title: "Recover sustainable capability".to_string(),
