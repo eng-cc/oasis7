@@ -14,6 +14,10 @@ function displayableStrings(value) {
     : [];
 }
 
+function displayableString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export function createViewerFeedbackModule({
   clone,
   feedbackBadgeClass,
@@ -877,6 +881,33 @@ export function createViewerFeedbackModule({
       ),
     };
     const dependencyStatus = gameplay.major_power_dependency_status || "unverified";
+    const recoveryOptionComparisons = (
+      Array.isArray(gameplay.recovery_options)
+        ? gameplay.recovery_options
+        : Array.isArray(gameplay.recoveryOptions)
+          ? gameplay.recoveryOptions
+          : []
+    )
+      .filter(isRecord)
+      .map((option) => {
+        const kind = displayableString(option.kind);
+        if (!kind) return null;
+        const timeClass = displayableString(option.estimated_time_class) || "unverified";
+        const resourceClass = displayableString(option.estimated_resource_class) || "unverified";
+        const riskClass = displayableString(option.risk_class) || "unverified";
+        const retainedBenefit = displayableString(option.retained_benefit) || "unverified";
+        const recommendationReason = displayableString(option.recommendation_reason) || "unverified";
+        return {
+          kind,
+          timeClass,
+          resourceClass,
+          riskClass,
+          retainedBenefit,
+          recommendationReason,
+          summary: `${kind}: time=${timeClass} · resources=${resourceClass} · risk=${riskClass} · retains=${retainedBenefit} · why=${recommendationReason}`,
+        };
+      })
+      .filter(Boolean);
     const recoveryOptions = [
       ["repair", gameplay.repair_available],
       ["rebuild", gameplay.rebuild_available],
@@ -886,9 +917,12 @@ export function createViewerFeedbackModule({
       .map(([label, value]) => `${label}: ${availabilityLabel(value)}`);
     const matureWorldContinuation = {
       dependencyStatus,
-      recoveryOptions: recoveryOptions.length > 0
+      recoveryOptions: recoveryOptionComparisons.length > 0
+        ? recoveryOptionComparisons.map((option) => option.summary).join(" / ")
+        : recoveryOptions.length > 0
         ? recoveryOptions.join(" / ")
         : localeText(locale, "等待 repair / rebuild / pivot truth", "Waiting for repair / rebuild / pivot truth"),
+      recoveryOptionComparisons,
       recoveryPath: gameplay.recovery_path_detail
         || gameplay.recovery_path_kind
         || narrativeNextStep

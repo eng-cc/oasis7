@@ -552,6 +552,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         repair_available: None,
         rebuild_available: None,
         pivot_available: None,
+        recovery_options: Vec::new(),
     });
 
     let mut value: serde_json::Value =

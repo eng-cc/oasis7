@@ -144,4 +144,74 @@ describe("viewer feedback module", () => {
       expect(createFeedbackModule(state).buildGameplaySummary().microDepotFacilities).toEqual([]);
     }
   });
+
+  it("renders published recovery options as escaped-by-the-view comparison details", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: {}, locations: {} },
+        player_gameplay: {
+          repair_available: true,
+          rebuild_available: true,
+          pivot_available: true,
+          recovery_options: [
+            {
+              kind: "repair",
+              estimated_time_class: "short",
+              estimated_resource_class: "low",
+              risk_class: "low",
+              retained_benefit: "<existing throughput>",
+              recommendation_reason: "Fastest safe recovery",
+            },
+            {
+              kind: "rebuild",
+              estimated_time_class: "medium",
+              estimated_resource_class: "high",
+              risk_class: "medium",
+              retained_benefit: "new capacity",
+              recommendation_reason: "Restores a stronger line",
+            },
+          ],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    const continuation = createFeedbackModule(state).buildGameplaySummary().matureWorldContinuation;
+
+    expect(continuation.recoveryOptionComparisons).toEqual([
+      expect.objectContaining({
+        kind: "repair",
+        timeClass: "short",
+        resourceClass: "low",
+        riskClass: "low",
+        retainedBenefit: "<existing throughput>",
+        recommendationReason: "Fastest safe recovery",
+      }),
+      expect.objectContaining({ kind: "rebuild", timeClass: "medium", resourceClass: "high" }),
+    ]);
+    expect(continuation.recoveryOptions).toBe(
+      "repair: time=short · resources=low · risk=low · retains=<existing throughput> · why=Fastest safe recovery / rebuild: time=medium · resources=high · risk=medium · retains=new capacity · why=Restores a stronger line",
+    );
+  });
+
+  it("keeps boolean recovery summaries when runtime recovery records are absent or invalid", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: {}, locations: {} },
+        player_gameplay: {
+          repair_available: true,
+          rebuild_available: false,
+          recovery_options: [{ estimated_time_class: "short" }, "repair"],
+        },
+      },
+      uiLocale: "en",
+    };
+
+    const continuation = createFeedbackModule(state).buildGameplaySummary().matureWorldContinuation;
+
+    expect(continuation.recoveryOptionComparisons).toEqual([]);
+    expect(continuation.recoveryOptions).toBe("repair: available / rebuild: unavailable");
+  });
 });

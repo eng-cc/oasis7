@@ -577,6 +577,58 @@ fn runtime_gameplay_action_unlocks_first_expansion_tradeoff_after_scale_out() {
 }
 
 #[test]
+fn runtime_gameplay_snapshot_publishes_complete_distinguishable_recovery_options() {
+    let _guard = lock_test_llm_env();
+    let mut server = setup_industrial_gameplay_with_completed_jobs(42, 4);
+    let gameplay = expect_player_gameplay(
+        &mut server,
+        "recoverable player progression after first expansion tradeoff",
+    );
+
+    assert_eq!(
+        gameplay.recovery_path_kind.as_deref(),
+        Some("repair_rebuild_or_pivot")
+    );
+    assert_eq!(gameplay.repair_available, Some(true));
+    assert_eq!(gameplay.rebuild_available, Some(true));
+    assert_eq!(gameplay.pivot_available, Some(true));
+
+    assert_eq!(
+        gameplay.recovery_options.len(),
+        3,
+        "recoverable progression must publish one canonical option for each recovery path"
+    );
+    let expected_kinds = ["repair", "rebuild", "pivot"];
+    for kind in expected_kinds {
+        let option = gameplay
+            .recovery_options
+            .iter()
+            .find(|option| option.kind == kind)
+            .unwrap_or_else(|| panic!("missing canonical {kind} recovery option"));
+        assert!(
+            !option.estimated_time_class.trim().is_empty(),
+            "{kind} must publish a qualitative estimated-time class"
+        );
+        assert!(
+            !option.estimated_resource_class.trim().is_empty(),
+            "{kind} must publish a qualitative estimated-resource class"
+        );
+        assert!(
+            !option.risk_class.trim().is_empty(),
+            "{kind} must publish a qualitative risk class"
+        );
+        assert!(
+            !option.retained_benefit.trim().is_empty(),
+            "{kind} must state the player benefit retained by this recovery path"
+        );
+        assert!(
+            !option.recommendation_reason.trim().is_empty(),
+            "{kind} must state why this recovery path is recommended"
+        );
+    }
+}
+
+#[test]
 fn runtime_gameplay_snapshot_blocks_branch_ready_when_no_commitment_is_executable() {
     let mut state = WorldState::default();
     state.industry_progress.stage = IndustryStage::ScaleOut;

@@ -113,6 +113,16 @@ pub struct PlayerGameplayBranchCommitment {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerGameplayRecoveryOption {
+    pub kind: String,
+    pub estimated_time_class: String,
+    pub estimated_resource_class: String,
+    pub risk_class: String,
+    pub retained_benefit: String,
+    pub recommendation_reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerGameplayRecentFeedback {
     pub action: String,
     pub stage: String,
@@ -294,6 +304,8 @@ pub struct PlayerGameplaySnapshot {
     pub recovery_path_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recovery_path_detail: Option<String>,
+    #[serde(default)]
+    pub recovery_options: Vec<PlayerGameplayRecoveryOption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requires_major_power_sponsorship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -382,6 +394,8 @@ struct PlayerGameplaySnapshotSerde {
     recovery_path_kind: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     recovery_path_detail: Option<String>,
+    #[serde(default)]
+    recovery_options: Vec<PlayerGameplayRecoveryOption>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     requires_major_power_sponsorship: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -475,6 +489,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
                 .recovery_path_kind
                 .or_else(|| Some("unverified".to_string())),
             recovery_path_detail: legacy.recovery_path_detail,
+            recovery_options: legacy.recovery_options,
             requires_major_power_sponsorship: legacy
                 .requires_major_power_sponsorship
                 .or_else(|| Some("unverified".to_string())),
