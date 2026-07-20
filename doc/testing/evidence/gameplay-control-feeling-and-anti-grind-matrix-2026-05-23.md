@@ -59,5 +59,5 @@
 - `rtk git diff --check`
 
 ## 备注
-- 本文档的 `watch` 不是模糊措辞，而是正式说明“判据已存在，但 runtime/sample truth 仍不足以给 `pass`”。
-- 当 `runtime-small-player-lane-state-contract` 或等价 small-player runtime slice 完成后，应重新生成本矩阵，而不是直接沿用当前 `watch` 结论。
+- 本文档的 `watch` 不是模糊措辞，而是正式说明“判据与 runtime truth 已存在，但 fresh mature-world sample 仍不足以给 `pass`”。
+- 完成 `qa-mature-world-small-player-fresh-sample` 后应重新生成本矩阵，而不是因字段落地直接沿用或升级当前 `watch` 结论。
