@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::BTreeMap;
 use std::net::TcpStream;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -20,10 +20,10 @@ const GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH: &str = "invalid_auth";
 const GAMEPLAY_SUBMIT_ERROR_NONCE_REPLAY: &str = "auth_nonce_replay";
 const GAMEPLAY_SUBMIT_ERROR_INTERNAL: &str = "internal_error";
 const GAMEPLAY_SUBMIT_ERROR_SUBMIT_FAILED: &str = "submit_failed";
-const MAX_TRACKED_GAMEPLAY_NONCES: usize = 4096;
+const GAMEPLAY_NONCE_LEDGER_FILE: &str = "gameplay-auth-nonces.json";
 
 static NEXT_GAMEPLAY_ACTION_ID: AtomicU64 = AtomicU64::new(1);
-static GAMEPLAY_NONCE_TRACKER: OnceLock<Mutex<GameplayNonceTracker>> = OnceLock::new();
+static GAMEPLAY_NONCE_LEDGER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -67,43 +67,42 @@ impl ChainGameplaySubmitResponse {
     }
 }
 
-#[derive(Debug, Default)]
-struct GameplayNonceTracker {
-    by_player: BTreeMap<String, HashSet<u64>>,
-    order: VecDeque<(String, u64)>,
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct GameplayNonceLedger {
+    #[serde(default)]
+    last_nonce_by_player_key: BTreeMap<String, BTreeMap<String, u64>>,
 }
 
-impl GameplayNonceTracker {
-    fn record_nonce(&mut self, player_id: &str, nonce: u64) -> Result<(), String> {
+#[derive(Debug)]
+enum GameplayNonceRecordError {
+    Replay(String),
+    Internal(String),
+}
+
+impl GameplayNonceLedger {
+    fn record_nonce(
+        &mut self,
+        player_id: &str,
+        public_key: &str,
+        nonce: u64,
+    ) -> Result<(), String> {
         if nonce == 0 {
             return Err("auth nonce must be greater than zero".to_string());
         }
-        let history = self.by_player.entry(player_id.to_string()).or_default();
-        if !history.insert(nonce) {
+        let last_nonce = self
+            .last_nonce_by_player_key
+            .entry(player_id.to_string())
+            .or_default()
+            .entry(public_key.to_string())
+            .or_default();
+        if nonce <= *last_nonce {
             return Err(format!(
-                "auth nonce replay detected for player {} nonce {}",
-                player_id, nonce
+                "auth nonce replay for player {} key {}: expected nonce > {}, received {}",
+                player_id, public_key, last_nonce, nonce
             ));
         }
-        self.order.push_back((player_id.to_string(), nonce));
-        self.prune();
+        *last_nonce = nonce;
         Ok(())
-    }
-
-    fn prune(&mut self) {
-        while self.order.len() > MAX_TRACKED_GAMEPLAY_NONCES {
-            let Some((player_id, nonce)) = self.order.pop_front() else {
-                break;
-            };
-            let mut remove_player = false;
-            if let Some(history) = self.by_player.get_mut(player_id.as_str()) {
-                history.remove(&nonce);
-                remove_player = history.is_empty();
-            }
-            if remove_player {
-                self.by_player.remove(player_id.as_str());
-            }
-        }
     }
 }
 
@@ -170,15 +169,21 @@ fn handle_gameplay_submit(
             }
         };
 
-    if let Err(err) = with_gameplay_nonce_tracker(|tracker| {
-        tracker.record_nonce(verified.player_id.as_str(), verified.nonce)
-    }) {
-        write_gameplay_submit_error(
-            stream,
-            409,
-            GAMEPLAY_SUBMIT_ERROR_NONCE_REPLAY,
-            err.as_str(),
-        )?;
+    if let Err(err) = record_gameplay_nonce(
+        execution_world_dir,
+        verified.player_id.as_str(),
+        verified.public_key.as_str(),
+        verified.nonce,
+    ) {
+        let (status, code, message) = match err {
+            GameplayNonceRecordError::Replay(message) => {
+                (409, GAMEPLAY_SUBMIT_ERROR_NONCE_REPLAY, message)
+            }
+            GameplayNonceRecordError::Internal(message) => {
+                (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, message)
+            }
+        };
+        write_gameplay_submit_error(stream, status, code, message.as_str())?;
         return Ok(());
     }
 
@@ -332,27 +337,49 @@ fn write_gameplay_submit_json_response(
         .map_err(|err| format!("failed to write gameplay submit json response: {err}"))
 }
 
-fn gameplay_nonce_tracker() -> &'static Mutex<GameplayNonceTracker> {
-    GAMEPLAY_NONCE_TRACKER.get_or_init(|| Mutex::new(GameplayNonceTracker::default()))
+fn gameplay_nonce_ledger_lock() -> &'static Mutex<()> {
+    GAMEPLAY_NONCE_LEDGER_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn with_gameplay_nonce_tracker<T>(
-    f: impl FnOnce(&mut GameplayNonceTracker) -> Result<T, String>,
-) -> Result<T, String> {
-    let mut tracker = gameplay_nonce_tracker()
+fn record_gameplay_nonce(
+    execution_world_dir: &Path,
+    player_id: &str,
+    public_key: &str,
+    nonce: u64,
+) -> Result<(), GameplayNonceRecordError> {
+    let _guard = gameplay_nonce_ledger_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    f(&mut tracker)
+    let path = execution_world_dir.join(GAMEPLAY_NONCE_LEDGER_FILE);
+    let mut ledger = if path.exists() {
+        let bytes = std::fs::read(path.as_path()).map_err(|err| {
+            GameplayNonceRecordError::Internal(format!(
+                "read gameplay nonce ledger {} failed: {err}",
+                path.display()
+            ))
+        })?;
+        serde_json::from_slice(&bytes).map_err(|err| {
+            GameplayNonceRecordError::Internal(format!(
+                "parse gameplay nonce ledger {} failed: {err}",
+                path.display()
+            ))
+        })?
+    } else {
+        GameplayNonceLedger::default()
+    };
+    ledger
+        .record_nonce(player_id, public_key, nonce)
+        .map_err(GameplayNonceRecordError::Replay)?;
+    let bytes = serde_json::to_vec_pretty(&ledger).map_err(|err| {
+        GameplayNonceRecordError::Internal(format!("encode gameplay nonce ledger failed: {err}"))
+    })?;
+    super::write_bytes_atomic(path.as_path(), bytes.as_slice())
+        .map_err(GameplayNonceRecordError::Internal)
 }
 
 #[cfg(test)]
 pub(super) fn reset_gameplay_submit_state_for_tests() {
     NEXT_GAMEPLAY_ACTION_ID.store(1, Ordering::Relaxed);
-    let mut tracker = gameplay_nonce_tracker()
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    tracker.by_player.clear();
-    tracker.order.clear();
 }
 
 #[cfg(test)]

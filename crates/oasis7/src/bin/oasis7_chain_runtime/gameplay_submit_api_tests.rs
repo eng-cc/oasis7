@@ -150,6 +150,16 @@ fn collect_data_world_dir(
     path
 }
 
+fn gameplay_nonce_world_dir(label: &str) -> PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "oasis7-chain-gameplay-nonce-{label}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(path.as_path());
+    std::fs::create_dir_all(path.as_path()).expect("create gameplay nonce world dir");
+    path
+}
+
 fn submit_json(
     runtime: &Arc<Mutex<NodeRuntime>>,
     execution_world_dir: &Path,
@@ -228,6 +238,28 @@ fn wait_for_committed_height(runtime: &Arc<Mutex<NodeRuntime>>, minimum_height: 
         .consensus
         .committed_height;
     panic!("timed out waiting for committed height >= {minimum_height}, got {height}");
+}
+
+fn wait_for_committed_action(calls: &Arc<Mutex<Vec<NodeExecutionCommitContext>>>) {
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(2) {
+        if calls
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .iter()
+            .any(|context| !context.committed_actions.is_empty())
+        {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let committed_action_count = calls
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .iter()
+        .map(|context| context.committed_actions.len())
+        .sum::<usize>();
+    panic!("timed out waiting for committed action, observed {committed_action_count}");
 }
 
 #[test]
@@ -310,6 +342,7 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
     let mut node_runtime = NodeRuntime::new(config).with_execution_hook(NoopExecutionHook);
     node_runtime.start().expect("start node runtime");
     let runtime = Arc::new(Mutex::new(node_runtime));
+    let world_dir = gameplay_nonce_world_dir("accept");
 
     let request = signed_gameplay_submit_request("browser-player-gameplay-submit-ok", 9);
     let body = serde_json::to_string(&request).expect("serialize request");
@@ -325,7 +358,7 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
         &runtime,
         "POST",
         "/v1/chain/gameplay/submit",
-        Path::new("unused-gameplay-world"),
+        world_dir.as_path(),
     )
     .expect("handler should process request");
     assert!(handled);
@@ -360,7 +393,7 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
 }
 
 #[test]
-fn gameplay_submit_handler_rejects_nonce_replay() {
+fn gameplay_submit_handler_persists_strictly_increasing_nonce_across_reload() {
     let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();
     let config = NodeConfig::new(
@@ -370,59 +403,56 @@ fn gameplay_submit_handler_rejects_nonce_replay() {
     )
     .expect("node config");
     let runtime = Arc::new(Mutex::new(NodeRuntime::new(config)));
+    let world_dir = gameplay_nonce_world_dir("reload");
 
-    let request = signed_gameplay_submit_request("node-gameplay-submit-replay", 11);
-    let body = serde_json::to_string(&request).expect("serialize request");
-    let http_request = format!(
-        "POST /v1/chain/gameplay/submit HTTP/1.1\r\nHost: 127.0.0.1:5121\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-
-    let (mut first_server, mut first_client) = tcp_stream_pair();
-    maybe_handle_gameplay_submit_request(
-        &mut first_server,
-        http_request.as_bytes(),
+    let first = signed_gameplay_submit_request("node-gameplay-submit-replay", 11);
+    let (first_status, first_payload) = submit_json(
         &runtime,
-        "POST",
-        "/v1/chain/gameplay/submit",
-        Path::new("unused-gameplay-world"),
-    )
-    .expect("first handler call");
-    drop(first_server);
-    let mut first_response = Vec::new();
-    first_client
-        .read_to_end(&mut first_response)
-        .expect("read first response");
-    let (first_status, first_payload): (u16, ChainGameplaySubmitResponse) =
-        decode_http_json_response(&first_response);
+        world_dir.as_path(),
+        serde_json::to_string(&first)
+            .expect("serialize first request")
+            .as_str(),
+    );
     assert_eq!(first_status, 200);
     assert!(first_payload.ok);
 
-    let (mut replay_server, mut replay_client) = tcp_stream_pair();
-    maybe_handle_gameplay_submit_request(
-        &mut replay_server,
-        http_request.as_bytes(),
+    let increasing = signed_gameplay_submit_request("node-gameplay-submit-replay", 12);
+    let (increasing_status, increasing_payload) = submit_json(
         &runtime,
-        "POST",
-        "/v1/chain/gameplay/submit",
-        Path::new("unused-gameplay-world"),
-    )
-    .expect("second handler call");
-    drop(replay_server);
-    replay_client
-        .set_read_timeout(Some(Duration::from_secs(2)))
-        .expect("set client timeout");
-    let mut replay_response = Vec::new();
-    replay_client
-        .read_to_end(&mut replay_response)
-        .expect("read replay response");
-    let (replay_status, replay_payload): (u16, ChainGameplaySubmitResponse) =
-        decode_http_json_response(&replay_response);
-    assert_eq!(replay_status, 409);
-    assert!(!replay_payload.ok);
+        world_dir.as_path(),
+        serde_json::to_string(&increasing)
+            .expect("serialize increasing request")
+            .as_str(),
+    );
+    assert_eq!(increasing_status, 200);
+    assert!(increasing_payload.ok);
+
+    for rejected_nonce in [10, 12] {
+        let rejected =
+            signed_gameplay_submit_request("node-gameplay-submit-replay", rejected_nonce);
+        let (status, payload) = submit_json(
+            &runtime,
+            world_dir.as_path(),
+            serde_json::to_string(&rejected)
+                .expect("serialize rejected request")
+                .as_str(),
+        );
+        assert_eq!(status, 409);
+        assert_eq!(payload.error_code.as_deref(), Some("auth_nonce_replay"));
+    }
+
+    reset_gameplay_submit_state_for_tests();
+    let replay_after_reload = signed_gameplay_submit_request("node-gameplay-submit-replay", 12);
+    let (reload_status, reload_payload) = submit_json(
+        &runtime,
+        world_dir.as_path(),
+        serde_json::to_string(&replay_after_reload)
+            .expect("serialize replay after reload")
+            .as_str(),
+    );
+    assert_eq!(reload_status, 409);
     assert_eq!(
-        replay_payload.error_code.as_deref(),
+        reload_payload.error_code.as_deref(),
         Some("auth_nonce_replay")
     );
 }
@@ -470,7 +500,7 @@ fn collect_data_submit_derives_bound_collector_and_commits_exact_action() {
     );
     assert_eq!(status, 200);
     assert!(response.ok);
-    wait_for_committed_height(&runtime, 1);
+    wait_for_committed_action(&calls);
     let calls = calls
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -585,5 +615,23 @@ fn collect_data_submit_rejects_cost_tampering() {
     assert_eq!(status, 401);
     assert!(!response.ok);
     assert_eq!(response.error_code.as_deref(), Some("invalid_auth"));
+
+    let authorized = signed_collect_data_submit(
+        "player-tamper",
+        43,
+        7,
+        11,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let (authorized_status, authorized_response) = submit_json(
+        &runtime,
+        world_dir.as_path(),
+        serde_json::to_string(&authorized)
+            .expect("serialize authorized collect data command")
+            .as_str(),
+    );
+    assert_eq!(authorized_status, 200);
+    assert!(authorized_response.ok);
     let _ = std::fs::remove_dir_all(world_dir);
 }
