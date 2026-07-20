@@ -7,6 +7,10 @@ use bevy::ecs::system::SystemParam;
 mod fragment_visuals;
 use fragment_visuals::reconcile_fragments;
 
+#[path = "render_agent_silhouette.rs"]
+mod agent_silhouette;
+use agent_silhouette::{PixelWorldAgentSilhouetteVisual, reconcile_agent_silhouettes};
+
 const LOCATION_HIT_HALF_SIZE: f64 = 8.0;
 const AGENT_HIT_HALF_SIZE: f64 = 8.0;
 const FRAGMENT_HIDDEN_THRESHOLD_PX: f64 = 1.5;
@@ -997,6 +1001,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
+    agent_silhouettes: Query<'w, 's, (Entity, &'static PixelWorldAgentSilhouetteVisual)>,
     agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
@@ -1023,6 +1028,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -1080,6 +1088,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.agent_cores.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.agent_silhouettes.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -1142,6 +1153,14 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    reconcile_agent_silhouettes(
+        &mut commands,
+        &runtime,
+        &queries.agent_silhouettes,
+        width,
+        height,
+        animation_ms,
     );
     reconcile_agent_cores(
         &mut commands,

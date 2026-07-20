@@ -675,6 +675,9 @@ fn bevy_ecs_reuses_hit_regions_on_unchanged_animation_frames() {
 #[path = "render_agent_core_tests.rs"]
 mod agent_core_tests;
 
+#[path = "render_agent_silhouette_tests.rs"]
+mod agent_silhouette_tests;
+
 #[test]
 fn bevy_ecs_refreshes_hit_regions_after_render_state_update() {
     let mut app = render_test_app(sample_render_state(12_000.0));
