@@ -218,8 +218,8 @@
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/launcher/game-client-launcher-feedback-window-2026-03-02.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/scenario/scenario-seed-locations.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/scenario/world-initialization.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
-| 2026-03-06 18:04:31 +0800 | cc | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired topic `viewer-manual-content-migration-2026-02-15`（原 PRD） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写审计轮次；原文已退役，从 Git history 追溯。 |
+| 2026-03-06 18:04:31 +0800 | cc | retired topic `viewer-manual-content-migration-2026-02-15`（原 project） | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写审计轮次；原文已退役，从 Git history 追溯。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/launcher/game-client-launcher-native-web-control-plane-unification-2026-03-04.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/launcher/game-client-launcher-web-required-config-gating-2026-03-04.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |
 | 2026-03-06 18:04:31 +0800 | cc | `doc/world-simulator/launcher/game-client-launcher-llm-settings-panel-2026-03-02.prd.md` | pass | A5-002 | 按 ROUND-005 范围完成逐文档审读并回写 `审计轮次: 5`。 |

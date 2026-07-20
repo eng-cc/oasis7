@@ -72,7 +72,6 @@
 | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.design.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` |
 | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.design.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` |
 | `doc/site/manual/site-manual-static-docs.prd.md` | `doc/site/manual/site-manual-static-docs.design.md` | `doc/site/manual/site-manual-static-docs.project.md` |
-| `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.design.md` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` |
 
 ## 历史压缩专题清单
 当前无保留原址的历史压缩专题；已完成且有当前承接面的旧专题已转入下方退役删除清单。
@@ -92,11 +91,12 @@
 | --- | --- |
 | `github-pages-hero-cta-simplify-2026-02-26` | 该完成态 CTA 微专题三件套已删除；当前首页叙事、CTA 与下载入口真值以 `doc/site/project.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、`site/index.html` 与 `site/en/index.html` 为准，历史细节从 GitHub task issue evidence comments 与 git history 追溯。 |
 | `github-pages-release-communication-placeholder-2026-03-11` | 该完成态公告占位三件套已删除；当前公开公告准备态与 technical preview 边界以 `doc/site/prd.md`、`doc/site/project.md`、`site/index.html` 与 `site/doc/cn/index.html` 为准，历史细节从 GitHub task issue evidence comments 与 git history 追溯。 |
+| `viewer-manual-content-migration-2026-02-15` | 该完成态 Viewer 手册搬迁三件套已删除；玩家模式承诺以 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 为准，当前操作及退役边界以 `doc/world-simulator/viewer/viewer-manual.manual.md` 为准，CN/EN 镜像治理以 `doc/site/manual/site-manual-static-docs.*` 为准，任务过程从 GitHub task issue evidence comments 与 git history 追溯。 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 `*.project.md`。
-- ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档，`doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` 为增量子文档；默认阅读先经 `doc/site/manual/README.md` 分流。
+- ROUND-002 口径：`doc/site/manual/site-manual-static-docs.prd.md` 为 manual 主文档；已完成的 Viewer 手册搬迁增量已回填并退役，默认阅读先经 `doc/site/manual/README.md` 分流。
 - ROUND-002 口径：`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为 github-pages 主文档，其余 github-pages 专题为增量子文档。
 - GitHub Pages content-sync historical/provenance note：`doc/site/github-pages/github-pages-content-sync-2026-02-12.*` 与 `doc/site/github-pages/github-pages-content-sync-2026-02-25.*` 保留为已完成内容同步批次的来源线索，不再作为当前默认活跃专题清单入口；当前 site 真值以 `doc/site/prd.md`、`doc/site/project.md` 为准，github-pages 主文档以 `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` 为准，下载/公开面按 `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` 与 `site/**` 现行文件追溯。后续若删除这些历史子文档，需先完成引用审计与 deletion-readiness slice。
 - 默认入口面先在 `README.md` / `prd.index.md` 收紧；只有当入口仍无法完成分流时，才进入后续路径级治理。

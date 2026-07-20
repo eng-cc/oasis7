@@ -249,9 +249,9 @@
 | 2026-03-06 11:51:27 +0800 | codex | `doc/site/manual/site-manual-static-docs.prd.md` | issue_open | I4-001,I4-002 | 接口路径写成 `site/site/doc/cn/index.html` 不可达；里程碑验收命令写为裸 `cargo check`，与仓库执行口径不一致。 |
 | 2026-03-06 11:51:46 +0800 | codex | `doc/site/manual/site-manual-static-docs.project.md` | issue_open | I4-001,I4-006 | 任务项仍使用 `site/site/doc/cn/index.html` 错误路径；状态更新时间停在 2026-02-15，缺本轮审计后的时效标注。 |
 | 2026-03-06 11:51:46 +0800 | codex | `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | issue_open | I4-004 | 验收标准要求“可直接复制命令”，但正文未给出任何可执行命令示例，无法直接按文复现。 |
-| 2026-03-06 11:52:07 +0800 | codex | `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | issue_open | I4-002 | 里程碑验收写为裸 `cargo check`，未与仓库统一命令 `env -u RUSTC_WRAPPER cargo check` 对齐。 |
+| 2026-03-06 11:52:07 +0800 | codex | retired topic `viewer-manual-content-migration-2026-02-15`（原 PRD） | issue_open | I4-002 | 里程碑验收写为裸 `cargo check`，未与仓库统一命令 `env -u RUSTC_WRAPPER cargo check` 对齐；原文已退役，从 Git history 追溯。 |
 | 2026-03-06 11:52:20 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.prd | pass | - | PRD 目标态与验证闭环完整，未发现本文件内新增 D4 高中风险分工问题。 |
-| 2026-03-06 11:52:33 +0800 | codex | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` | pass | - | 任务、依赖、状态与验收命令口径一致，未发现 D4-001~D4-008 的新增高/中风险问题。 |
+| 2026-03-06 11:52:33 +0800 | codex | retired topic `viewer-manual-content-migration-2026-02-15`（原 project） | pass | - | 任务、依赖、状态与验收命令口径一致，未发现 D4-001~D4-008 的新增高/中风险问题；原文已退役，从 Git history 追溯。 |
 | 2026-03-06 11:52:38 +0800 | codex | `doc/testing/manual/web-ui-agent-browser-closure-manual.project.md` | issue_open | I4-005 | WPCM-5 映射到 `PRD-TESTING-004`，与主 PRD 使用的 `PRD-TESTING-WEB-*` 编号体系不一致，追踪链路断裂。 |
 | 2026-03-06 11:52:45 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-asset-pipeline-ui-system-hardening-2026-03-05.project | pass | - | 任务拆解含 PRD-ID 映射与状态时间，项目口径与 PRD 分工一致。 |
 | 2026-03-06 11:53:03 +0800 | G4-002-Aristotle | historical removed standard_3d viewer doc set: viewer-web-closure-testing-policy.prd | pass | - | 闭环策略文档与配套 project 分工清晰，未发现新增 D4 高中风险问题。 |

@@ -113,8 +113,7 @@
 - `doc/site/github-pages/github-pages-lean-tech-refresh.project.md`
 - `doc/site/manual/site-manual-static-docs.prd.md`
 - `doc/site/manual/site-manual-static-docs.project.md`
-- `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md`
-- `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md`
+- retired topic `viewer-manual-content-migration-2026-02-15`（原 PRD / project；当前权威见 canonical Viewer 手册与 site manual 主专题，原文从 Git history 追溯）
 - `doc/site/prd.index.md`
 - `doc/site/project.md`
 - `doc/testing/ci/ci-test-coverage.prd.md`

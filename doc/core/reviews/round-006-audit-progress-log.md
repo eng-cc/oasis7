@@ -181,8 +181,8 @@
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/site-manual-static-docs.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/site-manual-static-docs.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/viewer-manual-content-migration-2026-02-15.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | retired topic `viewer-manual-content-migration-2026-02-15`（原 project） | `backfill` | pass | B6-002 | 当时已补标准专题 project 入口；现由 `doc/site/manual/site-manual-static-docs.project.md` 承接，原文从 Git history 追溯 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | retired topic `viewer-manual-content-migration-2026-02-15`（原 PRD） | `backfill` | pass | B6-002 | 当时已补标准 project 互链；现由产品模式分册与 canonical Viewer 手册承接，原文从 Git history 追溯 |
 
 | 2026-03-09 23:59:00 +0800 | `producer_system_designer` | `doc/core/reviews/consistency-review-round-006.md` | `backfill` | pass | B6-004 | 已清零残余旧命名文案并回写最终完成口径 |
 | 2026-03-09 23:59:00 +0800 | `qa_engineer` | `doc/core/reviews/round-006-kickoff-worklist.md` | `backfill` | pass | B6-004 | 已回写 ROUND-006 全量复核完成状态 |
