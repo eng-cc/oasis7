@@ -9121,6 +9121,38 @@ function MicroDepotFacilitiesPanel(props) {
   });
 }
 var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=event-list data-testid=viewer-recovery-options>`), _tmpl$3$2 = /* @__PURE__ */ template(`<div class="event-card recovery-option-card"><div class=event-card__title><span></span></div><div data-testid=viewer-recovery-option><div class=summary-grid>`);
+const RECOVERY_OPTION_LABELS = {
+  kind: {
+    repair: ["修复", "Repair"],
+    rebuild: ["重建", "Rebuild"],
+    pivot: ["转向", "Pivot"]
+  },
+  time: {
+    short: ["短期", "Short"],
+    medium: ["中期", "Medium"]
+  },
+  resource: {
+    focused_local_input: ["集中本地投入", "Focused local input"],
+    broader_local_reinvestment: ["更广泛的本地再投入", "Broader local reinvestment"],
+    redirected_local_commitment: ["转向本地投入", "Redirected local commitment"]
+  },
+  risk: {
+    low: ["低", "Low"],
+    moderate: ["中等", "Moderate"],
+    tradeoff: ["权衡", "Trade-off"]
+  }
+};
+function humanizeRecoveryOptionValue(value) {
+  const words = String(value || "").trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  if (!words) return "—";
+  return words.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+function recoveryOptionDisplayLabel(category, value, locale, tr2) {
+  const labels = RECOVERY_OPTION_LABELS[category]?.[value];
+  if (labels) return tr2(locale, labels[0], labels[1]);
+  const humanized = humanizeRecoveryOptionValue(value);
+  return tr2(locale, `未知：${humanized}`, humanized);
+}
 function RecoveryMetric(props) {
   return (() => {
     var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
@@ -9155,13 +9187,13 @@ function RecoveryOptionComparisonPanel(props) {
         },
         children: (option) => (() => {
           var _el$5 = _tmpl$3$2(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild;
-          insert(_el$7, () => option.kind);
+          insert(_el$7, () => recoveryOptionDisplayLabel("kind", option.kind, props.locale, props.tr));
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
               return text("时间", "Time");
             },
             get value() {
-              return option.timeClass;
+              return recoveryOptionDisplayLabel("time", option.timeClass, props.locale, props.tr);
             }
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
@@ -9169,7 +9201,7 @@ function RecoveryOptionComparisonPanel(props) {
               return text("资源", "Resources");
             },
             get value() {
-              return option.resourceClass;
+              return recoveryOptionDisplayLabel("resource", option.resourceClass, props.locale, props.tr);
             }
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
@@ -9177,7 +9209,7 @@ function RecoveryOptionComparisonPanel(props) {
               return text("风险", "Risk");
             },
             get value() {
-              return option.riskClass;
+              return recoveryOptionDisplayLabel("risk", option.riskClass, props.locale, props.tr);
             }
           }), null);
           insert(_el$9, createComponent(RecoveryMetric, {
