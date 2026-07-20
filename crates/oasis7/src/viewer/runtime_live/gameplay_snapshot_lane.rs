@@ -1,4 +1,24 @@
-use crate::simulator::persist::{PlayerGameplayGoalKind, PlayerGameplaySnapshot};
+use crate::simulator::persist::{
+    PlayerGameplayGoalKind, PlayerGameplayRecoveryOption, PlayerGameplaySnapshot,
+};
+
+fn recovery_option(
+    kind: &str,
+    estimated_time_class: &str,
+    estimated_resource_class: &str,
+    risk_class: &str,
+    retained_benefit: &str,
+    recommendation_reason: &str,
+) -> PlayerGameplayRecoveryOption {
+    PlayerGameplayRecoveryOption {
+        kind: kind.to_string(),
+        estimated_time_class: estimated_time_class.to_string(),
+        estimated_resource_class: estimated_resource_class.to_string(),
+        risk_class: risk_class.to_string(),
+        retained_benefit: retained_benefit.to_string(),
+        recommendation_reason: recommendation_reason.to_string(),
+    }
+}
 
 fn player_gameplay_forces_major_power_dependency(gameplay: &PlayerGameplaySnapshot) -> bool {
     let mut haystack = String::new();
@@ -175,6 +195,40 @@ pub(super) fn apply_small_player_lane_truth(gameplay: &mut PlayerGameplaySnapsho
                 _ => None,
             }
         };
+    }
+
+    if gameplay.recovery_options.is_empty()
+        && gameplay.recovery_path_kind.as_deref() == Some("repair_rebuild_or_pivot")
+        && gameplay.repair_available == Some(true)
+        && gameplay.rebuild_available == Some(true)
+        && gameplay.pivot_available == Some(true)
+    {
+        gameplay.recovery_options = vec![
+            recovery_option(
+                "repair",
+                "short",
+                "focused_local_input",
+                "low",
+                "Retains the current local line and its accumulated operating context.",
+                "Use repair when the current blocker is localized and restoring the existing line is the least disruptive response.",
+            ),
+            recovery_option(
+                "rebuild",
+                "medium",
+                "broader_local_reinvestment",
+                "moderate",
+                "Retains local production ownership while replacing the fragile operating arrangement.",
+                "Use rebuild when the current arrangement cannot reliably absorb the blocker and a resilient local line is needed.",
+            ),
+            recovery_option(
+                "pivot",
+                "medium",
+                "redirected_local_commitment",
+                "tradeoff",
+                "Retains independent progress by redirecting the next specialization instead of requiring sponsorship.",
+                "Use pivot when changing the local specialization creates a clearer path around the current pressure.",
+            ),
+        ];
     }
 
     let leverage_class = gameplay.leverage_class.as_deref().unwrap_or("unclassified");

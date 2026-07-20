@@ -502,6 +502,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
     let primary_factory = primary_factory_for_player_gameplay(state);
@@ -612,6 +613,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 repair_available: None,
                 rebuild_available: None,
                 pivot_available: None,
+                recovery_options: Vec::new(),
             });
         }
     }
@@ -676,6 +678,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
 
@@ -751,6 +754,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
 
@@ -829,6 +833,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    recovery_options: Vec::new(),
                 });
             }
             IndustryStage::ScaleOut => {
@@ -882,6 +887,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    recovery_options: Vec::new(),
                 });
             }
             IndustryStage::Governance => {
@@ -935,6 +941,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    recovery_options: Vec::new(),
                 });
             }
         }
@@ -988,6 +995,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
 
@@ -1039,6 +1047,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
 
@@ -1090,6 +1099,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            recovery_options: Vec::new(),
         });
     }
 
@@ -1140,5 +1150,6 @@ pub(super) fn build_player_gameplay_snapshot(
         repair_available: None,
         rebuild_available: None,
         pivot_available: None,
+        recovery_options: Vec::new(),
     })
 }

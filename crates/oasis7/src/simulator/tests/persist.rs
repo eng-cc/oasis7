@@ -552,6 +552,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         repair_available: None,
         rebuild_available: None,
         pivot_available: None,
+        recovery_options: Vec::new(),
     });
 
     let mut value: serde_json::Value =
@@ -563,6 +564,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         .expect("player gameplay object");
     gameplay_object.remove("execution_state");
     gameplay_object.remove("branch_recommendations");
+    gameplay_object.remove("recovery_options");
 
     let migrated = WorldSnapshot::from_json(
         &serde_json::to_string(&value).expect("serialize migrated snapshot"),
@@ -595,6 +597,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         Some("unverified")
     );
     assert_eq!(gameplay.recovery_path_kind.as_deref(), Some("unverified"));
+    assert!(gameplay.recovery_options.is_empty());
     let facility = gameplay
         .micro_depot_facilities
         .first()

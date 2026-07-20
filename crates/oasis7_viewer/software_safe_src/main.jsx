@@ -4,6 +4,7 @@ import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
+import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
@@ -11,6 +12,7 @@ import {
   LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE,
   isHostedPublicJoinDeploymentMode,
 } from "./software_safe_constants.js";
+import { recoveryOptionVisualFixture } from "./viewer_recovery_option_fixture.js";
 
 const VIEWER_VISUAL_FIXTURE_GLOBAL = "__OASIS7_VIEWER_VISUAL_FIXTURES__";
 const [viewerStateRevision, setViewerStateRevision] = createSignal(0);
@@ -2620,10 +2622,6 @@ function WorldSummaryPanel() {
                     value={gameplay().matureWorldContinuation?.dependencyStatus || tr(locale(), "未验证", "unverified")}
                   />
                   <MetricCard
-                    label={tr(locale(), "恢复选项", "Recovery Options")}
-                    value={gameplay().matureWorldContinuation?.recoveryOptions || tr(locale(), "待发布", "not published")}
-                  />
-                  <MetricCard
                     label={tr(locale(), "恢复路径", "Recovery Path")}
                     value={gameplay().matureWorldContinuation?.recoveryPath || tr(locale(), "等待运行时指引", "waiting for runtime guidance")}
                   />
@@ -2633,6 +2631,11 @@ function WorldSummaryPanel() {
                     detail={gameplay().shareReplay?.summary}
                   />
                 </div>
+                <RecoveryOptionComparisonPanel
+                  continuation={gameplay().matureWorldContinuation}
+                  locale={locale()}
+                  tr={tr}
+                />
               </PanelSection>
               <EventCard
                 title={tr(locale(), "已接受意图", "Accepted Intent")}
@@ -4018,6 +4021,13 @@ function viewerFixtureBaseSnapshot(overrides = {}) {
       causality_detail: "iron input exhausted at factory-0",
       last_world_change: "Smelter build request reached factory-0; iron shortage blocks construction.",
       next_step_hint: "Replenish upstream materials, then advance again to confirm the line resumes.",
+      recovery_path_kind: "repair_rebuild_or_pivot",
+      recovery_path_detail: "Choose the local recovery path that best fits the current constraint.",
+      major_power_dependency_status: "independent_path_available",
+      repair_available: true,
+      rebuild_available: true,
+      pivot_available: true,
+      recovery_options: recoveryOptionVisualFixture(),
       available_actions: [
         {
           action_id: "build_factory_smelter_mk1",
