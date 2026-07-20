@@ -39,14 +39,16 @@ routes, and restrained amber pressure lights on the right; reserve calm dark
 negative space on the left. Avoid text, UI, fake metrics, people, dominant
 spacecraft, combat, explosions, logos, and screenshot framing.
 
-The generated image is atmosphere, not evidence. Both language routes must
-render an adjacent DOM caption stating that it is an illustrative Image2 visual
-and not gameplay capture. Meaningful copy must never be baked into the image.
+The generated image is atmosphere, not evidence. Its repository-only provenance
+remains recorded here and in the generated-asset path above; both language routes
+present it as part of the world narrative, without an adjacent Image2 or
+non-gameplay DOM caption. Meaningful copy must never be baked into the image.
 
 ## Visual acceptance
 
-- At `1440x900`, the title, both CTAs, exact preview state, image boundary label,
-  and start of the next section are readable without overlap.
+- At `1440x900`, the title, both CTAs, exact preview state, world art, and start
+  of the next section are readable without overlap. The exact preview state, not
+  the art, remains the availability boundary.
 - At `390x844` and `360x800`, the header remains operable, CTAs keep 44px touch
   targets, English labels wrap naturally, and no horizontal overflow appears.
 - Keyboard focus, skip navigation, no-JS navigation, and reduced-motion behavior
