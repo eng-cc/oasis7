@@ -230,6 +230,8 @@ pub struct PlayerGameplaySnapshot {
     pub intent_scope: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub intent_target: Option<String>,
+    #[serde(default)]
+    pub can_reprioritize: bool,
     pub goal_id: String,
     pub goal_kind: PlayerGameplayGoalKind,
     pub goal_title: String,
@@ -316,6 +318,8 @@ struct PlayerGameplaySnapshotSerde {
     intent_scope: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     intent_target: Option<String>,
+    #[serde(default)]
+    can_reprioritize: bool,
     goal_id: String,
     goal_kind: PlayerGameplayGoalKind,
     goal_title: String,
@@ -428,6 +432,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             intent_summary: legacy.intent_summary,
             intent_scope: legacy.intent_scope,
             intent_target: legacy.intent_target,
+            can_reprioritize: legacy.can_reprioritize,
             goal_id: legacy.goal_id,
             goal_kind: legacy.goal_kind,
             goal_title: legacy.goal_title,

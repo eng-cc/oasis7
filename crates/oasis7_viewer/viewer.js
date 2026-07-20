@@ -1197,6 +1197,7 @@ function executeKindForAction(actionId, protocolAction) {
   if (protocolAction === "live_control.step") return "step";
   if (protocolAction === "live_control.play") return "play";
   if (protocolAction === "agent_chat") return "agent_chat";
+  if (protocolAction === "prompt_control.apply") return "reprioritize";
   if (protocolAction !== "gameplay_action.submit") return "unsupported";
   if (actionId === "claim_first_agent") return "claim_first_agent";
   if (actionId === "claim_starter_oc") return "claim_starter_oc";
@@ -7151,7 +7152,7 @@ function installPixelWorldVisualFixtureHook() {
   applySelection({ kind: "agent", id: "agent-0" });
   return fixtureName;
 }
-var _tmpl$$2 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$2 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$2 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
+var _tmpl$$3 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$3 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$3 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$3 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -7349,12 +7350,12 @@ function PixelWorldHostVisualLayer(props) {
   if (!props.enabled) {
     return [];
   }
-  return [_tmpl$$2(), _tmpl$2$2(), _tmpl$3$2(), createComponent(For, {
+  return [_tmpl$$3(), _tmpl$2$3(), _tmpl$3$3(), createComponent(For, {
     get each() {
       return visualState().fragmentTerrain.slice(0, 96);
     },
     children: (patch, index) => (() => {
-      var _el$4 = _tmpl$4$2();
+      var _el$4 = _tmpl$4$3();
       createRenderEffect((_p$) => {
         var _v$ = patch.dominant_compound, _v$2 = fragmentTerrainStyle(patch, visualState().worldBounds, index()), _v$3 = `${patch.location_id}:${patch.dominant_compound}`;
         _v$ !== _p$.e && setAttribute(_el$4, "data-compound", _p$.e = _v$);
@@ -7373,7 +7374,7 @@ function PixelWorldHostVisualLayer(props) {
       return visualState().links.slice(0, 10);
     },
     children: (link, index) => [(() => {
-      var _el$5 = _tmpl$5$2();
+      var _el$5 = _tmpl$5$3();
       createRenderEffect((_p$) => {
         var _v$4 = link.kind, _v$5 = routeStyle(link, visualState().worldBounds, index()), _v$6 = `${link.kind}:${link.id}`;
         _v$4 !== _p$.e && setAttribute(_el$5, "data-route-kind", _p$.e = _v$4);
@@ -8998,7 +8999,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$$1 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$1 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<span class=badge>`);
+var _tmpl$$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$2 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<span class=badge>`);
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -9027,7 +9028,7 @@ function MicroDepotFacilitiesPanel(props) {
       return facilities().length > 0;
     },
     get children() {
-      var _el$ = _tmpl$$1(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
+      var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
       insert(_el$4, () => tr2(locale(), "区域设施", "Regional Facility"));
       insert(_el$5, () => tr2(locale(), "Micro Depot", "Micro Depot"));
       insert(_el$6, () => tr2(locale(), "仅显示当前规范玩法快照已发布的状态、模块和回执证据；动作需由运行时另行发布。", "Shows only state, module, and receipt evidence published by the canonical gameplay snapshot; actions remain runtime-published."));
@@ -9036,7 +9037,7 @@ function MicroDepotFacilitiesPanel(props) {
           return facilities();
         },
         children: (facility) => (() => {
-          var _el$8 = _tmpl$4$1(), _el$9 = _el$8.firstChild, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling, _el$10 = _el$9.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.firstChild, _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$12.nextSibling, _el$17 = _el$16.firstChild, _el$18 = _el$17.nextSibling, _el$19 = _el$18.nextSibling, _el$20 = _el$16.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$26.nextSibling;
+          var _el$8 = _tmpl$4$2(), _el$9 = _el$8.firstChild, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling, _el$10 = _el$9.nextSibling, _el$11 = _el$10.nextSibling, _el$12 = _el$11.firstChild, _el$13 = _el$12.firstChild, _el$14 = _el$13.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$12.nextSibling, _el$17 = _el$16.firstChild, _el$18 = _el$17.nextSibling, _el$19 = _el$18.nextSibling, _el$20 = _el$16.nextSibling, _el$21 = _el$20.firstChild, _el$22 = _el$21.nextSibling, _el$23 = _el$22.nextSibling, _el$24 = _el$20.nextSibling, _el$25 = _el$24.firstChild, _el$26 = _el$25.nextSibling, _el$27 = _el$26.nextSibling;
           insert(_el$0, () => facility.facilityId || tr2(locale(), "未命名 depot", "Unnamed depot"));
           insert(_el$1, () => facilityStatusLabel(facility, locale(), tr2));
           insert(_el$10, () => `claim=${facility.ownerClaimId || "-"} · location=${facility.locationId || "-"} · ${tr2(locale(), "半径", "radius")}=${facility.serviceRadiusCm ?? "-"}cm`);
@@ -9057,7 +9058,7 @@ function MicroDepotFacilitiesPanel(props) {
               return displayableStrings(facility.supportedResourceKinds).length > 0;
             },
             get children() {
-              var _el$28 = _tmpl$2$1();
+              var _el$28 = _tmpl$2$2();
               insert(_el$28, () => `${tr2(locale(), "支持资源", "Supported resources")}: ${displayableStrings(facility.supportedResourceKinds).join(", ")}`);
               return _el$28;
             }
@@ -9068,19 +9069,19 @@ function MicroDepotFacilitiesPanel(props) {
             },
             get fallback() {
               return (() => {
-                var _el$30 = _tmpl$2$1();
+                var _el$30 = _tmpl$2$2();
                 insert(_el$30, () => tr2(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions."));
                 return _el$30;
               })();
             },
             get children() {
-              var _el$29 = _tmpl$3$1();
+              var _el$29 = _tmpl$3$2();
               insert(_el$29, createComponent(For, {
                 get each() {
                   return displayableStrings(facility.availableActions);
                 },
                 children: (action) => (() => {
-                  var _el$31 = _tmpl$5$1();
+                  var _el$31 = _tmpl$5$2();
                   insert(_el$31, action);
                   return _el$31;
                 })()
@@ -9097,6 +9098,141 @@ function MicroDepotFacilitiesPanel(props) {
     }
   });
 }
+var _tmpl$$1 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
+function ReprioritizeActionForm(props) {
+  const [open, setOpen] = createSignal(false);
+  const [draft, setDraft] = createSignal("");
+  const [localError, setLocalError] = createSignal("");
+  const [submitted, setSubmitted] = createSignal(false);
+  let textarea;
+  let errorNode;
+  const feedback = () => {
+    props.observeState();
+    return snapshotSemanticFeedback(state.lastPromptFeedback);
+  };
+  const inFlight = () => submitted() && ["registering", "signing", "sent"].includes(String(feedback()?.stage || ""));
+  const cancel = () => {
+    setDraft("");
+    setLocalError("");
+    setSubmitted(false);
+    setOpen(false);
+  };
+  createEffect(() => {
+    const current = feedback();
+    if (!submitted() || !current) return;
+    if (current.stage === "apply_ack") {
+      cancel();
+      sendGameplayAction({
+        protocol_action: "request_snapshot",
+        action_id: "request_snapshot"
+      });
+    } else if (current.stage === "error") {
+      setLocalError(current.reason || current.effect || props.tr(props.locale, "目标替换失败，请检查后重试。", "Goal replacement failed; review the error and retry."));
+      queueMicrotask(() => errorNode?.focus());
+    }
+  });
+  const submit = (event) => {
+    event.preventDefault();
+    const shortTermGoal = draft().trim();
+    if (!shortTermGoal) {
+      setLocalError(props.tr(props.locale, "请输入替代短期目标。", "Enter a replacement short-term goal."));
+      textarea?.focus();
+      return;
+    }
+    const agentId = props.action.targetAgentId;
+    const profile = state.snapshot?.model?.agent_prompt_profiles?.[agentId] || {};
+    setLocalError("");
+    const result = sendPromptControl("apply", {
+      agentId,
+      shortTermGoal,
+      // Never inherit dirty Advanced Prompt Settings drafts into this narrow action.
+      systemPrompt: profile.system_prompt_override || "",
+      longTermGoal: profile.long_term_goal_override || ""
+    });
+    if (result?.ok === false) {
+      setLocalError(result.reason);
+      queueMicrotask(() => errorNode?.focus());
+      return;
+    }
+    setSubmitted(true);
+  };
+  return (() => {
+    var _el$ = _tmpl$2$1();
+    insert(_el$, createComponent(Show, {
+      get when() {
+        return !open();
+      },
+      get fallback() {
+        return (() => {
+          var _el$3 = _tmpl$5$1(), _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$9 = _el$6.nextSibling, _el$0 = _el$9.firstChild, _el$1 = _el$0.nextSibling;
+          _el$3.$$keydown = (event) => {
+            if (event.key === "Escape" && !inFlight()) {
+              event.preventDefault();
+              cancel();
+            }
+          };
+          _el$3.addEventListener("submit", submit);
+          insert(_el$4, () => props.tr(props.locale, "替代短期目标", "Replacement short-term goal"));
+          _el$5.$$input = (event) => {
+            setDraft(event.currentTarget.value);
+            setLocalError("");
+          };
+          var _ref$ = textarea;
+          typeof _ref$ === "function" ? use(_ref$, _el$5) : textarea = _el$5;
+          insert(_el$6, () => props.tr(props.locale, "这会替换短期目标，不保证 Agent 下一步必定执行。", "This replaces the short-term goal; it does not guarantee the Agent's next action."));
+          insert(_el$3, createComponent(Show, {
+            get when() {
+              return localError();
+            },
+            get children() {
+              var _el$7 = _tmpl$3$1();
+              var _ref$2 = errorNode;
+              typeof _ref$2 === "function" ? use(_ref$2, _el$7) : errorNode = _el$7;
+              insert(_el$7, localError);
+              return _el$7;
+            }
+          }), _el$9);
+          insert(_el$3, createComponent(Show, {
+            get when() {
+              return memo(() => !!!localError())() && inFlight();
+            },
+            get children() {
+              var _el$8 = _tmpl$4$1();
+              insert(_el$8, () => props.tr(props.locale, "正在认证并提交新目标…", "Authenticating and submitting the new goal…"));
+              return _el$8;
+            }
+          }), _el$9);
+          _el$0.$$click = cancel;
+          insert(_el$0, () => props.tr(props.locale, "取消", "Cancel"));
+          insert(_el$1, () => props.tr(props.locale, "应用新目标", "Apply new goal"));
+          createRenderEffect((_p$) => {
+            var _v$ = inFlight(), _v$2 = !draft().trim() || inFlight();
+            _v$ !== _p$.e && (_el$0.disabled = _p$.e = _v$);
+            _v$2 !== _p$.t && (_el$1.disabled = _p$.t = _v$2);
+            return _p$;
+          }, {
+            e: void 0,
+            t: void 0
+          });
+          createRenderEffect(() => _el$5.value = draft());
+          return _el$3;
+        })();
+      },
+      get children() {
+        var _el$2 = _tmpl$$1();
+        _el$2.$$click = () => {
+          setOpen(true);
+          queueMicrotask(() => textarea?.focus());
+        };
+        insert(_el$2, () => props.action.label);
+        createRenderEffect(() => setAttribute(_el$2, "aria-label", props.action.label));
+        return _el$2;
+      }
+    }));
+    return _el$;
+  })();
+}
+delegateEvents(["click", "keydown", "input"]);
 function createViewerAgentClaimDisplayModel({ state: state2, tr: tr2 }) {
   function normalizedId2(value) {
     return String(value || "").trim();
@@ -12533,6 +12669,20 @@ function WorldSummaryPanel() {
                               n: void 0
                             });
                             return _el$294;
+                          }
+                        }), createComponent(Show, {
+                          get when() {
+                            return memo(() => action.executeKind === "reprioritize")() && !disabledReason();
+                          },
+                          get children() {
+                            return createComponent(ReprioritizeActionForm, {
+                              action,
+                              get locale() {
+                                return locale();
+                              },
+                              tr,
+                              observeState: observeViewerStateRevision
+                            });
                           }
                         }), createComponent(Show, {
                           get when() {

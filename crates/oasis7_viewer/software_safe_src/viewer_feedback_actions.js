@@ -7,6 +7,7 @@ function executeKindForAction(actionId, protocolAction) {
   if (protocolAction === "live_control.step") return "step";
   if (protocolAction === "live_control.play") return "play";
   if (protocolAction === "agent_chat") return "agent_chat";
+  if (protocolAction === "prompt_control.apply") return "reprioritize";
   if (protocolAction !== "gameplay_action.submit") return "unsupported";
   if (actionId === "claim_first_agent") return "claim_first_agent";
   if (actionId === "claim_starter_oc") return "claim_starter_oc";

@@ -92,7 +92,25 @@ pub(super) fn base_available_actions(
                 target_agent_id: Some(agent_id.to_string()),
                 disabled_reason: None,
             });
+            actions.push(PlayerGameplayAction {
+                action_id: "reprioritize".to_string(),
+                label: "Replace this Agent's short-term goal".to_string(),
+                protocol_action: "prompt_control.apply".to_string(),
+                target_agent_id: Some(agent_id.to_string()),
+                disabled_reason: None,
+            });
         }
+    } else if let Some(agent_id) = first_agent_id {
+        actions.push(PlayerGameplayAction {
+            action_id: "reprioritize".to_string(),
+            label: "Replace this Agent's short-term goal".to_string(),
+            protocol_action: "prompt_control.apply".to_string(),
+            target_agent_id: Some(agent_id.to_string()),
+            disabled_reason: Some(
+                "reprioritize requires an LLM-capable Agent with prompt-control support"
+                    .to_string(),
+            ),
+        });
     }
     actions
 }

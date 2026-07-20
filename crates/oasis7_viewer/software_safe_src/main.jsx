@@ -4,6 +4,7 @@ import { render as mount } from "solid-js/web";
 import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
+import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
   HOSTED_PUBLIC_JOIN_DEPLOYMENT_MODE,
@@ -2904,6 +2905,9 @@ function WorldSummaryPanel() {
                                 {gameplayActionDisplayLabel(action, locale())}
                               </button>
                             </div>
+                          </Show>
+                          <Show when={action.executeKind === "reprioritize" && !disabledReason()}>
+                            <ReprioritizeActionForm action={action} locale={locale()} tr={tr} observeState={observeViewerStateRevision} />
                           </Show>
                           <Show when={action.executeKind === "agent_chat"}>
                             <div class="toolbar">
