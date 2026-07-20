@@ -7,6 +7,14 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
+#[path = "render_test_fixtures.rs"]
+mod fixtures;
+use fixtures::{
+    sample_render_state_with_beacon_candidates, sample_render_state_with_hotspot_candidates,
+    sample_render_state_with_selection, sample_render_state_with_unoccluded_detail_fleck,
+    test_runtime,
+};
+
 const VIEWPORT_WIDTH: u32 = 960;
 const VIEWPORT_HEIGHT: u32 = 540;
 const PIXEL_BACKGROUND: [u8; 4] = [8, 12, 20, 255];
@@ -127,90 +135,6 @@ fn sample_render_state(fragment_footprint_cm: f64) -> RenderState {
             kind: "agent".to_string(),
             id: "agent-0".to_string(),
         }),
-    }
-}
-
-fn sample_render_state_with_selection(
-    fragment_footprint_cm: f64,
-    kind: &str,
-    id: &str,
-) -> RenderState {
-    let mut render_state = sample_render_state(fragment_footprint_cm);
-    render_state.selection = Some(Selection {
-        kind: kind.to_string(),
-        id: id.to_string(),
-    });
-    render_state
-}
-
-fn sample_render_state_with_unoccluded_detail_fleck() -> RenderState {
-    let mut render_state = sample_render_state(20_000.0);
-    render_state.selection = None;
-    render_state.locations[0].pos = sample_position(1_200_000.0, 700_000.0);
-    render_state.agents[0].pos = Some(sample_position(1_250_000.0, 750_000.0));
-    render_state
-}
-
-fn sample_render_state_with_beacon_candidates(kind: &str, id: &str) -> RenderState {
-    let mut render_state = sample_render_state_with_selection(12_000.0, kind, id);
-    render_state.locations.push(Location {
-        id: "loc-1".to_string(),
-        label: "Unselected Location".to_string(),
-        pos: sample_position(1_620_000.0, 1_100_000.0),
-        radius_cm: 30_000.0,
-        resource_summary: "-".to_string(),
-        size_hint_px: Some(10.0),
-        marker_role: Some("logic_anchor".to_string()),
-        marker_alpha: Some(0.32),
-    });
-    render_state.agents.push(Agent {
-        id: "agent-1".to_string(),
-        label: "Unselected Agent".to_string(),
-        pos: Some(sample_position(1_640_000.0, 1_115_000.0)),
-        location_id: Some("loc-1".to_string()),
-        resource_summary: "-".to_string(),
-        status_badges: vec![],
-        size_hint_px: Some(16.0),
-    });
-    render_state
-}
-
-fn sample_render_state_with_hotspot_candidates() -> RenderState {
-    let mut render_state = sample_render_state(12_000.0);
-    render_state.visual_hotspots = vec![
-        VisualHotspot {
-            id: "hotspot-blocker".to_string(),
-            label: "Blocked route".to_string(),
-            kind: "blocker".to_string(),
-            pos: sample_position(1_400_000.0, 800_000.0),
-            emphasis: Some(0.8),
-            size_hint_px: Some(12.0),
-        },
-        VisualHotspot {
-            id: "hotspot-goal".to_string(),
-            label: "Goal route".to_string(),
-            kind: "goal".to_string(),
-            pos: sample_position(1_600_000.0, 1_200_000.0),
-            emphasis: Some(0.5),
-            size_hint_px: Some(24.0),
-        },
-    ];
-    render_state
-}
-
-fn test_runtime(render_state: RenderState) -> BevyRuntimeState {
-    BevyRuntimeState {
-        mounted: true,
-        render_state: Some(render_state),
-        render_version: 1,
-        camera: CameraState {
-            zoom: 3.0,
-            pan_x_px: 0.0,
-            pan_y_px: 0.0,
-        },
-        camera_fit_version: 1,
-        camera_user_override: true,
-        ..Default::default()
     }
 }
 
@@ -1059,68 +983,6 @@ fn bevy_render_probe_contract_captures_visual_hierarchy() {
 }
 
 #[test]
-fn bevy_ecs_reconciles_neutral_hotspot_cores_without_hit_region_changes() {
-    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
-    let first = visual_probe_summary(&mut app);
-
-    assert_eq!(first.hotspots.len(), 2);
-    assert_eq!(first.hotspot_cores.len(), 2);
-    assert_eq!(first.hotspot_entity_cache_size, 2);
-    assert_eq!(first.hotspot_core_entity_count, 2);
-    assert_eq!(
-        first.hit_regions, 2,
-        "hotspot cores must not add hit regions"
-    );
-    for core in &first.hotspot_cores {
-        let base = first
-            .hotspots
-            .iter()
-            .find(|hotspot| hotspot.id == core.id)
-            .expect("hotspot base for core");
-        assert_eq!(core.x, base.x);
-        assert_eq!(core.y, base.y);
-        assert_eq!(core.z, base.z + HOTSPOT_CORE_LAYER_Z_OFFSET);
-        assert!(
-            (HOTSPOT_CORE_MIN_SIZE_PX as f32..=HOTSPOT_CORE_MAX_SIZE_PX as f32)
-                .contains(&core.size_px)
-        );
-        let expected_size = (base.size_px as f64 * HOTSPOT_CORE_SIZE_SCALE)
-            .clamp(HOTSPOT_CORE_MIN_SIZE_PX, HOTSPOT_CORE_MAX_SIZE_PX)
-            as f32;
-        assert_eq!(core.size_px, expected_size);
-    }
-    let world = app.world_mut();
-    let mut core_query = world.query::<(&PixelWorldHotspotCoreVisual, &Sprite)>();
-    for (_, sprite) in core_query.iter(world) {
-        assert_eq!(sprite.color, HOTSPOT_CORE_COLOR);
-    }
-
-    app.update();
-    assert_eq!(
-        visual_probe_summary(&mut app).hotspot_core_entity_count,
-        2,
-        "a consecutive visible reconcile must reuse each hotspot core"
-    );
-
-    {
-        let mut runtime = app.world_mut().resource_mut::<BevyRuntimeState>();
-        let mut removed = sample_render_state_with_hotspot_candidates();
-        removed.visual_hotspots.clear();
-        runtime.render_state = Some(removed);
-        runtime.render_version += 1;
-    }
-    app.update();
-    let removed = visual_probe_summary(&mut app);
-    assert!(removed.hotspot_cores.is_empty());
-    assert_eq!(removed.hotspot_core_entity_count, 0);
-    assert_eq!(removed.hotspot_entity_cache_size, 0);
-    assert_eq!(
-        removed.hit_regions, 2,
-        "hotspot removal must not alter hit regions"
-    );
-}
-
-#[test]
 fn selected_location_has_opaque_amber_two_pixel_ring_above_location_and_below_agents() {
     let mut app = render_test_app(sample_render_state_with_selection(
         12_000.0, "location", "loc-0",
@@ -1254,24 +1116,6 @@ fn bevy_pixel_regression_exports_selected_location_ring_with_world_layers() {
 }
 
 #[test]
-fn bevy_pixel_regression_exports_visible_neutral_hotspot_cores() {
-    let mut app = render_test_app(sample_render_state_with_hotspot_candidates());
-    let (image, summary) = rasterize_pixel_regression(&mut app);
-
-    assert!(summary.hotspot_pixels > 0);
-    assert!(summary.hotspot_core_pixels > 0);
-    assert_ne!(summary.hotspot_core_sample_rgba, PIXEL_BACKGROUND);
-    assert!(
-        image
-            .pixels()
-            .any(|pixel| pixel.0 == summary.hotspot_core_sample_rgba),
-        "neutral hotspot cores must contribute visible raster pixels"
-    );
-
-    write_pixel_probe_if_requested(&image, &summary);
-}
-
-#[test]
 fn bevy_pixel_regression_keeps_canvas_visible_for_agent_and_location_selection() {
     for (kind, id) in [("agent", "agent-0"), ("location", "loc-0")] {
         let mut app = render_test_app(sample_render_state_with_selection(12_000.0, kind, id));
@@ -1350,3 +1194,6 @@ fn bevy_pixel_regression_gives_selected_agent_and_location_the_same_non_color_be
         );
     }
 }
+
+#[path = "render_hotspot_core_tests.rs"]
+mod hotspot_core_tests;
