@@ -142,6 +142,28 @@
 - 初始化顺序：`seed_positions -> bootstrap_chunks -> agent_spawn_positions`。
 - 分块尺寸固定：`20km × 20km × 10km`（常量 `CHUNK_SIZE_X/Y/Z_CM`），场景不可覆盖。
 
+### Frag 密度、材质分布与保底配置
+
+`AsteroidFragmentConfig` 的稳定资源生成合同包括：
+
+- `min_fragments_per_chunk = 6`，sanitize 到 `0..=max_fragments_per_chunk`；正常采样不足时执行确定性、有界保底，约束不可满足时允许低于目标但必须终止。
+- `starter_core_radius_ratio = 0.35`，sanitize 到 `0.0..=1.0`；归一化平面半径不超过该值的候选进入 starter core。
+- `starter_core_density_multiplier = 1.6`，sanitize 到至少 `1.0`；只提高 starter core 的采样密度，不保证固定资源数量或玩家收益。
+- `material_distribution_strategy = uniform`；`uniform` 沿用统一材质权重，`core_metal_rim_volatile` 按 core / middle / rim 三段离散径向区间使用固定权重：中心提高 metal/composite，中段采用折中权重，外缘提高 ice/carbon。
+- 同一 `world_seed + config + chunk_coord` 产生相同候选、保底与材质选择。保底对每个缺口最多尝试 24 轮、每个候选最多尝试 8 次，继续遵守间距与 chunk 数量上限。
+
+这些参数属于生成器权威，不进入产品承诺；starter core 与最低数量只降低极端冷启动概率，不消除世界差异，也不保证第一工业目标必然完成。
+
+### 运行期 Frag 补种与落账
+
+- `replenish_interval_ticks = 100`；负值 sanitize 为 `0`，`0` 表示关闭。仅 asteroid-fragment runtime 已启用、当前 tick 命中非零周期、且 generated/exhausted chunk 低于 `max_fragments_per_chunk` 时补种。
+- `replenish_percent_ppm = 10_000`（1%），sanitize 到 `0..=1_000_000`。每次目标量为 `min(missing, max(1, ceil(max_fragments_per_chunk * ppm / 1_000_000)))`。
+- 随机源由 asteroid-fragment seed、当前 tick、固定 salt 与 `chunk_seed` 派生；候选必须通过本 chunk 与相邻 26 个 chunk 的 spacing 校验，因此同一权威输入可复现。
+- 成功候选先写入 locations，并把每个 fragment budget 聚合到 chunk budget，再原子记录 `FragmentsReplenished { entries }`。
+- replay 只应用事件中已提交的 replenishment entries，不重新运行补种算法；资源 `total/remaining` 守恒和 committed-delta 恢复边界保持不变。
+
+聚焦回归覆盖配置 sanitize、每 chunk 保底、starter core 偏置、材质分区、100 tick / 1% 补种与 replay 应用等价性。实现或默认值变化时必须同步这些合同和对应测试，不能只更新玩家预览。
+
 ### 原生分辨率声明（2026-05-07 对齐）
 - `chunk-grid`
   - native resolution: 固定 `20km × 20km × 10km`
