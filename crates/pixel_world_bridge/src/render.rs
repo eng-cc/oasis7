@@ -24,6 +24,9 @@ const FRAGMENT_FLECK_OFFSET_SCALE: f32 = 0.22;
 const LOCATION_LAYER_Z: f32 = 1.0;
 const SELECTED_LOCATION_CUE_LAYER_Z: f32 = 2.1;
 const AGENT_LAYER_Z: f32 = 3.0;
+const AGENT_CORE_LAYER_Z_OFFSET: f32 = 0.01;
+const AGENT_CORE_SIZE_SCALE: f32 = 0.32;
+const AGENT_CORE_COLOR: Color = Color::srgba_u8(224, 242, 254, 238);
 const SELECTED_ENTITY_LAYER_Z_OFFSET: f32 = 1.0;
 const SELECTED_ENTITY_SIZE_SCALE: f64 = 1.35;
 const SELECTED_LOCATION_CUE_THICKNESS_PX: f32 = 2.0;
@@ -115,6 +118,13 @@ struct PixelWorldSelectedLocationCue {
 
 #[derive(Component)]
 pub(crate) struct PixelWorldAgentVisual {
+    id: String,
+}
+
+/// A non-interactive, neutral inner light chip that gives every agent marker
+/// a stable pixel-world silhouette without encoding agent status.
+#[derive(Component)]
+struct PixelWorldAgentCoreVisual {
     id: String,
 }
 
@@ -407,18 +417,9 @@ pub(crate) fn agent_visual_style(
     index: usize,
 ) -> AgentVisualStyle {
     let pulse = 1.0 + (0.12 * ((animation_ms / 240.0) + index as f64).sin());
-    let base_size = if is_selected {
-        agent.size_hint_px.unwrap_or(15.0).max(15.0)
-    } else {
-        agent.size_hint_px.unwrap_or(12.0)
-    };
-    let selected_scale = if is_selected {
-        SELECTED_ENTITY_SIZE_SCALE
-    } else {
-        1.0
-    };
+    let base_size = agent_unanimated_size_px(agent, is_selected);
     AgentVisualStyle {
-        size_px: base_size * pulse * selected_scale,
+        size_px: base_size * pulse,
         layer_z: AGENT_LAYER_Z
             + if is_selected {
                 SELECTED_ENTITY_LAYER_Z_OFFSET
@@ -426,6 +427,24 @@ pub(crate) fn agent_visual_style(
                 0.0
             },
     }
+}
+
+fn agent_unanimated_size_px(agent: &Agent, is_selected: bool) -> f64 {
+    let base_size = if is_selected {
+        agent.size_hint_px.unwrap_or(15.0).max(15.0)
+    } else {
+        agent.size_hint_px.unwrap_or(12.0)
+    };
+    base_size
+        * if is_selected {
+            SELECTED_ENTITY_SIZE_SCALE
+        } else {
+            1.0
+        }
+}
+
+fn agent_core_size_px(agent: &Agent, is_selected: bool) -> f32 {
+    agent_unanimated_size_px(agent, is_selected) as f32 * AGENT_CORE_SIZE_SCALE
 }
 
 fn grid_geometry(layout: &GridLayoutKey) -> (f64, f64, f64, f64, Color) {
@@ -752,6 +771,75 @@ fn reconcile_agents(
     despawn_stale_entities(commands, &mut runtime.agent_entities, &active_ids);
 }
 
+fn reconcile_agent_cores(
+    commands: &mut Commands,
+    runtime: &BevyRuntimeState,
+    existing_cores: &Query<(Entity, &PixelWorldAgentCoreVisual)>,
+    width: f64,
+    height: f64,
+    animation_ms: f64,
+) {
+    let mut existing_by_id = HashMap::new();
+    for (entity, core) in existing_cores.iter() {
+        existing_by_id.insert(core.id.clone(), entity);
+    }
+
+    let Some(render_state) = runtime.render_state.as_ref() else {
+        for entity in existing_by_id.into_values() {
+            commands.entity(entity).despawn();
+        }
+        return;
+    };
+
+    let mut active_ids = HashSet::new();
+    for (index, agent) in render_state.agents.iter().enumerate() {
+        active_ids.insert(agent.id.clone());
+        let (canvas_x, canvas_y) = render_state
+            .world_bounds
+            .as_ref()
+            .and_then(|world_bounds| {
+                agent.pos.as_ref().and_then(|pos| {
+                    to_canvas_point(pos, world_bounds, width, height, &runtime.camera)
+                })
+            })
+            .unwrap_or_else(|| {
+                fallback_point_for_entity(&agent.id, width, height, &runtime.camera)
+            });
+        let is_selected = render_state
+            .selection
+            .as_ref()
+            .map(|selection| selection.kind == "agent" && selection.id == agent.id)
+            .unwrap_or(false);
+        let style = agent_visual_style(agent, is_selected, animation_ms, index);
+        let sprite = sprite_for_square(AGENT_CORE_COLOR, agent_core_size_px(agent, is_selected));
+        let transform = Transform::from_translation(to_bevy_translation(
+            canvas_x,
+            canvas_y,
+            width,
+            height,
+            style.layer_z + AGENT_CORE_LAYER_Z_OFFSET,
+        ));
+
+        if let Some(entity) = existing_by_id.get(&agent.id).copied() {
+            commands.entity(entity).insert((sprite, transform));
+        } else {
+            commands.spawn((
+                sprite,
+                transform,
+                PixelWorldAgentCoreVisual {
+                    id: agent.id.clone(),
+                },
+            ));
+        }
+    }
+
+    for (id, entity) in existing_by_id {
+        if !active_ids.contains(&id) {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
 fn reconcile_links(
     commands: &mut Commands,
     runtime: &mut BevyRuntimeState,
@@ -909,6 +997,7 @@ pub(crate) struct RenderSceneQueries<'w, 's> {
     location_visuals: Query<'w, 's, (Entity, &'static PixelWorldLocationVisual)>,
     selected_location_cues: Query<'w, 's, (Entity, &'static PixelWorldSelectedLocationCue)>,
     agent_visuals: Query<'w, 's, (Entity, &'static PixelWorldAgentVisual)>,
+    agent_cores: Query<'w, 's, (Entity, &'static PixelWorldAgentCoreVisual)>,
     link_visuals: Query<'w, 's, (Entity, &'static PixelWorldLinkVisual)>,
     hotspot_visuals: Query<'w, 's, (Entity, &'static PixelWorldHotspotVisual)>,
 }
@@ -931,6 +1020,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_shadows.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -985,6 +1077,9 @@ pub(crate) fn render_scene(
             commands.entity(entity).despawn();
         }
         for (entity, _) in queries.fragment_shadows.iter() {
+            commands.entity(entity).despawn();
+        }
+        for (entity, _) in queries.agent_cores.iter() {
             commands.entity(entity).despawn();
         }
         for entity in queries.current_grid.iter() {
@@ -1047,6 +1142,14 @@ pub(crate) fn render_scene(
         height,
         animation_ms,
         rebuild_hit_regions,
+    );
+    reconcile_agent_cores(
+        &mut commands,
+        &runtime,
+        &queries.agent_cores,
+        width,
+        height,
+        animation_ms,
     );
     reconcile_hotspots(&mut commands, &mut runtime, width, height, animation_ms);
 }
