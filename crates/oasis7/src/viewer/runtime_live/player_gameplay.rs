@@ -1,6 +1,8 @@
 use super::*;
 
-use super::super::auth::{VerifiedPlayerAuth, verify_gameplay_action_auth_proof};
+use super::super::auth::{
+    VerifiedPlayerAuth, verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
+};
 use super::super::gameplay_actions::{
     ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_CLAIM_FIRST_AGENT,
     ACTION_CLAIM_STARTER_OC, ACTION_RELEASE_AGENT_CLAIM, ACTION_SCHEDULE_ASSEMBLER_CONTROL_CHIP,
@@ -12,28 +14,35 @@ use super::super::gameplay_actions::{
     FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, FIRST_AGENT_CLAIM_TARGET_AGENT_ID,
     build_runtime_action_from_gameplay_request, gameplay_action_requires_actor_agent,
 };
-use super::super::protocol::{GameplayActionAck, GameplayActionError, GameplayActionRequest};
+use super::super::protocol::{
+    CollectDataCommand, CollectDataPreflight, GameplayActionAck, GameplayActionError,
+    GameplayActionRequest,
+};
 use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
-use crate::runtime::{IndustryStage, MaterialLedgerId, WorldState};
-use crate::simulator::{
-    PlayerDataCollectionPreflight, PlayerGameplayAction, PlayerGameplayRecentFeedback,
-};
+use crate::runtime::{Action as RuntimeAction, IndustryStage, MaterialLedgerId, WorldState};
+use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind};
 use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
+
+pub(super) enum CollectDataResult {
+    Preflight(CollectDataPreflight),
+    Submit(GameplayActionAck),
+}
 
 /// Quotes the exact cost and yield parameters a caller plans to submit via `CollectData`.
 ///
 /// `CollectData` deliberately has no global default cost or yield. Callers must supply the
 /// exact action parameters so this preflight remains aligned with runtime enforcement.
-pub fn data_collection_preflight(
+fn data_collection_preflight(
+    collector_agent_id: String,
     available_electricity: i64,
     electricity_cost: i64,
     data_amount: i64,
-) -> PlayerDataCollectionPreflight {
+) -> CollectDataPreflight {
     let invalid_reason = if electricity_cost <= 0 {
         Some("collection electricity cost must be positive".to_string())
     } else if data_amount <= 0 {
@@ -52,7 +61,12 @@ pub fn data_collection_preflight(
         })
     });
 
-    PlayerDataCollectionPreflight {
+    CollectDataPreflight {
+        data_owner_agent_id: collector_agent_id.clone(),
+        data_recipient_agent_id: collector_agent_id.clone(),
+        collector_agent_id,
+        data_use: "self_collection".to_string(),
+        permission_status: "self_owned_no_grant_required".to_string(),
         electricity_cost,
         data_amount,
         available_electricity,
@@ -65,6 +79,9 @@ pub fn data_collection_preflight(
         recovery_guidance: insufficient_electricity.then(|| {
             "replenish electricity before collecting data, or defer collection until electricity is available"
                 .to_string()
+        }),
+        alternative_action: insufficient_electricity.then(|| {
+            "replenish_electricity_or_defer_collection".to_string()
         }),
         blocked_reason,
     }
@@ -258,6 +275,211 @@ pub(super) fn extend_available_actions(
 }
 
 impl ViewerRuntimeLiveServer {
+    pub(super) fn handle_collect_data_protocol_request(
+        &mut self,
+        command: CollectDataCommand,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        match self.handle_collect_data(command) {
+            Ok(CollectDataResult::Preflight(quote)) => {
+                send_response(writer, &ViewerResponse::CollectDataPreflight { quote })?;
+            }
+            Ok(CollectDataResult::Submit(ack)) => {
+                let ack_player_id = ack.player_id.clone();
+                send_response(writer, &ViewerResponse::GameplayActionAck { ack })?;
+                if !ack_player_id.trim().is_empty() {
+                    session.current_player_id = Some(ack_player_id);
+                }
+                if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
+                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                    send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                }
+            }
+            Err(error) => {
+                self.record_gameplay_action_rejection(&error);
+                send_response(writer, &ViewerResponse::GameplayActionError { error })?;
+                if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
+                    let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
+                    send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn handle_collect_data(
+        &mut self,
+        command: CollectDataCommand,
+    ) -> Result<CollectDataResult, GameplayActionError> {
+        let (verified, collector_agent_id) = self.authorize_collect_data(&command)?;
+        let request = match &command {
+            CollectDataCommand::Preflight { request } | CollectDataCommand::Submit { request } => {
+                request
+            }
+        };
+        let available_electricity = self
+            .world
+            .state()
+            .agents
+            .get(collector_agent_id.as_str())
+            .map(|agent| agent.state.resources.get(ResourceKind::Electricity))
+            .ok_or_else(|| GameplayActionError {
+                code: "collector_agent_missing".to_string(),
+                message: format!("bound collector Agent {collector_agent_id} is not in the world"),
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: Some(collector_agent_id.clone()),
+            })?;
+        let quote = data_collection_preflight(
+            collector_agent_id.clone(),
+            available_electricity,
+            request.electricity_cost,
+            request.data_amount,
+        );
+        match &command {
+            CollectDataCommand::Preflight { .. } => Ok(CollectDataResult::Preflight(quote)),
+            CollectDataCommand::Submit { .. } => {
+                if !quote.can_execute {
+                    return Err(GameplayActionError {
+                        code: "collect_data_preflight_blocked".to_string(),
+                        message: quote
+                            .blocked_reason
+                            .clone()
+                            .unwrap_or_else(|| "data collection is blocked".to_string()),
+                        action_id: Some("collect_data".to_string()),
+                        target_agent_id: Some(collector_agent_id),
+                    });
+                }
+                if let Some(chain_status_bind) = self
+                    .config
+                    .chain_status_bind
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    let chain_submit_bind = self
+                        .config
+                        .chain_submit_bind
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .unwrap_or(chain_status_bind)
+                        .to_string();
+                    let submitted = chain_link::submit_chain_linked_collect_data(
+                        chain_submit_bind.as_str(),
+                        &command,
+                    )?;
+                    let runtime_action_id = submitted.action_id.expect(
+                        "chain collect_data submit must include action_id after ok=true validation",
+                    );
+                    self.runtime_action_players
+                        .insert(runtime_action_id, verified.player_id.clone());
+                    return Ok(CollectDataResult::Submit(GameplayActionAck {
+                        action_id: "collect_data".to_string(),
+                        target_agent_id: collector_agent_id,
+                        player_id: verified.player_id,
+                        runtime_action_id,
+                        accepted_at_tick: self.world.state().time,
+                        message: Some(
+                            "submitted data collection to chain runtime; wait for committed world sync"
+                                .to_string(),
+                        ),
+                    }));
+                }
+                let runtime_action_id = self.world.submit_action(RuntimeAction::CollectData {
+                    collector_agent_id: collector_agent_id.clone(),
+                    electricity_cost: request.electricity_cost,
+                    data_amount: request.data_amount,
+                });
+                self.runtime_action_players
+                    .insert(runtime_action_id, verified.player_id.clone());
+                Ok(CollectDataResult::Submit(GameplayActionAck {
+                    action_id: "collect_data".to_string(),
+                    target_agent_id: collector_agent_id,
+                    player_id: verified.player_id,
+                    runtime_action_id,
+                    accepted_at_tick: self.world.state().time,
+                    message: Some(
+                        "advance 1-2 steps to apply the queued data collection".to_string(),
+                    ),
+                }))
+            }
+        }
+    }
+
+    fn authorize_collect_data(
+        &mut self,
+        command: &CollectDataCommand,
+    ) -> Result<(VerifiedPlayerAuth, String), GameplayActionError> {
+        self.ensure_gameplay_ready_for_action("collect_data", Some("collect_data"), None)
+            .map_err(|(code, message)| GameplayActionError {
+                code,
+                message,
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: None,
+            })?;
+        let request = match command {
+            CollectDataCommand::Preflight { request } | CollectDataCommand::Submit { request } => {
+                request
+            }
+        };
+        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
+            code: "auth_proof_required".to_string(),
+            message: "collect_data requires auth proof".to_string(),
+            action_id: Some("collect_data".to_string()),
+            target_agent_id: None,
+        })?;
+        let verified = verify_collect_data_auth_proof(command, auth).map_err(|message| {
+            GameplayActionError {
+                code: map_auth_verify_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: None,
+            }
+        })?;
+        self.session_policy
+            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
+            .map_err(|message| GameplayActionError {
+                code: map_session_policy_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: None,
+            })?;
+        self.llm_sidecar
+            .consume_player_auth_nonce(verified.player_id.as_str(), verified.nonce)
+            .map_err(|message| GameplayActionError {
+                code: "auth_nonce_replay".to_string(),
+                message,
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: None,
+            })?;
+        let collector_agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "player_agent_binding_required".to_string(),
+                message: "collect_data requires a bound player Agent session".to_string(),
+                action_id: Some("collect_data".to_string()),
+                target_agent_id: None,
+            })?
+            .to_string();
+        let public_key = normalize_optional_public_key(request.public_key.as_deref());
+        ensure_agent_player_access_runtime(
+            &self.world,
+            &self.llm_sidecar,
+            collector_agent_id.as_str(),
+            verified.player_id.as_str(),
+            public_key.as_deref(),
+        )
+        .map_err(|err| GameplayActionError {
+            code: err.code,
+            message: err.message,
+            action_id: Some("collect_data".to_string()),
+            target_agent_id: err.agent_id,
+        })?;
+        Ok((verified, collector_agent_id))
+    }
+
     pub(super) fn handle_gameplay_action(
         &mut self,
         request: GameplayActionRequest,
@@ -709,7 +931,7 @@ mod tests {
 
     #[test]
     fn data_collection_preflight_reports_the_exact_executable_collection() {
-        let quote = data_collection_preflight(20, 7, 11);
+        let quote = data_collection_preflight("collector".to_string(), 20, 7, 11);
 
         assert_eq!(quote.electricity_cost, 7);
         assert_eq!(quote.data_amount, 11);
@@ -718,12 +940,17 @@ mod tests {
         assert!(quote.can_execute);
         assert_eq!(quote.blocked_reason, None);
         assert_eq!(quote.recovery_guidance, None);
+        assert_eq!(quote.collector_agent_id, "collector");
+        assert_eq!(quote.data_owner_agent_id, "collector");
+        assert_eq!(quote.data_recipient_agent_id, "collector");
+        assert_eq!(quote.data_use, "self_collection");
+        assert_eq!(quote.permission_status, "self_owned_no_grant_required");
     }
 
     #[test]
     fn data_collection_preflight_preserves_balance_and_guides_recovery_when_power_is_insufficient()
     {
-        let quote = data_collection_preflight(3, 5, 8);
+        let quote = data_collection_preflight("collector".to_string(), 3, 5, 8);
 
         assert_eq!(quote.electricity_cost, 5);
         assert_eq!(quote.data_amount, 8);
@@ -735,6 +962,10 @@ mod tests {
             Some("insufficient electricity: need 5, have 3")
         );
         assert_eq!(
+            quote.alternative_action.as_deref(),
+            Some("replenish_electricity_or_defer_collection")
+        );
+        assert_eq!(
             quote.recovery_guidance.as_deref(),
             Some(
                 "replenish electricity before collecting data, or defer collection until electricity is available"
@@ -744,7 +975,7 @@ mod tests {
 
     #[test]
     fn data_collection_preflight_matches_runtime_rejection_for_nonpositive_parameters() {
-        let quote = data_collection_preflight(20, 0, 8);
+        let quote = data_collection_preflight("collector".to_string(), 20, 0, 8);
 
         assert!(!quote.can_execute);
         assert_eq!(quote.electricity_after, 20);

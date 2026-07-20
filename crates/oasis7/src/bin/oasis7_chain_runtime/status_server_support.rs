@@ -280,6 +280,7 @@ fn handle_chain_status_connection(
         &runtime,
         method,
         path,
+        execution_world_dir,
     )? {
         return Ok(());
     }

@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::net::TcpStream;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -7,8 +8,8 @@ use oasis7::consensus_action_payload::{
     ConsensusActionPayloadEnvelope, encode_consensus_action_payload,
 };
 use oasis7::viewer::{
-    GameplayActionRequest, build_runtime_action_from_gameplay_request,
-    verify_gameplay_action_auth_proof,
+    CollectDataCommand, GameplayActionRequest, build_runtime_action_from_gameplay_request,
+    verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
 };
 use oasis7_node::NodeRuntime;
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,13 @@ const MAX_TRACKED_GAMEPLAY_NONCES: usize = 4096;
 
 static NEXT_GAMEPLAY_ACTION_ID: AtomicU64 = AtomicU64::new(1);
 static GAMEPLAY_NONCE_TRACKER: OnceLock<Mutex<GameplayNonceTracker>> = OnceLock::new();
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ChainGameplaySubmitRequest {
+    CollectData(CollectDataCommand),
+    Gameplay(GameplayActionRequest),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ChainGameplaySubmitResponse {
@@ -105,6 +113,7 @@ pub(super) fn maybe_handle_gameplay_submit_request(
     runtime: &Arc<Mutex<NodeRuntime>>,
     method: &str,
     path: &str,
+    execution_world_dir: &Path,
 ) -> Result<bool, String> {
     if path != GAMEPLAY_SUBMIT_PATH {
         return Ok(false);
@@ -118,7 +127,7 @@ pub(super) fn maybe_handle_gameplay_submit_request(
         )?;
         return Ok(true);
     }
-    handle_gameplay_submit(stream, request_bytes, runtime)?;
+    handle_gameplay_submit(stream, request_bytes, runtime, execution_world_dir)?;
     Ok(true)
 }
 
@@ -126,6 +135,7 @@ fn handle_gameplay_submit(
     stream: &mut TcpStream,
     request_bytes: &[u8],
     runtime: &Arc<Mutex<NodeRuntime>>,
+    execution_world_dir: &Path,
 ) -> Result<(), String> {
     let body = match super::feedback_submit_api::extract_http_json_body(request_bytes) {
         Ok(body) => body,
@@ -139,7 +149,7 @@ fn handle_gameplay_submit(
             return Ok(());
         }
     };
-    let request = match parse_gameplay_submit_request(body) {
+    let request = match parse_chain_gameplay_submit_request(body) {
         Ok(request) => request,
         Err(err) => {
             write_gameplay_submit_error(
@@ -151,28 +161,14 @@ fn handle_gameplay_submit(
             return Ok(());
         }
     };
-    let Some(auth) = request.auth.as_ref() else {
-        write_gameplay_submit_error(
-            stream,
-            401,
-            GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH,
-            "gameplay submit requires auth proof",
-        )?;
-        return Ok(());
-    };
-
-    let verified = match verify_gameplay_action_auth_proof(&request, auth) {
-        Ok(verified) => verified,
-        Err(err) => {
-            write_gameplay_submit_error(
-                stream,
-                401,
-                GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH,
-                err.as_str(),
-            )?;
-            return Ok(());
-        }
-    };
+    let (verified, runtime_action) =
+        match authorize_chain_gameplay_submit(request, execution_world_dir) {
+            Ok(result) => result,
+            Err((status, code, message)) => {
+                write_gameplay_submit_error(stream, status, code, message.as_str())?;
+                return Ok(());
+            }
+        };
 
     if let Err(err) = with_gameplay_nonce_tracker(|tracker| {
         tracker.record_nonce(verified.player_id.as_str(), verified.nonce)
@@ -186,13 +182,6 @@ fn handle_gameplay_submit(
         return Ok(());
     }
 
-    let runtime_action = match build_runtime_action_from_gameplay_request(&request) {
-        Ok(action) => action,
-        Err(err) => {
-            write_gameplay_submit_error(stream, 400, err.code.as_str(), err.message.as_str())?;
-            return Ok(());
-        }
-    };
     let payload = match build_gameplay_submit_action_payload(runtime_action) {
         Ok(payload) => payload,
         Err(err) => {
@@ -229,6 +218,82 @@ fn handle_gameplay_submit(
 
 pub(super) fn parse_gameplay_submit_request(body: &[u8]) -> Result<GameplayActionRequest, String> {
     serde_json::from_slice(body).map_err(|err| format!("invalid gameplay submit request: {err}"))
+}
+
+fn parse_chain_gameplay_submit_request(body: &[u8]) -> Result<ChainGameplaySubmitRequest, String> {
+    serde_json::from_slice(body).map_err(|err| format!("invalid gameplay submit request: {err}"))
+}
+
+fn authorize_chain_gameplay_submit(
+    request: ChainGameplaySubmitRequest,
+    execution_world_dir: &Path,
+) -> Result<
+    (oasis7::viewer::VerifiedPlayerAuth, oasis7::runtime::Action),
+    (u16, &'static str, String),
+> {
+    match request {
+        ChainGameplaySubmitRequest::Gameplay(request) => {
+            let auth = request.auth.as_ref().ok_or_else(|| {
+                (
+                    401,
+                    GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH,
+                    "gameplay submit requires auth proof".to_string(),
+                )
+            })?;
+            let verified = verify_gameplay_action_auth_proof(&request, auth)
+                .map_err(|err| (401, GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH, err))?;
+            let action = build_runtime_action_from_gameplay_request(&request)
+                .map_err(|err| (400, GAMEPLAY_SUBMIT_ERROR_INVALID_REQUEST, err.message))?;
+            Ok((verified, action))
+        }
+        ChainGameplaySubmitRequest::CollectData(command) => {
+            let CollectDataCommand::Submit { request } = &command else {
+                return Err((
+                    400,
+                    GAMEPLAY_SUBMIT_ERROR_INVALID_REQUEST,
+                    "chain gameplay submit accepts only collect_data mode=submit".to_string(),
+                ));
+            };
+            let auth = request.auth.as_ref().ok_or_else(|| {
+                (
+                    401,
+                    GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH,
+                    "collect_data submit requires auth proof".to_string(),
+                )
+            })?;
+            let verified = verify_collect_data_auth_proof(&command, auth)
+                .map_err(|err| (401, GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH, err))?;
+            let world = super::execution_bridge::load_execution_world(execution_world_dir)
+                .map_err(|err| (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, err))?;
+            let matching_claims = world
+                .state()
+                .starter_oc_claims
+                .values()
+                .filter(|claim| {
+                    claim.player_id == verified.player_id
+                        && claim.public_key.as_deref() == Some(verified.public_key.as_str())
+                })
+                .collect::<Vec<_>>();
+            let [claim] = matching_claims.as_slice() else {
+                return Err((
+                    403,
+                    GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH,
+                    format!(
+                        "collect_data requires exactly one authoritative player/key Agent binding; found {}",
+                        matching_claims.len()
+                    ),
+                ));
+            };
+            Ok((
+                verified,
+                oasis7::runtime::Action::CollectData {
+                    collector_agent_id: claim.agent_id.clone(),
+                    electricity_cost: request.electricity_cost,
+                    data_amount: request.data_amount,
+                },
+            ))
+        }
+    }
 }
 
 fn build_gameplay_submit_action_payload(

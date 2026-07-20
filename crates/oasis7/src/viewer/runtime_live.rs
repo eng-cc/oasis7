@@ -84,7 +84,6 @@ use gameplay_snapshot::{
     player_gameplay_feedback_from_control_ack,
 };
 use mapping::{map_runtime_event, runtime_state_to_simulator_model};
-pub use player_gameplay::data_collection_preflight;
 use session_policy::{
     RuntimeSessionPolicy, RuntimeSessionRevokeMetadata, location_id_for_pos,
     map_session_policy_error_code, normalize_optional_string, session_revoke_metadata_key,
@@ -810,6 +809,9 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             },
+            ViewerRequest::CollectData { command } => {
+                self.handle_collect_data_protocol_request(command, session, writer)?;
+            }
             ViewerRequest::AuthoritativeChallenge { command } => {
                 match self.handle_authoritative_challenge(command) {
                     Ok((ack, maybe_batch_update)) => {

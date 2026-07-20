@@ -12,6 +12,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 mod auth_actions;
+mod auth_actions_collect_data;
 mod auth_actions_feedback;
 mod authoritative;
 mod background_play;
