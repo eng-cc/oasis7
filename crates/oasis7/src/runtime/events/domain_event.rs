@@ -239,6 +239,14 @@ pub enum DomainEvent {
         electricity_cost: i64,
         data_amount: i64,
     },
+    DataCollectedAuthenticated {
+        collector_agent_id: String,
+        electricity_cost: i64,
+        data_amount: i64,
+        player_id: String,
+        public_key: String,
+        nonce: u64,
+    },
     DataAccessGranted {
         owner_agent_id: String,
         grantee_agent_id: String,
@@ -824,6 +832,9 @@ impl DomainEvent {
             DomainEvent::ActionRejected { .. } => None,
             DomainEvent::ResourceTransferred { from_agent_id, .. } => Some(from_agent_id.as_str()),
             DomainEvent::DataCollected {
+                collector_agent_id, ..
+            }
+            | DomainEvent::DataCollectedAuthenticated {
                 collector_agent_id, ..
             } => Some(collector_agent_id.as_str()),
             DomainEvent::DataAccessGranted { owner_agent_id, .. } => Some(owner_agent_id.as_str()),

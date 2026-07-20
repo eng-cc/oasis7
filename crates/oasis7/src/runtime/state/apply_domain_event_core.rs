@@ -785,6 +785,7 @@ impl WorldState {
             | event @ DomainEvent::ModuleArtifactSaleCompleted { .. }
             | event @ DomainEvent::ResourceTransferred { .. }
             | event @ DomainEvent::DataCollected { .. }
+            | event @ DomainEvent::DataCollectedAuthenticated { .. }
             | event @ DomainEvent::DataAccessGranted { .. }
             | event @ DomainEvent::DataAccessRevoked { .. }
             | event @ DomainEvent::PowerRedeemed { .. }

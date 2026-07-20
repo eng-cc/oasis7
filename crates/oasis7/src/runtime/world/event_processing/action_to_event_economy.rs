@@ -140,6 +140,100 @@ impl World {
                     data_amount: *data_amount,
                 }))
             }
+            Action::CollectDataAuthenticated {
+                collector_agent_id,
+                electricity_cost,
+                data_amount,
+                player_id,
+                public_key,
+                nonce,
+            } => {
+                let matching_claims = self
+                    .state
+                    .starter_oc_claims
+                    .values()
+                    .filter(|claim| {
+                        claim.player_id == *player_id
+                            && claim.public_key.as_deref() == Some(public_key.as_str())
+                    })
+                    .collect::<Vec<_>>();
+                if matching_claims.len() != 1 || matching_claims[0].agent_id != *collector_agent_id
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "authenticated collect_data requires exactly one starter OC player/key binding for collector {collector_agent_id}; found {}",
+                                matching_claims.len()
+                            )],
+                        },
+                    }));
+                }
+                let last_nonce = self
+                    .state
+                    .authenticated_collect_data_last_nonces
+                    .get(player_id)
+                    .and_then(|by_key| by_key.get(public_key))
+                    .copied()
+                    .unwrap_or(0);
+                if *nonce == 0 || *nonce <= last_nonce {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "authenticated collect_data nonce replay: expected nonce > {last_nonce}, received {nonce}"
+                            )],
+                        },
+                    }));
+                }
+                if !self.state.agents.contains_key(collector_agent_id) {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::AgentNotFound {
+                            agent_id: collector_agent_id.clone(),
+                        },
+                    }));
+                }
+                if *electricity_cost <= 0 || *data_amount <= 0 {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::InvalidAmount {
+                            amount: if *electricity_cost <= 0 {
+                                *electricity_cost
+                            } else {
+                                *data_amount
+                            },
+                        },
+                    }));
+                }
+                let available = self
+                    .state
+                    .agents
+                    .get(collector_agent_id)
+                    .map(|cell| cell.state.resources.get(ResourceKind::Electricity))
+                    .unwrap_or(0);
+                if available < *electricity_cost {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::InsufficientResource {
+                            agent_id: collector_agent_id.clone(),
+                            kind: ResourceKind::Electricity,
+                            requested: *electricity_cost,
+                            available,
+                        },
+                    }));
+                }
+                Ok(WorldEventBody::Domain(
+                    DomainEvent::DataCollectedAuthenticated {
+                        collector_agent_id: collector_agent_id.clone(),
+                        electricity_cost: *electricity_cost,
+                        data_amount: *data_amount,
+                        player_id: player_id.clone(),
+                        public_key: public_key.clone(),
+                        nonce: *nonce,
+                    },
+                ))
+            }
             Action::GrantDataAccess {
                 owner_agent_id,
                 grantee_agent_id,

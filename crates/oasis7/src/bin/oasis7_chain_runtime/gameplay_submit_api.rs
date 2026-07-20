@@ -17,13 +17,45 @@ use serde::{Deserialize, Serialize};
 const GAMEPLAY_SUBMIT_PATH: &str = "/v1/chain/gameplay/submit";
 const GAMEPLAY_SUBMIT_ERROR_INVALID_REQUEST: &str = "invalid_request";
 const GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH: &str = "invalid_auth";
-const GAMEPLAY_SUBMIT_ERROR_NONCE_REPLAY: &str = "auth_nonce_replay";
 const GAMEPLAY_SUBMIT_ERROR_INTERNAL: &str = "internal_error";
 const GAMEPLAY_SUBMIT_ERROR_SUBMIT_FAILED: &str = "submit_failed";
 const GAMEPLAY_NONCE_LEDGER_FILE: &str = "gameplay-auth-nonces.json";
-
 static NEXT_GAMEPLAY_ACTION_ID: AtomicU64 = AtomicU64::new(1);
 static GAMEPLAY_NONCE_LEDGER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct GameplayNonceLedger {
+    #[serde(default)]
+    last_nonce_by_player_key: BTreeMap<String, BTreeMap<String, u64>>,
+}
+
+enum LegacyNonceError {
+    Replay(String),
+    Internal(String),
+}
+
+impl GameplayNonceLedger {
+    fn record(&mut self, player_id: &str, public_key: &str, nonce: u64) -> Result<(), String> {
+        let last = self
+            .last_nonce_by_player_key
+            .entry(player_id.to_string())
+            .or_default()
+            .entry(public_key.to_string())
+            .or_default();
+        if nonce == 0 || nonce <= *last {
+            return Err(format!(
+                "auth nonce replay: expected nonce > {last}, received {nonce}"
+            ));
+        }
+        *last = nonce;
+        Ok(())
+    }
+}
+
+struct AuthorizedGameplaySubmit {
+    action: oasis7::runtime::Action,
+    legacy_auth: Option<oasis7::viewer::VerifiedPlayerAuth>,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -64,45 +96,6 @@ impl ChainGameplaySubmitResponse {
             error_code: Some(error_code.into()),
             error: Some(message.into()),
         }
-    }
-}
-
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct GameplayNonceLedger {
-    #[serde(default)]
-    last_nonce_by_player_key: BTreeMap<String, BTreeMap<String, u64>>,
-}
-
-#[derive(Debug)]
-enum GameplayNonceRecordError {
-    Replay(String),
-    Internal(String),
-}
-
-impl GameplayNonceLedger {
-    fn record_nonce(
-        &mut self,
-        player_id: &str,
-        public_key: &str,
-        nonce: u64,
-    ) -> Result<(), String> {
-        if nonce == 0 {
-            return Err("auth nonce must be greater than zero".to_string());
-        }
-        let last_nonce = self
-            .last_nonce_by_player_key
-            .entry(player_id.to_string())
-            .or_default()
-            .entry(public_key.to_string())
-            .or_default();
-        if nonce <= *last_nonce {
-            return Err(format!(
-                "auth nonce replay for player {} key {}: expected nonce > {}, received {}",
-                player_id, public_key, last_nonce, nonce
-            ));
-        }
-        *last_nonce = nonce;
-        Ok(())
     }
 }
 
@@ -160,32 +153,26 @@ fn handle_gameplay_submit(
             return Ok(());
         }
     };
-    let (verified, runtime_action) =
-        match authorize_chain_gameplay_submit(request, execution_world_dir) {
-            Ok(result) => result,
-            Err((status, code, message)) => {
-                write_gameplay_submit_error(stream, status, code, message.as_str())?;
-                return Ok(());
-            }
-        };
-
-    if let Err(err) = record_gameplay_nonce(
-        execution_world_dir,
-        verified.player_id.as_str(),
-        verified.public_key.as_str(),
-        verified.nonce,
-    ) {
-        let (status, code, message) = match err {
-            GameplayNonceRecordError::Replay(message) => {
-                (409, GAMEPLAY_SUBMIT_ERROR_NONCE_REPLAY, message)
-            }
-            GameplayNonceRecordError::Internal(message) => {
-                (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, message)
-            }
-        };
-        write_gameplay_submit_error(stream, status, code, message.as_str())?;
-        return Ok(());
+    let authorized = match authorize_chain_gameplay_submit(request, execution_world_dir) {
+        Ok(authorized) => authorized,
+        Err((status, code, message)) => {
+            write_gameplay_submit_error(stream, status, code, message.as_str())?;
+            return Ok(());
+        }
+    };
+    if let Some(auth) = authorized.legacy_auth.as_ref() {
+        if let Err(error) = record_legacy_gameplay_nonce(execution_world_dir, auth) {
+            let (status, code, message) = match error {
+                LegacyNonceError::Replay(message) => (409, "auth_nonce_replay", message),
+                LegacyNonceError::Internal(message) => {
+                    (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, message)
+                }
+            };
+            write_gameplay_submit_error(stream, status, code, message.as_str())?;
+            return Ok(());
+        }
     }
+    let runtime_action = authorized.action;
 
     let payload = match build_gameplay_submit_action_payload(runtime_action) {
         Ok(payload) => payload,
@@ -232,10 +219,7 @@ fn parse_chain_gameplay_submit_request(body: &[u8]) -> Result<ChainGameplaySubmi
 fn authorize_chain_gameplay_submit(
     request: ChainGameplaySubmitRequest,
     execution_world_dir: &Path,
-) -> Result<
-    (oasis7::viewer::VerifiedPlayerAuth, oasis7::runtime::Action),
-    (u16, &'static str, String),
-> {
+) -> Result<AuthorizedGameplaySubmit, (u16, &'static str, String)> {
     match request {
         ChainGameplaySubmitRequest::Gameplay(request) => {
             let auth = request.auth.as_ref().ok_or_else(|| {
@@ -249,7 +233,10 @@ fn authorize_chain_gameplay_submit(
                 .map_err(|err| (401, GAMEPLAY_SUBMIT_ERROR_INVALID_AUTH, err))?;
             let action = build_runtime_action_from_gameplay_request(&request)
                 .map_err(|err| (400, GAMEPLAY_SUBMIT_ERROR_INVALID_REQUEST, err.message))?;
-            Ok((verified, action))
+            Ok(AuthorizedGameplaySubmit {
+                action,
+                legacy_auth: Some(verified),
+            })
         }
         ChainGameplaySubmitRequest::CollectData(command) => {
             let CollectDataCommand::Submit { request } = &command else {
@@ -289,14 +276,17 @@ fn authorize_chain_gameplay_submit(
                     ),
                 ));
             };
-            Ok((
-                verified,
-                oasis7::runtime::Action::CollectData {
+            Ok(AuthorizedGameplaySubmit {
+                action: oasis7::runtime::Action::CollectDataAuthenticated {
                     collector_agent_id: claim.agent_id.clone(),
                     electricity_cost: request.electricity_cost,
                     data_amount: request.data_amount,
+                    player_id: verified.player_id.clone(),
+                    public_key: verified.public_key.clone(),
+                    nonce: verified.nonce,
                 },
-            ))
+                legacy_auth: None,
+            })
         }
     }
 }
@@ -337,44 +327,32 @@ fn write_gameplay_submit_json_response(
         .map_err(|err| format!("failed to write gameplay submit json response: {err}"))
 }
 
-fn gameplay_nonce_ledger_lock() -> &'static Mutex<()> {
-    GAMEPLAY_NONCE_LEDGER_LOCK.get_or_init(|| Mutex::new(()))
-}
-
-fn record_gameplay_nonce(
+fn record_legacy_gameplay_nonce(
     execution_world_dir: &Path,
-    player_id: &str,
-    public_key: &str,
-    nonce: u64,
-) -> Result<(), GameplayNonceRecordError> {
-    let _guard = gameplay_nonce_ledger_lock()
+    auth: &oasis7::viewer::VerifiedPlayerAuth,
+) -> Result<(), LegacyNonceError> {
+    let _guard = GAMEPLAY_NONCE_LEDGER_LOCK
+        .get_or_init(|| Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let path = execution_world_dir.join(GAMEPLAY_NONCE_LEDGER_FILE);
     let mut ledger = if path.exists() {
-        let bytes = std::fs::read(path.as_path()).map_err(|err| {
-            GameplayNonceRecordError::Internal(format!(
-                "read gameplay nonce ledger {} failed: {err}",
-                path.display()
-            ))
-        })?;
-        serde_json::from_slice(&bytes).map_err(|err| {
-            GameplayNonceRecordError::Internal(format!(
-                "parse gameplay nonce ledger {} failed: {err}",
-                path.display()
-            ))
-        })?
+        let bytes = std::fs::read(path.as_path())
+            .map_err(|err| LegacyNonceError::Internal(err.to_string()))?;
+        serde_json::from_slice(&bytes).map_err(|err| LegacyNonceError::Internal(err.to_string()))?
     } else {
         GameplayNonceLedger::default()
     };
     ledger
-        .record_nonce(player_id, public_key, nonce)
-        .map_err(GameplayNonceRecordError::Replay)?;
-    let bytes = serde_json::to_vec_pretty(&ledger).map_err(|err| {
-        GameplayNonceRecordError::Internal(format!("encode gameplay nonce ledger failed: {err}"))
-    })?;
-    super::write_bytes_atomic(path.as_path(), bytes.as_slice())
-        .map_err(GameplayNonceRecordError::Internal)
+        .record(
+            auth.player_id.as_str(),
+            auth.public_key.as_str(),
+            auth.nonce,
+        )
+        .map_err(LegacyNonceError::Replay)?;
+    let bytes = serde_json::to_vec_pretty(&ledger)
+        .map_err(|err| LegacyNonceError::Internal(err.to_string()))?;
+    super::write_bytes_atomic(path.as_path(), bytes.as_slice()).map_err(LegacyNonceError::Internal)
 }
 
 #[cfg(test)]

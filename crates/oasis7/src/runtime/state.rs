@@ -432,6 +432,8 @@ pub struct WorldState {
     pub agent_claims: BTreeMap<String, AgentClaimState>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub starter_oc_claims: BTreeMap<String, StarterOcClaimState>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub authenticated_collect_data_last_nonces: BTreeMap<String, BTreeMap<String, u64>>,
     #[serde(default)]
     pub agent_claim_last_processed_epoch: u64,
     #[serde(default)]
@@ -557,6 +559,7 @@ impl Default for WorldState {
             economic_contracts: BTreeMap::new(),
             agent_claims: BTreeMap::new(),
             starter_oc_claims: BTreeMap::new(),
+            authenticated_collect_data_last_nonces: BTreeMap::new(),
             agent_claim_last_processed_epoch: 0,
             contract_pair_last_success_settled_at: BTreeMap::new(),
             reputation_reward_window_started_at: BTreeMap::new(),
@@ -926,6 +929,7 @@ impl WorldState {
             | DomainEvent::ModuleArtifactSaleCompleted { .. }
             | DomainEvent::ResourceTransferred { .. }
             | DomainEvent::DataCollected { .. }
+            | DomainEvent::DataCollectedAuthenticated { .. }
             | DomainEvent::DataAccessGranted { .. }
             | DomainEvent::DataAccessRevoked { .. }
             | DomainEvent::PowerRedeemed { .. }

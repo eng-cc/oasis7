@@ -69,6 +69,65 @@ fn collect_data_consumes_electricity_and_adds_data() {
 }
 
 #[test]
+fn authenticated_collect_data_advances_consensus_nonce_and_rejects_replay() {
+    let mut world = World::new();
+    register_agent(&mut world, "collector-auth");
+    world
+        .set_agent_resource_balance("collector-auth", ResourceKind::Electricity, 30)
+        .expect("seed electricity");
+    world.submit_action(Action::ClaimStarterOc {
+        agent_id: "collector-auth".to_string(),
+        player_id: "player-auth".to_string(),
+        public_key: Some("public-auth".to_string()),
+    });
+    world.step().expect("claim collector");
+
+    let action = Action::CollectDataAuthenticated {
+        collector_agent_id: "collector-auth".to_string(),
+        electricity_cost: 7,
+        data_amount: 11,
+        player_id: "player-auth".to_string(),
+        public_key: "public-auth".to_string(),
+        nonce: 9,
+    };
+    world.submit_action(action.clone());
+    world.step().expect("authenticated collection");
+    assert_eq!(
+        world.state().authenticated_collect_data_last_nonces["player-auth"]["public-auth"],
+        9
+    );
+    assert_eq!(
+        world
+            .agent_resource_balance("collector-auth", ResourceKind::Electricity)
+            .expect("collector electricity"),
+        23
+    );
+
+    world.submit_action(action);
+    world.step().expect("replay deterministically rejected");
+    assert_latest_rule_denied_contains(&world, "authenticated collect_data nonce replay");
+    assert_eq!(
+        world
+            .agent_resource_balance("collector-auth", ResourceKind::Electricity)
+            .expect("collector electricity"),
+        23
+    );
+
+    world.submit_action(Action::CollectDataAuthenticated {
+        collector_agent_id: "collector-auth".to_string(),
+        electricity_cost: 7,
+        data_amount: 11,
+        player_id: "player-auth".to_string(),
+        public_key: "public-auth".to_string(),
+        nonce: 8,
+    });
+    world
+        .step()
+        .expect("lower nonce deterministically rejected");
+    assert_latest_rule_denied_contains(&world, "authenticated collect_data nonce replay");
+}
+
+#[test]
 fn collect_data_rejects_when_electricity_is_insufficient() {
     let mut world = World::new();
     register_agent(&mut world, "collector");

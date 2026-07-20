@@ -324,6 +324,14 @@ pub enum Action {
         electricity_cost: i64,
         data_amount: i64,
     },
+    CollectDataAuthenticated {
+        collector_agent_id: String,
+        electricity_cost: i64,
+        data_amount: i64,
+        player_id: String,
+        public_key: String,
+        nonce: u64,
+    },
     GrantDataAccess {
         owner_agent_id: String,
         grantee_agent_id: String,
@@ -727,6 +735,9 @@ impl Action {
             Action::TransferResource { from_agent_id, .. }
             | Action::EmitResourceTransfer { from_agent_id, .. } => Some(from_agent_id.as_str()),
             Action::CollectData {
+                collector_agent_id, ..
+            }
+            | Action::CollectDataAuthenticated {
                 collector_agent_id, ..
             } => Some(collector_agent_id.as_str()),
             Action::GrantDataAccess { owner_agent_id, .. }
