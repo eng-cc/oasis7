@@ -149,7 +149,7 @@
 - `min_fragments_per_chunk = 6`，sanitize 到 `0..=max_fragments_per_chunk`；正常采样不足时执行确定性、有界保底，约束不可满足时允许低于目标但必须终止。
 - `starter_core_radius_ratio = 0.35`，sanitize 到 `0.0..=1.0`；归一化平面半径不超过该值的候选进入 starter core。
 - `starter_core_density_multiplier = 1.6`，sanitize 到至少 `1.0`；只提高 starter core 的采样密度，不保证固定资源数量或玩家收益。
-- `material_distribution_strategy = uniform`；`uniform` 沿用统一材质权重，`core_metal_rim_volatile` 在中心提高 metal/composite、外缘提高 ice/carbon，并在中间区平滑过渡。
+- `material_distribution_strategy = uniform`；`uniform` 沿用统一材质权重，`core_metal_rim_volatile` 按 core / middle / rim 三段离散径向区间使用固定权重：中心提高 metal/composite，中段采用折中权重，外缘提高 ice/carbon。
 - 同一 `world_seed + config + chunk_coord` 产生相同候选、保底与材质选择。保底对每个缺口最多尝试 24 轮、每个候选最多尝试 8 次，继续遵守间距与 chunk 数量上限。
 
 这些参数属于生成器权威，不进入产品承诺；starter core 与最低数量只降低极端冷启动概率，不消除世界差异，也不保证第一工业目标必然完成。
