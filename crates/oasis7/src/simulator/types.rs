@@ -408,6 +408,7 @@ pub struct ScheduleQuote {
     pub runway_before_ticks: i64,
     pub runway_after_ticks: i64,
     pub downtime_threshold_ppm: i64,
+    pub continue_production_risk: String,
     pub maintenance_pressure_delta: String,
     pub recommended_maintenance_action: String,
 }

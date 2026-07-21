@@ -90,6 +90,52 @@ impl WorldKernel {
             }
         }
 
+        let electricity_after = available_electricity.saturating_sub(electricity_cost);
+        let idle_cost_per_tick = self.config.power.idle_cost_per_tick;
+        let runway_ticks = |electricity: i64| {
+            if idle_cost_per_tick <= 0 {
+                i64::MAX
+            } else {
+                electricity.max(0) / idle_cost_per_tick
+            }
+        };
+        let runway_before_ticks = runway_ticks(available_electricity);
+        let runway_after_ticks = runway_ticks(electricity_after);
+
+        let power_capacity = match owner {
+            ResourceOwner::Agent { agent_id } => self
+                .model
+                .agents
+                .get(agent_id)
+                .map(|agent| agent.power.capacity)
+                .unwrap_or(self.config.power.default_power_capacity),
+            ResourceOwner::Location { .. } => self.config.power.default_power_capacity,
+        }
+        .max(0);
+        let critical_threshold_pct = self.config.power.critical_threshold_pct.clamp(0, 100);
+        let downtime_threshold_ppm = critical_threshold_pct.saturating_mul(10_000);
+        let critical_electricity_threshold = power_capacity
+            .saturating_mul(critical_threshold_pct)
+            .saturating_div(100);
+        let risk_is_elevated = electricity_after <= critical_electricity_threshold;
+        let risk_before_schedule = available_electricity <= critical_electricity_threshold;
+        let continue_production_risk = if risk_is_elevated { "elevated" } else { "low" };
+        let maintenance_pressure_delta = match (risk_before_schedule, risk_is_elevated) {
+            (false, true) => "increased",
+            (true, false) => "reduced",
+            _ => "unchanged",
+        };
+        let recommended_pre_step = if risk_is_elevated {
+            "restore_power_before_scheduling"
+        } else {
+            "schedule_now"
+        };
+        let recommended_maintenance_action = if risk_is_elevated {
+            "reduce_load"
+        } else {
+            "continue_production"
+        };
+
         Ok(ScheduleQuote {
             owner: owner.clone(),
             factory_id: factory_id.to_string(),
@@ -103,12 +149,13 @@ impl WorldKernel {
             finished_product_units,
             local_shortage_delay_ticks: 0,
             shortage_reason: "none".to_string(),
-            recommended_pre_step: "schedule_now".to_string(),
-            runway_before_ticks: 0,
-            runway_after_ticks: 0,
-            downtime_threshold_ppm: 0,
-            maintenance_pressure_delta: "none".to_string(),
-            recommended_maintenance_action: "continue_production".to_string(),
+            recommended_pre_step: recommended_pre_step.to_string(),
+            runway_before_ticks,
+            runway_after_ticks,
+            downtime_threshold_ppm,
+            continue_production_risk: continue_production_risk.to_string(),
+            maintenance_pressure_delta: maintenance_pressure_delta.to_string(),
+            recommended_maintenance_action: recommended_maintenance_action.to_string(),
         })
     }
 }

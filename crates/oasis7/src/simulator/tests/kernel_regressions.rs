@@ -118,7 +118,7 @@ fn schedule_recipe_accepts_scale_out_recipe_on_smelter_factory() {
 }
 
 #[test]
-fn schedule_recipe_quote_previews_costs_and_runway_without_mutating_state() {
+fn schedule_recipe_quote_previews_normal_runway_and_low_risk_without_mutating_state() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;
     config.economy.factory_build_hardware_cost = 0;
@@ -160,7 +160,12 @@ fn schedule_recipe_quote_previews_costs_and_runway_without_mutating_state() {
         .resources
         .clone();
     let quote = kernel
-        .quote_schedule_recipe(&owner, "factory.smelter.alpha", "recipe.smelter.alloy_plate", 2)
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            2,
+        )
         .expect("schedule quote");
 
     assert_eq!(kernel.journal().len(), journal_len_before_quote);
@@ -184,11 +189,111 @@ fn schedule_recipe_quote_previews_costs_and_runway_without_mutating_state() {
     assert_eq!(quote.finished_product_units, 4);
     assert_eq!(quote.local_shortage_delay_ticks, 0);
     assert_eq!(quote.shortage_reason, "none");
-    assert_eq!(quote.runway_before_ticks, 0);
-    assert_eq!(quote.runway_after_ticks, 0);
-    assert_eq!(quote.downtime_threshold_ppm, 0);
-    assert_eq!(quote.maintenance_pressure_delta, "none");
+    assert_eq!(quote.runway_before_ticks, 32);
+    assert_eq!(quote.runway_after_ticks, 14);
+    assert!(quote.downtime_threshold_ppm > 0);
+    assert_eq!(quote.continue_production_risk, "low");
+    assert_eq!(quote.maintenance_pressure_delta, "unchanged");
     assert_eq!(quote.recommended_pre_step, "schedule_now");
+    assert_eq!(quote.recommended_maintenance_action, "continue_production");
+}
+
+#[test]
+fn schedule_recipe_quote_marks_critical_runway_as_elevated_risk_and_defers_production() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 6;
+    config.economy.recipe_hardware_cost_per_batch = 2;
+    config.economy.recipe_data_output_per_batch = 1;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 20);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+
+    let quote = kernel
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            2,
+        )
+        .expect("schedule quote");
+
+    assert_eq!(quote.runway_before_ticks, 20);
+    assert_eq!(quote.runway_after_ticks, 2);
+    assert_eq!(quote.continue_production_risk, "elevated");
+    assert_ne!(quote.recommended_maintenance_action, "continue_production");
+}
+
+#[test]
+fn schedule_recipe_quote_uses_unbounded_runway_when_idle_cost_is_zero() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 6;
+    config.economy.recipe_hardware_cost_per_batch = 2;
+    config.economy.recipe_data_output_per_batch = 1;
+    config.power.idle_cost_per_tick = 0;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+
+    let quote = kernel
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            2,
+        )
+        .expect("schedule quote without dividing by zero");
+
+    assert_eq!(quote.runway_before_ticks, i64::MAX);
+    assert_eq!(quote.runway_after_ticks, i64::MAX);
+    assert_eq!(quote.continue_production_risk, "low");
     assert_eq!(quote.recommended_maintenance_action, "continue_production");
 }
 
@@ -228,7 +333,12 @@ fn schedule_recipe_quote_rejects_output_overflow_like_execution() {
 
     let journal_len_before_quote = kernel.journal().len();
     let reason = kernel
-        .quote_schedule_recipe(&owner, "factory.smelter.alpha", "recipe.smelter.alloy_plate", 1)
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            1,
+        )
         .expect_err("output overflow should reject");
 
     assert_eq!(kernel.journal().len(), journal_len_before_quote);
