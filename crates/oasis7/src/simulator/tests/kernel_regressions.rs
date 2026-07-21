@@ -321,6 +321,75 @@ fn schedule_recipe_quote_keeps_critical_risk_with_unbounded_runway_when_idle_cos
 }
 
 #[test]
+fn schedule_recipe_quote_reports_zero_shutdown_runway_when_idle_cost_is_zero_without_mutation() {
+    let mut config = WorldConfig::default();
+    config.economy.factory_build_electricity_cost = 0;
+    config.economy.factory_build_hardware_cost = 0;
+    config.economy.recipe_electricity_cost_per_batch = 6;
+    config.economy.recipe_hardware_cost_per_batch = 2;
+    config.economy.recipe_data_output_per_batch = 1;
+    config.power.idle_cost_per_tick = 0;
+    let mut kernel = WorldKernel::with_config(config);
+    kernel.submit_action(Action::RegisterLocation {
+        location_id: "loc-smelter".to_string(),
+        name: "smelter-site".to_string(),
+        pos: pos(0, 0),
+        profile: LocationProfile::default(),
+    });
+    kernel.submit_action(Action::RegisterAgent {
+        agent_id: "agent-smelter".to_string(),
+        location_id: "loc-smelter".to_string(),
+    });
+    kernel.step_until_empty();
+
+    let owner = ResourceOwner::Agent {
+        agent_id: "agent-smelter".to_string(),
+    };
+    kernel.submit_action(Action::BuildFactory {
+        owner: owner.clone(),
+        location_id: "loc-smelter".to_string(),
+        factory_id: "factory.smelter.alpha".to_string(),
+        factory_kind: "factory.smelter.mk1".to_string(),
+    });
+    kernel.step().expect("build smelter factory");
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+    set_agent_power(&mut kernel, "agent-smelter", 100, 0);
+
+    let journal_len_before_quote = kernel.journal().len();
+    let agent_before_quote = kernel
+        .model()
+        .agents
+        .get("agent-smelter")
+        .expect("agent exists")
+        .clone();
+    let quote = kernel
+        .quote_schedule_recipe(
+            &owner,
+            "factory.smelter.alpha",
+            "recipe.smelter.alloy_plate",
+            2,
+        )
+        .expect("shutdown schedule quote");
+
+    assert_eq!(kernel.journal().len(), journal_len_before_quote);
+    assert_eq!(
+        kernel
+            .model()
+            .agents
+            .get("agent-smelter")
+            .expect("agent exists"),
+        &agent_before_quote
+    );
+    assert_eq!(quote.electricity_after, 14);
+    assert_eq!(quote.runway_before_ticks, 0);
+    assert_eq!(quote.runway_after_ticks, 0);
+    assert_eq!(quote.continue_production_risk, "elevated");
+    assert_eq!(quote.recommended_pre_step, "restore_power_before_scheduling");
+    assert_eq!(quote.recommended_maintenance_action, "restore_power");
+}
+
+#[test]
 fn schedule_recipe_quote_rejects_output_overflow_like_execution() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;

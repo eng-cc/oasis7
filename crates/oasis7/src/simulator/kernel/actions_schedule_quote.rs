@@ -99,16 +99,18 @@ impl WorldKernel {
                         .agents
                         .get(agent_id)
                         .expect("agent exists after ensure_owner_exists");
-                    let idle_cost_per_tick = self.config.power.idle_cost_per_tick;
-                    let runway_ticks = if idle_cost_per_tick <= 0 {
-                        i64::MAX
-                    } else {
-                        agent.power.level.max(0) / idle_cost_per_tick
-                    };
                     let power_state = self
                         .config
                         .power
                         .compute_state(agent.power.level, agent.power.capacity);
+                    let idle_cost_per_tick = self.config.power.idle_cost_per_tick;
+                    let runway_ticks = if matches!(power_state, AgentPowerState::Shutdown) {
+                        0
+                    } else if idle_cost_per_tick <= 0 {
+                        i64::MAX
+                    } else {
+                        agent.power.level.max(0) / idle_cost_per_tick
+                    };
                     let critical_threshold_pct =
                         self.config.power.critical_threshold_pct.clamp(0, 100);
                     (
