@@ -19,11 +19,9 @@
 - `../project.md` 是 game 模块执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进状态。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
-## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-07-06）:
-  - `doc/game/gameplay/`: 78 份 Markdown
-  - `doc/game/`: 83 份 Markdown
-- 该子域已经达到热点阈值；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
+## 文档密度
+- 当前 inventory 与热点判定统一以仓库根目录执行的 `./scripts/doc-inventory-report.sh` 为准；本页不维护容易漂移的文件数量快照。
+- 该子域是持续治理的热点目录；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
 
 ## 首读主题簇
 
