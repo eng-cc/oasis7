@@ -90,6 +90,54 @@ impl WorldKernel {
             }
         }
 
+        let electricity_after = available_electricity.saturating_sub(electricity_cost);
+        let (runway_before_ticks, runway_after_ticks, downtime_threshold_ppm, risk_is_elevated) =
+            match owner {
+                ResourceOwner::Agent { agent_id } => {
+                    let agent = self
+                        .model
+                        .agents
+                        .get(agent_id)
+                        .expect("agent exists after ensure_owner_exists");
+                    let power_state = self
+                        .config
+                        .power
+                        .compute_state(agent.power.level, agent.power.capacity);
+                    let idle_cost_per_tick = self.config.power.idle_cost_per_tick;
+                    let runway_ticks = if matches!(power_state, AgentPowerState::Shutdown) {
+                        0
+                    } else if idle_cost_per_tick <= 0 {
+                        i64::MAX
+                    } else {
+                        agent.power.level.max(0) / idle_cost_per_tick
+                    };
+                    let critical_threshold_pct =
+                        self.config.power.critical_threshold_pct.clamp(0, 100);
+                    (
+                        runway_ticks,
+                        runway_ticks,
+                        critical_threshold_pct.saturating_mul(10_000),
+                        matches!(
+                            power_state,
+                            AgentPowerState::Critical | AgentPowerState::Shutdown
+                        ),
+                    )
+                }
+                ResourceOwner::Location { .. } => (i64::MAX, i64::MAX, 0, false),
+            };
+        let continue_production_risk = if risk_is_elevated { "elevated" } else { "low" };
+        let maintenance_pressure_delta = "unchanged";
+        let recommended_pre_step = if risk_is_elevated {
+            "restore_power_before_scheduling"
+        } else {
+            "schedule_now"
+        };
+        let recommended_maintenance_action = if risk_is_elevated {
+            "restore_power"
+        } else {
+            "continue_production"
+        };
+
         Ok(ScheduleQuote {
             owner: owner.clone(),
             factory_id: factory_id.to_string(),
@@ -97,18 +145,20 @@ impl WorldKernel {
             batches,
             base_duration_ticks: batches,
             electricity_cost,
+            electricity_after,
             hardware_cost,
             data_output,
             finished_product_id: plan.finished_product_id.to_string(),
             finished_product_units,
             local_shortage_delay_ticks: 0,
             shortage_reason: "none".to_string(),
-            recommended_pre_step: "schedule_now".to_string(),
-            runway_before_ticks: 0,
-            runway_after_ticks: 0,
-            downtime_threshold_ppm: 0,
-            maintenance_pressure_delta: "none".to_string(),
-            recommended_maintenance_action: "continue_production".to_string(),
+            recommended_pre_step: recommended_pre_step.to_string(),
+            runway_before_ticks,
+            runway_after_ticks,
+            downtime_threshold_ppm,
+            continue_production_risk: continue_production_risk.to_string(),
+            maintenance_pressure_delta: maintenance_pressure_delta.to_string(),
+            recommended_maintenance_action: recommended_maintenance_action.to_string(),
         })
     }
 }

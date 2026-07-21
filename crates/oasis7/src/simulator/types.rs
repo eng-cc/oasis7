@@ -398,6 +398,7 @@ pub struct ScheduleQuote {
     pub batches: i64,
     pub base_duration_ticks: i64,
     pub electricity_cost: i64,
+    pub electricity_after: i64,
     pub hardware_cost: i64,
     pub data_output: i64,
     pub finished_product_id: String,
@@ -408,6 +409,7 @@ pub struct ScheduleQuote {
     pub runway_before_ticks: i64,
     pub runway_after_ticks: i64,
     pub downtime_threshold_ppm: i64,
+    pub continue_production_risk: String,
     pub maintenance_pressure_delta: String,
     pub recommended_maintenance_action: String,
 }
