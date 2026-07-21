@@ -44,6 +44,7 @@ RESERVED_PRODUCT_IDENTITY_METADATA = (
 PRODUCT_IDENTITY_EXAMPLE_PATHS = frozenset(
     {"doc/engineering/doc-governance/doc-structure-standard.design.md"}
 )
+CANONICAL_MODULE_ROOT_PATHS = frozenset(module.path for module in MODULES)
 REQUIRED_HEADINGS = (
     "## 文档身份",
     "## 1. 产品承诺",
@@ -109,13 +110,16 @@ def check(root: Path) -> list[str]:
     errors: list[str] = []
     for path in sorted(root.joinpath("doc").glob("**/*.md")):
         relative_path = path.relative_to(root).as_posix()
-        if relative_path.startswith("doc/product/") or relative_path in PRODUCT_IDENTITY_EXAMPLE_PATHS:
+        if (
+            relative_path in CANONICAL_MODULE_ROOT_PATHS
+            or relative_path in PRODUCT_IDENTITY_EXAMPLE_PATHS
+        ):
             continue
         for line, label in reserved_product_identity_metadata_lines(path.read_text(encoding="utf-8")):
             fail(
                 errors,
                 "identity-metadata-location",
-                f"{relative_path}:{line}: {label} is reserved for doc/product/**",
+                f"{relative_path}:{line}: {label} is reserved for canonical product module roots",
             )
     landing_path = root / "doc/product/README.md"
     if not landing_path.is_file():

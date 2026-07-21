@@ -190,6 +190,14 @@ def main() -> None:
         ),
     )
     scenario(
+        "identity-metadata-location",
+        lambda root: replace(
+            root / "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
+            "# Agent/provider 体验连续性",
+            "# Agent/provider 体验连续性\n\n- Product PRD-ID：`PRD-PRODUCT-003`",
+        ),
+    )
+    scenario(
         None,
         lambda root: replace(
             root / "doc/core/prd.md",
