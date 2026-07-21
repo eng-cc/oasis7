@@ -16,6 +16,8 @@ COPY_PATHS = (
     "doc/product",
     "doc/game/prd.md",
     "doc/game/gameplay/gameplay-top-level-design.prd.md",
+    "doc/core/prd.md",
+    "doc/engineering/doc-governance/doc-structure-standard.design.md",
     "doc/world-runtime/prd.md",
     "doc/p2p/prd.md",
     "doc/testing/prd.md",
@@ -58,7 +60,7 @@ def replace(path: Path, before: str, after: str) -> None:
     path.write_text(text.replace(before, after, 1), encoding="utf-8")
 
 
-def scenario(expected: str, mutation) -> None:
+def scenario(expected: str | None, mutation) -> None:
     root = make_fixture()
     try:
         mutation(root)
@@ -177,6 +179,30 @@ def main() -> None:
             root / "doc/product/world-infrastructure/prd.md",
             "PRD-GAME-016",
             "PRD-GAME-999",
+        ),
+    )
+    scenario(
+        "identity-metadata-location",
+        lambda root: replace(
+            root / "doc/core/prd.md",
+            "# core PRD",
+            "# core PRD\n\n- 产品模块：`不允许在此声明`",
+        ),
+    )
+    scenario(
+        None,
+        lambda root: replace(
+            root / "doc/core/prd.md",
+            "# core PRD",
+            "# core PRD\n\nProduct PRD-ID is reserved for module PRDs; this is a reference, not metadata.",
+        ),
+    )
+    scenario(
+        None,
+        lambda root: replace(
+            root / "doc/engineering/doc-governance/doc-structure-standard.design.md",
+            "### 3.4 产品组合层的薄覆盖例外",
+            "### 3.4 产品组合层的薄覆盖例外\n\n- Product PRD-ID：`PRD-PRODUCT-001`",
         ),
     )
     print("product-doc-governance-check.test: OK")
