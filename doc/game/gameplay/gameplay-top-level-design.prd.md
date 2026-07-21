@@ -255,6 +255,63 @@
 - `--no-llm`、operator-only、Prompt Ops 或其他 debug/probe lane 只能用于排障，不得作为“当前 focus order 已完成”的放行依据。
 - 当前 producer 正式口径继续保持双层判定：`10-minute trust gate` 与 `first capability gate` 必须分开记录。2026-04-15 的 `trust gate = hold`、`first capability gate = not_run` 现在只保留为历史 baseline；当前 fresh truth 已更新为 `trust gate = pass`、`first capability gate = pass`，但这仍不等于可以跳过后续更宽的 release / liveops 边界复核。
 
+### 2.7.1 PRD-GAME-012 稳定 early-retention 合同
+
+产品承诺统一见 [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md)。本节拥有不随短期任务日期变化的 gameplay 专业合同；当前 verdict、task trace 与复跑边界统一见 [`doc/game/project.md`](../project.md) 和 `doc/testing/evidence/`。
+
+#### Gate 与 verdict 隔离
+
+- `10-minute trust gate` 判断首次控制可信、主目标可读、玩家后果可见、阻塞可恢复，以及玩家是否出现继续游玩的基础意愿。
+- formal headed Web/UI 首次控制地板要求最近样本的首次成功率 `>= 95%`；依赖手动 reopen/reload 才进入可控态、出现 `control ack timed out without progress`，或发生阶段回退伴随冻结的样本均计为失败，并使 trust gate 保持 `hold`，不能由后续恢复后的成功冲淡。
+- `first capability gate` 判断首个持续能力是否在后续 `15~45` 分钟或 `1~3` 次会话内闭环；不得因为它没有在首个 10 分钟完成而把 trust gate 判为失败。
+- `progression_pass`、`attraction_pass`、`motivation_density_pass` 与 `content_volume_pass` 是四个独立结论。目标覆盖、世界推进、first capability pass、动机密度和内容量不得互相代签。
+- formal lane 能推进但缺少新选择、奖励、玩家因果或回访理由时标记 `progression_pass_but_attraction_weak`；动机密度已通过但有效内容量不足时标记 `content_volume_weak`。
+- active-LLM / headed live 样本与 deterministic-provider-backed required evidence 必须分开。required tier 证明合同、回归和设计充分性；真实玩家留存、生产 provider 体验或 release/playtest claim 仍需 live/provider evidence。
+
+#### 0~30 分钟 beat 合同
+
+| 时间 | 玩家问题与动词 | 必须形成的反馈/收益 | 失败签名与恢复 |
+| --- | --- | --- | --- |
+| `0~1m` | 我是谁、现在做什么；进入/读取 | 主目标包含动作、完成条件、阶段预期与下一步 | raw operator/debug 噪音抢焦点或 empty world 无可执行入口 |
+| `1~3m` | 我的指令生效了吗；`play/step/select/action` | `Player Intent -> World Consequence -> Recovery Move -> Next Move` 控制证明 | rejected/blocked 缺权限、模式、前提或修复动作 |
+| `3~5m` | 世界哪里因我改变；查看/对比 | accepted/executing/produced/blocked/cost 可区分，玩家可指出自己的因果 | 只有世界 tick / Agent 活动，标记 `world_activity_only` |
+| `5~7m` | 下一步修、扩、等或改道；选择 | 至少一次带收益、代价、阻塞与预期结果的 meaningful decision | 只能无界等待，必须 fallback 或 reprioritize |
+| `7~10m` | 小阻塞是否可处理；repair/fallback/reprioritize | blocker taxonomy 与 wait/repair/reroute/no-safe-fallback 中的可执行恢复 | 无恢复或升级解释，标记 `agency_weakened` |
+| `8~12m` | 我获得了什么；确认产出 | 可见产出、小胜利、新用途或下一步价值 | 只有库存/吞吐上涨，标记 attraction weak |
+| `12~18m` | 能力是否持续；补料/排程/稳定产线 | 一次产出转为可维护、可恢复并打开新选择的能力 | 只有 progress percent，标记 `progression_pass_but_attraction_weak` |
+| `18~23m` | 接下来如何变强；expand/repair/specialize/tradeoff | 分支说明即时收益、后续 beat、风险/锁定与回访 hook | 只给路线标签或重复同一循环，标记 `branch_commitment_missing` / `grind_only` |
+| `20~25m` | 能否打断或纠偏 Agent；interrupt/reprioritize/correct | 玩家能读到打断、重排、纠偏或 handoff | 只能等 Agent 自行推进，判定 agency 风险 |
+| `25~30m` | 为什么下次回来；选择下一目标/回访包 | 本局成果、choice memory、新 leverage、下一目标和 first action on return | `forced_major_power_dependency` 或 `world_activity_only` 不能算 pass |
+
+#### 内容量、动机与 anti-script 判据
+
+- content-volume 最低门槛固定为：`effective_play_minutes >= 30`、`player_operation_count >= 18`、`content_unit_count >= 8`、`distinct_action_family_count >= 6`、`passive_wait_share <= 0.25`。未达标即 `content_volume_weak`。
+- motivation/attraction evidence 至少记录 `hook_score`、`replay_intent`、`meaningful_decision_count`、`reward_or_unlock_count`、`stall_or_wait_periods`、`biggest_boredom_point`、`continue_reason` 与 `return_hook`；这些是 evidence DTO，不得写成 runtime 世界真值。
+- `route_tradeoff` 必须影响后续至少 2 个 beat；`accelerate` 与 `stabilize` 至少在中途可见指标、事故后果或回访目标上不同，否则标记 `route_tradeoff_fake_choice`。
+- 微型委托必须产生可见、可命名、可交付的成果，并推进同一 `local_demand_id` 的 before/after 进度；只有 reward ID 或静态成果卡不能通过。
+- 第二局首屏必须能恢复上一局 choice memory，并据路线、成果或修复选择生成不同的 `next_session_goal` 与 `first_action_on_return`。
+- 连续 `step/wait/refresh` 等被动 CTA 即使推进进度，也必须由 boredom negative regression 判为 attraction weak；`quick_patch` 与 `root_cause_fix` 必须展示时间、保留进度、残留风险或稳定收益上的真实差异。
+- required summary 必须标注 `runtime_backed / viewer_fixture_only / visual_only / live_verified` 等 provenance；共享 scenario driver 可用于 deterministic 回归，但 mock/fixture 不得冒充真实 0~30 分钟 live gameplay。
+
+#### 选择可读性与 quote/preview 合同
+
+- `branch_offer`：每条推荐路线必须包含 `route_label / immediate_gain / future_beat_changed / risk_or_lockin / next_session_hook`。
+- 路线可回退时必须提供 `rollback_deadline_beat / rollback_cost_summary / rollback_kept_benefit / rollback_lost_benefit`；缺失标记 `route_rollback_quote_missing`。
+- `Opportunity Scan` 的未推荐 hook 必须说明 `hook_value_summary / hook_readiness_state / defer_reason / unlock_precondition / revisit_timing_hint / value_vs_immediate_action`；缺失标记 `opportunity_discard_reason_missing`。
+- starter frag 推荐必须说明粗粒度材质预期、可达性与第一工业目标关联，不承诺精确掉落或必然完成能力链。
+- `ScheduleRecipe` 必须在提交前展示基础耗时、本地稀缺延迟、维护 sink、折旧压力、排程前后 runway、停机临界点、继续生产风险和推荐 pre-step；执行后 receipt 不能替代 quote。
+- `RefineCompound` 必须展示质量、电力成本、hardware 产出、精炼后电力、目标缺口前后变化、推荐量与 `enough_to_advance / partial_progress / poor_power_tradeoff`。
+- `market_quotes`、`TransferMaterial`、`ProductValidated` 分别必须解释采购来源与税费/运输成本、调运到达量/损耗/ETA/产线阻塞变化、验证后的用途/可交易性/能力解锁/下一步。
+- `BuyPower`、`harvest_radiation` 或等待发电必须解释补电量、成本、恢复后状态、可行动 runway 与防停机收益；`SellPower` 必须解释收入、售电后 runway、下一动作可负担性和停机风险。
+- `FragmentsReplenished` 或运行期补种必须解释当前余量、补种触发/时机/数量、等待成本、第一工业目标关联，以及等待、转移或替代材料路线。
+
+#### TASK-GAME-076 自动化与证据边界
+
+- required 入口保持 `./scripts/verify-gameplay-attraction-automation.sh --tier required`；live 玩家路径与 pure API 证据使用 `./scripts/verify-gameplay-attraction-automation.sh --tier live`。
+- required tier 必须覆盖 scenario summary writer、weak-sample regression、route branch、second-run hook、anti-script、boredom negative 和 truth/provenance coverage；live tier 才能把真实 browser/player-path 或 pure API gameplay 标为 `live_verified`。
+- 当前 required evidence 为 `attraction_pass`、`motivation_density_pass`、`content_volume_pass`，记录 `34/30` 分钟有效内容与 `22/18` 次玩家操作；它不等于真实玩家留存或生产 provider 放行。
+- runtime/viewer/agent canonical truth 或对应 surface 发生变化时，重跑 required；需要真实体验、provider 或 release/playtest 判断时，再跑 live/provider sample 并由 QA/producer 分别给出验证与阶段判断。
+
 ## 2.8 物理世界尺度与玩家交互尺度
 
 oasis7 的世界不是无尺度表格。
@@ -364,7 +421,7 @@ oasis7 当前正式主路线不是 direct control，而是 indirect control。
 - 暂不把 `--no-llm` 调试 lane 重新定义为正式游玩入口。
 - 暂不把 Prompt Ops / operator-only 入口作为默认玩家主路径。
 
-专题口径见 `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`。
+early-retention 产品承诺见 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，专业玩法合同见本文件 2.7.1，当前 verdict 见 `doc/game/project.md` 与 `doc/testing/evidence/`。
 
 ## 2.11 纯 API 客户端等价
 

@@ -96,7 +96,7 @@
 - `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
 - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
-- `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+- `doc/game/gameplay/gameplay-top-level-design.prd.md`（PRD-GAME-012 stable early-retention contract）
 - `testing-manual.md`
 
 ## 状态

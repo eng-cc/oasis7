@@ -4,7 +4,7 @@
 
 ## 从这里开始
 - 想快速理解核心玩法骨架：先读 `gameplay-top-level-design.prd.md`
-- 想确认当前冲刺窗口、10 分钟留存修复和下一步体验目标：先读 `gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+- 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 看 `../project.md`
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-feeling-contract-2026-05-14.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-top-level-design.prd.md` 的专业合同
 - 想确认 1cm 物理世界、动作粒度和表现夸张边界：先读 `../../product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的玩法合同
@@ -19,11 +19,9 @@
 - `../project.md` 是 game 模块执行入口，适合确认 retention、preview、经济规则与放行门禁当前推进状态。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
-## 密度快照
-- 当前 inventory 快照（`bash scripts/doc-inventory-report.sh`，2026-07-06）:
-  - `doc/game/gameplay/`: 78 份 Markdown
-  - `doc/game/`: 83 份 Markdown
-- 该子域已经达到热点阈值；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
+## 文档密度
+- 当前 inventory 与热点判定统一以仓库根目录执行的 `./scripts/doc-inventory-report.sh` 为准；本页不维护容易漂移的文件数量快照。
+- 该子域是持续治理的热点目录；本页目标是降低首读扫描成本，并将退役的一次性 handoff 语义收敛到正式 PRD/project/evidence surfaces。
 
 ## 首读主题簇
 
@@ -36,14 +34,13 @@
 
 ### 2. 当前体验窗口与留存修复
 - 首读入口:
-  - `gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
-  - `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
+  - `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md`（产品承诺）
   - `gameplay-top-level-design.prd.md`
 - 适合问题:
   - 进入游戏后的前 10 分钟为什么会掉线
   - micro-loop、反馈可见性和 post-onboarding 阶段如何衔接
   - 哪些问题应该先作为体验修复，而不是系统重写
-  - 当前 `TASK-GAME-076` 的 required tier 自动化/诊断/content-volume supplement 已补齐到 `content_volume_pass`；若要判断真实留存或生产 provider 体验，继续看 retention topic project 的 live/provider playtest 边界
+  - 当前 `TASK-GAME-076` 的 required tier 自动化/诊断/content-volume supplement 已补齐到 `content_volume_pass`；若要判断真实留存或生产 provider 体验，继续看 `../project.md` 的 live/provider playtest 边界与 `../../testing/evidence/` 的正式样本
 
 ### 3. Agency、间接控制与物理尺度
 - 首读入口:

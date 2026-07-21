@@ -56,9 +56,9 @@
 - [x] `qa_engineer`：建立统一 `closed_beta_candidate` release gate，串联 headed Web/UI、pure API、no-UI smoke、longrun/recovery 与 trend baseline。
 - [x] `liveops_community`：收口封闭 Beta 候选 runbook、招募/反馈/事故回流模板与禁语清单。
 
-### T8 10 分钟留存修复（2026-04-09）
-- [x] 冻结“未来两周只优先做 5 条 retention lane”的专题 PRD / design / project，并完成根入口挂载。
-- [x] `viewer_engineer` / `runtime_engineer`：已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；fresh active-LLM formal lane 的 runtime floor 已恢复，但 retention gate 仍被 `TASK-GAME-065` 判定为 `hold`。
+### T8 稳定 early-retention 与持续能力合同
+原 2026-04-09 dated retention triplet 的 durable 产品承诺已由 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 承接；PRD-GAME-012 的 gate 隔离、0~30 分钟 beat、threshold、provenance、anti-script、branch/rollback/opportunity 与 quote/preview 专业合同已收敛到 `gameplay-top-level-design.prd.md`，当前 task/verdict/live 边界由 `doc/game/project.md` 与 testing evidence 承接。
+- 历史实现记录：`viewer_engineer` / `runtime_engineer` 已收口首次进入与最小控制地板的前台控制门控与 ack 语义，让 headed Web/UI 与 `software_safe` 不再把明确 `blocked` / `no_progress` 压扁成伪 timeout；`TASK-GAME-065` 的 `hold` 只保留为 2026-04-15 历史 baseline，当前 fresh formal truth 已由 `issue-160-first-capability-closeout` 刷新为 `pass`。
 - [x] `runtime_engineer` / `viewer_engineer`：已把 `PostOnboarding` 后 10 分钟工业中循环加厚为“韧性生产 -> 第一次扩产取舍 -> 通用 mid-loop”的目标包。
 - [x] `viewer_engineer` / `agent_engineer`：已收口首屏噪音、玩家身份与后果可见化，把当前主目标、阻塞、代价与奖励节奏做成首屏主语义。
 - `qa_engineer`：已建立 active-LLM 10 分钟留存 gate，并明确 `--no-llm` 仅保留 debug/probe lane，不再作为正式留存结论；2026-04-15 baseline 曾收口为 `10-minute trust gate = hold`、`first capability gate = not_run`，而 2026-05-17 fresh formal truth 已由 `issue-160-first-capability-closeout` 刷新为 `trust gate = pass`、`first capability gate = pass`。
