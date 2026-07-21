@@ -104,7 +104,7 @@
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`
   - `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`
   - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`
-  - `doc/game/gameplay/gameplay-ten-minute-retention-recovery-2026-04-09.prd.md`
+  - `doc/game/gameplay/gameplay-top-level-design.prd.md`（PRD-GAME-012 stable early-retention contract）
   - `crates/oasis7/src/viewer/runtime_live/gameplay_snapshot.rs`
   - `crates/oasis7/src/bin/oasis7_pure_api_client.rs`
   - `crates/oasis7_viewer/software_safe.js`

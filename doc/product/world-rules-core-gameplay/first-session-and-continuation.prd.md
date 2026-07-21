@@ -14,6 +14,8 @@
 
 玩家从第一次发出有效意图开始，就能持续回答五个问题：我正在追求什么、系统是否接受、世界发生了什么、为什么被阻塞、下一步怎样继续。首局结束不是体验终点，而是进入可恢复、有阶段成果且能展开中循环选择的持续游玩链路。
 
+首局信任与首次持续能力是两个相邻但独立的产品结果。前者证明玩家能够可靠地控制、理解并愿意继续当前体验；后者证明玩家已经获得能持续运转、经受阻塞并展开新选择的世界能力。世界仍在推进、进度数值变化或单次动作成功，均不能单独证明玩家被吸引而愿意继续，也不能替代其中任一结果的组合证据。
+
 ## 2. 首局微循环
 
 每个受支持的玩家意图都必须形成可读闭环：
@@ -44,6 +46,7 @@
 - 默认承接应优先帮助玩家形成持续能力，例如稳定生产、恢复被阻塞的能力或完成首次有效协作；不得直接抛出与当前世界状态脱节的宏大目标。
 - 玩家可以自由探索或暂时收起目标，但必须能重新聚焦；重连或回流后也能恢复当前目标、阻塞和下一步。
 - 主目标不可达时，体验切换到保全、恢复或替代路径，不能只要求继续等待。
+- 首局信任只要求玩家能够可靠理解并继续当前链路；首次持续能力及其后的路线选择应在后续游玩中得到独立证明，不能把两者混成同一结论。
 
 ## 4. 首次持续能力与中循环展开
 
@@ -51,8 +54,9 @@
 
 - 玩家能读懂投入、产出、当前用途、维护或恢复方式以及下一步价值。
 - 首个阶段成果必须在合理的早期游玩窗口内可达；具体时长和数值由专业域与当前验证计划维护。
+- 能力证明必须覆盖一次可理解的阻塞及其可恢复处理，表明该能力能继续运转或在受限后恢复，而非只证明一次无阻碍的动作完成。
 - 达成后至少展开一个中循环方向，例如生产扩张、区域服务、治理影响或协作保障。
-- 每个推荐方向都要说明即时收益、后续体验变化、主要风险或约束以及下次会话的继续理由；方向标签本身不能代替选择后果。
+- 每个推荐方向都要说明即时收益、后续体验变化、主要风险或约束以及下次会话的继续理由；方向标签本身不能代替选择后果。可以回退的选择还必须让玩家理解何时仍可回退、回退的主要代价，以及哪些收益会保留或失去，不能用笼统的“可回退”掩盖取舍。
 - 首局控制可信度、继续游玩的动机和首次持续能力是相邻但不同的判断，不得用其中一项的通过代签其他项。
 
 ## 5. 失败与恢复
@@ -74,6 +78,7 @@
 - FS-5：阶段成果后的方向选择至少说明收益、体验变化、风险或约束和继续游玩的 hook。
 - FS-6：Viewer 与 pure API 分别提供自身入口证据，且二者对权威事实、动作能力和主要因果保持一致。
 - FS-7：首局入口样例能证明主目标包含动作、完成条件和时间或阶段预期，次要目标不干扰当前决策；推荐首个资源目标时可解释其粗粒度价值、可达性与首次持续能力关联而不承诺产出，资源阻塞样例能比较等待、转移与替代路线的主要成本，结束后能进入后引导主目标。
+- FS-8：组合证据分别证明首局信任、继续游玩的动机与首次持续能力；持续能力样例包含可恢复阻塞和后续路线，路线样例说明收益、体验变化、风险或约束、回访理由及适用时的可逆取舍。确定性或模拟性证据可以验证规则和体验结构，但不能单独替代真实留存或受控 provider readiness 的专业验证。
 
 ### 6.1 验收追踪
 
@@ -86,6 +91,7 @@
 | FS-5 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 分支收益、体验变化、风险/约束和继续游玩 hook 的 S6 证据 | test_tier_required |
 | FS-6 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-008 / PRD-WORLD_SIMULATOR-039 / PRD-WORLD_SIMULATOR-041 / PRD-WORLD_SIMULATOR-046 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | Viewer 与 pure API 各自入口证据及权威事实、动作能力、主要因果 parity 对账 | test_tier_full |
 | FS-7 | gameplay_designer / viewer_engineer / qa_engineer | PRD-GAME-004 / PRD-GAME-012 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 首局主目标结构、首屏优先级、推荐理由、阻塞恢复与 PostOnboarding 交接的 S6 入口证据 | test_tier_required |
+| FS-8 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-012 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 信任、继续动机与持续能力的分离证据；能力恢复、路线取舍与专业留存/提供方 readiness 验证的组合审计 | test_tier_full |
 
 具体字段矩阵、测试命令与历史 verdict 不复制到本分册。
 
