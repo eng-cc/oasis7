@@ -117,8 +117,24 @@ fn schedule_recipe_accepts_scale_out_recipe_on_smelter_factory() {
     }
 }
 
+fn set_agent_power(kernel: &mut WorldKernel, agent_id: &str, capacity: i64, level: i64) {
+    let config = kernel.config().clone();
+    let mut snapshot = kernel.snapshot();
+    let agent = snapshot
+        .model
+        .agents
+        .get_mut(agent_id)
+        .expect("agent exists in snapshot");
+    let mut power = AgentPowerStatus::new(capacity, level);
+    power.update_state(&config.power);
+    agent.power = power;
+    let journal = kernel.journal_snapshot();
+    *kernel = WorldKernel::from_snapshot(snapshot, journal)
+        .expect("rebuild kernel from power-configured snapshot");
+}
+
 #[test]
-fn schedule_recipe_quote_previews_normal_runway_and_low_risk_without_mutating_state() {
+fn schedule_recipe_quote_keeps_healthy_battery_runway_independent_from_electricity_ledger() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;
     config.economy.factory_build_hardware_cost = 0;
@@ -150,6 +166,7 @@ fn schedule_recipe_quote_previews_normal_runway_and_low_risk_without_mutating_st
     kernel.step().expect("build smelter factory");
     seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
     seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+    set_agent_power(&mut kernel, "agent-smelter", 100, 100);
 
     let journal_len_before_quote = kernel.journal().len();
     let resources_before_quote = kernel
@@ -189,9 +206,10 @@ fn schedule_recipe_quote_previews_normal_runway_and_low_risk_without_mutating_st
     assert_eq!(quote.finished_product_units, 4);
     assert_eq!(quote.local_shortage_delay_ticks, 0);
     assert_eq!(quote.shortage_reason, "none");
-    assert_eq!(quote.runway_before_ticks, 32);
-    assert_eq!(quote.runway_after_ticks, 14);
-    assert!(quote.downtime_threshold_ppm > 0);
+    assert_eq!(quote.electricity_after, 14);
+    assert_eq!(quote.runway_before_ticks, 100);
+    assert_eq!(quote.runway_after_ticks, 100);
+    assert_eq!(quote.downtime_threshold_ppm, 50_000);
     assert_eq!(quote.continue_production_risk, "low");
     assert_eq!(quote.maintenance_pressure_delta, "unchanged");
     assert_eq!(quote.recommended_pre_step, "schedule_now");
@@ -199,7 +217,7 @@ fn schedule_recipe_quote_previews_normal_runway_and_low_risk_without_mutating_st
 }
 
 #[test]
-fn schedule_recipe_quote_marks_critical_runway_as_elevated_risk_and_defers_production() {
+fn schedule_recipe_quote_keeps_critical_battery_risk_elevated_despite_healthy_ledger() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;
     config.economy.factory_build_hardware_cost = 0;
@@ -229,8 +247,9 @@ fn schedule_recipe_quote_marks_critical_runway_as_elevated_risk_and_defers_produ
         factory_kind: "factory.smelter.mk1".to_string(),
     });
     kernel.step().expect("build smelter factory");
-    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 20);
+    seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
     seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+    set_agent_power(&mut kernel, "agent-smelter", 100, 5);
 
     let quote = kernel
         .quote_schedule_recipe(
@@ -241,14 +260,16 @@ fn schedule_recipe_quote_marks_critical_runway_as_elevated_risk_and_defers_produ
         )
         .expect("schedule quote");
 
-    assert_eq!(quote.runway_before_ticks, 20);
-    assert_eq!(quote.runway_after_ticks, 2);
+    assert_eq!(quote.electricity_after, 14);
+    assert_eq!(quote.runway_before_ticks, 5);
+    assert_eq!(quote.runway_after_ticks, 5);
     assert_eq!(quote.continue_production_risk, "elevated");
-    assert_ne!(quote.recommended_maintenance_action, "continue_production");
+    assert_eq!(quote.recommended_pre_step, "restore_power_before_scheduling");
+    assert_eq!(quote.recommended_maintenance_action, "restore_power");
 }
 
 #[test]
-fn schedule_recipe_quote_uses_unbounded_runway_when_idle_cost_is_zero() {
+fn schedule_recipe_quote_keeps_critical_risk_with_unbounded_runway_when_idle_cost_is_zero() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;
     config.economy.factory_build_hardware_cost = 0;
@@ -281,6 +302,7 @@ fn schedule_recipe_quote_uses_unbounded_runway_when_idle_cost_is_zero() {
     kernel.step().expect("build smelter factory");
     seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Electricity, 32);
     seed_owner_resource(&mut kernel, owner.clone(), ResourceKind::Data, 16);
+    set_agent_power(&mut kernel, "agent-smelter", 100, 5);
 
     let quote = kernel
         .quote_schedule_recipe(
@@ -293,8 +315,9 @@ fn schedule_recipe_quote_uses_unbounded_runway_when_idle_cost_is_zero() {
 
     assert_eq!(quote.runway_before_ticks, i64::MAX);
     assert_eq!(quote.runway_after_ticks, i64::MAX);
-    assert_eq!(quote.continue_production_risk, "low");
-    assert_eq!(quote.recommended_maintenance_action, "continue_production");
+    assert_eq!(quote.continue_production_risk, "elevated");
+    assert_eq!(quote.recommended_pre_step, "restore_power_before_scheduling");
+    assert_eq!(quote.recommended_maintenance_action, "restore_power");
 }
 
 #[test]

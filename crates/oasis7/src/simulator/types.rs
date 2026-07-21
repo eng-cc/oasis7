@@ -398,6 +398,7 @@ pub struct ScheduleQuote {
     pub batches: i64,
     pub base_duration_ticks: i64,
     pub electricity_cost: i64,
+    pub electricity_after: i64,
     pub hardware_cost: i64,
     pub data_output: i64,
     pub finished_product_id: String,
