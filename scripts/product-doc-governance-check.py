@@ -34,6 +34,17 @@ MODULES = (
     ProductModule("player-entry-distribution", "玩家入口与发行", "PRD-PRODUCT-004", ("README.md", "doc/world-simulator/prd.md")),
 )
 LIFECYCLES = {"proposed", "draft", "active", "superseded", "retired"}
+RESERVED_PRODUCT_IDENTITY_METADATA = (
+    "产品模块",
+    "产品模块 slug",
+    "产品层唯一 PRD",
+    "产品模块总入口",
+    "Product PRD-ID",
+)
+PRODUCT_IDENTITY_EXAMPLE_PATHS = frozenset(
+    {"doc/engineering/doc-governance/doc-structure-standard.design.md"}
+)
+CANONICAL_MODULE_ROOT_PATHS = frozenset(module.path for module in MODULES)
 REQUIRED_HEADINGS = (
     "## 文档身份",
     "## 1. 产品承诺",
@@ -51,6 +62,28 @@ def metadata(text: str, label: str) -> str | None:
     if not match:
         return None
     return (match.group(1) or match.group(2)).strip()
+
+
+def reserved_product_identity_metadata_lines(text: str) -> list[tuple[int, str]]:
+    """Return exact reserved metadata declarations, never semantic references."""
+    labels = "|".join(re.escape(label) for label in RESERVED_PRODUCT_IDENTITY_METADATA)
+    pattern = re.compile(rf"^- ({labels})：", re.MULTILINE)
+    declarations: list[tuple[int, str]] = []
+    fence: tuple[str, int] | None = None
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if fence:
+            character, length = fence
+            if re.fullmatch(rf" {{0,3}}{re.escape(character)}{{{length},}}[ \t]*", line):
+                fence = None
+            continue
+        opener = re.match(r" {0,3}([`~])\1{2,}", line)
+        if opener:
+            fence = (opener.group(1), len(opener.group(0).lstrip()))
+            continue
+        match = pattern.match(line)
+        if match:
+            declarations.append((line_number, match.group(1)))
+    return declarations
 
 
 def fail(errors: list[str], code: str, detail: str) -> None:
@@ -87,6 +120,19 @@ def active_topic_targets(root: Path, module_path: Path, text: str) -> set[str]:
 
 def check(root: Path) -> list[str]:
     errors: list[str] = []
+    for path in sorted(root.joinpath("doc").glob("**/*.md")):
+        relative_path = path.relative_to(root).as_posix()
+        if (
+            relative_path in CANONICAL_MODULE_ROOT_PATHS
+            or relative_path in PRODUCT_IDENTITY_EXAMPLE_PATHS
+        ):
+            continue
+        for line, label in reserved_product_identity_metadata_lines(path.read_text(encoding="utf-8")):
+            fail(
+                errors,
+                "identity-metadata-location",
+                f"{relative_path}:{line}: {label} is reserved for canonical product module roots",
+            )
     landing_path = root / "doc/product/README.md"
     if not landing_path.is_file():
         return ["product-doc-governance: entry-missing: doc/product/README.md"]
