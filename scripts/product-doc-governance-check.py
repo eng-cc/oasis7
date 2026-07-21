@@ -68,10 +68,22 @@ def reserved_product_identity_metadata_lines(text: str) -> list[tuple[int, str]]
     """Return exact reserved metadata declarations, never semantic references."""
     labels = "|".join(re.escape(label) for label in RESERVED_PRODUCT_IDENTITY_METADATA)
     pattern = re.compile(rf"^- ({labels})：", re.MULTILINE)
-    return [
-        (text.count("\n", 0, match.start()) + 1, match.group(1))
-        for match in pattern.finditer(text)
-    ]
+    declarations: list[tuple[int, str]] = []
+    fence: tuple[str, int] | None = None
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if fence:
+            character, length = fence
+            if re.fullmatch(rf" {{0,3}}{re.escape(character)}{{{length},}}[ \t]*", line):
+                fence = None
+            continue
+        opener = re.match(r" {0,3}([`~])\1{2,}", line)
+        if opener:
+            fence = (opener.group(1), len(opener.group(0).lstrip()))
+            continue
+        match = pattern.match(line)
+        if match:
+            declarations.append((line_number, match.group(1)))
+    return declarations
 
 
 def fail(errors: list[str], code: str, detail: str) -> None:

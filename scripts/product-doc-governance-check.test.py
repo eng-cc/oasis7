@@ -208,6 +208,14 @@ def main() -> None:
     scenario(
         None,
         lambda root: replace(
+            root / "doc/core/prd.md",
+            "# core PRD",
+            "# core PRD\n\n```markdown\n- 产品模块：`示例，不是声明`\n```\n\n~~~markdown\n- Product PRD-ID：`PRD-PRODUCT-999`\n~~~",
+        ),
+    )
+    scenario(
+        None,
+        lambda root: replace(
             root / "doc/engineering/doc-governance/doc-structure-standard.design.md",
             "### 3.4 产品组合层的薄覆盖例外",
             "### 3.4 产品组合层的薄覆盖例外\n\n- Product PRD-ID：`PRD-PRODUCT-001`",
