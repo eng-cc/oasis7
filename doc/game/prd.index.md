@@ -23,21 +23,14 @@
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-wasm-backed-regional-infrastructure-micro-depot-2026-06-22.prd.md`
 - 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态看 `doc/game/project.md` 与对应 round execution record
-- 想继续按文件名、专题或补充材料下钻：使用下方密度快照、热点子域导航与补充入口
-
-## 密度快照（2026-07-06）
-- `doc/game/`：83 份文件
-- `doc/game/gameplay/`：78 份文件
-- `doc/game/gameplay/` 正式专题三件套：66 份文件
-- `doc/game/gameplay/` 补充材料：11 份文件
-- 模块根入口：5 份文件
+- 想继续按文件名、专题或补充材料下钻：使用下方热点子域导航与补充入口；当前文件库存统一以 `./scripts/doc-inventory-report.sh` 为准，本页不维护容易漂移的数量快照
 
 ## 热点子域导航
-| 子域 | 文件数 | 适合回答的问题 |
-| --- | --- | --- |
-| `gameplay/` 正式专题三件套 | 66 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同、mature-world 小玩家承接与可编程区域设施 |
-| `gameplay/` 补充材料 | 11 | runbook、evidence、checklist 与跨角色执行留痕 |
-| 模块根入口 | 5 | 模块目标态、执行台账、设计总览与文件级精确检索 |
+| 子域 | 适合回答的问题 |
+| --- | --- |
+| `gameplay/` 正式专题 | 核心玩法骨架、留存修复、preview/beta gate、claim economy、治理、agency 合同、mature-world 小玩家承接与可编程区域设施 |
+| `gameplay/` 补充材料 | runbook、evidence、checklist 与跨角色执行留痕 |
+| 模块根入口 | 模块目标态、执行台账、设计总览与文件级精确检索 |
 
 ## 活跃补充文档
 - `doc/game/gameplay/README.md`：`gameplay/` 热点子域 landing page，适合先做簇级分流，再决定进入玩法骨架、留存、agency、preview/beta gate 或 economy/claim 专题。
