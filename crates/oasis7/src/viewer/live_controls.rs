@@ -601,6 +601,20 @@ impl ViewerLiveSession {
                     },
                 )?;
             }
+            ViewerRequest::QuoteRefineCompound { request: _ } => {
+                send_response(
+                    writer,
+                    &ViewerResponse::GameplayActionError {
+                        error: crate::viewer::GameplayActionError {
+                            code: "unsupported_in_live_server".to_string(),
+                            message: "quote_refine_compound is only available in runtime live mode"
+                                .to_string(),
+                            action_id: Some("quote_refine_compound".to_string()),
+                            target_agent_id: None,
+                        },
+                    },
+                )?;
+            }
             ViewerRequest::Control { mode, request_id } => {
                 // Legacy compatibility: map mixed control channel into live semantics.
                 self.apply_control_mode(

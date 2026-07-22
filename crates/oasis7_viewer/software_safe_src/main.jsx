@@ -5,6 +5,8 @@ import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
+import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
+import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
@@ -21,8 +23,10 @@ function observeViewerStateRevision() {
   viewerStateRevision();
 }
 
-function uiLocale() {
-  return core.state.uiLocale;
+function uiLocale() { return core.state.uiLocale; }
+function focusViewerAnchor(event) {
+  const href = event.currentTarget.getAttribute("href"); const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
+  if (!target) return; event.preventDefault(); target.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" }); window.history.replaceState(null, "", href);
 }
 
 function tr(locale, zh, en) {
@@ -2218,6 +2222,7 @@ function MobileJumpRail() {
       <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
       <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
       <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
+      <a class="mobile-rail__link" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
       <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
         {tr(locale(), "诊断", "Diagnostics")}
       </a>
@@ -2776,6 +2781,12 @@ function WorldSummaryPanel() {
               <MicroDepotFacilitiesPanel
                 facilities={gameplay().microDepotFacilities}
                 locale={locale}
+                tr={tr}
+              />
+              <RefineQuotePreflightPanel
+                quote={core.state.refineQuotePreflight} requestState={core.state.refineQuoteRequest}
+                requestRefineQuote={core.requestRefineQuote}
+                locale={locale()}
                 tr={tr}
               />
               <Show when={gameplay().agentClaim}>
@@ -3849,9 +3860,7 @@ function AppShell() {
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
-          <div class="panel__meta-copy">
-            {tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}
-          </div>
+          <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div><a class="mobile-rail__link" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
         </div>
         <div class="panel__body">
           <TargetsPanel />
@@ -3902,11 +3911,9 @@ function AppShell() {
 export { AppShell };
 
 function viewerVisualFixtureNameFromQuery() {
-  if (!viewerTestApiEnabled()) {
-    return null;
-  }
-  const value = String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim();
-  return value || null;
+  return viewerTestApiEnabled()
+    ? String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim() || null
+    : null;
 }
 
 function viewerTestApiEnabled() {
@@ -4321,6 +4328,7 @@ function installViewerVisualFixture() {
       core.state.selectedObject = null;
     },
   };
+  installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();

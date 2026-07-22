@@ -1,14 +1,12 @@
 use serde::{Deserialize, Serialize};
-
 mod rollback_v2;
 pub use rollback_v2::*;
-
 mod negotiation;
 pub use negotiation::*;
-
 mod collect_data;
 pub use collect_data::*;
-
+mod refine_quote;
+pub use refine_quote::*;
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +92,9 @@ pub enum ViewerRequest {
     },
     CollectData {
         command: CollectDataCommand,
+    },
+    QuoteRefineCompound {
+        request: RefineQuoteRequest,
     },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
@@ -628,6 +629,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     CollectDataPreflight {
         quote: CollectDataPreflight,
+    },
+    RefineQuotePreflight {
+        quote: RefineQuotePreflight,
     },
     Error {
         message: String,

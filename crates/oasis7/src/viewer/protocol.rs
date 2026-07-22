@@ -19,12 +19,13 @@ pub use proto::{
     NegotiatedViewerProtocol, PlaybackControl, PlayerActionDisposition, PlayerAuthProof,
     PlayerAuthScheme, PlayerCompensationState, PlayerCompensationStatus, PlayerRollbackDisposition,
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
-    PromptControlRollbackRequest, RollbackApprovalSignature, RollbackAttributionResolution,
-    RollbackAttributionResolutionRequest, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
-    RollbackCheckpointRef, RollbackCompensationTransitionRequest, RollbackIntent,
-    RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
-    RollbackSourceEventRef, RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl,
-    ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
+    PromptControlRollbackRequest, RefineQuotePreflight, RefineQuoteRequest,
+    RollbackApprovalSignature, RollbackAttributionResolution, RollbackAttributionResolutionRequest,
+    RollbackAuthorityRole, RollbackAuthorizationEnvelope, RollbackCheckpointRef,
+    RollbackCompensationTransitionRequest, RollbackIntent, RollbackOperatorAuthorization,
+    RollbackReceiptAccessRequest, RollbackReplayTarget, RollbackSourceEventRef,
+    RollbackStrictAuditEvidence, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerStream,
 };
 
 pub type ViewerResponse =

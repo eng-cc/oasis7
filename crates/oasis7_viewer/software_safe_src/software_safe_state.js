@@ -38,6 +38,8 @@ export function createSoftwareSafeState() {
     lastPromptFeedback: null,
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
+    refineQuotePreflight: null,
+    refineQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {
       actionKey: null,
       label: null,

@@ -423,6 +423,8 @@
         cursor: pointer;
         transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
       }
+      button.button--secondary { border-color: rgba(141, 199, 170, 0.38); background: rgba(141, 199, 170, 0.09); }
+      button.button--secondary:not(:disabled):hover { border-color: rgba(141, 199, 170, 0.68); background: rgba(141, 199, 170, 0.15); }
       button:not(:disabled):hover {
         border-color: rgba(208, 168, 91, 0.54);
         transform: translateY(-1px);
@@ -2458,6 +2460,7 @@
           padding: 14px;
           --viewer-side-max-height: none; --mobile-action-card-clearance: 84px;
         }
+        #viewer-refine-quote-panel { scroll-margin-top: var(--mobile-action-card-clearance, 0); }
         .shell {
           grid-template-columns: 1fr;
           grid-template-areas:
