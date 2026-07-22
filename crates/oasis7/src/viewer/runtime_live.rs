@@ -56,6 +56,7 @@ mod gameplay_snapshot;
 mod gameplay_snapshot_feedback;
 mod gameplay_snapshot_helpers;
 mod gameplay_snapshot_lane;
+mod gameplay_validation_preview;
 mod mapping;
 mod player_gameplay;
 mod recovery;
