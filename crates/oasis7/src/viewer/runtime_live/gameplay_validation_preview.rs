@@ -64,9 +64,7 @@ pub(super) fn product_validation_unlock_preview(
             ),
         ),
         "denied" => (
-            format!(
-                "Validated {role_tag} product remains gated by stage {required_stage_label}."
-            ),
+            format!("Validated {role_tag} product remains gated by stage {required_stage_label}."),
             format!(
                 "Advance industry from {current_stage} to {required_stage_label}; validation unlocks no new capability."
             ),
