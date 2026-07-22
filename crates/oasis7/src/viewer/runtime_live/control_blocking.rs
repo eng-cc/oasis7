@@ -100,6 +100,7 @@ impl ViewerRuntimeLiveServer {
 
     pub(super) fn compat_snapshot(&mut self, current_player_id: Option<&str>) -> WorldSnapshot {
         let runtime_snapshot = self.world.snapshot();
+        let runtime_state = &runtime_snapshot.state;
         let runtime_journal_len = runtime_snapshot.journal_len;
         let next_event_id = runtime_snapshot.last_event_id.saturating_add(1).max(1);
         let next_action_id = runtime_snapshot.next_action_id.max(1);
@@ -116,14 +117,12 @@ impl ViewerRuntimeLiveServer {
             .and_then(|player_id| self.llm_sidecar.bound_agent_for_player(player_id));
         let primary_agent_claim = snapshot_bound_agent_id.and_then(|agent_id| {
             build_player_agent_claim_snapshot(
-                self.world.state(),
+                runtime_state,
                 agent_id,
                 self.world.governance_execution_policy().epoch_length_ticks,
             )
         });
-        let first_agent_claim_target_bound = self
-            .world
-            .state()
+        let first_agent_claim_target_bound = runtime_state
             .agents
             .contains_key(crate::viewer::FIRST_AGENT_CLAIM_TARGET_AGENT_ID)
             && self
@@ -134,14 +133,14 @@ impl ViewerRuntimeLiveServer {
             && snapshot_bound_agent_id.is_none()
             && !first_agent_claim_target_bound;
         let model = runtime_state_to_simulator_model(
-            self.world.state(),
+            runtime_state,
             &self.llm_sidecar,
             self.seed_model.as_ref(),
         );
         let micro_depot_facilities =
             WorldKernel::micro_depot_player_facility_snapshots_from_model(&model);
         let mut player_gameplay = build_player_gameplay_snapshot(
-            self.world.state(),
+            runtime_state,
             snapshot_bound_agent_id,
             self.confirmed_player_gameplay_progress_time.is_some(),
             self.latest_player_gameplay_feedback.as_ref(),
@@ -190,7 +189,7 @@ impl ViewerRuntimeLiveServer {
         WorldSnapshot {
             version: SNAPSHOT_VERSION,
             chunk_generation_schema_version: CHUNK_GENERATION_SCHEMA_VERSION,
-            time: self.world.state().time,
+            time: runtime_state.time,
             config: self.snapshot_config.clone(),
             model,
             runtime_snapshot: Some(runtime_snapshot),

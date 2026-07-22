@@ -2722,6 +2722,26 @@ function WorldSummaryPanel() {
                   </div>
                 </Show>
               </EventCard>
+              <Show when={gameplay().validationUnlockPreview}>
+                {(preview) => (
+                  <EventCard
+                    title={tr(locale(), "产品验证预览", "Product Validation Preview")}
+                    badge={preview().stageStatus || "unknown"}
+                    badgeClass={preview().stageStatus === "available" ? "badge badge--good" : "badge badge--warn"}
+                    meta={preview().valueSummary || tr(locale(), "验证结果未声明新的能力；请根据现有角色和阶段决定下一步。", "The validation result declares no new capability; use the existing role and stage to choose the next move.")}
+                  >
+                    <div class="feedback-summary" data-testid="validation-unlock-preview">
+                      {`${preview().productId || tr(locale(), "未知产品", "Unknown product")} · ${preview().roleTag || "unknown"} · ${preview().tradable ? tr(locale(), "可交易", "tradable") : tr(locale(), "不可交易", "not tradable")}`}
+                    </div>
+                    <div class="feedback-detail">
+                      {`${tr(locale(), "阶段", "Stage")}: ${preview().currentStage || "unknown"} / ${preview().requiredStage || "unknown"}`}
+                    </div>
+                    <Show when={preview().nextStepHint}>
+                      <div class="feedback-detail">{preview().nextStepHint}</div>
+                    </Show>
+                  </EventCard>
+                )}
+              </Show>
               <PanelSection
                 title={tr(locale(), "能力经济可读性", "Capability Economics")}
                 eyebrow={tr(locale(), "下一步会带来什么", "What The Next Move Changes")}

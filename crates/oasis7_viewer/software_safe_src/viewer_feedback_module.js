@@ -1079,6 +1079,21 @@ export function createViewerFeedbackModule({
           availableActions: displayableStrings(facility.available_actions ?? facility.availableActions),
         };
       });
+    const rawValidationUnlockPreview = gameplay.validation_unlock_preview ?? gameplay.validationUnlockPreview;
+    const validationUnlockPreview = isRecord(rawValidationUnlockPreview)
+      ? {
+          productId: rawValidationUnlockPreview.product_id || rawValidationUnlockPreview.productId || null,
+          roleTag: rawValidationUnlockPreview.role_tag || rawValidationUnlockPreview.roleTag || "unknown",
+          tradable: typeof rawValidationUnlockPreview.tradable === "boolean"
+            ? rawValidationUnlockPreview.tradable
+            : null,
+          requiredStage: rawValidationUnlockPreview.required_stage || rawValidationUnlockPreview.requiredStage || "unknown",
+          currentStage: rawValidationUnlockPreview.current_stage || rawValidationUnlockPreview.currentStage || "unknown",
+          stageStatus: rawValidationUnlockPreview.stage_status || rawValidationUnlockPreview.stageStatus || "unknown",
+          valueSummary: rawValidationUnlockPreview.value_summary || rawValidationUnlockPreview.valueSummary || null,
+          nextStepHint: rawValidationUnlockPreview.next_step_hint || rawValidationUnlockPreview.nextStepHint || null,
+        }
+      : null;
 
     return {
       stageId: gameplay.stage_id || null,
@@ -1119,6 +1134,7 @@ export function createViewerFeedbackModule({
       branchHint: gameplay.branch_hint || null,
       branchRecommendations,
       microDepotFacilities,
+      validationUnlockPreview,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

@@ -63,6 +63,39 @@ describe("viewer feedback module", () => {
     );
   });
 
+  it("projects the canonical product-validation preview without inventing an unlock", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          validation_unlock_preview: {
+            product_id: "iron_ingot",
+            role_tag: "scale",
+            tradable: false,
+            required_stage: "bootstrap",
+            current_stage: "bootstrap",
+            stage_status: "available",
+            value_summary: "Validated scale product; trading disabled.",
+            next_step_hint: "Use this product in its scale role.",
+          },
+        },
+      },
+      uiLocale: "en",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().validationUnlockPreview).toEqual({
+      productId: "iron_ingot",
+      roleTag: "scale",
+      tradable: false,
+      requiredStage: "bootstrap",
+      currentStage: "bootstrap",
+      stageStatus: "available",
+      valueSummary: "Validated scale product; trading disabled.",
+      nextStepHint: "Use this product in its scale role.",
+    });
+  });
+
   it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {
     const state = {
       lastGameplayActionFeedback: null,

@@ -302,8 +302,15 @@ impl WorldState {
                 }
             }
             DomainEvent::ProductValidated {
-                requester_agent_id, ..
+                requester_agent_id,
+                stack,
+                tradable,
+                ..
             } => {
+                self.latest_product_validation = Some(LastProductValidationState {
+                    product_id: stack.kind.clone(),
+                    tradable: *tradable,
+                });
                 if let Some(cell) = self.agents.get_mut(requester_agent_id) {
                     cell.last_active = now;
                 }

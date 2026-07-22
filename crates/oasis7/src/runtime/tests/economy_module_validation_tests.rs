@@ -348,6 +348,13 @@ fn validate_product_with_module_uses_module_decision() {
         }
         other => panic!("expected ProductValidated, got {other:?}"),
     }
+    let preview_source = world
+        .state()
+        .latest_product_validation
+        .as_ref()
+        .expect("accepted validation is retained for the player preview");
+    assert_eq!(preview_source.product_id, "logistics_drone");
+    assert!(preview_source.tradable);
 }
 
 #[test]
