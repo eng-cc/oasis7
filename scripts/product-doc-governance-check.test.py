@@ -22,6 +22,7 @@ COPY_PATHS = (
     "doc/p2p/prd.md",
     "doc/testing/prd.md",
     "doc/world-simulator/prd.md",
+    "doc/game/gameplay/gameplay-agent-claim-token-cost-2026-03-27.prd.md",
 )
 
 
