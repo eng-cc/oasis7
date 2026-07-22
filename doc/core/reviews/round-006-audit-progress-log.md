@@ -177,8 +177,8 @@
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages showcase PRD (retired/deleted; historical audit artifact; Git history) | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | GitHub Pages visual-polish-v2-2026-02-12 project record (retired/deleted historical artifact; Git history) | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | GitHub Pages visual-polish-v2-2026-02-12 PRD (retired/deleted historical artifact; Git history) | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/site-manual-static-docs.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/manual/site-manual-static-docs.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | retired topic `viewer-manual-content-migration-2026-02-15`（原 project） | `backfill` | pass | B6-002 | 当时已补标准专题 project 入口；现由 `doc/site/manual/site-manual-static-docs.project.md` 承接，原文从 Git history 追溯 |

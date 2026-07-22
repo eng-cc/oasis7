@@ -244,8 +244,8 @@
 | 2026-03-06 11:50:09 +0800 | codex | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 `- 审计轮次: 2`；状态最近更新停在 2026-02-26，缺 ROUND-004 审计后的状态说明。 |
 | 2026-03-06 11:50:17 +0800 | codex | `historical removed viewer-tools doc set: capture-viewer-frame.prd` | pass | - | 提供了可直接运行的 fallback 命令（run-viewer-web / capture-viewer-frame）并给出参数语义。 |
 | 2026-03-06 11:50:27 +0800 | Codex-G4-001 | `doc/core/reviews/consistency-review-round-004.md` | issue_open | I4-203 | `S_round004` 当前基线记为 18 份，但本分区已回写 45 份，统计口径与实时进度仍未对齐。 |
-| 2026-03-06 11:50:35 +0800 | codex | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | issue_open | I4-003 | 文档内 `审计轮次` 字段重复（主字段与 `- 审计轮次: 2` 并存），造成轮次判读歧义。 |
-| 2026-03-06 11:51:01 +0800 | codex | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` | issue_open | I4-003,I4-006 | 存在重复审计字段 `- 审计轮次: 2`；状态最近更新时间停在 2026-02-12，缺本轮审计后的时效说明。 |
+| 2026-03-06 11:50:35 +0800 | codex | GitHub Pages visual-polish-v2-2026-02-12 PRD (retired/deleted historical artifact; Git history) | issue_open | I4-003 | 文档内 `审计轮次` 字段重复（主字段与 `- 审计轮次: 2` 并存），造成轮次判读歧义。 |
+| 2026-03-06 11:51:01 +0800 | codex | GitHub Pages visual-polish-v2-2026-02-12 project record (retired/deleted historical artifact; Git history) | issue_open | I4-003,I4-006 | 存在重复审计字段 `- 审计轮次: 2`；状态最近更新时间停在 2026-02-12，缺本轮审计后的时效说明。 |
 | 2026-03-06 11:51:27 +0800 | codex | `doc/site/manual/site-manual-static-docs.prd.md` | issue_open | I4-001,I4-002 | 接口路径写成 `site/site/doc/cn/index.html` 不可达；里程碑验收命令写为裸 `cargo check`，与仓库执行口径不一致。 |
 | 2026-03-06 11:51:46 +0800 | codex | `doc/site/manual/site-manual-static-docs.project.md` | issue_open | I4-001,I4-006 | 任务项仍使用 `site/site/doc/cn/index.html` 错误路径；状态更新时间停在 2026-02-15，缺本轮审计后的时效标注。 |
 | 2026-03-06 11:51:46 +0800 | codex | `doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md` | issue_open | I4-004 | 验收标准要求“可直接复制命令”，但正文未给出任何可执行命令示例，无法直接按文复现。 |
