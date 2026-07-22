@@ -185,8 +185,8 @@
 - `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md`
 - GitHub Pages content-sync-2026-02-12 PRD (retired/deleted historical artifact; Git history)
 - GitHub Pages content-sync-2026-02-12 project record (retired/deleted historical artifact; Git history)
-- `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md`
-- `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md`
+- GitHub Pages content-sync-2026-02-25 PRD (retired/deleted historical artifact; Git history)
+- GitHub Pages content-sync-2026-02-25 project record (retired/deleted historical artifact; Git history)
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`
 - site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history)
