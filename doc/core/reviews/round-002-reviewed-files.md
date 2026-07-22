@@ -97,8 +97,8 @@
 - `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`
-- `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md`
-- `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md`
+- site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history)
+- site github-pages game-first-home-2026-02-25 project (retired/deleted; historical audit artifact; Git history)
 - site github-pages hero CTA simplify PRD (retired/deleted)
 - site github-pages hero CTA simplify project (retired/deleted)
 - `doc/site/github-pages/github-pages-hero-motion-layer.prd.md`

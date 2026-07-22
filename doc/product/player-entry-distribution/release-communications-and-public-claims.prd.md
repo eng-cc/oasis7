@@ -27,6 +27,13 @@
 - 第三方账号存在、平台认证、原生 profile、帖子或回复都不证明产品集成、身份互通、合作关系、受支持入口或发行可用性；这些结论需要独立的当前产品决策、专业证据与根 README claim。
 - 点赞、关注、回复、creator/builder 兴趣和合作线索只是待分流信号，不是 roadmap 承诺、readiness evidence 或批准。渠道回复不得承诺日期、范围、集成或恢复结果。
 
+### 2.1 公共发现与双语事实一致性
+
+- 公共发现页应让首次读者理解产品定位、受支持入口和已验证范围；亮点、架构能力、截图或技术细节不得遮蔽适用限制、未承诺内容和下一步。
+- 同一公开事实的 CN/EN 配对 surface 必须表达语义等价的 claim envelope：相同 primary mode、证据窗口、适用限制和下一步。翻译可调整语言与阅读顺序，但不得单侧扩大状态、遗漏限制或把历史事实写成当前承诺。
+- 当当前事实、证据或限制漂移时，所有配对 surface 必须在同一纠正/收窄动作中更新；不能仅修正一侧，或继续以另一侧的旧文案背书。
+- 玩家价值可以先于技术实现说明，但信息层级不构成当前状态、发行就绪或公开 claim 的独立证据；当前结论仍以根 `README.md` 和同一证据窗口为准。
+
 ## 3. 沟通生命周期
 
 - `draft`、`reviewed`、`publish_ready`、`published`、`withdrawn/stale` 是不同状态，不能互相代签。草稿和审核通过都不是发布证据。
@@ -64,6 +71,7 @@
 - RC-8：公开内容遵循最小披露，不泄露敏感配置、内部证据或个人信息。
 - RC-9：抽样 channel profile、帖子和回复能区分渠道 presence 与产品集成/访问；CTA 只指向当前受支持公开入口或正式反馈/贡献路径。
 - RC-10：产品、缺陷与合作信号都有 owner 和下一步，互动指标不会升级 claim、readiness 或 roadmap。
+- RC-11：公共发现的配对语言 surface 对同一事实保持 primary mode、证据窗口、限制和下一步的语义等价；任一事实漂移时，两侧同时纠正或收窄，且亮点与技术说明不掩盖边界。
 
 ### 6.1 验收追踪
 
@@ -74,6 +82,7 @@
 | RC-4 / RC-4A / RC-5 | producer_system_designer / liveops_community / qa_engineer / blockchain_ops_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md`; 对应专业权威 | active surface claim 对账、同窗证据核验与 stale/withdrawn 纠正记录 | test_tier_required |
 | RC-7 / RC-8 | liveops_community / qa_engineer / runtime_engineer / viewer_engineer / blockchain_ops_engineer | `doc/readme/prd.md`; `doc/testing/prd.md` | incident/rollback 抽样与最小披露审计 | test_tier_required |
 | RC-9 / RC-10 | liveops_community / producer_system_designer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | 渠道 presence/integration 负例、CTA 与信号 owner/next-action 审计 | test_tier_required |
+| RC-11 | liveops_community / producer_system_designer / viewer_engineer / qa_engineer | `README.md`; `doc/readme/prd.md`; `doc/testing/prd.md` | CN/EN 公共发现 surface 的 primary mode、证据窗口、限制、下一步及 drift 纠正对账 | test_tier_required |
 
 ## 7. Non-Goals
 

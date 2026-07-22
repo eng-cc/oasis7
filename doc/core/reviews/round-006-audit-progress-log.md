@@ -155,8 +155,8 @@
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages game-first-home-2026-02-25 project (retired/deleted; historical audit artifact; Git history) | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history) | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages hero CTA simplify project (retired/deleted) | `backfill` | pass | B6-002 | 当时已补标准专题 project 入口；该一次性 CTA 三件套后续已退役删除，本行仅保留历史 backfill 证据。 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages hero CTA simplify PRD (retired/deleted) | `backfill` | pass | B6-002 | 当时已补标准 project 互链；该一次性 CTA 三件套后续已退役删除，本行仅保留历史 backfill 证据。 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
@@ -173,8 +173,8 @@
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-showcase.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-showcase.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages showcase project (retired/deleted; historical audit artifact; Git history) | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | site github-pages showcase PRD (retired/deleted; historical audit artifact; Git history) | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
