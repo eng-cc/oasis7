@@ -1,5 +1,6 @@
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
+import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
 
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
@@ -1079,76 +1080,11 @@ export function createViewerFeedbackModule({
           availableActions: displayableStrings(facility.available_actions ?? facility.availableActions),
         };
       });
-    const rawValidationUnlockPreview = gameplay.validation_unlock_preview ?? gameplay.validationUnlockPreview;
-    const validationUnlockPreview = isRecord(rawValidationUnlockPreview)
-      ? (() => {
-          const productId = rawValidationUnlockPreview.product_id || rawValidationUnlockPreview.productId || null;
-          const roleTag = rawValidationUnlockPreview.role_tag || rawValidationUnlockPreview.roleTag || "unknown";
-          const tradable = typeof rawValidationUnlockPreview.tradable === "boolean"
-            ? rawValidationUnlockPreview.tradable
-            : null;
-          const requiredStage = rawValidationUnlockPreview.required_stage || rawValidationUnlockPreview.requiredStage || "unknown";
-          const currentStage = rawValidationUnlockPreview.current_stage || rawValidationUnlockPreview.currentStage || "unknown";
-          const stageStatus = rawValidationUnlockPreview.stage_status || rawValidationUnlockPreview.stageStatus || "unknown";
-          const valueSummary = rawValidationUnlockPreview.value_summary || rawValidationUnlockPreview.valueSummary || null;
-          const nextStepHint = rawValidationUnlockPreview.next_step_hint || rawValidationUnlockPreview.nextStepHint || null;
-          if (!isLocaleZh(locale)) {
-            return {
-              productId,
-              roleTag,
-              roleLabel: roleTag,
-              tradable,
-              requiredStage,
-              requiredStageLabel: requiredStage,
-              currentStage,
-              currentStageLabel: currentStage,
-              stageStatus,
-              stageStatusLabel: stageStatus,
-              valueSummary,
-              localizedValueSummary: valueSummary,
-              nextStepHint,
-              localizedNextStepHint: nextStepHint,
-            };
-          }
-          const roleLabel = ({ bootstrap: "启动", scale: "规模化", governance: "治理", unknown: "未知" })[roleTag] || roleTag;
-          const stageLabel = (stage) => ({
-            bootstrap: "起步",
-            scale_out: "规模扩展",
-            governance: "治理",
-            none: "无要求",
-            unknown: "未知",
-          })[stage] || stage;
-          const stageStatusLabel = ({ available: "可用", denied: "未满足", unknown: "未知" })[stageStatus] || stageStatus;
-          const requiredStageLabel = stageLabel(requiredStage);
-          const currentStageLabel = stageLabel(currentStage);
-          const localizedValueSummary = stageStatus === "available"
-            ? `已验证${roleLabel}产品；${tradable ? "已启用交易" : "未启用交易"}。`
-            : stageStatus === "denied"
-              ? `已验证${roleLabel}产品仍受阶段 ${requiredStageLabel} 限制。`
-              : `已验证${roleLabel}产品的阶段要求未知。`;
-          const localizedNextStepHint = stageStatus === "available"
-            ? `将此产品用于${roleLabel}角色；验证不会解锁新能力。`
-            : stageStatus === "denied"
-              ? `将产业从${currentStageLabel}推进至${requiredStageLabel}；验证不会解锁新能力。`
-              : "请先查看受治理的产品档案，再依赖此验证。";
-          return {
-            productId,
-            roleTag,
-            roleLabel,
-            tradable,
-            requiredStage,
-            requiredStageLabel,
-            currentStage,
-            currentStageLabel,
-            stageStatus,
-            stageStatusLabel,
-            valueSummary,
-            localizedValueSummary,
-            nextStepHint,
-            localizedNextStepHint,
-          };
-        })()
-      : null;
+    const validationUnlockPreview = buildValidationUnlockPreviewDisplayModel(
+      gameplay.validation_unlock_preview ?? gameplay.validationUnlockPreview,
+      locale,
+      isLocaleZh,
+    );
 
     return {
       stageId: gameplay.stage_id || null,
