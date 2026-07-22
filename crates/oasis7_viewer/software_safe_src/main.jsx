@@ -2220,6 +2220,7 @@ function MobileJumpRail() {
       <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
       <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
       <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
+      <a class="mobile-rail__link" href="#viewer-refine-quote-panel">{tr(locale(), "报价", "Quote")}</a>
       <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
         {tr(locale(), "诊断", "Diagnostics")}
       </a>

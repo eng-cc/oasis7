@@ -144,7 +144,7 @@ export function RefineQuotePreflightPanel(props) {
   }
 
   return (
-    <section class="panel panel--nested" data-testid="refine-quote-panel" data-quote-kind="preflight">
+    <section id="viewer-refine-quote-panel" class="panel panel--nested" data-testid="refine-quote-panel" data-quote-kind="preflight">
       <div class="panel__header">
         <div class="stack stack--compact">
           <div class="panel__eyebrow">{tr(locale(), "提交前估价", "Before You Commit")}</div>
