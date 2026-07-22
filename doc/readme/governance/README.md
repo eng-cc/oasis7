@@ -7,7 +7,7 @@
 - 想确认 README 口径控制、季度复核或当前公开状态：先读根 `../../../README.md`、`readme-project-overview-whitepaper-2026-04-25.md`、`readme-consistency-audit-checklist-2026-03-11.prd.md` 或 `readme-quarterly-review-cycle-2026-03-11.prd.md`
 - 想确认 release communication 的产品边界：先读 `../../product/player-entry-distribution/release-communications-and-public-claims.prd.md`；执行时使用 `readme-release-communication-template.md` 或 `readme-release-announcement-template.md`
 - 想确认 Moltbook 渠道边界与公开 claim：先读发行沟通产品分册；持续运营使用 `readme-moltbook-liveops-runbook.md`，帖文与回复素材使用 `readme-moltbook-post-pack.md`
-- 想确认 limited playable technical preview 的贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan：先读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
+- 想确认 limited playable technical preview 中“参与或贡献不自动形成权益”的产品边界：先读 [`参与和认可边界`](../../product/player-entry-distribution/participation-and-recognition-boundaries.prd.md)；如需贡献奖励治理、ledger、distribution closure 或 merged PR reward round scan，再读 `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md` 或 `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`；invite pack 仅作为历史素材按需检索
 - 想确认小红书持续运营、已批准素材包或小红书博主 / 微信公众号激励：先读 `readme-xiaohongshu-liveops-runbook-2026-03-23.md`、`../../../site/social/xiaohongshu/README.md`、`../../../site/social/xiaohongshu/token-usage/token-usage-post-pack-2026-04-20.md`、`../../../site/social/xiaohongshu/future-ownership/future-ownership-post-pack-2026-04-13.md` 或 `../../../site/social/xiaohongshu/wechat-promoter-oasis-coin-incentive/wechat-promoter-oasis-coin-incentive-pack-2026-04-12.md`
 - 想确认当前通用资源与领域/模块记录的边界：先读根 `../../../README.md` 与大世界基础设施产品 PRD 的[资源模型分册](../../product/world-infrastructure/prd.md#25-资源模型与模块扩展边界)；世界规则直接进入[世界规则与核心玩法产品 PRD](../../product/world-rules-core-gameplay/prd.md)
 - 想精确找某份专题文档，而不是按问题阅读：回到 `../prd.index.md`
@@ -77,9 +77,11 @@
 
 ### 4. Limited playable technical preview 贡献奖励与台账执行
 - 首读入口:
+  - [`参与和认可边界`](../../product/player-entry-distribution/participation-and-recognition-boundaries.prd.md)（产品层：可审核贡献与非自动权益边界）
   - `readme-limited-preview-contributor-reward-pack-2026-03-22.prd.md`
   - `readme-limited-preview-contributor-reward-ledger-2026-03-22.prd.md`
 - 适合问题:
+  - 有限预览参与、访问、游玩或贡献是否自动形成代币、支付、所有权、治理或后续访问权
   - 贡献奖励、ledger、distribution closure 与 merged PR round scan 当前该从哪里看
   - reward 审批、distribution ref、actual-value review 需要看哪组文档
   - 哪些奖励表述被禁止，如何避免 `play-to-earn`、登录奖励或固定 token 汇率误读

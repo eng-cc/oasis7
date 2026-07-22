@@ -1,8 +1,5 @@
 # oasis7 Limited Preview Early Contributor Reward Pack（2026-03-22）
 
-- 对应设计文档: `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.design.md`
-- 对应项目管理文档: `doc/readme/governance/readme-limited-preview-contributor-reward-pack-2026-03-22.project.md`
-
 审计轮次: 1
 
 ## 1. Executive Summary
