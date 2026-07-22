@@ -5,6 +5,7 @@
 - 关联专题:
   - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
   - `doc/world-simulator/viewer/viewer-fragment-element-rendering.prd.md`
+- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文继续拥有 Fragment terrain、LOD、渲染层与验证合同。
 
 审计轮次: 1
 

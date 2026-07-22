@@ -6,6 +6,7 @@
   - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-semantic-positioning-2026-05-26.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod-2026-05-27.prd.md`
+- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文继续拥有 HUD/DTO、renderer 信息架构、测试与历史实现证据。
 
 审计轮次: 1
 
