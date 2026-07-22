@@ -112,8 +112,8 @@ describe("RefineQuotePreflightCard", () => {
   });
 
   it.each([
-    ["partial_progress", /recharge, then refine the recommended amount, or mine\/wait/i],
-    ["poor_power_tradeoff", /recharge, mine, or wait, then reduce the refine amount/i],
+    ["partial_progress", /compare recharging, mining, or waiting before choosing a supported gameplay action/i],
+    ["poor_power_tradeoff", /recharge, mine, or wait, then adjust the plan and request a new estimate/i],
   ])("gives localized next-decision guidance for %s", (valueClassification, guidance) => {
     render(() => <RefineQuotePreflightCard quote={{ ...quote, value_classification: valueClassification }} locale="en" tr={tr} />);
     expect(screen.getByTestId("refine-quote-next-decision")).toHaveTextContent(guidance);

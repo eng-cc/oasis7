@@ -30,20 +30,20 @@ function nextDecisionGuidance(value, locale, tr) {
     case "enough_to_advance":
       return tr(
         locale,
-        "这笔预估足以推进目标：确认后可按推荐量精炼；当前面板不会替你提交精炼。",
-        "This quote can advance the target: after you decide, refine the recommended amount. This panel will not submit refining for you.",
+        "这笔预估足以推进目标：把推荐量作为计划参考，再从支持的玩法动作继续；当前面板不会替你提交精炼。",
+        "This quote can advance the target: keep the recommended amount as a planning reference, then continue through a supported gameplay action. This panel will not submit refining for you.",
       );
     case "partial_progress":
       return tr(
         locale,
-        "这次只能缩小缺口：可先补电后按推荐量继续精炼，或采矿/等待以准备剩余材料。",
-        "This only reduces the gap: recharge, then refine the recommended amount, or mine/wait to prepare the remaining material.",
+        "这次只能缩小缺口：先比较补电、采矿或等待，再选择支持的玩法动作；当前面板只提供预估。",
+        "This only reduces the gap: compare recharging, mining, or waiting before choosing a supported gameplay action. This panel only provides the estimate.",
       );
     default:
       return tr(
         locale,
-        "这笔电力投入不划算：先补电、采矿或等待，并降低精炼量后再请求一份新预估。",
-        "This power tradeoff is poor: recharge, mine, or wait, then reduce the refine amount and request a new quote.",
+        "这笔电力投入不划算：先补电、采矿或等待，调整计划后再请求一份新预估。",
+        "This power tradeoff is poor: recharge, mine, or wait, then adjust the plan and request a new estimate.",
       );
   }
 }
