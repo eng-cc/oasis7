@@ -7,7 +7,7 @@
 
 ## ROUND-002 主从口径
 - 本文件为 github-pages 项目主入口（master）。
-- `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md`、`doc/site/github-pages/github-pages-benchmark-polish-v3.project.md`、`doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` 为本批增量计划文档（slave）。
+- `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md`、`doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` 为本批增量计划文档（slave）。
 
 ## 任务拆解
 

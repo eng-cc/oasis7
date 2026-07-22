@@ -149,8 +149,8 @@
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
-| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | GitHub Pages content-sync-2026-02-12 project record (retired/deleted historical artifact; Git history) | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
+| 2026-03-09 23:02:00 +0800 | `producer_system_designer` | GitHub Pages content-sync-2026-02-12 PRD (retired/deleted historical artifact; Git history) | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md` | `backfill` | pass | B6-002 | 已补标准 project 互链 |
 | 2026-03-09 23:02:00 +0800 | `producer_system_designer` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | `backfill` | pass | B6-002 | 已补标准专题 project 入口 |
