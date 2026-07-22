@@ -16,7 +16,7 @@
 | 2026-03-06 11:41:54 +0800 | codex | `doc/world-runtime/governance/audit-export.md` | issue_open | I4-001 | 文件未在 `doc/world-runtime/prd.index.md` 的专题清单中登记，存在可达性断点。 |
 | 2026-03-06 11:42:42 +0800 | codex | `doc/world-runtime/governance/governance-events.md` | issue_open | I4-001 | 文件未在 `doc/world-runtime/prd.index.md` 的专题清单中登记，存在可达性断点。 |
 | 2026-03-06 11:42:13 +0800 | codex | `doc/testing/ci/ci-wasm32-target-install.prd.md` | issue_open | I4-001 | SC-2 写为 scripts/ci-tests.sh required/full，验收命令不可直接执行。 |
-| 2026-03-06 11:42:16 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md` | issue_open | I4-001,I4-002 | 输出文件路径写成 `site/site/doc/cn/index.html` 且验收命令写为裸 `cargo check`，可达性与可执行口径不一致。 |
+| 2026-03-06 11:42:16 +0800 | codex | GitHub Pages content-sync-2026-02-25 PRD (retired/deleted historical artifact; Git history) | issue_open | I4-001,I4-002 | 输出文件路径写成 `site/site/doc/cn/index.html` 且验收命令写为裸 `cargo check`，可达性与可执行口径不一致。 |
 | 2026-03-06 11:42:19 +0800 | codex | `doc/p2p/prd.md` | issue_open | I4-012 | PRD 闭环以治理检查为主，缺可执行验收命令映射。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/project.md` | issue_open | I4-011 | 模块级 project 缺 PRD-ID->TASK->验收命令->证据矩阵。 |
 | 2026-03-06 11:42:20 +0800 | codex | `doc/p2p/prd.index.md` | issue_open | I4-010 | 索引未覆盖 README.md，可达性规则未显式声明。 |
@@ -275,7 +275,7 @@
 | 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure PRD (retired/deleted; historical review record) | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
 | 2026-03-06 11:55:32 +0800 | codex | `doc/scripts/prd.md` | pass | - | 模块主 PRD 的脚本分层与 fallback 约束清晰，未见 D4 即时整改问题。 |
 | 2026-03-06 11:55:48 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure project (retired/deleted; historical review record) | issue_open | I4-009 | 标题声明“含 PRD-ID 映射”但任务列表未给出 PRD-ID 对应，PRD-ID→TASK 追溯链缺失。 |
-| 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
+| 2026-03-06 11:55:49 +0800 | codex | GitHub Pages content-sync-2026-02-25 project record (retired/deleted historical artifact; Git history) | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history) | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
