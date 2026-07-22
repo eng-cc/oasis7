@@ -2,6 +2,7 @@ use super::*;
 
 use super::super::auth::{
     VerifiedPlayerAuth, verify_collect_data_auth_proof, verify_gameplay_action_auth_proof,
+    verify_refine_quote_auth_proof,
 };
 use super::super::gameplay_actions::{
     ACTION_BUILD_ASSEMBLER_MK1, ACTION_BUILD_SMELTER_MK1, ACTION_CLAIM_FIRST_AGENT,
@@ -16,14 +17,16 @@ use super::super::gameplay_actions::{
 };
 use super::super::protocol::{
     CollectDataCommand, CollectDataPreflight, GameplayActionAck, GameplayActionError,
-    GameplayActionRequest,
+    GameplayActionRequest, RefineQuotePreflight, RefineQuoteRequest,
 };
 use super::control_plane::{
     ensure_agent_player_access_runtime, ensure_agent_player_binding_target_runtime,
     map_auth_verify_error_code, normalize_optional_public_key,
 };
 use crate::runtime::{Action as RuntimeAction, IndustryStage, MaterialLedgerId, WorldState};
-use crate::simulator::{PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind};
+use crate::simulator::{
+    PlayerGameplayAction, PlayerGameplayRecentFeedback, ResourceKind, ResourceOwner, WorldKernel,
+};
 use std::collections::BTreeMap;
 
 const GAMEPLAY_ACTION_PROTOCOL: &str = "gameplay_action.submit";
@@ -275,6 +278,110 @@ pub(super) fn extend_available_actions(
 }
 
 impl ViewerRuntimeLiveServer {
+    /// Computes the simulator-kernel quote from a fresh, read-only projection of runtime state.
+    /// No runtime action, event, auth nonce, or player binding is mutated by this path.
+    pub(super) fn handle_refine_quote(
+        &mut self,
+        request: RefineQuoteRequest,
+    ) -> Result<RefineQuotePreflight, GameplayActionError> {
+        self.ensure_gameplay_ready_for_action(
+            "quote_refine_compound",
+            Some("quote_refine_compound"),
+            None,
+        )
+        .map_err(|(code, message)| GameplayActionError {
+            code,
+            message,
+            action_id: Some("quote_refine_compound".to_string()),
+            target_agent_id: None,
+        })?;
+        let verified = self.verify_refine_quote_auth(&request)?;
+        self.session_policy
+            .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
+            .map_err(|message| GameplayActionError {
+                code: map_session_policy_error_code(message.as_str()).to_string(),
+                message,
+                action_id: Some("quote_refine_compound".to_string()),
+                target_agent_id: None,
+            })?;
+        let agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(verified.player_id.as_str())
+            .ok_or_else(|| GameplayActionError {
+                code: "player_agent_binding_required".to_string(),
+                message: "quote_refine_compound requires a bound player Agent session".to_string(),
+                action_id: Some("quote_refine_compound".to_string()),
+                target_agent_id: None,
+            })?;
+        let public_key = normalize_optional_public_key(request.public_key.as_deref());
+        ensure_agent_player_access_runtime(
+            &self.world,
+            &self.llm_sidecar,
+            agent_id,
+            verified.player_id.as_str(),
+            public_key.as_deref(),
+        )
+        .map_err(|err| GameplayActionError {
+            code: err.code,
+            message: err.message,
+            action_id: Some("quote_refine_compound".to_string()),
+            target_agent_id: err.agent_id,
+        })?;
+        let model = super::mapping::runtime_state_to_simulator_model(
+            self.world.state(),
+            &self.llm_sidecar,
+            self.seed_model.as_ref(),
+        );
+        let quote = WorldKernel::with_model(self.snapshot_config.clone(), model)
+            .quote_refine_compound(
+                &ResourceOwner::Agent {
+                    agent_id: agent_id.to_string(),
+                },
+                request.compound_mass_g,
+            )
+            .map_err(|reason| GameplayActionError {
+                code: "refine_quote_rejected".to_string(),
+                message: format!("quote_refine_compound rejected: {reason:?}"),
+                action_id: Some("quote_refine_compound".to_string()),
+                target_agent_id: Some(agent_id.to_string()),
+            })?;
+        Ok(RefineQuotePreflight {
+            owner_agent_id: agent_id.to_string(),
+            compound_mass_g: quote.compound_mass_g,
+            electricity_cost: quote.electricity_cost,
+            electricity_after: quote.electricity_after,
+            hardware_output: quote.hardware_output,
+            target_id: "factory_build_hardware".to_string(),
+            target_gap_before: quote.hardware_shortfall_before,
+            target_gap_after: quote.hardware_shortfall_after,
+            target_linkage: quote.first_goal_relevance,
+            recommended_refine_amount: quote.recommended_refine_amount,
+            value_classification: match quote.refine_value_class.as_str() {
+                "enough_for_next_step" => "enough_to_advance".to_string(),
+                "partial_progress" => "partial_progress".to_string(),
+                _ => "poor_power_tradeoff".to_string(),
+            },
+        })
+    }
+
+    fn verify_refine_quote_auth(
+        &self,
+        request: &RefineQuoteRequest,
+    ) -> Result<VerifiedPlayerAuth, GameplayActionError> {
+        let auth = request.auth.as_ref().ok_or_else(|| GameplayActionError {
+            code: "auth_proof_required".to_string(),
+            message: "quote_refine_compound requires auth proof".to_string(),
+            action_id: Some("quote_refine_compound".to_string()),
+            target_agent_id: None,
+        })?;
+        verify_refine_quote_auth_proof(request, auth).map_err(|message| GameplayActionError {
+            code: map_auth_verify_error_code(message.as_str()).to_string(),
+            message,
+            action_id: Some("quote_refine_compound".to_string()),
+            target_agent_id: None,
+        })
+    }
+
     pub(super) fn handle_collect_data_protocol_request(
         &mut self,
         command: CollectDataCommand,

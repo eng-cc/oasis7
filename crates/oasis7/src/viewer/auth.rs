@@ -10,6 +10,8 @@ use super::protocol::{
 
 mod collect_data;
 pub use collect_data::{sign_collect_data_auth_proof, verify_collect_data_auth_proof};
+mod refine_quote;
+pub use refine_quote::{sign_refine_quote_auth_proof, verify_refine_quote_auth_proof};
 
 const VIEWER_PLAYER_AUTH_PAYLOAD_VERSION: u8 = 1;
 pub const HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV: &str =

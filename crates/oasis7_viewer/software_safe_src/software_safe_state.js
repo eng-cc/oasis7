@@ -38,6 +38,7 @@ export function createSoftwareSafeState() {
     lastPromptFeedback: null,
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
+    refineQuotePreflight: null,
     gameplayActionPending: {
       actionKey: null,
       label: null,

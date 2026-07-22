@@ -5,6 +5,8 @@ import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
+import { RefineQuotePreflightCard } from "./refine_quote_preflight_card.jsx";
+import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
 import {
@@ -2778,6 +2780,13 @@ function WorldSummaryPanel() {
                 locale={locale}
                 tr={tr}
               />
+              <Show when={core.state.refineQuotePreflight}>
+                <RefineQuotePreflightCard
+                  quote={core.state.refineQuotePreflight}
+                  locale={locale()}
+                  tr={tr}
+                />
+              </Show>
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
                   locale={locale()}
@@ -3902,11 +3911,9 @@ function AppShell() {
 export { AppShell };
 
 function viewerVisualFixtureNameFromQuery() {
-  if (!viewerTestApiEnabled()) {
-    return null;
-  }
-  const value = String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim();
-  return value || null;
+  return viewerTestApiEnabled()
+    ? String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim() || null
+    : null;
 }
 
 function viewerTestApiEnabled() {
@@ -4321,6 +4328,7 @@ function installViewerVisualFixture() {
       core.state.selectedObject = null;
     },
   };
+  installRefineQuotePreflightVisualFixture(fixtures, { core, setFixturePlayerAuth, viewerFixtureBaseSnapshot });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
 
   const fixtureName = viewerVisualFixtureNameFromQuery();

@@ -6,6 +6,7 @@ import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./v
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
+import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import {
   buildViewerEntityLists,
   renderViewerEntityList,
@@ -177,6 +178,18 @@ function normalizeWsAddr(raw) {
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
+
+const {
+  handleRefineQuotePreflight,
+  injectRefineQuotePreflightForTest,
+  installRefineQuotePreflightVisualFixture,
+} = createRefineQuotePreflightStateModule({
+  clone,
+  getSearchParams,
+  isTestApiEnabled,
+  render,
+  state,
+});
 
 function normalizeU64Display(value) {
   if (value == null) {
@@ -1736,6 +1749,56 @@ async function buildGameplayActionAuthProof(request, auth) {
     nonce,
     signature: await signAuthPayload(signingPayload, auth),
   };
+}
+
+async function buildRefineQuoteAuthProof(request, auth) {
+  const nonce = nextAuthNonce();
+  const signingPayload = buildAuthEnvelope({
+    operation: "gameplay_action",
+    action_id: "quote_refine_compound",
+    target_agent_id: `compound_mass_g:${request.compound_mass_g}`,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+  });
+  return {
+    scheme: "ed25519",
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+    signature: await signAuthPayload(signingPayload, auth),
+  };
+}
+
+async function requestRefineQuote(compoundMassG) {
+  const compoundMassGNumber = Number(compoundMassG);
+  if (!Number.isSafeInteger(compoundMassGNumber) || compoundMassGNumber <= 0) {
+    return { ok: false, reason: "refine quote requires a positive whole-number compound mass in grams" };
+  }
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return { ok: false, reason: "refine quote requires a connected viewer websocket" };
+  }
+  try {
+    await ensureHostedPlayerAuthAvailable();
+    if (!state.auth.available) {
+      return { ok: false, reason: state.auth.error || "refine quote requires an active player session" };
+    }
+    const boundAgentId = String(state.auth.boundAgentId || "").trim();
+    if (!boundAgentId) {
+      return { ok: false, reason: "refine quote requires a bound player Agent" };
+    }
+    await ensureRegisteredPlayerSession(boundAgentId);
+    const request = {
+      compound_mass_g: compoundMassGNumber,
+      player_id: state.auth.playerId,
+      public_key: state.auth.publicKey,
+    };
+    request.auth = await buildRefineQuoteAuthProof(request, state.auth);
+    sendJson({ type: "quote_refine_compound", request });
+    return { ok: true, request: clone(request) };
+  } catch (error) {
+    return { ok: false, reason: `refine quote request failed: ${String(error)}` };
+  }
 }
 
 function canAutoIssueHostedPlayerSession() {
@@ -3440,6 +3503,9 @@ function handleViewerMessage(message) {
     case "gameplay_action_error":
       handleGameplayActionError(message.error);
       break;
+    case "refine_quote_preflight":
+      handleRefineQuotePreflight(message.quote);
+      break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
       break;
@@ -4184,6 +4250,7 @@ function installTestApi() {
     fillControlExample,
     sendControl,
     sendGameplayAction,
+    requestRefineQuote,
     runSteps,
     setMode,
     focus,
@@ -4194,6 +4261,7 @@ function installTestApi() {
     togglePromptOverridesVisible,
     setStrongAuthApprovalCode,
     injectSnapshot,
+    injectRefineQuotePreflightForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -4215,6 +4283,7 @@ function bootstrap() {
   state.hostedAccess = resolveHostedAccessHint();
   state.auth = resolveViewerAuthState();
   state.wsUrl = initialWsUrl();
+  installRefineQuotePreflightVisualFixture();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -4304,6 +4373,7 @@ export {
   chatHistoryStorageKey,
   hostedActionPolicy,
   injectSnapshot,
+  injectRefineQuotePreflightForTest,
   isEmptyEntitySnapshotRefreshPendingForTest,
   isAgentChatInFlight,
   isAgentVisibleToCurrentSession,
@@ -4330,6 +4400,7 @@ export {
   sendAgentChat,
   sendControl,
   sendGameplayAction,
+  requestRefineQuote,
   sendPromptControl,
   setMode,
   setStrongAuthApprovalCode,

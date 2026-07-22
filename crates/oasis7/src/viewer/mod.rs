@@ -26,12 +26,12 @@ pub use auth::{
     preflight_hosted_registration_replay_ledger, sign_agent_chat_auth_proof,
     sign_collect_data_auth_proof, sign_gameplay_action_auth_proof,
     sign_hosted_prompt_control_strong_auth_grant, sign_prompt_control_apply_auth_proof,
-    sign_prompt_control_rollback_auth_proof, sign_session_register_auth_proof,
-    verify_agent_chat_auth_proof, verify_collect_data_auth_proof,
+    sign_prompt_control_rollback_auth_proof, sign_refine_quote_auth_proof,
+    sign_session_register_auth_proof, verify_agent_chat_auth_proof, verify_collect_data_auth_proof,
     verify_gameplay_action_auth_proof, verify_hosted_prompt_control_apply_strong_auth_grant,
     verify_hosted_prompt_control_rollback_strong_auth_grant,
     verify_prompt_control_apply_auth_proof, verify_prompt_control_rollback_auth_proof,
-    verify_session_register_auth_proof,
+    verify_refine_quote_auth_proof, verify_session_register_auth_proof,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use demo::{ViewerDemoError, ViewerDemoSummary, generate_viewer_demo};
@@ -65,8 +65,9 @@ pub use protocol::{
     GameplayActionError, GameplayActionRequest, HostedStrongAuthGrant, LiveControl,
     PlaybackControl, PlayerAuthProof, PlayerAuthScheme, PromptControlAck,
     PromptControlApplyRequest, PromptControlCommand, PromptControlError, PromptControlOperation,
-    PromptControlRollbackRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
-    ViewerRequest, ViewerResponse, ViewerStream,
+    PromptControlRollbackRequest, RefineQuotePreflight, RefineQuoteRequest,
+    VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile, ViewerRequest, ViewerResponse,
+    ViewerStream,
 };
 pub use rollback_audit_evidence::{
     RollbackStrictAuditEvidenceInput, build_unsigned_strict_audit_evidence,

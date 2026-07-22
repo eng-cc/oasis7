@@ -2762,7 +2762,7 @@ function createViewerLocalePreferencesModule({
     renderViewer();
     return state2.uiLocale;
   }
-  function toggleViewerLocale() {
+  function toggleViewerLocale2() {
     return setViewerLocale2(state2.uiLocale === "zh" ? "en" : "zh");
   }
   function setPromptOverridesVisible2(visible) {
@@ -2781,7 +2781,7 @@ function createViewerLocalePreferencesModule({
     setPromptOverridesVisible: setPromptOverridesVisible2,
     setViewerLocale: setViewerLocale2,
     togglePromptOverridesVisible: togglePromptOverridesVisible2,
-    toggleViewerLocale
+    toggleViewerLocale: toggleViewerLocale2
   };
 }
 function createViewerBrowserPersistenceModule({
@@ -2801,7 +2801,7 @@ function createViewerBrowserPersistenceModule({
       return null;
     }
   }
-  function chatHistoryStorageKey() {
+  function chatHistoryStorageKey2() {
     const worldId = state2.worldId || state2.snapshot?.world_id || state2.snapshot?.worldId || null;
     if (!worldId) {
       return null;
@@ -2929,7 +2929,7 @@ function createViewerBrowserPersistenceModule({
   }
   function persistChatHistory2() {
     const storage = storageSafe();
-    const key = chatHistoryStorageKey();
+    const key = chatHistoryStorageKey2();
     if (!storage || !key) {
       return;
     }
@@ -2940,7 +2940,7 @@ function createViewerBrowserPersistenceModule({
   }
   function hydrateChatHistoryFromStorage2() {
     const storage = storageSafe();
-    const key = chatHistoryStorageKey();
+    const key = chatHistoryStorageKey2();
     if (!storage || !key) {
       return;
     }
@@ -2958,7 +2958,7 @@ function createViewerBrowserPersistenceModule({
     }
   }
   return {
-    chatHistoryStorageKey,
+    chatHistoryStorageKey: chatHistoryStorageKey2,
     hydrateChatHistoryFromStorage: hydrateChatHistoryFromStorage2,
     normalizeChatHistoryEntry: normalizeChatHistoryEntry2,
     persistChatHistory: persistChatHistory2,
@@ -3005,7 +3005,7 @@ function createViewerWorldScaleModule({
     }
     return `${trimDisplayValue(numeric, 0)} cm`;
   }
-  function formatWorldPositionCm(pos, locale = state2.uiLocale) {
+  function formatWorldPositionCm2(pos, locale = state2.uiLocale) {
     if (!pos || typeof pos !== "object") {
       return null;
     }
@@ -3124,7 +3124,7 @@ function createViewerWorldScaleModule({
         kind: anchor.kind,
         id: anchor.id,
         label: anchor.kind === "agent" ? isZh ? "当前选中 Agent 锚点" : "Selected agent anchor" : isZh ? "当前选中地点锚点" : "Selected location anchor",
-        positionLabel: formatWorldPositionCm(anchor.pos, locale),
+        positionLabel: formatWorldPositionCm2(anchor.pos, locale),
         radiusCm: anchor.radiusCm,
         radiusLabel: anchor.radiusCm == null ? null : formatPhysicalDistanceCm2(anchor.radiusCm, locale),
         locationId: anchor.locationId
@@ -3181,9 +3181,46 @@ function createViewerWorldScaleModule({
   }
   return {
     formatPhysicalDistanceCm: formatPhysicalDistanceCm2,
-    formatWorldPositionCm,
+    formatWorldPositionCm: formatWorldPositionCm2,
     buildWorldScaleSurface: buildWorldScaleSurface2,
     detectRendererMeta: detectRendererMeta2
+  };
+}
+const VISUAL_FIXTURE_NAME = "refine_quote_preflight";
+const visualFixtureQuote = Object.freeze({
+  owner_agent_id: "agent-0",
+  compound_mass_g: 40,
+  electricity_cost: 12,
+  electricity_after: 88,
+  hardware_output: 20,
+  target_id: "factory_build_hardware",
+  target_gap_before: 20,
+  target_gap_after: 0,
+  target_linkage: "enables_factory_build_hardware_goal",
+  recommended_refine_amount: 40,
+  value_classification: "enough_to_advance"
+});
+function createRefineQuotePreflightStateModule({ clone: clone2, getSearchParams: getSearchParams2, isTestApiEnabled: isTestApiEnabled2, render: render2, state: state2 }) {
+  function handleRefineQuotePreflight2(quote) {
+    if (!quote || typeof quote !== "object") return;
+    state2.refineQuotePreflight = clone2(quote);
+  }
+  function injectRefineQuotePreflightForTest2(quote) {
+    if (!isTestApiEnabled2()) {
+      throw new Error("injectRefineQuotePreflightForTest requires test_api=1");
+    }
+    handleRefineQuotePreflight2(quote);
+    render2();
+    return clone2(state2.refineQuotePreflight);
+  }
+  function installRefineQuotePreflightVisualFixture2() {
+    if (!isTestApiEnabled2() || getSearchParams2().get("fixture") !== VISUAL_FIXTURE_NAME) return;
+    handleRefineQuotePreflight2(visualFixtureQuote);
+  }
+  return {
+    handleRefineQuotePreflight: handleRefineQuotePreflight2,
+    injectRefineQuotePreflightForTest: injectRefineQuotePreflightForTest2,
+    installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture2
   };
 }
 function resourceSummary$1(resources) {
@@ -3197,6 +3234,9 @@ function resourceSummary$1(resources) {
     return `${key}:${value}`;
   }).join(" · ") || "-";
 }
+function escapeHtml$1(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
 function buildViewerEntityLists({ entityCollections: entityCollections2, selectedSearch, isAgentVisibleToCurrentSession: isAgentVisibleToCurrentSession2 }) {
   const { agents, locations } = entityCollections2();
   const keyword = String(selectedSearch || "").trim().toLowerCase();
@@ -3205,6 +3245,37 @@ function buildViewerEntityLists({ entityCollections: entityCollections2, selecte
     agents: agents.filter((agent) => isAgentVisibleToCurrentSession2(agent.id)).filter((agent) => filter(agent, `${agent.id} ${agent.location_id}`)).sort((a, b) => String(a.id).localeCompare(String(b.id))),
     locations: locations.filter((location) => filter(location, `${location.id} ${location.name}`)).sort((a, b) => String(a.id).localeCompare(String(b.id)))
   };
+}
+function renderViewerEntityList({ state: state2, lists }) {
+  const renderItem = (kind, entry, title, meta) => {
+    const selected = state2.selectedKind === kind && state2.selectedId === entry.id;
+    return `
+      <button class="list-item" data-select-kind="${kind}" data-select-id="${escapeHtml$1(entry.id)}" data-selected="${selected}">
+        <div class="list-item__title">${escapeHtml$1(title)}</div>
+        <div class="list-item__meta">${escapeHtml$1(meta)}</div>
+      </button>
+    `;
+  };
+  return `
+    <div class="stack">
+      <div class="field">
+        <label for="entity-search">Filter targets</label>
+        <input id="entity-search" type="search" placeholder="Search agents or locations" value="${escapeHtml$1(state2.selectedSearch)}" />
+      </div>
+      <div>
+        <div class="panel__title" style="margin-bottom:10px;">Agents</div>
+        <div class="list">
+          ${lists.agents.length ? lists.agents.map((agent) => renderItem("agent", agent, agent.id, `location=${agent.location_id} · resources=${resourceSummary$1(agent.resources)}`)).join("") : '<div class="empty">No agents in current snapshot.</div>'}
+        </div>
+      </div>
+      <div>
+        <div class="panel__title" style="margin-bottom:10px;">Locations</div>
+        <div class="list">
+          ${lists.locations.length ? lists.locations.map((location) => renderItem("location", location, location.name || location.id, `id=${location.id} · resources=${resourceSummary$1(location.resources)}`)).join("") : '<div class="empty">No locations in current snapshot.</div>'}
+        </div>
+      </div>
+    </div>
+  `;
 }
 const $RAW = /* @__PURE__ */ Symbol("store-raw"), $NODE = /* @__PURE__ */ Symbol("store-node"), $HAS = /* @__PURE__ */ Symbol("store-has"), $SELF = /* @__PURE__ */ Symbol("store-self");
 function isWrappable(obj) {
@@ -3403,6 +3474,7 @@ function createSoftwareSafeState() {
     lastPromptFeedback: null,
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
+    refineQuotePreflight: null,
     gameplayActionPending: {
       actionKey: null,
       label: null,
@@ -3676,6 +3748,7 @@ let semanticSendLoop = null;
 const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
 let pendingSessionRegisterWaiter = null;
+const elements = {};
 let renderHook = () => {
 };
 let bootstrapped = false;
@@ -3719,7 +3792,8 @@ const {
   resolveStoredPromptOverridesVisibility,
   setPromptOverridesVisible,
   setViewerLocale,
-  togglePromptOverridesVisible
+  togglePromptOverridesVisible,
+  toggleViewerLocale
 } = createViewerLocalePreferencesModule({
   documentRef: document,
   getSearchParams,
@@ -3730,6 +3804,8 @@ const {
   uiLocaleStoragePrefix: UI_LOCALE_STORAGE_PREFIX,
   windowRef: window
 });
+const setSoftwareSafeLocale = setViewerLocale;
+const toggleSoftwareSafeLocale = toggleViewerLocale;
 function getSelectedSearch() {
   return state.selectedSearch;
 }
@@ -3769,6 +3845,17 @@ function normalizeWsAddr(raw) {
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
+const {
+  handleRefineQuotePreflight,
+  injectRefineQuotePreflightForTest,
+  installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture$1
+} = createRefineQuotePreflightStateModule({
+  clone,
+  getSearchParams,
+  isTestApiEnabled,
+  render,
+  state
+});
 function normalizeFiniteNumber(value) {
   if (value == null) {
     return null;
@@ -3797,6 +3884,7 @@ function trimFixed(value, digits) {
 }
 const {
   formatPhysicalDistanceCm,
+  formatWorldPositionCm,
   buildWorldScaleSurface,
   detectRendererMeta
 } = createViewerWorldScaleModule({
@@ -3844,6 +3932,7 @@ function initialWsUrl() {
   return normalizeWsAddr(params.get("ws") || params.get("addr") || DEFAULT_WS_ADDR);
 }
 const {
+  chatHistoryStorageKey,
   hydrateChatHistoryFromStorage,
   normalizeChatHistoryEntry,
   persistChatHistory,
@@ -4464,6 +4553,13 @@ function scheduleAgentChatOverallTimeout(feedback) {
     expireAgentChatOverallTimeout(feedback);
   }, AGENT_CHAT_OVERALL_TIMEOUT_MS);
 }
+function expirePendingAgentChatOverallTimeoutForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("expirePendingAgentChatOverallTimeoutForTest requires test_api=1");
+  }
+  clearPendingAgentChatOverallTimer();
+  return expireAgentChatOverallTimeout(state.lastChatFeedback);
+}
 function scheduleAgentChatAckTimeout(feedback) {
   clearPendingAgentChatAckTimer();
   pendingAgentChatAckTimer = window.setTimeout(() => {
@@ -4857,6 +4953,18 @@ function clearEmptyEntitySnapshotRefreshTimer() {
     emptyEntitySnapshotRefreshTimer = null;
   }
 }
+function needsEmptyEntitySnapshotRefreshForTest(snapshot = state.snapshot) {
+  if (!isTestApiEnabled()) {
+    throw new Error("needsEmptyEntitySnapshotRefreshForTest requires test_api=1");
+  }
+  return needsEmptyEntitySnapshotRefresh(snapshot);
+}
+function isEmptyEntitySnapshotRefreshPendingForTest() {
+  if (!isTestApiEnabled()) {
+    throw new Error("isEmptyEntitySnapshotRefreshPendingForTest requires test_api=1");
+  }
+  return Boolean(emptyEntitySnapshotRefreshTimer);
+}
 function syncEmptyEntitySnapshotRefreshLoop() {
   if (!needsEmptyEntitySnapshotRefresh()) {
     clearEmptyEntitySnapshotRefreshTimer();
@@ -5136,6 +5244,54 @@ async function buildGameplayActionAuthProof(request, auth) {
     nonce,
     signature: await signAuthPayload(signingPayload, auth)
   };
+}
+async function buildRefineQuoteAuthProof(request, auth) {
+  const nonce = nextAuthNonce();
+  const signingPayload = buildAuthEnvelope({
+    operation: "gameplay_action",
+    action_id: "quote_refine_compound",
+    target_agent_id: `compound_mass_g:${request.compound_mass_g}`,
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce
+  });
+  return {
+    scheme: "ed25519",
+    player_id: auth.playerId,
+    public_key: auth.publicKey,
+    nonce,
+    signature: await signAuthPayload(signingPayload, auth)
+  };
+}
+async function requestRefineQuote(compoundMassG) {
+  const compoundMassGNumber = Number(compoundMassG);
+  if (!Number.isSafeInteger(compoundMassGNumber) || compoundMassGNumber <= 0) {
+    return { ok: false, reason: "refine quote requires a positive whole-number compound mass in grams" };
+  }
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return { ok: false, reason: "refine quote requires a connected viewer websocket" };
+  }
+  try {
+    await ensureHostedPlayerAuthAvailable();
+    if (!state.auth.available) {
+      return { ok: false, reason: state.auth.error || "refine quote requires an active player session" };
+    }
+    const boundAgentId = String(state.auth.boundAgentId || "").trim();
+    if (!boundAgentId) {
+      return { ok: false, reason: "refine quote requires a bound player Agent" };
+    }
+    await ensureRegisteredPlayerSession(boundAgentId);
+    const request = {
+      compound_mass_g: compoundMassGNumber,
+      player_id: state.auth.playerId,
+      public_key: state.auth.publicKey
+    };
+    request.auth = await buildRefineQuoteAuthProof(request, state.auth);
+    sendJson({ type: "quote_refine_compound", request });
+    return { ok: true, request: clone(request) };
+  } catch (error) {
+    return { ok: false, reason: `refine quote request failed: ${String(error)}` };
+  }
 }
 function canAutoIssueHostedPlayerSession() {
   return isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
@@ -6704,6 +6860,9 @@ function handleViewerMessage(message) {
     case "gameplay_action_error":
       handleGameplayActionError(message.error);
       break;
+    case "refine_quote_preflight":
+      handleRefineQuotePreflight(message.quote);
+      break;
     case "authoritative_recovery_ack":
       handleAuthoritativeRecoveryAck(message.ack);
       break;
@@ -6847,6 +7006,471 @@ function feedbackBadgeClass(feedback) {
   if (feedback.ok) return "badge badge--good";
   return "badge badge--warn";
 }
+function escapeHtml(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+function renderLists() {
+  elements.leftPanel.innerHTML = renderViewerEntityList({ state, lists: modelLists() });
+}
+function renderSummary() {
+  const controlFeedback = snapshotControlFeedback(state.lastControlFeedback);
+  const promptFeedback = snapshotSemanticFeedback(state.lastPromptFeedback);
+  const chatFeedback = snapshotSemanticFeedback(state.lastChatFeedback);
+  const authSurface = buildAuthSurfaceModel();
+  const hostedActionMatrixView = buildHostedActionMatrixView();
+  const hostedRecoveryHint = buildHostedRecoveryHint();
+  const authBadgeClass = state.auth.available ? "badge badge--good" : "badge badge--warn";
+  const selectedDebug = selectedAgentExecutionDebugContext();
+  const tierBadgeClass = (status) => status === "active" || status === "active_legacy_preview" ? "badge badge--good" : status === "superseded" ? "badge" : "badge badge--warn";
+  const showRebindNotice = !!state.auth.pendingRequestedAgentId && (state.auth.pendingForceRebind || state.auth.runtimeStatus === "rebind_retrying" || state.auth.runtimeStatus === "rebind_registering");
+  elements.centerPanel.innerHTML = `
+    <div class="stack">
+      <div class="badge-row">
+        <span class="badge badge--accent">viewer</span>
+        <span class="${connectionBadgeClass()}">${escapeHtml(state.connectionStatus)}</span>
+        <span class="badge">rendererClass=${escapeHtml(state.rendererClass)}</span>
+        <span class="badge">controlProfile=${escapeHtml(state.controlProfile)}</span>
+      </div>
+      <div class="summary-grid">
+        <div class="metric"><div class="metric__label">Logical Time</div><div class="metric__value">${state.logicalTime}</div></div>
+        <div class="metric"><div class="metric__label">Event Seq</div><div class="metric__value">${state.eventSeq}</div></div>
+        <div class="metric"><div class="metric__label">World</div><div class="metric__value">${escapeHtml(state.worldId || "-")}</div></div>
+        <div class="metric"><div class="metric__label">Viewer Server</div><div class="metric__value">${escapeHtml(state.server || "-")}</div></div>
+      </div>
+      <div class="badge-row">
+        <span class="badge">ws=${escapeHtml(state.wsUrl || "-")}</span>
+        <span class="badge">entryReason=${escapeHtml(state.viewerReason || "-")}</span>
+        <span class="badge">renderer=${escapeHtml(state.renderer || "n/a")}</span>
+      </div>
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Execution Lanes</div></div>
+        <div class="panel__body stack">
+          ${selectedDebug ? `<div class="badge-row">
+                <span class="badge badge--accent">selected agent lane</span>
+                <span class="badge">renderMode=${escapeHtml(state.renderMode)}</span>
+                <span class="badge">entryReason=${escapeHtml(state.viewerReason || "-")}</span>
+                <span class="badge">provider=${escapeHtml(selectedDebug.provider_mode || "-")}</span>
+                <span class="badge">mode=${escapeHtml(selectedDebug.execution_mode || "-")}</span>
+                <span class="badge">env=${escapeHtml(selectedDebug.environment_class || "-")}</span>
+              </div>
+              <div class="badge-row">
+                <span class="badge">obs=${escapeHtml(selectedDebug.observation_schema_version || "-")}</span>
+                <span class="badge">act=${escapeHtml(selectedDebug.action_schema_version || "-")}</span>
+                <span class="badge">agentProfile=${escapeHtml(selectedDebug.agent_profile || "-")}</span>
+                <span class="badge">providerFallback=${escapeHtml(selectedDebug.fallback_reason || "-")}</span>
+              </div>
+              <pre class="json">${escapeHtml(JSON.stringify(selectedDebug, null, 2))}</pre>` : '<div class="empty">Select an agent to inspect the current execution-lane metadata.</div>'}
+        </div>
+      </div>
+      <div class="badge-row">
+        <span class="${authBadgeClass}">auth=${state.auth.available ? state.auth.registrationStatus || "ready" : "missing"}</span>
+        <span class="badge badge--accent">tier=${escapeHtml(authSurface.currentTier)}</span>
+        <span class="badge">source=${escapeHtml(authSurface.source)}</span>
+        <span class="badge">deploymentHint=${escapeHtml(authSurface.deploymentHint)}</span>
+        <span class="badge">player=${escapeHtml(state.auth.playerId || "-")}</span>
+        <span class="badge">pubkey=${escapeHtml(state.auth.publicKey ? `${state.auth.publicKey.slice(0, 10)}…` : "-")}</span>
+        <span class="badge">epoch=${escapeHtml(state.auth.sessionEpoch == null ? "-" : state.auth.sessionEpoch)}</span>
+        <span class="badge">runtime=${escapeHtml(state.auth.runtimeStatus || "-")}</span>
+        <span class="badge">boundAgent=${escapeHtml(state.auth.boundAgentId || "-")}</span>
+        <span class="badge">requestedAgent=${escapeHtml(state.auth.pendingRequestedAgentId || "-")}</span>
+        <span class="badge">${escapeHtml(state.auth.pendingForceRebind ? "rebind=forcing" : "rebind=idle")}</span>
+      </div>
+      ${state.auth.recoveryErrorCode || state.auth.recoveryErrorMessage ? `<div class="badge-row">
+            <span class="badge badge--warn">recoveryError=${escapeHtml(state.auth.recoveryErrorCode || "-")}</span>
+            <span class="badge">${escapeHtml(state.auth.recoveryErrorMessage || "-")}</span>
+          </div>` : ""}
+      ${showRebindNotice ? `<div class="badge-row">
+            <span class="badge badge--accent">rebind</span>
+            <span class="badge">target=${escapeHtml(state.auth.pendingRequestedAgentId || "-")}</span>
+            <span class="badge">${escapeHtml(state.auth.pendingForceRebind ? "mode=force_rebind" : "mode=awaiting_retry")}</span>
+          </div>
+          <div class="empty">Player session is switching to the requested agent and the current action will continue after registration succeeds.</div>` : ""}
+      ${state.auth.rebindNotice ? `<div class="empty">${escapeHtml(state.auth.rebindNotice)}</div>` : ""}
+      ${state.hostedAdmission ? `<div class="badge-row">
+            <span class="badge">activeSlots=${escapeHtml(`${state.hostedAdmission.active_player_sessions}/${state.hostedAdmission.max_player_sessions}`)}</span>
+            <span class="badge">effectiveSlots=${escapeHtml(state.hostedAdmission.effective_player_sessions == null ? "-" : `${state.hostedAdmission.effective_player_sessions}/${state.hostedAdmission.max_player_sessions}`)}</span>
+            <span class="badge">runtimeBound=${escapeHtml(state.hostedAdmission.runtime_bound_player_sessions == null ? "-" : state.hostedAdmission.runtime_bound_player_sessions)}</span>
+            <span class="badge">runtimeOnly=${escapeHtml(state.hostedAdmission.runtime_only_player_sessions == null ? "-" : state.hostedAdmission.runtime_only_player_sessions)}</span>
+            <span class="badge">runtimeProbe=${escapeHtml(state.hostedAdmission.runtime_probe_status || "-")}</span>
+            <span class="badge">issueBudget=${escapeHtml(state.hostedAdmission.remaining_issue_budget)}</span>
+            <span class="badge">leaseTTL=${escapeHtml(state.hostedAdmission.slot_lease_ttl_ms)}</span>
+            <span class="badge">issued=${escapeHtml(state.hostedAdmission.issued_players_total)}</span>
+            <span class="badge">released=${escapeHtml(state.hostedAdmission.released_players_total)}</span>
+          </div>` : ""}
+      ${state.hostedAdmission?.runtime_probe_error ? `<div class="badge-row">
+            <span class="badge badge--warn">runtimeProbeError=${escapeHtml(state.hostedAdmission.runtime_probe_error)}</span>
+          </div>` : ""}
+      ${hostedRecoveryHint ? `<div class="panel panel--nested" style="background:rgba(255,255,255,0.02); border-color:rgba(255,184,77,0.35);">
+            <div class="panel__header"><div class="panel__title">Hosted Recovery</div></div>
+            <div class="panel__body stack">
+              <div class="badge-row">
+                <span class="badge badge--warn">${escapeHtml(hostedRecoveryHint.kind)}</span>
+                <span class="badge">${escapeHtml(hostedRecoveryHint.title)}</span>
+              </div>
+              <div class="empty">${escapeHtml(hostedRecoveryHint.detail)}</div>
+              <div class="toolbar"><button data-auth-action="retry-issue" ${state.auth.issueInFlight ? "disabled" : ""}>${escapeHtml(hostedRecoveryHint.cta)}</button></div>
+            </div>
+          </div>` : ""}
+      ${!state.auth.available && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) ? hostedRecoveryHint ? "" : `<div class="toolbar"><button data-auth-action="retry-issue" ${state.auth.issueInFlight ? "disabled" : ""}>Acquire Hosted Player Session</button></div>` : ""}
+      ${state.auth.available && state.auth.source !== LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE ? `<div class="toolbar"><button data-auth-action="logout">Release Hosted Player Session</button></div>` : ""}
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Session Ladder</div></div>
+        <div class="panel__body stack">
+          <div class="empty">${escapeHtml(authSurface.currentTierReason)}</div>
+          <div class="event-list">
+            ${authSurface.tiers.map(
+    (tier) => `
+                  <div class="event-card">
+                    <div class="event-card__title">
+                      <span>${escapeHtml(tier.label)}</span>
+                      <span class="${tierBadgeClass(tier.status)}">${escapeHtml(tier.status)}</span>
+                    </div>
+                    <div class="event-card__meta">${escapeHtml(tier.reason)}</div>
+                  </div>`
+  ).join("")}
+          </div>
+          <div class="badge-row">
+            <span class="${authSurface.capabilities.prompt_control.enabled ? "badge badge--good" : "badge badge--warn"}">prompt=${escapeHtml(authSurface.capabilities.prompt_control.enabled ? "enabled" : authSurface.capabilities.prompt_control.code)}</span>
+            <span class="${authSurface.capabilities.agent_chat.enabled ? "badge badge--good" : "badge badge--warn"}">chat=${escapeHtml(authSurface.capabilities.agent_chat.enabled ? "enabled" : authSurface.capabilities.agent_chat.code)}</span>
+            <span class="badge badge--warn">mainToken=${escapeHtml(authSurface.capabilities.main_token_transfer.code)}</span>
+          </div>
+          <div class="empty">${escapeHtml(authSurface.reconnect)}</div>
+        </div>
+      </div>
+      ${hostedActionMatrixView.length ? `<div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+            <div class="panel__header"><div class="panel__title">Hosted Action Matrix</div></div>
+            <div class="panel__body stack">
+              <div class="empty">This is the hosted public-join truth surface exported by the launcher. QA should read these action ids directly instead of inferring from button state alone.</div>
+              <div class="event-list">
+                ${hostedActionMatrixView.map(
+    (item) => `
+                      <div class="event-card">
+                        <div class="event-card__title">
+                          <span>${escapeHtml(item.actionId)}</span>
+                          <span class="${item.enabled ? "badge badge--good" : "badge badge--warn"}">${escapeHtml(item.enabled ? "enabled" : item.code || "blocked")}</span>
+                        </div>
+                        <div class="event-card__meta">required_auth=${escapeHtml(item.requiredAuth)} · availability=${escapeHtml(item.availability)}</div>
+                        <div class="empty">${escapeHtml(item.reason || "-")}</div>
+                        ${item.capabilityReason && item.capabilityReason !== item.reason ? `<div class="empty">viewer=${escapeHtml(item.capabilityReason)}</div>` : ""}
+                      </div>`
+  ).join("")}
+              </div>
+            </div>
+          </div>` : ""}
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Playback Controls</div></div>
+        <div class="panel__body stack">
+          <div class="toolbar">
+            <button data-action="play">Play</button>
+            <button data-action="pause">Pause</button>
+            <button data-action="step">Step x1</button>
+          </div>
+          <div class="control-grid">
+            <div class="field">
+              <label for="step-count">Step count</label>
+              <input id="step-count" type="number" min="1" step="1" value="3" />
+            </div>
+            <div class="field" style="align-self:end;">
+              <button data-action="step-count">Step custom count</button>
+            </div>
+          </div>
+          ${controlFeedback ? `<div class="badge-row">
+                <span class="badge">action=${escapeHtml(controlFeedback.action)}</span>
+                <span class="badge">stage=${escapeHtml(controlFeedback.stage)}</span>
+                <span class="badge">Δtick=${controlFeedback.deltaLogicalTime}</span>
+                <span class="badge">Δevent=${controlFeedback.deltaEventSeq}</span>
+              </div>
+              <pre class="json">${escapeHtml(JSON.stringify(controlFeedback, null, 2))}</pre>` : '<div class="empty">No control feedback yet.</div>'}
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div class="metric">
+          <div class="metric__label">Prompt Feedback</div>
+          <div class="metric__value">${escapeHtml(promptFeedback?.stage || "idle")}</div>
+          ${promptFeedback ? `<div class="badge-row" style="margin-top:8px;"><span class="${feedbackBadgeClass(promptFeedback)}">${escapeHtml(promptFeedback.effect || promptFeedback.reason || "ready")}</span></div>` : ""}
+        </div>
+        <div class="metric">
+          <div class="metric__label">Chat Feedback</div>
+          <div class="metric__value">${escapeHtml(chatFeedback?.stage || "idle")}</div>
+          ${chatFeedback ? `<div class="badge-row" style="margin-top:8px;"><span class="${feedbackBadgeClass(chatFeedback)}">${escapeHtml(chatFeedback.effect || chatFeedback.reason || "ready")}</span></div>` : ""}
+        </div>
+      </div>
+      <div>
+        <div class="panel__title" style="margin-bottom:10px;">Recent Events</div>
+        <div class="event-list">
+          ${state.recentEvents.length ? state.recentEvents.map(
+    (event) => `
+                    <div class="event-card">
+                      <div class="event-card__title">
+                        <span>${escapeHtml(summarizeEventTitle(event))}</span>
+                        <span>#${Number(event.id || 0)}</span>
+                      </div>
+                      <div class="event-card__meta">time=${Number(event.time || 0)}</div>
+                      <pre class="json">${escapeHtml(JSON.stringify(event.kind, null, 2))}</pre>
+                    </div>`
+  ).join("") : '<div class="empty">Waiting for live events…</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderInteractionPanel() {
+  const rawAgentId = selectedAgentId();
+  const agentId = rawAgentId && isAgentVisibleToCurrentSession(rawAgentId) ? rawAgentId : null;
+  if (!agentId) {
+    return '<div class="empty">Select an agent to unlock prompt/chat controls.</div>';
+  }
+  const binding = selectedAgentBindingInfo();
+  const promptFeedback = snapshotSemanticFeedback(state.lastPromptFeedback);
+  const chatFeedback = snapshotSemanticFeedback(state.lastChatFeedback);
+  const authSurface = buildAuthSurfaceModel();
+  const promptCapability = authSurface.capabilities.prompt_control;
+  const chatCapability = authSurface.capabilities.agent_chat;
+  const mainTokenTransferCapability = authSurface.capabilities.main_token_transfer;
+  const mainTokenTransferPolicy = hostedActionPolicy("main_token_transfer");
+  const interactionEnabled = promptCapability.enabled;
+  const strongAuthGrantHint = authSurface.capabilities.prompt_control.enabled && isHostedPublicJoinDeploymentMode(state.hostedAccess?.deployment_mode) ? `<div class="field">
+         <label for="strong-auth-approval-code">Backend Approval Code</label>
+         <input id="strong-auth-approval-code" type="password" autocomplete="off" value="${escapeHtml(state.strongAuth.approvalCode || "")}" />
+       </div>` : "";
+  const authNotice = interactionEnabled ? `<div class="badge-row"><span class="badge badge--good">${escapeHtml(authSurface.currentTier)}</span><span class="badge">player=${escapeHtml(state.auth.playerId)}</span><span class="badge">source=${escapeHtml(authSurface.source)}</span></div>
+       <div class="empty">${escapeHtml(promptCapability.reason)}</div>` : `<div class="empty">${escapeHtml(promptCapability.reason)}</div>`;
+  const chatHistory = state.chatHistory.filter((entry) => entry.agentId === agentId || entry.targetAgentId === agentId).slice(0, 12);
+  const assetLaneStatusText = mainTokenTransferCapability.enabled ? "preview_only" : mainTokenTransferCapability.code || "blocked";
+  const assetLaneDetail = mainTokenTransferCapability.enabled ? "Contract marks main_token_transfer as strong_auth-capable on this lane, but viewer still exposes no transfer form here." : mainTokenTransferCapability.reason;
+  return `
+    <div class="stack">
+      <div class="badge-row">
+        <span class="badge badge--accent">Agent Interaction</span>
+        <span class="badge">agent=${escapeHtml(agentId)}</span>
+        <span class="badge">promptVersion=${Number(state.promptDraft.currentVersion || 0)}</span>
+      </div>
+      ${authNotice}
+      <div class="badge-row">
+        <span class="badge">boundPlayer=${escapeHtml(binding?.playerId || "-")}</span>
+        <span class="badge">boundKey=${escapeHtml(binding?.publicKey ? `${binding.publicKey.slice(0, 10)}…` : "-")}</span>
+        <span class="${promptCapability.enabled ? "badge badge--good" : "badge badge--warn"}">prompt=${escapeHtml(promptCapability.enabled ? "enabled" : promptCapability.code)}</span>
+        <span class="${chatCapability.enabled ? "badge badge--good" : "badge badge--warn"}">chat=${escapeHtml(chatCapability.enabled ? "enabled" : chatCapability.code)}</span>
+        <span class="${mainTokenTransferCapability.enabled ? "badge badge--good" : "badge badge--warn"}">mainToken=${escapeHtml(assetLaneStatusText)}</span>
+      </div>
+      <div class="empty">${escapeHtml(assetLaneDetail)}</div>
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Prompt Overrides</div></div>
+        <div class="panel__body stack">
+          ${strongAuthGrantHint}
+          <div class="field">
+            <label for="prompt-system">System Prompt Override</label>
+            <textarea id="prompt-system" rows="4" ${promptCapability.enabled ? "" : "disabled"}>${escapeHtml(state.promptDraft.systemPrompt)}</textarea>
+          </div>
+          <div class="field">
+            <label for="prompt-short">Short-Term Goal Override</label>
+            <textarea id="prompt-short" rows="3" ${promptCapability.enabled ? "" : "disabled"}>${escapeHtml(state.promptDraft.shortTermGoal)}</textarea>
+          </div>
+          <div class="field">
+            <label for="prompt-long">Long-Term Goal Override</label>
+            <textarea id="prompt-long" rows="3" ${promptCapability.enabled ? "" : "disabled"}>${escapeHtml(state.promptDraft.longTermGoal)}</textarea>
+          </div>
+          <div class="toolbar">
+            <button data-prompt-action="preview" ${promptCapability.enabled ? "" : "disabled"}>Preview Prompt</button>
+            <button data-prompt-action="apply" ${promptCapability.enabled ? "" : "disabled"}>Apply Prompt</button>
+          </div>
+          <div class="toolbar">
+            <div class="field" style="margin:0; min-width:180px; flex:1;">
+              <label for="prompt-rollback-version">Rollback Target Version</label>
+              <input id="prompt-rollback-version" type="number" min="0" step="1" value="${Number(state.promptDraft.rollbackTargetVersion || 0)}" ${promptCapability.enabled ? "" : "disabled"} />
+            </div>
+            <button data-prompt-action="rollback" ${promptCapability.enabled ? "" : "disabled"}>Rollback Prompt</button>
+          </div>
+          ${promptFeedback ? `<div class="badge-row"><span class="${feedbackBadgeClass(promptFeedback)}">${escapeHtml(promptFeedback.stage)}</span></div>
+               <pre class="json">${escapeHtml(JSON.stringify(promptFeedback, null, 2))}</pre>` : '<div class="empty">No prompt feedback yet.</div>'}
+          ${state.strongAuth.lastGrantActionId ? `<div class="empty">lastGrant=${escapeHtml(state.strongAuth.lastGrantActionId)} expiresAt=${escapeHtml(String(state.strongAuth.lastGrantExpiresAtUnixMs || "-"))}</div>` : ""}
+          ${state.strongAuth.lastGrantError ? `<div class="empty" style="color:var(--bad);">${escapeHtml(state.strongAuth.lastGrantError)}</div>` : ""}
+        </div>
+      </div>
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Asset / Governance Lane</div></div>
+        <div class="panel__body stack">
+          <div class="badge-row">
+            <span class="${mainTokenTransferCapability.enabled ? "badge badge--good" : "badge badge--warn"}">main_token_transfer=${escapeHtml(assetLaneStatusText)}</span>
+            <span class="badge">required_auth=${escapeHtml(mainTokenTransferPolicy?.required_auth || "-")}</span>
+            <span class="badge">availability=${escapeHtml(mainTokenTransferPolicy?.availability || "-")}</span>
+          </div>
+          <div class="empty">${escapeHtml(assetLaneDetail)}</div>
+          <div class="empty">${escapeHtml(mainTokenTransferPolicy?.reason || "No hosted action policy is available for main_token_transfer on this lane.")}</div>
+          <div class="toolbar">
+            <button disabled>Main Token Transfer (Not Exposed Here Yet)</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel panel--nested" style="background:rgba(255,255,255,0.02);">
+        <div class="panel__header"><div class="panel__title">Agent Chat</div></div>
+        <div class="panel__body stack">
+          <div class="field">
+            <label for="agent-chat-message">Message</label>
+            <textarea id="agent-chat-message" rows="4" placeholder="Send a message to the selected agent" ${chatCapability.enabled ? "" : "disabled"}>${escapeHtml(state.chatDraft.message)}</textarea>
+          </div>
+          <div class="toolbar">
+            <button data-chat-send="1" ${chatCapability.enabled ? "" : "disabled"}>Send Chat</button>
+          </div>
+          ${chatFeedback ? `<div class="badge-row"><span class="${feedbackBadgeClass(chatFeedback)}">${escapeHtml(chatFeedback.stage)}</span></div>
+               <pre class="json">${escapeHtml(JSON.stringify(chatFeedback, null, 2))}</pre>` : '<div class="empty">No chat feedback yet.</div>'}
+          <div>
+            <div class="panel__title" style="margin-bottom:10px;">Message Flow</div>
+            <div class="event-list">
+              ${chatHistory.length ? chatHistory.map(
+    (entry) => `
+                        <div class="event-card">
+                          <div class="event-card__title">
+                            <span>${escapeHtml(entry.source === "player" ? `player → ${entry.targetAgentId || entry.agentId || "agent"}` : `${entry.agentId || "agent"} spoke`)}</span>
+                            <span>tick=${Number(entry.tick || 0)}</span>
+                          </div>
+                          <div class="event-card__meta">speaker=${escapeHtml(entry.speaker || entry.playerId || "-")} · location=${escapeHtml(entry.locationId || "-")}</div>
+                          <pre class="json">${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+                        </div>`
+  ).join("") : '<div class="empty">No chat history for this agent yet.</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderDetails() {
+  const selectedLabel = state.selectedKind && state.selectedId ? `${state.selectedKind}:${state.selectedId}` : "nothing selected";
+  elements.rightPanel.innerHTML = `
+    <div class="stack">
+      <div class="badge-row">
+        <span class="badge badge--accent">Selected</span>
+        <span class="badge">${escapeHtml(selectedLabel)}</span>
+      </div>
+      ${renderInteractionPanel()}
+      ${state.selectedObject ? `<pre class="json">${escapeHtml(JSON.stringify(state.selectedObject, null, 2))}</pre>` : '<div class="empty">Select an agent or location from the left list.</div>'}
+      <div>
+        <div class="panel__title" style="margin-bottom:10px;">Snapshot Summary</div>
+        <pre class="json">${escapeHtml(
+    JSON.stringify(
+      {
+        config: state.snapshot?.config || null,
+        counts: {
+          agents: Object.keys(state.snapshot?.model?.agents || {}).length,
+          locations: Object.keys(state.snapshot?.model?.locations || {}).length,
+          promptProfiles: Object.keys(state.snapshot?.model?.agent_prompt_profiles || {}).length,
+          executionDebugContexts: Object.keys(state.snapshot?.model?.agent_execution_debug_contexts || {}).length
+        },
+        metrics: state.metrics,
+        hostedAccess: clone(state.hostedAccess)
+      },
+      null,
+      2
+    )
+  )}</pre>
+      </div>
+      ${state.lastError ? `<div>
+            <div class="panel__title" style="margin-bottom:10px; color: var(--bad);">Last Error</div>
+            <pre class="json">${escapeHtml(state.lastError)}</pre>
+          </div>` : ""}
+    </div>
+  `;
+}
+function bindEvents() {
+  const searchInput = document.getElementById("entity-search");
+  if (searchInput) {
+    searchInput.addEventListener("input", (event) => {
+      state.selectedSearch = String(event.target.value || "");
+      renderLists();
+      bindEvents();
+    });
+  }
+  document.querySelectorAll("[data-select-kind][data-select-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applySelection({
+        kind: button.getAttribute("data-select-kind"),
+        id: button.getAttribute("data-select-id")
+      });
+    });
+  });
+  document.querySelectorAll("[data-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-action");
+      if (action === "step-count") {
+        const value = Number(document.getElementById("step-count")?.value || 1);
+        sendControl("step", { count: Math.max(1, Math.floor(value || 1)) });
+        return;
+      }
+      sendControl(action, null);
+    });
+  });
+  const promptSystem = document.getElementById("prompt-system");
+  if (promptSystem) {
+    promptSystem.addEventListener("input", (event) => {
+      state.promptDraft.systemPrompt = String(event.target.value || "");
+      state.promptDraft.dirty = true;
+    });
+  }
+  const promptShort = document.getElementById("prompt-short");
+  if (promptShort) {
+    promptShort.addEventListener("input", (event) => {
+      state.promptDraft.shortTermGoal = String(event.target.value || "");
+      state.promptDraft.dirty = true;
+    });
+  }
+  const promptLong = document.getElementById("prompt-long");
+  if (promptLong) {
+    promptLong.addEventListener("input", (event) => {
+      state.promptDraft.longTermGoal = String(event.target.value || "");
+      state.promptDraft.dirty = true;
+    });
+  }
+  const promptRollbackVersion = document.getElementById("prompt-rollback-version");
+  if (promptRollbackVersion) {
+    promptRollbackVersion.addEventListener("input", (event) => {
+      const nextValue = Number(event.target.value || 0);
+      state.promptDraft.rollbackTargetVersion = Math.max(0, Math.floor(nextValue || 0));
+    });
+  }
+  const strongAuthApprovalCode = document.getElementById("strong-auth-approval-code");
+  if (strongAuthApprovalCode) {
+    strongAuthApprovalCode.addEventListener("input", (event) => {
+      state.strongAuth.approvalCode = String(event.target.value || "");
+    });
+  }
+  document.querySelectorAll("[data-prompt-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-prompt-action");
+      if (action === "rollback") {
+        sendPromptControl("rollback", {
+          toVersion: Number(state.promptDraft.rollbackTargetVersion || 0)
+        });
+        return;
+      }
+      sendPromptControl(action, null);
+    });
+  });
+  const chatMessage = document.getElementById("agent-chat-message");
+  if (chatMessage) {
+    chatMessage.addEventListener("input", (event) => {
+      state.chatDraft.message = String(event.target.value || "");
+      state.chatDraft.dirty = true;
+    });
+  }
+  document.querySelectorAll("[data-chat-send]").forEach((button) => {
+    button.addEventListener("click", () => {
+      sendAgentChat(selectedAgentId(), state.chatDraft.message);
+    });
+  });
+  document.querySelectorAll("[data-auth-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const action = button.getAttribute("data-auth-action");
+      if (action === "logout") {
+        void logoutHostedPlayerSession();
+        return;
+      }
+      if (action === "retry-issue") {
+        void retryHostedPlayerIdentityIssue();
+      }
+    });
+  });
+}
 function render() {
   renderHook();
 }
@@ -6871,6 +7495,7 @@ function installTestApi() {
     fillControlExample,
     sendControl,
     sendGameplayAction,
+    requestRefineQuote,
     runSteps,
     setMode,
     focus,
@@ -6881,6 +7506,7 @@ function installTestApi() {
     togglePromptOverridesVisible,
     setStrongAuthApprovalCode,
     injectSnapshot,
+    injectRefineQuotePreflightForTest,
     logoutHostedPlayerSession,
     startHostedAccountLogin,
     completeHostedAccountLogin,
@@ -6901,6 +7527,7 @@ function bootstrap() {
   state.hostedAccess = resolveHostedAccessHint();
   state.auth = resolveViewerAuthState();
   state.wsUrl = initialWsUrl();
+  installRefineQuotePreflightVisualFixture$1();
   window[RENDER_META_GLOBAL_NAME] = Object.freeze({
     renderMode: state.renderMode,
     rendererClass: state.rendererClass,
@@ -6958,6 +7585,86 @@ window.addEventListener("unhandledrejection", (event) => {
   const message = event?.reason?.message || String(event?.reason || "unhandled rejection");
   reportFatalError(message, "window.unhandledrejection");
 });
+const core = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  applySelection,
+  bindEvents,
+  buildAuthSurfaceModel,
+  buildGameplaySummary,
+  buildHostedActionMatrixView,
+  buildHostedRecoveryHint,
+  buildTargetSyncProgress,
+  buildWorldScaleSurface,
+  chatHistoryStorageKey,
+  clone,
+  completeHostedAccountLogin,
+  connectionBadgeClass,
+  describeControls,
+  describePromptVersionState,
+  describeSemanticFeedback,
+  entityCollections,
+  expireHostedRuntimeSyncTimeoutForTest,
+  expirePendingAgentChatOverallTimeoutForTest,
+  expirePendingGameplayActionAckTimeoutForTest,
+  expirePendingPromptControlAckTimeoutForTest,
+  expirePendingSessionRegisterWaiterForTest,
+  feedbackBadgeClass,
+  fillControlExample,
+  focus,
+  formatPhysicalDistanceCm,
+  formatWorldPositionCm,
+  getSelectedSearch,
+  getState,
+  handleControlCompletionAck,
+  hostedActionPolicy,
+  initializeSoftwareSafeCore,
+  injectRefineQuotePreflightForTest,
+  injectSnapshot,
+  isAgentChatInFlight,
+  isAgentVisibleToCurrentSession,
+  isEmptyEntitySnapshotRefreshPendingForTest,
+  isLocaleZh,
+  logoutHostedPlayerSession,
+  modelLists,
+  needsEmptyEntitySnapshotRefreshForTest,
+  pushChatHistory,
+  refreshHostedAdmissionState,
+  registerPlayerSessionForTest,
+  renderDetails,
+  renderInteractionPanel,
+  renderLists,
+  renderSummary,
+  reportFatalError,
+  requestRefineQuote,
+  requestRender,
+  resourceSummary: resourceSummary$1,
+  retryHostedPlayerIdentityIssue,
+  runSteps,
+  select,
+  selectedAgentBindingInfo,
+  selectedAgentExecutionDebugContext,
+  selectedAgentId,
+  sendAgentChat,
+  sendControl,
+  sendGameplayAction,
+  sendPromptControl,
+  setMode,
+  setPromptOverridesVisible,
+  setRenderHook,
+  setSelectedSearch,
+  setSoftwareSafeLocale,
+  setStrongAuthApprovalCode,
+  setViewerLocale,
+  snapshotControlFeedback,
+  snapshotSemanticFeedback,
+  startHostedAccountLogin,
+  state,
+  summarizeEventTitle,
+  togglePromptOverridesVisible,
+  toggleSoftwareSafeLocale,
+  toggleViewerLocale,
+  updatePixelWorldRuntimeMeta
+}, Symbol.toStringTag, { value: "Module" }));
 function resolvePixelWorldRuntimeModuleUrl() {
   if (typeof window !== "undefined" && window.location) {
     return new URL("./pixel-world-bridge/pixel_world_bridge.js", window.location.href).href;
@@ -7249,7 +7956,7 @@ function installPixelWorldVisualFixtureHook() {
   applySelection({ kind: "agent", id: "agent-0" });
   return fixtureName;
 }
-var _tmpl$$4 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$4 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$4 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$3 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$3 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
+var _tmpl$$5 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__grid>`), _tmpl$2$5 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--one">`), _tmpl$3$5 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__terrain-band pixel-world-canvas__terrain-band--two">`), _tmpl$4$3 = /* @__PURE__ */ template(`<div class=pixel-world-fragment-terrain>`), _tmpl$5$3 = /* @__PURE__ */ template(`<div class=pixel-world-route>`), _tmpl$6$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--mid">`), _tmpl$7$1 = /* @__PURE__ */ template(`<div class="pixel-world-route-waypoint pixel-world-route-waypoint--target">`), _tmpl$8$1 = /* @__PURE__ */ template(`<div class=pixel-world-hotspot><span>`), _tmpl$9$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--location"data-pixel-world-location-marker=true><span>`), _tmpl$0$1 = /* @__PURE__ */ template(`<button class="pixel-world-entity pixel-world-entity--agent"data-pixel-world-agent-marker=true><span>`), _tmpl$1$1 = /* @__PURE__ */ template(`<button type=button class="pixel-world-entity pixel-world-entity--agent pixel-world-entity--canvas-hit-target"data-pixel-world-agent-marker=true><span>`), _tmpl$10$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--goal">`), _tmpl$11$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas__callout pixel-world-canvas__callout--blocker">`), _tmpl$12$1 = /* @__PURE__ */ template(`<div class=pixel-world-canvas__selection>`), _tmpl$13$1 = /* @__PURE__ */ template(`<div class="pixel-world-canvas pixel-world-canvas--rendered"data-renderer-ready=true><canvas id=pixel-world-embedded-runtime-canvas class=pixel-world-canvas__surface tabindex=0 role=img aria-describedby=pixel-world-canvas-accessible-summary width=960 height=540></canvas><div id=pixel-world-canvas-accessible-summary class=sr-only></div><div class=pixel-world-canvas__overlay>`), _tmpl$14$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__detail>`), _tmpl$15$1 = /* @__PURE__ */ template(`<span>`), _tmpl$16$1 = /* @__PURE__ */ template(`<div class=pixel-world-action-receipt__meta><span>`), _tmpl$17$1 = /* @__PURE__ */ template(`<div><div class=pixel-world-action-receipt__label></div><div class=pixel-world-action-receipt__body><div class=pixel-world-action-receipt__title></div><div class=pixel-world-action-receipt__summary>`), _tmpl$18$1 = /* @__PURE__ */ template(`<span class=pixel-world-command-cell__blocker-chip>`), _tmpl$19$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-cell__detail>`), _tmpl$20$1 = /* @__PURE__ */ template(`<div class=pixel-world-command-strip><div class="pixel-world-command-cell pixel-world-command-cell--objective"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail></div></div><div class="pixel-world-command-cell pixel-world-command-cell--next"role=button tabindex=0><div class=pixel-world-command-cell__header><div class=pixel-world-command-cell__label></div></div><div class=pixel-world-command-cell__value></div><a class=pixel-world-command-cell__action></a></div><div class="pixel-world-command-cell pixel-world-command-cell--leverage"><div class=pixel-world-command-cell__label></div><div class=pixel-world-command-cell__value></div><div class=pixel-world-command-cell__detail>`), _tmpl$21$1 = /* @__PURE__ */ template(`<span class="badge badge--accent">`), _tmpl$22$1 = /* @__PURE__ */ template(`<span class="badge badge--warn">`), _tmpl$23$1 = /* @__PURE__ */ template(`<div class="pixel-world-readout badge-row"><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge>`), _tmpl$24$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--tick"data-hud-priority=telemetry><span></span><strong></strong><em>`), _tmpl$25$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-hud data-focus-hud=true><div class=pixel-world-focus-hud__identity><div class=pixel-world-focus-hud__eyebrow></div><div class=pixel-world-focus-hud__title></div></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--prompt"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--mission"><span></span><strong></strong><em></em></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-hud__cell pixel-world-focus-hud__cell--receipt"><span></span><strong></strong><em></em></div><div class=pixel-world-focus-controls><button type=button class="pixel-world-focus-control pixel-world-focus-control--primary"></button><details class=pixel-world-focus-more-controls><summary></summary><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--secondary"></button><button type=button class="pixel-world-focus-control pixel-world-focus-control--quiet">`), _tmpl$26$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-cinematic data-focus-cinematic=true><div class=pixel-world-focus-cinematic__eyebrow></div><div class=pixel-world-focus-cinematic__title></div><div class=pixel-world-focus-cinematic__body></div><div class=badge-row><span class="badge badge--accent">`), _tmpl$27$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-rail__item pixel-world-focus-rail__item--blocker"data-focus-priority=blocker><span></span><strong>`), _tmpl$28$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail__item><span></span><strong>`), _tmpl$29$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-rail data-focus-rail=true><div class=pixel-world-focus-rail__label>`), _tmpl$30$1 = /* @__PURE__ */ template(`<span class=sr-only>`), _tmpl$31$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--selected"data-selected=true><span></span><strong>`), _tmpl$32$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-minimap data-focus-minimap=true><div class=pixel-world-focus-minimap__label></div><div class=pixel-world-focus-minimap__grid></div><div class=pixel-world-focus-minimap__route></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--target"><span></span><strong></strong></div><div class="pixel-world-focus-minimap__node pixel-world-focus-minimap__node--agent"><span></span><strong></strong></div><div class=pixel-world-focus-minimap__meta><span></span><span></span><span></span><span>`), _tmpl$33$1 = /* @__PURE__ */ template(`<pre class=json>`), _tmpl$34$1 = /* @__PURE__ */ template(`<details class=diagnostic><summary>`), _tmpl$35$1 = /* @__PURE__ */ template(`<span class=badge>`), _tmpl$36$1 = /* @__PURE__ */ template(`<div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span>`), _tmpl$37$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-command-tray><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--target"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--blocker"><span></span><strong></strong></div><div class="pixel-world-focus-command-chip pixel-world-focus-command-chip--receipt"><span></span><strong></strong></div><button type=button class="pixel-world-focus-command-chip pixel-world-focus-command-chip--primary"data-chat-send=1>`), _tmpl$38$1 = /* @__PURE__ */ template(`<div class=empty>`), _tmpl$39$1 = /* @__PURE__ */ template(`<div class="panel panel--nested"><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=field><label for=agent-chat-message></label><textarea id=agent-chat-message rows=2></textarea></div><div class=toolbar><button type=button data-chat-send=1></button></div><div><div class="panel__title panel__title--spaced"></div><div class=event-list>`), _tmpl$40$1 = /* @__PURE__ */ template(`<div class="pixel-world-focus-command-surface stack">`), _tmpl$41$1 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$42$1 = /* @__PURE__ */ template(`<div class=feedback-card><div class=badge-row><span></span></div><div class=feedback-summary>`), _tmpl$43$1 = /* @__PURE__ */ template(`<div><div class=event-card__title><span></span></div><div class=event-card__meta></div><div class=feedback-summary>`), _tmpl$44$1 = /* @__PURE__ */ template(`<div class=pixel-world-host__summary><div class=pixel-world-host__summary-copy><div class=pixel-world-host__headline></div><div class=feedback-detail></div></div><div class=pixel-world-focus-entry><div id=pixel-world-focus-entry-hint class=pixel-world-focus-entry__hint></div><button type=button class=pixel-world-focus-entry__button aria-describedby=pixel-world-focus-entry-hint>`), _tmpl$45$1 = /* @__PURE__ */ template(`<div class="empty pixel-world-render-unavailable"data-renderer-state=unavailable>`), _tmpl$46$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-unavailable"data-renderer-state=unavailable><summary></summary><div class="stack flow-top"><div class=feedback-summary>`), _tmpl$47$1 = /* @__PURE__ */ template(`<div class=pixel-world-focus-receipt>`), _tmpl$48$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--command"><summary></summary><div class=pixel-world-focus-drawer__body>`), _tmpl$49$1 = /* @__PURE__ */ template(`<details class="diagnostic pixel-world-render-diagnostics"><summary></summary><div class="pixel-world-host__toolbar badge-row"><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><span class=badge></span><button type=button></button><button type=button></button><div class=feedback-detail>`), _tmpl$50$1 = /* @__PURE__ */ template(`<details class="pixel-world-focus-drawer pixel-world-focus-drawer--diagnostics"><summary></summary><div class=pixel-world-focus-drawer__body><div class=badge-row><span class=badge></span><span class=badge></span><span class=badge></span></div><div class="toolbar toolbar--spaced"><button type=button>`), _tmpl$51$1 = /* @__PURE__ */ template(`<div class="stack flow-top"><pre class=json>`), _tmpl$52$1 = /* @__PURE__ */ template(`<div><details class=diagnostic><summary>`);
 function tr$1(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -7447,7 +8154,7 @@ function PixelWorldHostVisualLayer(props) {
   if (!props.enabled) {
     return [];
   }
-  return [_tmpl$$4(), _tmpl$2$4(), _tmpl$3$4(), createComponent(For, {
+  return [_tmpl$$5(), _tmpl$2$5(), _tmpl$3$5(), createComponent(For, {
     get each() {
       return visualState().fragmentTerrain.slice(0, 96);
     },
@@ -9096,7 +9803,7 @@ function PixelWorldHost(props) {
   })();
 }
 delegateEvents(["click", "keydown", "input"]);
-var _tmpl$$3 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$3 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<span class=badge>`);
+var _tmpl$$4 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=micro-depot-facilities-panel><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack">`), _tmpl$2$4 = /* @__PURE__ */ template(`<div class=feedback-detail>`), _tmpl$3$4 = /* @__PURE__ */ template(`<div class="badge-row badge-row--spaced">`), _tmpl$4$2 = /* @__PURE__ */ template(`<div class=event-card><div class=event-card__title><span></span><span class="badge badge--accent"></span></div><div class=event-card__meta></div><div class="summary-grid micro-depot-facilities__metrics"><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail></div></div><div class=metric><div class=metric__label></div><div class=metric__value></div><div class=feedback-detail>`), _tmpl$5$2 = /* @__PURE__ */ template(`<span class=badge>`);
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
@@ -9125,7 +9832,7 @@ function MicroDepotFacilitiesPanel(props) {
       return facilities().length > 0;
     },
     get children() {
-      var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
+      var _el$ = _tmpl$$4(), _el$2 = _el$.firstChild, _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.nextSibling, _el$7 = _el$2.nextSibling;
       insert(_el$4, () => tr2(locale(), "区域设施", "Regional Facility"));
       insert(_el$5, () => tr2(locale(), "Micro Depot", "Micro Depot"));
       insert(_el$6, () => tr2(locale(), "仅显示当前规范玩法快照已发布的状态、模块和回执证据；动作需由运行时另行发布。", "Shows only state, module, and receipt evidence published by the canonical gameplay snapshot; actions remain runtime-published."));
@@ -9155,7 +9862,7 @@ function MicroDepotFacilitiesPanel(props) {
               return displayableStrings(facility.supportedResourceKinds).length > 0;
             },
             get children() {
-              var _el$28 = _tmpl$2$3();
+              var _el$28 = _tmpl$2$4();
               insert(_el$28, () => `${tr2(locale(), "支持资源", "Supported resources")}: ${displayableStrings(facility.supportedResourceKinds).join(", ")}`);
               return _el$28;
             }
@@ -9166,13 +9873,13 @@ function MicroDepotFacilitiesPanel(props) {
             },
             get fallback() {
               return (() => {
-                var _el$30 = _tmpl$2$3();
+                var _el$30 = _tmpl$2$4();
                 insert(_el$30, () => tr2(locale(), "当前快照没有发布可用 depot 动作。", "The current snapshot publishes no available depot actions."));
                 return _el$30;
               })();
             },
             get children() {
-              var _el$29 = _tmpl$3$3();
+              var _el$29 = _tmpl$3$4();
               insert(_el$29, createComponent(For, {
                 get each() {
                   return displayableStrings(facility.availableActions);
@@ -9195,7 +9902,7 @@ function MicroDepotFacilitiesPanel(props) {
     }
   });
 }
-var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=event-list data-testid=viewer-recovery-options>`), _tmpl$3$2 = /* @__PURE__ */ template(`<div class="event-card recovery-option-card"><div class=event-card__title><span></span></div><div data-testid=viewer-recovery-option><div class=summary-grid>`);
+var _tmpl$$3 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$3 = /* @__PURE__ */ template(`<div class=event-list data-testid=viewer-recovery-options>`), _tmpl$3$3 = /* @__PURE__ */ template(`<div class="event-card recovery-option-card"><div class=event-card__title><span></span></div><div data-testid=viewer-recovery-option><div class=summary-grid>`);
 const RECOVERY_OPTION_LABELS = {
   kind: {
     repair: ["修复", "Repair"],
@@ -9230,7 +9937,7 @@ function recoveryOptionDisplayLabel(category, value, locale, tr2) {
 }
 function RecoveryMetric(props) {
   return (() => {
-    var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    var _el$ = _tmpl$$3(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
     insert(_el$2, () => props.label);
     insert(_el$3, () => props.value);
     return _el$;
@@ -9255,13 +9962,13 @@ function RecoveryOptionComparisonPanel(props) {
       });
     },
     get children() {
-      var _el$4 = _tmpl$2$2();
+      var _el$4 = _tmpl$2$3();
       insert(_el$4, createComponent(For, {
         get each() {
           return options();
         },
         children: (option) => (() => {
-          var _el$5 = _tmpl$3$2(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild;
+          var _el$5 = _tmpl$3$3(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.firstChild;
           insert(_el$7, () => recoveryOptionDisplayLabel("kind", option.kind, props.locale, props.tr));
           insert(_el$9, createComponent(RecoveryMetric, {
             get label() {
@@ -9310,6 +10017,133 @@ function RecoveryOptionComparisonPanel(props) {
       return _el$4;
     }
   });
+}
+var _tmpl$$2 = /* @__PURE__ */ template(`<div class=metric><div class=metric__label></div><div class=metric__value>`), _tmpl$2$2 = /* @__PURE__ */ template(`<div class=metric__detail>`), _tmpl$3$2 = /* @__PURE__ */ template(`<section class="panel panel--nested"data-testid=refine-quote-preflight data-quote-kind=preflight><div class=panel__header><div class="stack stack--compact"><div class=panel__eyebrow></div><div class=panel__title></div><div class=panel__meta-copy></div></div></div><div class="panel__body stack"><div class=badge-row><span class="badge badge--accent"></span><span class=badge></span><span class=badge></span></div><div class=summary-grid></div><div class=feedback-summary></div><div class=feedback-summary>`);
+function displayValue(value) {
+  if (value === null || value === void 0 || value === "") return "-";
+  return String(value);
+}
+function classificationCopy(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "enough_to_advance":
+      return tr2(locale, "足以推进下一步", "Enough to advance");
+    case "partial_progress":
+      return tr2(locale, "可获得部分进展", "Partial progress");
+    default:
+      return tr2(locale, "电力投入不划算", "Poor power tradeoff");
+  }
+}
+function linkageCopy(value, locale, tr2) {
+  switch (String(value || "")) {
+    case "enables_factory_build_hardware_goal":
+      return tr2(locale, "本次产出可满足工厂硬件目标", "This output satisfies the factory hardware target");
+    case "reduces_factory_build_hardware_shortfall":
+      return tr2(locale, "本次产出会缩小工厂硬件缺口", "This output reduces the factory hardware gap");
+    default:
+      return tr2(locale, "本次产出不会缩小当前工厂硬件缺口", "This output does not reduce the current factory hardware gap");
+  }
+}
+function QuoteMetric(props) {
+  return (() => {
+    var _el$ = _tmpl$$2(), _el$2 = _el$.firstChild, _el$3 = _el$2.nextSibling;
+    insert(_el$2, () => props.label);
+    insert(_el$3, () => displayValue(props.value));
+    insert(_el$, (() => {
+      var _c$ = memo(() => !!props.detail);
+      return () => _c$() ? (() => {
+        var _el$4 = _tmpl$2$2();
+        insert(_el$4, () => props.detail);
+        return _el$4;
+      })() : null;
+    })(), null);
+    return _el$;
+  })();
+}
+function RefineQuotePreflightCard(props) {
+  const quote = () => props.quote || {};
+  const locale = () => props.locale;
+  const tr2 = props.tr;
+  return (() => {
+    var _el$5 = _tmpl$3$2(), _el$6 = _el$5.firstChild, _el$7 = _el$6.firstChild, _el$8 = _el$7.firstChild, _el$9 = _el$8.nextSibling, _el$0 = _el$9.nextSibling, _el$1 = _el$6.nextSibling, _el$10 = _el$1.firstChild, _el$11 = _el$10.firstChild, _el$12 = _el$11.nextSibling, _el$13 = _el$12.nextSibling, _el$14 = _el$10.nextSibling, _el$15 = _el$14.nextSibling, _el$16 = _el$15.nextSibling;
+    insert(_el$8, () => tr2(locale(), "提交前估价", "Before You Commit"));
+    insert(_el$9, () => tr2(locale(), "化合物精炼预估", "Compound Refining Quote"));
+    insert(_el$0, () => tr2(locale(), "这是只读预估，不会提交精炼、扣除电力或生成回执。", "This is a read-only quote. It does not submit refining, spend electricity, or create a receipt."));
+    insert(_el$11, () => tr2(locale(), "预估", "quote"));
+    insert(_el$12, () => `${tr2(locale(), "目标", "target")}: ${displayValue(quote().target_id)}`);
+    insert(_el$13, () => `${tr2(locale(), "Agent", "Agent")}: ${displayValue(quote().owner_agent_id)}`);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "精炼量", "Refine amount");
+      },
+      get value() {
+        return `${displayValue(quote().compound_mass_g)} g`;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "电力成本", "Electricity cost");
+      },
+      get value() {
+        return quote().electricity_cost;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "剩余电力", "Electricity remaining");
+      },
+      get value() {
+        return quote().electricity_after;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "硬件产出", "Hardware output");
+      },
+      get value() {
+        return quote().hardware_output;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "目标缺口", "Target gap");
+      },
+      get value() {
+        return `${displayValue(quote().target_gap_before)} → ${displayValue(quote().target_gap_after)}`;
+      }
+    }), null);
+    insert(_el$14, createComponent(QuoteMetric, {
+      get label() {
+        return tr2(locale(), "建议精炼量", "Recommended amount");
+      },
+      get value() {
+        return `${displayValue(quote().recommended_refine_amount)} g`;
+      }
+    }), null);
+    insert(_el$15, () => `${tr2(locale(), "目标关联", "Target linkage")}: ${linkageCopy(quote().target_linkage, locale(), tr2)}`);
+    insert(_el$16, () => `${tr2(locale(), "价值判断", "Value assessment")}: ${classificationCopy(quote().value_classification, locale(), tr2)}`);
+    return _el$5;
+  })();
+}
+const refineQuotePreflightFixture = Object.freeze({
+  owner_agent_id: "agent-0",
+  compound_mass_g: 40,
+  electricity_cost: 12,
+  electricity_after: 88,
+  hardware_output: 20,
+  target_id: "factory_build_hardware",
+  target_gap_before: 20,
+  target_gap_after: 0,
+  target_linkage: "enables_factory_build_hardware_goal",
+  recommended_refine_amount: 40,
+  value_classification: "enough_to_advance"
+});
+function installRefineQuotePreflightVisualFixture(fixtures, { core: core2, setFixturePlayerAuth: setFixturePlayerAuth2, viewerFixtureBaseSnapshot: viewerFixtureBaseSnapshot2 }) {
+  fixtures.refine_quote_preflight = () => {
+    core2.injectSnapshot(viewerFixtureBaseSnapshot2(), { returnState: false });
+    core2.applySelection({ kind: "agent", id: "agent-0" });
+    setFixturePlayerAuth2();
+    core2.injectRefineQuotePreflightForTest(refineQuotePreflightFixture);
+  };
 }
 var _tmpl$$1 = /* @__PURE__ */ template(`<button data-testid=viewer-available-action-reprioritize>`), _tmpl$2$1 = /* @__PURE__ */ template(`<div class=toolbar data-testid=viewer-reprioritize-action>`), _tmpl$3$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status role=alert tabindex=-1 class=feedback-detail>`), _tmpl$4$1 = /* @__PURE__ */ template(`<div id=viewer-reprioritize-status aria-live=polite class=feedback-detail>`), _tmpl$5$1 = /* @__PURE__ */ template(`<form><label for=viewer-reprioritize-goal></label><textarea id=viewer-reprioritize-goal rows=3 aria-describedby="viewer-reprioritize-help viewer-reprioritize-status"></textarea><div id=viewer-reprioritize-help class=feedback-detail></div><div class=toolbar><button type=button></button><button type=submit>`);
 function ReprioritizeActionForm(props) {
@@ -12664,6 +13498,21 @@ function WorldSummaryPanel() {
             tr
           }), createComponent(Show, {
             get when() {
+              return state.refineQuotePreflight;
+            },
+            get children() {
+              return createComponent(RefineQuotePreflightCard, {
+                get quote() {
+                  return state.refineQuotePreflight;
+                },
+                get locale() {
+                  return locale();
+                },
+                tr
+              });
+            }
+          }), createComponent(Show, {
+            get when() {
               return gameplay().agentClaim;
             },
             get children() {
@@ -14529,11 +15378,7 @@ function AppShell() {
   })()];
 }
 function viewerVisualFixtureNameFromQuery() {
-  if (!viewerTestApiEnabled()) {
-    return null;
-  }
-  const value = String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim();
-  return value || null;
+  return viewerTestApiEnabled() ? String(new URLSearchParams(window.location.search || "").get("viewer_visual_fixture") || "").trim() || null : null;
 }
 function viewerTestApiEnabled() {
   const value = String(new URLSearchParams(window.location.search || "").get("test_api") || "").trim().toLowerCase();
@@ -15042,6 +15887,11 @@ function installViewerVisualFixture() {
       state.selectedObject = null;
     }
   };
+  installRefineQuotePreflightVisualFixture(fixtures, {
+    core,
+    setFixturePlayerAuth,
+    viewerFixtureBaseSnapshot
+  });
   window[VIEWER_VISUAL_FIXTURE_GLOBAL] = fixtures;
   const fixtureName = viewerVisualFixtureNameFromQuery();
   if (!fixtureName || !fixtures[fixtureName]) {

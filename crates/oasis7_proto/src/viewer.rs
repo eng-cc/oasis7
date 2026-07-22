@@ -8,6 +8,8 @@ pub use negotiation::*;
 
 mod collect_data;
 pub use collect_data::*;
+mod refine_quote;
+pub use refine_quote::*;
 
 pub const VIEWER_PROTOCOL_VERSION: u32 = 2;
 
@@ -94,6 +96,9 @@ pub enum ViewerRequest {
     },
     CollectData {
         command: CollectDataCommand,
+    },
+    QuoteRefineCompound {
+        request: RefineQuoteRequest,
     },
     AuthoritativeChallenge {
         command: AuthoritativeChallengeCommand,
@@ -628,6 +633,9 @@ pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     },
     CollectDataPreflight {
         quote: CollectDataPreflight,
+    },
+    RefineQuotePreflight {
+        quote: RefineQuotePreflight,
     },
     Error {
         message: String,
