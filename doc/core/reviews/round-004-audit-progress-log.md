@@ -269,8 +269,8 @@
 | 2026-03-06 11:54:48 +0800 | codex | `doc/testing/prd.index.md` | pass | - | 专题 PRD/project 配对索引完整且路径可达，未发现 D4 级别问题。 |
 | 2026-03-06 11:54:56 +0800 | codex | `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` | issue_open | I4-002 | 验收命令未统一为 。 |
 | 2026-03-06 11:54:56 +0800 | codex | `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
-| 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` | issue_open | I4-002 | 验收命令未统一为 。 |
-| 2026-03-06 11:54:58 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:54:58 +0800 | codex | GitHub Pages content-sync-2026-02-12 PRD (retired/deleted historical artifact; Git history) | issue_open | I4-002 | 验收命令未统一为 。 |
+| 2026-03-06 11:54:58 +0800 | codex | GitHub Pages content-sync-2026-02-12 project record (retired/deleted historical artifact; Git history) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:55:08 +0800 | codex | `doc/scripts/README.md` | pass | - | scripts 模块入口与子目录说明一致，未见 D4-001~D4-008 问题。 |
 | 2026-03-06 11:55:30 +0800 | G4-002-Aristotle | Intent/distributed/runtime closure PRD (retired/deleted; historical review record) | pass | - | PRD 以规格与验收口径为主，未发现新增 D4 高中风险分工/可达性问题。 |
 | 2026-03-06 11:55:32 +0800 | codex | `doc/scripts/prd.md` | pass | - | 模块主 PRD 的脚本分层与 fallback 约束清晰，未见 D4 即时整改问题。 |

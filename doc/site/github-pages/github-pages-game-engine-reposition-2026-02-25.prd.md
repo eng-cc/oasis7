@@ -7,7 +7,7 @@
 
 ## ROUND-002 主从口径
 - 本文件为 github-pages 主文档（master）。
-- `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md`、`doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md`、`doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md` 为本批增量子文档（slave）。
+- `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md`、`doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` 为本批增量子文档（slave）。
 
 - 对应标准执行入口: `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`
 

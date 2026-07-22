@@ -288,8 +288,8 @@
 - `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md`
 - `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md`
 - `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md`
-- `doc/site/github-pages/github-pages-content-sync-2026-02-12.prd.md`
-- `doc/site/github-pages/github-pages-content-sync-2026-02-12.project.md`
+- GitHub Pages content-sync-2026-02-12 PRD (retired/deleted historical artifact; Git history)
+- GitHub Pages content-sync-2026-02-12 project record (retired/deleted historical artifact; Git history)
 - `doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
