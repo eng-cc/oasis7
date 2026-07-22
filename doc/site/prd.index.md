@@ -60,7 +60,6 @@
 | `doc/site/github-pages/github-pages-architecture-svg-refresh.prd.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.design.md` | `doc/site/github-pages/github-pages-architecture-svg-refresh.project.md` |
 | `doc/site/github-pages/github-pages-benchmark-polish-v3.prd.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.design.md` | `doc/site/github-pages/github-pages-benchmark-polish-v3.project.md` |
 | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` |
-| `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.design.md` | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` |
 | `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | `doc/site/github-pages/github-pages-hero-motion-layer.design.md` | `doc/site/github-pages/github-pages-hero-motion-layer.project.md` |
 | `doc/site/github-pages/github-pages-hero-pointer-interaction.prd.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.design.md` | `doc/site/github-pages/github-pages-hero-pointer-interaction.project.md` |
 | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.design.md` | `doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md` |
@@ -68,7 +67,6 @@
 | `doc/site/github-pages/github-pages-lean-tech-refresh.prd.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.design.md` | `doc/site/github-pages/github-pages-lean-tech-refresh.project.md` |
 | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.design.md` | `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.project.md` |
 | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.design.md` | `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md` |
-| `doc/site/github-pages/github-pages-showcase.prd.md` | `doc/site/github-pages/github-pages-showcase.design.md` | `doc/site/github-pages/github-pages-showcase.project.md` |
 | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.design.md` | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md` |
 | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.design.md` | `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md` |
 | `doc/site/manual/site-manual-static-docs.prd.md` | `doc/site/manual/site-manual-static-docs.design.md` | `doc/site/manual/site-manual-static-docs.project.md` |
@@ -92,6 +90,8 @@
 | `github-pages-hero-cta-simplify-2026-02-26` | 该完成态 CTA 微专题三件套已删除；当前首页叙事、CTA 与下载入口真值以 `doc/site/project.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`、`site/index.html` 与 `site/en/index.html` 为准，历史细节从 GitHub task issue evidence comments 与 git history 追溯。 |
 | `github-pages-release-communication-placeholder-2026-03-11` | 该完成态公告占位三件套已删除；当前公开公告准备态与 technical preview 边界以 `doc/site/prd.md`、`doc/site/project.md`、`site/index.html` 与 `site/doc/cn/index.html` 为准，历史细节从 GitHub task issue evidence comments 与 git history 追溯。 |
 | `viewer-manual-content-migration-2026-02-15` | 该完成态 Viewer 手册搬迁三件套已删除；玩家模式承诺以 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 为准，当前操作及退役边界以 `doc/world-simulator/viewer/viewer-manual.manual.md` 为准，CN/EN 镜像治理以 `doc/site/manual/site-manual-static-docs.*` 为准，任务过程从 GitHub task issue evidence comments 与 git history 追溯。 |
+| `github-pages-game-first-home-2026-02-25` | 该完成态首页游戏优先重排三件套已删除；当前公开首页语义与状态边界以 `doc/site/prd.md`、`doc/site/project.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
+| `github-pages-showcase` | 该完成态首版对外展示站三件套已删除；当前公开站点结构、双语入口与状态边界以 `doc/site/prd.md`、`doc/site/project.md`、`doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`、`site/index.html` 与 `site/en/index.html` 为准，任务过程以 GitHub task #2515 evidence comments 与 git history 追溯。 |
 
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。

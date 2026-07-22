@@ -321,8 +321,8 @@
 - `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md`
 - `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md`
-- `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md`
-- `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md`
+- site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history)
+- site github-pages game-first-home-2026-02-25 project (retired/deleted; historical audit artifact; Git history)
 - site github-pages hero CTA simplify PRD (retired/deleted)
 - site github-pages hero CTA simplify project (retired/deleted)
 - `doc/site/github-pages/github-pages-hero-motion-layer.prd.md`
@@ -339,8 +339,8 @@
 - `doc/site/github-pages/github-pages-quality-gates-sync-seo-hardening-2026-02-26.project.md`
 - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.prd.md`
 - `doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
-- `doc/site/github-pages/github-pages-showcase.prd.md`
-- `doc/site/github-pages/github-pages-showcase.project.md`
+- site github-pages showcase PRD (retired/deleted; historical audit artifact; Git history)
+- site github-pages showcase project (retired/deleted; historical audit artifact; Git history)
 - `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md`
 - `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md`
 - `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md`

@@ -141,7 +141,7 @@
     - `git diff --check`
 - [x] TASK-SITE-018 (PRD-SITE-008) [test_tier_required]: 收口 `doc/site/github-pages/**` 活跃专题中的当前 viewer 校验命令与 crate 路径，统一使用 `oasis7_viewer` / `crates/oasis7*` 口径。
   - 验收命令 (`test_tier_required`):
-    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
+    - `rg -n "oasis7_viewer|crates/oasis7/src/bin/oasis7_viewer_live.rs|crates/oasis7_viewer/src/" doc/site/github-pages/github-pages-home-radical-redesign-2026-02-26.project.md doc/site/github-pages/github-pages-home-conversion-i18n-screenshot-refresh-2026-02-26.project.md doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md doc/site/github-pages/github-pages-content-sync-2026-02-25.prd.md doc/site/github-pages/github-pages-release-download-pipeline-2026-03-01.project.md`
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-SITE-019 (PRD-SITE-002/003) [test_tier_required]: 执行 ROUND-009 `site` 模块入口映射治理，明确 `doc/site/README.md`、公开 docs hub、手册镜像策略与仓库权威手册的职责边界。

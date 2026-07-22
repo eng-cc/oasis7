@@ -234,9 +234,9 @@
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/prd.md` | pass | - | 结构与口径未发现需立即整改的 D4 高中风险问题。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/engineering/project.md` | issue_open | I4-201 | 任务项未形成 PRD-ID->TASK->验收命令->测试证据完整链，存在高风险断链。 |
 | 2026-03-06 11:48:55 +0800 | Codex-G4-001 | `doc/core/reviews/round-004-audit-progress-log.md` | pass | - | 审计进度日志结构正常，已按逐篇即时回写机制持续记录。 |
-| 2026-03-06 11:48:55 +0800 | codex | `doc/site/github-pages/github-pages-showcase.prd.md` | issue_open | I4-003 | 同文并存 `审计轮次: 4` 与列表项 `- 审计轮次: 2`，审计字段重复导致轮次统计口径不唯一。 |
+| 2026-03-06 11:48:55 +0800 | codex | site github-pages showcase PRD (retired/deleted; historical audit artifact; Git history) | issue_open | I4-003 | 同文并存 `审计轮次: 4` 与列表项 `- 审计轮次: 2`，审计字段重复导致轮次统计口径不唯一。 |
 | 2026-03-06 11:48:58 +0800 | codex | `doc/playability_test_result/game-test.prd.md` | issue_open | I4-004 | agent-browser 命令依赖 `$CODEX_HOME/.codex` 外部路径，当前仓库内未提供可直接执行的本地兜底入口。 |
-| 2026-03-06 11:49:15 +0800 | codex | `doc/site/github-pages/github-pages-showcase.project.md` | issue_open | I4-003,I4-006 | 同文并存 `审计轮次: 4` 与 `- 审计轮次: 2`；状态“最近更新 2026-02-10”与当前轮次审计时间差较大，时效维护不足。 |
+| 2026-03-06 11:49:15 +0800 | codex | site github-pages showcase project (retired/deleted; historical audit artifact; Git history) | issue_open | I4-003,I4-006 | 同文并存 `审计轮次: 4` 与 `- 审计轮次: 2`；状态“最近更新 2026-02-10”与当前轮次审计时间差较大，时效维护不足。 |
 | 2026-03-06 11:49:16 +0800 | codex | `doc/playability_test_result/game-test.project.md` | issue_open | I4-003,I4-008 | 任务仅 G1~G5 未映射 PRD-ID，且依赖路径 `.codex/skills/playwright/SKILL.md` 在仓库内不可达。 |
 | 2026-03-06 11:49:35 +0800 | codex | `doc/playability_test_result/README.md` | issue_open | I4-006 | 文档声明“仅保留最近一天样本”，但活跃卡片同时列出 2026-02-28 与 2026-03-01 多日样本，状态口径不一致。 |
 | 2026-03-06 11:49:45 +0800 | codex | `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md` | issue_open | I4-002,I4-003 | 里程碑验收命令写为裸 `cargo check`（未对齐 `env -u RUSTC_WRAPPER` 口径），且存在重复审计字段 `- 审计轮次: 2`。 |
@@ -278,8 +278,8 @@
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-content-sync-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-engine-reposition-2026-02-25.project.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
-| 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.prd.md` | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
-| 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-game-first-home-2026-02-25.project.md` | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
+| 2026-03-06 11:55:49 +0800 | codex | site github-pages game-first-home-2026-02-25 PRD (retired/deleted; historical audit artifact; Git history) | issue_open | I4-001 | 存在 site/site/doc/cn/index.html 路径口径，发布可达性风险。 |
+| 2026-03-06 11:55:49 +0800 | codex | site github-pages game-first-home-2026-02-25 project (retired/deleted; historical audit artifact; Git history) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题。 |
 | 2026-03-06 11:55:49 +0800 | codex | site github-pages hero CTA simplify PRD (retired/deleted) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题；该一次性 CTA 三件套后续已退役删除。 |
 | 2026-03-06 11:55:49 +0800 | codex | site github-pages hero CTA simplify project (retired/deleted) | pass | - | 未发现新增 D4-001~D4-008 高中风险问题；该一次性 CTA 三件套后续已退役删除。 |
 | 2026-03-06 11:55:49 +0800 | codex | `doc/site/github-pages/github-pages-hero-motion-layer.prd.md` | issue_open | I4-002 | 验收命令未统一为 env -u RUSTC_WRAPPER cargo check。 |
