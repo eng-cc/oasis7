@@ -22,6 +22,12 @@
 - 每份可玩性、parity、observer 或 blocked 结论必须绑定一个 primary mode；`viewer` 与 `pure_api` 的证据不得互相代签。
 - `pure_api` 不是协议探针或自动化执行 lane 的别名。它只有在专业域规定的正式玩法前置与独立证据成立时，才能声明为可玩。
 
+### 2.1 Launcher 交付表面边界
+
+Native 或 Web Launcher 是已声明 `viewer` / `pure_api` 路径的交付、控制与过渡表面，不是第三种玩家模式、发行等级或独立可玩性证明。当前 Launcher 的首次引导、配置修复、反馈入口与持续运行体验，应统一服务于对应 primary mode；具体 UI、控制面、请求状态、持久化、运行时恢复与验证契约继续由 [`doc/world-simulator/launcher/README.md`](../../world-simulator/launcher/README.md) 及其专业域文档维护。
+
+当 Launcher 的前置条件、配置、会话或后端不可用时，产品口径必须呈现真实的 `blocked` / `observer` 状态和可执行的恢复下一步。成功打开 Launcher、完成本地 fallback、探针/console 可用或单次启动成功，都不能反向证明声明的 primary mode 已经可玩，也不能扩大公开发行 claim。
+
 ## 3. 入口能力等价
 
 `viewer` 与 `pure_api` 可以采用不同表现方式，但必须消费同一权威世界事实和玩家语义。决定持续游玩的能力不能因入口不同而丢失：
