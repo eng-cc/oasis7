@@ -5,6 +5,7 @@
 - 关联主专题:
   - `doc/world-simulator/viewer/viewer-web-entry-visual-redesign-2026-05-12.prd.md`
   - `doc/world-simulator/viewer/viewer-pixel-world-bridge-render-optimization-2026-05-17.prd.md`
+- 产品层长期承诺：[`doc/product/agents-world-simulation/player-readable-world-stage.prd.md`](../../product/agents-world-simulation/player-readable-world-stage.prd.md)；本文继续拥有位置来源、派生规则、DTO 与验证合同。
 
 审计轮次: 1
 
