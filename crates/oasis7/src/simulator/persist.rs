@@ -314,6 +314,20 @@ pub struct PlayerGameplaySnapshot {
     pub rebuild_available: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pivot_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_unlock_preview: Option<ProductValidationUnlockPreview>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProductValidationUnlockPreview {
+    pub product_id: String,
+    pub role_tag: String,
+    pub tradable: bool,
+    pub required_stage: String,
+    pub current_stage: String,
+    pub stage_status: String,
+    pub value_summary: String,
+    pub next_step_hint: String,
 }
 
 #[derive(Deserialize)]
@@ -404,6 +418,8 @@ struct PlayerGameplaySnapshotSerde {
     rebuild_available: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pivot_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    validation_unlock_preview: Option<ProductValidationUnlockPreview>,
 }
 
 fn derive_legacy_execution_state(
@@ -496,6 +512,7 @@ impl<'de> Deserialize<'de> for PlayerGameplaySnapshot {
             repair_available: legacy.repair_available,
             rebuild_available: legacy.rebuild_available,
             pivot_available: legacy.pivot_available,
+            validation_unlock_preview: legacy.validation_unlock_preview,
         })
     }
 }

@@ -6,6 +6,7 @@ use crate::simulator::persist::{
     PlayerAgentClaimSnapshot, PlayerGameplayAction, PlayerGameplayCausalityKind,
     PlayerGameplayExecutionState, PlayerGameplayGoalKind, PlayerGameplayRecentFeedback,
     PlayerGameplaySnapshot, PlayerGameplayStageId, PlayerGameplayStageStatus,
+    ProductValidationUnlockPreview,
 };
 use crate::viewer::ACTION_CLAIM_FIRST_AGENT;
 
@@ -16,6 +17,7 @@ use super::gameplay_snapshot_helpers::{
     base_available_actions, blocker_next_step, primary_factory_for_player_gameplay,
 };
 use super::gameplay_snapshot_lane::apply_small_player_lane_truth;
+use super::gameplay_validation_preview::product_validation_unlock_preview;
 use super::player_gameplay::extend_available_actions;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -351,9 +353,11 @@ fn derive_player_gameplay_causality(
 fn finalize_player_gameplay_snapshot(
     mut gameplay: PlayerGameplaySnapshot,
     industry_stage: IndustryStage,
+    validation_unlock_preview: Option<ProductValidationUnlockPreview>,
     recent_feedback: Option<&PlayerGameplayRecentFeedback>,
     causality_signal: Option<&PlayerGameplayCausalitySignal>,
 ) -> PlayerGameplaySnapshot {
+    gameplay.validation_unlock_preview = validation_unlock_preview;
     gameplay.can_reprioritize = gameplay
         .available_actions
         .iter()
@@ -438,10 +442,12 @@ pub(super) fn build_player_gameplay_snapshot(
         );
     }
     let industry_stage = state.industry_progress.stage;
+    let validation_unlock_preview = product_validation_unlock_preview(state);
     let finalize = |gameplay| {
         finalize_player_gameplay_snapshot(
             gameplay,
             industry_stage,
+            validation_unlock_preview.clone(),
             recent_feedback,
             causality_signal,
         )
@@ -502,6 +508,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -613,6 +620,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 repair_available: None,
                 rebuild_available: None,
                 pivot_available: None,
+                validation_unlock_preview: None,
                 recovery_options: Vec::new(),
             });
         }
@@ -678,6 +686,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -754,6 +763,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -833,6 +843,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    validation_unlock_preview: None,
                     recovery_options: Vec::new(),
                 });
             }
@@ -887,6 +898,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    validation_unlock_preview: None,
                     recovery_options: Vec::new(),
                 });
             }
@@ -941,6 +953,7 @@ pub(super) fn build_player_gameplay_snapshot(
                     repair_available: None,
                     rebuild_available: None,
                     pivot_available: None,
+                    validation_unlock_preview: None,
                     recovery_options: Vec::new(),
                 });
             }
@@ -995,6 +1008,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -1047,6 +1061,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -1099,6 +1114,7 @@ pub(super) fn build_player_gameplay_snapshot(
             repair_available: None,
             rebuild_available: None,
             pivot_available: None,
+            validation_unlock_preview: None,
             recovery_options: Vec::new(),
         });
     }
@@ -1150,6 +1166,7 @@ pub(super) fn build_player_gameplay_snapshot(
         repair_available: None,
         rebuild_available: None,
         pivot_available: None,
+        validation_unlock_preview: None,
         recovery_options: Vec::new(),
     })
 }

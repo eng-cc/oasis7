@@ -351,6 +351,14 @@ pub struct ModuleReleaseRequestState {
     pub updated_at: WorldTime,
 }
 
+/// Durable truth for the latest accepted product validation. Player-facing
+/// presentation joins this with the current governed profile and industry stage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LastProductValidationState {
+    pub product_id: String,
+    pub tradable: bool,
+}
+
 /// Persistent mapping from module release request lifecycle to release manifest lifecycle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleReleaseManifestMappingState {
@@ -406,6 +414,8 @@ pub struct WorldState {
     pub material_profiles: BTreeMap<String, MaterialProfileV1>,
     #[serde(default)]
     pub product_profiles: BTreeMap<String, ProductProfileV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_product_validation: Option<LastProductValidationState>,
     #[serde(default)]
     pub recipe_profiles: BTreeMap<String, RecipeProfileV1>,
     #[serde(default)]
@@ -546,6 +556,7 @@ impl Default for WorldState {
             material_ledgers: default_material_ledgers(),
             material_profiles: BTreeMap::new(),
             product_profiles: BTreeMap::new(),
+            latest_product_validation: None,
             recipe_profiles: BTreeMap::new(),
             factory_profiles: BTreeMap::new(),
             factories: BTreeMap::new(),

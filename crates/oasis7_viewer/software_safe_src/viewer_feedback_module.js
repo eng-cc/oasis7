@@ -1,5 +1,6 @@
 import { normalizeViewerAvailableActions } from "./viewer_feedback_actions.js";
 import { buildGameplayEconomicSurface } from "./viewer_feedback_gameplay_economics.js";
+import { buildValidationUnlockPreviewDisplayModel } from "./viewer_validation_unlock_preview_display_model.js";
 
 function isRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
@@ -1079,6 +1080,11 @@ export function createViewerFeedbackModule({
           availableActions: displayableStrings(facility.available_actions ?? facility.availableActions),
         };
       });
+    const validationUnlockPreview = buildValidationUnlockPreviewDisplayModel(
+      gameplay.validation_unlock_preview ?? gameplay.validationUnlockPreview,
+      locale,
+      isLocaleZh,
+    );
 
     return {
       stageId: gameplay.stage_id || null,
@@ -1119,6 +1125,7 @@ export function createViewerFeedbackModule({
       branchHint: gameplay.branch_hint || null,
       branchRecommendations,
       microDepotFacilities,
+      validationUnlockPreview,
       narrativeBlockerDetail,
       narrativeNextStep,
       economicSurface,

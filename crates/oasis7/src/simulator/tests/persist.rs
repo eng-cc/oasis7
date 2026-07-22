@@ -552,6 +552,7 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
         repair_available: None,
         rebuild_available: None,
         pivot_available: None,
+        validation_unlock_preview: None,
         recovery_options: Vec::new(),
     });
 
