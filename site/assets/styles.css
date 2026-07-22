@@ -2845,6 +2845,52 @@ code {
   border-right: 0;
 }
 
+.choice-trace-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(20rem, 0.92fr);
+  gap: clamp(1rem, 3vw, 2.4rem);
+  align-items: stretch;
+  margin-top: 1.5rem;
+}
+
+.choice-trace-art {
+  position: relative;
+  min-height: 19rem;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(67, 239, 187, 0.32);
+  border-radius: var(--radius-lg);
+  background: #030912;
+  box-shadow: var(--shadow-1);
+}
+
+.choice-trace-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(3, 9, 18, 0.18), transparent 55%, rgba(3, 9, 18, 0.48));
+  pointer-events: none;
+}
+
+.choice-trace-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 19rem;
+  object-fit: cover;
+  object-position: center;
+}
+
+.choice-trace-layout .consequence-rail {
+  margin-top: 0;
+  align-self: stretch;
+}
+
+.choice-trace-layout .consequence-beat {
+  min-height: 0;
+  padding-block: clamp(1rem, 2.2vw, 1.8rem);
+}
+
 .beat-number {
   display: block;
   margin-bottom: 1.4rem;
@@ -2884,6 +2930,10 @@ code {
 
   .section-hero .hero-visual::before {
     inset: 10% -4% 4%;
+  }
+
+  .choice-trace-layout {
+    grid-template-columns: 1fr;
   }
 }
 
