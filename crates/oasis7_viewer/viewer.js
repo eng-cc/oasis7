@@ -10073,6 +10073,10 @@ function nextDecisionGuidance(value, locale, tr2) {
       return tr2(locale, "这笔电力投入不划算：先补电、采矿或等待，调整计划后再请求一份新预估。", "This power tradeoff is poor: recharge, mine, or wait, then adjust the plan and request a new estimate.");
   }
 }
+function quoteRequestErrorCopy(error, locale, tr2) {
+  if (!error) return "";
+  return tr2(locale, "无法获取精炼预估。请检查连接、玩家会话和输入量后重试。", "Could not get the refining quote. Check the connection, player session, and amount, then retry.");
+}
 function linkageCopy(value, locale, tr2) {
   switch (String(value || "")) {
     case "enables_factory_build_hardware_goal":
@@ -10174,7 +10178,7 @@ function RefineQuotePreflightPanel(props) {
   const locale = () => props.locale;
   const tr2 = props.tr;
   const remoteRequestState = () => props.requestState || {};
-  const visibleError = () => remoteRequestState().status === "error" ? remoteRequestState().error : requestError();
+  const visibleError = () => quoteRequestErrorCopy(remoteRequestState().status === "error" ? remoteRequestState().error : requestError(), locale(), tr2);
   const visibleStatus = () => remoteRequestState().status === "received" ? tr2(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.") : requestStatus();
   async function requestQuote(event) {
     event.preventDefault();

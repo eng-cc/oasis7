@@ -48,6 +48,15 @@ function nextDecisionGuidance(value, locale, tr) {
   }
 }
 
+function quoteRequestErrorCopy(error, locale, tr) {
+  if (!error) return "";
+  return tr(
+    locale,
+    "无法获取精炼预估。请检查连接、玩家会话和输入量后重试。",
+    "Could not get the refining quote. Check the connection, player session, and amount, then retry.",
+  );
+}
+
 function linkageCopy(value, locale, tr) {
   switch (String(value || "")) {
     case "enables_factory_build_hardware_goal":
@@ -124,7 +133,11 @@ export function RefineQuotePreflightPanel(props) {
   const locale = () => props.locale;
   const tr = props.tr;
   const remoteRequestState = () => props.requestState || {};
-  const visibleError = () => remoteRequestState().status === "error" ? remoteRequestState().error : requestError();
+  const visibleError = () => quoteRequestErrorCopy(
+    remoteRequestState().status === "error" ? remoteRequestState().error : requestError(),
+    locale(),
+    tr,
+  );
   const visibleStatus = () => remoteRequestState().status === "received"
     ? tr(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.")
     : requestStatus();

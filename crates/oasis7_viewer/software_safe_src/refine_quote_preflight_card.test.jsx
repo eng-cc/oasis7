@@ -79,7 +79,8 @@ describe("RefineQuotePreflightCard", () => {
     render(() => <RefineQuotePreflightPanel quote={null} requestRefineQuote={requestRefineQuote} locale="en" tr={tr} />);
 
     fireEvent.submit(screen.getByTestId("refine-quote-request-form"));
-    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("refine quote requires a connected viewer websocket"));
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/Could not get the refining quote/i));
+    expect(screen.getByRole("alert")).not.toHaveTextContent("refine quote requires a connected viewer websocket");
     expect(screen.queryByTestId("refine-quote-preflight")).not.toBeInTheDocument();
     expect(screen.queryByText("Refining receipt")).not.toBeInTheDocument();
   });
@@ -107,8 +108,21 @@ describe("RefineQuotePreflightCard", () => {
         tr={tr}
       />
     ));
-    expect(screen.getAllByRole("alert").at(-1)).toHaveTextContent("quote_refine_compound rejected");
+    expect(screen.getAllByRole("alert").at(-1)).toHaveTextContent(/Could not get the refining quote/i);
+    expect(screen.getAllByRole("alert").at(-1)).not.toHaveTextContent("quote_refine_compound rejected");
     expect(screen.queryByText(/waiting for the quote result/i)).not.toBeInTheDocument();
+
+    render(() => (
+      <RefineQuotePreflightPanel
+        quote={null}
+        requestRefineQuote={requestRefineQuote}
+        requestState={{ status: "error", error: "quote_refine_compound rejected" }}
+        locale="zh"
+        tr={tr}
+      />
+    ));
+    expect(screen.getAllByRole("alert").at(-1)).toHaveTextContent(/无法获取精炼预估/);
+    expect(screen.getAllByRole("alert").at(-1)).not.toHaveTextContent("quote_refine_compound");
   });
 
   it.each([
