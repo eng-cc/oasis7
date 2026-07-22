@@ -189,6 +189,57 @@ fn runtime_refine_quote_is_signed_deterministic_and_non_mutating() {
 }
 
 #[test]
+fn runtime_refine_quote_does_not_require_or_mutate_gameplay_readiness() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Script),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(206);
+    register_runtime_session(
+        &mut server,
+        "player-refine-script",
+        Some(agent_id.as_str()),
+        206,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    server
+        .world
+        .set_agent_resource_balance(
+            agent_id.as_str(),
+            crate::simulator::ResourceKind::Data,
+            2_500,
+        )
+        .expect("seed compound");
+    let state_before = server.world.state().clone();
+    let feedback_before = server.latest_player_gameplay_feedback.clone();
+
+    let quote = server
+        .handle_refine_quote(signed_refine_quote_request(
+            2_500,
+            "player-refine-script",
+            207,
+            public_key.as_str(),
+            private_key.as_str(),
+        ))
+        .expect("script-mode quote remains read-only");
+
+    assert_eq!(quote.owner_agent_id, agent_id);
+    assert_eq!(server.world.state(), &state_before);
+    assert_eq!(server.latest_player_gameplay_feedback, feedback_before);
+}
+
+#[test]
 fn runtime_collect_data_quotes_and_submits_the_exact_authenticated_request() {
     let _guard = lock_test_llm_env();
     let mut server = ViewerRuntimeLiveServer::new(

@@ -284,17 +284,6 @@ impl ViewerRuntimeLiveServer {
         &mut self,
         request: RefineQuoteRequest,
     ) -> Result<RefineQuotePreflight, GameplayActionError> {
-        self.ensure_gameplay_ready_for_action(
-            "quote_refine_compound",
-            Some("quote_refine_compound"),
-            None,
-        )
-        .map_err(|(code, message)| GameplayActionError {
-            code,
-            message,
-            action_id: Some("quote_refine_compound".to_string()),
-            target_agent_id: None,
-        })?;
         let verified = self.verify_refine_quote_auth(&request)?;
         self.session_policy
             .validate_known_session_key(verified.player_id.as_str(), verified.public_key.as_str())
