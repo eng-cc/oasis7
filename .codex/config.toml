@@ -46,6 +46,7 @@ config_file = "agents/liveops_community.toml"
 
 [features]
 memories = true
+multi_agent_v2 = true
 
 [memories]
 generate_memories = true
