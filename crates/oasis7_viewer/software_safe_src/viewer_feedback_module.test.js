@@ -63,7 +63,7 @@ describe("viewer feedback module", () => {
     );
   });
 
-  it("projects the canonical product-validation preview without inventing an unlock", () => {
+  it("preserves English product-validation preview values and labels", () => {
     const state = {
       lastGameplayActionFeedback: null,
       snapshot: {
@@ -87,13 +87,84 @@ describe("viewer feedback module", () => {
     expect(createFeedbackModule(state).buildGameplaySummary().validationUnlockPreview).toEqual({
       productId: "iron_ingot",
       roleTag: "scale",
+      roleLabel: "scale",
       tradable: false,
       requiredStage: "bootstrap",
+      requiredStageLabel: "bootstrap",
       currentStage: "bootstrap",
+      currentStageLabel: "bootstrap",
       stageStatus: "available",
+      stageStatusLabel: "available",
       valueSummary: "Validated scale product; trading disabled.",
+      localizedValueSummary: "Validated scale product; trading disabled.",
       nextStepHint: "Use this product in its scale role.",
+      localizedNextStepHint: "Use this product in its scale role.",
     });
+  });
+
+  it("localizes product-validation preview display text while preserving raw DTO values", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          validation_unlock_preview: {
+            product_id: "iron_ingot",
+            role_tag: "scale",
+            tradable: false,
+            required_stage: "bootstrap",
+            current_stage: "bootstrap",
+            stage_status: "available",
+            value_summary: "Validated scale product; trading disabled.",
+            next_step_hint: "Use this product in its scale role.",
+          },
+        },
+      },
+      uiLocale: "zh",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().validationUnlockPreview).toEqual(expect.objectContaining({
+      roleTag: "scale",
+      roleLabel: "规模化",
+      requiredStage: "bootstrap",
+      requiredStageLabel: "起步",
+      currentStage: "bootstrap",
+      currentStageLabel: "起步",
+      stageStatus: "available",
+      stageStatusLabel: "可用",
+      valueSummary: "Validated scale product; trading disabled.",
+      localizedValueSummary: "已验证规模化产品；未启用交易。",
+      nextStepHint: "Use this product in its scale role.",
+      localizedNextStepHint: "将此产品用于规模化角色；验证不会解锁新能力。",
+    }));
+  });
+
+  it("localizes a blank-gate stage as no requirement while preserving its raw value", () => {
+    const state = {
+      lastGameplayActionFeedback: null,
+      snapshot: {
+        model: { agents: { "agent-0": { id: "agent-0" } }, locations: { base: { id: "base" } } },
+        player_gameplay: {
+          validation_unlock_preview: {
+            product_id: "iron_ingot",
+            role_tag: "scale",
+            tradable: true,
+            required_stage: "none",
+            current_stage: "bootstrap",
+            stage_status: "available",
+            value_summary: "Validated scale product; trading enabled.",
+            next_step_hint: "Use this product in its scale role.",
+          },
+        },
+      },
+      uiLocale: "zh",
+    };
+
+    expect(createFeedbackModule(state).buildGameplaySummary().validationUnlockPreview).toEqual(expect.objectContaining({
+      requiredStage: "none",
+      requiredStageLabel: "无要求",
+      localizedValueSummary: "已验证规模化产品；已启用交易。",
+    }));
   });
 
   it("projects canonical micro depot facilities without inventing quote or ROI fields", () => {

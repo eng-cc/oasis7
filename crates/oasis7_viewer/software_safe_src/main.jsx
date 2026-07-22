@@ -2726,18 +2726,18 @@ function WorldSummaryPanel() {
                 {(preview) => (
                   <EventCard
                     title={tr(locale(), "产品验证预览", "Product Validation Preview")}
-                    badge={preview().stageStatus || "unknown"}
+                    badge={preview().stageStatusLabel || "unknown"}
                     badgeClass={preview().stageStatus === "available" ? "badge badge--good" : "badge badge--warn"}
-                    meta={preview().valueSummary || tr(locale(), "验证结果未声明新的能力；请根据现有角色和阶段决定下一步。", "The validation result declares no new capability; use the existing role and stage to choose the next move.")}
+                    meta={preview().localizedValueSummary || tr(locale(), "验证结果未声明新的能力；请根据现有角色和阶段决定下一步。", "The validation result declares no new capability; use the existing role and stage to choose the next move.")}
                   >
                     <div class="feedback-summary" data-testid="validation-unlock-preview">
-                      {`${preview().productId || tr(locale(), "未知产品", "Unknown product")} · ${preview().roleTag || "unknown"} · ${preview().tradable ? tr(locale(), "可交易", "tradable") : tr(locale(), "不可交易", "not tradable")}`}
+                      {`${preview().productId || tr(locale(), "未知产品", "Unknown product")} · ${preview().roleLabel || tr(locale(), "未知", "unknown")} · ${preview().tradable ? tr(locale(), "可交易", "tradable") : tr(locale(), "不可交易", "not tradable")}`}
                     </div>
                     <div class="feedback-detail">
-                      {`${tr(locale(), "阶段", "Stage")}: ${preview().currentStage || "unknown"} / ${preview().requiredStage || "unknown"}`}
+                      {`${tr(locale(), "阶段", "Stage")}: ${preview().currentStageLabel || tr(locale(), "未知", "unknown")} / ${preview().requiredStageLabel || tr(locale(), "未知", "unknown")}`}
                     </div>
-                    <Show when={preview().nextStepHint}>
-                      <div class="feedback-detail">{preview().nextStepHint}</div>
+                    <Show when={preview().localizedNextStepHint}>
+                      <div class="feedback-detail">{preview().localizedNextStepHint}</div>
                     </Show>
                   </EventCard>
                 )}
