@@ -123,6 +123,11 @@ export function RefineQuotePreflightPanel(props) {
   const [requestStatus, setRequestStatus] = createSignal("");
   const locale = () => props.locale;
   const tr = props.tr;
+  const remoteRequestState = () => props.requestState || {};
+  const visibleError = () => remoteRequestState().status === "error" ? remoteRequestState().error : requestError();
+  const visibleStatus = () => remoteRequestState().status === "received"
+    ? tr(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.")
+    : requestStatus();
 
   async function requestQuote(event) {
     event.preventDefault();
@@ -172,8 +177,8 @@ export function RefineQuotePreflightPanel(props) {
             {requesting() ? tr(locale(), "正在请求预估…", "Requesting quote…") : tr(locale(), "请求预估", "Request quote")}
           </button>
         </form>
-        {requestError() ? <div class="feedback-summary feedback-summary--error" role="alert">{requestError()}</div> : null}
-        {requestStatus() ? <div class="feedback-summary" role="status">{requestStatus()}</div> : null}
+        {visibleError() ? <div class="feedback-summary feedback-summary--error" role="alert">{visibleError()}</div> : null}
+        {visibleStatus() ? <div class="feedback-summary" role="status">{visibleStatus()}</div> : null}
         {props.quote ? <RefineQuotePreflightCard quote={props.quote} locale={locale()} tr={tr} /> : null}
       </div>
     </section>

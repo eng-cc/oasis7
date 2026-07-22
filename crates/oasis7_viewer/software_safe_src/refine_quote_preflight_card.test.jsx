@@ -84,6 +84,33 @@ describe("RefineQuotePreflightCard", () => {
     expect(screen.queryByText("Refining receipt")).not.toBeInTheDocument();
   });
 
+  it("replaces waiting feedback with the server result", () => {
+    const requestRefineQuote = vi.fn(async () => ({ ok: true }));
+    render(() => (
+      <RefineQuotePreflightPanel
+        quote={quote}
+        requestRefineQuote={requestRefineQuote}
+        requestState={{ status: "received", error: null }}
+        locale="en"
+        tr={tr}
+      />
+    ));
+    expect(screen.getByRole("status")).toHaveTextContent(/Quote received; review the estimate below/i);
+    expect(screen.queryByText(/waiting for the quote result/i)).not.toBeInTheDocument();
+
+    render(() => (
+      <RefineQuotePreflightPanel
+        quote={null}
+        requestRefineQuote={requestRefineQuote}
+        requestState={{ status: "error", error: "quote_refine_compound rejected" }}
+        locale="en"
+        tr={tr}
+      />
+    ));
+    expect(screen.getAllByRole("alert").at(-1)).toHaveTextContent("quote_refine_compound rejected");
+    expect(screen.queryByText(/waiting for the quote result/i)).not.toBeInTheDocument();
+  });
+
   it.each([
     ["partial_progress", /recharge, then refine the recommended amount, or mine\/wait/i],
     ["poor_power_tradeoff", /recharge, mine, or wait, then reduce the refine amount/i],

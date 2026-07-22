@@ -3204,6 +3204,15 @@ function createRefineQuotePreflightStateModule({ clone: clone2, getSearchParams:
   function handleRefineQuotePreflight2(quote) {
     if (!quote || typeof quote !== "object") return;
     state2.refineQuotePreflight = clone2(quote);
+    state2.refineQuoteRequest = { status: "received", error: null };
+  }
+  function handleRefineQuoteError2(error) {
+    if (String(error?.action_id || "").trim() !== "quote_refine_compound") return false;
+    state2.refineQuoteRequest = {
+      status: "error",
+      error: String(error?.message || error?.code || "refine quote request failed")
+    };
+    return true;
   }
   function injectRefineQuotePreflightForTest2(quote) {
     if (!isTestApiEnabled2()) {
@@ -3219,6 +3228,7 @@ function createRefineQuotePreflightStateModule({ clone: clone2, getSearchParams:
   }
   return {
     handleRefineQuotePreflight: handleRefineQuotePreflight2,
+    handleRefineQuoteError: handleRefineQuoteError2,
     injectRefineQuotePreflightForTest: injectRefineQuotePreflightForTest2,
     installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture2
   };
@@ -3475,6 +3485,7 @@ function createSoftwareSafeState() {
     lastChatFeedback: null,
     lastGameplayActionFeedback: null,
     refineQuotePreflight: null,
+    refineQuoteRequest: { status: "idle", error: null },
     gameplayActionPending: {
       actionKey: null,
       label: null,
@@ -3847,6 +3858,7 @@ function clone(value) {
 }
 const {
   handleRefineQuotePreflight,
+  handleRefineQuoteError,
   injectRefineQuotePreflightForTest,
   installRefineQuotePreflightVisualFixture: installRefineQuotePreflightVisualFixture$1
 } = createRefineQuotePreflightStateModule({
@@ -5266,18 +5278,22 @@ async function buildRefineQuoteAuthProof(request, auth) {
 async function requestRefineQuote(compoundMassG) {
   const compoundMassGNumber = Number(compoundMassG);
   if (!Number.isSafeInteger(compoundMassGNumber) || compoundMassGNumber <= 0) {
+    state.refineQuoteRequest = { status: "error", error: "refine quote requires a positive whole-number compound mass in grams" };
     return { ok: false, reason: "refine quote requires a positive whole-number compound mass in grams" };
   }
   if (!socket || socket.readyState !== WebSocket.OPEN) {
+    state.refineQuoteRequest = { status: "error", error: "refine quote requires a connected viewer websocket" };
     return { ok: false, reason: "refine quote requires a connected viewer websocket" };
   }
   try {
     await ensureHostedPlayerAuthAvailable();
     if (!state.auth.available) {
+      state.refineQuoteRequest = { status: "error", error: state.auth.error || "refine quote requires an active player session" };
       return { ok: false, reason: state.auth.error || "refine quote requires an active player session" };
     }
     const boundAgentId = String(state.auth.boundAgentId || "").trim();
     if (!boundAgentId) {
+      state.refineQuoteRequest = { status: "error", error: "refine quote requires a bound player Agent" };
       return { ok: false, reason: "refine quote requires a bound player Agent" };
     }
     await ensureRegisteredPlayerSession(boundAgentId);
@@ -5287,10 +5303,13 @@ async function requestRefineQuote(compoundMassG) {
       public_key: state.auth.publicKey
     };
     request.auth = await buildRefineQuoteAuthProof(request, state.auth);
+    state.refineQuoteRequest = { status: "pending", error: null };
     sendJson({ type: "quote_refine_compound", request });
     return { ok: true, request: clone(request) };
   } catch (error) {
-    return { ok: false, reason: `refine quote request failed: ${String(error)}` };
+    const reason = `refine quote request failed: ${String(error)}`;
+    state.refineQuoteRequest = { status: "error", error: reason };
+    return { ok: false, reason };
   }
 }
 function canAutoIssueHostedPlayerSession() {
@@ -6483,6 +6502,9 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 }
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
+  if (handleRefineQuoteError(error)) {
+    return;
+  }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     error?.action_id || "gameplay_action",
@@ -10151,6 +10173,9 @@ function RefineQuotePreflightPanel(props) {
   const [requestStatus, setRequestStatus] = createSignal("");
   const locale = () => props.locale;
   const tr2 = props.tr;
+  const remoteRequestState = () => props.requestState || {};
+  const visibleError = () => remoteRequestState().status === "error" ? remoteRequestState().error : requestError();
+  const visibleStatus = () => remoteRequestState().status === "received" ? tr2(locale(), "预估已返回，请查看报价结果。", "Quote received; review the estimate below.") : requestStatus();
   async function requestQuote(event) {
     event.preventDefault();
     setRequestError("");
@@ -10182,18 +10207,18 @@ function RefineQuotePreflightPanel(props) {
       return () => _c$2() ? tr2(locale(), "正在请求预估…", "Requesting quote…") : tr2(locale(), "请求预估", "Request quote");
     })());
     insert(_el$24, (() => {
-      var _c$3 = memo(() => !!requestError());
+      var _c$3 = memo(() => !!visibleError());
       return () => _c$3() ? (() => {
         var _el$30 = _tmpl$5$2();
-        insert(_el$30, requestError);
+        insert(_el$30, visibleError);
         return _el$30;
       })() : null;
     })(), null);
     insert(_el$24, (() => {
-      var _c$4 = memo(() => !!requestStatus());
+      var _c$4 = memo(() => !!visibleStatus());
       return () => _c$4() ? (() => {
         var _el$31 = _tmpl$6$1();
-        insert(_el$31, requestStatus);
+        insert(_el$31, visibleStatus);
         return _el$31;
       })() : null;
     })(), null);
@@ -13599,6 +13624,9 @@ function WorldSummaryPanel() {
           }), createComponent(RefineQuotePreflightPanel, {
             get quote() {
               return state.refineQuotePreflight;
+            },
+            get requestState() {
+              return state.refineQuoteRequest;
             },
             requestRefineQuote,
             get locale() {

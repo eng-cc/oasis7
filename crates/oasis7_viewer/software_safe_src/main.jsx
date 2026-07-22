@@ -2782,7 +2782,7 @@ function WorldSummaryPanel() {
                 tr={tr}
               />
               <RefineQuotePreflightPanel
-                quote={core.state.refineQuotePreflight}
+                quote={core.state.refineQuotePreflight} requestState={core.state.refineQuoteRequest}
                 requestRefineQuote={core.requestRefineQuote}
                 locale={locale()}
                 tr={tr}

@@ -66,6 +66,7 @@ describe("requestRefineQuote", () => {
       ok: false,
       reason: "refine quote requires a positive whole-number compound mass in grams",
     }));
+    expect(core.state.refineQuoteRequest).toEqual(expect.objectContaining({ status: "error" }));
     expect(await core.requestRefineQuote(40)).toEqual(expect.objectContaining({
       ok: false,
       reason: "refine quote requires a connected viewer websocket",
@@ -87,6 +88,7 @@ describe("requestRefineQuote", () => {
       ok: true,
       request: expect.objectContaining({ compound_mass_g: 40 }),
     }));
+    expect(core.state.refineQuoteRequest).toEqual({ status: "pending", error: null });
     const message = sentMessages.find((entry) => entry.type === "quote_refine_compound");
     expect(message).toEqual(expect.objectContaining({
       type: "quote_refine_compound",

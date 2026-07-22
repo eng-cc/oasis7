@@ -181,6 +181,7 @@ function clone(value) {
 
 const {
   handleRefineQuotePreflight,
+  handleRefineQuoteError,
   injectRefineQuotePreflightForTest,
   installRefineQuotePreflightVisualFixture,
 } = createRefineQuotePreflightStateModule({
@@ -1773,18 +1774,21 @@ async function buildRefineQuoteAuthProof(request, auth) {
 async function requestRefineQuote(compoundMassG) {
   const compoundMassGNumber = Number(compoundMassG);
   if (!Number.isSafeInteger(compoundMassGNumber) || compoundMassGNumber <= 0) {
-    return { ok: false, reason: "refine quote requires a positive whole-number compound mass in grams" };
+    state.refineQuoteRequest = { status: "error", error: "refine quote requires a positive whole-number compound mass in grams" }; return { ok: false, reason: "refine quote requires a positive whole-number compound mass in grams" };
   }
   if (!socket || socket.readyState !== WebSocket.OPEN) {
+    state.refineQuoteRequest = { status: "error", error: "refine quote requires a connected viewer websocket" };
     return { ok: false, reason: "refine quote requires a connected viewer websocket" };
   }
   try {
     await ensureHostedPlayerAuthAvailable();
     if (!state.auth.available) {
+      state.refineQuoteRequest = { status: "error", error: state.auth.error || "refine quote requires an active player session" };
       return { ok: false, reason: state.auth.error || "refine quote requires an active player session" };
     }
     const boundAgentId = String(state.auth.boundAgentId || "").trim();
     if (!boundAgentId) {
+      state.refineQuoteRequest = { status: "error", error: "refine quote requires a bound player Agent" };
       return { ok: false, reason: "refine quote requires a bound player Agent" };
     }
     await ensureRegisteredPlayerSession(boundAgentId);
@@ -1794,10 +1798,13 @@ async function requestRefineQuote(compoundMassG) {
       public_key: state.auth.publicKey,
     };
     request.auth = await buildRefineQuoteAuthProof(request, state.auth);
+    state.refineQuoteRequest = { status: "pending", error: null };
     sendJson({ type: "quote_refine_compound", request });
     return { ok: true, request: clone(request) };
   } catch (error) {
-    return { ok: false, reason: `refine quote request failed: ${String(error)}` };
+    const reason = `refine quote request failed: ${String(error)}`;
+    state.refineQuoteRequest = { status: "error", error: reason };
+    return { ok: false, reason };
   }
 }
 
@@ -3090,6 +3097,9 @@ async function retryGameplayActionAfterMissingSession(feedback, error) {
 
 function handleGameplayActionError(error) {
   clearPendingGameplayActionAckTimer();
+  if (handleRefineQuoteError(error)) {
+    return;
+  }
   const feedback = state.lastGameplayActionFeedback || createSemanticFeedback(
     "gameplay_action",
     error?.action_id || "gameplay_action",

@@ -20,6 +20,16 @@ export function createRefineQuotePreflightStateModule({ clone, getSearchParams, 
     // A quote is kept outside gameplay-action feedback so it cannot be presented
     // as an accepted action or receipt.
     state.refineQuotePreflight = clone(quote);
+    state.refineQuoteRequest = { status: "received", error: null };
+  }
+
+  function handleRefineQuoteError(error) {
+    if (String(error?.action_id || "").trim() !== "quote_refine_compound") return false;
+    state.refineQuoteRequest = {
+      status: "error",
+      error: String(error?.message || error?.code || "refine quote request failed"),
+    };
+    return true;
   }
 
   function injectRefineQuotePreflightForTest(quote) {
@@ -38,6 +48,7 @@ export function createRefineQuotePreflightStateModule({ clone, getSearchParams, 
 
   return {
     handleRefineQuotePreflight,
+    handleRefineQuoteError,
     injectRefineQuotePreflightForTest,
     installRefineQuotePreflightVisualFixture,
   };
