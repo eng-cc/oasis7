@@ -1,6 +1,6 @@
-import { render, screen, within } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
-import { RefineQuotePreflightCard } from "./refine_quote_preflight_card.jsx";
+import { fireEvent, render, screen, within } from "@solidjs/testing-library";
+import { describe, expect, it, vi } from "vitest";
+import { RefineQuotePreflightCard, RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
 
 const quote = {
   owner_agent_id: "agent-0",
@@ -34,6 +34,10 @@ describe("RefineQuotePreflightCard", () => {
     expect(within(card).getByText("20 → 0")).toBeInTheDocument();
     expect(within(card).getByText(/This output satisfies the factory hardware target/i)).toBeInTheDocument();
     expect(within(card).getByText(/Value assessment: Enough to advance/i)).toBeInTheDocument();
+    expect(within(card).getByText(/Next decision: This quote can advance the target/i)).toBeInTheDocument();
+    const targetBadge = within(card).getByText(/target: Factory hardware build/i);
+    expect(targetBadge).toHaveAttribute("data-target-id", "factory_build_hardware");
+    expect(within(card).queryByText("factory_build_hardware")).not.toBeInTheDocument();
     expect(within(card).queryByRole("button", { name: /refin|submit|commit/i })).not.toBeInTheDocument();
 
     unmount();
@@ -44,7 +48,47 @@ describe("RefineQuotePreflightCard", () => {
     expect(within(zhCard).getByText("电力成本")).toBeInTheDocument();
     expect(within(zhCard).getByText(/目标关联: 本次产出可满足工厂硬件目标/)).toBeInTheDocument();
     expect(within(zhCard).getByText(/价值判断: 足以推进下一步/)).toBeInTheDocument();
+    expect(within(zhCard).getByText(/下一步建议: 这笔预估足以推进目标/)).toBeInTheDocument();
     expect(within(zhCard).queryByText("enough_to_advance")).not.toBeInTheDocument();
     expect(within(zhCard).queryByText("enables_factory_build_hardware_goal")).not.toBeInTheDocument();
+  });
+
+  it("keeps the authenticated read-only quote trigger reachable before a quote and reports request state", async () => {
+    const requestRefineQuote = vi.fn(async () => ({ ok: true }));
+    const { unmount } = render(() => <RefineQuotePreflightPanel quote={null} requestRefineQuote={requestRefineQuote} locale="en" tr={tr} />);
+
+    const panel = screen.getByTestId("refine-quote-panel");
+    expect(within(panel).getByRole("button", { name: "Request quote" })).toBeInTheDocument();
+    expect(within(panel).queryByTestId("refine-quote-preflight")).not.toBeInTheDocument();
+    expect(within(panel).getByText(/does not submit refining, spend electricity, or create a receipt/i)).toBeInTheDocument();
+
+    const amount = within(panel).getByRole("spinbutton", { name: "Refine amount (g)" });
+    fireEvent.input(amount, { target: { value: "25" } });
+    fireEvent.submit(screen.getByTestId("refine-quote-request-form"));
+    await vi.waitFor(() => expect(requestRefineQuote).toHaveBeenCalledWith("25"));
+    expect(within(panel).getByRole("status")).toHaveTextContent(/Read-only quote requested/i);
+    expect(within(panel).queryByRole("button", { name: /submit refining|commit refining/i })).not.toBeInTheDocument();
+
+    unmount();
+    render(() => <RefineQuotePreflightPanel quote={quote} requestRefineQuote={requestRefineQuote} locale="en" tr={tr} />);
+    expect(within(screen.getByTestId("refine-quote-panel")).getByTestId("refine-quote-preflight")).toBeInTheDocument();
+  });
+
+  it("keeps a failed quote request visible without presenting a refine receipt", async () => {
+    const requestRefineQuote = vi.fn(async () => ({ ok: false, reason: "refine quote requires a connected viewer websocket" }));
+    render(() => <RefineQuotePreflightPanel quote={null} requestRefineQuote={requestRefineQuote} locale="en" tr={tr} />);
+
+    fireEvent.submit(screen.getByTestId("refine-quote-request-form"));
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("refine quote requires a connected viewer websocket"));
+    expect(screen.queryByTestId("refine-quote-preflight")).not.toBeInTheDocument();
+    expect(screen.queryByText("Refining receipt")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["partial_progress", /recharge, then refine the recommended amount, or mine\/wait/i],
+    ["poor_power_tradeoff", /recharge, mine, or wait, then reduce the refine amount/i],
+  ])("gives localized next-decision guidance for %s", (valueClassification, guidance) => {
+    render(() => <RefineQuotePreflightCard quote={{ ...quote, value_classification: valueClassification }} locale="en" tr={tr} />);
+    expect(screen.getByTestId("refine-quote-next-decision")).toHaveTextContent(guidance);
   });
 });

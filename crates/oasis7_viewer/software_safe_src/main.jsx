@@ -5,7 +5,7 @@ import * as core from "./legacy_core.js";
 import { PixelWorldHost } from "./pixel_world_host.jsx";
 import { MicroDepotFacilitiesPanel } from "./micro_depot_facilities_panel.jsx";
 import { RecoveryOptionComparisonPanel } from "./recovery_option_comparison_panel.jsx";
-import { RefineQuotePreflightCard } from "./refine_quote_preflight_card.jsx";
+import { RefineQuotePreflightPanel } from "./refine_quote_preflight_card.jsx";
 import { installRefineQuotePreflightVisualFixture } from "./refine_quote_preflight_visual_fixture.js";
 import { ReprioritizeActionForm } from "./reprioritize_action_form.jsx";
 import { createViewerAgentClaimDisplayModel } from "./viewer_agent_claim_display_model.js";
@@ -2780,13 +2780,12 @@ function WorldSummaryPanel() {
                 locale={locale}
                 tr={tr}
               />
-              <Show when={core.state.refineQuotePreflight}>
-                <RefineQuotePreflightCard
-                  quote={core.state.refineQuotePreflight}
-                  locale={locale()}
-                  tr={tr}
-                />
-              </Show>
+              <RefineQuotePreflightPanel
+                quote={core.state.refineQuotePreflight}
+                requestRefineQuote={core.requestRefineQuote}
+                locale={locale()}
+                tr={tr}
+              />
               <Show when={gameplay().agentClaim}>
                 <ClaimAgentChoiceCard
                   locale={locale()}
