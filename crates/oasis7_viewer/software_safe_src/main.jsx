@@ -23,8 +23,10 @@ function observeViewerStateRevision() {
   viewerStateRevision();
 }
 
-function uiLocale() {
-  return core.state.uiLocale;
+function uiLocale() { return core.state.uiLocale; }
+function focusViewerAnchor(event) {
+  const href = event.currentTarget.getAttribute("href"); const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
+  if (!target) return; event.preventDefault(); target.scrollIntoView({ behavior: "auto", block: "start", inline: "nearest" }); window.history.replaceState(null, "", href);
 }
 
 function tr(locale, zh, en) {
@@ -2220,7 +2222,7 @@ function MobileJumpRail() {
       <a class="mobile-rail__link" href="#viewer-stage-panel">{tr(locale(), "世界", "World")}</a>
       <a class="mobile-rail__link" href="#viewer-targets-panel">{tr(locale(), "目标", "Targets")}</a>
       <a class="mobile-rail__link" href="#viewer-details-panel">{tr(locale(), "指挥", "Command")}</a>
-      <a class="mobile-rail__link" href="#viewer-refine-quote-panel">{tr(locale(), "报价", "Quote")}</a>
+      <a class="mobile-rail__link" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
       <a class="mobile-rail__link mobile-rail__link--diagnostics" href="#viewer-diagnostics-panel">
         {tr(locale(), "诊断", "Diagnostics")}
       </a>
@@ -3858,7 +3860,7 @@ function AppShell() {
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
-          <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div><a class="mobile-rail__link" href="#viewer-refine-quote-panel">{tr(locale(), "报价", "Quote")}</a>
+          <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div><a class="mobile-rail__link" href="#viewer-refine-quote-panel" onClick={focusViewerAnchor}>{tr(locale(), "报价", "Quote")}</a>
         </div>
         <div class="panel__body">
           <TargetsPanel />

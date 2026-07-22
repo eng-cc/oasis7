@@ -10552,6 +10552,18 @@ function observeViewerStateRevision() {
 function uiLocale() {
   return state.uiLocale;
 }
+function focusViewerAnchor(event) {
+  const href = event.currentTarget.getAttribute("href");
+  const target = href?.startsWith("#") ? document.getElementById(href.slice(1)) : null;
+  if (!target) return;
+  event.preventDefault();
+  target.scrollIntoView({
+    behavior: "auto",
+    block: "start",
+    inline: "nearest"
+  });
+  window.history.replaceState(null, "", href);
+}
 function tr(locale, zh, en) {
   return isLocaleZh(locale) ? zh : en;
 }
@@ -12691,6 +12703,7 @@ function MobileJumpRail() {
     insert(_el$189, () => tr(locale(), "世界", "World"));
     insert(_el$190, () => tr(locale(), "目标", "Targets"));
     insert(_el$191, () => tr(locale(), "指挥", "Command"));
+    _el$192.$$click = focusViewerAnchor;
     insert(_el$192, () => tr(locale(), "报价", "Quote"));
     insert(_el$193, () => tr(locale(), "诊断", "Diagnostics"));
     createRenderEffect(() => setAttribute(_el$188, "aria-label", tr(locale(), "主入口分区导航", "Primary entry section navigation")));
@@ -15436,6 +15449,7 @@ function AppShell() {
     insert(_el$362, () => tr(locale(), "导航", "Navigate"));
     insert(_el$363, () => tr(locale(), "目标", "Targets"));
     insert(_el$364, () => tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface."));
+    _el$365.$$click = focusViewerAnchor;
     insert(_el$365, () => tr(locale(), "报价", "Quote"));
     insert(_el$366, createComponent(TargetsPanel, {}));
     createRenderEffect((_p$) => {
