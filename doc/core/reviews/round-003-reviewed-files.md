@@ -316,8 +316,8 @@
 - site github-pages showcase project (retired/deleted; historical audit artifact; Git history)
 - `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.prd.md`
 - `doc/site/github-pages/github-pages-user-perspective-adjustments-2026-02-26.project.md`
-- `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.prd.md`
-- `doc/site/github-pages/github-pages-visual-polish-v2-2026-02-12.project.md`
+- GitHub Pages visual-polish-v2-2026-02-12 PRD (retired/deleted historical artifact; Git history)
+- GitHub Pages visual-polish-v2-2026-02-12 project record (retired/deleted historical artifact; Git history)
 - `doc/site/manual/site-manual-static-docs.prd.md`
 - `doc/site/manual/site-manual-static-docs.project.md`
 - retired topic `viewer-manual-content-migration-2026-02-15`（原 PRD / project；当前权威见 canonical Viewer 手册与 site manual 主专题，原文从 Git history 追溯）
