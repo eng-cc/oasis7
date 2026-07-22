@@ -3858,9 +3858,7 @@ function AppShell() {
         <div class="panel__header panel__header--stack">
           <div class="panel__eyebrow">{tr(locale(), "导航", "Navigate")}</div>
           <div class="panel__title">{tr(locale(), "目标", "Targets")}</div>
-          <div class="panel__meta-copy">
-            {tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}
-          </div>
+          <div class="panel__meta-copy">{tr(locale(), "先锁定对象，再进入世界舞台或右侧指挥面板。", "Lock onto a target first, then move into the stage or command surface.")}</div><a class="mobile-rail__link" href="#viewer-refine-quote-panel">{tr(locale(), "报价", "Quote")}</a>
         </div>
         <div class="panel__body">
           <TargetsPanel />
