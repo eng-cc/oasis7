@@ -219,8 +219,9 @@
       </section>
 
       <section id="proof" class="section" data-reveal>
-        <h2>现在已经能看见哪些后果</h2>
-        <p class="section-intro">先看一条后果怎样发生：你给出方向或限制，Agent 作出选择，世界留下变化，之后还能回头追看。当前是 limited playable technical preview，不等同 closed beta、公开发售、赛季或公开网页加入。</p>
+        <p class="eyebrow">受控场景证据</p>
+        <h2>不是一串日志，而是一条能回看的后果链。</h2>
+        <p class="section-intro">这里展示的是当前 Viewer 的受控验证场景截图：先出现压力，再由 Agent 作出选择，最后把变化留在可追看的世界记录里。当前是 limited playable technical preview，不等同 closed beta、公开发售、赛季或公开网页加入。</p>
         <div class="proof-switcher" data-proof-switcher>
           <p class="proof-switcher-label">切换证据场景</p>
           <div class="proof-switcher-controls" role="group" aria-label="切换证据场景" data-proof-controls>
@@ -233,19 +234,41 @@
         </div>
 
         <div class="proof-grid">
+          <figure class="proof-figure" data-proof-panel="minimal" data-proof-visible="true">
+            <img src="assets/images/screenshots/minimal.webp" alt="受控的单点波动场景 Viewer 截图，显示小行星带中的可观测世界状态" width="2400" height="1600" />
+            <figcaption>单点波动：当前 Viewer 受控场景截图，不是概念图或公开玩法模式。</figcaption>
+          </figure>
+          <figure class="proof-figure" data-proof-panel="twin" data-proof-visible="false">
+            <img src="assets/images/screenshots/twin_region_bootstrap.webp" alt="受控的双区协作场景 Viewer 截图，显示两个区域的世界状态" width="2400" height="1600" />
+            <figcaption>双区协作：当前 Viewer 受控场景截图，不是概念图或公开玩法模式。</figcaption>
+          </figure>
+          <figure class="proof-figure" data-proof-panel="triad" data-proof-visible="false">
+            <img src="assets/images/screenshots/triad_region_bootstrap.webp" alt="受控的三方治理场景 Viewer 截图，显示多方区域的世界状态" width="2400" height="1600" />
+            <figcaption>三方治理：当前 Viewer 受控场景截图，不是概念图或公开玩法模式。</figcaption>
+          </figure>
           <article class="proof-card proof-card-key">
-            <h3>最小可验证案例</h3>
-            <ol class="proof-list">
-              <li>你先给文明一个目标、约束或治理边界</li>
-              <li>Agent 在资源与规则的限制下，自己决定怎么执行</li>
-              <li>世界把价格、协作与治理的变化写成事件和后果</li>
-              <li>你可以通过 replay、live runtime 和审计轨迹回看这条链</li>
+            <h3>这张图背后的三步</h3>
+            <ol class="proof-list proof-causal-list">
+              <li><span>01</span><div><strong>压力出现</strong><p>资源、目标或既有规则先收紧可选空间。</p></div></li>
+              <li><span>02</span><div><strong>Agent 回应</strong><p>它们在当下约束内决定生产、交易或协作。</p></div></li>
+              <li><span>03</span><div><strong>后果留下</strong><p>世界变化进入事件、回放与审计可读的轨迹。</p></div></li>
             </ol>
             <a class="button secondary" href="#download">获取开发预览</a>
           </article>
+        </div>
+        <p class="doc-entry-note">`minimal / twin_region / triad_region` 是受控验证场景回放标签，用来说明后果链已经可检查，不是公开玩法模式名。截图是当前可观测证据；下面的日志只作辅助追溯。</p>
 
-          <article class="proof-card">
-            <h3>事件片段（自动切换）</h3>
+        <div class="proof-strip">
+          <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
+          <span class="proof-chip">你现在在首页看到的是默认网页验证入口</span>
+          <span class="proof-chip">更深入的可视化 / 程序化入口放在文档中心</span>
+          <span class="proof-chip is-highlight">现状：limited playable technical preview</span>
+        </div>
+        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：viewer</span>。也就是首页默认展示的这条唯一 UI 网页验证面；如果你要继续深挖，更底层的兼容入口和程序化访问方式都放在文档中心说明。</p>
+
+        <details class="proof-log-details">
+          <summary>展开查看对应事件日志（辅助证据）</summary>
+          <div class="proof-log-body">
             <pre data-proof-code data-proof-panel="minimal" data-proof-visible="true"><code>[tick=128] minimal::harvest accepted -> +power
 [tick=133] minimal::scheduler stable -> next decision window
 [tick=136] minimal::market quote refreshed -> price spike warning</code></pre>
@@ -255,17 +278,8 @@
             <pre data-proof-code data-proof-panel="triad" data-proof-visible="false"><code>[tick=142] triad_region::agent-3 reroute logistics via neutral node
 [tick=149] triad_region::multi-party pact signed
 [tick=155] triad_region::policy vote closes -> regime shift</code></pre>
-          </article>
-        </div>
-        <p class="doc-entry-note">`minimal / twin_region / triad_region` 是受控验证场景回放标签，用来说明后果链已经可检查，不是公开玩法模式名。</p>
-
-        <div class="proof-strip">
-          <span class="proof-chip">覆盖：离线回放 + 在线运行 + 审计校验</span>
-          <span class="proof-chip">你现在在首页看到的是默认网页验证入口</span>
-          <span class="proof-chip">更深入的可视化 / 程序化入口放在文档中心</span>
-          <span class="proof-chip is-highlight">现状：limited playable technical preview</span>
-        </div>
-        <p class="doc-entry-note"><span data-homepage-claim="default-web-entry">默认网页验证入口：viewer</span>。也就是首页默认展示的这条唯一 UI 网页验证面；如果你要继续深挖，更底层的兼容入口和程序化访问方式都放在文档中心说明。</p>
+          </div>
+        </details>
 
         <div class="proof-timeline" data-proof-timeline>
           <article class="proof-timeline-item" data-proof-event="minimal" data-proof-visible="true">

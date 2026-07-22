@@ -625,7 +625,7 @@
     }
 
     const buttons = Array.from(controls.querySelectorAll("[data-proof-tab]"));
-    const panels = Array.from(document.querySelectorAll("[data-proof-code][data-proof-panel]"));
+    const panels = Array.from(document.querySelectorAll("[data-proof-panel]"));
     const events = Array.from(document.querySelectorAll("[data-proof-event]"));
 
     if (!buttons.length || !panels.length || !events.length) {
