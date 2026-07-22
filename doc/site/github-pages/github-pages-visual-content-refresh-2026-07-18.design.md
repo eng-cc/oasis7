@@ -47,6 +47,20 @@ non-gameplay DOM caption. Meaningful copy must never be baked into the image.
 The #2459 amendment removes player-facing production-process labels while
 retaining this repository provenance and the exact public preview status.
 
+## 2026-07-22 choice-trace illustration provenance
+
+- Current hero asset: `site/assets/images/hero/asteroid-choice-trace-image2-20260722.webp`
+- Generated-image prompt summary: a wide asteroid-belt civilization under
+  resource pressure, with inhabited industrial nodes and luminous logistics
+  routes that make divergent cooperation choices legible; use dark space and
+  restrained teal/amber light, with no text, UI, people, logos, combat, or
+  screenshot framing.
+
+This generated image is illustrative atmosphere for the Pressure → Choice →
+Trace story only. It is not gameplay, runtime, replay, audit, or browser-proof
+evidence, and it does not change the public preview status or replace the
+real Viewer captures used in proof-oriented contexts.
+
 ## Visual acceptance
 
 - At `1440x900`, the title, both CTAs, exact preview state, world art, and start
