@@ -256,8 +256,8 @@
 
 | 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-distributed-resilience.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-distributed-resilience.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 11:20:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 160 个专题、剩余 205 个缺口 |
 
 
@@ -277,9 +277,9 @@
 
 | 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-production-hardening-phase9` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-production-hardening-phase9.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-runtime-path-index` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-runtime-path-index.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
-| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-distributed-resilience.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-distributed-resilience.design.md` 并回写 PRD/Project/README/index 互链 |
+| 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-distributed-resilience.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/p2p/distfs/distfs-standard-file-io` | `backfill` | pass | I8-001/I8-002 | 已补齐 `doc/p2p/distfs/distfs-standard-file-io.design.md` 并回写 PRD/Project/README/index 互链 |
 | 2026-03-10 12:05:00 +0800 | `producer_system_designer` | `doc/core/reviews/round-008-reviewed-files.md` | `backfill` | pass | I8-001/I8-002 | 已将 ROUND-008 统计推进到补齐 174 个专题、剩余 191 个缺口 |
 

@@ -67,7 +67,7 @@
 | 子域 | 默认先读 | 折叠的增量/追溯入口 |
 | --- | --- | --- |
 | `distfs/` production hardening | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-production-hardening-phase1.prd.md` | `distfs-production-hardening-phase2` 到 `distfs-production-hardening-phase9` 仅作为阶段 delta 和追溯入口 |
-| `distfs/` self-healing | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | `distfs-self-healing-polling-loop-2026-02-23` 与 `distfs-self-healing-runtime-polling-wiring-2026-02-23` 仅作为增量入口 |
+| `distfs/` distributed resilience | `doc/p2p/distfs/README.md` -> `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | 异构 provider 选择、无单机完整依赖、自愈控制/轮询与受限 NodeRuntime 接线统一收敛；NodeRuntime 仍仅是依赖齐备时运行、失败不阻断 tick 的增量边界 |
 | `observer/` sync source | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-source-mode.prd.md` | `observer-sync-source-dht-mode` 仅作为 DHT 组合链路 delta |
 | `observer/` sync mode metrics | `doc/p2p/observer/README.md` -> `doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md` | `observer-sync-mode-metrics-runtime-bridge` 与 `observer-sync-mode-observability` 仅作为增量入口 |
 | `viewer-live/` CLI defaults | `doc/p2p/viewer-live/README.md` -> `doc/p2p/prd.md` | `oasis7-viewer-live-llm-default-on-2026-02-23` 与 `oasis7-viewer-live-no-llm-flag-2026-02-23` 均已完成，仅作为历史变更与审计追溯入口 |
@@ -102,8 +102,7 @@
 | `doc/p2p/distfs/distfs-feedback-node-runtime-integration-2026-03-01.prd.md` | `doc/p2p/distfs/distfs-feedback-node-runtime-integration-2026-03-01.design.md` | `doc/p2p/distfs/distfs-feedback-node-runtime-integration-2026-03-01.project.md` |
 | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.prd.md` | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.design.md` | `doc/p2p/distfs/distfs-feedback-open-ledger-2026-03-01.project.md` |
 | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.prd.md` | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.design.md` | `doc/p2p/distfs/distfs-feedback-p2p-bridge-2026-03-01.project.md` |
-| `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.prd.md` | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.design.md` | `doc/p2p/distfs/distfs-heterogeneous-node-optimal-stability-2026-02-23.project.md` |
-| `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.prd.md` | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.design.md` | `doc/p2p/distfs/distfs-no-single-full-node-assumption-2026-02-23.project.md` |
+| `doc/p2p/distfs/distfs-distributed-resilience.prd.md` | `doc/p2p/distfs/distfs-distributed-resilience.design.md` | `doc/p2p/distfs/distfs-distributed-resilience.project.md` |
 | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.prd.md` | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.design.md` | `doc/p2p/distfs/distfs-path-index-observer-bootstrap.project.md` |
 | `doc/p2p/distfs/distfs-production-hardening-phase1.prd.md` | `doc/p2p/distfs/distfs-production-hardening-phase1.design.md` | `doc/p2p/distfs/distfs-production-hardening-phase1.project.md` |
 | `doc/p2p/distfs/distfs-production-hardening-phase2.prd.md` | `doc/p2p/distfs/distfs-production-hardening-phase2.design.md` | `doc/p2p/distfs/distfs-production-hardening-phase2.project.md` |
@@ -115,9 +114,6 @@
 | `doc/p2p/distfs/distfs-production-hardening-phase8.prd.md` | `doc/p2p/distfs/distfs-production-hardening-phase8.design.md` | `doc/p2p/distfs/distfs-production-hardening-phase8.project.md` |
 | `doc/p2p/distfs/distfs-production-hardening-phase9.prd.md` | `doc/p2p/distfs/distfs-production-hardening-phase9.design.md` | `doc/p2p/distfs/distfs-production-hardening-phase9.project.md` |
 | `doc/p2p/distfs/distfs-runtime-path-index.prd.md` | `doc/p2p/distfs/distfs-runtime-path-index.design.md` | `doc/p2p/distfs/distfs-runtime-path-index.project.md` |
-| `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.prd.md` | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.design.md` | `doc/p2p/distfs/distfs-self-healing-control-plane-2026-02-23.project.md` |
-| `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.prd.md` | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.design.md` | `doc/p2p/distfs/distfs-self-healing-polling-loop-2026-02-23.project.md` |
-| `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.prd.md` | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.design.md` | `doc/p2p/distfs/distfs-self-healing-runtime-polling-wiring-2026-02-23.project.md` |
 | `doc/p2p/distfs/distfs-standard-file-io.prd.md` | `doc/p2p/distfs/distfs-standard-file-io.design.md` | `doc/p2p/distfs/distfs-standard-file-io.project.md` |
 | `doc/p2p/distributed/distributed-hard-split-phase7.prd.md` | `doc/p2p/distributed/distributed-hard-split-phase7.design.md` | `doc/p2p/distributed/distributed-hard-split-phase7.project.md` |
 | `doc/p2p/distributed/distributed-pos-consensus.prd.md` | `doc/p2p/distributed/distributed-pos-consensus.design.md` | `doc/p2p/distributed/distributed-pos-consensus.project.md` |
@@ -182,5 +178,5 @@
 - ROUND-002 主从口径（node）：`node-contribution-points` 为主文档；`runtime-closure` 与 `multi-node-closure-test` 为增量子文档。
 - NodePoints historical/provenance note：`doc/p2p/node/node-contribution-points-runtime-closure.*` 与 `doc/p2p/node/node-contribution-points-multi-node-closure-test.*` 保留为已完成增量闭环/验证来源线索，不再作为根索引普通 active 三件套入口；当前首读与主规格以 `doc/p2p/node/node-contribution-points.prd.md`、`doc/p2p/node/node-contribution-points.project.md` 和 `doc/p2p/node/README.md` 为准。后续若删除这些历史子文档，需先完成引用审计与 deletion-readiness slice。
 - ROUND-002 主从口径（node）：`node-redeemable-power-asset` 为主文档；`audit-hardening` 与 `signature-governance-phase3` 为增量子文档。
-- ROUND-002 主从口径（distfs/self-healing）：`distfs-self-healing-control-plane-2026-02-23` 为主文档与需求/范围主入口；`polling-loop` 仅补充轮询策略/状态/入口增量；`runtime-polling-wiring` 仅补充 NodeRuntime 接线与执行器增量。通用边界、基线语义与无单机完整数据假设以主文档为准。
+- DistFS distributed resilience：`distfs-distributed-resilience` 是异构 provider 兼容/选择、无单机完整依赖、分布覆盖、自愈控制/轮询与 NodeRuntime 接线的唯一主入口。NodeRuntime 接线仍受“依赖齐备才运行、缺依赖跳过、单轮失败不阻断 tick”约束，不能被误述为全局自治恢复或 readiness 结论。
 - ROUND-002 主从口径（distfs）：`distfs-production-hardening-phase1` 为主文档；`phase2~phase9` 为增量子文档。
