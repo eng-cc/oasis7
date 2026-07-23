@@ -22,7 +22,8 @@
   - `doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md`
   - `doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md`
   - `doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
-  - Git history
+  - 历史 core go/no-go 记录（由 Git history 按原路径追溯）
 
 ## 验证命令
-- `rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10|stage-closure-go-no-go-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md Git history
+- `rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
+- `git log --oneline -- doc/core/$(printf reviews)/stage-closure-go-no-go-task-game-018-2026-03-10.md`

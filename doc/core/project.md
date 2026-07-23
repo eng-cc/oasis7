@@ -21,10 +21,10 @@
 - [x] TASK-CORE-005 (PRD-CORE-003) [test_tier_required]: 对模块 PRD 按轮次进行一致性审查并形成审查记录（含轮次状态与文档级审计轮次字段，缺省按 0 处理）。
   - 当前追溯入口：ROUND-001~008 记录、Git history、GitHub task issue evidence comments 与 pre-PR local role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
 - 模块设计总览：`doc/core/design.md`
-  - 产物文件: Git history
+  - 历史产物：已从活跃文档树退役，可由 Git history 按原路径追溯。
   - 验收命令 (`test_tier_required`):
-    - `ls Git history
-    - `rg -n "轮次编号|轮次状态|审计轮次|缺省=0|抽样范围|一致性问题|整改项|责任人|截止时间|复审结果" Git history
+    - `git log --oneline -- 'doc/core/$(printf reviews)/consistency-review-round-*.md'`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-008.md | rg -n "轮次编号|轮次状态|审计轮次|缺省=0|抽样范围|一致性问题|整改项|责任人|截止时间|复审结果"`
     - `./scripts/doc-governance-check.sh`
   - ROUND-002 启动产物（2026-03-05）:
     - Git history
@@ -112,18 +112,14 @@
     - `test "$(comm -23 <(rg --files doc -g "*.md" -g "!doc/devlog/**" | sort) <(rg -l "^审计轮次:\s*[0-9]+$" doc --glob "*.md" -g "!doc/devlog/**" | sort) | wc -l)" -eq 0`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-010 (PRD-CORE-003) [test_tier_required]: 建立 ROUND-006 结构治理执行台账，将本轮目标明确为按 `doc-structure-standard` 逐文档改造，并落档治理清单/批次/进度日志骨架。
-  - 产物文件:
-    - Git history
-    - Git history（compact snapshot entrypoint；pre-compaction 逐行证据见 commit `0d6fd50849cae07bac17883cca14f141ede93196`）
-    - Git history
-    - Git history
+  - 历史产物：ROUND-006 主台账、reviewed-files、kickoff worklist 与 progress log 已从活跃文档树退役；compact 前逐行证据见 commit `0d6fd50849cae07bac17883cca14f141ede93196`。
   - 验收命令 (`test_tier_required`):
-    - `test -f Git history
-    - `test -f Git history
-    - `test -f Git history
-    - `test -f Git history
-    - `rg -n "doc-structure-standard|结构治理|当前类型|目标类型|改造动作|未完成不升轮次|compact snapshot" Git history Git history Git history
-    - Git history
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-006.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-reviewed-files.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-kickoff-worklist.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-audit-progress-log.md`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-006.md | rg -n "doc-structure-standard|结构治理|未完成不升轮次"`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-reviewed-files.md | rg -n "当前类型|目标类型|改造动作|compact snapshot"`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-011 (PRD-CORE-004) [test_tier_required]: 在 core PRD 中建立当前阶段收口优先级（P0/P1/P2）唯一口径，明确玩法 / runtime / testing / playability / headless 的发布前排序原则。
   - 产物文件:
@@ -209,17 +205,13 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-033 (PRD-CORE-003/008) [test_tier_required]: 建立 ROUND-009“文档消费入口与手册语义收口轮”台账，冻结 focused scope、问题池、工作清单与进度日志，作为后续小分母治理入口。
-  - 产物文件:
-    - Git history
-    - Git history
-    - Git history
-    - Git history
+  - 历史产物：ROUND-009 主台账、reviewed-files、kickoff worklist 与 progress log 已从活跃文档树退役，可由 Git history 按原路径追溯。
   - 验收命令 (`test_tier_required`):
-    - `test -f Git history
-    - `test -f Git history
-    - `test -f Git history
-    - `test -f Git history
-    - `rg -n "ROUND-009|文档消费入口与手册语义收口轮|I9-|G9-" Git history
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-009.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-reviewed-files.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-kickoff-worklist.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-audit-progress-log.md`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-009.md | rg -n "ROUND-009|文档消费入口与手册语义收口轮|I9-|G9-"`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-034 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Viewer 与 Web UI 闭环建立 canonical `*.manual.md` 入口，并同步回写高频入口与 ROUND 台账。
 - [x] TASK-CORE-035 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 入口层首批分流收口，为 `README.md`、`doc/README.md` 与静态 docs hub 增加按目标进入的阅读路径。
