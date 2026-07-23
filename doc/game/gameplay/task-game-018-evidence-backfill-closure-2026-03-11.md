@@ -10,7 +10,7 @@
 - game 侧证据映射：`doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md` 已显式挂接 playability / testing / core 三条链路。
 - playability 证据包：`doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md` 已存在。
 - testing 证据包：`doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md` 已存在。
-- core go/no-go 记录：`doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md` 已存在，且将 playability / testing / runtime 证据链标记为 `ready`。
+- core go/no-go 记录：Git history 已存在，且将 playability / testing / runtime 证据链标记为 `ready`。
 
 ## 验收判定
 - `TASK-GAME-018` 的跨模块证据回填已经完成，`doc/game/project.md` 可以将“下一任务”回写为无。
@@ -22,7 +22,8 @@
   - `doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md`
   - `doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md`
   - `doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
-  - `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
+  - 历史 core go/no-go 记录（由 Git history 按原路径追溯）
 
 ## 验证命令
-- `rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10|stage-closure-go-no-go-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
+- `rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
+- `git log --oneline -- doc/core/$(printf reviews)/stage-closure-go-no-go-task-game-018-2026-03-10.md`

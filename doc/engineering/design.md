@@ -15,7 +15,7 @@
 ## 2. 阅读顺序
 模块级当前导航统一从 `doc/engineering/README.md` 开始；本设计文档只在进入模块三件套后承载结构设计、规则载体与执行链路，不再复制一套根入口顺序。
 
-专题精确检索由 `doc/engineering/prd.index.md` 承担；历史 PRD 审读与 legacy 迁移证据见 `doc/core/reviews/`。
+专题精确检索由 `doc/engineering/prd.index.md` 承担；历史 PRD 审读与 legacy 迁移证据见 Git history。
 
 ## 3. 设计结构
 ### 3.1 规则载体分层
@@ -24,7 +24,7 @@
 - `project.md`：定义治理任务、批次、owner 与验证口径。
 - `doc-governance/*`：定义 `doc/` 文档树的组织规范、默认阅读面减重规则与早期文档治理收口。
 - `rust-governance/*`：定义 Rust 文件体量、长期零扫描与语义化结构拆分契约；不维护冻结基线或一次性 burn-down 台账。
-- 历史 PRD 审读/治理台账：保留在 `doc/core/reviews/round-*` logs；当前新增/变更文档追踪由模块入口与 doc governance 规则承接。
+- 历史 PRD 审读/治理台账：保留在 Git history logs；当前新增/变更文档追踪由模块入口与 doc governance 规则承接。
 - `self-evolution/*`：保留 repo-local memory / working_memory / stage-gate 对象背景、自我进化 memory 补强、legacy/local task-file consolidation 边界，以及外部 agent workflow 借鉴的 adopted / rejected / deferred 治理结论；当前 task truth / evidence sink 以 `doc/engineering/workflow/source-of-truth.md` 的 GitHub Project-backed PM contract 为准。
 
 ### 3.2 工程治理执行链路
@@ -33,14 +33,14 @@
 - 过程记录：GitHub task issue evidence comments；历史 `.pm/tasks/*` 记录已归档到 `.pm/github-project-sync/task-archive.jsonl`
 - 聚合归档：历史 `.pm/tasks/*` 已由 GitHub Project migration Step 3 归档；新任务不得再创建 repo-local task yaml/execution log。
 - 静态校验：`scripts/doc-governance-check.sh`
-- ROUND 台账：`doc/core/reviews/consistency-review-round-*.md`
+- ROUND 台账：Git history
 
 ### 3.3 文档结构治理链路
 - 权威规则：`doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - 规范正文：`doc/engineering/doc-governance/doc-structure-standard.design.md`
 - 执行挂靠：`doc/engineering/doc-governance/doc-structure-standard.project.md`
-- 项目级执行台账：`doc/core/reviews/consistency-review-round-006.md`
-- 逐文档执行面：`doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot）
+- 项目级执行台账：Git history
+- 逐文档执行面：Git history（compact snapshot entrypoint；pre-compaction 逐行证据见 git snapshot）
 
 ## 4. 集成点
 - `AGENTS.md`
@@ -48,7 +48,7 @@
 - `.agents/roles/templates/*.md`
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
-- `doc/core/reviews/round-*` logs
+- Git history logs
 - `scripts/doc-governance-check.sh`
 - `testing-manual.md`
 

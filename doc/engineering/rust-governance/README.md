@@ -9,5 +9,5 @@
 ledger，避免一次性 burn-down 记录重新成为当前规则。
 
 2026-02 round3、2026-03 burn-down 批次及已删除 baseline 的历史证据保留在
-GitHub task、`doc/core/reviews/round-*` 与 git history；它们不是 active task
+GitHub task、Git history 与 git history；它们不是 active task
 入口，也不在本目录恢复。

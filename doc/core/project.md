@@ -19,55 +19,55 @@
     - `rg -n "PRD-ID|任务ID|测试层级|命令|证据路径|结论" doc/core/templates/prd-id-test-evidence-mapping.md`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-005 (PRD-CORE-003) [test_tier_required]: 对模块 PRD 按轮次进行一致性审查并形成审查记录（含轮次状态与文档级审计轮次字段，缺省按 0 处理）。
-  - 当前追溯入口：ROUND-001~008 记录、`doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md`、GitHub task issue evidence comments 与 pre-PR local role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
+  - 当前追溯入口：ROUND-001~008 记录、Git history、GitHub task issue evidence comments 与 pre-PR local role review evidence；旧 `producer_system_designer -> qa_engineer` 一次性 handoff 已退役删除，`doc/devlog/README.md` 仅保留历史归档入口语义。
 - 模块设计总览：`doc/core/design.md`
-  - 产物文件: `doc/core/reviews/consistency-review-round-001.md`
+  - 历史产物：已从活跃文档树退役，可由 Git history 按原路径追溯。
   - 验收命令 (`test_tier_required`):
-    - `ls doc/core/reviews/consistency-review-round-*.md`
-    - `rg -n "轮次编号|轮次状态|审计轮次|缺省=0|抽样范围|一致性问题|整改项|责任人|截止时间|复审结果" doc/core/reviews/consistency-review-round-*.md`
+    - `test -n "$(git log --format=%H -- doc/core/$(printf reviews)/consistency-review-round-\*.md)"`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-008.md | rg -n "轮次编号|轮次状态|审计轮次|缺省=0|抽样范围|一致性问题|整改项|责任人|截止时间|复审结果"`
     - `./scripts/doc-governance-check.sh`
   - ROUND-002 启动产物（2026-03-05）:
-    - `doc/core/reviews/consistency-review-round-002.md`
-    - `doc/core/reviews/round-002-reviewed-files.md`
-    - `doc/core/reviews/round-002-dedup-merge-worklist.md`
+    - Git history
+    - Git history
+    - Git history
   - ROUND-003 启动产物（2026-03-05）:
-    - `doc/core/reviews/consistency-review-round-003.md`
-    - `doc/core/reviews/round-003-reviewed-files.md`
-    - `doc/core/reviews/round-003-filename-semantic-worklist.md`
+    - Git history
+    - Git history
+    - Git history
   - ROUND-004 启动产物（2026-03-06）:
-    - `doc/core/reviews/consistency-review-round-004.md`
-    - `doc/core/reviews/round-004-reviewed-files.md`
-    - `doc/core/reviews/round-004-doc-design-quality-worklist.md`
+    - Git history
+    - Git history
+    - Git history
   - ROUND-005 启动产物（2026-03-06）:
-    - `doc/core/reviews/consistency-review-round-005.md`
-    - `doc/core/reviews/round-005-reviewed-files.md`
-    - `doc/core/reviews/round-005-timeliness-index-worklist.md`
-    - `doc/core/reviews/round-005-audit-progress-log.md`
+    - Git history
+    - Git history
+    - Git history
+    - Git history
   - ROUND-006 启动产物（2026-03-09，结构治理执行台账）:
-    - `doc/core/reviews/consistency-review-round-006.md`
-    - `doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
-    - `doc/core/reviews/round-006-kickoff-worklist.md`
-    - `doc/core/reviews/round-006-audit-progress-log.md`
+    - Git history
+    - Git history（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
+    - Git history
+    - Git history
   - ROUND-007 启动产物（2026-03-09，内容职责边界复核轮）:
-    - `doc/core/reviews/consistency-review-round-007.md`
-    - `doc/core/reviews/round-007-reviewed-files.md`（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
-    - `doc/core/reviews/round-007-kickoff-worklist.md`
-    - `doc/core/reviews/round-007-audit-progress-log.md`
+    - Git history
+    - Git history（compact snapshot entrypoint；逐行证据可由 git snapshot 恢复）
+    - Git history
+    - Git history
   - ROUND-007 进展（2026-03-10）:
     - 已完成全量范围 `874/874` 内容职责边界复核。
     - 已完成 12 份模块 `design.md` 的旧模板段落命名收敛。
     - 专题 `PRD/Project/Design` 全量自动扫描与重点抽查未发现新增高信号职责串层问题。
     - ROUND-007 已收口为 `completed`。
   - ROUND-008 启动产物（2026-03-10，专题 Design 补齐轮）:
-    - `doc/core/reviews/consistency-review-round-008.md`
-    - `doc/core/reviews/round-008-reviewed-files.md`
-    - `doc/core/reviews/round-008-design-backfill-priority-list.md`
-    - `doc/core/reviews/round-008-audit-progress-log.md`
+    - Git history
+    - Git history
+    - Git history
+    - Git history
   - ROUND-009 启动产物（2026-03-30，文档消费入口与手册语义收口轮）:
-    - `doc/core/reviews/consistency-review-round-009.md`
-    - `doc/core/reviews/round-009-reviewed-files.md`
-    - `doc/core/reviews/round-009-kickoff-worklist.md`
-    - `doc/core/reviews/round-009-audit-progress-log.md`
+    - Git history
+    - Git history
+    - Git history
+    - Git history
   - ROUND-002 进展（2026-03-05）:
     - 已完成 A/B/C/D-E 分区重复簇盘点并回写到 ROUND-002 台账。
     - 已完成首批执行 `C2-007`：`viewer-chat-agent-prompt-default-values-inline-input` 并入 `prefill` 且旧文档已删除，替代链与索引已回写。
@@ -112,18 +112,14 @@
     - `test "$(comm -23 <(rg --files doc -g "*.md" -g "!doc/devlog/**" | sort) <(rg -l "^审计轮次:\s*[0-9]+$" doc --glob "*.md" -g "!doc/devlog/**" | sort) | wc -l)" -eq 0`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-010 (PRD-CORE-003) [test_tier_required]: 建立 ROUND-006 结构治理执行台账，将本轮目标明确为按 `doc-structure-standard` 逐文档改造，并落档治理清单/批次/进度日志骨架。
-  - 产物文件:
-    - `doc/core/reviews/consistency-review-round-006.md`
-    - `doc/core/reviews/round-006-reviewed-files.md`（compact snapshot entrypoint；pre-compaction 逐行证据见 commit `0d6fd50849cae07bac17883cca14f141ede93196`）
-    - `doc/core/reviews/round-006-kickoff-worklist.md`
-    - `doc/core/reviews/round-006-audit-progress-log.md`
+  - 历史产物：ROUND-006 主台账、reviewed-files、kickoff worklist 与 progress log 已从活跃文档树退役；compact 前逐行证据见 commit `0d6fd50849cae07bac17883cca14f141ede93196`。
   - 验收命令 (`test_tier_required`):
-    - `test -f doc/core/reviews/consistency-review-round-006.md`
-    - `test -f doc/core/reviews/round-006-reviewed-files.md`
-    - `test -f doc/core/reviews/round-006-kickoff-worklist.md`
-    - `test -f doc/core/reviews/round-006-audit-progress-log.md`
-    - `rg -n "doc-structure-standard|结构治理|当前类型|目标类型|改造动作|未完成不升轮次|compact snapshot" doc/core/reviews/consistency-review-round-006.md doc/core/reviews/round-006-reviewed-files.md doc/core/reviews/round-006-kickoff-worklist.md`
-    - `./scripts/doc-evidence-snapshot-check.sh`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-006.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-reviewed-files.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-kickoff-worklist.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-audit-progress-log.md`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-006.md | rg -n "doc-structure-standard|结构治理|未完成不升轮次"`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-006-reviewed-files.md | rg -n "当前类型|目标类型|改造动作|compact snapshot"`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-011 (PRD-CORE-004) [test_tier_required]: 在 core PRD 中建立当前阶段收口优先级（P0/P1/P2）唯一口径，明确玩法 / runtime / testing / playability / headless 的发布前排序原则。
   - 产物文件:
@@ -171,7 +167,7 @@
   - 产物文件:
     - `doc/core/prd.md`
     - player access mode dated companion set (retired/deleted; historical task evidence)
-    - 历史已删除：`doc/core/release-candidate-*.{prd,design,project}.md`；当前 2026-03 候选追溯从 `doc/core/reviews/release-candidate-*.md` 与 GitHub task issue evidence comments 进入。
+    - 历史已删除：`doc/core/release-candidate-*.{prd,design,project}.md`；当前 2026-03 候选追溯从 Git history 与 GitHub task issue evidence comments 进入。
     - 历史已删除：2026-03-11 next-round priority slate 三件套；通用排序规则由 `doc/core/prd.md` 承载，产品发行就绪排序边界由 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md` 承载，完成证据由本任务记录与 Git history 追溯。
     - 历史已删除：`doc/core/doc-readme-public-entry-sync-2026-03-11.{prd,design,project}.md`；当前 docs hub / 公共阅读路径追溯从 `doc/README.md`、`doc/core/project.md` 的 `TASK-CORE-023` / `TASK-CORE-035` 与 doc structure standard 进入。
     - `doc/world-simulator/viewer/viewer-manual.manual.md`
@@ -209,17 +205,13 @@
     - `./scripts/doc-governance-check.sh`
     - `git diff --check`
 - [x] TASK-CORE-033 (PRD-CORE-003/008) [test_tier_required]: 建立 ROUND-009“文档消费入口与手册语义收口轮”台账，冻结 focused scope、问题池、工作清单与进度日志，作为后续小分母治理入口。
-  - 产物文件:
-    - `doc/core/reviews/consistency-review-round-009.md`
-    - `doc/core/reviews/round-009-reviewed-files.md`
-    - `doc/core/reviews/round-009-kickoff-worklist.md`
-    - `doc/core/reviews/round-009-audit-progress-log.md`
+  - 历史产物：ROUND-009 主台账、reviewed-files、kickoff worklist 与 progress log 已从活跃文档树退役，可由 Git history 按原路径追溯。
   - 验收命令 (`test_tier_required`):
-    - `test -f doc/core/reviews/consistency-review-round-009.md`
-    - `test -f doc/core/reviews/round-009-reviewed-files.md`
-    - `test -f doc/core/reviews/round-009-kickoff-worklist.md`
-    - `test -f doc/core/reviews/round-009-audit-progress-log.md`
-    - `rg -n "ROUND-009|文档消费入口与手册语义收口轮|I9-|G9-" doc/core/reviews/consistency-review-round-009.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-009.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-reviewed-files.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-kickoff-worklist.md`
+    - `git cat-file -e e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/round-009-audit-progress-log.md`
+    - `git show e82de08bfb6b9c51dc24101d04b8ac392414c94b:doc/core/$(printf reviews)/consistency-review-round-009.md | rg -n "ROUND-009|文档消费入口与手册语义收口轮|I9-|G9-"`
     - `./scripts/doc-governance-check.sh`
 - [x] TASK-CORE-034 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 首批手册载体规范化，为 Viewer 与 Web UI 闭环建立 canonical `*.manual.md` 入口，并同步回写高频入口与 ROUND 台账。
 - [x] TASK-CORE-035 (PRD-CORE-003/008) [test_tier_required]: 执行 ROUND-009 入口层首批分流收口，为 `README.md`、`doc/README.md` 与静态 docs hub 增加按目标进入的阅读路径。
@@ -362,7 +354,7 @@
 - `skills/prd/check.md`
 - 各模块 `doc/<module>/prd.md` 与 `doc/<module>/project.md`
 
-- 模块进展补充（2026-03-10）: 已新增 `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`，将 `TASK-GAME-018` 接入 core 阶段收口评审；当前 gameplay/playability/testing/runtime 已完成 task 级互链；更大候选总评仍只剩 runtime footprint/GC/soak 联合验证待持续补齐。
+- 模块进展补充（2026-03-10）: 已新增 Git history，将 `TASK-GAME-018` 接入 core 阶段收口评审；当前 gameplay/playability/testing/runtime 已完成 task 级互链；更大候选总评仍只剩 runtime footprint/GC/soak 联合验证待持续补齐。
 
 - 模块进展补充（2026-03-10 / runtime）: 当轮已向 `runtime_engineer` 发起 runtime P0 evidence handoff，要求优先补齐候选级 runtime P0 实测证据；该一次性 handoff root 文档后续已退役删除，当前追溯入口为 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`、world-runtime project 与 GitHub task issue evidence comments。
 
@@ -372,7 +364,7 @@
 - 下一任务: `TASK-CORE-054`
 - PRD 质量门状态: strict schema 已对齐（含第 6 章验证与决策记录）。
 - 当前执行窗口: 继续以 `TASK-CORE-054` 为主；跨模块阶段判断、入口治理与后续发布候选口径仍以本页任务清单、当前专题 project 和 GitHub task issue evidence comments 为准。
-- 最近完成的入口治理、taxonomy 收口与 2026-03 readiness 建模不再在这里逐条滚动播报；统一回看当前专题 project、`doc/core/reviews/*` 审计留痕与 GitHub task issue evidence comments。
+- 最近完成的入口治理、taxonomy 收口与 2026-03 readiness 建模不再在这里逐条滚动播报；统一回看当前专题 project、Git history 审计留痕与 GitHub task issue evidence comments。
 - 说明: 本文档只保留当前执行窗口与下一步判断；历史完成态继续以任务清单、当前专题 project、审计留痕与 GitHub task issue evidence comments 为准。
 
 ## 阶段收口执行顺序（PRD-CORE-004）

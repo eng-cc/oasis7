@@ -4,7 +4,7 @@
 
 ## 说明
 - 模块目录已从旧名称 `nonviewer` 重命名为 `headless-runtime`。
-- 仍需当前读取的历史专题集中在 `doc/headless-runtime/nonviewer/`；已完成的一次性设计对齐审查三件套不再保留为活跃文档，追溯入口收敛到 `doc/core/reviews/` 与本模块 `project.md`。
+- 仍需当前读取的历史专题集中在 `doc/headless-runtime/nonviewer/`；已完成的一次性设计对齐审查三件套不再保留为活跃文档，追溯入口收敛到 Git history 与本模块 `project.md`。
 - 不再保留 `doc/headless-runtime/archive/` 归档目录。
 
 ## 入口

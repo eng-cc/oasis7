@@ -801,9 +801,9 @@
 - 预期结果：runtime 规则边界、回归模板、门禁指标可直接用于发布评审。
 - 回归影响范围：world-runtime / testing / launcher-chain-runtime 接口。
 
-- 模块进展补充（2026-03-10）: 当轮曾发起 runtime P0 candidate evidence role handoff，明确当前 core `blocked` 的剩余缺口是 runtime 候选级实测证据绑定，而非模板缺失；该一次性 handoff root 文档后续已退役删除，当前追溯入口为 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`、core review 记录与 GitHub task issue evidence comments。
+- 模块进展补充（2026-03-10）: 当轮曾发起 runtime P0 candidate evidence role handoff，明确当时 core `blocked` 的剩余缺口是 runtime 候选级实测证据绑定，而非模板缺失；该一次性 handoff 与相应历史评审均已从活跃文档树退役，当前追溯入口为 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`、GitHub task issue evidence comments 与 Git history。
 
-- 模块进展补充（2026-03-10 / candidate）: 已新增 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`，将 `TASK-GAME-018` 所需 runtime P0 候选级实测证据实例化，并绑定到 core go/no-go 记录。
+- 模块进展补充（2026-03-10 / candidate）: 已新增 `doc/world-runtime/evidence/runtime-release-gate-metrics-task-game-018-2026-03-10.md`，将 `TASK-GAME-018` 所需 runtime P0 候选级实测证据实例化；当时的 core go/no-go 绑定保留在 Git history，当前状态以现行 task evidence 为准。
 
 - 模块进展补充（2026-03-10 / T7.2）: 已新增 `scripts/oasis7-runtime-storage-gate.sh` 作为 storage/GC/replay gate 固定入口，当前已用 `release_default` 样本生成 `.tmp/world_runtime_storage_gate/20260310-234359/summary.md`，下一步接真实 runtime 状态样本。
 

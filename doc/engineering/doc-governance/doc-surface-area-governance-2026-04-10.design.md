@@ -33,7 +33,7 @@
 - 证明某项治理、评审、验证、采证或批次收口曾经发生过的材料。
 
 典型载体：
-- `doc/core/reviews/*`
+- Git history
 - `doc/**/governance/*`
 - `doc/**/evidence/*`
 - checklist / reviewed-files / audit-progress 等记录

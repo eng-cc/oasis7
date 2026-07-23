@@ -11,7 +11,7 @@
 - 想确认跨模块优先级规则：读 `doc/core/prd.md`；想确认当前执行任务与下一步：读 `doc/core/project.md`
 - 想先看玩家访问模式与 execution lane 的产品契约：`doc/product/player-entry-distribution/prd.md`
 - 想先看“统一持久大世界”默认产品模型与术语契约：`doc/product/world-infrastructure/prd.md`
-- 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 `doc/core/reviews/README.md`
+- 想追溯 ROUND 审计、2026-03 版本候选 readiness / go-no-go 或任务收口依据：按需进入 Git history
 
 ## 入口
 - PRD: `doc/core/prd.md`
@@ -24,7 +24,7 @@
 - `prd.md` 是 core 模块权威规格入口，适合先理解项目级模块地图、链路、阶段口径与跨模块规则。
 - `project.md` 是执行台账，适合确认当前 core 收口动作、最近完成项与下一步。
 - `prd.index.md` 是定向检索索引，适合已经知道主题后按文件名继续下钻，不是新读者的首读入口。
-- `reviews/`、`templates/`、`checklists/` 属于审计与配套材料层；`reviews/README.md` 负责审计留痕分流，默认不与活跃主题入口混成同一层。
+- `templates/` 与 `checklists/` 属于配套材料层；已退役审计记录从 Git history 和 GitHub task issue evidence comments 追溯。
 
 ## 活跃阅读面边界
 - 当前页只保留 `what / where / next / risk` 所需入口，不再直接平铺活跃专题长名单或 review 台账。
@@ -37,8 +37,8 @@
 - 维护项目级设计阅读顺序、跨模块优先级规则与 ROUND 台账入口；当前任务排序和下一步只在 core project 与 GitHub task truth 更新。
 
 ## 热点子域导航
-- `reviews/`：ROUND 审查、go/no-go、readiness board 与 audit-progress 留痕；先由 `reviews/README.md` 分流，再按需进入。
-- 根目录只保留 core 模块入口、设计总览、主 PRD、project 与文件级索引，不再保留 dated cross-module 专题三件套；产品契约从 `doc/product/` 对应模块 PRD 进入，历史候选与任务证据从 `reviews/`、core project、GitHub task evidence 和 Git history 追溯。
+- 历史 ROUND 审查、go/no-go、readiness board 与 audit-progress 记录已从活跃文档树退役，按 Git history 和 GitHub task issue evidence comments 追溯。
+- 根目录只保留 core 模块入口、设计总览、主 PRD、project 与文件级索引，不再保留 dated cross-module 专题三件套；产品契约从 `doc/product/` 对应模块 PRD 进入，历史候选与任务证据从 core project、GitHub task evidence 和 Git history 追溯。
 - `templates/`：阶段收口和 PRD-ID 追踪模板。
 - `checklists/`：跨模块影响检查清单。
 

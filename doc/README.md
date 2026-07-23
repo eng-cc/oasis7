@@ -68,5 +68,5 @@
 - 新功能或行为变更必须先更新模块 `prd.md`，再更新 `project.md`，最后实现与测试。
 - 代码、测试、文档任务必须可追溯到 PRD-ID。
 - 设计内容应优先收敛到对应产品模块或专业模块中可长期维护的模块级 `design.md` / 权威专题；避免为短期小功能新建带日期的设计碎片。既有碎片宜按语义合并、修复引用并在安全时删除；只有承担可独立长期治理职责的专题，才保留窄范围的专题设计文档，而不以临时任务范围建档。
-- `doc/` 根目录只保留当前总入口；历史路径、已删除入口与迁移过程从 Git history 和 `doc/core/reviews/` 追溯，不在活跃导航重复列举。
+- `doc/` 根目录只保留当前总入口；历史路径、已删除入口与迁移过程从 Git history 和 GitHub task issue evidence comments 追溯，不在活跃导航重复列举。
 - 模块根入口、专题落位、README 职责与 legacy redirect 的共享治理规则统一从 `doc/engineering/doc-governance/README.md` 进入，再按问题下钻到规范正文或对应专题。

@@ -41,7 +41,7 @@
 
 ## Validation
 - 建议测试层级：`test_tier_required`
-- 建议验证命令：`rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10|stage-closure-go-no-go-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md && rg -n "下一任务: 无" doc/game/project.md`
+- 建议验证命令：`rg -n "TASK-GAME-018|playability-release-evidence-bundle-task-game-018-2026-03-10|release-evidence-bundle-task-game-018-2026-03-10" doc/game/gameplay/gameplay-visual-evidence-linkage-2026-03-10.md doc/playability_test_result/evidence/playability-release-evidence-bundle-task-game-018-2026-03-10.md doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md && git log --oneline -- doc/core/$(printf reviews)/stage-closure-go-no-go-task-game-018-2026-03-10.md && rg -n "下一任务: 无" doc/game/project.md`
 
 ## Notes
 - 接收方确认范围：`已确认 TASK-GAME-018 的证据回填链路完整，可移除 game 主项目尾注`

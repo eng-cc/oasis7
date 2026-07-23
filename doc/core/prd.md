@@ -218,7 +218,7 @@
   - v2.1 (2026-03-06): 启动 ROUND-005，专项收敛文档状态时效字段、完成态字段、命名一致性与索引覆盖规则。
   - v2.2 (historical, completed): 已建立阶段收口优先级、跨角色交付矩阵与发布前 P0 必备闭环。
   - v2.3 (historical, completed): 已完成下一轮优先级排序及其首个 release-readiness 专题承接；当前不再维护独立 dated priority slate。
-  - v2.4 (historical, 2026-03): 版本级 readiness 与 go/no-go 裁决已落为 `doc/core/reviews/*` 审计留痕；不再保留根目录 release-candidate 三件套作为当前首读入口。
+  - v2.4 (historical, 2026-03): 版本级 readiness 与 go/no-go 裁决已落为 Git history 审计留痕；不再保留根目录 release-candidate 三件套作为当前首读入口。
 - Technical Risks:
   - 风险-1: 模块新增能力未及时回填全局链路。
   - 风险-2: 总览与分册的口径同步依赖人工流程。

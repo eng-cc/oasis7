@@ -6,7 +6,7 @@
 > 说明：本页既有 `TASK-*` 顺序编号条目和历史 `Trace: .pm/tasks/...` 作为历史追踪保留，不做批量迁移；GitHub Project migration Step 3 后，新增任务项默认改用小写 kebab-case 的 `topic-slug (PRD-ID)` 稳定标识，并固定追加 GitHub task issue 或 `task_uid` 追溯运行态 task。项目页 slug 只用于人类检索与规划，不替代 GitHub-backed `task_uid`。
 > 模板：`- [ ] agents-workflow-single-source (PRD-ENGINEERING-021) [test_tier_required]: 对齐项目任务标识口径。 Trace: GitHub issue #NNNN / task_uid task_<32hex>`
 
-- [x] core-release-candidate-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 core 首读/活跃索引的 2026-03 release-candidate readiness / version / go-no-go 根目录三件套，将历史候选证据收敛到 `doc/core/reviews/*` 审计留痕、git history 与 GitHub task issue evidence comments，并同步收紧 core README、PRD index、project 状态和 module-root allowlist。 Trace: #2066 (task_e56d696bddcb4d2baa173b02e4631921)
+- [x] core-release-candidate-triplet-retirement (PRD-ENGINEERING-021/025/030) [test_tier_required]: 删除仍占据 core 首读/活跃索引的 2026-03 release-candidate readiness / version / go-no-go 根目录三件套，将历史候选证据收敛到 Git history 审计留痕、git history 与 GitHub task issue evidence comments，并同步收紧 core README、PRD index、project 状态和 module-root allowlist。 Trace: #2066 (task_e56d696bddcb4d2baa173b02e4631921)
 
 - [x] live-design-evidence-legacy-task-log-convergence (PRD-ENGINEERING-021/025/030) [test_tier_required]: 收敛仍在活跃设计/覆盖文档中直接暴露退役 `.pm/tasks/*.execution.md` 的旧证据入口，把 current-facing task evidence 统一回 GitHub issue / `task_uid`，退役 task log 仅通过 `.pm/github-project-sync/task-archive.jsonl` 作 migration/audit 追溯；本轮不删除仍承担当前入口职责的活文档。 Trace: #2106 (task_5f92b597c8ae44728045398d024f0bee)
 
@@ -481,8 +481,8 @@
 - [x] gwsc-test-readiness-gates (PRD-ENGINEERING-021/025) [test_tier_required] + [test_tier_full]: 补齐大世界状态同步与提交闭环的模块级 wrapper、S10 API/viewer projection contract、public_testnet readiness lane 和 claim-boundary 文档，确保 module/proxy 证据不越界声明 release/public_testnet ready。 Trace: .pm/tasks/task_b52dc268bc394b0eb05a139eabc00307.yaml
 - [x] scripts-bootstrap-devlog-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/scripts` 当前 README / PRD 与 task-worktree-bootstrap 专题中仍把 `--init-docs` 绑定到“当日 devlog” / `today_devlog` 的旧语义，将 active bootstrap docs 对齐为模块 PRD/project 检查与 PM task execution log evidence。 Trace: .pm/tasks/task_e53e6c9884ec4f27a45e99f54b7075ba.yaml
 - [x] evidence-template-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 `doc/testing`、`doc/playability_test_result` 与 `doc/core` 活证据/门禁模板中仍把新任务结论导向 `doc/devlog/YYYY-MM-DD.md` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留模块 project/evidence bundle 回写要求。 Trace: .pm/tasks/task_cb0f1e08aa594e42a08f9393347fb8e7.yaml
-- [x] core-release-candidate-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/core` 根目录 2026-03 release-candidate / next-round 一次性 producer/QA/LiveOps handoff 面，将活引用收敛到正式 core 专题三件套、`doc/core/reviews/*`、`.pm` execution log 与 pre-PR role review evidence。 Trace: .pm/tasks/task_f8dea693e16643788547488f22de4447.yaml
-- [x] core-round-audit-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/core` 根目录最后一个 2026-03 TASK-CORE-005 producer->QA 一次性 handoff 面，将 ROUND 收口追溯入口收敛到 `doc/core/reviews/task-core-005-round-audit-closure-2026-03-11.md`、ROUND 台账、`.pm` execution log 与 pre-PR role review evidence。 Trace: .pm/tasks/task_08836ae3a4534cbda65cb8cccc767e6e.yaml
+- [x] core-release-candidate-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/core` 根目录 2026-03 release-candidate / next-round 一次性 producer/QA/LiveOps handoff 面，将活引用收敛到正式 core 专题三件套、git history、`.pm` execution log 与 pre-PR role review evidence。 Trace: #1571 (task_f8dea693e16643788547488f22de4447)
+- [x] core-round-audit-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/core` 根目录最后一个 2026-03 TASK-CORE-005 producer->QA 一次性 handoff 面，将 ROUND 收口追溯入口收敛到 git history、ROUND 台账、`.pm` execution log 与 pre-PR role review evidence。 Trace: #1623 (task_08836ae3a4534cbda65cb8cccc767e6e)
 - [x] readme-liveops-runbook-execution-log-semantics (PRD-ENGINEERING-021/025) [test_tier_required]: 收口 Moltbook / 小红书持续运营 runbook 与 readme PRD 当前 flow / AC 中仍把渠道动作和信号回流导向 `doc/devlog` 的旧语义，将 active evidence sink 改为对应 `.pm/tasks/task_<32hex>.execution.md`，保留 runbook、issue / PR 与 producer summary 等正式回流面。 Trace: .pm/tasks/task_cd72186645e746dd8d12ed5cfc730f50.yaml
 - [x] game-limited-preview-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/game/gameplay/` TASK-GAME-036/037 limited preview 一次性 role handoff briefs，将当前 limited preview 执行、QA gate watch 与 live trace 收敛到正式 limited preview PRD/project、round-1 execution record、QA gate evidence 与 `.pm` execution log / pre-PR role review evidence。 Trace: .pm/tasks/task_ab539eb94b724db6b6f2a51846314fe3.yaml
 - [x] readme-moltbook-handoff-retire (PRD-ENGINEERING-021/025) [test_tier_required]: 退役删除 `doc/readme/governance/` TASK-README-014/015 Moltbook 一次性 role handoff briefs，将当前 Moltbook promotion、post drafts 与 liveops runbook 追溯收敛到正式 PRD/project/runbook、`doc/readme/governance/README.md`、`doc/readme/prd.index.md` 与 `.pm` execution log / pre-PR role review evidence。 Trace: .pm/tasks/task_27878601094144ecb63a6b33d2a965e3.yaml
@@ -513,13 +513,13 @@
 - `testing-manual.md`
 - `skills/prd/check.md`
 - `doc/engineering/*.md`
-- historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs 与 git history，当前规则入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`）
+- historical oversized Rust file splitting round3 triplet（后续已删除；历史审读证据见 Git history logs 与 git history，当前规则入口为 `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`）
 - `doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md`（当前长期契约；已完成 design / project 证据从 live 树退役，保留于 GitHub task 与 git history）
 - `scripts/check-rust-file-size.sh`
-- historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 `doc/core/reviews/round-*` logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments；退役前 `.pm/tasks/task_<32hex>.execution.md` 仅作历史追溯）
+- historical legacy migration closure / handoff records（后续已删除；历史迁移证据见 Git history logs，当前规则入口见 `doc/engineering/doc-governance/doc-structure-standard.design.md`、`doc/engineering/workflow/source-of-truth.md` 与 GitHub task issue evidence comments；退役前 `.pm/tasks/task_<32hex>.execution.md` 仅作历史追溯）
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/workflow/source-of-truth.md`
-- historical engineering full-PRD review triplet（后续已删除；历史审读证据见 `doc/core/reviews/round-*` logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
+- historical engineering full-PRD review triplet（后续已删除；历史审读证据见 Git history logs，当前追踪入口见 `doc/engineering/prd.index.md` 与模块入口）
 - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
 - `doc/engineering/doc-governance/doc-structure-standard.design.md`
 - `doc/engineering/doc-governance/doc-structure-standard.project.md`

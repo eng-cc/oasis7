@@ -8,7 +8,7 @@
 - 日期: `2026-03-10`
 - 汇总人: `qa_engineer`
 - 关联 testing 证据包: `doc/testing/evidence/release-evidence-bundle-task-game-018-2026-03-10.md`
-- 关联 core go/no-go 记录: `doc/core/reviews/stage-closure-go-no-go-task-game-018-2026-03-10.md`
+- 关联 core go/no-go 记录: Git history
 - 总结论: `pass`
 
 ## 卡片覆盖范围

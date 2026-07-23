@@ -109,7 +109,7 @@
   - `doc/<module>/project.md`
   - `doc/<module>/prd.index.md`
   - `doc/engineering/doc-governance/doc-structure-standard.prd.md`
-  - `doc/core/reviews/*`
+  - Git history
   - `doc/devlog/*`
 - Edge Cases & Error Handling:
   - 高价值审计材料仍被频繁引用：允许保留专题内直链，但不应提升为模块 README 默认入口项。
